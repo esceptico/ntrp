@@ -122,6 +122,42 @@ CREATE TABLE IF NOT EXISTS chat_compactions (
 
 CREATE INDEX IF NOT EXISTS idx_chat_compactions_session_boundary
     ON chat_compactions(session_id, boundary_seq);
+
+CREATE TABLE IF NOT EXISTS background_agent_runs (
+    task_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    parent_run_id TEXT,
+    status TEXT NOT NULL,
+    command TEXT NOT NULL,
+    detail TEXT,
+    result_ref TEXT,
+    result_text TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    updated_at TEXT NOT NULL,
+    ended_at TEXT,
+    cancel_requested_at TEXT,
+    notified_at TEXT,
+    PRIMARY KEY (session_id, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_background_agent_runs_session_status
+    ON background_agent_runs(session_id, status);
+
+CREATE TABLE IF NOT EXISTS background_agent_events (
+    session_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    task_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT,
+    result_ref TEXT,
+    terminal INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_background_agent_events_task
+    ON background_agent_events(task_id);
 	"""
 
 SQL_SAVE_SESSION = """
@@ -192,6 +228,7 @@ class SessionStore:
     def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
         self.read_conn = read_conn or conn
+        self._background_event_lock = asyncio.Lock()
 
     async def _update(self, sql: str, params: tuple) -> bool:
         cursor = await self.conn.execute(sql, params)
@@ -223,6 +260,35 @@ class SessionStore:
             "ingested_at": row["ingested_at"],
             "enqueued_seq": row["enqueued_seq"],
             "ingested_seq": row["ingested_seq"],
+        }
+
+    def _background_agent_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "task_id": row["task_id"],
+            "session_id": row["session_id"],
+            "parent_run_id": row["parent_run_id"],
+            "status": row["status"],
+            "command": row["command"],
+            "detail": row["detail"],
+            "result_ref": row["result_ref"],
+            "created_at": row["created_at"],
+            "started_at": row["started_at"],
+            "updated_at": row["updated_at"],
+            "ended_at": row["ended_at"],
+            "cancel_requested_at": row["cancel_requested_at"],
+            "notified_at": row["notified_at"],
+        }
+
+    def _background_agent_event_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "session_id": row["session_id"],
+            "seq": row["seq"],
+            "task_id": row["task_id"],
+            "status": row["status"],
+            "detail": row["detail"],
+            "result_ref": row["result_ref"],
+            "terminal": bool(row["terminal"]),
+            "created_at": row["created_at"],
         }
 
     async def init_schema(self) -> None:
@@ -489,6 +555,232 @@ class SessionStore:
         )
         await self.conn.commit()
         return cursor.rowcount
+
+    async def record_background_agent_started(
+        self,
+        *,
+        task_id: str,
+        session_id: str,
+        parent_run_id: str | None,
+        command: str,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            INSERT INTO background_agent_runs (
+                task_id, session_id, parent_run_id, status, command,
+                created_at, started_at, updated_at
+            )
+            VALUES (?, ?, ?, 'running', ?, ?, ?, ?)
+            ON CONFLICT(session_id, task_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                parent_run_id = excluded.parent_run_id,
+                status = 'running',
+                command = excluded.command,
+                detail = NULL,
+                result_ref = NULL,
+                result_text = NULL,
+                updated_at = excluded.updated_at,
+                ended_at = NULL,
+                cancel_requested_at = NULL,
+                notified_at = NULL
+            """,
+            (task_id, session_id, parent_run_id, command, now, now, now),
+        )
+        await self.conn.commit()
+        await self.record_background_agent_event(
+            task_id=task_id,
+            session_id=session_id,
+            status="started",
+        )
+
+    async def record_background_agent_event(
+        self,
+        *,
+        task_id: str,
+        session_id: str,
+        status: str,
+        detail: str | None = None,
+        result_ref: str | None = None,
+    ) -> int:
+        terminal = status in {"completed", "failed", "cancelled", "interrupted"}
+        now = datetime.now(UTC).isoformat()
+        async with self._background_event_lock:
+            rows = await self.conn.execute_fetchall(
+                """
+                SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
+                FROM background_agent_events
+                WHERE session_id = ?
+                """,
+                (session_id,),
+            )
+            seq = int(rows[0]["next_seq"])
+            await self.conn.execute(
+                """
+                INSERT INTO background_agent_events (
+                    session_id, seq, task_id, status, detail, result_ref, terminal, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (session_id, seq, task_id, status, detail, result_ref, int(terminal), now),
+            )
+            await self.conn.execute(
+                """
+            UPDATE background_agent_runs
+            SET detail = COALESCE(?, detail),
+                result_ref = COALESCE(?, result_ref),
+                updated_at = ?
+            WHERE session_id = ? AND task_id = ?
+            """,
+            (detail, result_ref, now, session_id, task_id),
+        )
+            await self.conn.commit()
+        return seq
+
+    async def record_background_agent_finished(
+        self,
+        *,
+        task_id: str,
+        session_id: str,
+        status: str,
+        result_ref: str | None = None,
+        detail: str | None = None,
+        result_text: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            UPDATE background_agent_runs
+            SET status = ?,
+                detail = COALESCE(?, detail),
+                result_ref = COALESCE(?, result_ref),
+                result_text = COALESCE(?, result_text),
+                updated_at = ?,
+                ended_at = COALESCE(ended_at, ?)
+            WHERE session_id = ? AND task_id = ?
+            """,
+            (status, detail, result_ref, result_text, now, now, session_id, task_id),
+        )
+        await self.conn.commit()
+        await self.record_background_agent_event(
+            task_id=task_id,
+            session_id=session_id,
+            status=status,
+            detail=detail,
+            result_ref=result_ref,
+        )
+
+    async def request_background_agent_cancel(self, session_id: str, task_id: str) -> bool:
+        now = datetime.now(UTC).isoformat()
+        cursor = await self.conn.execute(
+            """
+            UPDATE background_agent_runs
+            SET status = 'cancel_requested',
+                cancel_requested_at = COALESCE(cancel_requested_at, ?),
+                updated_at = ?
+            WHERE session_id = ? AND task_id = ?
+              AND status NOT IN ('completed', 'failed', 'cancelled', 'interrupted')
+            """,
+            (now, now, session_id, task_id),
+        )
+        await self.conn.commit()
+        changed = cursor.rowcount > 0
+        if changed:
+            await self.record_background_agent_event(
+                task_id=task_id,
+                session_id=session_id,
+                status="cancel_requested",
+            )
+        return changed
+
+    async def get_background_agent_result(self, session_id: str, task_id: str) -> str | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT result_text FROM background_agent_runs
+            WHERE session_id = ? AND task_id = ?
+            """,
+            (session_id, task_id),
+        )
+        if not rows:
+            return None
+        value = rows[0]["result_text"]
+        return value if isinstance(value, str) else None
+
+    async def list_background_agent_runs(
+        self,
+        session_id: str,
+        *,
+        include_terminal: bool = True,
+    ) -> list[dict]:
+        if include_terminal:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM background_agent_runs
+                WHERE session_id = ?
+                ORDER BY updated_at DESC
+                """,
+                (session_id,),
+            )
+        else:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM background_agent_runs
+                WHERE session_id = ?
+                  AND status NOT IN ('completed', 'failed', 'cancelled', 'interrupted')
+                ORDER BY updated_at DESC
+                """,
+                (session_id,),
+            )
+        return [self._background_agent_payload(row) for row in rows]
+
+    async def list_background_agent_events(
+        self,
+        session_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 10000,
+    ) -> list[dict]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM background_agent_events
+            WHERE session_id = ? AND seq > ?
+            ORDER BY seq ASC
+            LIMIT ?
+            """,
+            (session_id, after_seq, limit),
+        )
+        return [self._background_agent_event_payload(row) for row in rows]
+
+    async def mark_interrupted_background_agent_runs(self) -> int:
+        now = datetime.now(UTC).isoformat()
+        rows = await self.conn.execute_fetchall(
+            """
+            SELECT task_id, session_id FROM background_agent_runs
+            WHERE status IN ('running', 'activity', 'cancel_requested')
+            """,
+        )
+        if not rows:
+            return 0
+        await self.conn.execute(
+            """
+            UPDATE background_agent_runs
+            SET status = 'interrupted',
+                detail = COALESCE(detail, 'server_restart'),
+                updated_at = ?,
+                ended_at = COALESCE(ended_at, ?)
+            WHERE status IN ('running', 'activity', 'cancel_requested')
+            """,
+            (now, now),
+        )
+        for row in rows:
+            await self.record_background_agent_event(
+                task_id=row["task_id"],
+                session_id=row["session_id"],
+                status="interrupted",
+                detail="server_restart",
+            )
+        await self.conn.commit()
+        return len(rows)
 
     async def record_chat_queued_message(
         self,

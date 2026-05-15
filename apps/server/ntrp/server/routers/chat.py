@@ -11,6 +11,7 @@ from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
+    BackgroundAgentRunsResponse,
     BackgroundRequest,
     CancelRequest,
     ChatRequest,
@@ -239,21 +240,61 @@ async def background_run(request: BackgroundRequest, run_registry: RunRegistry =
     return {"status": "backgrounding"}
 
 
-@router.get("/chat/background-tasks")
-async def list_background_tasks(session_id: str, run_registry: RunRegistry = Depends(require_run_registry)):
+@router.get("/chat/background-tasks", response_model=BackgroundAgentRunsResponse)
+async def list_background_tasks(
+    session_id: str,
+    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    session_service = getattr(runtime, "session_service", None)
+    store = getattr(session_service, "store", None)
+    if store is not None:
+        return {"tasks": await store.list_background_agent_runs(session_id)}
+
     registry = run_registry.get_background_registry(session_id)
     pending = registry.list_pending()
-    return {"tasks": [{"task_id": tid, "command": cmd} for tid, cmd in pending]}
+    now = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    return {
+        "tasks": [
+            {
+                "task_id": tid,
+                "session_id": session_id,
+                "parent_run_id": None,
+                "status": "running",
+                "command": cmd,
+                "detail": None,
+                "result_ref": None,
+                "created_at": now,
+                "started_at": None,
+                "updated_at": now,
+                "ended_at": None,
+                "cancel_requested_at": None,
+                "notified_at": None,
+            }
+            for tid, cmd in pending
+        ]
+    }
 
 
 @router.post("/chat/background-tasks/{task_id}/cancel")
 async def cancel_background_task(
     task_id: str,
     session_id: str,
+    runtime: Runtime = Depends(get_runtime),
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
+    requested = False
+    session_service = getattr(runtime, "session_service", None)
+    store = getattr(session_service, "store", None)
+    if store is not None:
+        requested = await store.request_background_agent_cancel(session_id, task_id)
+
     registry = run_registry.get_background_registry(session_id)
     command = registry.cancel(task_id)
-    if command is None:
+    if command is None and not requested:
         raise HTTPException(status_code=404, detail="Task not found or already done")
-    return {"status": "cancelled", "task_id": task_id}
+    return {
+        "status": "cancelled" if command is not None else "cancel_requested",
+        "task_id": task_id,
+        "command": command,
+    }

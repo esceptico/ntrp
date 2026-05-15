@@ -98,6 +98,99 @@ async def test_marks_interrupted_chat_runs_on_startup(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_background_agent_run_lifecycle(store: SessionStore):
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-1",
+        parent_run_id="run-1",
+        command="research task",
+    )
+    await store.record_background_agent_event(
+        task_id="bg-1",
+        session_id="sess-1",
+        status="activity",
+        detail="read files",
+    )
+    await store.record_background_agent_finished(
+        task_id="bg-1",
+        session_id="sess-1",
+        status="completed",
+        result_ref="bg_results/bg-1.txt",
+        detail="done",
+        result_text="full result",
+    )
+
+    runs = await store.list_background_agent_runs("sess-1")
+    assert runs[0]["task_id"] == "bg-1"
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["result_ref"] == "bg_results/bg-1.txt"
+    assert await store.get_background_agent_result("sess-1", "bg-1") == "full result"
+
+    events = await store.list_background_agent_events("sess-1", after_seq=0)
+    assert [e["status"] for e in events] == ["started", "activity", "completed"]
+    assert events[-1]["terminal"] is True
+
+
+@pytest.mark.asyncio
+async def test_background_agent_task_ids_are_session_scoped(store: SessionStore):
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-1",
+        parent_run_id="run-1",
+        command="first",
+    )
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-2",
+        parent_run_id="run-2",
+        command="second",
+    )
+
+    assert (await store.list_background_agent_runs("sess-1"))[0]["command"] == "first"
+    assert (await store.list_background_agent_runs("sess-2"))[0]["command"] == "second"
+
+
+@pytest.mark.asyncio
+async def test_background_agent_cancel_request_is_session_scoped_and_evented(store: SessionStore):
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-1",
+        parent_run_id="run-1",
+        command="first",
+    )
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-2",
+        parent_run_id="run-2",
+        command="second",
+    )
+
+    assert await store.request_background_agent_cancel("sess-1", "bg-1") is True
+
+    assert (await store.list_background_agent_runs("sess-1"))[0]["status"] == "cancel_requested"
+    assert (await store.list_background_agent_runs("sess-2"))[0]["status"] == "running"
+    events = await store.list_background_agent_events("sess-1")
+    assert [e["status"] for e in events] == ["started", "cancel_requested"]
+    assert events[-1]["terminal"] is False
+
+
+@pytest.mark.asyncio
+async def test_marks_running_background_agents_interrupted_on_startup(store: SessionStore):
+    await store.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-1",
+        parent_run_id="run-1",
+        command="research task",
+    )
+
+    changed = await store.mark_interrupted_background_agent_runs()
+    runs = await store.list_background_agent_runs("sess-1")
+
+    assert changed == 1
+    assert runs[0]["status"] == "interrupted"
+
+
+@pytest.mark.asyncio
 async def test_session_events_round_trip_with_sequence(store: SessionStore):
     await store.record_session_event(
         StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="processing")),

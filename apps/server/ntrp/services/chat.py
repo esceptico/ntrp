@@ -76,6 +76,42 @@ async def _record_run_started(service: object, run_id: str, session_id: str) -> 
         await fn(run_id, session_id)
 
 
+def _background_event_recorder(session_service: SessionService):
+    async def record(**event) -> None:
+        store = session_service.store
+        status = str(event.get("status") or "")
+        task_id = str(event.get("task_id") or "")
+        session_id = str(event.get("session_id") or "")
+        if not task_id or not session_id:
+            return
+        if status == "started":
+            await store.record_background_agent_started(
+                task_id=task_id,
+                session_id=session_id,
+                parent_run_id=event.get("parent_run_id"),
+                command=str(event.get("command") or ""),
+            )
+        elif bool(event.get("terminal")):
+            await store.record_background_agent_finished(
+                task_id=task_id,
+                session_id=session_id,
+                status=status,
+                detail=event.get("detail"),
+                result_ref=event.get("result_ref"),
+                result_text=event.get("result_text"),
+            )
+        else:
+            await store.record_background_agent_event(
+                task_id=task_id,
+                session_id=session_id,
+                status=status,
+                detail=event.get("detail"),
+                result_ref=event.get("result_ref"),
+            )
+
+    return record
+
+
 async def _record_run_status(
     service: object,
     run_id: str,
@@ -634,6 +670,11 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         await bus.emit(ThinkingEvent(status="processing..."))
 
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
+        bg_registry.record_event = _background_event_recorder(ctx.session_service)
+        bg_registry.read_result = lambda task_id: ctx.session_service.store.get_background_agent_result(
+            session_state.session_id,
+            task_id,
+        )
         io = IOBridge(pending_approvals=run.pending_approvals, emit=bus.emit)
         agent = create_agent(
             executor=ctx.executor,

@@ -651,3 +651,18 @@ test("background task event updates background agents without transcript noise",
     detail: "done",
   });
 });
+
+test("background snapshot does not complete missing running tasks", () => {
+  const s = getState();
+  s.upsertBackgroundAgent({
+    taskId: "bg-1",
+    sessionId: "session-1",
+    command: "research",
+    status: "running",
+    updatedAt: 1,
+  });
+
+  s.setBackgroundAgentsForSession("session-1", []);
+
+  expect(getState().backgroundAgents["session-1:bg-1"].status).toBe("running");
+});

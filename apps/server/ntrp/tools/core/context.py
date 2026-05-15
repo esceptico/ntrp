@@ -70,6 +70,8 @@ class BackgroundTaskRegistry:
 
     session_id: str = ""
     on_result: Callable[[list[dict]], Awaitable[None]] | None = None
+    record_event: Callable[..., Awaitable[None]] | None = None
+    read_result: Callable[[str], Awaitable[str | None]] | None = None
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     _commands: dict[str, str] = field(default_factory=dict)
 
@@ -84,6 +86,42 @@ class BackgroundTaskRegistry:
         self._tasks[task_id] = task
         self._commands[task_id] = command
         task.add_done_callback(lambda _: self._remove(task_id))
+
+    async def _record(
+        self,
+        *,
+        task_id: str,
+        status: str,
+        detail: str | None = None,
+        result_ref: str | None = None,
+        result_text: str | None = None,
+        parent_run_id: str | None = None,
+    ) -> None:
+        if not self.record_event:
+            return
+        terminal = status in {"completed", "failed", "cancelled", "interrupted"}
+        await self.record_event(
+            task_id=task_id,
+            session_id=self.session_id,
+            parent_run_id=parent_run_id,
+            command=self._commands.get(task_id, ""),
+            status=status,
+            detail=detail,
+            result_ref=result_ref,
+            result_text=result_text,
+            terminal=terminal,
+        )
+
+    async def record_started(self, *, task_id: str, command: str, parent_run_id: str | None = None) -> None:
+        self._commands[task_id] = command
+        await self._record(
+            task_id=task_id,
+            status="started",
+            parent_run_id=parent_run_id,
+        )
+
+    async def record_activity(self, task_id: str, detail: str) -> None:
+        await self._record(task_id=task_id, status="activity", detail=detail)
 
     def cancel_all(self) -> list[tuple[str, str]]:
         """Cancel all pending tasks. Returns list of (task_id, command) for cancelled tasks."""
@@ -124,6 +162,16 @@ class BackgroundTaskRegistry:
         path.write_text(content, encoding="utf-8")
         return path
 
+    async def read_background_result(self, task_id: str) -> str | None:
+        if self.read_result:
+            durable = await self.read_result(task_id)
+            if durable is not None:
+                return durable
+        path = RESULT_BASE / self.session_id / "bg_results" / f"{task_id}.txt"
+        if not path.exists():
+            return None
+        return await asyncio.to_thread(path.read_text, encoding="utf-8")
+
     async def deliver_result(
         self,
         task_id: str,
@@ -132,13 +180,30 @@ class BackgroundTaskRegistry:
         status: str,
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
-        self._write_result_file(task_id, result)
+        path = self._write_result_file(task_id, result)
+        result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
 
         notification = f"[background task {task_id} {status}]"
         messages = [{"role": Role.USER, "content": notification}]
 
         if emit:
-            await emit(BackgroundTaskEvent(task_id=task_id, command=label, status=status))
+            await emit(
+                BackgroundTaskEvent(
+                    task_id=task_id,
+                    session_id=self.session_id,
+                    command=label,
+                    status=status,
+                    result_ref=result_ref,
+                    terminal=True,
+                )
+            )
+
+        await self._record(
+            task_id=task_id,
+            status=status,
+            result_ref=result_ref,
+            result_text=result,
+        )
 
         await self.inject(messages)
 

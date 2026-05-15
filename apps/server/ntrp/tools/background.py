@@ -1,9 +1,6 @@
-import asyncio
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
-from ntrp.constants import BACKGROUND_AGENT_TIMEOUT, NTRP_TMP_BASE
+from ntrp.constants import BACKGROUND_AGENT_TIMEOUT
 from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -67,16 +64,8 @@ class GetBackgroundResultInput(BaseModel):
     task_id: str = Field(description="The ID of the background task")
 
 
-def _read_background_result(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    return path.read_text(encoding="utf-8")
-
-
 async def get_background_result(execution: ToolExecution, args: GetBackgroundResultInput) -> ToolResult:
-    session_id = execution.ctx.background_tasks.session_id or execution.ctx.session_id
-    path = Path(NTRP_TMP_BASE) / session_id / "bg_results" / f"{args.task_id}.txt"
-    content = await asyncio.to_thread(_read_background_result, path)
+    content = await execution.ctx.background_tasks.read_background_result(args.task_id)
     if content is None:
         return ToolResult(
             content=f"No result for task {args.task_id} — use list_background_tasks to check if it's still running.",

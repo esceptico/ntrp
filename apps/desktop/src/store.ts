@@ -50,7 +50,13 @@ export interface ServerLoop {
   running_since: string | null;
 }
 
-export type BackgroundAgentStatus = "running" | "completed" | "failed" | "cancelled";
+export type BackgroundAgentStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted"
+  | "cancel_requested";
 
 export interface BackgroundAgent {
   taskId: string;
@@ -58,6 +64,7 @@ export interface BackgroundAgent {
   command: string;
   status: BackgroundAgentStatus;
   detail?: string;
+  resultRef?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -411,7 +418,13 @@ interface Actions {
   setLoops: (loops: ServerLoop[]) => void;
   setBackgroundAgentsForSession: (
     sessionId: string,
-    agents: { taskId: string; command: string }[],
+    agents: {
+      taskId: string;
+      command: string;
+      status?: BackgroundAgentStatus;
+      detail?: string;
+      resultRef?: string;
+    }[],
   ) => void;
   upsertBackgroundAgent: (
     agent: Omit<BackgroundAgent, "createdAt"> & { createdAt?: number },
@@ -880,25 +893,19 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => {
       const now = Date.now();
       const next = { ...(s.backgroundAgents ?? {}) };
-      const seen = new Set<string>();
       for (const agent of agents) {
         const key = `${sessionId}:${agent.taskId}`;
-        seen.add(key);
         const prev = next[key];
         next[key] = {
           taskId: agent.taskId,
           sessionId,
           command: agent.command,
-          status: prev?.status ?? "running",
-          detail: prev?.detail,
+          status: agent.status ?? prev?.status ?? "running",
+          detail: agent.detail ?? prev?.detail,
+          resultRef: agent.resultRef ?? prev?.resultRef,
           createdAt: prev?.createdAt ?? now,
           updatedAt: now,
         };
-      }
-      for (const [key, agent] of Object.entries(next)) {
-        if (agent.sessionId === sessionId && !seen.has(key) && agent.status === "running") {
-          next[key] = { ...agent, status: "completed", updatedAt: now };
-        }
       }
       return { backgroundAgents: next };
     }),

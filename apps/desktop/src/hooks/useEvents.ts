@@ -511,9 +511,11 @@ function applyServerEvent(event: ServerEvent, mode: EventApplicationMode): Serve
         command: event.command,
         status:
           event.status === "completed" || event.status === "failed" || event.status === "cancelled"
+            || event.status === "interrupted" || event.status === "cancel_requested"
             ? event.status
             : "running",
-        detail: event.detail,
+        detail: event.detail ?? undefined,
+        resultRef: event.result_ref ?? undefined,
         updatedAt: ts,
       });
       return;

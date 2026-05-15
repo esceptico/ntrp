@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+from inspect import isawaitable
 from uuid import uuid4
 
 from ntrp.agent import (
@@ -268,7 +269,10 @@ def create_spawn_fn(
                     if isinstance(event, Result):
                         text = event.text
                     elif parent_emit:
-                        for out in to_events(event):
+                        mapped = to_events(event)
+                        if isawaitable(mapped):
+                            mapped = await mapped
+                        for out in mapped:
                             await parent_emit(out)
                 return text
             except asyncio.CancelledError:
@@ -353,21 +357,32 @@ def create_spawn_fn(
         task_id = registry.generate_id()
         label = task[:80]
 
-        def _to_bg_events(event):
+        async def _to_bg_events(event):
             if isinstance(event, ToolStarted):
                 detail = event.display_name or event.name
             elif isinstance(event, ToolCompleted):
                 detail = f"{event.display_name or event.name}: {event.preview}"
             else:
                 return ()
-            return (BackgroundTaskEvent(task_id=task_id, command=label, status="activity", detail=detail),)
+            await registry.record_activity(task_id, detail)
+            return (
+                BackgroundTaskEvent(
+                    task_id=task_id,
+                    session_id=registry.session_id,
+                    run_id=calling_ctx.run.run_id,
+                    command=label,
+                    status="activity",
+                    detail=detail,
+                ),
+            )
 
         async def _run_background():
             try:
                 result = await asyncio.wait_for(_stream_to(_to_bg_events), timeout=timeout)
                 status = "completed"
             except asyncio.CancelledError:
-                return
+                result = "Cancelled"
+                status = "cancelled"
             except TimeoutError:
                 _logger.warning("Background task %s timed out, salvaging", task_id)
                 # Belt-and-suspenders: if the salvage call itself raises
@@ -403,11 +418,20 @@ def create_spawn_fn(
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)
 
+        await registry.record_started(task_id=task_id, command=label, parent_run_id=calling_ctx.run.run_id)
         bg_task = asyncio.create_task(_run_background())
         registry.register(task_id, bg_task, command=label)
 
         if calling_ctx.io.emit:
-            await calling_ctx.io.emit(BackgroundTaskEvent(task_id=task_id, command=label, status="started"))
+            await calling_ctx.io.emit(
+                BackgroundTaskEvent(
+                    task_id=task_id,
+                    session_id=registry.session_id,
+                    run_id=calling_ctx.run.run_id,
+                    command=label,
+                    status="started",
+                )
+            )
 
         return f"Background task {task_id} started: {task}"
 

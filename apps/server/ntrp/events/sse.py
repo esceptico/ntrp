@@ -284,9 +284,13 @@ class QuestionEvent(SSEEvent):
 class BackgroundTaskEvent(SSEEvent):
     type: EventType = field(default=EventType.BACKGROUND_TASK, init=False)
     task_id: str = ""
+    session_id: str = ""
+    run_id: str | None = None
     command: str = ""
     status: str = ""  # "started", "completed", "failed", "cancelled", "activity"
     detail: str | None = None
+    result_ref: str | None = None
+    terminal: bool = False
 
 
 @dataclass(frozen=True)

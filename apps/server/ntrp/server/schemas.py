@@ -59,6 +59,34 @@ class BackgroundTaskSessionStatusResponse(BaseModel):
     pending_tasks: int
 
 
+class BackgroundAgentRunResponse(BaseModel):
+    task_id: str
+    session_id: str
+    parent_run_id: str | None = None
+    status: Literal[
+        "running",
+        "activity",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+        "cancel_requested",
+    ]
+    command: str
+    detail: str | None = None
+    result_ref: str | None = None
+    created_at: str
+    started_at: str | None = None
+    updated_at: str
+    ended_at: str | None = None
+    cancel_requested_at: str | None = None
+    notified_at: str | None = None
+
+
+class BackgroundAgentRunsResponse(BaseModel):
+    tasks: list[BackgroundAgentRunResponse] = Field(default_factory=list)
+
+
 class ChatRunsStatusResponse(BaseModel):
     observed_at: str
     total_retained: int

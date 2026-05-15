@@ -72,7 +72,23 @@ function useBackgroundTasksPoll(sessionId: string | null): void {
         if (!cancelled) {
           setBackgroundAgentsForSession(
             sessionId,
-            tasks.map((task) => ({ taskId: task.task_id, command: task.command })),
+            tasks.map((task) => {
+              const status =
+                task.status === "completed" ||
+                task.status === "failed" ||
+                task.status === "cancelled" ||
+                task.status === "interrupted" ||
+                task.status === "cancel_requested"
+                  ? task.status
+                  : "running";
+              return {
+                taskId: task.task_id,
+                command: task.command,
+                status,
+                detail: task.detail ?? undefined,
+                resultRef: task.result_ref ?? undefined,
+              };
+            }),
           );
         }
       } catch {
@@ -157,7 +173,7 @@ function BackgroundAgentRow({ agent }: { agent: BackgroundAgent }) {
     setCancelling(true);
     try {
       await cancelBackgroundTaskApi(config, agent.sessionId, agent.taskId);
-      upsertBackgroundAgent({ ...agent, status: "cancelled", updatedAt: Date.now() });
+      upsertBackgroundAgent({ ...agent, status: "cancel_requested", updatedAt: Date.now() });
     } catch {
       setCancelling(false);
     }

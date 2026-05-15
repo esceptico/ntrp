@@ -107,7 +107,17 @@ export type ServerEvent = CommonServerEventFields & (
 
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
-  | { type: "background_task"; task_id: string; command: string; status: "started" | "completed" | "failed" | "cancelled" | string; detail?: string }
+  | {
+      type: "background_task";
+      task_id: string;
+      session_id?: string;
+      run_id?: string | null;
+      command: string;
+      status: "started" | "activity" | "completed" | "failed" | "cancelled" | "interrupted" | "cancel_requested" | string;
+      detail?: string | null;
+      result_ref?: string | null;
+      terminal?: boolean;
+    }
   | { type: "stream_reset"; reason: "replay_gap" | string }
   | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
   | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status?: string; summary?: string; depth?: number }
@@ -1262,7 +1272,12 @@ export async function deleteAutomationApi(config: AppConfig, taskId: string): Pr
 
 export interface BackgroundTaskSummary {
   task_id: string;
+  session_id?: string;
+  parent_run_id?: string | null;
+  status?: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "cancel_requested" | string;
   command: string;
+  detail?: string | null;
+  result_ref?: string | null;
 }
 
 export async function listBackgroundTasksApi(
