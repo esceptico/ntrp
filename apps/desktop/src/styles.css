@@ -1014,6 +1014,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-clip: text;
 }
 
+/* Beat 2/3: graceful shine exit. When the tool result arrives and
+   data-state flips off "running", the shine gradient snaps away
+   (background-image can't transition between gradients) — but a
+   color transition smoothly fades the text from `transparent` back
+   to its natural color (text-faint / text-muted / text-ink-soft).
+   That fade-in masks the gradient snap; the row reads as the shine
+   resolving into the final text rather than abruptly stopping. */
+.tool-line,
+.tool-line * {
+  transition: color 240ms ease-out;
+}
+
 /* Reasoning head's icons (Brain, ChevronDown) stay muted instead of
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
