@@ -665,19 +665,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `border border-line` from Tailwind utilities will see it
    suppressed in dark mode via `border-color: transparent` here. */
 .glass-pane {
-  /* Light recipe — glass via blur + saturation, not via tint.
-     Backdrop heavily blurred (24px) so chat content becomes smooth
-     color washes; saturation pumped (180%) so those washes feel
-     present rather than gray; surface tint kept very low (18%) so
-     the backdrop colors actually show. The hairline ring + soft
-     shadow define the edge and lift. Same vocabulary as dark glass
-     just inverted: blur as the shared engine. */
-  background-color: color-mix(in oklab, var(--color-surface) 70%, transparent);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  /* Light recipe — researched against Apple Materials / NSVisualEffectView /
+     glassmorphism best-practice. Three key moves:
+       1. Cool-neutral surface, not pure white. hsl(220 25% 99%) at
+          65% alpha. Prevents the "hospital white" feeling pure white
+          gives over text-heavy backdrops.
+       2. Strong inset top specular (white @ 85%). The "meniscus" —
+          the bright edge where liquid meets the side of a glass.
+          Eye reads it as glass; body can stay translucent.
+       3. saturate(180%) — restores the chroma backdrop-filter blur
+          washes out. Single most important fix for "light glass goes
+          gray." */
+  background-color: color-mix(in oklab, hsl(220 25% 99%) 65%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-color: transparent;
   box-shadow:
-    0 2px 8px -2px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(20, 24, 28, 0.06),
+    0 8px 24px rgba(20, 24, 28, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
 }
 :root.dark .glass-pane {
@@ -763,16 +769,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
    "Thin" — same surface, different role. */
 .glass-pane-thick {
-  /* Light: thick blur (40px) for heavy diffusion, slightly more
-     surface tint than thin (35%) for popover content legibility,
-     same saturation pump. Lifted drop shadow so the popover visibly
-     floats above its parent. */
-  background-color: color-mix(in oklab, var(--color-surface) 88%, transparent);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  /* Light: same recipe as thin but tuned for focused-attention
+     popovers. Surface tint up to 78% so content reads cleanly,
+     heavier blur (32px), lifted shadow, slightly stronger ring.
+     Same cool-neutral hue and meniscus specular for visual family
+     continuity. */
+  background-color: color-mix(in oklab, hsl(220 25% 99%) 78%, transparent);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
   border-color: transparent;
   box-shadow:
-    0 12px 32px -8px rgba(0, 0, 0, 0.10),
+    0 1px 2px rgba(20, 24, 28, 0.06),
+    0 16px 40px rgba(20, 24, 28, 0.10),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-thick {
@@ -813,13 +822,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
    See `feedback_backdrop_filter_containing_block.md` in memory. */
 .glass-pane-static {
-  /* Light: same architectural recipe as glass-pane-thick (they share
-     the popover/dropdown role; static is only different in dark mode
-     where it sidesteps backdrop-filter for nested cases). */
-  background-color: var(--color-surface);
+  /* Light: solid cool-neutral (no backdrop-filter — this tier exists
+     for nested popovers inside another filter). Same meniscus
+     specular + edge + shadow as thick so it visually belongs. */
+  background-color: hsl(220 25% 99%);
   border-color: transparent;
   box-shadow:
-    0 12px 32px -8px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(20, 24, 28, 0.06),
+    0 16px 40px rgba(20, 24, 28, 0.10),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-static {
