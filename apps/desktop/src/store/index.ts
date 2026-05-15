@@ -292,12 +292,13 @@ export const useStore = create<State & Actions>((set) => ({
   setDraft: (draft) => set({ draft }),
   setEditingId: (editingId) => set({ editingId }),
   resetUsage: () => set({ usage: initialUsage }),
-  accumulateUsage: ({ prompt, completion, cost }) =>
+  accumulateUsage: ({ prompt, completion, cost, messageCount }) =>
     set((s) => ({
       usage: {
         lastPrompt: prompt,
         totalTokens: s.usage.totalTokens + prompt + completion,
         totalCost: s.usage.totalCost + cost,
+        messageCount: messageCount ?? s.usage.messageCount,
       },
     })),
 

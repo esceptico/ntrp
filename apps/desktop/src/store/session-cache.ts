@@ -4,6 +4,7 @@ export const initialUsage: SessionUsage = {
   lastPrompt: 0,
   totalTokens: 0,
   totalCost: 0,
+  messageCount: 0,
 };
 
 export function blankSessionView(): CachedSessionState {

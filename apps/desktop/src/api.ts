@@ -83,7 +83,7 @@ type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: 
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean }
-  | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
+  | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number }; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
   | { type: "RUN_ERROR"; run_id: string; message: string }
 
@@ -1043,6 +1043,11 @@ export async function deleteCustomModelApi(
 
 export interface ServerConfig {
   chat_model: string;
+  /** Hard token ceiling of the active chat model. Combined with
+   *  `compression_threshold` (a fraction in 0-1) it gives the exact token
+   *  count at which auto-compaction fires — that's what the budget dial
+   *  shows its outer arc against. 0 when the model isn't recognized. */
+  chat_model_max_context: number;
   research_model: string;
   memory_model: string;
   embedding_model: string;

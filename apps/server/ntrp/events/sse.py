@@ -112,6 +112,10 @@ class RunFinishedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_FINISHED, init=False)
     run_id: str = ""
     usage: dict = field(default_factory=dict)
+    # Server-side message count after this run. The desktop's budget dial
+    # checks it against `max_messages` for the message-pressure arc. 0 when
+    # unavailable (cancelled runs etc.).
+    message_count: int = 0
 
 
 @dataclass(frozen=True)

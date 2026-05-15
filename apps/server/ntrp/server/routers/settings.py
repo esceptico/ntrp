@@ -85,9 +85,17 @@ def _config_response(rt: Runtime) -> dict:
         ),
     }
 
+    # Resolve the chat model's hard token ceiling so the desktop can render
+    # the budget dial against absolute numbers (no second round-trip).
+    try:
+        chat_model_max_context = get_model(config.chat_model).max_context_tokens
+    except Exception:
+        chat_model_max_context = 0
+
     return {
         **rt.config_status(),
         "chat_model": config.chat_model,
+        "chat_model_max_context": chat_model_max_context,
         "research_model": config.research_model,
         "memory_model": config.memory_model,
         "embedding_model": config.embedding_model,

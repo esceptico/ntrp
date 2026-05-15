@@ -12,7 +12,7 @@ import {
 } from "./CommandPicker";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
-import { UsageDisplay } from "./composer/UsageDisplay";
+import { BudgetDial } from "./composer/BudgetDial";
 import { useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 
@@ -465,7 +465,7 @@ export function Composer() {
             )}
           </button>
           <LoopStatusBar />
-          <UsageDisplay />
+          <BudgetDial />
           <span className="flex-1" />
           <ModelReasoningChip />
           {running ? (

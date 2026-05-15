@@ -278,7 +278,12 @@ function applyServerEvent(event: ServerEvent, mode: EventApplicationMode): Serve
       return;
     case "RUN_FINISHED":
       if (s.currentRunId && s.currentRunId !== event.run_id) return;
-      if (event.usage) s.accumulateUsage(event.usage);
+      if (event.usage) {
+        s.accumulateUsage({
+          ...event.usage,
+          messageCount: event.message_count,
+        });
+      }
       endActivity(s);
       endTurn(s, ts);
       activeAssistantMessageId = null;

@@ -201,6 +201,9 @@ export interface SessionUsage {
   lastPrompt: number;
   totalTokens: number;
   totalCost: number;
+  /** Server-side message count after the latest run. Drives the message
+   *  scale on the budget dial. 0 before the first run finishes. */
+  messageCount: number;
 }
 
 export interface MarkdownViewState {
@@ -334,7 +337,7 @@ export interface Actions {
   setDraft: (draft: string) => void;
   setEditingId: (id: string | null) => void;
   resetUsage: () => void;
-  accumulateUsage: (usage: { prompt: number; completion: number; cost: number }) => void;
+  accumulateUsage: (usage: { prompt: number; completion: number; cost: number; messageCount?: number }) => void;
   openSettings: (origin?: { x: number; y: number } | null) => void;
   closeSettings: () => void;
   setConnectionDraft: (patch: Partial<AppConfig>) => void;

@@ -318,6 +318,33 @@ function AgentButton({
       >
         {statusText}
       </span>
+      {item.usage && status !== "running" && (
+        <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
+      )}
     </button>
+  );
+}
+
+/** Compact `· 4.2k · $0.03` suffix that hangs off a finished agent row.
+ *  Renders only when the subagent reported usage (i.e. it actually ran
+ *  LLM calls). Used by the activity trace and the ToolViewer's AgentBody. */
+export function AgentUsageSuffix({ tokens, cost }: { tokens: number; cost?: number }) {
+  if (tokens <= 0 && !cost) return null;
+  const tk =
+    tokens < 1000
+      ? `${tokens}`
+      : tokens < 10000
+        ? `${(tokens / 1000).toFixed(1)}k`
+        : `${Math.round(tokens / 1000)}k`;
+  const ct = cost
+    ? cost < 0.01
+      ? `$${cost.toFixed(4)}`
+      : `$${cost.toFixed(3)}`
+    : null;
+  return (
+    <span className="text-whisper tabular-nums shrink-0" aria-label="Subagent usage">
+      · {tk}
+      {ct && ` · ${ct}`}
+    </span>
   );
 }

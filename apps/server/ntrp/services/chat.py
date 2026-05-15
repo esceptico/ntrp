@@ -781,7 +781,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
         usage_dict = run.usage.to_dict()
         usage_dict["cost"] = tracker.cost
-        await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=usage_dict))
+        await bus.emit(
+            RunFinishedEvent(
+                run_id=run.run_id,
+                usage=usage_dict,
+                message_count=len(run.messages),
+            )
+        )
         ctx.run_registry.complete_run(run.run_id)
         run_finished = True
 

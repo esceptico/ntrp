@@ -180,6 +180,18 @@ export function ToolViewer() {
   );
 }
 
+function formatAgentUsage(tokens: number, cost: number | undefined): string {
+  const tk =
+    tokens < 1000
+      ? `${tokens}`
+      : tokens < 10000
+        ? `${(tokens / 1000).toFixed(1)}k`
+        : `${Math.round(tokens / 1000)}k`;
+  if (!cost) return `${tk} tokens`;
+  const ct = cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(3)}`;
+  return `${tk} tokens · ${ct}`;
+}
+
 function AgentBody({
   item,
   descendants,
@@ -193,9 +205,16 @@ function AgentBody({
   return (
     <>
       <section className="grid gap-1.5">
-        <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-          Task
-        </h3>
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+            Task
+          </h3>
+          {item.usage && item.usage.total > 0 && (
+            <span className="text-xs text-faint tabular-nums" title="Subagent's own LLM spend (already rolled into the parent's total cost)">
+              {formatAgentUsage(item.usage.total, item.cost)}
+            </span>
+          )}
+        </div>
         <p className="m-0 text-base leading-relaxed text-ink whitespace-pre-wrap">
           {task || "(no task provided)"}
         </p>
