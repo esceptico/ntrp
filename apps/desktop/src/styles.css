@@ -674,9 +674,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      through. Reads as solid paper at rest, glass when something
      moves behind it. No meniscus (was reading as a delimiter line
      on white-on-white). */
-  background-color: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  background-color: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.04),
@@ -771,9 +771,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      content stays crisply readable, with a hint of backdrop blur
      for the glass identity. Lifted shadow. Same hairline ink ring
      family, slightly stronger to mark the focused-attention tier. */
-  background-color: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background-color: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(32px) saturate(170%) brightness(1.12);
+  -webkit-backdrop-filter: blur(32px) saturate(170%) brightness(1.12);
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.05),
@@ -817,6 +817,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    uniform (which it is — composer + chat behind).
 
    See `feedback_backdrop_filter_containing_block.md` in memory. */
+
+/* Modal scrim — the dim layer between a modal and the chat behind.
+   Dark: traditional dark scrim (0.32 alpha black) — focuses attention
+   onto the modal by darkening backdrop. Light: very faint dark wash
+   (0.08 alpha) — too much darkening here would shade the modal's
+   own backdrop-filter sample into gray, killing the glass identity. */
+.modal-scrim {
+  background-color: rgba(20, 24, 28, 0.08);
+}
+:root.dark .modal-scrim {
+  background-color: rgba(0, 0, 0, 0.32);
+}
+
 .glass-pane-static {
   /* Light: solid pure white (no backdrop-filter — this tier exists
      for nested popovers inside another filter). Same ring + shadow
