@@ -709,31 +709,32 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     inset 0 1px 0 0 color-mix(in oklab, white 16%, transparent);
 }
 
-/* Send acknowledgement — when the user submits, the composer's top
-   edge briefly catches more light. Single pulse, ~280ms ease-out.
-   Composes as ::after over the existing box-shadow stack so it
-   layers cleanly with the form's drop shadow + base ring + top
-   specular without replacing them; also coexists with the thinking-
-   rim ::before pseudo when sending mid-run. Material acknowledges
-   the action — no new motion language grafted on. */
+/* Send acknowledgement — when the user submits, the composer's
+   surface briefly brightens. Single pulse, ~360ms ease-out.
+   Body-fill flash (not edge) so it doesn't compete with the
+   thinking-rim's comet/breath/hue-cycle animations on the
+   perimeter — different visual axis, both can fire together
+   without overlapping. ::after with a top-down gradient that
+   mirrors the glass thickness tint, just amped for a beat. */
 .composer-card.glass-pane[data-just-sent="true"]::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  /* Two-layer pulse: sharp top-edge line + soft glow spreading
-     downward into the surface. Reads as light catching the top
-     edge and bleeding into the material — not just a 1px flash. */
-  box-shadow:
-    inset 0 1px 0 0 color-mix(in oklab, var(--color-ink) 38%, transparent),
-    inset 0 8px 16px -6px color-mix(in oklab, var(--color-ink) 14%, transparent);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-ink) 10%, transparent),
+    color-mix(in oklab, var(--color-ink) 4%, transparent)
+  );
   animation: composerJustSent 360ms ease-out forwards;
 }
 :root.dark .composer-card.glass-pane[data-just-sent="true"]::after {
-  box-shadow:
-    inset 0 1px 0 0 color-mix(in oklab, white 38%, transparent),
-    inset 0 8px 16px -6px color-mix(in oklab, white 14%, transparent);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, white 10%, transparent),
+    color-mix(in oklab, white 4%, transparent)
+  );
 }
 @keyframes composerJustSent {
   from { opacity: 1; }
