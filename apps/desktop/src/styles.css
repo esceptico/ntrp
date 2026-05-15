@@ -672,7 +672,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      the backdrop colors actually show. The hairline ring + soft
      shadow define the edge and lift. Same vocabulary as dark glass
      just inverted: blur as the shared engine. */
-  background-color: color-mix(in oklab, var(--color-surface) 18%, transparent);
+  background-color: color-mix(in oklab, var(--color-surface) 70%, transparent);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-color: transparent;
@@ -767,7 +767,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      surface tint than thin (35%) for popover content legibility,
      same saturation pump. Lifted drop shadow so the popover visibly
      floats above its parent. */
-  background-color: color-mix(in oklab, var(--color-surface) 35%, transparent);
+  background-color: color-mix(in oklab, var(--color-surface) 88%, transparent);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   border-color: transparent;
