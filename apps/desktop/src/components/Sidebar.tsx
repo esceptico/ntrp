@@ -367,7 +367,7 @@ function SessionList() {
             const isFirst = idx === 0 && !searchActive;
             return (
               <div key={bucket.label}>
-                <div className="sticky top-0 z-10 flex items-center gap-1 pr-[18px] bg-bg-main">
+                <div className="sticky top-0 z-10 flex items-center gap-1 pr-[18px]">
                   <button
                     type="button"
                     onClick={() => toggleBucket(bucket.label)}
