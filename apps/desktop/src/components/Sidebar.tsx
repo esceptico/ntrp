@@ -421,13 +421,13 @@ function SessionList() {
                   {!isCollapsed && (
                     <motion.div
                       key="rows"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
+                      initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+                      animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+                      exit={{ gridTemplateRows: "0fr", opacity: 0 }}
                       transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                      style={{ overflow: "hidden" }}
+                      style={{ display: "grid" }}
                     >
-                      <div className="px-2.5 flex flex-col gap-0">
+                      <div className="px-2.5 flex flex-col gap-0 overflow-hidden min-h-0">
                         {bucket.items.map((session) => (
                           <SessionRow
                             key={session.session_id}

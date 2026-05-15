@@ -25,10 +25,18 @@ export function SidebarResizeHandle() {
       document.body.style.cursor = "ew-resize";
       document.body.style.userSelect = "none";
 
+      // During drag, write the CSS variable imperatively and skip the store
+      // entirely. Going through Zustand on every mousemove rerenders every
+      // subscriber of prefs.sidebarWidth (App, both sidebars) per pixel —
+      // pure waste when the only consumers of the live value are CSS readers
+      // that already use var(--sidebar-width). Per the motion tier list,
+      // CSS-var writes trigger paint, so we still want this scoped, but
+      // moving it off React drops 60+ rerenders per second during drag.
+      let liveWidth = startWidthRef.current;
       const onMove = (moveEv: MouseEvent) => {
         const next = startWidthRef.current + (moveEv.clientX - startXRef.current);
-        const clamped = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, next));
-        setPref("sidebarWidth", clamped);
+        liveWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, next));
+        document.documentElement.style.setProperty("--sidebar-width", `${liveWidth}px`);
       };
 
       const onUp = () => {
@@ -37,19 +45,18 @@ export function SidebarResizeHandle() {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
 
-        const current = useStore.getState().prefs.sidebarWidth;
-        let nearest = current;
+        let nearest = liveWidth;
         let nearestDelta = Infinity;
         for (const point of SIDEBAR_SNAP_POINTS) {
-          const delta = Math.abs(current - point);
+          const delta = Math.abs(liveWidth - point);
           if (delta < nearestDelta) {
             nearest = point;
             nearestDelta = delta;
           }
         }
-        if (nearestDelta <= SIDEBAR_SNAP_THRESHOLD_PX && nearest !== current) {
-          setPref("sidebarWidth", nearest);
-        }
+        const final =
+          nearestDelta <= SIDEBAR_SNAP_THRESHOLD_PX ? nearest : liveWidth;
+        setPref("sidebarWidth", final);
       };
 
       document.addEventListener("mousemove", onMove);

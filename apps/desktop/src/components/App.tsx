@@ -144,7 +144,7 @@ export function App() {
        AnimatePresence). */
     <MotionConfig reducedMotion="user">
       <motion.div
-        className="glass-pane absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] rounded-xl overflow-hidden will-change-transform"
+        className="glass-pane absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] rounded-xl overflow-hidden"
         initial={false}
         animate={{ x: sidebarHidden ? -sidebarWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}

@@ -12,8 +12,11 @@ import { originFromEvent } from "../lib/motion";
 // (we're not animating a Slack message, just a card dismissing).
 const SPRING = { type: "spring", stiffness: 340, damping: 32, mass: 0.9 } as const;
 
-const STACK_OPACITY = [1, 0.55, 0.3];
-const STACK_Y = [0, -6, -12];
+// Cap visible stack to 2 cards. The front card already shows "1 of N" when
+// there are more pending, so a third sliver doesn't add information — it
+// just adds a GPU blend layer and lifts z-index pressure.
+const STACK_OPACITY = [1, 0.5];
+const STACK_Y = [0, -6];
 const STACK_SCALE_STEP = 0.035;
 
 /** Encodes which way the front card should leave on dismiss. The store
@@ -193,7 +196,10 @@ export function ApprovalBanner() {
                   key={approval.toolId}
                   style={{
                     gridArea: "stack",
-                    zIndex: 100 - index,
+                    // Stack order only matters relative to siblings; high
+                    // absolute z-index just inflates the chat's stacking
+                    // context for no benefit.
+                    zIndex: 2 - index,
                     pointerEvents: index === 0 ? "auto" : "none",
                   }}
                   variants={stackVariants}

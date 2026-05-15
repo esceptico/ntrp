@@ -218,9 +218,15 @@ export function Messages() {
           <CompactionIndicator />
         </div>
       </div>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {!isNearBottom && order.length > 0 && (
+          // Two discrete variants (round chevron vs. pill with count) swap
+          // via AnimatePresence + a `mode="wait"` keyed parent. Each variant
+          // only animates opacity/scale/y — pure compositor work. Previously
+          // a single `layout`-FLIP button morphed widths, which forced a
+          // measurement pass per swap.
           <motion.button
+            key={unreadCount > 0 ? "unread" : "chevron"}
             type="button"
             onClick={onPillClick}
             initial={{ opacity: 0, y: 6, scale: 0.95 }}
@@ -228,11 +234,6 @@ export function Messages() {
             exit={{ opacity: 0, y: 6, scale: 0.95 }}
             transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
             aria-label={unreadCount > 0 ? `${unreadCount} new message${unreadCount === 1 ? "" : "s"} — jump to latest` : "Scroll to bottom"}
-            // Pill grows to fit a count badge when messages land while
-            // the user is scrolled up. With zero unread we collapse back
-            // to the round chevron — minimal chrome when there's nothing
-            // to communicate. `layout` lets motion FLIP between widths.
-            layout
             style={{ bottom: "calc(var(--chat-bottom-h, 96px) + 12px)" }}
             className={
               unreadCount > 0
@@ -242,15 +243,7 @@ export function Messages() {
           >
             <ChevronDown size={ICON.MD} strokeWidth={2} />
             {unreadCount > 0 && (
-              <motion.span
-                key={unreadCount}
-                initial={{ opacity: 0, y: -3 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.14, ease: EASE_EMPHASIZED }}
-                className="tabular-nums"
-              >
-                {unreadCount} new
-              </motion.span>
+              <span className="tabular-nums">{unreadCount} new</span>
             )}
           </motion.button>
         )}
