@@ -668,15 +668,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `border border-line` from Tailwind utilities will see it
    suppressed in dark mode via `border-color: transparent` here. */
 .glass-pane {
-  /* Light recipe — "Linen with breath." Architectural identity
-     (clean white surface, ink hairline border, soft drop shadow)
-     with just enough transparency + blur that backdrop motion shows
-     through. Reads as solid paper at rest, glass when something
-     moves behind it. No meniscus (was reading as a delimiter line
-     on white-on-white). */
-  background-color: rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
-  -webkit-backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
+  /* Light recipe — "Linen." Solid white surface, hairline ink
+     border, soft 2-step drop shadow. No backdrop-filter, no
+     transparency. Glass identity reserved for dark mode; light gets
+     a clean architectural material that the user explicitly liked
+     for its rim treatment. */
+  background-color: var(--color-surface);
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.04),
@@ -767,17 +764,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
    "Thin" — same surface, different role. */
 .glass-pane-thick {
-  /* Light: more opaque than thin (92% white) so popover/modal
-     content stays crisply readable, with a hint of backdrop blur
-     for the glass identity. Lifted shadow. Same hairline ink ring
-     family, slightly stronger to mark the focused-attention tier. */
-  background-color: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(32px) saturate(170%) brightness(1.12);
-  -webkit-backdrop-filter: blur(32px) saturate(170%) brightness(1.12);
+  /* Light: linen recipe — solid surface, hairline ink ring at 10%
+     (slightly stronger than thin's 8% for the focused-attention
+     tier), lifted 2-step shadow. */
+  background-color: var(--color-surface);
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.05),
-    0 16px 40px rgba(20, 24, 28, 0.08),
+    0 16px 40px rgba(20, 24, 28, 0.10),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-thick {
