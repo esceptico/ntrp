@@ -256,10 +256,18 @@ export function BudgetDial() {
                 color={ratioColor(messageRatio)}
               />
               <div className="mt-2 pt-2 border-t border-line-soft grid grid-cols-2 gap-y-1 gap-x-3">
-                <span className="text-faint">Session spend</span>
-                <span className="tabular-nums text-ink-soft text-right">
-                  {formatCost(usage.totalCost)}
-                </span>
+                {/* Spend row hidden when zero — for OAuth-backed providers
+                    (openai-codex, claude-pro, etc.) the server has no
+                    pricing data and "$0" is misleading. The provider just
+                    doesn't meter per-token from us. */}
+                {usage.totalCost > 0 && (
+                  <>
+                    <span className="text-faint">Session spend</span>
+                    <span className="tabular-nums text-ink-soft text-right">
+                      {formatCost(usage.totalCost)}
+                    </span>
+                  </>
+                )}
                 {usage.totalTokens > 0 && (
                   <>
                     <span className="text-faint">Total tokens</span>
@@ -278,8 +286,10 @@ export function BudgetDial() {
                 )}
               </div>
               <div className="mt-2 text-[11px] text-faint leading-snug">
-                Auto-compacts when either scale hits 100%. Subagent spend is
-                rolled into the cost; their tokens stay off this gauge.
+                Auto-compacts when either scale hits 100%.
+                {usage.totalCost > 0
+                  ? " Subagent spend is rolled into the cost; their tokens stay off this gauge."
+                  : " Subagent tokens stay off this gauge."}
               </div>
             </motion.div>
           )}

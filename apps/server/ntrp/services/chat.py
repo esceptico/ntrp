@@ -839,7 +839,17 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     input_tokens = u.prompt_tokens + u.cache_read_tokens + u.cache_write_tokens
                 else:
                     input_tokens = None
-                metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
+                # `run.messages` is the agent's working-set after this run —
+                # for loops that's the trimmed tail (compactor and pricing
+                # both operate on this), not the full disk transcript. We
+                # persist the working-set size so the next session-open
+                # shows the correct message-pressure number on the dial.
+                metadata: dict | None = None
+                if input_tokens is not None or run.messages:
+                    metadata = {}
+                    if input_tokens is not None:
+                        metadata["last_input_tokens"] = input_tokens
+                    metadata["last_message_count"] = len(run.messages)
                 await ctx.session_service.save(session_state, _persistable_messages(run), metadata=metadata)
                 # Disk now holds the canonical end-of-run state; advance the
                 # checkpoint watermark so any cursor below it gets a

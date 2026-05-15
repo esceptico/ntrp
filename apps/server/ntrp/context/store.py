@@ -1089,6 +1089,7 @@ class SessionStore:
             state=state,
             messages=messages,
             last_input_tokens=metadata.get("last_input_tokens"),
+            last_message_count=metadata.get("last_message_count"),
         )
 
     async def get_latest_id(self) -> str | None:

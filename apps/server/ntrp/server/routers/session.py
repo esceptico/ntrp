@@ -139,9 +139,15 @@ async def get_session_history(
         # Snapshot of the session's budget-relevant counters so the desktop
         # can populate the BudgetDial immediately on session open instead of
         # waiting for the next run to finish and emit RunFinishedEvent.
+        # `last_message_count` reflects the agent's working-set after its
+        # last run — for loop sessions that's the trimmed tail, not the
+        # full disk transcript. Falls back to the on-disk count for
+        # sessions saved before this field existed.
         "usage": {
             "last_input_tokens": data.last_input_tokens or 0,
-            "message_count": len(data.messages),
+            "message_count": data.last_message_count
+            if data.last_message_count is not None
+            else len(data.messages),
         },
     }
 
