@@ -665,20 +665,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `border border-line` from Tailwind utilities will see it
    suppressed in dark mode via `border-color: transparent` here. */
 .glass-pane {
-  /* Light recipe — surface-tinted (additive white), not ink-tinted
-     (subtractive gray). The whole "dark mode picks up light from
-     above, light mode absorbs light" metaphor was wrong: Apple's
-     Thin/Regular Material on light bg is whitish-translucent, not
-     gray. The surface itself reads near-white; backdrop-filter
-     diffuses content behind it; the only "ink" cues are the hairline
-     edge ring and the underlying drop shadow. */
-  background-color: color-mix(in oklab, var(--color-surface) 55%, transparent);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  /* Light recipe — "Linen" / architectural minimal. Drops the glass
+     material entirely. Light themes don't need atmospheric cues to
+     define surfaces; hairlines + soft shadows do it cleaner. Solid
+     surface, ink-translucent hairline ring, paper-on-desk drop
+     shadow. Same shape vocabulary as dark glass (rounded radii,
+     spacing, row patterns) — different material story. */
+  background-color: var(--color-surface);
   border-color: transparent;
   box-shadow:
-    0 3px 12px -3px rgba(0, 0, 0, 0.06),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 6%, transparent);
+    0 2px 8px -2px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
 }
 :root.dark .glass-pane {
   background-color: transparent;
@@ -706,8 +703,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
 }
 
-/* Composer-specific: lit-edge brightens on focus. Higher specificity
-   than `.glass-pane` so the focus state overrides. */
+/* Composer-specific focus state. Light: the inset ring darkens
+   slightly so the surface feels "engaged" without changing
+   character. Dark: the top-edge specular brightens. */
+.composer-card.glass-pane:focus-within {
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 14%, transparent);
+}
 :root.dark .composer-card.glass-pane:focus-within {
   box-shadow:
     0 4px 14px -4px rgba(0, 0, 0, 0.32),
@@ -757,18 +760,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
    "Thin" — same surface, different role. */
 .glass-pane-thick {
-  /* Light: heavier surface tint than thin — popovers/modals want
-     content legibility, so the white-additive tint is dialed up
-     (75% vs thin's 55%). Same blur-and-glass mechanism, just a
-     more present white surface. Reads as "frosted white glass"
-     not "gray dimmer." */
-  background-color: color-mix(in oklab, var(--color-surface) 75%, transparent);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  /* Light: same architectural recipe as .glass-pane but a more
+     lifted drop shadow — popovers and modals should visibly hover
+     above their parent. Sharper edge tone too for focused-attention
+     surfaces. */
+  background-color: var(--color-surface);
   border-color: transparent;
   box-shadow:
-    0 8px 24px -6px rgba(0, 0, 0, 0.10),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
+    0 12px 32px -8px rgba(0, 0, 0, 0.12),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-thick {
   background-color: transparent;
@@ -808,15 +808,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
    See `feedback_backdrop_filter_containing_block.md` in memory. */
 .glass-pane-static {
-  /* Light: solid white surface (no backdrop-filter — this tier
-     exists for nested popovers where the parent already filters).
-     Same edge + shadow vocabulary as the thick tier so it visually
-     belongs. */
+  /* Light: same architectural recipe as glass-pane-thick (they share
+     the popover/dropdown role; static is only different in dark mode
+     where it sidesteps backdrop-filter for nested cases). */
   background-color: var(--color-surface);
   border-color: transparent;
   box-shadow:
-    0 8px 24px -6px rgba(0, 0, 0, 0.10),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
+    0 12px 32px -8px rgba(0, 0, 0, 0.12),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-static {
   background-color: var(--color-bg-main);
