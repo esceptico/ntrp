@@ -184,7 +184,14 @@ class BackgroundTaskRegistry:
         result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
 
         notification = f"[background agent {task_id} {status}]\n\nResult:\n{result}"
-        messages = [{"role": Role.USER, "content": notification, "is_meta": True}]
+        messages = [
+            {
+                "role": Role.USER,
+                "content": notification,
+                "is_meta": True,
+                "client_id": f"bg:{task_id}:{status}",
+            }
+        ]
 
         if emit:
             await emit(

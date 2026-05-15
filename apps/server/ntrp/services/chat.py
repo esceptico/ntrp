@@ -50,6 +50,7 @@ class ChatDeps:
     available_integrations: list[str]
     integration_errors: dict[str, str]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
+    dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
     memory: FactMemory | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: NotifierService | None = None
@@ -68,6 +69,7 @@ class ChatContext:
     session_service: SessionService
     run_registry: RunRegistry
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
+    dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
 
 async def _record_run_started(service: object, run_id: str, session_id: str) -> None:
@@ -275,11 +277,10 @@ async def _prepare_messages(
         # Stamp the desktop client's UI id so /session/revert can later
         # match the saved row when the user edits this message.
         user_msg["client_id"] = client_id
-        # Loop-dispatched messages aren't user input — they're scheduler
-        # ticks. Tag is_meta so the model still sees the prompt (in API
-        # history) but the desktop transcript hides the bubble. Mirrors
-        # Claude Code's isMeta convention.
-        if client_id.startswith("loop:"):
+        # Loop/background-dispatched messages aren't user input. Tag
+        # is_meta so the model sees them but the desktop transcript hides
+        # the bubble. Mirrors Claude Code's isMeta convention.
+        if client_id.startswith(("loop:", "bg:")):
             user_msg["is_meta"] = True
     messages.append(user_msg)
 
@@ -418,6 +419,7 @@ async def prepare_chat(
         session_service=deps.session_service,
         run_registry=deps.run_registry,
         enqueue_run_completed=deps.enqueue_run_completed,
+        dispatch_session_message=deps.dispatch_session_message,
     )
 
 
@@ -449,6 +451,7 @@ async def submit_chat_message(
     session_service: SessionService | None = None,
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
+    is_meta_client = bool(client_id and client_id.startswith(("loop:", "bg:")))
 
     # Idempotent retry: a POST with a client_id we already accepted within
     # the dedup window returns the same run_id instead of starting a
@@ -466,7 +469,7 @@ async def submit_chat_message(
         }
         if client_id:
             entry["client_id"] = client_id
-            if client_id.startswith("loop:"):
+            if is_meta_client:
                 entry["is_meta"] = True
         active_run.queue_injection(entry)
         if client_id:
@@ -497,6 +500,8 @@ async def submit_chat_message(
     await _record_run_started(deps.session_service, ctx.run.run_id, ctx.session_state.session_id)
     if loop_task_id:
         ctx.run.loop_task_id = loop_task_id
+    if is_meta_client:
+        ctx.run.is_meta_run = True
     # Persist the user message before the agent starts streaming. Without
     # this the message exists only in `run.messages` (in memory) until the
     # first `on_step_finish` save fires — and a client that switches away
@@ -639,6 +644,32 @@ def _build_get_pending(bus: SessionBus, run: RunState, session_service: SessionS
     return _get_pending
 
 
+async def _handle_background_result(
+    *,
+    run: RunState,
+    session_id: str,
+    messages: list[dict],
+    dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None,
+    run_finished: bool,
+) -> None:
+    if not run_finished and not run.cancelled:
+        run.queue_injections(messages)
+        return
+    if not dispatch_session_message:
+        return
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        client_id = message.get("client_id")
+        await dispatch_session_message(
+            session_id,
+            content,
+            client_id if isinstance(client_id, str) else None,
+            True,
+        )
+
+
 async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
@@ -663,7 +694,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 integration_errors=ctx.integration_errors,
                 skip_approvals=session_state.skip_approvals,
                 session_name=session_state.name or "",
-                is_meta_run=bool(run.loop_task_id),
+                is_meta_run=bool(run.loop_task_id) or run.is_meta_run,
             )
         )
 
@@ -716,8 +747,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
 
         async def _on_bg_result(messages: list[dict]) -> None:
-            if not run_finished and not run.cancelled:
-                run.queue_injections(messages)
+            await _handle_background_result(
+                run=run,
+                session_id=session_state.session_id,
+                messages=messages,
+                dispatch_session_message=ctx.dispatch_session_message,
+                run_finished=run_finished,
+            )
 
         bg_registry.on_result = _on_bg_result
 
@@ -746,6 +782,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         usage_dict["cost"] = tracker.cost
         await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=usage_dict))
         ctx.run_registry.complete_run(run.run_id)
+        run_finished = True
 
     except asyncio.CancelledError:
         run.cancelled = True

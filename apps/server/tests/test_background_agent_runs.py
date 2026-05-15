@@ -62,5 +62,6 @@ async def test_background_registry_injects_hidden_meta_completion_with_result():
             "role": "user",
             "content": "[background agent bg-1 completed]\n\nResult:\nemail summary",
             "is_meta": True,
+            "client_id": "bg:bg-1:completed",
         }
     ]

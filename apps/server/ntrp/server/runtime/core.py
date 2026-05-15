@@ -1,4 +1,6 @@
-from datetime import datetime
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request
 
@@ -24,6 +26,10 @@ from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from datetime import datetime
+
 
 class Runtime:
     def __init__(self, config: Config | None = None):
@@ -40,6 +46,7 @@ class Runtime:
         self.skill_registry: SkillRegistry | None = None
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
+        self.dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
         self._connected = False
         self._closing = False
@@ -264,6 +271,7 @@ class Runtime:
             available_integrations=self.get_available_integrations(),
             integration_errors=self.get_integration_errors(),
             enqueue_run_completed=self.stores.outbox.enqueue_run_completed if self.stores else None,
+            dispatch_session_message=self.dispatch_session_message,
             memory=self.memory,
             skill_registry=self.skill_registry,
             notifier_service=self.notifier_service,

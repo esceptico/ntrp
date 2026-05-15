@@ -15,11 +15,10 @@ from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
-from ntrp.server.routers.loops import router as loops_router
-from ntrp.services.chat import submit_chat_message
 from ntrp.server.routers.context import router as context_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
+from ntrp.server.routers.loops import router as loops_router
 from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.ops import router as ops_router
 from ntrp.server.routers.providers import router as providers_router
@@ -27,6 +26,7 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime
+from ntrp.services.chat import submit_chat_message
 
 
 def _loop_target_id(automation: Automation) -> str | None:
@@ -85,25 +85,39 @@ async def lifespan(app: FastAPI):
     # target session can't trample each other's tail-end load→save window.
     session_write_locks: dict[str, asyncio.Lock] = {}
 
+    async def _dispatch_session_message(
+        session_id: str,
+        message: str,
+        client_id: str | None = None,
+        skip_approvals: bool | None = False,
+    ) -> str | None:
+        result = await submit_chat_message(
+            runtime.run_registry,
+            lambda: runtime.build_chat_deps(),
+            bus_registry,
+            message=message,
+            session_id=session_id,
+            skip_approvals=skip_approvals,
+            client_id=client_id,
+            session_service=runtime.session_service,
+        )
+        return result.get("run_id") if isinstance(result, dict) else None
+
     async def _dispatch_iteration(automation: Automation) -> str | None:
         # Iteration loops are autonomous: the user already approved the
         # loop at creation (via the create_loop approval card), so
         # subsequent iterations should skip per-tool approvals. Matches
         # the same writable→skip_approvals convention the regular
         # automation path uses in scheduler._run_agent.
-        result = await submit_chat_message(
-            runtime.run_registry,
-            lambda: runtime.build_chat_deps(),
-            bus_registry,
-            message=automation.loop_prompt or "",
-            session_id=_loop_target_id(automation) or "",
-            skip_approvals=automation.writable,
+        return await _dispatch_session_message(
+            _loop_target_id(automation) or "",
+            automation.loop_prompt or "",
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
-            session_service=runtime.session_service,
+            skip_approvals=automation.writable,
         )
-        return result.get("run_id") if isinstance(result, dict) else None
 
     runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
+    runtime.dispatch_session_message = _dispatch_session_message
 
     async def _dispatch_post(automation: Automation) -> str | None:
         # Post mode: run the agent fresh (no session history), then write

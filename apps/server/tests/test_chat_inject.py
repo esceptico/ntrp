@@ -22,7 +22,7 @@ from ntrp.server.routers.chat import _event_stream
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
-from ntrp.services.chat import ChatDeps, expand_skill_command
+from ntrp.services.chat import ChatDeps, _handle_background_result, expand_skill_command
 from ntrp.skills.registry import SkillRegistry
 
 
@@ -297,6 +297,67 @@ async def test_drain_no_events_when_queue_empty():
 
     assert drained == []
     assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_background_result_after_parent_finished_dispatches_meta_run():
+    run = RunState(run_id="cool-otter", session_id="sess-1")
+    calls = []
+
+    async def dispatch(session_id: str, message: str, client_id: str | None, skip_approvals: bool | None):
+        calls.append((session_id, message, client_id, skip_approvals))
+
+    await _handle_background_result(
+        run=run,
+        session_id="sess-1",
+        messages=[
+            {
+                "role": "user",
+                "content": "[background agent bg-1 completed]\n\nResult:\ndone",
+                "is_meta": True,
+                "client_id": "bg:bg-1:completed",
+            }
+        ],
+        dispatch_session_message=dispatch,
+        run_finished=True,
+    )
+
+    assert run.inject_queue == []
+    assert calls == [
+        (
+            "sess-1",
+            "[background agent bg-1 completed]\n\nResult:\ndone",
+            "bg:bg-1:completed",
+            True,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_background_result_during_parent_run_queues_injection():
+    run = RunState(run_id="cool-otter", session_id="sess-1")
+    calls = []
+
+    async def dispatch(session_id: str, message: str, client_id: str | None, skip_approvals: bool | None):
+        calls.append((session_id, message, client_id, skip_approvals))
+
+    message = {
+        "role": "user",
+        "content": "[background agent bg-1 completed]\n\nResult:\ndone",
+        "is_meta": True,
+        "client_id": "bg:bg-1:completed",
+    }
+
+    await _handle_background_result(
+        run=run,
+        session_id="sess-1",
+        messages=[message],
+        dispatch_session_message=dispatch,
+        run_finished=False,
+    )
+
+    assert run.inject_queue == [message]
+    assert calls == []
 
 
 # --- DELETE /chat/inject/{client_id} ---
