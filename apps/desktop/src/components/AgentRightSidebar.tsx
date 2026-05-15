@@ -39,6 +39,10 @@ function statusDotClass(status: BackgroundAgent["status"] | "running"): string {
   }
 }
 
+export function isActiveBackgroundAgent(agent: BackgroundAgent): boolean {
+  return agent.status === "running" || agent.status === "cancel_requested";
+}
+
 export function StatusDot({
   status,
   pulse = false,
@@ -245,6 +249,7 @@ export function AgentRightSidebar() {
     () =>
       Object.values(backgroundAgents ?? {})
         .filter((agent) => !currentSessionId || agent.sessionId === currentSessionId)
+        .filter(isActiveBackgroundAgent)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 8),
     [backgroundAgents, currentSessionId],

@@ -175,6 +175,63 @@ async def test_background_agent_cancel_request_is_session_scoped_and_evented(sto
 
 
 @pytest.mark.asyncio
+async def test_background_agent_schema_migrates_old_task_id_primary_key(tmp_path: Path):
+    conn = await database.connect(tmp_path / "old-sessions.db")
+    read_conn = await database.connect(tmp_path / "old-sessions.db", readonly=True)
+    await conn.execute(
+        """
+        CREATE TABLE background_agent_runs (
+            task_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            parent_run_id TEXT,
+            status TEXT NOT NULL,
+            command TEXT NOT NULL,
+            detail TEXT,
+            result_ref TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            updated_at TEXT NOT NULL,
+            ended_at TEXT,
+            cancel_requested_at TEXT,
+            notified_at TEXT
+        )
+        """
+    )
+    await conn.execute(
+        """
+        INSERT INTO background_agent_runs (
+            task_id, session_id, parent_run_id, status, command,
+            created_at, started_at, updated_at
+        )
+        VALUES ('bg-1', 'sess-1', 'run-1', 'running', 'old', 'now', 'now', 'now')
+        """
+    )
+    await conn.commit()
+
+    s = SessionStore(conn, read_conn)
+    await s.init_schema()
+    await s.record_background_agent_started(
+        task_id="bg-1",
+        session_id="sess-2",
+        parent_run_id="run-2",
+        command="new",
+    )
+    await s.record_background_agent_finished(
+        task_id="bg-1",
+        session_id="sess-2",
+        status="completed",
+        result_text="result",
+    )
+
+    assert (await s.list_background_agent_runs("sess-1"))[0]["command"] == "old"
+    assert (await s.list_background_agent_runs("sess-2"))[0]["command"] == "new"
+    assert await s.get_background_agent_result("sess-2", "bg-1") == "result"
+
+    await read_conn.close()
+    await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_marks_running_background_agents_interrupted_on_startup(store: SessionStore):
     await store.record_background_agent_started(
         task_id="bg-1",

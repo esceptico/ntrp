@@ -304,6 +304,62 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
+        await self._migrate_background_agent_runs_schema()
+
+    async def _migrate_background_agent_runs_schema(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(background_agent_runs)")
+        if not rows:
+            return
+
+        columns = {row["name"] for row in rows}
+        pk_columns = [row["name"] for row in sorted(rows, key=lambda row: row["pk"]) if row["pk"]]
+        if "result_text" in columns and pk_columns == ["session_id", "task_id"]:
+            return
+
+        await self.conn.execute("ALTER TABLE background_agent_runs RENAME TO background_agent_runs_old")
+        await self.conn.execute(
+            """
+            CREATE TABLE background_agent_runs (
+                task_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                parent_run_id TEXT,
+                status TEXT NOT NULL,
+                command TEXT NOT NULL,
+                detail TEXT,
+                result_ref TEXT,
+                result_text TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                updated_at TEXT NOT NULL,
+                ended_at TEXT,
+                cancel_requested_at TEXT,
+                notified_at TEXT,
+                PRIMARY KEY (session_id, task_id)
+            )
+            """
+        )
+        await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO background_agent_runs (
+                task_id, session_id, parent_run_id, status, command,
+                detail, result_ref, result_text, created_at, started_at,
+                updated_at, ended_at, cancel_requested_at, notified_at
+            )
+            SELECT
+                task_id, session_id, parent_run_id, status, command,
+                detail, result_ref, NULL, created_at, started_at,
+                updated_at, ended_at, cancel_requested_at, notified_at
+            FROM background_agent_runs_old
+            """
+        )
+        await self.conn.execute("DROP TABLE background_agent_runs_old")
+        await self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_background_agent_runs_session_status
+                ON background_agent_runs(session_id, status)
+            """
+        )
+        await self.conn.commit()
 
     def _to_serializable_messages(self, messages: list[dict | Any]) -> list[dict]:
         serializable: list[dict] = []

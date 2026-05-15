@@ -11,6 +11,7 @@ import {
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
 import { loadHistory, stopRun } from "../src/actions.js";
+import { isActiveBackgroundAgent } from "../src/components/AgentRightSidebar.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -665,4 +666,27 @@ test("background snapshot does not complete missing running tasks", () => {
   s.setBackgroundAgentsForSession("session-1", []);
 
   expect(getState().backgroundAgents["session-1:bg-1"].status).toBe("running");
+});
+
+test("right sidebar active background agents excludes terminal statuses", () => {
+  expect(
+    isActiveBackgroundAgent({
+      taskId: "bg-1",
+      sessionId: "session-1",
+      command: "research",
+      status: "completed",
+      createdAt: 1,
+      updatedAt: 2,
+    }),
+  ).toBe(false);
+  expect(
+    isActiveBackgroundAgent({
+      taskId: "bg-2",
+      sessionId: "session-1",
+      command: "research",
+      status: "running",
+      createdAt: 1,
+      updatedAt: 2,
+    }),
+  ).toBe(true);
 });

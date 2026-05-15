@@ -143,6 +143,23 @@ export function App() {
        this covers the JS-driven side (motion.div springs, layout anims,
        AnimatePresence). */
     <MotionConfig reducedMotion="user">
+      {/* SVG defs for liquid-glass displacement filter. Referenced by
+          `.glass-pane`'s backdrop-filter. Hidden via width/height 0 —
+          only the <defs> matter. feTurbulence generates a noise field;
+          feDisplacementMap warps the backdrop based on that noise.
+          baseFrequency tuned so the displacement reads as gentle
+          refraction (not chaotic). scale = pixel-radius of the warp. */}
+      <svg
+        aria-hidden
+        style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }}
+      >
+        <defs>
+          <filter id="liquid-edge" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="3" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
       <motion.div
         className="absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] bg-bg-main border border-line rounded-xl shadow-sm overflow-hidden will-change-transform"
         initial={false}
