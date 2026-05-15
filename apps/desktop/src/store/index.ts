@@ -301,6 +301,10 @@ export const useStore = create<State & Actions>((set) => ({
         messageCount: messageCount ?? s.usage.messageCount,
       },
     })),
+  hydrateUsageSnapshot: ({ lastPrompt, messageCount }) =>
+    set((s) => ({
+      usage: { ...s.usage, lastPrompt, messageCount },
+    })),
 
   openSettings: (origin) =>
     set((s) => ({

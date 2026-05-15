@@ -102,12 +102,6 @@ export function BudgetDial() {
     };
   }, [open]);
 
-  // Empty session — render nothing so the toolbar isn't decorated with a
-  // zero-progress dial before any work has happened.
-  if (usage.messageCount === 0 && usage.lastPrompt === 0 && usage.totalCost === 0) {
-    return <span />;
-  }
-
   return (
     <span className="inline-flex items-center">
       <button

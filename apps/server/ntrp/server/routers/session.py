@@ -136,6 +136,13 @@ async def get_session_history(
             "before": page["before"],
             "after": page["after"],
         },
+        # Snapshot of the session's budget-relevant counters so the desktop
+        # can populate the BudgetDial immediately on session open instead of
+        # waiting for the next run to finish and emit RunFinishedEvent.
+        "usage": {
+            "last_input_tokens": data.last_input_tokens or 0,
+            "message_count": len(data.messages),
+        },
     }
 
 

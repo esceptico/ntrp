@@ -338,6 +338,11 @@ export interface Actions {
   setEditingId: (id: string | null) => void;
   resetUsage: () => void;
   accumulateUsage: (usage: { prompt: number; completion: number; cost: number; messageCount?: number }) => void;
+  /** Replace the budget-relevant fields without touching cumulative spend.
+   *  Used when loading a session's persisted state — last prompt size and
+   *  message count come from disk; cumulative cost/tokens start fresh
+   *  for the session view (server doesn't persist running totals). */
+  hydrateUsageSnapshot: (snapshot: { lastPrompt: number; messageCount: number }) => void;
   openSettings: (origin?: { x: number; y: number } | null) => void;
   closeSettings: () => void;
   setConnectionDraft: (patch: Partial<AppConfig>) => void;

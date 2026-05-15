@@ -156,10 +156,11 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
 
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
-  const { messages, active_run_id, page } = await apiWithConfig<{
+  const { messages, active_run_id, page, usage } = await apiWithConfig<{
     messages: HistoryMessage[];
     active_run_id: string | null;
     page?: HistoryPage;
+    usage?: { last_input_tokens: number; message_count: number };
   }>(s.config, historyPath(sessionId, options));
 
   if (getState().currentSessionId !== sessionId) return;
@@ -176,6 +177,15 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     s.appendHistoryPage(items, page);
   } else {
     s.setHistory(items, page);
+    // Only hydrate the budget snapshot on a fresh load — paging in older /
+    // newer chunks doesn't change "what the agent's current context size
+    // looks like" so we leave the dial alone.
+    if (usage) {
+      s.hydrateUsageSnapshot({
+        lastPrompt: usage.last_input_tokens,
+        messageCount: usage.message_count,
+      });
+    }
   }
   if (active_run_id) {
     s.setRunning(true);
