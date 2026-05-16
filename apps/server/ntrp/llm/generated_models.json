@@ -1,0 +1,5617 @@
+[
+  {
+    "id": "claude-haiku-4-5",
+    "provider": "anthropic",
+    "name": "Claude Haiku 4.5 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 1.0,
+    "price_out": 5.0,
+    "price_cache_read": 0.1,
+    "price_cache_write": 1.25,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-10-15",
+    "last_updated": "2025-10-15"
+  },
+  {
+    "id": "claude-haiku-4-5-20251001",
+    "provider": "anthropic",
+    "name": "Claude Haiku 4.5",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 1.0,
+    "price_out": 5.0,
+    "price_cache_read": 0.1,
+    "price_cache_write": 1.25,
+    "reasoning_efforts": [
+      "high",
+      "max"
+    ],
+    "release_date": "2025-10-15",
+    "last_updated": "2025-10-15"
+  },
+  {
+    "id": "claude-opus-4-0",
+    "provider": "anthropic",
+    "name": "Claude Opus 4 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 32000,
+    "price_in": 15.0,
+    "price_out": 75.0,
+    "price_cache_read": 1.5,
+    "price_cache_write": 18.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-05-22",
+    "last_updated": "2025-05-22"
+  },
+  {
+    "id": "claude-opus-4-1",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.1 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 32000,
+    "price_in": 15.0,
+    "price_out": 75.0,
+    "price_cache_read": 1.5,
+    "price_cache_write": 18.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-08-05",
+    "last_updated": "2025-08-05"
+  },
+  {
+    "id": "claude-opus-4-1-20250805",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.1",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 32000,
+    "price_in": 15.0,
+    "price_out": 75.0,
+    "price_cache_read": 1.5,
+    "price_cache_write": 18.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-08-05",
+    "last_updated": "2025-08-05"
+  },
+  {
+    "id": "claude-opus-4-20250514",
+    "provider": "anthropic",
+    "name": "Claude Opus 4",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 32000,
+    "price_in": 15.0,
+    "price_out": 75.0,
+    "price_cache_read": 1.5,
+    "price_cache_write": 18.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-05-22",
+    "last_updated": "2025-05-22"
+  },
+  {
+    "id": "claude-opus-4-5",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.5 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-11-24",
+    "last_updated": "2025-11-24"
+  },
+  {
+    "id": "claude-opus-4-5-20251101",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.5",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-11-01",
+    "last_updated": "2025-11-01"
+  },
+  {
+    "id": "claude-opus-4-6",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.6",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2026-02-05",
+    "last_updated": "2026-03-13"
+  },
+  {
+    "id": "claude-opus-4-7",
+    "provider": "anthropic",
+    "name": "Claude Opus 4.7",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "release_date": "2026-04-16",
+    "last_updated": "2026-04-16"
+  },
+  {
+    "id": "claude-sonnet-4-0",
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-05-22",
+    "last_updated": "2025-05-22"
+  },
+  {
+    "id": "claude-sonnet-4-20250514",
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-05-22",
+    "last_updated": "2025-05-22"
+  },
+  {
+    "id": "claude-sonnet-4-5",
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4.5 (latest)",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-09-29",
+    "last_updated": "2025-09-29"
+  },
+  {
+    "id": "claude-sonnet-4-5-20250929",
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4.5",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2025-09-29",
+    "last_updated": "2025-09-29"
+  },
+  {
+    "id": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4.6",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "release_date": "2026-02-17",
+    "last_updated": "2026-03-13"
+  },
+  {
+    "id": "gemini-2.5-flash",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.3,
+    "price_out": 2.5,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-03-20",
+    "last_updated": "2025-06-05"
+  },
+  {
+    "id": "gemini-2.5-flash-lite",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash Lite",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-06-17",
+    "last_updated": "2025-06-17"
+  },
+  {
+    "id": "gemini-2.5-flash-lite-preview-06-17",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash Lite Preview 06-17",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-06-17",
+    "last_updated": "2025-06-17"
+  },
+  {
+    "id": "gemini-2.5-flash-lite-preview-09-2025",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash Lite Preview 09-25",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-25",
+    "last_updated": "2025-09-25"
+  },
+  {
+    "id": "gemini-2.5-flash-preview-05-20",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash Preview 05-20",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.15,
+    "price_out": 0.6,
+    "price_cache_read": 0.0375,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-05-20",
+    "last_updated": "2025-05-20"
+  },
+  {
+    "id": "gemini-2.5-flash-preview-09-2025",
+    "provider": "google",
+    "name": "Gemini 2.5 Flash Preview 09-25",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.3,
+    "price_out": 2.5,
+    "price_cache_read": 0.075,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-25",
+    "last_updated": "2025-09-25"
+  },
+  {
+    "id": "gemini-2.5-pro",
+    "provider": "google",
+    "name": "Gemini 2.5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-03-20",
+    "last_updated": "2025-06-05"
+  },
+  {
+    "id": "gemini-2.5-pro-preview-06-05",
+    "provider": "google",
+    "name": "Gemini 2.5 Pro Preview 06-05",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.31,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-06-05",
+    "last_updated": "2025-06-05"
+  },
+  {
+    "id": "gemini-3-flash-preview",
+    "provider": "google",
+    "name": "Gemini 3 Flash Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.5,
+    "price_out": 3.0,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "high"
+    ],
+    "release_date": "2025-12-17",
+    "last_updated": "2025-12-17"
+  },
+  {
+    "id": "gemini-3-pro-preview",
+    "provider": "google",
+    "name": "Gemini 3 Pro Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 64000,
+    "price_in": 2.0,
+    "price_out": 12.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-18",
+    "last_updated": "2025-11-18"
+  },
+  {
+    "id": "gemini-3.1-flash-lite",
+    "provider": "google",
+    "name": "Gemini 3.1 Flash Lite",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.25,
+    "price_out": 1.5,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-05-07",
+    "last_updated": "2026-05-07"
+  },
+  {
+    "id": "gemini-3.1-flash-lite-preview",
+    "provider": "google",
+    "name": "Gemini 3.1 Flash Lite Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.25,
+    "price_out": 1.5,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-03-03",
+    "last_updated": "2026-03-03"
+  },
+  {
+    "id": "gemini-3.1-pro-preview",
+    "provider": "google",
+    "name": "Gemini 3.1 Pro Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 2.0,
+    "price_out": 12.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-02-19",
+    "last_updated": "2026-02-19"
+  },
+  {
+    "id": "gemini-3.1-pro-preview-customtools",
+    "provider": "google",
+    "name": "Gemini 3.1 Pro Preview Custom Tools",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 2.0,
+    "price_out": 12.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-02-19",
+    "last_updated": "2026-02-19"
+  },
+  {
+    "id": "gemini-flash-latest",
+    "provider": "google",
+    "name": "Gemini Flash Latest",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.3,
+    "price_out": 2.5,
+    "price_cache_read": 0.075,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-25",
+    "last_updated": "2025-09-25"
+  },
+  {
+    "id": "gemini-flash-lite-latest",
+    "provider": "google",
+    "name": "Gemini Flash-Lite Latest",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-25",
+    "last_updated": "2025-09-25"
+  },
+  {
+    "id": "gemini-live-2.5-flash",
+    "provider": "google",
+    "name": "Gemini Live 2.5 Flash",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text",
+      "audio"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 8000,
+    "price_in": 0.5,
+    "price_out": 2.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-01",
+    "last_updated": "2025-09-01"
+  },
+  {
+    "id": "gemini-live-2.5-flash-preview-native-audio",
+    "provider": "google",
+    "name": "Gemini Live 2.5 Flash Preview Native Audio",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text",
+      "audio"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 65536,
+    "price_in": 0.5,
+    "price_out": 2.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-06-17",
+    "last_updated": "2025-09-18"
+  },
+  {
+    "id": "gemma-4-26b-a4b-it",
+    "provider": "google",
+    "name": "Gemma 4 26B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 8192,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
+  },
+  {
+    "id": "gemma-4-31b-it",
+    "provider": "google",
+    "name": "Gemma 4 31B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 8192,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
+  },
+  {
+    "id": "gpt-5",
+    "provider": "openai",
+    "name": "GPT-5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "gpt-5-codex",
+    "provider": "openai",
+    "name": "GPT-5-Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-09-15",
+    "last_updated": "2025-09-15"
+  },
+  {
+    "id": "gpt-5-mini",
+    "provider": "openai",
+    "name": "GPT-5 Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "gpt-5-nano",
+    "provider": "openai",
+    "name": "GPT-5 Nano",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.05,
+    "price_out": 0.4,
+    "price_cache_read": 0.005,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "gpt-5-pro",
+    "provider": "openai",
+    "name": "GPT-5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 272000,
+    "price_in": 15.0,
+    "price_out": 120.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-10-06",
+    "last_updated": "2025-10-06"
+  },
+  {
+    "id": "gpt-5.1",
+    "provider": "openai",
+    "name": "GPT-5.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "gpt-5.1-chat-latest",
+    "provider": "openai",
+    "name": "GPT-5.1 Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "gpt-5.1-codex",
+    "provider": "openai",
+    "name": "GPT-5.1 Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "gpt-5.1-codex-max",
+    "provider": "openai",
+    "name": "GPT-5.1 Codex Max",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "gpt-5.1-codex-mini",
+    "provider": "openai",
+    "name": "GPT-5.1 Codex mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "gpt-5.2",
+    "provider": "openai",
+    "name": "GPT-5.2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
+  },
+  {
+    "id": "gpt-5.2-chat-latest",
+    "provider": "openai",
+    "name": "GPT-5.2 Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
+  },
+  {
+    "id": "gpt-5.2-codex",
+    "provider": "openai",
+    "name": "GPT-5.2 Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
+  },
+  {
+    "id": "gpt-5.2-pro",
+    "provider": "openai",
+    "name": "GPT-5.2 Pro",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 21.0,
+    "price_out": 168.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
+  },
+  {
+    "id": "gpt-5.3-chat-latest",
+    "provider": "openai",
+    "name": "GPT-5.3 Chat (latest)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-03",
+    "last_updated": "2026-03-03"
+  },
+  {
+    "id": "gpt-5.3-codex",
+    "provider": "openai",
+    "name": "GPT-5.3 Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-02-05",
+    "last_updated": "2026-02-05"
+  },
+  {
+    "id": "gpt-5.3-codex-spark",
+    "provider": "openai",
+    "name": "GPT-5.3 Codex Spark",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 32000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-02-05",
+    "last_updated": "2026-02-05"
+  },
+  {
+    "id": "gpt-5.4",
+    "provider": "openai",
+    "name": "GPT-5.4",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 2.5,
+    "price_out": 15.0,
+    "price_cache_read": 0.25,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "release_date": "2026-03-05",
+    "last_updated": "2026-03-05"
+  },
+  {
+    "id": "gpt-5.4-mini",
+    "provider": "openai",
+    "name": "GPT-5.4 mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.75,
+    "price_out": 4.5,
+    "price_cache_read": 0.075,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "release_date": "2026-03-17",
+    "last_updated": "2026-03-17"
+  },
+  {
+    "id": "gpt-5.4-nano",
+    "provider": "openai",
+    "name": "GPT-5.4 nano",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.2,
+    "price_out": 1.25,
+    "price_cache_read": 0.02,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "none",
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-03-17",
+    "last_updated": "2026-03-17"
+  },
+  {
+    "id": "gpt-5.4-pro",
+    "provider": "openai",
+    "name": "GPT-5.4 Pro",
+    "tool_call": true,
+    "structured_output": false,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 180.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-03-05",
+    "last_updated": "2026-03-05"
+  },
+  {
+    "id": "gpt-5.5",
+    "provider": "openai",
+    "name": "GPT-5.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 30.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "release_date": "2026-04-23",
+    "last_updated": "2026-04-23"
+  },
+  {
+    "id": "gpt-5.5-pro",
+    "provider": "openai",
+    "name": "GPT-5.5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 180.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-04-23",
+    "last_updated": "2026-04-23"
+  },
+  {
+    "id": "o3-pro",
+    "provider": "openai",
+    "name": "o3-pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 100000,
+    "price_in": 20.0,
+    "price_out": 80.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2025-06-10",
+    "last_updated": "2025-06-10"
+  },
+  {
+    "id": "alibaba/tongyi-deepresearch-30b-a3b",
+    "provider": "openrouter",
+    "name": "Tongyi DeepResearch 30B A3B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.09,
+    "price_out": 0.45,
+    "price_cache_read": 0.09,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-18",
+    "last_updated": "2025-09-18"
+  },
+  {
+    "id": "anthropic/claude-haiku-4.5",
+    "provider": "openrouter",
+    "name": "Claude Haiku 4.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 1.0,
+    "price_out": 5.0,
+    "price_cache_read": 0.1,
+    "price_cache_write": 1.25,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-15",
+    "last_updated": "2025-10-15"
+  },
+  {
+    "id": "anthropic/claude-opus-4.1",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 32000,
+    "price_in": 15.0,
+    "price_out": 75.0,
+    "price_cache_read": 1.5,
+    "price_cache_write": 18.75,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-05",
+    "last_updated": "2025-08-05"
+  },
+  {
+    "id": "anthropic/claude-opus-4.5",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-24",
+    "last_updated": "2025-11-24"
+  },
+  {
+    "id": "anthropic/claude-opus-4.6",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.6",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-04",
+    "last_updated": "2026-02-04"
+  },
+  {
+    "id": "anthropic/claude-opus-4.6-fast",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.6 (Fast)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 150.0,
+    "price_cache_read": 3.0,
+    "price_cache_write": 37.5,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-07",
+    "last_updated": "2026-04-07"
+  },
+  {
+    "id": "anthropic/claude-opus-4.7",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.7",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-16",
+    "last_updated": "2026-04-16"
+  },
+  {
+    "id": "anthropic/claude-opus-4.7-fast",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.7 (Fast)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 150.0,
+    "price_cache_read": 3.0,
+    "price_cache_write": 37.5,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-12",
+    "last_updated": "2026-05-12"
+  },
+  {
+    "id": "anthropic/claude-sonnet-4.5",
+    "provider": "openrouter",
+    "name": "Claude Sonnet 4.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-29",
+    "last_updated": "2025-09-29"
+  },
+  {
+    "id": "anthropic/claude-sonnet-4.6",
+    "provider": "openrouter",
+    "name": "Claude Sonnet 4.6",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.3,
+    "price_cache_write": 3.75,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-17",
+    "last_updated": "2026-02-17"
+  },
+  {
+    "id": "arcee-ai/trinity-large-preview",
+    "provider": "openrouter",
+    "name": "Trinity Large Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131000,
+    "max_output_tokens": 131000,
+    "price_in": 0.15,
+    "price_out": 0.45,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-27",
+    "last_updated": "2026-01-27"
+  },
+  {
+    "id": "arcee-ai/trinity-large-thinking",
+    "provider": "openrouter",
+    "name": "Trinity Large Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.22,
+    "price_out": 0.85,
+    "price_cache_read": 0.06,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-01",
+    "last_updated": "2026-04-01"
+  },
+  {
+    "id": "arcee-ai/trinity-mini",
+    "provider": "openrouter",
+    "name": "Trinity Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.045,
+    "price_out": 0.15,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-01",
+    "last_updated": "2025-12-01"
+  },
+  {
+    "id": "bytedance-seed/seed-1.6",
+    "provider": "openrouter",
+    "name": "Seed 1.6",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-23",
+    "last_updated": "2025-12-23"
+  },
+  {
+    "id": "bytedance-seed/seed-1.6-flash",
+    "provider": "openrouter",
+    "name": "Seed 1.6 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.075,
+    "price_out": 0.3,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-23",
+    "last_updated": "2025-12-23"
+  },
+  {
+    "id": "bytedance-seed/seed-2.0-lite",
+    "provider": "openrouter",
+    "name": "Seed-2.0-Lite",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 131072,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-10",
+    "last_updated": "2026-03-10"
+  },
+  {
+    "id": "bytedance-seed/seed-2.0-mini",
+    "provider": "openrouter",
+    "name": "Seed-2.0-Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 131072,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-26",
+    "last_updated": "2026-02-26"
+  },
+  {
+    "id": "deepseek/deepseek-chat-v3.1",
+    "provider": "openrouter",
+    "name": "DeepSeek V3.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 163840,
+    "max_output_tokens": 32768,
+    "price_in": 0.21,
+    "price_out": 0.79,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-21",
+    "last_updated": "2025-08-21"
+  },
+  {
+    "id": "deepseek/deepseek-r1-0528",
+    "provider": "openrouter",
+    "name": "R1 0528",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 163840,
+    "max_output_tokens": 32768,
+    "price_in": 0.5,
+    "price_out": 2.15,
+    "price_cache_read": 0.35,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-05-28",
+    "last_updated": "2025-05-28"
+  },
+  {
+    "id": "deepseek/deepseek-v3.1-terminus",
+    "provider": "openrouter",
+    "name": "DeepSeek V3.1 Terminus",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 163840,
+    "max_output_tokens": 32768,
+    "price_in": 0.27,
+    "price_out": 0.95,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-22",
+    "last_updated": "2025-09-22"
+  },
+  {
+    "id": "deepseek/deepseek-v3.2",
+    "provider": "openrouter",
+    "name": "DeepSeek V3.2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 65536,
+    "price_in": 0.252,
+    "price_out": 0.378,
+    "price_cache_read": 0.0252,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-01",
+    "last_updated": "2025-12-01"
+  },
+  {
+    "id": "deepseek/deepseek-v3.2-exp",
+    "provider": "openrouter",
+    "name": "DeepSeek V3.2 Exp",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 163840,
+    "max_output_tokens": 65536,
+    "price_in": 0.27,
+    "price_out": 0.41,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-29",
+    "last_updated": "2025-09-29"
+  },
+  {
+    "id": "deepseek/deepseek-v4-flash",
+    "provider": "openrouter",
+    "name": "DeepSeek V4 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 131072,
+    "price_in": 0.126,
+    "price_out": 0.252,
+    "price_cache_read": 0.0252,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-24",
+    "last_updated": "2026-04-24"
+  },
+  {
+    "id": "deepseek/deepseek-v4-pro",
+    "provider": "openrouter",
+    "name": "DeepSeek V4 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 384000,
+    "price_in": 0.435,
+    "price_out": 0.87,
+    "price_cache_read": 0.003625,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-24",
+    "last_updated": "2026-04-24"
+  },
+  {
+    "id": "google/gemini-2.5-flash",
+    "provider": "openrouter",
+    "name": "Gemini 2.5 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65535,
+    "price_in": 0.3,
+    "price_out": 2.5,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2025-06-17",
+    "last_updated": "2025-06-17"
+  },
+  {
+    "id": "google/gemini-2.5-flash-lite",
+    "provider": "openrouter",
+    "name": "Gemini 2.5 Flash Lite",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65535,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-22",
+    "last_updated": "2025-07-22"
+  },
+  {
+    "id": "google/gemini-2.5-flash-lite-preview-09-2025",
+    "provider": "openrouter",
+    "name": "Gemini 2.5 Flash Lite Preview 09-2025",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65535,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-25",
+    "last_updated": "2025-09-25"
+  },
+  {
+    "id": "google/gemini-2.5-pro",
+    "provider": "openrouter",
+    "name": "Gemini 2.5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.375,
+    "reasoning_efforts": [],
+    "release_date": "2025-06-17",
+    "last_updated": "2025-06-17"
+  },
+  {
+    "id": "google/gemini-2.5-pro-preview",
+    "provider": "openrouter",
+    "name": "Gemini 2.5 Pro Preview 06-05",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text",
+      "audio"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.375,
+    "reasoning_efforts": [],
+    "release_date": "2025-06-05",
+    "last_updated": "2025-06-05"
+  },
+  {
+    "id": "google/gemini-3-flash-preview",
+    "provider": "openrouter",
+    "name": "Gemini 3 Flash Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf",
+      "audio",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.5,
+    "price_out": 3.0,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-17",
+    "last_updated": "2025-12-17"
+  },
+  {
+    "id": "google/gemini-3.1-flash-lite",
+    "provider": "openrouter",
+    "name": "Gemini 3.1 Flash Lite",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "pdf",
+      "audio"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.25,
+    "price_out": 1.5,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-07",
+    "last_updated": "2026-05-07"
+  },
+  {
+    "id": "google/gemini-3.1-flash-lite-preview",
+    "provider": "openrouter",
+    "name": "Gemini 3.1 Flash Lite Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "pdf",
+      "audio"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 0.25,
+    "price_out": 1.5,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-03",
+    "last_updated": "2026-03-03"
+  },
+  {
+    "id": "google/gemini-3.1-pro-preview",
+    "provider": "openrouter",
+    "name": "Gemini 3.1 Pro Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "audio",
+      "pdf",
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 2.0,
+    "price_out": 12.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.375,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-19",
+    "last_updated": "2026-02-19"
+  },
+  {
+    "id": "google/gemini-3.1-pro-preview-customtools",
+    "provider": "openrouter",
+    "name": "Gemini 3.1 Pro Preview Custom Tools",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "audio",
+      "image",
+      "video",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 2.0,
+    "price_out": 12.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.375,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-25",
+    "last_updated": "2026-02-25"
+  },
+  {
+    "id": "google/gemma-4-26b-a4b-it",
+    "provider": "openrouter",
+    "name": "Gemma 4 26B A4B ",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.06,
+    "price_out": 0.33,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-03",
+    "last_updated": "2026-04-03"
+  },
+  {
+    "id": "google/gemma-4-26b-a4b-it:free",
+    "provider": "openrouter",
+    "name": "Gemma 4 26B A4B  (free)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-03",
+    "last_updated": "2026-04-03"
+  },
+  {
+    "id": "google/gemma-4-31b-it",
+    "provider": "openrouter",
+    "name": "Gemma 4 31B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 16384,
+    "price_in": 0.12,
+    "price_out": 0.37,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
+  },
+  {
+    "id": "google/gemma-4-31b-it:free",
+    "provider": "openrouter",
+    "name": "Gemma 4 31B (free)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
+  },
+  {
+    "id": "ibm-granite/granite-4.1-8b",
+    "provider": "openrouter",
+    "name": "Granite 4.1 8B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.05,
+    "price_out": 0.1,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-30",
+    "last_updated": "2026-04-30"
+  },
+  {
+    "id": "inception/mercury-2",
+    "provider": "openrouter",
+    "name": "Mercury 2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 50000,
+    "price_in": 0.25,
+    "price_out": 0.75,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-04",
+    "last_updated": "2026-03-04"
+  },
+  {
+    "id": "inclusionai/ling-2.6-1t",
+    "provider": "openrouter",
+    "name": "Ling-2.6-1T",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.3,
+    "price_out": 2.5,
+    "price_cache_read": 0.06,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-23",
+    "last_updated": "2026-04-23"
+  },
+  {
+    "id": "inclusionai/ling-2.6-flash",
+    "provider": "openrouter",
+    "name": "Ling-2.6-flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.01,
+    "price_out": 0.03,
+    "price_cache_read": 0.002,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-21",
+    "last_updated": "2026-04-21"
+  },
+  {
+    "id": "kwaipilot/kat-coder-pro-v2",
+    "provider": "openrouter",
+    "name": "KAT-Coder-Pro V2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 80000,
+    "price_in": 0.3,
+    "price_out": 1.2,
+    "price_cache_read": 0.06,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-27",
+    "last_updated": "2026-03-27"
+  },
+  {
+    "id": "minimax/minimax-m2",
+    "provider": "openrouter",
+    "name": "MiniMax M2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 196608,
+    "max_output_tokens": 196608,
+    "price_in": 0.255,
+    "price_out": 1.0,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-23",
+    "last_updated": "2025-10-23"
+  },
+  {
+    "id": "minimax/minimax-m2.1",
+    "provider": "openrouter",
+    "name": "MiniMax M2.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 196608,
+    "max_output_tokens": 196608,
+    "price_in": 0.29,
+    "price_out": 0.95,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-23",
+    "last_updated": "2025-12-23"
+  },
+  {
+    "id": "minimax/minimax-m2.5",
+    "provider": "openrouter",
+    "name": "MiniMax M2.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 196608,
+    "max_output_tokens": 196608,
+    "price_in": 0.15,
+    "price_out": 1.15,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-12",
+    "last_updated": "2026-02-12"
+  },
+  {
+    "id": "minimax/minimax-m2.7",
+    "provider": "openrouter",
+    "name": "MiniMax M2.7",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 196608,
+    "max_output_tokens": 131072,
+    "price_in": 0.279,
+    "price_out": 1.2,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-18",
+    "last_updated": "2026-03-18"
+  },
+  {
+    "id": "mistralai/codestral-2508",
+    "provider": "openrouter",
+    "name": "Codestral 2508",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 256000,
+    "price_in": 0.3,
+    "price_out": 0.9,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-01",
+    "last_updated": "2025-08-01"
+  },
+  {
+    "id": "mistralai/devstral-2512",
+    "provider": "openrouter",
+    "name": "Devstral 2 2512",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.4,
+    "price_out": 2.0,
+    "price_cache_read": 0.04,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-09",
+    "last_updated": "2025-12-09"
+  },
+  {
+    "id": "mistralai/devstral-medium",
+    "provider": "openrouter",
+    "name": "Devstral Medium",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.4,
+    "price_out": 2.0,
+    "price_cache_read": 0.04,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-10",
+    "last_updated": "2025-07-10"
+  },
+  {
+    "id": "mistralai/devstral-small",
+    "provider": "openrouter",
+    "name": "Devstral Small 1.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.1,
+    "price_out": 0.3,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-10",
+    "last_updated": "2025-07-10"
+  },
+  {
+    "id": "mistralai/ministral-14b-2512",
+    "provider": "openrouter",
+    "name": "Ministral 3 14B 2512",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.2,
+    "price_out": 0.2,
+    "price_cache_read": 0.02,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-02",
+    "last_updated": "2025-12-02"
+  },
+  {
+    "id": "mistralai/ministral-3b-2512",
+    "provider": "openrouter",
+    "name": "Ministral 3 3B 2512",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.1,
+    "price_out": 0.1,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-02",
+    "last_updated": "2025-12-02"
+  },
+  {
+    "id": "mistralai/ministral-8b-2512",
+    "provider": "openrouter",
+    "name": "Ministral 3 8B 2512",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.15,
+    "price_out": 0.15,
+    "price_cache_read": 0.015,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-02",
+    "last_updated": "2025-12-02"
+  },
+  {
+    "id": "mistralai/mistral-large-2512",
+    "provider": "openrouter",
+    "name": "Mistral Large 3 2512",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.5,
+    "price_out": 1.5,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-01",
+    "last_updated": "2025-12-01"
+  },
+  {
+    "id": "mistralai/mistral-medium-3-5",
+    "provider": "openrouter",
+    "name": "Mistral Medium 3.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 1.5,
+    "price_out": 7.5,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-30",
+    "last_updated": "2026-04-30"
+  },
+  {
+    "id": "mistralai/mistral-medium-3.1",
+    "provider": "openrouter",
+    "name": "Mistral Medium 3.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 262144,
+    "price_in": 0.4,
+    "price_out": 2.0,
+    "price_cache_read": 0.04,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-13",
+    "last_updated": "2025-08-13"
+  },
+  {
+    "id": "mistralai/mistral-small-2603",
+    "provider": "openrouter",
+    "name": "Mistral Small 4",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.15,
+    "price_out": 0.6,
+    "price_cache_read": 0.015,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-16",
+    "last_updated": "2026-03-16"
+  },
+  {
+    "id": "mistralai/mistral-small-3.2-24b-instruct",
+    "provider": "openrouter",
+    "name": "Mistral Small 3.2 24B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 0.075,
+    "price_out": 0.2,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-06-20",
+    "last_updated": "2025-06-20"
+  },
+  {
+    "id": "moonshotai/kimi-k2-0905",
+    "provider": "openrouter",
+    "name": "Kimi K2 0905",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.6,
+    "price_out": 2.5,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-04",
+    "last_updated": "2025-09-04"
+  },
+  {
+    "id": "moonshotai/kimi-k2-thinking",
+    "provider": "openrouter",
+    "name": "Kimi K2 Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.6,
+    "price_out": 2.5,
+    "price_cache_read": 0.15,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-06",
+    "last_updated": "2025-11-06"
+  },
+  {
+    "id": "moonshotai/kimi-k2.5",
+    "provider": "openrouter",
+    "name": "Kimi K2.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.4,
+    "price_out": 1.9,
+    "price_cache_read": 0.09,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-27",
+    "last_updated": "2026-01-27"
+  },
+  {
+    "id": "moonshotai/kimi-k2.6",
+    "provider": "openrouter",
+    "name": "Kimi K2.6",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262142,
+    "max_output_tokens": 262142,
+    "price_in": 0.73,
+    "price_out": 3.49,
+    "price_cache_read": 0.25,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-20",
+    "last_updated": "2026-04-20"
+  },
+  {
+    "id": "nex-agi/deepseek-v3.1-nex-n1",
+    "provider": "openrouter",
+    "name": "DeepSeek V3.1 Nex N1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 163840,
+    "price_in": 0.135,
+    "price_out": 0.5,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-08",
+    "last_updated": "2025-12-08"
+  },
+  {
+    "id": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "provider": "openrouter",
+    "name": "Llama 3.3 Nemotron Super 49B V1.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 16384,
+    "price_in": 0.1,
+    "price_out": 0.4,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-10",
+    "last_updated": "2025-10-10"
+  },
+  {
+    "id": "nvidia/nemotron-3-nano-30b-a3b",
+    "provider": "openrouter",
+    "name": "Nemotron 3 Nano 30B A3B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 228000,
+    "price_in": 0.05,
+    "price_out": 0.2,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-14",
+    "last_updated": "2025-12-14"
+  },
+  {
+    "id": "nvidia/nemotron-3-super-120b-a12b",
+    "provider": "openrouter",
+    "name": "Nemotron 3 Super",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.09,
+    "price_out": 0.45,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-11",
+    "last_updated": "2026-03-11"
+  },
+  {
+    "id": "nvidia/nemotron-3-super-120b-a12b:free",
+    "provider": "openrouter",
+    "name": "Nemotron 3 Super (free)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-11",
+    "last_updated": "2026-03-11"
+  },
+  {
+    "id": "nvidia/nemotron-nano-9b-v2",
+    "provider": "openrouter",
+    "name": "Nemotron Nano 9B V2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 16384,
+    "price_in": 0.04,
+    "price_out": 0.16,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-05",
+    "last_updated": "2025-09-05"
+  },
+  {
+    "id": "nvidia/nemotron-nano-9b-v2:free",
+    "provider": "openrouter",
+    "name": "Nemotron Nano 9B V2 (free)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 128000,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-05",
+    "last_updated": "2025-09-05"
+  },
+  {
+    "id": "openai/gpt-4o-audio-preview",
+    "provider": "openrouter",
+    "name": "GPT-4o Audio",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "audio",
+      "text"
+    ],
+    "output_modalities": [
+      "text",
+      "audio"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 2.5,
+    "price_out": 10.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-15",
+    "last_updated": "2025-08-15"
+  },
+  {
+    "id": "openai/gpt-5",
+    "provider": "openrouter",
+    "name": "GPT-5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "openai/gpt-5-codex",
+    "provider": "openrouter",
+    "name": "GPT-5 Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-23",
+    "last_updated": "2025-09-23"
+  },
+  {
+    "id": "openai/gpt-5-mini",
+    "provider": "openrouter",
+    "name": "GPT-5 Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.025,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "openai/gpt-5-nano",
+    "provider": "openrouter",
+    "name": "GPT-5 Nano",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.05,
+    "price_out": 0.4,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-07",
+    "last_updated": "2025-08-07"
+  },
+  {
+    "id": "openai/gpt-5-pro",
+    "provider": "openrouter",
+    "name": "GPT-5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 15.0,
+    "price_out": 120.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-06",
+    "last_updated": "2025-10-06"
+  },
+  {
+    "id": "openai/gpt-5.1",
+    "provider": "openrouter",
+    "name": "GPT-5.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "openai/gpt-5.1-chat",
+    "provider": "openrouter",
+    "name": "GPT-5.1 Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "openai/gpt-5.1-codex",
+    "provider": "openrouter",
+    "name": "GPT-5.1-Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "openai/gpt-5.1-codex-max",
+    "provider": "openrouter",
+    "name": "GPT-5.1-Codex-Max",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.125,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-04",
+    "last_updated": "2025-12-04"
+  },
+  {
+    "id": "openai/gpt-5.1-codex-mini",
+    "provider": "openrouter",
+    "name": "GPT-5.1-Codex-Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.25,
+    "price_out": 2.0,
+    "price_cache_read": 0.03,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "openai/gpt-5.2",
+    "provider": "openrouter",
+    "name": "GPT-5.2",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-10",
+    "last_updated": "2025-12-10"
+  },
+  {
+    "id": "openai/gpt-5.2-chat",
+    "provider": "openrouter",
+    "name": "GPT-5.2 Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 32000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-10",
+    "last_updated": "2025-12-10"
+  },
+  {
+    "id": "openai/gpt-5.2-codex",
+    "provider": "openrouter",
+    "name": "GPT-5.2-Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-14",
+    "last_updated": "2026-01-14"
+  },
+  {
+    "id": "openai/gpt-5.2-pro",
+    "provider": "openrouter",
+    "name": "GPT-5.2 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 21.0,
+    "price_out": 168.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-10",
+    "last_updated": "2025-12-10"
+  },
+  {
+    "id": "openai/gpt-5.3-chat",
+    "provider": "openrouter",
+    "name": "GPT-5.3 Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-03",
+    "last_updated": "2026-03-03"
+  },
+  {
+    "id": "openai/gpt-5.3-codex",
+    "provider": "openrouter",
+    "name": "GPT-5.3-Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.75,
+    "price_out": 14.0,
+    "price_cache_read": 0.175,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-24",
+    "last_updated": "2026-02-24"
+  },
+  {
+    "id": "openai/gpt-5.4",
+    "provider": "openrouter",
+    "name": "GPT-5.4",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 2.5,
+    "price_out": 15.0,
+    "price_cache_read": 0.25,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-05",
+    "last_updated": "2026-03-05"
+  },
+  {
+    "id": "openai/gpt-5.4-mini",
+    "provider": "openrouter",
+    "name": "GPT-5.4 Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.75,
+    "price_out": 4.5,
+    "price_cache_read": 0.075,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-17",
+    "last_updated": "2026-03-17"
+  },
+  {
+    "id": "openai/gpt-5.4-nano",
+    "provider": "openrouter",
+    "name": "GPT-5.4 Nano",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 0.2,
+    "price_out": 1.25,
+    "price_cache_read": 0.02,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-17",
+    "last_updated": "2026-03-17"
+  },
+  {
+    "id": "openai/gpt-5.4-pro",
+    "provider": "openrouter",
+    "name": "GPT-5.4 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 180.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-05",
+    "last_updated": "2026-03-05"
+  },
+  {
+    "id": "openai/gpt-5.5",
+    "provider": "openrouter",
+    "name": "GPT-5.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 30.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-24",
+    "last_updated": "2026-04-24"
+  },
+  {
+    "id": "openai/gpt-5.5-pro",
+    "provider": "openrouter",
+    "name": "GPT-5.5 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1050000,
+    "max_output_tokens": 128000,
+    "price_in": 30.0,
+    "price_out": 180.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-24",
+    "last_updated": "2026-04-24"
+  },
+  {
+    "id": "openai/gpt-audio",
+    "provider": "openrouter",
+    "name": "GPT Audio",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "audio"
+    ],
+    "output_modalities": [
+      "text",
+      "audio"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 2.5,
+    "price_out": 10.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-19",
+    "last_updated": "2026-01-19"
+  },
+  {
+    "id": "openai/gpt-audio-mini",
+    "provider": "openrouter",
+    "name": "GPT Audio Mini",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "audio"
+    ],
+    "output_modalities": [
+      "text",
+      "audio"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "price_in": 0.6,
+    "price_out": 2.4,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-19",
+    "last_updated": "2026-01-19"
+  },
+  {
+    "id": "openai/gpt-chat-latest",
+    "provider": "openrouter",
+    "name": "GPT Chat Latest",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 30.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-05",
+    "last_updated": "2026-05-05"
+  },
+  {
+    "id": "openai/gpt-oss-120b",
+    "provider": "openrouter",
+    "name": "gpt-oss-120b",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.039,
+    "price_out": 0.18,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-05",
+    "last_updated": "2025-08-05"
+  },
+  {
+    "id": "openai/gpt-oss-20b",
+    "provider": "openrouter",
+    "name": "gpt-oss-20b",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.03,
+    "price_out": 0.14,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-05",
+    "last_updated": "2025-08-05"
+  },
+  {
+    "id": "openai/gpt-oss-safeguard-20b",
+    "provider": "openrouter",
+    "name": "gpt-oss-safeguard-20b",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 65536,
+    "price_in": 0.075,
+    "price_out": 0.3,
+    "price_cache_read": 0.037,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-29",
+    "last_updated": "2025-10-29"
+  },
+  {
+    "id": "openai/o3-deep-research",
+    "provider": "openrouter",
+    "name": "o3 Deep Research",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 100000,
+    "price_in": 10.0,
+    "price_out": 40.0,
+    "price_cache_read": 2.5,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-10",
+    "last_updated": "2025-10-10"
+  },
+  {
+    "id": "openai/o3-pro",
+    "provider": "openrouter",
+    "name": "o3 Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "pdf",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 100000,
+    "price_in": 20.0,
+    "price_out": 80.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-06-10",
+    "last_updated": "2025-06-10"
+  },
+  {
+    "id": "openai/o4-mini-deep-research",
+    "provider": "openrouter",
+    "name": "o4 Mini Deep Research",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "pdf",
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 200000,
+    "max_output_tokens": 100000,
+    "price_in": 2.0,
+    "price_out": 8.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-10",
+    "last_updated": "2025-10-10"
+  },
+  {
+    "id": "openrouter/owl-alpha",
+    "provider": "openrouter",
+    "name": "Owl Alpha",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048756,
+    "max_output_tokens": 262144,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-28",
+    "last_updated": "2026-04-28"
+  },
+  {
+    "id": "prime-intellect/intellect-3",
+    "provider": "openrouter",
+    "name": "INTELLECT-3",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.2,
+    "price_out": 1.1,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-27",
+    "last_updated": "2025-11-27"
+  },
+  {
+    "id": "qwen/qwen-plus-2025-07-28",
+    "provider": "openrouter",
+    "name": "Qwen Plus 0728",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 32768,
+    "price_in": 0.26,
+    "price_out": 0.78,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.325,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-08",
+    "last_updated": "2025-09-08"
+  },
+  {
+    "id": "qwen/qwen-plus-2025-07-28:thinking",
+    "provider": "openrouter",
+    "name": "Qwen Plus 0728 (thinking)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 32768,
+    "price_in": 0.26,
+    "price_out": 0.78,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.325,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-08",
+    "last_updated": "2025-09-08"
+  },
+  {
+    "id": "qwen/qwen3-235b-a22b-2507",
+    "provider": "openrouter",
+    "name": "Qwen3 235B A22B Instruct 2507",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 16384,
+    "price_in": 0.071,
+    "price_out": 0.1,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-21",
+    "last_updated": "2025-07-21"
+  },
+  {
+    "id": "qwen/qwen3-235b-a22b-thinking-2507",
+    "provider": "openrouter",
+    "name": "Qwen3 235B A22B Thinking 2507",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 81920,
+    "price_in": 0.1495,
+    "price_out": 1.495,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-25",
+    "last_updated": "2025-07-25"
+  },
+  {
+    "id": "qwen/qwen3-30b-a3b-instruct-2507",
+    "provider": "openrouter",
+    "name": "Qwen3 30B A3B Instruct 2507",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.09,
+    "price_out": 0.3,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-29",
+    "last_updated": "2025-07-29"
+  },
+  {
+    "id": "qwen/qwen3-30b-a3b-thinking-2507",
+    "provider": "openrouter",
+    "name": "Qwen3 30B A3B Thinking 2507",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 131072,
+    "price_in": 0.08,
+    "price_out": 0.4,
+    "price_cache_read": 0.08,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-08-28",
+    "last_updated": "2025-08-28"
+  },
+  {
+    "id": "qwen/qwen3-coder",
+    "provider": "openrouter",
+    "name": "Qwen3 Coder 480B A35B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.22,
+    "price_out": 1.8,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-23",
+    "last_updated": "2025-07-23"
+  },
+  {
+    "id": "qwen/qwen3-coder-30b-a3b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 Coder 30B A3B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 160000,
+    "max_output_tokens": 32768,
+    "price_in": 0.07,
+    "price_out": 0.27,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-31",
+    "last_updated": "2025-07-31"
+  },
+  {
+    "id": "qwen/qwen3-coder-flash",
+    "provider": "openrouter",
+    "name": "Qwen3 Coder Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.195,
+    "price_out": 0.975,
+    "price_cache_read": 0.039,
+    "price_cache_write": 0.24375,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-17",
+    "last_updated": "2025-09-17"
+  },
+  {
+    "id": "qwen/qwen3-coder-next",
+    "provider": "openrouter",
+    "name": "Qwen3 Coder Next",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.11,
+    "price_out": 0.8,
+    "price_cache_read": 0.07,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-04",
+    "last_updated": "2026-02-04"
+  },
+  {
+    "id": "qwen/qwen3-coder-plus",
+    "provider": "openrouter",
+    "name": "Qwen3 Coder Plus",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.65,
+    "price_out": 3.25,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.8125,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-23",
+    "last_updated": "2025-09-23"
+  },
+  {
+    "id": "qwen/qwen3-max",
+    "provider": "openrouter",
+    "name": "Qwen3 Max",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.78,
+    "price_out": 3.9,
+    "price_cache_read": 0.156,
+    "price_cache_write": 0.975,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-23",
+    "last_updated": "2025-09-23"
+  },
+  {
+    "id": "qwen/qwen3-max-thinking",
+    "provider": "openrouter",
+    "name": "Qwen3 Max Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 32768,
+    "price_in": 0.78,
+    "price_out": 3.9,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-09",
+    "last_updated": "2026-02-09"
+  },
+  {
+    "id": "qwen/qwen3-next-80b-a3b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 Next 80B A3B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 16384,
+    "price_in": 0.09,
+    "price_out": 1.1,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-11",
+    "last_updated": "2025-09-11"
+  },
+  {
+    "id": "qwen/qwen3-next-80b-a3b-instruct:free",
+    "provider": "openrouter",
+    "name": "Qwen3 Next 80B A3B Instruct (free)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.0,
+    "price_out": 0.0,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-11",
+    "last_updated": "2025-09-11"
+  },
+  {
+    "id": "qwen/qwen3-next-80b-a3b-thinking",
+    "provider": "openrouter",
+    "name": "Qwen3 Next 80B A3B Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.0975,
+    "price_out": 0.78,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-11",
+    "last_updated": "2025-09-11"
+  },
+  {
+    "id": "qwen/qwen3-vl-235b-a22b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 235B A22B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 16384,
+    "price_in": 0.2,
+    "price_out": 0.88,
+    "price_cache_read": 0.11,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-23",
+    "last_updated": "2025-09-23"
+  },
+  {
+    "id": "qwen/qwen3-vl-235b-a22b-thinking",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 235B A22B Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.26,
+    "price_out": 2.6,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-23",
+    "last_updated": "2025-09-23"
+  },
+  {
+    "id": "qwen/qwen3-vl-30b-a3b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 30B A3B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.13,
+    "price_out": 0.52,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-06",
+    "last_updated": "2025-10-06"
+  },
+  {
+    "id": "qwen/qwen3-vl-30b-a3b-thinking",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 30B A3B Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.13,
+    "price_out": 1.56,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-06",
+    "last_updated": "2025-10-06"
+  },
+  {
+    "id": "qwen/qwen3-vl-32b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 32B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.104,
+    "price_out": 0.416,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-23",
+    "last_updated": "2025-10-23"
+  },
+  {
+    "id": "qwen/qwen3-vl-8b-instruct",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 8B Instruct",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.08,
+    "price_out": 0.5,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-14",
+    "last_updated": "2025-10-14"
+  },
+  {
+    "id": "qwen/qwen3-vl-8b-thinking",
+    "provider": "openrouter",
+    "name": "Qwen3 VL 8B Thinking",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 32768,
+    "price_in": 0.117,
+    "price_out": 1.365,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-10-14",
+    "last_updated": "2025-10-14"
+  },
+  {
+    "id": "qwen/qwen3.5-122b-a10b",
+    "provider": "openrouter",
+    "name": "Qwen3.5-122B-A10B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.26,
+    "price_out": 2.08,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-25",
+    "last_updated": "2026-02-25"
+  },
+  {
+    "id": "qwen/qwen3.5-27b",
+    "provider": "openrouter",
+    "name": "Qwen3.5-27B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.195,
+    "price_out": 1.56,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-25",
+    "last_updated": "2026-02-25"
+  },
+  {
+    "id": "qwen/qwen3.5-35b-a3b",
+    "provider": "openrouter",
+    "name": "Qwen3.5-35B-A3B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 81920,
+    "price_in": 0.14,
+    "price_out": 1.0,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-25",
+    "last_updated": "2026-02-25"
+  },
+  {
+    "id": "qwen/qwen3.5-397b-a17b",
+    "provider": "openrouter",
+    "name": "Qwen3.5 397B A17B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.39,
+    "price_out": 2.34,
+    "price_cache_read": 0.195,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-16",
+    "last_updated": "2026-02-16"
+  },
+  {
+    "id": "qwen/qwen3.5-9b",
+    "provider": "openrouter",
+    "name": "Qwen3.5-9B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 81920,
+    "price_in": 0.04,
+    "price_out": 0.15,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-10",
+    "last_updated": "2026-03-10"
+  },
+  {
+    "id": "qwen/qwen3.5-flash-02-23",
+    "provider": "openrouter",
+    "name": "Qwen3.5-Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.065,
+    "price_out": 0.26,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.08125,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-25",
+    "last_updated": "2026-02-25"
+  },
+  {
+    "id": "qwen/qwen3.5-plus-02-15",
+    "provider": "openrouter",
+    "name": "Qwen3.5 Plus 2026-02-15",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.26,
+    "price_out": 1.56,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.325,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-16",
+    "last_updated": "2026-02-16"
+  },
+  {
+    "id": "qwen/qwen3.5-plus-20260420",
+    "provider": "openrouter",
+    "name": "Qwen3.5 Plus 2026-04-20",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.3,
+    "price_out": 1.8,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-27",
+    "last_updated": "2026-04-27"
+  },
+  {
+    "id": "qwen/qwen3.6-27b",
+    "provider": "openrouter",
+    "name": "Qwen3.6 27B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 81920,
+    "price_in": 0.32,
+    "price_out": 3.2,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-27",
+    "last_updated": "2026-04-27"
+  },
+  {
+    "id": "qwen/qwen3.6-35b-a3b",
+    "provider": "openrouter",
+    "name": "Qwen3.6 35B A3B",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 262144,
+    "price_in": 0.15,
+    "price_out": 1.0,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-27",
+    "last_updated": "2026-04-27"
+  },
+  {
+    "id": "qwen/qwen3.6-flash",
+    "provider": "openrouter",
+    "name": "Qwen3.6 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.1875,
+    "price_out": 1.125,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.234375,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-27",
+    "last_updated": "2026-04-27"
+  },
+  {
+    "id": "qwen/qwen3.6-max-preview",
+    "provider": "openrouter",
+    "name": "Qwen3.6 Max Preview",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 1.04,
+    "price_out": 6.24,
+    "price_cache_read": 0.0,
+    "price_cache_write": 1.3,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-27",
+    "last_updated": "2026-04-27"
+  },
+  {
+    "id": "qwen/qwen3.6-plus",
+    "provider": "openrouter",
+    "name": "Qwen3.6 Plus",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 65536,
+    "price_in": 0.325,
+    "price_out": 1.95,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.40625,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
+  },
+  {
+    "id": "stepfun/step-3.5-flash",
+    "provider": "openrouter",
+    "name": "Step 3.5 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.3,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-29",
+    "last_updated": "2026-01-29"
+  },
+  {
+    "id": "upstage/solar-pro-3",
+    "provider": "openrouter",
+    "name": "Solar Pro 3",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 128000,
+    "price_in": 0.15,
+    "price_out": 0.6,
+    "price_cache_read": 0.015,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-27",
+    "last_updated": "2026-01-27"
+  },
+  {
+    "id": "x-ai/grok-4",
+    "provider": "openrouter",
+    "name": "Grok 4",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 64000,
+    "price_in": 3.0,
+    "price_out": 15.0,
+    "price_cache_read": 0.75,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-09",
+    "last_updated": "2025-07-09"
+  },
+  {
+    "id": "x-ai/grok-4-fast",
+    "provider": "openrouter",
+    "name": "Grok 4 Fast",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 2000000,
+    "max_output_tokens": 30000,
+    "price_in": 0.2,
+    "price_out": 0.5,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-19",
+    "last_updated": "2025-09-19"
+  },
+  {
+    "id": "x-ai/grok-4.1-fast",
+    "provider": "openrouter",
+    "name": "Grok 4.1 Fast",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 2000000,
+    "max_output_tokens": 30000,
+    "price_in": 0.2,
+    "price_out": 0.5,
+    "price_cache_read": 0.05,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-19",
+    "last_updated": "2025-11-19"
+  },
+  {
+    "id": "x-ai/grok-4.20",
+    "provider": "openrouter",
+    "name": "Grok 4.20",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 2000000,
+    "max_output_tokens": 2000000,
+    "price_in": 1.25,
+    "price_out": 2.5,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-31",
+    "last_updated": "2026-03-31"
+  },
+  {
+    "id": "x-ai/grok-4.3",
+    "provider": "openrouter",
+    "name": "Grok 4.3",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 1000000,
+    "price_in": 1.25,
+    "price_out": 2.5,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-30",
+    "last_updated": "2026-04-30"
+  },
+  {
+    "id": "xiaomi/mimo-v2-flash",
+    "provider": "openrouter",
+    "name": "MiMo-V2-Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.1,
+    "price_out": 0.3,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-14",
+    "last_updated": "2025-12-14"
+  },
+  {
+    "id": "xiaomi/mimo-v2-omni",
+    "provider": "openrouter",
+    "name": "MiMo-V2-Omni",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "audio",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 262144,
+    "max_output_tokens": 65536,
+    "price_in": 0.4,
+    "price_out": 2.0,
+    "price_cache_read": 0.08,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-18",
+    "last_updated": "2026-03-18"
+  },
+  {
+    "id": "xiaomi/mimo-v2-pro",
+    "provider": "openrouter",
+    "name": "MiMo-V2-Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 131072,
+    "price_in": 1.0,
+    "price_out": 3.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-18",
+    "last_updated": "2026-03-18"
+  },
+  {
+    "id": "xiaomi/mimo-v2.5",
+    "provider": "openrouter",
+    "name": "MiMo-V2.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "audio",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 131072,
+    "price_in": 0.4,
+    "price_out": 2.0,
+    "price_cache_read": 0.08,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-22",
+    "last_updated": "2026-04-22"
+  },
+  {
+    "id": "xiaomi/mimo-v2.5-pro",
+    "provider": "openrouter",
+    "name": "MiMo-V2.5-Pro",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 16384,
+    "price_in": 1.0,
+    "price_out": 3.0,
+    "price_cache_read": 0.2,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-22",
+    "last_updated": "2026-04-22"
+  },
+  {
+    "id": "z-ai/glm-4.5",
+    "provider": "openrouter",
+    "name": "GLM 4.5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 131072,
+    "max_output_tokens": 98304,
+    "price_in": 0.6,
+    "price_out": 2.2,
+    "price_cache_read": 0.11,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-07-25",
+    "last_updated": "2025-07-25"
+  },
+  {
+    "id": "z-ai/glm-4.6",
+    "provider": "openrouter",
+    "name": "GLM 4.6",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131072,
+    "price_in": 0.43,
+    "price_out": 1.74,
+    "price_cache_read": 0.08,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-09-30",
+    "last_updated": "2025-09-30"
+  },
+  {
+    "id": "z-ai/glm-4.7",
+    "provider": "openrouter",
+    "name": "GLM 4.7",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131072,
+    "price_in": 0.4,
+    "price_out": 1.75,
+    "price_cache_read": 0.08,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-22",
+    "last_updated": "2025-12-22"
+  },
+  {
+    "id": "z-ai/glm-4.7-flash",
+    "provider": "openrouter",
+    "name": "GLM 4.7 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 16384,
+    "price_in": 0.06,
+    "price_out": 0.4,
+    "price_cache_read": 0.01,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-01-19",
+    "last_updated": "2026-01-19"
+  },
+  {
+    "id": "z-ai/glm-5",
+    "provider": "openrouter",
+    "name": "GLM 5",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131000,
+    "price_in": 0.6,
+    "price_out": 1.92,
+    "price_cache_read": 0.12,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-02-11",
+    "last_updated": "2026-02-11"
+  },
+  {
+    "id": "z-ai/glm-5-turbo",
+    "provider": "openrouter",
+    "name": "GLM 5 Turbo",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131072,
+    "price_in": 1.2,
+    "price_out": 4.0,
+    "price_cache_read": 0.24,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-03-15",
+    "last_updated": "2026-03-15"
+  },
+  {
+    "id": "z-ai/glm-5.1",
+    "provider": "openrouter",
+    "name": "GLM 5.1",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131072,
+    "price_in": 0.98,
+    "price_out": 3.08,
+    "price_cache_read": 0.182,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-07",
+    "last_updated": "2026-04-07"
+  },
+  {
+    "id": "z-ai/glm-5v-turbo",
+    "provider": "openrouter",
+    "name": "GLM 5V Turbo",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "image",
+      "text",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 202752,
+    "max_output_tokens": 131072,
+    "price_in": 1.2,
+    "price_out": 4.0,
+    "price_cache_read": 0.24,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2026-04-01",
+    "last_updated": "2026-04-01"
+  }
+]

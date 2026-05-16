@@ -50,8 +50,43 @@ class Model:
     reasoning_efforts: tuple[str, ...] = ()
 
 
+def _generated_models_path() -> Path:
+    return Path(__file__).with_name("generated_models.json")
+
+
+def _model_from_generated_entry(entry: dict) -> Model:
+    return Model(
+        id=entry["id"],
+        provider=Provider(entry["provider"]),
+        max_context_tokens=int(entry["context_window"]),
+        max_output_tokens=int(entry.get("max_output_tokens", 8192)),
+        pricing=Pricing(
+            price_in=float(entry.get("price_in", 0)),
+            price_out=float(entry.get("price_out", 0)),
+            price_cache_read=float(entry.get("price_cache_read", 0)),
+            price_cache_write=float(entry.get("price_cache_write", 0)),
+        ),
+        reasoning_efforts=tuple(entry.get("reasoning_efforts", ())),
+    )
+
+
+def _load_generated_models() -> list[Model]:
+    path = _generated_models_path()
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        _logger.warning("Failed to read generated models from %s", path, exc_info=True)
+        return []
+    if not isinstance(raw, list):
+        _logger.warning("Skipping generated models from %s: expected list", path)
+        return []
+    return [_model_from_generated_entry(entry) for entry in raw if isinstance(entry, dict)]
+
+
 # Prices are per million tokens.
-DEFAULTS = [
+FALLBACK_DEFAULTS = [
     # --- Anthropic ---
     Model(
         "claude-opus-4-7",
@@ -230,6 +265,11 @@ DEFAULTS = [
         pricing=Pricing(price_in=0.20, price_out=0.50),
     ),
 ]
+
+OAUTH_DEFAULTS = [m for m in FALLBACK_DEFAULTS if m.provider == Provider.OPENAI_CODEX]
+DEFAULTS = (
+    _load_generated_models() or [m for m in FALLBACK_DEFAULTS if m.provider != Provider.OPENAI_CODEX]
+) + OAUTH_DEFAULTS
 
 
 @dataclass(frozen=True)

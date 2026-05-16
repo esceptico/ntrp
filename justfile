@@ -31,6 +31,10 @@ check:
     cd apps/tui && bun run typecheck
     cd apps/desktop && bun run typecheck
 
+# Refresh committed model metadata from models.dev.
+update-models:
+    cd apps/server && uv run python scripts/update_models.py
+
 # Build distributable artifacts.
 build:
     cd apps/server && uv build
