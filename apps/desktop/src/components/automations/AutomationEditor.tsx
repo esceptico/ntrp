@@ -12,6 +12,7 @@ import type {
 import { SPRING_SMOOTH } from "../../lib/motion";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
+import { GlassSwitch } from "../GlassSwitch";
 
 const MODAL_BACKDROP_DURATION = 0.2;
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -309,15 +310,15 @@ export function AutomationEditor({
                   schedule={form.schedule}
                   onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
                 />
-                <label className="inline-flex items-center gap-1.5 px-1 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
+                <div className="inline-flex items-center gap-1.5 px-1 select-none">
+                  <GlassSwitch
+                    size="sm"
                     checked={form.writable}
-                    onChange={(e) => setForm((p) => ({ ...p, writable: e.target.checked }))}
-                    className="size-3 accent-accent"
+                    onChange={(next) => setForm((p) => ({ ...p, writable: next }))}
+                    aria-label="Writable"
                   />
                   <span className="text-sm text-muted">Writable</span>
-                </label>
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <button

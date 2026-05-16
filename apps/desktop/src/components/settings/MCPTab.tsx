@@ -21,6 +21,7 @@ import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
+import { GlassSwitch } from "../GlassSwitch";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -239,7 +240,13 @@ function ServerRow({
         >
           <SettingsIcon size={ICON.MD} strokeWidth={2} />
         </button>
-        <Toggle checked={server.enabled} onChange={onToggle} disabled={busy} />
+        <GlassSwitch
+          size="sm"
+          checked={server.enabled}
+          onChange={onToggle}
+          disabled={busy}
+          aria-label={server.enabled ? `Disable ${server.name}` : `Enable ${server.name}`}
+        />
       </div>
     </li>
   );
@@ -480,17 +487,18 @@ function ToolsSection({
           const checked = enabledNames.has(t.name);
           return (
             <li key={t.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-2">
-              <input
-                type="checkbox"
+              <GlassSwitch
+                size="sm"
                 checked={checked}
                 disabled={busy}
-                onChange={() => {
-                  const next = new Set(enabledNames);
-                  if (checked) next.delete(t.name);
-                  else next.add(t.name);
-                  commit(next);
+                onChange={(next) => {
+                  const updated = new Set(enabledNames);
+                  if (next) updated.add(t.name);
+                  else updated.delete(t.name);
+                  commit(updated);
                 }}
-                className="mt-[3px] shrink-0 cursor-pointer"
+                aria-label={`Include ${t.name}`}
+                className="mt-[3px]"
               />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-ink tracking-[-0.005em] truncate">
@@ -732,39 +740,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
       {children}
     </label>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={onChange}
-      className={clsx(
-        "relative inline-flex items-center h-[18px] w-[30px] rounded-full transition-colors shrink-0",
-        checked ? "bg-accent-strong" : "bg-line",
-        disabled && "opacity-50 cursor-not-allowed",
-      )}
-    >
-      <span
-        aria-hidden
-        className={clsx(
-          "absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform",
-          checked ? "translate-x-[14px]" : "translate-x-[2px]",
-        )}
-      />
-    </button>
   );
 }
 

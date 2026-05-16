@@ -14,6 +14,7 @@ import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from ".
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
+import { GlassSwitch } from "../GlassSwitch";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -70,9 +71,11 @@ export function AppearanceTab() {
           title="Reasoning in chat"
           hint="Show or hide reasoning rows. Tool calls stay visible."
           control={
-            <Toggle
+            <GlassSwitch
+              size="sm"
               checked={showReasoning}
-              onChange={() => setPref("showReasoningInChat", !showReasoning)}
+              onChange={(next) => setPref("showReasoningInChat", next)}
+              aria-label="Show reasoning in chat"
             />
           }
         />
@@ -240,35 +243,6 @@ function SettingRow({
       </div>
       <div className="shrink-0 max-w-full">{control}</div>
     </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className={clsx(
-        "relative inline-flex items-center h-[18px] w-[30px] rounded-full transition-colors shrink-0",
-        checked ? "bg-accent-strong" : "bg-line",
-      )}
-    >
-      <span
-        aria-hidden
-        className={clsx(
-          "absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform",
-          checked ? "translate-x-[14px]" : "translate-x-[2px]",
-        )}
-      />
-    </button>
   );
 }
 
