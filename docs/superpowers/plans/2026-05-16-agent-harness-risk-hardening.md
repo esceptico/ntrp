@@ -813,9 +813,9 @@ Do not implement these in the B slice. Create separate specs/plans when B is mer
 
 ### C1: Compaction Rehydration
 
-- Persist loaded tools, invoked skills, pending approvals, background task refs, active plan refs, artifact refs, and loop task ID as structured compaction metadata.
-- Stop clearing loaded tools blindly on compaction.
-- Test that compaction preserves deferred tool state and pending control-plane state.
+- Persist pending approvals, background task refs, active plan refs, artifact refs, and loop task ID as structured compaction metadata.
+- Keep clearing loaded deferred tools on compaction; the model can reload a deferred group if it is still needed.
+- Test that compaction drops deferred tool visibility while preserving pending control-plane state.
 
 ### C2: Prompt And Cache Telemetry
 

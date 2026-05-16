@@ -1,6 +1,7 @@
 import re
 import shutil
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,7 @@ from ntrp.logging import get_logger
 _logger = get_logger(__name__)
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
+_SKILL_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,47}$")
 
 
 @dataclass
@@ -18,6 +20,17 @@ class SkillMeta:
     description: str
     path: Path
     location: str
+    source: str | None = None
+    version: str | None = None
+    reviewed_at: str | None = None
+
+
+@dataclass
+class SkillValidationIssue:
+    path: Path
+    location: str
+    reason: str
+    detail: str
 
 
 def _parse_skill_md(content: str) -> tuple[dict, str] | None:
@@ -36,12 +49,31 @@ def _parse_skill_md(content: str) -> tuple[dict, str] | None:
 class SkillRegistry:
     def __init__(self):
         self._skills: dict[str, SkillMeta] = {}
+        self._validation_issues: list[SkillValidationIssue] = []
 
     def load(self, dirs: list[tuple[Path, str]]) -> None:
+        self._validation_issues.clear()
         for path, location in dirs:
             self._scan_dir(path, location)
         if self._skills:
             _logger.info("Loaded %d skill(s): %s", len(self._skills), ", ".join(self._skills))
+
+    @property
+    def validation_issues(self) -> list[dict[str, str]]:
+        return [
+            {
+                "path": str(issue.path),
+                "location": issue.location,
+                "reason": issue.reason,
+                "detail": issue.detail,
+            }
+            for issue in self._validation_issues
+        ]
+
+    def _record_issue(self, path: Path, location: str, reason: str, detail: str) -> None:
+        self._validation_issues.append(
+            SkillValidationIssue(path=path, location=location, reason=reason, detail=detail)
+        )
 
     def _scan_dir(self, base: Path, location: str) -> None:
         if not base.exists():
@@ -64,16 +96,45 @@ class SkillRegistry:
             frontmatter, _ = parsed
             name = frontmatter.get("name")
             description = frontmatter.get("description")
-            if not name or not description:
+            if not isinstance(name, str) or not _SKILL_NAME_RE.fullmatch(name):
+                self._record_issue(
+                    skill_md,
+                    location,
+                    "invalid_name",
+                    "Skill name must match ^[a-z][a-z0-9-]{0,47}$.",
+                )
+                continue
+            if skill_dir.name != name:
+                self._record_issue(
+                    skill_md,
+                    location,
+                    "directory_name_mismatch",
+                    "Skill directory must match frontmatter name.",
+                )
+                continue
+            if not isinstance(description, str) or not description.strip():
+                self._record_issue(skill_md, location, "missing_description", "Skill description is required.")
                 _logger.warning("Missing name or description in %s", skill_md)
                 continue
             if name in self._skills:
                 continue
+            reviewed_at = _optional_date(frontmatter.get("reviewed_at"))
+            if frontmatter.get("reviewed_at") is not None and reviewed_at is None:
+                self._record_issue(
+                    skill_md,
+                    location,
+                    "invalid_reviewed_at",
+                    "reviewed_at must be an ISO date.",
+                )
+                continue
             self._skills[name] = SkillMeta(
                 name=name,
-                description=description,
+                description=description.strip(),
                 path=skill_dir,
                 location=location,
+                source=_optional_string(frontmatter.get("source")),
+                version=_optional_string(frontmatter.get("version")),
+                reviewed_at=reviewed_at,
             )
 
     def list_all(self) -> list[SkillMeta]:
@@ -134,3 +195,26 @@ class SkillRegistry:
 
     def __bool__(self) -> bool:
         return bool(self._skills)
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool, date)):
+        return str(value)
+    return None
+
+
+def _optional_date(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError:
+            return None
+    return None

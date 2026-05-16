@@ -11,7 +11,7 @@ from ntrp.core.compaction_model_request_middleware import CompactionModelRequest
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
-from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
+from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.deferred import build_deferred_tools_prompt, build_deferred_tools_prompt_for_schemas, load_tools_tool
 
@@ -129,7 +129,14 @@ class AlwaysCompacts:
     def should_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> bool:
         return True
 
-    async def maybe_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> list[dict] | None:
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+        *,
+        rehydration_state: dict | None = None,
+    ) -> list[dict] | None:
         return [{"role": "system", "content": "compacted"}]
 
 
@@ -141,8 +148,62 @@ class RecordingCompactor:
         self.seen.append(last_input_tokens)
         return False
 
-    async def maybe_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> list[dict] | None:
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+        *,
+        rehydration_state: dict | None = None,
+    ) -> list[dict] | None:
         return None
+
+
+def test_run_context_rehydration_snapshot_round_trip():
+    run = RunContext(
+        run_id="run",
+        deferred_tools_enabled=True,
+        loaded_tools={"slack_search", "background"},
+        loop_task_id="loop-1",
+        active_plan_ref="plan:abc",
+    )
+
+    snapshot = run.to_rehydration_state(
+        pending_approvals=["call-1"],
+        background_tasks=[{"task_id": "bg-1", "command": "research"}],
+    )
+
+    restored = RunContext(run_id="run", deferred_tools_enabled=True)
+    restored.apply_rehydration_state(snapshot)
+
+    assert restored.loaded_tools == set()
+    assert restored.loop_task_id == "loop-1"
+    assert restored.active_plan_ref == "plan:abc"
+    assert "loaded_tools" not in snapshot
+    assert snapshot["pending_approval_ids"] == ["call-1"]
+    assert snapshot["background_tasks"] == [{"task_id": "bg-1", "command": "research"}]
+
+
+def test_tool_context_builds_compaction_rehydration_state():
+    run = RunContext(run_id="run", loaded_tools={"slack_search"}, active_plan_ref="plan:abc")
+    io = IOBridge(pending_approvals={"call-1": object()})  # type: ignore[dict-item]
+    background = BackgroundTaskRegistry(session_id="s")
+    background._commands["bg-1"] = "research"
+
+    ctx = ToolContext(
+        session_state=SessionState(session_id="s", started_at=datetime.now(UTC)),
+        registry=_registry(),
+        run=run,
+        io=io,
+        background_tasks=background,
+    )
+
+    assert ctx.to_rehydration_state() == {
+        "pending_approval_ids": ["call-1"],
+        "background_tasks": [{"task_id": "bg-1", "command": "research"}],
+        "active_plan_ref": "plan:abc",
+        "loop_task_id": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -196,13 +257,20 @@ async def test_deferred_middleware_hides_then_reveals_loaded_tools():
 
 
 @pytest.mark.asyncio
-async def test_compaction_unloads_deferred_tools_after_current_request():
+async def test_compaction_unloads_deferred_tools_but_rehydrates_control_state():
     registry = _registry()
-    run = RunContext(run_id="run", deferred_tools_enabled=True, loaded_tools={"slack_search"})
+    run = RunContext(
+        run_id="run",
+        deferred_tools_enabled=True,
+        loaded_tools={"slack_search"},
+        active_plan_ref="plan:abc",
+    )
     deferred = DeferredToolsModelRequestMiddleware(registry=registry, run=run, get_services=dict)
     compaction = CompactionModelRequestMiddleware(
         compactor=AlwaysCompacts(),
         on_compact=run.loaded_tools.clear,
+        get_rehydration_state=lambda: run.to_rehydration_state(),
+        apply_rehydration_state=run.apply_rehydration_state,
     )
 
     async def compacting_next(req: ModelRequest) -> ModelRequest:
@@ -213,6 +281,7 @@ async def test_compaction_unloads_deferred_tools_after_current_request():
     assert "slack_search" in names
     assert prepared.messages == [{"role": "system", "content": "compacted"}]
     assert run.loaded_tools == set()
+    assert run.active_plan_ref == "plan:abc"
 
     next_prepared = await deferred(_request(registry), _identity)
     next_names = {t["function"]["name"] for t in next_prepared.tools}

@@ -142,6 +142,8 @@ def create_agent(
             CompactionModelRequestMiddleware(
                 compactor=config.compactor,
                 on_compact=run_ctx.loaded_tools.clear,
+                get_rehydration_state=tool_ctx.to_rehydration_state,
+                apply_rehydration_state=run_ctx.apply_rehydration_state,
                 emit=tool_ctx.io.emit,
                 run_id=run_id,
                 initial_input_tokens=initial_input_tokens,

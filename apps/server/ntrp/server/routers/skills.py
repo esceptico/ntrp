@@ -22,6 +22,11 @@ async def list_skills(svc: SkillService = Depends(require_skill_service)):
     }
 
 
+@router.get("/skills/governance")
+async def skill_governance(svc: SkillService = Depends(require_skill_service)):
+    return svc.governance_report()
+
+
 @router.get("/skills/{name}/content")
 async def get_skill_content(name: str, svc: SkillService = Depends(require_skill_service)):
     meta = svc.get(name)

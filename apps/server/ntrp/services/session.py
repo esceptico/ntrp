@@ -133,6 +133,7 @@ class SessionService:
         boundary_seq: int,
         messages_before: int,
         messages_after: int,
+        rehydration_state: dict | None = None,
     ) -> None:
         try:
             await self.store.record_chat_compaction(
@@ -141,6 +142,7 @@ class SessionService:
                 boundary_seq=boundary_seq,
                 messages_before=messages_before,
                 messages_after=messages_after,
+                rehydration_state=rehydration_state,
             )
         except Exception as e:
             _logger.warning("Failed to record chat compaction: %s", e)

@@ -280,6 +280,8 @@ def create_spawn_fn(
                 CompactionModelRequestMiddleware(
                     compactor=compactor,
                     on_compact=child_run.loaded_tools.clear,
+                    get_rehydration_state=child_ctx.to_rehydration_state,
+                    apply_rehydration_state=child_run.apply_rehydration_state,
                     emit=parent_emit,
                     run_id=calling_ctx.run.run_id,
                 ),

@@ -57,10 +57,32 @@ class RunContext:
     loaded_tools: set[str] = field(default_factory=set)
     allowed_tool_names: set[str] | None = None
     loop_task_id: str | None = None
+    active_plan_ref: str | None = None
 
     def __post_init__(self) -> None:
         if self.budget is None:
             self.budget = RunBudget()
+
+    def to_rehydration_state(
+        self,
+        *,
+        pending_approvals: list[str] | None = None,
+        background_tasks: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "pending_approval_ids": pending_approvals or [],
+            "background_tasks": background_tasks or [],
+            "active_plan_ref": self.active_plan_ref,
+            "loop_task_id": self.loop_task_id,
+        }
+
+    def apply_rehydration_state(self, state: dict[str, Any] | None) -> None:
+        if not state:
+            return
+        active_plan_ref = state.get("active_plan_ref")
+        self.active_plan_ref = active_plan_ref if isinstance(active_plan_ref, str) else None
+        loop_task_id = state.get("loop_task_id")
+        self.loop_task_id = loop_task_id if isinstance(loop_task_id, str) else None
 
 
 @dataclass
@@ -176,6 +198,12 @@ class BackgroundTaskRegistry:
     def list_pending(self) -> list[tuple[str, str]]:
         return [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
 
+    def to_rehydration_refs(self) -> list[dict[str, str]]:
+        return [
+            {"task_id": task_id, "command": command}
+            for task_id, command in sorted(self._commands.items())
+        ]
+
     async def inject(self, messages: list[dict]) -> None:
         if self.on_result:
             await self.on_result(messages)
@@ -287,6 +315,12 @@ class ToolContext:
     @property
     def capabilities(self) -> frozenset[str]:
         return frozenset(self.services)
+
+    def to_rehydration_state(self) -> dict[str, Any]:
+        return self.run.to_rehydration_state(
+            pending_approvals=sorted((self.io.pending_approvals or {}).keys()),
+            background_tasks=self.background_tasks.to_rehydration_refs(),
+        )
 
     def get_client[T](self, id: str, client_type: type[T]) -> T | None:
         s = self.services.get(id)

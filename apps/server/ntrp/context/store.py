@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS chat_compactions (
     boundary_seq INTEGER NOT NULL,
     messages_before INTEGER NOT NULL,
     messages_after INTEGER NOT NULL,
+    rehydration_state TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -390,6 +391,15 @@ class SessionStore:
                 pass
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
+        await self._migrate_chat_compactions_schema()
+
+    async def _migrate_chat_compactions_schema(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(chat_compactions)")
+        columns = {row["name"] for row in rows}
+        if "rehydration_state" in columns:
+            return
+        await self.conn.execute("ALTER TABLE chat_compactions ADD COLUMN rehydration_state TEXT")
+        await self.conn.commit()
 
     async def _migrate_tool_calls_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(tool_calls)")
@@ -1272,18 +1282,24 @@ class SessionStore:
         boundary_seq: int,
         messages_before: int,
         messages_after: int,
+        rehydration_state: dict | None = None,
     ) -> None:
+        rehydration_state_json = await asyncio.to_thread(
+            lambda: json.dumps(rehydration_state, default=str) if rehydration_state is not None else None
+        )
         await self.conn.execute(
             """
             INSERT INTO chat_compactions (
-                compaction_id, session_id, boundary_seq, messages_before, messages_after, created_at
+                compaction_id, session_id, boundary_seq, messages_before, messages_after,
+                rehydration_state, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(compaction_id) DO UPDATE SET
                 session_id = excluded.session_id,
                 boundary_seq = excluded.boundary_seq,
                 messages_before = excluded.messages_before,
-                messages_after = excluded.messages_after
+                messages_after = excluded.messages_after,
+                rehydration_state = excluded.rehydration_state
             """,
             (
                 compaction_id,
@@ -1291,6 +1307,7 @@ class SessionStore:
                 boundary_seq,
                 messages_before,
                 messages_after,
+                rehydration_state_json,
                 datetime.now(UTC).isoformat(),
             ),
         )
@@ -1313,6 +1330,7 @@ class SessionStore:
                 "boundary_seq": row["boundary_seq"],
                 "messages_before": row["messages_before"],
                 "messages_after": row["messages_after"],
+                "rehydration_state": json.loads(row["rehydration_state"]) if row["rehydration_state"] else None,
                 "created_at": row["created_at"],
             }
             for row in rows

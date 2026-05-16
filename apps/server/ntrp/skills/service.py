@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from pathlib import Path
 
 from ntrp.settings import NTRP_DIR
@@ -30,6 +31,38 @@ class SkillService:
 
     def get(self, name: str) -> SkillMeta | None:
         return self._registry.get(name)
+
+    def governance_report(self, *, now_date: str | None = None) -> dict:
+        today = date.fromisoformat(now_date) if now_date else date.today()
+        inventory = []
+        cleanup_candidates = []
+
+        for skill in self._registry.list_all():
+            row = {
+                "name": skill.name,
+                "description": skill.description,
+                "location": skill.location,
+                "path": str(skill.path),
+                "source": skill.source,
+                "version": skill.version,
+                "reviewed_at": skill.reviewed_at,
+            }
+            inventory.append(row)
+            if skill.reviewed_at:
+                reviewed = date.fromisoformat(skill.reviewed_at)
+                if (today - reviewed).days >= 180:
+                    cleanup_candidates.append({**row, "reason": "review_stale"})
+
+        return {
+            "summary": {
+                "skill_count": len(inventory),
+                "validation_issue_count": len(self._registry.validation_issues),
+                "cleanup_candidate_count": len(cleanup_candidates),
+            },
+            "inventory": inventory,
+            "validation_issues": self._registry.validation_issues,
+            "cleanup_candidates": cleanup_candidates,
+        }
 
     async def install(self, source: str) -> SkillMeta | None:
         target_dir = NTRP_DIR / "skills"

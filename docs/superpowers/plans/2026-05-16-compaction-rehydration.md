@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Compaction must preserve the active control-plane state: loaded tools, pending approvals, background tasks, and active plan reference.
+**Goal:** Compaction must preserve active control-plane refs: pending approvals, background tasks, and active plan reference. Loaded deferred tools are intentionally dropped after compaction.
 
-**Architecture:** Keep message summarization separate from runtime-state rehydration. Add a small typed `CompactionState` snapshot that is captured before compaction, stored on the handoff message and `chat_compactions`, then restored onto the current `RunContext` after compaction. Do not persist live `asyncio.Task` or `Future` objects; persist stable refs and restore only the registry-visible state.
+**Architecture:** Keep message summarization separate from runtime-state rehydration. Add a small typed `CompactionState` snapshot that is captured before compaction, stored on the handoff message and `chat_compactions`, then restored onto the current `RunContext` after compaction. Do not persist live `asyncio.Task` or `Future` objects; persist stable refs only. Do not rehydrate `loaded_tools`; the model can call `load_tools` again if it still needs a deferred group.
 
 **Tech Stack:** Python dataclasses/Pydantic-style dicts, existing `RunContext`, `IOBridge`, `BackgroundTaskRegistry`, `SessionStore`, pytest.
 
@@ -17,7 +17,7 @@
 - Modify `apps/server/ntrp/core/compaction_model_request_middleware.py`: capture and restore runtime state around compaction.
 - Modify `apps/server/ntrp/context/store.py`: add `rehydration_state` JSON column to `chat_compactions`.
 - Modify `apps/server/ntrp/services/session.py`: pass the optional `rehydration_state` into the store.
-- Test `apps/server/tests/test_deferred_tools.py`: loaded tools survive compaction.
+- Test `apps/server/tests/test_deferred_tools.py`: deferred tools are dropped while control-plane refs survive compaction.
 - Test `apps/server/tests/test_compactor.py`: compacted handoff contains rehydration metadata.
 - Test `apps/server/tests/test_session_store.py`: `chat_compactions.rehydration_state` round trips.
 
@@ -49,7 +49,7 @@ def test_run_context_rehydration_snapshot_round_trip():
     restored = RunContext(run_id="run", deferred_tools_enabled=True)
     restored.apply_rehydration_state(snapshot)
 
-    assert restored.loaded_tools == {"slack_search", "background"}
+    assert restored.loaded_tools == set()
     assert restored.loop_task_id == "loop-1"
     assert restored.active_plan_ref == "plan:abc"
     assert snapshot["pending_approval_ids"] == ["call-1"]
@@ -80,7 +80,6 @@ def to_rehydration_state(
     background_tasks: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     return {
-        "loaded_tools": sorted(self.loaded_tools),
         "pending_approval_ids": pending_approvals or [],
         "background_tasks": background_tasks or [],
         "active_plan_ref": self.active_plan_ref,
@@ -90,9 +89,6 @@ def to_rehydration_state(
 def apply_rehydration_state(self, state: dict[str, Any] | None) -> None:
     if not state:
         return
-    loaded = state.get("loaded_tools")
-    if isinstance(loaded, list):
-        self.loaded_tools = {v for v in loaded if isinstance(v, str)}
     active_plan_ref = state.get("active_plan_ref")
     self.active_plan_ref = active_plan_ref if isinstance(active_plan_ref, str) else None
     loop_task_id = state.get("loop_task_id")
@@ -135,7 +131,6 @@ def test_tool_context_builds_compaction_rehydration_state():
     )
 
     assert ctx.to_rehydration_state() == {
-        "loaded_tools": ["slack_search"],
         "pending_approval_ids": ["call-1"],
         "background_tasks": [{"task_id": "bg-1", "command": "research"}],
         "active_plan_ref": "plan:abc",
@@ -202,7 +197,7 @@ def test_build_compacted_messages_embeds_rehydration_state():
         {"role": "user", "content": "old", "message_id": "m1"},
         {"role": "assistant", "content": "new", "message_id": "m2"},
     ]
-    state = {"loaded_tools": ["slack_search"], "active_plan_ref": "plan:abc"}
+    state = {"active_plan_ref": "plan:abc", "pending_approval_ids": ["call-1"]}
 
     compacted = _build_compacted_messages(messages, 1, 2, "summary", rehydration_state=state)
 
@@ -253,7 +248,7 @@ cd apps/server && uv run pytest tests/test_compactor.py::test_build_compacted_me
 
 Expected: pass.
 
-## Task 4: Preserve Loaded Tools During Compaction
+## Task 4: Drop Loaded Tools And Rehydrate Control State During Compaction
 
 **Files:**
 - Modify: `apps/server/ntrp/core/compaction_model_request_middleware.py`
@@ -267,12 +262,18 @@ Replace `test_compaction_unloads_deferred_tools_after_current_request` with:
 
 ```python
 @pytest.mark.asyncio
-async def test_compaction_preserves_deferred_tools_after_current_request():
+async def test_compaction_unloads_deferred_tools_but_rehydrates_control_state():
     registry = _registry()
-    run = RunContext(run_id="run", deferred_tools_enabled=True, loaded_tools={"slack_search"})
+    run = RunContext(
+        run_id="run",
+        deferred_tools_enabled=True,
+        loaded_tools={"slack_search"},
+        active_plan_ref="plan:abc",
+    )
     deferred = DeferredToolsModelRequestMiddleware(registry=registry, run=run, get_services=dict)
     compaction = CompactionModelRequestMiddleware(
         compactor=AlwaysCompacts(),
+        on_compact=run.loaded_tools.clear,
         get_rehydration_state=lambda: run.to_rehydration_state(),
         apply_rehydration_state=run.apply_rehydration_state,
     )
@@ -284,11 +285,12 @@ async def test_compaction_preserves_deferred_tools_after_current_request():
     names = {t["function"]["name"] for t in prepared.tools}
     assert "slack_search" in names
     assert prepared.messages == [{"role": "system", "content": "compacted"}]
-    assert run.loaded_tools == {"slack_search"}
+    assert run.loaded_tools == set()
+    assert run.active_plan_ref == "plan:abc"
 
     next_prepared = await deferred(_request(registry), _identity)
     next_names = {t["function"]["name"] for t in next_prepared.tools}
-    assert "slack_search" in next_names
+    assert "slack_search" not in next_names
 ```
 
 - [ ] **Step 2: Verify red**
@@ -296,7 +298,7 @@ async def test_compaction_preserves_deferred_tools_after_current_request():
 Run:
 
 ```bash
-cd apps/server && uv run pytest tests/test_deferred_tools.py::test_compaction_preserves_deferred_tools_after_current_request -q
+cd apps/server && uv run pytest tests/test_deferred_tools.py::test_compaction_unloads_deferred_tools_but_rehydrates_control_state -q
 ```
 
 Expected: fail because `CompactionModelRequestMiddleware` lacks `get_rehydration_state` and `apply_rehydration_state`.
@@ -325,7 +327,7 @@ if self.apply_rehydration_state:
     self.apply_rehydration_state(rehydration_state)
 ```
 
-Remove `on_compact=run.loaded_tools.clear` from `apps/server/ntrp/core/factory.py` and `apps/server/ntrp/core/spawner.py`. Wire `get_rehydration_state=ctx.to_rehydration_state` where a `ToolContext` is available; otherwise use `run.to_rehydration_state`.
+Keep `on_compact=run.loaded_tools.clear` in `apps/server/ntrp/core/factory.py` and `apps/server/ntrp/core/spawner.py`. Wire `get_rehydration_state=ctx.to_rehydration_state` and `apply_rehydration_state=run.apply_rehydration_state` so approval/background/plan refs survive without restoring deferred tools.
 
 - [ ] **Step 4: Verify green**
 
@@ -349,7 +351,7 @@ Expected: pass.
 Extend `test_compaction_boundary_round_trip`:
 
 ```python
-rehydration_state = {"loaded_tools": ["slack_search"], "active_plan_ref": "plan:abc"}
+rehydration_state = {"active_plan_ref": "plan:abc", "pending_approval_ids": ["call-1"]}
 await store.record_chat_compaction(
     compaction_id="compact-1",
     session_id="sess-1",

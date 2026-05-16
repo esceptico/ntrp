@@ -45,7 +45,7 @@ The main gap is not architecture direction. It is making policy, budgets, rehydr
 ### P1: Context, Planning, And Legibility
 
 6. Compaction is mostly conversation summarization.
-   It records message boundaries, but active approvals, active plan/goal, loaded skills, loaded instruction scopes, deferred tools, artifact refs, and unresolved background/tool state are not explicit rehydration inputs.
+   It records message boundaries, but active approvals, active plan/goal, artifact refs, and unresolved background/tool state are not explicit rehydration inputs. Deferred tool visibility should reset after compaction; the model can reload groups if they are still needed.
 
 7. Planning mode is not a runtime mode.
    There are plan artifacts in `docs/superpowers/plans`, but no harness mode that blocks mutating tools while planning, ties approval to a plan version, or records a durable plan state.

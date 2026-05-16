@@ -524,12 +524,14 @@ async def test_session_events_round_trip_with_sequence(store: SessionStore):
 
 @pytest.mark.asyncio
 async def test_compaction_boundary_round_trip(store: SessionStore):
+    rehydration_state = {"active_plan_ref": "plan:abc", "pending_approval_ids": ["call-1"]}
     await store.record_chat_compaction(
         compaction_id="compact-1",
         session_id="sess-1",
         boundary_seq=12,
         messages_before=20,
         messages_after=5,
+        rehydration_state=rehydration_state,
     )
 
     compactions = await store.list_chat_compactions("sess-1")
@@ -539,6 +541,7 @@ async def test_compaction_boundary_round_trip(store: SessionStore):
     assert compactions[0]["boundary_seq"] == 12
     assert compactions[0]["messages_before"] == 20
     assert compactions[0]["messages_after"] == 5
+    assert compactions[0]["rehydration_state"] == rehydration_state
 
 
 @pytest.mark.asyncio

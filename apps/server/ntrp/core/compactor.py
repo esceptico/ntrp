@@ -31,6 +31,8 @@ class Compactor(Protocol):
         messages: list[dict],
         model: str,
         last_input_tokens: int | None,
+        *,
+        rehydration_state: dict | None = None,
     ) -> list[dict] | None:
         """Return compacted messages, or None if no compaction needed."""
         ...
@@ -176,7 +178,14 @@ def _message_ref_id(msg: dict) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _build_compacted_messages(messages: list[dict], start: int, end: int, summary: str) -> list[dict]:
+def _build_compacted_messages(
+    messages: list[dict],
+    start: int,
+    end: int,
+    summary: str,
+    *,
+    rehydration_state: dict | None = None,
+) -> list[dict]:
     compaction: dict = {
         "kind": "session_handoff",
         "message_start": start,
@@ -186,6 +195,8 @@ def _build_compacted_messages(messages: list[dict], start: int, end: int, summar
         compaction["message_start_id"] = start_id
     if end > start and (end_id := _message_ref_id(messages[end - 1])):
         compaction["message_end_id"] = end_id
+    if rehydration_state:
+        compaction["rehydration"] = rehydration_state
 
     return [
         messages[0],
@@ -204,6 +215,7 @@ async def compact_messages(
     *,
     keep_ratio: float = COMPRESSION_KEEP_RATIO,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+    rehydration_state: dict | None = None,
 ) -> list[dict] | None:
     """Compact messages by summarizing old ones. Returns new messages or None if nothing to compact."""
     r = compactable_range(messages, keep_ratio=keep_ratio)
@@ -211,7 +223,7 @@ async def compact_messages(
         return None
     start, end = r
     summary = await compact_summarize(messages, start, end, model, summary_max_tokens)
-    return _build_compacted_messages(messages, start, end, summary)
+    return _build_compacted_messages(messages, start, end, summary, rehydration_state=rehydration_state)
 
 
 class SummaryCompactor:
@@ -248,6 +260,8 @@ class SummaryCompactor:
         messages: list[dict],
         model: str,
         last_input_tokens: int | None,
+        *,
+        rehydration_state: dict | None = None,
     ) -> list[dict] | None:
         if not self.should_compact(messages, model, last_input_tokens):
             return None
@@ -257,4 +271,5 @@ class SummaryCompactor:
             model,
             keep_ratio=self.keep_ratio,
             summary_max_tokens=self.summary_max_tokens,
+            rehydration_state=rehydration_state,
         )
