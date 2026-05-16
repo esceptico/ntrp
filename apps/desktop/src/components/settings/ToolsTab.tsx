@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import clsx from "clsx";
 import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { listToolsApi, type ToolMetadata, type ToolOverrideDecision } from "../../api";
 import { useStore } from "../../store";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { GlassToggle } from "../GlassToggle";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
@@ -17,7 +17,7 @@ export function ToolsTab() {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
   const mounted = useMountedRef();
-  const { busy, error, run } = useMutationState(mounted);
+  const { error, run } = useMutationState(mounted);
   const [tools, setTools] = useState<ToolMetadata[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -131,24 +131,12 @@ export function ToolsTab() {
                         </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-1 p-1 h-8 rounded-md bg-surface-soft border border-line-soft">
-                      {DECISIONS.map((decision) => (
-                        <button
-                          key={decision.value}
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setOverride(tool, decision.value)}
-                          className={clsx(
-                            "px-2 rounded-[5px] text-xs font-medium transition-colors disabled:opacity-50",
-                            current === decision.value
-                              ? "bg-bg-main text-ink shadow-sm"
-                              : "text-muted hover:text-ink hover:bg-bg-main/50",
-                          )}
-                        >
-                          {decision.label}
-                        </button>
-                      ))}
-                    </div>
+                    <GlassToggle
+                      size="sm"
+                      options={DECISIONS}
+                      value={current}
+                      onChange={(v) => setOverride(tool, v as ToolOverrideDecision)}
+                    />
                   </li>
                 );
               })}
