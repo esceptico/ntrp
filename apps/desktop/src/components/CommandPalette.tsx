@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -245,9 +245,25 @@ function PaletteBody({
     [setCrumbs, setQuery],
   );
 
-  // Keep the highlighted row in view while arrow-navigating.
-  useEffect(() => {
-    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  // Keep the highlighted row in view while arrow-navigating. Naive
+  // `scrollIntoView({block:"nearest"})` jams the row against the
+  // viewport edge — and with section headers in between, the next
+  // arrow press lands the new active row partially behind a header,
+  // making it look like the highlight was "skipped". We only scroll
+  // when the row is actually clipped, and reserve ~28px at the top
+  // for the section header that floats above it.
+  useLayoutEffect(() => {
+    const row = activeRowRef.current;
+    const list = listRef.current;
+    if (!row || !list) return;
+    const rowBox = row.getBoundingClientRect();
+    const listBox = list.getBoundingClientRect();
+    const headerPad = 28;
+    if (rowBox.top < listBox.top + headerPad) {
+      list.scrollTop -= listBox.top + headerPad - rowBox.top;
+    } else if (rowBox.bottom > listBox.bottom - 6) {
+      list.scrollTop += rowBox.bottom - (listBox.bottom - 6);
+    }
   }, [safe]);
 
   const grouped = useMemo(() => groupBySection(filtered), [filtered]);
