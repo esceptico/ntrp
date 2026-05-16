@@ -29,6 +29,24 @@ const SIZES = {
 
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
+const BTN_STYLE_BASE: CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  lineHeight: 1,
+  background: "transparent",
+  border: "none",
+  borderRadius: 999,
+  cursor: "pointer",
+  appearance: "none",
+  WebkitAppearance: "none",
+  transition: "color 200ms ease",
+  userSelect: "none",
+};
+
 function normalize(opt: Option): NormalizedOption {
   return typeof opt === "string" ? { value: opt, label: opt } : opt;
 }
@@ -52,6 +70,11 @@ export function GlassToggle({
   const activeIndex = items.findIndex((o) => o.value === value);
 
   useLayoutEffect(() => {
+    if (activeIndex === -1) {
+      setPill(null);
+      setReady(true);
+      return;
+    }
     const btn = btnRefs.current[activeIndex];
     const track = trackRef.current;
     if (!btn || !track) return;
@@ -71,7 +94,7 @@ export function GlassToggle({
   const focusAt = (i: number) => {
     const next = (i + items.length) % items.length;
     btnRefs.current[next]?.focus();
-    onChange(items[next].value);
+    if (items[next].value !== value) onChange(items[next].value);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -101,8 +124,6 @@ export function GlassToggle({
     background: "var(--gt-track-bg)",
     border: "1px solid var(--gt-track-border)",
     boxShadow: "var(--gt-track-shadow)",
-    backdropFilter: "blur(20px) saturate(180%)",
-    WebkitBackdropFilter: "blur(20px) saturate(180%)",
   };
 
   const pillStyle: CSSProperties = {
@@ -116,8 +137,6 @@ export function GlassToggle({
     background: "var(--gt-pill-bg)",
     border: "1px solid var(--gt-pill-border)",
     boxShadow: "var(--gt-pill-shadow)",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
     transition: ready
       ? `transform 380ms ${EASE}, width 380ms ${EASE}`
       : "none",
@@ -128,6 +147,12 @@ export function GlassToggle({
 
   const classes = ["glass-toggle", className].filter(Boolean).join(" ");
 
+  const btnSizing: CSSProperties = {
+    height: sz.h - sz.pad * 2,
+    padding: `0 ${sz.padX}px`,
+    fontSize: sz.font,
+  };
+
   return (
     <div
       ref={setRefs}
@@ -136,31 +161,9 @@ export function GlassToggle({
       style={trackStyle}
       onKeyDown={onKeyDown}
     >
-      <span aria-hidden style={pillStyle} />
+      <span aria-hidden className="glass-toggle-pill" style={pillStyle} />
       {items.map((opt, i) => {
         const active = opt.value === value;
-        const btnStyle: CSSProperties = {
-          position: "relative",
-          zIndex: 1,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          height: sz.h - sz.pad * 2,
-          padding: `0 ${sz.padX}px`,
-          fontSize: sz.font,
-          fontWeight: active ? 600 : 500,
-          lineHeight: 1,
-          color: active ? "var(--gt-fg)" : "var(--gt-fg-muted)",
-          background: "transparent",
-          border: "none",
-          borderRadius: 999,
-          cursor: "pointer",
-          appearance: "none",
-          WebkitAppearance: "none",
-          transition: "color 200ms ease",
-          userSelect: "none",
-        };
         return (
           <button
             key={opt.value}
@@ -172,7 +175,12 @@ export function GlassToggle({
             aria-selected={active}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(opt.value)}
-            style={btnStyle}
+            style={{
+              ...BTN_STYLE_BASE,
+              ...btnSizing,
+              fontWeight: active ? 600 : 500,
+              color: active ? "var(--gt-fg)" : "var(--gt-fg-muted)",
+            }}
           >
             {opt.icon ? (
               <span style={{ display: "inline-flex" }}>{opt.icon}</span>
