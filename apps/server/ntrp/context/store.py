@@ -229,6 +229,16 @@ class SessionStore:
         self.conn = conn
         self.read_conn = read_conn or conn
         self._background_event_lock = asyncio.Lock()
+        self._session_locks_guard = asyncio.Lock()
+        self._session_write_locks: dict[str, asyncio.Lock] = {}
+
+    async def _session_write_lock(self, session_id: str) -> asyncio.Lock:
+        async with self._session_locks_guard:
+            lock = self._session_write_locks.get(session_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._session_write_locks[session_id] = lock
+            return lock
 
     async def _update(self, sql: str, params: tuple) -> bool:
         cursor = await self.conn.execute(sql, params)
@@ -497,7 +507,7 @@ class SessionStore:
 
         await flush_current()
 
-    async def _ensure_session_messages(self, session_id: str) -> None:
+    async def _ensure_session_messages_unlocked(self, session_id: str) -> None:
         has_rows = await self.read_conn.execute_fetchall(SQL_LOAD_SESSION_MESSAGES_COUNT, (session_id,))
         if has_rows:
             return
@@ -518,30 +528,37 @@ class SessionStore:
         await self.conn.execute("UPDATE sessions SET messages = ? WHERE session_id = ?", (messages_json, session_id))
         await self.conn.commit()
 
+    async def _ensure_session_messages(self, session_id: str) -> None:
+        lock = await self._session_write_lock(session_id)
+        async with lock:
+            await self._ensure_session_messages_unlocked(session_id)
+
     async def update_progress(self, state: SessionState, messages: list[dict | Any]) -> None:
         """Lightweight mid-run save: rewrite messages + bump last_activity,
         upserting the row so a fresh session's first save lands instead of
         silently no-op'ing. Leaves metadata alone — the final save in the
         chat service re-stamps last_input_tokens."""
-        serializable = self._to_serializable_messages(messages)
-        now = datetime.now(UTC).isoformat()
-        self._stamp_messages(serializable, now)
+        lock = await self._session_write_lock(state.session_id)
+        async with lock:
+            serializable = self._to_serializable_messages(messages)
+            now = datetime.now(UTC).isoformat()
+            self._stamp_messages(serializable, now)
 
-        messages_json = await asyncio.to_thread(lambda: json.dumps(serializable, default=str))
-        await self.conn.execute(
-            SQL_UPSERT_PROGRESS,
-            (
-                state.session_id,
-                state.started_at.isoformat(),
-                now,
-                messages_json,
-                state.name,
-                state.session_type,
-                state.origin_automation_id,
-            ),
-        )
-        await self._mirror_session_messages(state.session_id, serializable)
-        await self.conn.commit()
+            messages_json = await asyncio.to_thread(lambda: json.dumps(serializable, default=str))
+            await self.conn.execute(
+                SQL_UPSERT_PROGRESS,
+                (
+                    state.session_id,
+                    state.started_at.isoformat(),
+                    now,
+                    messages_json,
+                    state.name,
+                    state.session_type,
+                    state.origin_automation_id,
+                ),
+            )
+            await self._mirror_session_messages(state.session_id, serializable)
+            await self.conn.commit()
 
     async def record_chat_run_started(
         self,
@@ -688,8 +705,8 @@ class SessionStore:
                 updated_at = ?
             WHERE session_id = ? AND task_id = ?
             """,
-            (detail, result_ref, now, session_id, task_id),
-        )
+                (detail, result_ref, now, session_id, task_id),
+            )
             await self.conn.commit()
         return seq
 
@@ -1035,33 +1052,35 @@ class SessionStore:
         ]
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
-        serializable_messages = self._to_serializable_messages(messages)
+        lock = await self._session_write_lock(state.session_id)
+        async with lock:
+            serializable_messages = self._to_serializable_messages(messages)
 
-        # Stamp created_at on every message that hasn't been stamped yet.
-        # The list is shared with the agent's in-memory context so the
-        # stamp persists across saves without a side-table lookup.
-        now = datetime.now(UTC).isoformat()
-        self._stamp_messages(serializable_messages, now)
+            # Stamp created_at on every message that hasn't been stamped yet.
+            # The list is shared with the agent's in-memory context so the
+            # stamp persists across saves without a side-table lookup.
+            now = datetime.now(UTC).isoformat()
+            self._stamp_messages(serializable_messages, now)
 
-        meta = metadata or {}
-        messages_json, metadata_json = await asyncio.to_thread(
-            lambda: (json.dumps(serializable_messages, default=str), json.dumps(meta))
-        )
-        await self.conn.execute(
-            SQL_SAVE_SESSION,
-            (
-                state.session_id,
-                state.started_at.isoformat(),
-                state.last_activity.isoformat(),
-                messages_json,
-                metadata_json,
-                state.name,
-                state.session_type,
-                state.origin_automation_id,
-            ),
-        )
-        await self._mirror_session_messages(state.session_id, serializable_messages)
-        await self.conn.commit()
+            meta = metadata or {}
+            messages_json, metadata_json = await asyncio.to_thread(
+                lambda: (json.dumps(serializable_messages, default=str), json.dumps(meta))
+            )
+            await self.conn.execute(
+                SQL_SAVE_SESSION,
+                (
+                    state.session_id,
+                    state.started_at.isoformat(),
+                    state.last_activity.isoformat(),
+                    messages_json,
+                    metadata_json,
+                    state.name,
+                    state.session_type,
+                    state.origin_automation_id,
+                ),
+            )
+            await self._mirror_session_messages(state.session_id, serializable_messages)
+            await self.conn.commit()
 
     async def load_session(self, session_id: str) -> SessionData | None:
         rows = await self.read_conn.execute_fetchall(SQL_LOAD_SESSION, (session_id,))
@@ -1235,10 +1254,7 @@ class SessionStore:
             )
             rows = list(reversed(desc_rows))
 
-        messages = [
-            self._message_row_payload(row)
-            for row in rows
-        ]
+        messages = [self._message_row_payload(row) for row in rows]
         first_seq = messages[0]["seq"] if messages else None
         last_seq = messages[-1]["seq"] if messages else None
         has_more_before = False
@@ -1272,28 +1288,30 @@ class SessionStore:
         message_id: str | None = None,
         seq: int | None = None,
     ) -> bool:
-        await self._ensure_session_messages(session_id)
-        target_seq = seq
-        if target_seq is None and message_id:
-            rows = await self.read_conn.execute_fetchall(
-                """
-                SELECT seq FROM session_messages
-                WHERE session_id = ? AND (message_id = ? OR client_id = ?)
-                LIMIT 1
-                """,
-                (session_id, message_id, message_id),
-            )
-            target_seq = int(rows[0]["seq"]) if rows else None
-        if target_seq is None:
-            return False
+        lock = await self._session_write_lock(session_id)
+        async with lock:
+            await self._ensure_session_messages_unlocked(session_id)
+            target_seq = seq
+            if target_seq is None and message_id:
+                rows = await self.read_conn.execute_fetchall(
+                    """
+                    SELECT seq FROM session_messages
+                    WHERE session_id = ? AND (message_id = ? OR client_id = ?)
+                    LIMIT 1
+                    """,
+                    (session_id, message_id, message_id),
+                )
+                target_seq = int(rows[0]["seq"]) if rows else None
+            if target_seq is None:
+                return False
 
-        cursor = await self.conn.execute(
-            "DELETE FROM session_messages WHERE session_id = ? AND seq >= ?",
-            (session_id, target_seq),
-        )
-        await self._rebuild_session_episodes(session_id)
-        await self.conn.commit()
-        return cursor.rowcount > 0
+            cursor = await self.conn.execute(
+                "DELETE FROM session_messages WHERE session_id = ? AND seq >= ?",
+                (session_id, target_seq),
+            )
+            await self._rebuild_session_episodes(session_id)
+            await self.conn.commit()
+            return cursor.rowcount > 0
 
     async def list_session_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
         await self._ensure_session_messages(session_id)
