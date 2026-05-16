@@ -41,9 +41,9 @@
      can't read as glass (no contrast for the material to define
      against). Content surfaces (`--color-bg-main`, `--color-surface`)
      stay pure white so message content / cards have max contrast for
-     reading. The hairline-divider sidebar/chat seam pattern still
-     reads because sidebar uses bg-main (white) and chat uses bg
-     (cream). */
+     reading. The sidebar still separates from chat through material
+     contrast: sidebar chrome sits over bg-main/white while chat uses
+     the warmer bg cream. */
   --color-bg: #faf9f3;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
@@ -263,13 +263,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar {
   -webkit-app-region: drag;
-  /* Right-edge seam — same rim language as .glass-pane's base ring
-     so the sidebar reads as part of the chrome family. Dark mode
-     uses a white-translucent line; light mode uses ink-translucent. */
-  border-right: 1px solid color-mix(in oklab, var(--color-ink) 10%, transparent);
-}
-:root.dark .sidebar {
-  border-right-color: color-mix(in oklab, white 5%, transparent);
 }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
 
@@ -636,51 +629,33 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* The composer is a glass card floating over the message scroll area —
    per Rauno's Depth essay "Shoot through a surface". Surface treatment
-   lives on `.glass-pane` (shared with the right sidebar, command
+   lives on `.glass-surface` (shared with the right sidebar, command
    picker, etc.); `.composer-card` is the structural hook used by
    the data-thinking variants below. */
 
-/* ─── Glass pane — shared material ──────────────────────────
-   The canonical glass surface used by the composer, the Active
-   right sidebar, the CommandPicker, and any other "agent chrome"
-   overlay. Single source of truth for the recipe so tuning the
-   material updates every surface together.
+/* ─── Glass framework ───────────────────────────────────────
+   Shared material. This intentionally carries the old composer
+   recipe across chrome surfaces. These classes own material only,
+   not layout. */
+.glass-surface {
+  --glass-radius: 16px;
+  --glass-tint: rgba(255, 255, 255, 0.35);
+  --glass-shadow: rgba(31, 38, 135, 0.25);
+  --glass-edge-light: color-mix(in oklab, var(--color-ink) 8%, transparent);
+  --glass-edge-shade: rgba(0, 0, 0, 0.06);
 
-   Phase 1 of the glass-as-physical-material direction. Four
-   ingredients per the conception:
-     1. blur 14px + saturate 160% — thin pane: less diffusion so
-        content reads clearer; saturation pump compensates for
-        dark-bg color loss without over-pumping.
-     2. Thickness gradient — vertical tint fall-off (6% → 2%)
-        simulates light traveling through material; the top
-        catches more light than the bottom.
-     3. Asymmetric inner ring — `inset 0 1px 0` brighter top edge
-        over a symmetric base ring reads as "lit surface" instead
-        of "card outline". Single biggest "feels glassy vs feels
-        like a filter" lever.
-     4. SVG turbulence grain — baked into background-image as a
-        data URI. Gives the surface permanent texture so it
-        doesn't vanish over empty dark space. ~0.3KB, scales,
-        zero extra requests. baseFrequency 0.9 = fine grain,
-        alpha 0.04 = subliminal.
-   Border is suppressed because the inner ring IS the edge —
-   doubling them creates a chunky outline. Consumers that have
-   `border border-line` from Tailwind utilities will see it
-   suppressed in dark mode via `border-color: transparent` here. */
-.glass-pane {
-  /* Light recipe — "Linen." Solid white surface, hairline ink
-     border, soft 2-step drop shadow. No backdrop-filter, no
-     transparency. Glass identity reserved for dark mode; light gets
-     a clean architectural material that the user explicitly liked
-     for its rim treatment. */
-  background-color: var(--color-surface);
-  border-color: transparent;
+  background: var(--glass-tint);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid transparent;
+  border-radius: var(--glass-radius);
   box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.04),
-    0 8px 24px rgba(20, 24, 28, 0.06),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
+    0 8px 24px -12px var(--glass-shadow),
+    inset 0 0 0 1px var(--glass-edge-light),
+    inset 0 -0.5px 0 var(--glass-edge-shade);
 }
-:root.dark .glass-pane {
+.glass-surface[data-tone="dark"],
+:root.dark .glass-surface {
   background-color: transparent;
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
@@ -694,87 +669,55 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   border-color: transparent;
-  /* Stacked-glass shadow stack (dark mode):
-       1. Drop shadow — deeper than --shadow-sm so the halo reads on
-          dark bg. Makes each pane visibly float above what's below.
-       2. Base inset ring — symmetric edge definition.
-       3. Top-edge specular — brighter highlight catching "light"
-          from above; the strongest "this is a glass pane" cue. */
   box-shadow:
     0 4px 14px -4px rgba(0, 0, 0, 0.32),
-    inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.16);
 }
-
-/* Composer-specific focus state. Light: the inset ring darkens
-   8% → 14% so the surface feels "engaged"; everything else in the
-   linen-with-breath recipe stays. */
-.composer-card.glass-pane:focus-within {
-  box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.05),
-    0 8px 24px rgba(20, 24, 28, 0.08),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 14%, transparent);
-}
-:root.dark .composer-card.glass-pane:focus-within {
-  box-shadow:
-    0 4px 14px -4px rgba(0, 0, 0, 0.32),
-    inset 0 0 0 1px color-mix(in oklab, white 5%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 16%, transparent);
-}
-
-/* Send acknowledgement — when the user submits, the composer's
-   surface briefly brightens. Single pulse, ~360ms ease-out.
-   Body-fill flash (not edge) so it doesn't compete with the
-   thinking-rim's comet/breath/hue-cycle animations on the
-   perimeter — different visual axis, both can fire together
-   without overlapping. ::after with a top-down gradient that
-   mirrors the glass thickness tint, just amped for a beat. */
-.composer-card.glass-pane[data-just-sent="true"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--color-ink) 10%, transparent),
-    color-mix(in oklab, var(--color-ink) 4%, transparent)
-  );
-  animation: composerJustSent 360ms ease-out forwards;
-}
-:root.dark .composer-card.glass-pane[data-just-sent="true"]::after {
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, white 10%, transparent),
-    color-mix(in oklab, white 4%, transparent)
-  );
-}
-@keyframes composerJustSent {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-/* ─── Glass pane (thick) — focused-attention popovers ────────
-   Same material family as `.glass-pane` but tuned for surfaces
-   that demand the user's attention (command pickers, modals,
-   detail dialogs) where show-through hurts legibility. Heavier
-   tint and stronger blur so what's behind reads as "context,
-   diffused" not "content, faintly readable". Lifted elevation
-   (shadow-md vs shadow-sm) reinforces the popover hierarchy.
-   This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
-   "Thin" — same surface, different role. */
-.glass-pane-thick {
-  /* Light: linen recipe — solid surface, hairline ink ring at 10%
-     (slightly stronger than thin's 8% for the focused-attention
-     tier), lifted 2-step shadow. */
-  background-color: var(--color-surface);
+.glass-surface[data-tone="light"] {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-color: transparent;
   box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.05),
-    0 16px 40px rgba(20, 24, 28, 0.10),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
+    0 8px 24px -12px rgba(31, 38, 135, 0.25),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.06);
 }
-:root.dark .glass-pane-thick {
+.glass-frosted {
+  /* Default surface recipe; class kept for semantic variant use. */
+}
+.glass-clear {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(2px) saturate(160%);
+  -webkit-backdrop-filter: blur(2px) saturate(160%);
+}
+:root.dark .glass-clear,
+.glass-clear[data-tone="dark"] {
+  background-color: transparent;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, white 2%, transparent),
+      color-mix(in oklab, white 0.5%, transparent)
+    );
+}
+.glass-clear[data-tone="light"] {
+  background: rgba(255, 255, 255, 0.04);
+}
+.glass-heavy {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border-color: transparent;
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.32),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.08);
+}
+:root.dark .glass-heavy,
+.glass-heavy[data-tone="dark"] {
   background-color: transparent;
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
@@ -788,29 +731,112 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border-color: transparent;
-  /* Stacked-glass shadow stack — thick tier sits higher than thin
-     (larger blur radius, deeper alpha) so popovers + modals visibly
-     hover above ambient chrome. Brighter top specular than thin
-     reinforces the tier hierarchy. */
   box-shadow:
     0 10px 30px -8px rgba(0, 0, 0, 0.4),
-    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.2);
+}
+.glass-heavy[data-tone="light"] {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border-color: transparent;
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.32),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.08);
+}
+.glass-static {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: transparent;
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.25),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.06);
+}
+:root.dark .glass-static,
+.glass-static[data-tone="dark"] {
+  background-color: var(--color-bg-main);
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  background-repeat: repeat;
+  border-color: transparent;
+  box-shadow:
+    0 10px 30px -8px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.26),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.18);
+}
+.glass-static[data-tone="light"] {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: transparent;
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.25),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.06);
+}
+.glass-toggle.glass-static {
+  background: rgba(255, 255, 255, 0.28);
+}
+:root.dark .glass-toggle.glass-static,
+.glass-toggle.glass-static[data-tone="dark"] {
+  background: rgba(255, 255, 255, 0.08);
+}
+.glass-toggle.glass-static[data-tone="light"] {
+  background: rgba(255, 255, 255, 0.28);
+}
+.glass-radius-sm { --glass-radius: 10px; }
+.glass-radius-md { --glass-radius: 16px; }
+.glass-radius-lg { --glass-radius: 20px; }
+.glass-radius-pill { --glass-radius: 999px; }
+.composer-card.glass-surface:focus-within {
+  border-color: transparent;
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.25),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 14%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.08);
+}
+:root.dark .composer-card.glass-surface:focus-within {
+  border-color: transparent;
+  box-shadow:
+    0 4px 14px -4px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.18);
 }
 
-/* ─── Glass pane (static) — for popovers stuck inside another
-   glass surface ───────────────────────────────────────────────
-   Same visual recipe as `.glass-pane-thick` (grain, edge ring,
-   top specular, drop shadow) but with a SOLID background instead
-   of `backdrop-filter`. Used for popovers whose DOM parent has
-   its own backdrop-filter — the model-picker dropdown and the
-   loop hover tooltip both live inside the `.composer-card`
-   form, and Chromium's containing-block rule would neutralize
-   their own `backdrop-filter`. Solid bg sidesteps that entirely;
-   visually indistinguishable when the content behind is mostly
-   uniform (which it is — composer + chat behind).
-
-   See `feedback_backdrop_filter_containing_block.md` in memory. */
+/* Send acknowledgement — when the user submits, the composer's
+   surface briefly brightens. Single pulse, ~360ms ease-out.
+   Body-fill flash (not edge) so it doesn't compete with the
+   thinking-rim's comet/breath/hue-cycle animations on the
+   perimeter — different visual axis, both can fire together
+   without overlapping. ::after with a top-down gradient that
+   mirrors the glass thickness tint, just amped for a beat. */
+.composer-card.glass-surface[data-just-sent="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-ink) 10%, transparent),
+    color-mix(in oklab, var(--color-ink) 4%, transparent)
+  );
+  animation: composerJustSent 360ms ease-out forwards;
+}
+:root.dark .composer-card.glass-surface[data-just-sent="true"]::after {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, white 10%, transparent),
+    color-mix(in oklab, white 4%, transparent)
+  );
+}
+@keyframes composerJustSent {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 
 /* Modal scrim — the dim layer between a modal and the chat behind.
    Dark: traditional dark scrim (0.32 alpha black) — focuses attention
@@ -822,30 +848,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 :root.dark .modal-scrim {
   background-color: rgba(0, 0, 0, 0.32);
-}
-
-.glass-pane-static {
-  /* Light: solid pure white (no backdrop-filter — this tier exists
-     for nested popovers inside another filter). Same ring + shadow
-     family as thick. */
-  background-color: #ffffff;
-  border-color: transparent;
-  box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.05),
-    0 16px 40px rgba(20, 24, 28, 0.08),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
-}
-:root.dark .glass-pane-static {
-  background-color: var(--color-bg-main);
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  background-size: 240px 240px;
-  background-repeat: repeat;
-  border-color: transparent;
-  box-shadow:
-    0 10px 30px -8px rgba(0, 0, 0, 0.4),
-    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
 }
 
 /* ─── Composer "thinking" indicators ────────────────────────
@@ -954,7 +956,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   }
 }
 /* Breath leaving: stop the animation and let box-shadow transition
-   back to whatever the glass-pane base provides over 250ms. Keeps
+   back to whatever the glass surface base provides over 250ms. Keeps
    the halo dissolving instead of snapping off mid-cycle. */
 .composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="breath"] {
   animation: none;

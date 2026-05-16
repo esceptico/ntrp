@@ -269,7 +269,7 @@ export function Composer() {
       </div>
       {/* Wrapper exists so the CommandPicker can sit as a sibling of
           the form rather than a child. The form has backdrop-filter
-          (`.glass-pane`), which establishes a backdrop-sampling
+          (`.glass-surface`), which establishes a backdrop-sampling
           containing block — child backdrop-filters would sample the
           already-filtered form bg instead of the chat content beneath,
           producing a flat/invisible blur. Lifting the picker out lets
@@ -290,7 +290,7 @@ export function Composer() {
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}
-        className="composer-card glass-pane relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
+        className="composer-card glass-surface glass-frosted glass-radius-md relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
       >
         {selectedSkill && (
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">

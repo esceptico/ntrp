@@ -83,7 +83,7 @@ export function PageModal({
           onClick={onClose}
         >
           <motion.div
-            className={`glass-pane-thick ${size} grid ${grid} ${rounded} overflow-hidden`}
+            className={`glass-surface glass-heavy glass-radius-md ${size} grid ${grid} ${rounded} overflow-hidden`}
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
