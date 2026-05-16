@@ -245,24 +245,21 @@ function PaletteBody({
     [setCrumbs, setQuery],
   );
 
-  // Keep the highlighted row in view while arrow-navigating. Naive
-  // `scrollIntoView({block:"nearest"})` jams the row against the
-  // viewport edge — and with section headers in between, the next
-  // arrow press lands the new active row partially behind a header,
-  // making it look like the highlight was "skipped". We only scroll
-  // when the row is actually clipped, and reserve ~28px at the top
-  // for the section header that floats above it.
+  // Keep the highlighted row in view while arrow-navigating. Only
+  // scrolls when the row is actually clipped; small breathing-room pads
+  // top and bottom so the highlighted row never sits flush against the
+  // edge. Section headers aren't sticky so no extra offset needed.
   useLayoutEffect(() => {
     const row = activeRowRef.current;
     const list = listRef.current;
     if (!row || !list) return;
     const rowBox = row.getBoundingClientRect();
     const listBox = list.getBoundingClientRect();
-    const headerPad = 28;
-    if (rowBox.top < listBox.top + headerPad) {
-      list.scrollTop -= listBox.top + headerPad - rowBox.top;
-    } else if (rowBox.bottom > listBox.bottom - 6) {
-      list.scrollTop += rowBox.bottom - (listBox.bottom - 6);
+    const PAD = 8;
+    if (rowBox.top < listBox.top + PAD) {
+      list.scrollTop -= listBox.top + PAD - rowBox.top;
+    } else if (rowBox.bottom > listBox.bottom - PAD) {
+      list.scrollTop += rowBox.bottom - (listBox.bottom - PAD);
     }
   }, [safe]);
 
@@ -425,7 +422,14 @@ function Row({
       <button
         ref={activeRef}
         type="button"
-        onMouseEnter={onHover}
+        // `onMouseMove` (not `onMouseEnter`) so keyboard navigation
+        // doesn't fight a stationary cursor — when arrow-scroll shifts
+        // a row under the mouse, mouseenter would fire and reset the
+        // active index back to whatever the cursor happens to cover,
+        // making it feel like rows got "skipped". Mousemove only fires
+        // on actual cursor motion, so hover takes over again the moment
+        // the user touches the mouse.
+        onMouseMove={onHover}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
         data-active={active ? "true" : undefined}
