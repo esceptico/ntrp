@@ -35,6 +35,9 @@ export type ThinkingIntensity = "subtle" | "normal" | "strong";
 export type ThemeChoice = "light" | "dark" | "system";
 
 export type GlassDensity = "airy" | "balanced" | "solid";
+export type GlassBlur = "crisp" | "balanced" | "soft";
+export type GlassRim = "quiet" | "balanced" | "sharp";
+export type GlassTexture = "clean" | "auto" | "grain";
 
 export type PaletteId =
   | "warm"
@@ -52,6 +55,9 @@ export interface Prefs {
   theme: ThemeChoice;
   palette: PaletteId;
   glassDensity: GlassDensity;
+  glassBlur: GlassBlur;
+  glassRim: GlassRim;
+  glassTexture: GlassTexture;
   sidebarHidden: boolean;
   /** Sidebar width in pixels. User-resizable via the right-edge drag
    *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the
