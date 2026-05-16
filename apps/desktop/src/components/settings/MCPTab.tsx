@@ -174,9 +174,9 @@ function ServerRow({
   const mounted = useMountedRef();
   const { busy, error, run } = useMutationState(mounted);
 
-  const onToggle = () =>
+  const onToggle = (next: boolean) =>
     void run(async () => {
-      await toggleMCPServerApi(config, server.name, !server.enabled);
+      await toggleMCPServerApi(config, server.name, next);
       await onChanged();
     });
 

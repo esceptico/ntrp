@@ -310,7 +310,13 @@ export function AutomationEditor({
                   schedule={form.schedule}
                   onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
                 />
-                <div className="inline-flex items-center gap-1.5 px-1 select-none">
+                <div
+                  className="inline-flex items-center gap-1.5 px-1 select-none cursor-pointer"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    setForm((p) => ({ ...p, writable: !p.writable }));
+                  }}
+                >
                   <GlassSwitch
                     size="sm"
                     checked={form.writable}
