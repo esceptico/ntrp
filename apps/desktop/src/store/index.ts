@@ -5,7 +5,6 @@ import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from
 import { blankSessionView, initialUsage, snapshotSession } from "./session-cache";
 import {
   createInitialSessionViewState,
-  legacyFieldsFromSessionView,
   reduceCachePreviewRestored,
   reduceHistoryLoadSucceeded,
   reduceHistoryPageLoading,
@@ -41,6 +40,8 @@ import {
   reduceQueuedMessagesCleared,
   reduceQueuedMessagesPersisted,
   reduceQueuedMessageStatus,
+  reduceRunCompleted,
+  reduceRunStarted,
   reduceRunStatus,
 } from "./run-lifecycle";
 
@@ -92,12 +93,6 @@ export const useStore = create<State & Actions>((set) => ({
   currentSessionId: null,
   messages: new Map(),
   order: [],
-  historyLoadedFor: null,
-  historyReloadingFor: null,
-  historyHasMoreBefore: false,
-  historyHasMoreAfter: false,
-  historyLoadingBefore: false,
-  historyLoadingAfter: false,
   activeRunSessionIds: new Set(),
   unreadDoneSessionIds: new Set(),
   sessionCache: new Map(),
@@ -147,9 +142,11 @@ export const useStore = create<State & Actions>((set) => ({
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
   prependSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
-  setActiveRunSessions: (ids) =>
-    set((s) => reduceRunStatus(s, { activeRuns: ids.map((sessionId) => ({ sessionId })) })),
-  setActiveRunStatus: (runs) => set((s) => reduceRunStatus(s, { activeRuns: runs })),
+  syncActiveRuns: (runs) => set((s) => reduceRunStatus(s, { activeRuns: runs })),
+  markRunStarted: (runId, sessionId) =>
+    set((s) => reduceRunStarted(s, { runId, sessionId })),
+  markRunCompleted: (runId, sessionId) =>
+    set((s) => reduceRunCompleted(s, { runId, sessionId })),
   setCurrentSession: (currentSessionId) =>
     set((s) => {
       let unread = s.unreadDoneSessionIds;
@@ -178,7 +175,7 @@ export const useStore = create<State & Actions>((set) => ({
       }
       return {
         sessionView,
-        ...legacyFieldsFromSessionView(sessionView),
+        currentSessionId: sessionView.currentSessionId,
         sessionCache: cache,
         messages: view.messages,
         order: view.order,
@@ -213,7 +210,6 @@ export const useStore = create<State & Actions>((set) => ({
         : s.sessionView;
       return {
         sessionView,
-        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order,
         ...reduceQueuedMessagesPersisted(s, persistedIds),
@@ -234,7 +230,6 @@ export const useStore = create<State & Actions>((set) => ({
         : s.sessionView;
       return {
         sessionView,
-        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order: [...ids, ...s.order],
       };
@@ -254,7 +249,6 @@ export const useStore = create<State & Actions>((set) => ({
         : s.sessionView;
       return {
         sessionView,
-        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order: [...s.order, ...ids],
       };
@@ -263,10 +257,7 @@ export const useStore = create<State & Actions>((set) => ({
   setHistoryLoading: (direction, loading) =>
     set((s) => {
       const sessionView = reduceHistoryPageLoading(s.sessionView, direction, loading);
-      return {
-        sessionView,
-        ...legacyFieldsFromSessionView(sessionView),
-      };
+      return { sessionView };
     }),
 
   appendMessage: (message) =>
@@ -317,7 +308,6 @@ export const useStore = create<State & Actions>((set) => ({
     }),
 
   setConnected: (connected) => set({ connected }),
-  setRunning: (running) => set({ running }),
   setError: (error) => set({ error }),
   setDraft: (draft) => set({ draft }),
   setEditingId: (editingId) => set({ editingId }),
@@ -401,7 +391,6 @@ export const useStore = create<State & Actions>((set) => ({
       return { messages };
     }),
 
-  setCurrentRunId: (currentRunId) => set({ currentRunId }),
   setSkipApprovals: (skipApprovals) => {
     persistSkipApprovals(skipApprovals);
     set({ skipApprovals });

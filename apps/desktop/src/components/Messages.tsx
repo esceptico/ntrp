@@ -20,14 +20,14 @@ import { ICON } from "../lib/icons";
 export function Messages() {
   const order = useStore((s) => s.order);
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const historyLoadedFor = useStore((s) => s.historyLoadedFor);
+  const historyLoadedFor = useStore((s) => s.sessionView.historyLoadedFor);
   const sourceFocus = useStore((s) => s.sourceFocus);
   const historyPaging = useStore(
     useShallow((s) => ({
-      hasMoreBefore: s.historyHasMoreBefore,
-      hasMoreAfter: s.historyHasMoreAfter,
-      loadingBefore: s.historyLoadingBefore,
-      loadingAfter: s.historyLoadingAfter,
+      hasMoreBefore: s.sessionView.historyHasMoreBefore,
+      hasMoreAfter: s.sessionView.historyHasMoreAfter,
+      loadingBefore: s.sessionView.historyLoadingBefore,
+      loadingAfter: s.sessionView.historyLoadingAfter,
     })),
   );
   const sessionReady = currentSessionId === null || historyLoadedFor === currentSessionId;

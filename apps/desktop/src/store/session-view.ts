@@ -16,6 +16,8 @@ export interface SessionViewState {
 
 export type HistoryPageMergeMode = "replace" | "prepend" | "append";
 
+const replaceHistoryLoadVersions = new Map<string, number>();
+
 export function createInitialSessionViewState(): SessionViewState {
   return {
     currentSessionId: null,
@@ -29,6 +31,19 @@ export function createInitialSessionViewState(): SessionViewState {
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };
+}
+
+export function nextHistoryReplaceRequestVersion(sessionId: string): number {
+  const version = (replaceHistoryLoadVersions.get(sessionId) ?? 0) + 1;
+  replaceHistoryLoadVersions.set(sessionId, version);
+  return version;
+}
+
+export function isCurrentHistoryReplaceRequestVersion(
+  sessionId: string,
+  version: number,
+): boolean {
+  return replaceHistoryLoadVersions.get(sessionId) === version;
 }
 
 export function reduceSessionSelected(
@@ -146,18 +161,6 @@ export function reduceHistoryPageLoading(
   return direction === "before"
     ? { ...state, historyLoadingBefore: loading }
     : { ...state, historyLoadingAfter: loading };
-}
-
-export function legacyFieldsFromSessionView(state: SessionViewState) {
-  return {
-    currentSessionId: state.currentSessionId,
-    historyLoadedFor: state.historyLoadedFor,
-    historyReloadingFor: state.historyReloadingFor,
-    historyHasMoreBefore: state.historyHasMoreBefore,
-    historyHasMoreAfter: state.historyHasMoreAfter,
-    historyLoadingBefore: state.historyLoadingBefore,
-    historyLoadingAfter: state.historyLoadingAfter,
-  };
 }
 
 function historyHasMoreBeforeAfterSuccess(

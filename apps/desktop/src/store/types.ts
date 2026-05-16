@@ -228,11 +228,6 @@ export interface CachedSessionState {
   sessionView: SessionViewState;
   messages: Map<string, UiMessage>;
   order: string[];
-  historyLoadedFor: string | null;
-  historyHasMoreBefore: boolean;
-  historyHasMoreAfter: boolean;
-  historyLoadingBefore: boolean;
-  historyLoadingAfter: boolean;
   running: boolean;
   currentRunId: string | null;
   usage: SessionUsage;
@@ -255,18 +250,6 @@ export interface State {
   currentSessionId: string | null;
   messages: Map<string, UiMessage>;
   order: string[];
-  /** Set to the session id whose saved history is now loaded into
-   *  `messages`/`order`. We delay opening the SSE stream until this
-   *  matches `currentSessionId` — otherwise `setHistory()` racing the
-   *  first live deltas would wipe them. */
-  historyLoadedFor: string | null;
-  /** Session currently being reconciled against /session/history. Cached
-   *  messages may remain visible, but SSE should wait until this clears. */
-  historyReloadingFor: string | null;
-  historyHasMoreBefore: boolean;
-  historyHasMoreAfter: boolean;
-  historyLoadingBefore: boolean;
-  historyLoadingAfter: boolean;
   /** Session ids with an active run on the server. Refreshed by a
    *  poller hook so the sidebar can render a streaming indicator on
    *  sessions that are still working — including the ones the user
@@ -338,10 +321,11 @@ export interface Actions {
   setConfig: (config: AppConfig) => void;
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
-  setActiveRunSessions: (ids: string[]) => void;
-  setActiveRunStatus: (
+  syncActiveRuns: (
     runs: { runId?: string | null; sessionId: string; status?: string | null }[],
   ) => void;
+  markRunStarted: (runId: string | null, sessionId: string) => void;
+  markRunCompleted: (runId: string | null, sessionId?: string | null) => void;
   setCurrentSession: (sessionId: string | null) => void;
   setHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
   prependHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
@@ -352,7 +336,6 @@ export interface Actions {
   mutateMessage: (id: string, patch: Partial<UiMessage>) => void;
   truncateFrom: (id: string) => void;
   setConnected: (connected: boolean) => void;
-  setRunning: (running: boolean) => void;
   setError: (error: string | null) => void;
   setDraft: (draft: string) => void;
   setEditingId: (id: string | null) => void;
@@ -372,7 +355,6 @@ export interface Actions {
   appendActivityItem: (activityId: string, item: ActivityItem) => void;
   mergeActivityItem: (itemId: string, patch: Partial<ActivityItem>) => boolean;
   finalizeActivity: (activityId: string, label?: string) => void;
-  setCurrentRunId: (runId: string | null) => void;
   setSkipApprovals: (skip: boolean) => void;
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
   addPendingApproval: (approval: ApprovalState) => void;

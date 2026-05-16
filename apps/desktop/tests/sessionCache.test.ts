@@ -11,14 +11,11 @@ function blank() {
     currentSessionId: null,
     messages: new Map(),
     order: [],
-    historyLoadedFor: null,
-    historyReloadingFor: null,
-    historyHasMoreBefore: false,
-    historyHasMoreAfter: false,
-    historyLoadingBefore: false,
-    historyLoadingAfter: false,
     running: false,
     currentRunId: null,
+    activeRunSessionIds: new Set(),
+    unreadDoneSessionIds: new Set(),
+    terminalRunIds: new Set(),
     activeActivityId: null,
     sessionCache: new Map(),
     pendingApprovals: [],
@@ -41,8 +38,7 @@ test("switching sessions snapshots outgoing state into cache", () => {
   const s = getState();
   s.setCurrentSession("A");
   s.setHistory([userMessage("a-1", "hello A")]);
-  s.setCurrentRunId("run-A");
-  s.setRunning(true);
+  s.markRunStarted("run-A", "A");
 
   s.setCurrentSession("B");
 
@@ -51,7 +47,6 @@ test("switching sessions snapshots outgoing state into cache", () => {
   expect(cached!.order).toEqual(["a-1"]);
   expect(cached!.currentRunId).toBe("run-A");
   expect(cached!.running).toBe(true);
-  expect(cached!.historyLoadedFor).toBe("A");
   expect(cached!.sessionView.historyLoadedFor).toBe("A");
 });
 
@@ -63,13 +58,13 @@ test("switching back hydrates cached state", () => {
   s.setCurrentSession("B");
   // B is fresh and has no cache yet — global slots are blank.
   expect(getState().messages.size).toBe(0);
-  expect(getState().historyLoadedFor).toBeNull();
+  expect(getState().sessionView.historyLoadedFor).toBeNull();
 
   s.setCurrentSession("A");
   // Restored from cache: the preview comes back, but canonical history
   // still has to reload before live tail can open.
   expect(getState().messages.get("a-1")?.content).toBe("hello A");
-  expect(getState().historyLoadedFor).toBeNull();
+  expect(getState().sessionView.historyLoadedFor).toBeNull();
   expect(getState().sessionView.historyPhase).toBe("cached-preview");
   expect(getState().sessionView.canonicalHistoryRequired).toBe(true);
 });
@@ -98,8 +93,7 @@ test("switchSession preserves cached preview until canonical history replaces it
     s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
     s.setCurrentSession("A");
     s.setHistory([userMessage("a-1", "cached A")]);
-    s.setRunning(true);
-    s.setCurrentRunId("run-A");
+    s.markRunStarted("run-A", "A");
     s.setCurrentSession("B");
 
     const switching = switchSession("A");
@@ -108,8 +102,8 @@ test("switchSession preserves cached preview until canonical history replaces it
     expect(getState().messages.get("a-1")?.content).toBe("cached A");
     expect(getState().running).toBe(true);
     expect(getState().currentRunId).toBe("run-A");
-    expect(getState().historyLoadedFor).toBeNull();
-    expect(getState().historyReloadingFor).toBe("A");
+    expect(getState().sessionView.historyLoadedFor).toBeNull();
+    expect(getState().sessionView.historyReloadingFor).toBe("A");
     expect(getState().sessionView.historyPhase).toBe("loading-history");
 
     resolveRequest?.({
@@ -133,8 +127,8 @@ test("switchSession preserves cached preview until canonical history replaces it
 
     expect(getState().messages.get("server-a-1")?.content).toBe("canonical A");
     expect(getState().messages.has("a-1")).toBe(false);
-    expect(getState().historyLoadedFor).toBe("A");
-    expect(getState().historyReloadingFor).toBeNull();
+    expect(getState().sessionView.historyLoadedFor).toBe("A");
+    expect(getState().sessionView.historyReloadingFor).toBeNull();
     expect(getState().sessionView.canonicalHistoryRequired).toBe(false);
     expect(getState().running).toBe(false);
     expect(getState().currentRunId).toBeNull();
@@ -174,7 +168,7 @@ test("older replace history response cannot override newer response", async () =
       "/session/history?session_id=A",
       "/session/history?session_id=A",
     ]);
-    expect(getState().historyReloadingFor).toBe("A");
+    expect(getState().sessionView.historyReloadingFor).toBe("A");
 
     resolvers[1]?.({
       ok: true,
@@ -216,8 +210,8 @@ test("older replace history response cannot override newer response", async () =
 
     expect(getState().messages.get("server-a-new")?.content).toBe("new canonical A");
     expect(getState().messages.has("server-a-old")).toBe(false);
-    expect(getState().historyLoadedFor).toBe("A");
-    expect(getState().historyReloadingFor).toBeNull();
+    expect(getState().sessionView.historyLoadedFor).toBe("A");
+    expect(getState().sessionView.historyReloadingFor).toBeNull();
     expect(getState().running).toBe(false);
     expect(getState().currentRunId).toBeNull();
   } finally {
@@ -239,8 +233,7 @@ test("re-selecting current session is a no-op for view state", () => {
 test("running state persists across switches", () => {
   const s = getState();
   s.setCurrentSession("A");
-  s.setRunning(true);
-  s.setCurrentRunId("run-A");
+  s.markRunStarted("run-A", "A");
 
   s.setCurrentSession("B");
   expect(getState().running).toBe(false);

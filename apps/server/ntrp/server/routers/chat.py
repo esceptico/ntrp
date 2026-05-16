@@ -37,6 +37,26 @@ def _keepalive(latest_seq: int) -> str:
     return f": seq={latest_seq}\n\n"
 
 
+async def _bus_for_event_stream(session_id: str, bus_registry: BusRegistry, event_store=None):
+    bus = bus_registry.get(session_id)
+    if event_store is None:
+        return bus or bus_registry.get_or_create(session_id)
+
+    latest_seq = await event_store.get_latest_session_event_seq(session_id)
+    if latest_seq:
+        checkpoint_seq = await event_store.get_latest_session_checkpoint_seq(session_id)
+        # session_events is only a cursor ledger; chat_runs.last_seq is
+        # the persisted canonical checkpoint written after save/save_progress.
+        bus_registry.remember_session_cursor(
+            session_id,
+            next_seq=latest_seq + 1,
+            checkpoint_seq=checkpoint_seq,
+        )
+        return bus_registry.get_or_create(session_id)
+
+    return bus or bus_registry.get_or_create(session_id)
+
+
 async def _event_stream(
     session_id: str,
     bus_registry: BusRegistry,
@@ -45,22 +65,7 @@ async def _event_stream(
     after_seq: int | None = None,
     event_store=None,
 ) -> AsyncGenerator[str]:
-    bus = bus_registry.get(session_id)
-    if event_store is not None:
-        latest_seq = await event_store.get_latest_session_event_seq(session_id)
-        if latest_seq:
-            checkpoint_seq = await event_store.get_latest_session_checkpoint_seq(session_id)
-            # session_events is only a cursor ledger; chat_runs.last_seq is
-            # the persisted canonical checkpoint written after save/save_progress.
-            bus_registry.remember_session_cursor(
-                session_id,
-                next_seq=latest_seq + 1,
-                checkpoint_seq=checkpoint_seq,
-            )
-            bus = bus_registry.get_or_create(session_id)
-
-    if bus is None:
-        bus = bus_registry.get_or_create(session_id)
+    bus = await _bus_for_event_stream(session_id, bus_registry, event_store)
     subscription = bus.subscribe_with_replay(after_seq=after_seq)
     snapshot, queue = subscription
     last_event_at = time.monotonic()

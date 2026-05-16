@@ -32,8 +32,8 @@ function headersFor(config: AppConfig): HeadersInit {
 
 export function useEvents(sessionId: string | null) {
   const config = useStore((s) => s.config);
-  const historyLoadedFor = useStore((s) => s.historyLoadedFor);
-  const historyReloadingFor = useStore((s) => s.historyReloadingFor);
+  const historyLoadedFor = useStore((s) => s.sessionView.historyLoadedFor);
+  const historyReloadingFor = useStore((s) => s.sessionView.historyReloadingFor);
   const ready =
     sessionId !== null &&
     historyLoadedFor === sessionId &&

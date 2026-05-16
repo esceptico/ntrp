@@ -20,7 +20,7 @@ interface RunsStatus {
 export function useActiveRuns(): void {
   const config = useStore((s) => s.config);
   const connected = useStore((s) => s.connected);
-  const setActiveRunStatus = useStore((s) => s.setActiveRunStatus);
+  const syncActiveRuns = useStore((s) => s.syncActiveRuns);
 
   useEffect(() => {
     if (!connected) return;
@@ -30,7 +30,7 @@ export function useActiveRuns(): void {
       try {
         const data = await apiWithConfig<RunsStatus>(config, "/chat/runs/status");
         if (disposed) return;
-        setActiveRunStatus(
+        syncActiveRuns(
           data.active_runs.map((run) => ({
             runId: run.run_id,
             sessionId: run.session_id,
@@ -48,5 +48,5 @@ export function useActiveRuns(): void {
       disposed = true;
       clearInterval(id);
     };
-  }, [config, connected, setActiveRunStatus]);
+  }, [config, connected, syncActiveRuns]);
 }

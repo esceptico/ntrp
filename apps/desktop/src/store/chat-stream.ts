@@ -5,6 +5,7 @@ import {
   applyChatEventToTranscript,
   createInitialTranscriptProjectionState,
   resetTranscriptProjectionState,
+  transientProjectionReplayFloor,
   type TranscriptProjectionEffect,
   type TranscriptProjectionState,
 } from "./transcript-projection";
@@ -150,15 +151,7 @@ function clearTransientStreamState(state: ChatStreamState): ChatStreamState {
 function rewindCursorForTransientProjection(state: ChatStreamState): Map<string, number> {
   if (!state.sessionId) return state.lastEventSeqBySession;
 
-  let replayFromSeq: number | null = null;
-  for (const pending of state.pendingToolCalls.values()) {
-    if (typeof pending.startSeq !== "number") continue;
-    replayFromSeq =
-      replayFromSeq === null ? pending.startSeq : Math.min(replayFromSeq, pending.startSeq);
-  }
-  for (const seq of state.pendingActivityReplaySeqs.values()) {
-    replayFromSeq = replayFromSeq === null ? seq : Math.min(replayFromSeq, seq);
-  }
+  const replayFromSeq = transientProjectionReplayFloor(state);
   if (replayFromSeq === null) return state.lastEventSeqBySession;
 
   const nextCursor = Math.max(0, replayFromSeq - 1);

@@ -70,6 +70,21 @@ export function resetTranscriptProjectionState(
   return createInitialTranscriptProjectionState();
 }
 
+export function transientProjectionReplayFloor(
+  state: TranscriptProjectionState,
+): number | null {
+  let replayFromSeq: number | null = null;
+  for (const pending of state.pendingToolCalls.values()) {
+    if (typeof pending.startSeq !== "number") continue;
+    replayFromSeq =
+      replayFromSeq === null ? pending.startSeq : Math.min(replayFromSeq, pending.startSeq);
+  }
+  for (const seq of state.pendingActivityReplaySeqs.values()) {
+    replayFromSeq = replayFromSeq === null ? seq : Math.min(replayFromSeq, seq);
+  }
+  return replayFromSeq;
+}
+
 export function clearDelayedActivityTimers(state: TranscriptProjectionState): void {
   for (const timer of state.delayedActivityTimers) clearTimeout(timer);
 }

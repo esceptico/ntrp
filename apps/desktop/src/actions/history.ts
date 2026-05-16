@@ -2,7 +2,8 @@ import { apiWithConfig, type HistoryMessage, type HistoryPage } from "../api";
 import { getState, setState, type UiMessage } from "../store";
 import { clearReplayGapBlockForSession } from "../store/chat-stream";
 import {
-  legacyFieldsFromSessionView,
+  isCurrentHistoryReplaceRequestVersion,
+  nextHistoryReplaceRequestVersion,
   reduceHistoryLoadFailed,
   reduceHistoryLoadStarted,
 } from "../store/session-view";
@@ -10,8 +11,6 @@ import { reduceRunCompleted, reduceRunStarted } from "../store/run-lifecycle";
 import { rebuildTranscriptFromHistory } from "../store/transcript-projection";
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
-
-const replaceHistoryLoadVersions = new Map<string, number>();
 
 export interface LoadHistoryOptions {
   mode?: HistoryLoadMode;
@@ -69,10 +68,9 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   const mode = options.mode ?? "replace";
   let replaceLoadVersion: number | null = null;
   if (mode === "replace") {
-    replaceLoadVersion = (replaceHistoryLoadVersions.get(sessionId) ?? 0) + 1;
-    replaceHistoryLoadVersions.set(sessionId, replaceLoadVersion);
+    replaceLoadVersion = nextHistoryReplaceRequestVersion(sessionId);
     const sessionView = reduceHistoryLoadStarted(s.sessionView, sessionId);
-    setState({ sessionView, ...legacyFieldsFromSessionView(sessionView) });
+    setState({ sessionView });
   }
 
   let history: {
@@ -85,10 +83,10 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     history = await apiWithConfig(s.config, historyPath(sessionId, options));
   } catch (error) {
     if (mode === "replace") {
-      if (replaceHistoryLoadVersions.get(sessionId) !== replaceLoadVersion) return;
+      if (!isCurrentHistoryReplaceRequestVersion(sessionId, replaceLoadVersion ?? 0)) return;
       const state = getState();
       const sessionView = reduceHistoryLoadFailed(state.sessionView, sessionId);
-      setState({ sessionView, ...legacyFieldsFromSessionView(sessionView) });
+      setState({ sessionView });
     }
     throw error;
   }
@@ -96,7 +94,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   if (getState().currentSessionId !== sessionId) return;
   if (
     mode === "replace" &&
-    replaceHistoryLoadVersions.get(sessionId) !== replaceLoadVersion
+    !isCurrentHistoryReplaceRequestVersion(sessionId, replaceLoadVersion ?? 0)
   ) {
     return;
   }
@@ -135,7 +133,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
 
 export async function loadOlderHistory(): Promise<void> {
   const s = getState();
-  if (!s.currentSessionId || !s.historyHasMoreBefore || s.historyLoadingBefore) return;
+  if (!s.currentSessionId || !s.sessionView.historyHasMoreBefore || s.sessionView.historyLoadingBefore) return;
   const before = historyBoundaryId(s, "first");
   if (!before) return;
   s.setHistoryLoading("before", true);
@@ -148,7 +146,7 @@ export async function loadOlderHistory(): Promise<void> {
 
 export async function loadNewerHistory(): Promise<void> {
   const s = getState();
-  if (!s.currentSessionId || !s.historyHasMoreAfter || s.historyLoadingAfter) return;
+  if (!s.currentSessionId || !s.sessionView.historyHasMoreAfter || s.sessionView.historyLoadingAfter) return;
   const after = historyBoundaryId(s, "last");
   if (!after) return;
   s.setHistoryLoading("after", true);
