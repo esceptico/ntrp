@@ -71,6 +71,49 @@ test("reconnect keeps cursor but does not replay visual animations", () => {
   expect(state.connectionPhase).toBe("connecting");
 });
 
+test("disconnect rewinds cursor for a half-applied tool call", () => {
+  let state = createInitialChatStreamState();
+  state = reduceEventCursor(state, { session_id: "session-1", seq: 12 }).state;
+  state = {
+    ...state,
+    sessionId: "session-1",
+    pendingToolCalls: new Map([
+      [
+        "tool-1",
+        {
+          name: "ReadFile",
+          description: "",
+          argsBuffer: "{}",
+          depth: 0,
+          parentId: null,
+          semanticKind: "tool",
+          startSeq: 10,
+        },
+      ],
+    ]),
+  };
+
+  state = reduceStreamDisconnected(state, "session-1");
+
+  expect(state.lastEventSeqBySession.get("session-1")).toBe(9);
+  expect(state.pendingToolCalls.size).toBe(0);
+});
+
+test("disconnect rewinds cursor for delayed activity item render", () => {
+  let state = createInitialChatStreamState();
+  state = reduceEventCursor(state, { session_id: "session-1", seq: 12 }).state;
+  state = {
+    ...state,
+    sessionId: "session-1",
+    pendingActivityReplaySeqs: new Map([["tool-1", 10]]),
+  };
+
+  state = reduceStreamDisconnected(state, "session-1");
+
+  expect(state.lastEventSeqBySession.get("session-1")).toBe(9);
+  expect(state.pendingActivityReplaySeqs.size).toBe(0);
+});
+
 test("run cancellation exposes pending queued messages as resend effects", () => {
   const effect = runCancelledEffect([
     {

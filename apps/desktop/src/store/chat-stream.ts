@@ -136,13 +136,38 @@ export function clearReplayBlock(
 
 function clearTransientStreamState(state: ChatStreamState): ChatStreamState {
   if (state.replayMutationTimer !== null) clearTimeout(state.replayMutationTimer);
+  const lastEventSeqBySession = rewindCursorForTransientProjection(state);
   const projection = resetTranscriptProjectionState(state);
   return {
     ...state,
     ...projection,
+    lastEventSeqBySession,
     replayMutationTimer: null,
     replayMutationActive: false,
   };
+}
+
+function rewindCursorForTransientProjection(state: ChatStreamState): Map<string, number> {
+  if (!state.sessionId) return state.lastEventSeqBySession;
+
+  let replayFromSeq: number | null = null;
+  for (const pending of state.pendingToolCalls.values()) {
+    if (typeof pending.startSeq !== "number") continue;
+    replayFromSeq =
+      replayFromSeq === null ? pending.startSeq : Math.min(replayFromSeq, pending.startSeq);
+  }
+  for (const seq of state.pendingActivityReplaySeqs.values()) {
+    replayFromSeq = replayFromSeq === null ? seq : Math.min(replayFromSeq, seq);
+  }
+  if (replayFromSeq === null) return state.lastEventSeqBySession;
+
+  const nextCursor = Math.max(0, replayFromSeq - 1);
+  if (state.lastEventSeqBySession.get(state.sessionId) === nextCursor) {
+    return state.lastEventSeqBySession;
+  }
+  const lastEventSeqBySession = new Map(state.lastEventSeqBySession);
+  lastEventSeqBySession.set(state.sessionId, nextCursor);
+  return lastEventSeqBySession;
 }
 
 function updateChatStreamState(next: ChatStreamState): ChatStreamState {

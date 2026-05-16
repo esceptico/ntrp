@@ -19,11 +19,13 @@ export interface PendingToolCall {
   depth: number;
   parentId: string | null;
   semanticKind: string;
+  startSeq?: number;
 }
 
 export interface TranscriptProjectionState {
   pendingResultPatches: Map<string, Partial<ActivityItem>>;
   pendingToolCalls: Map<string, PendingToolCall>;
+  pendingActivityReplaySeqs: Map<string, number>;
   delayedActivityTimers: Set<ReturnType<typeof setTimeout>>;
   activeAssistantMessageId: string | null;
   nextItemRenderAt: number;
@@ -54,6 +56,7 @@ export function createInitialTranscriptProjectionState(): TranscriptProjectionSt
   return {
     pendingResultPatches: new Map(),
     pendingToolCalls: new Map(),
+    pendingActivityReplaySeqs: new Map(),
     delayedActivityTimers: new Set(),
     activeAssistantMessageId: null,
     nextItemRenderAt: 0,
@@ -205,6 +208,7 @@ export function applyChatEventToTranscript(
         depth: event.depth ?? 0,
         parentId: event.parent_id ?? null,
         semanticKind: event.kind ?? "tool",
+        startSeq: typeof event.seq === "number" ? event.seq : undefined,
       });
       context.update({ ...context.state, pendingToolCalls });
       break;
@@ -226,7 +230,12 @@ export function applyChatEventToTranscript(
       const pending = context.state.pendingToolCalls.get(event.tool_call_id);
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.delete(event.tool_call_id);
-      context.update({ ...context.state, pendingToolCalls });
+      let pendingActivityReplaySeqs = context.state.pendingActivityReplaySeqs;
+      if (typeof pending?.startSeq === "number") {
+        pendingActivityReplaySeqs = new Map(pendingActivityReplaySeqs);
+        pendingActivityReplaySeqs.set(event.tool_call_id, pending.startSeq);
+      }
+      context.update({ ...context.state, pendingToolCalls, pendingActivityReplaySeqs });
       if (!pending) break;
 
       const target = pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}");
@@ -450,6 +459,7 @@ function selectTranscriptProjectionState(state: TranscriptProjectionState): Tran
   return {
     pendingResultPatches: state.pendingResultPatches,
     pendingToolCalls: state.pendingToolCalls,
+    pendingActivityReplaySeqs: state.pendingActivityReplaySeqs,
     delayedActivityTimers: state.delayedActivityTimers,
     activeAssistantMessageId: state.activeAssistantMessageId,
     nextItemRenderAt: state.nextItemRenderAt,
@@ -568,11 +578,22 @@ function enqueueActivityItem(
   item: ActivityItem,
   mode: EventApplicationMode,
 ) {
+  const clearReplaySeq = () => {
+    if (!context.state.pendingActivityReplaySeqs.has(item.id)) return;
+    const pendingActivityReplaySeqs = new Map(context.state.pendingActivityReplaySeqs);
+    pendingActivityReplaySeqs.delete(item.id);
+    context.update({ ...context.state, pendingActivityReplaySeqs });
+  };
+
   if (mode === "replay") {
     const state = getState();
-    if (!state.messages.get(activityId)?.activity) return;
+    if (!state.messages.get(activityId)?.activity) {
+      clearReplaySeq();
+      return;
+    }
     const pendingPatch = takePendingResultPatch(context, item.id);
     state.appendActivityItem(activityId, pendingPatch ? { ...item, ...pendingPatch } : item);
+    clearReplaySeq();
     return;
   }
 
@@ -584,7 +605,10 @@ function enqueueActivityItem(
   const delay = renderAt - now;
   const apply = () => {
     const state = getState();
-    if (!state.messages.get(activityId)?.activity) return;
+    if (!state.messages.get(activityId)?.activity) {
+      clearReplaySeq();
+      return;
+    }
     const { state: withoutPatch, patch } = takePendingResultPatchFromState(
       context.latest(),
       item.id,
@@ -592,6 +616,7 @@ function enqueueActivityItem(
     context.commit(withoutPatch);
     const pendingPatch = patch;
     state.appendActivityItem(activityId, pendingPatch ? { ...item, ...pendingPatch } : item);
+    clearReplaySeq();
   };
   if (delay === 0) apply();
   else {
