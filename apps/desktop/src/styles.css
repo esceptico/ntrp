@@ -791,6 +791,48 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .glass-radius-md { --glass-radius: 16px; }
 .glass-radius-lg { --glass-radius: 20px; }
 .glass-radius-pill { --glass-radius: 999px; }
+
+:root.glass-density-airy .glass-surface {
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(30px) saturate(190%);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  box-shadow:
+    0 8px 24px -14px rgba(31, 38, 135, 0.2),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 6%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+}
+:root.dark.glass-density-airy .glass-surface {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, white 1.6%, transparent),
+      color-mix(in oklab, white 0.4%, transparent)
+    );
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow:
+    0 4px 14px -6px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.12);
+}
+:root.glass-density-solid .glass-surface {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow:
+    0 8px 24px -12px rgba(31, 38, 135, 0.22),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.08);
+}
+:root.dark.glass-density-solid .glass-surface {
+  background: color-mix(in oklab, var(--color-bg-main) 86%, transparent);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow:
+    0 10px 30px -8px rgba(0, 0, 0, 0.38),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.18);
+}
 .composer-card.glass-surface:focus-within {
   border-color: transparent;
   box-shadow:

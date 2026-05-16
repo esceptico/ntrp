@@ -55,6 +55,7 @@ export type {
   BackgroundAgent,
   BackgroundAgentStatus,
   CachedSessionState,
+  GlassDensity,
   ImageBlock,
   MarkdownViewState,
   PaletteId,

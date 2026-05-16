@@ -15,6 +15,7 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingIntensity: "normal",
   theme: "system",
   palette: "graphite",
+  glassDensity: "balanced",
   sidebarHidden: false,
   sidebarWidth: 272,
   showReasoningInChat: true,

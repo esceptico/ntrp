@@ -5,6 +5,7 @@ import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, t
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
+  type GlassDensity,
   type PaletteId,
   type ThemeChoice,
   type ThinkingAnimation,
@@ -33,11 +34,18 @@ const INTENSITIES: { id: ThinkingIntensity; label: string }[] = [
   { id: "strong", label: "Strong" },
 ];
 
+const GLASS_DENSITIES: { id: GlassDensity; label: string }[] = [
+  { id: "airy", label: "Airy" },
+  { id: "balanced", label: "Balanced" },
+  { id: "solid", label: "Solid" },
+];
+
 export function AppearanceTab() {
   const thinking = useStore((s) => s.prefs.thinkingAnimation);
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
+  const glassDensity = useStore((s) => s.prefs.glassDensity);
   const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
   const setPref = useStore((s) => s.setPref);
 
@@ -76,6 +84,17 @@ export function AppearanceTab() {
           title="Palette"
           hint="Color scheme used across the app."
           control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
+        />
+        <SettingRow
+          title="Glass"
+          hint="Controls how much background shows through panels, menus, and composer surfaces."
+          control={
+            <SegmentedControl
+              value={glassDensity}
+              options={GLASS_DENSITIES}
+              onChange={(id) => setPref("glassDensity", id)}
+            />
+          }
         />
         <SettingRow
           title="Reasoning in chat"
