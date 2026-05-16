@@ -5,10 +5,6 @@ import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, t
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
-  type GlassBlur,
-  type GlassDensity,
-  type GlassRim,
-  type GlassTexture,
   type PaletteId,
   type ThemeChoice,
   type ThinkingAnimation,
@@ -17,7 +13,6 @@ import {
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
-import { GlassToggle } from "../GlassToggle";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -32,34 +27,10 @@ const THEMES: { id: ThemeChoice; label: string; icon: LucideIcon }[] = [
   { id: "system", label: "System", icon: Monitor },
 ];
 
-const INTENSITIES: { value: ThinkingIntensity; label: string }[] = [
-  { value: "subtle", label: "Subtle" },
-  { value: "normal", label: "Normal" },
-  { value: "strong", label: "Strong" },
-];
-
-const GLASS_DENSITIES: { value: GlassDensity; label: string }[] = [
-  { value: "airy", label: "Airy" },
-  { value: "balanced", label: "Balanced" },
-  { value: "solid", label: "Solid" },
-];
-
-const GLASS_BLURS: { value: GlassBlur; label: string }[] = [
-  { value: "crisp", label: "Crisp" },
-  { value: "balanced", label: "Balanced" },
-  { value: "soft", label: "Soft" },
-];
-
-const GLASS_RIMS: { value: GlassRim; label: string }[] = [
-  { value: "quiet", label: "Quiet" },
-  { value: "balanced", label: "Balanced" },
-  { value: "sharp", label: "Sharp" },
-];
-
-const GLASS_TEXTURES: { value: GlassTexture; label: string }[] = [
-  { value: "clean", label: "Clean" },
-  { value: "auto", label: "Auto" },
-  { value: "grain", label: "Grain" },
+const INTENSITIES: { id: ThinkingIntensity; label: string }[] = [
+  { id: "subtle", label: "Subtle" },
+  { id: "normal", label: "Normal" },
+  { id: "strong", label: "Strong" },
 ];
 
 export function AppearanceTab() {
@@ -67,10 +38,6 @@ export function AppearanceTab() {
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
-  const glassDensity = useStore((s) => s.prefs.glassDensity);
-  const glassBlur = useStore((s) => s.prefs.glassBlur);
-  const glassRim = useStore((s) => s.prefs.glassRim);
-  const glassTexture = useStore((s) => s.prefs.glassTexture);
   const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
   const setPref = useStore((s) => s.setPref);
 
@@ -81,74 +48,34 @@ export function AppearanceTab() {
           title="Mode"
           hint="Light, Dark, or follow your system preference."
           control={
-            <GlassToggle
-              value={theme}
-              options={THEMES.map(({ id, label, icon: Icon }) => ({
-                value: id,
-                label,
-                icon: <Icon size={ICON.SM} strokeWidth={2} />,
-              }))}
-              onChange={(id) => setPref("theme", id)}
-              size="sm"
-            />
+            <div className="inline-flex p-0.5 rounded-[9px] bg-surface-soft">
+              {THEMES.map((t) => {
+                const Icon = t.icon;
+                const active = theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setPref("theme", t.id)}
+                    className={clsx(
+                      "inline-flex items-center gap-1.5 h-7 px-3 rounded-[7px] text-sm font-medium tracking-[-0.005em] transition-colors",
+                      active
+                        ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+                        : "text-muted hover:text-ink",
+                    )}
+                  >
+                    <Icon size={ICON.MD} strokeWidth={2} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
           }
         />
         <SettingRow
           title="Palette"
           hint="Color scheme used across the app."
           control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
-        />
-        <SettingRow
-          title="Glass material"
-          hint="How transparent panels, menus, and composer surfaces feel."
-          control={
-            <GlassToggle
-              value={glassDensity}
-              options={GLASS_DENSITIES}
-              onChange={(id) => setPref("glassDensity", id)}
-              size="sm"
-              blur
-            />
-          }
-        />
-        <SettingRow
-          title="Glass blur"
-          hint="How strongly surfaces diffuse content behind them."
-          control={
-            <GlassToggle
-              value={glassBlur}
-              options={GLASS_BLURS}
-              onChange={(id) => setPref("glassBlur", id)}
-              size="sm"
-              blur
-            />
-          }
-        />
-        <SettingRow
-          title="Glass rim"
-          hint="Strength of the edge highlight around glass surfaces."
-          control={
-            <GlassToggle
-              value={glassRim}
-              options={GLASS_RIMS}
-              onChange={(id) => setPref("glassRim", id)}
-              size="sm"
-              blur
-            />
-          }
-        />
-        <SettingRow
-          title="Glass texture"
-          hint="Auto keeps grain in dark mode only. Grain forces it everywhere."
-          control={
-            <GlassToggle
-              value={glassTexture}
-              options={GLASS_TEXTURES}
-              onChange={(id) => setPref("glassTexture", id)}
-              size="sm"
-              blur
-            />
-          }
         />
         <SettingRow
           title="Reasoning in chat"
@@ -175,11 +102,10 @@ export function AppearanceTab() {
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
           control={
-            <GlassToggle
+            <SegmentedControl
               value={intensity}
               options={INTENSITIES}
               onChange={(id) => setPref("thinkingIntensity", id)}
-              size="sm"
             />
           }
         />
@@ -353,6 +279,39 @@ function Toggle({
         )}
       />
     </button>
+  );
+}
+
+function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { id: T; label: string }[];
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="inline-flex p-0.5 rounded-[9px] bg-surface-soft">
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(opt.id)}
+            className={clsx(
+              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-sm leading-none font-medium tracking-[-0.005em] transition-colors",
+              active
+                ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+                : "text-muted hover:text-ink",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -7,19 +7,19 @@ import {
 } from "react";
 import { GlassSurface } from "./GlassSurface";
 
-type Option<T extends string> = T | { value: T; label: string; icon?: ReactNode };
+type Option = string | { value: string; label: string; icon?: ReactNode };
 
-interface Props<T extends string> {
-  options: Option<T>[];
-  value: T;
-  onChange: (value: T) => void;
+interface Props {
+  options: Option[];
+  value: string;
+  onChange: (value: string) => void;
   size?: "sm" | "md" | "lg";
   tone?: "light" | "dark" | "auto";
   /** Apply backdrop-filter to the track. Expensive in long lists — default off. */
   blur?: boolean;
 }
 
-type NormalizedOption<T extends string> = { value: T; label: string; icon?: ReactNode };
+type NormalizedOption = { value: string; label: string; icon?: ReactNode };
 
 const SIZES = {
   sm: { height: 32, font: 12, padX: 14, gap: 4 },
@@ -50,18 +50,18 @@ const TONES = {
 
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
-function normalize<T extends string>(opt: Option<T>): NormalizedOption<T> {
+function normalize(opt: Option): NormalizedOption {
   return typeof opt === "string" ? { value: opt, label: opt } : opt;
 }
 
-export function GlassToggle<T extends string>({
+export function GlassToggle({
   options,
   value,
   onChange,
   size = "md",
   tone = "auto",
   blur = false,
-}: Props<T>) {
+}: Props) {
   const items = options.map(normalize);
   const sz = SIZES[size];
   const t = TONES[tone];
