@@ -782,15 +782,37 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .glass-static[data-tone="light"] {
   background: rgba(255, 255, 255, 0.86);
 }
-.glass-toggle.glass-static {
-  background: rgba(255, 255, 255, 0.28);
+/* GlassToggle — self-contained segmented control. Variables are
+   consumed by the component's inline styles; this block just resolves
+   them per color scheme. Light defaults live on the element; the dark
+   override flips them under :root.dark. */
+.glass-toggle {
+  --gt-track-bg: rgba(255, 255, 255, 0.35);
+  --gt-track-border: rgba(255, 255, 255, 0.55);
+  --gt-track-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 8px 24px -12px rgba(31, 38, 135, 0.25);
+  --gt-pill-bg: rgba(255, 255, 255, 0.75);
+  --gt-pill-border: rgba(255, 255, 255, 0.9);
+  --gt-pill-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px rgba(31, 38, 135, 0.18);
+  --gt-fg: rgba(20, 20, 30, 0.92);
+  --gt-fg-muted: rgba(20, 20, 30, 0.55);
 }
-:root.dark .glass-toggle.glass-static,
-.glass-toggle.glass-static[data-tone="dark"] {
-  background: rgba(255, 255, 255, 0.08);
-}
-.glass-toggle.glass-static[data-tone="light"] {
-  background: rgba(255, 255, 255, 0.28);
+:root.dark .glass-toggle {
+  --gt-track-bg: rgba(255, 255, 255, 0.08);
+  --gt-track-border: rgba(255, 255, 255, 0.12);
+  --gt-track-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --gt-pill-bg: rgba(255, 255, 255, 0.14);
+  --gt-pill-border: rgba(255, 255, 255, 0.22);
+  --gt-pill-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+  --gt-fg: rgba(255, 255, 255, 0.95);
+  --gt-fg-muted: rgba(255, 255, 255, 0.55);
 }
 .glass-radius-sm { --glass-radius: 10px; }
 .glass-radius-md { --glass-radius: 16px; }
