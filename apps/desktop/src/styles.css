@@ -834,8 +834,27 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   --gs-knob-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 2px 8px rgba(31, 38, 135, 0.18);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  width: var(--gs-track-w);
+  height: var(--gs-track-h);
+  border: 1px solid var(--gs-track-border);
+  border-radius: 999px;
+  background: var(--gs-track-bg);
+  box-shadow: var(--gs-track-shadow);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.glass-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .glass-switch.glass-switch-on {
   --gs-track-bg: color-mix(in oklab, var(--color-accent) 75%, rgba(255, 255, 255, 0.35));
@@ -846,6 +865,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     0 2px 8px rgba(31, 38, 135, 0.22);
 }
 .glass-switch-knob {
+  position: absolute;
+  left: 0;
+  top: var(--gs-knob-top);
+  width: var(--gs-knob-size);
+  height: var(--gs-knob-size);
+  border-radius: 999px;
+  background: var(--gs-knob-bg);
+  border: 1px solid var(--gs-knob-border);
+  box-shadow: var(--gs-knob-shadow);
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
