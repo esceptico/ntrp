@@ -799,12 +799,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     0 2px 8px rgba(31, 38, 135, 0.18);
   --gt-fg: rgba(20, 20, 30, 0.92);
   --gt-fg-muted: rgba(20, 20, 30, 0.55);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-.glass-toggle-pill {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* No backdrop-filter — N toggles in a list (per-tool decision pickers
+     in MCPTab/ToolsTab) each forced a compositor pass per frame and tanked
+     the whole UI. The semi-transparent fill keeps enough material identity. */
 }
 :root.dark .glass-toggle {
   --gt-track-bg: rgba(255, 255, 255, 0.08);
@@ -849,8 +846,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   appearance: none;
   -webkit-appearance: none;
   transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  /* No backdrop-filter: at 30x18px the blur is invisible and N switches
+     in a list each force a compositor pass, which causes the whole UI
+     to lag. The semi-transparent fill carries enough material identity. */
 }
 .glass-switch:disabled {
   cursor: not-allowed;
@@ -876,8 +874,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow: var(--gs-knob-shadow);
   pointer-events: none;
   transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* No backdrop-filter — same reasoning as the track. */
 }
 .glass-switch:focus-visible {
   outline: none;

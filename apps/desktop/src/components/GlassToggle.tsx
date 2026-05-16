@@ -128,9 +128,11 @@ export function GlassToggle({
 
   const pillStyle: CSSProperties = {
     position: "absolute",
+    // top/bottom symmetric — explicit height + border-box + 1px border
+    // gave a 2px vertical asymmetry (top gap > bottom gap).
     top: sz.pad,
+    bottom: sz.pad,
     left: 0,
-    height: sz.h - sz.pad * 2,
     width: pill?.w ?? 0,
     transform: `translateX(${pill?.x ?? 0}px)`,
     borderRadius: 999,
@@ -148,7 +150,6 @@ export function GlassToggle({
   const classes = ["glass-toggle", className].filter(Boolean).join(" ");
 
   const btnSizing: CSSProperties = {
-    height: sz.h - sz.pad * 2,
     padding: `0 ${sz.padX}px`,
     fontSize: sz.font,
   };
