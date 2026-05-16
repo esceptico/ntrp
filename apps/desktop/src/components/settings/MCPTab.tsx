@@ -20,6 +20,7 @@ import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
+import { GlassToggle } from "../GlassToggle";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -363,20 +364,21 @@ function ServerForm({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-md bg-surface-soft border border-line-soft">
-          <TransportTab
-            label="STDIO"
-            active={transport === "stdio"}
-            disabled={transportLocked && transport !== "stdio"}
-            onClick={() => !transportLocked && setTransport("stdio")}
+        {transportLocked ? (
+          <div className="inline-flex items-center h-8 px-3 rounded-md bg-surface-soft border border-line-soft text-sm font-medium text-ink-soft self-start">
+            {transport === "stdio" ? "STDIO" : "Streamable HTTP"}
+          </div>
+        ) : (
+          <GlassToggle
+            size="sm"
+            value={transport}
+            onChange={(v) => setTransport(v as MCPTransport)}
+            options={[
+              { value: "stdio", label: "STDIO" },
+              { value: "http", label: "Streamable HTTP" },
+            ]}
           />
-          <TransportTab
-            label="Streamable HTTP"
-            active={transport === "http"}
-            disabled={transportLocked && transport !== "http"}
-            onClick={() => !transportLocked && setTransport("http")}
-          />
-        </div>
+        )}
 
         {transportLocked && (
           <p className="m-0 text-xs text-faint">
@@ -500,27 +502,12 @@ function ToolsSection({
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-1 p-1 h-8 rounded-md bg-surface-soft border border-line-soft">
-                {TOOL_DECISIONS.map((decision) => {
-                  const current = overrides[t.full_name] ?? baseDecision(t);
-                  return (
-                    <button
-                      key={decision.value}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setToolDecision(t, decision.value)}
-                      className={clsx(
-                        "px-2 rounded-[5px] text-xs font-medium transition-colors disabled:opacity-50",
-                        current === decision.value
-                          ? "bg-bg-main text-ink shadow-sm"
-                          : "text-muted hover:text-ink hover:bg-bg-main/50",
-                      )}
-                    >
-                      {decision.label}
-                    </button>
-                  );
-                })}
-              </div>
+              <GlassToggle
+                size="sm"
+                value={overrides[t.full_name] ?? baseDecision(t)}
+                onChange={(v) => setToolDecision(t, v as ToolOverrideDecision)}
+                options={TOOL_DECISIONS.map((d) => ({ value: d.value, label: d.label }))}
+              />
             </li>
           );
         })}
@@ -745,33 +732,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
       {children}
     </label>
-  );
-}
-
-function TransportTab({
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        "inline-flex items-center justify-center h-7 rounded-[6px] text-sm font-medium tracking-[-0.005em] transition-colors",
-        active ? "bg-surface text-ink shadow-[var(--shadow-sm)]" : "text-muted hover:text-ink",
-        disabled && "opacity-40 cursor-not-allowed",
-      )}
-    >
-      {label}
-    </button>
   );
 }
 

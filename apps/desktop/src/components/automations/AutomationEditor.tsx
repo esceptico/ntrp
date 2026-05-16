@@ -11,6 +11,7 @@ import type {
 } from "../../api";
 import { SPRING_SMOOTH } from "../../lib/motion";
 import { ICON } from "../../lib/icons";
+import { GlassToggle } from "../GlassToggle";
 
 const MODAL_BACKDROP_DURATION = 0.2;
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -385,9 +386,10 @@ function ScheduleChip({
             transition={{ duration: 0.16, ease: MODAL_EASE }}
             className="absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3 rounded-[12px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]"
           >
-            <SegmentedControl
+            <GlassToggle
+              size="sm"
               value={schedule.kind}
-              onChange={(kind) => onChange({ ...schedule, kind })}
+              onChange={(kind) => onChange({ ...schedule, kind: kind as ScheduleKind })}
               options={[
                 { value: "at", label: "At time" },
                 { value: "every", label: "Every" },
@@ -518,36 +520,6 @@ function ScheduleField({
         <span className="text-2xs text-faint font-mono leading-snug">{hint}</span>
       )}
     </label>
-  );
-}
-
-function SegmentedControl<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string }[];
-}) {
-  return (
-    <div className="inline-flex h-8 rounded-md bg-surface-sunken p-px">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={clsx(
-            "flex-1 px-3 rounded-[5px] text-sm font-medium tracking-[-0.005em] transition-colors",
-            value === opt.value
-              ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-              : "text-muted hover:text-ink",
-          )}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
   );
 }
 

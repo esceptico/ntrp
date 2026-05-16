@@ -13,6 +13,7 @@ import {
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
+import { GlassToggle } from "../GlassToggle";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -48,28 +49,16 @@ export function AppearanceTab() {
           title="Mode"
           hint="Light, Dark, or follow your system preference."
           control={
-            <div className="inline-flex p-0.5 rounded-[9px] bg-surface-soft">
-              {THEMES.map((t) => {
-                const Icon = t.icon;
-                const active = theme === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setPref("theme", t.id)}
-                    className={clsx(
-                      "inline-flex items-center gap-1.5 h-7 px-3 rounded-[7px] text-sm font-medium tracking-[-0.005em] transition-colors",
-                      active
-                        ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-                        : "text-muted hover:text-ink",
-                    )}
-                  >
-                    <Icon size={ICON.MD} strokeWidth={2} />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
+            <GlassToggle
+              size="sm"
+              value={theme}
+              onChange={(v) => setPref("theme", v as ThemeChoice)}
+              options={THEMES.map((t) => ({
+                value: t.id,
+                label: t.label,
+                icon: <t.icon size={ICON.MD} strokeWidth={2} />,
+              }))}
+            />
           }
         />
         <SettingRow
@@ -102,10 +91,11 @@ export function AppearanceTab() {
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
           control={
-            <SegmentedControl
+            <GlassToggle
+              size="sm"
               value={intensity}
-              options={INTENSITIES}
-              onChange={(id) => setPref("thinkingIntensity", id)}
+              onChange={(v) => setPref("thinkingIntensity", v as ThinkingIntensity)}
+              options={INTENSITIES.map((o) => ({ value: o.id, label: o.label }))}
             />
           }
         />
@@ -279,39 +269,6 @@ function Toggle({
         )}
       />
     </button>
-  );
-}
-
-function SegmentedControl<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { id: T; label: string }[];
-  onChange: (id: T) => void;
-}) {
-  return (
-    <div className="inline-flex p-0.5 rounded-[9px] bg-surface-soft">
-      {options.map((opt) => {
-        const active = value === opt.id;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => onChange(opt.id)}
-            className={clsx(
-              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-sm leading-none font-medium tracking-[-0.005em] transition-colors",
-              active
-                ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-                : "text-muted hover:text-ink",
-            )}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
