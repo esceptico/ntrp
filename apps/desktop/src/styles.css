@@ -820,6 +820,63 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   --gt-fg: rgba(255, 255, 255, 0.95);
   --gt-fg-muted: rgba(255, 255, 255, 0.55);
 }
+/* GlassSwitch — boolean on/off switch sibling to GlassToggle. Same
+   frosted material; knob travels along the track. Variables resolved
+   per color scheme; consumed via inline styles in the component. */
+.glass-switch {
+  --gs-track-bg: rgba(255, 255, 255, 0.35);
+  --gs-track-border: rgba(255, 255, 255, 0.55);
+  --gs-track-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 8px 24px -12px rgba(31, 38, 135, 0.25);
+  --gs-knob-bg: rgba(255, 255, 255, 0.75);
+  --gs-knob-border: rgba(255, 255, 255, 0.9);
+  --gs-knob-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px rgba(31, 38, 135, 0.18);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.glass-switch.glass-switch-on {
+  --gs-track-bg: color-mix(in oklab, var(--color-accent) 75%, rgba(255, 255, 255, 0.35));
+  --gs-track-border: color-mix(in oklab, var(--color-accent) 60%, rgba(255, 255, 255, 0.55));
+  --gs-knob-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(31, 38, 135, 0.22);
+}
+.glass-switch-knob {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.glass-switch:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--gs-track-shadow),
+    0 0 0 3px var(--color-accent-soft);
+}
+:root.dark .glass-switch {
+  --gs-track-bg: rgba(255, 255, 255, 0.08);
+  --gs-track-border: rgba(255, 255, 255, 0.12);
+  --gs-track-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --gs-knob-bg: rgba(255, 255, 255, 0.14);
+  --gs-knob-border: rgba(255, 255, 255, 0.22);
+  --gs-knob-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+:root.dark .glass-switch.glass-switch-on {
+  --gs-track-bg: color-mix(in oklab, var(--color-accent) 60%, rgba(255, 255, 255, 0.08));
+  --gs-track-border: color-mix(in oklab, var(--color-accent) 50%, rgba(255, 255, 255, 0.22));
+  --gs-knob-bg: rgba(255, 255, 255, 0.28);
+  --gs-knob-border: rgba(255, 255, 255, 0.4);
+  --gs-knob-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
 .glass-radius-sm { --glass-radius: 10px; }
 .glass-radius-md { --glass-radius: 16px; }
 .glass-radius-lg { --glass-radius: 20px; }
