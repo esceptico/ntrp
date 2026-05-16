@@ -96,6 +96,32 @@ class AlwaysCompacts:
         return [{"role": "system", "content": "compacted"}]
 
 
+class RecordingCompactor:
+    def __init__(self):
+        self.seen: list[int | None] = []
+
+    def should_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> bool:
+        self.seen.append(last_input_tokens)
+        return False
+
+    async def maybe_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> list[dict] | None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_compaction_uses_persisted_input_tokens_on_first_request():
+    registry = _registry()
+    compactor = RecordingCompactor()
+    middleware = CompactionModelRequestMiddleware(
+        compactor=compactor,
+        initial_input_tokens=314_000,
+    )
+
+    await middleware(_request(registry), _identity)
+
+    assert compactor.seen == [314_000]
+
+
 @pytest.mark.asyncio
 async def test_deferred_middleware_hides_then_reveals_loaded_tools():
     registry = _registry()

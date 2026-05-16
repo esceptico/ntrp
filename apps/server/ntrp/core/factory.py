@@ -57,6 +57,7 @@ def create_agent(
     loaded_tools: set[str] | None = None,
     loop_task_id: str | None = None,
     parent_tracker: UsageTracker | None = None,
+    initial_input_tokens: int | None = None,
 ) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
@@ -113,6 +114,7 @@ def create_agent(
                 on_compact=run_ctx.loaded_tools.clear,
                 emit=tool_ctx.io.emit,
                 run_id=run_id,
+                initial_input_tokens=initial_input_tokens,
             ),
         ),
     )

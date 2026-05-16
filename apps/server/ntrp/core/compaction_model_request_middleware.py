@@ -14,18 +14,24 @@ class CompactionModelRequestMiddleware:
         on_compact: Callable[[], None] | None = None,
         emit: Callable[[Any], Awaitable[None]] | None = None,
         run_id: str = "",
+        initial_input_tokens: int | None = None,
     ):
         self.compactor = compactor
         self.on_compact = on_compact
         self.emit = emit
         self.run_id = run_id
+        self.initial_input_tokens = initial_input_tokens
 
     async def __call__(self, request: ModelRequest, next_request: ModelRequestNext) -> ModelRequest:
         prepared = await next_request(request)
         if not self.compactor:
             return prepared
 
-        last_input_tokens = prepared.previous_response.usage.input_tokens if prepared.previous_response else None
+        last_input_tokens = (
+            prepared.previous_response.usage.input_tokens
+            if prepared.previous_response
+            else self.initial_input_tokens
+        )
 
         # Pre-check so we only emit start/finish around an *actual* compaction.
         should = self.compactor.should_compact(prepared.messages, prepared.model, last_input_tokens)

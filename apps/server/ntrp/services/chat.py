@@ -68,6 +68,7 @@ class ChatContext:
     integration_errors: dict[str, str]
     session_service: SessionService
     run_registry: RunRegistry
+    initial_input_tokens: int | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
@@ -418,6 +419,7 @@ async def prepare_chat(
         integration_errors=deps.integration_errors,
         session_service=deps.session_service,
         run_registry=deps.run_registry,
+        initial_input_tokens=session_data.last_input_tokens,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
     )
@@ -719,6 +721,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             loaded_tools=run.loaded_tools,
             loop_task_id=run.loop_task_id,
             parent_tracker=tracker,
+            initial_input_tokens=ctx.initial_input_tokens,
         )
         agent.hooks.on_response = tracker.track
 
