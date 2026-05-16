@@ -264,7 +264,13 @@ export function applyChatEventToTranscript(
           activityInsertAnchor(context),
         );
         s.setActiveActivityId(newId);
-        context.update({ ...context.state, nextItemRenderAt: Date.now() });
+        const nextPendingActivityReplaySeqs = new Map(context.state.pendingActivityReplaySeqs);
+        nextPendingActivityReplaySeqs.delete(item.id);
+        context.update({
+          ...context.state,
+          pendingActivityReplaySeqs: nextPendingActivityReplaySeqs,
+          nextItemRenderAt: Date.now(),
+        });
       } else {
         enqueueActivityItem(context, activityId, item, mode);
       }

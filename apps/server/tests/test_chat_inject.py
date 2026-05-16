@@ -199,6 +199,52 @@ async def test_event_stream_uses_persisted_checkpoint_as_cursor_boundary(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_event_stream_seeds_persisted_cursor_without_client_cursor(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running", last_seq=7)
+    await store.record_session_event(
+        StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="checkpoint-evidence")),
+    )
+    buses = BusRegistry(record_event=store.record_session_event)
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, event_store=store)
+    next_chunk = asyncio.create_task(anext(stream))
+    try:
+        for _ in range(100):
+            await asyncio.sleep(0)
+            bus = buses.get("sess-1")
+            if bus is not None and bus._subscribers:
+                break
+
+        bus = buses.get("sess-1")
+        assert bus is not None
+        assert bus.next_seq == 8
+        assert bus.checkpoint_seq == 7
+
+        await bus.emit(ThinkingEvent(status="live-with-seeded-cursor"))
+        chunk = await asyncio.wait_for(next_chunk, timeout=1)
+    finally:
+        if not next_chunk.done():
+            next_chunk.cancel()
+            with suppress(asyncio.CancelledError):
+                await next_chunk
+        await stream.aclose()
+        await read_conn.close()
+        await conn.close()
+
+    seq, event_name, payload = _parse_sse_chunk(chunk)
+    assert seq == 8
+    assert event_name == "thinking"
+    assert payload["status"] == "live-with-seeded-cursor"
+
+
+@pytest.mark.asyncio
 async def test_event_stream_does_not_promote_raw_events_to_checkpoint(tmp_path):
     import ntrp.database as database
 

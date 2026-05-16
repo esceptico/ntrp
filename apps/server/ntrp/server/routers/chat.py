@@ -46,7 +46,7 @@ async def _event_stream(
     event_store=None,
 ) -> AsyncGenerator[str]:
     bus = bus_registry.get(session_id)
-    if event_store is not None and after_seq is not None:
+    if event_store is not None:
         latest_seq = await event_store.get_latest_session_event_seq(session_id)
         if latest_seq:
             checkpoint_seq = await event_store.get_latest_session_checkpoint_seq(session_id)

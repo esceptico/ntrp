@@ -794,7 +794,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 message_count=len(run.messages),
             )
         )
-        ctx.run_registry.complete_run(run.run_id)
         run_finished = True
 
     except asyncio.CancelledError:
@@ -867,6 +866,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     RunStatus.COMPLETED.value,
                     last_seq=bus.next_seq - 1,
                 )
+                ctx.run_registry.complete_run(run.run_id)
                 event = RunCompleted(
                     run_id=run.run_id,
                     session_id=session_state.session_id,

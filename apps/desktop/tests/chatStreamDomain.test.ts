@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test";
 import {
+  handleServerEvent,
   clearReplayBlock,
   createInitialChatStreamState,
+  getChatStreamState,
   reduceEventCursor,
   reduceReplayGap,
   reduceStreamConnecting,
   reduceStreamDisconnected,
   runCancelledEffect,
 } from "../src/store/chat-stream.ts";
+import { setState } from "../src/store/index.ts";
 
 test("stale event seq is ignored", () => {
   let state = createInitialChatStreamState();
@@ -112,6 +115,35 @@ test("disconnect rewinds cursor for delayed activity item render", () => {
 
   expect(state.lastEventSeqBySession.get("session-1")).toBe(9);
   expect(state.pendingActivityReplaySeqs.size).toBe(0);
+});
+
+test("visible first tool item does not leave cursor rewind marker", () => {
+  setState({
+    currentSessionId: "session-1",
+    messages: new Map(),
+    order: [],
+    activeActivityId: null,
+    running: false,
+    currentRunId: null,
+  });
+
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    session_id: "session-1",
+    seq: 10,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    session_id: "session-1",
+    seq: 11,
+  });
+
+  const stream = getChatStreamState();
+  expect(getChatStreamState().lastEventSeqBySession.get("session-1")).toBe(11);
+  expect(stream.pendingActivityReplaySeqs.size).toBe(0);
 });
 
 test("run cancellation exposes pending queued messages as resend effects", () => {
