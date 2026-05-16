@@ -9,7 +9,6 @@ import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { Demo as TraceDemo } from "./trace/Demo";
 
 // The five "open from chrome" modals only mount when the user actually
 // opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/
@@ -148,10 +147,6 @@ export function App() {
   useEffect(() => {
     void window.ntrpDesktop?.quickCapture?.setShortcut?.(quickCaptureShortcut);
   }, [quickCaptureShortcut]);
-
-  if (hash === "#trace-demo") {
-    return <TraceDemo />;
-  }
 
   return (
     /* `reducedMotion="user"` makes every motion component honor the OS
