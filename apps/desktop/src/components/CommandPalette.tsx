@@ -245,29 +245,10 @@ function PaletteBody({
     [setCrumbs, setQuery],
   );
 
-  // Keep the highlighted row in view while arrow-navigating. Use the
-  // row's offset position relative to the scroll container (which is
-  // the row's offsetParent — the list has overflow:auto). Avoids
-  // getBoundingClientRect, which lies under the modal's scale/y motion
-  // transform and made earlier attempts jumpy.
+  // Keep the highlighted row in view while arrow-navigating.
   useLayoutEffect(() => {
-    const row = activeRowRef.current;
-    const list = listRef.current;
-    if (!row || !list) return;
-    const PAD = 8;
-    // offsetTop walks up to the nearest positioned ancestor; the
-    // <li> wrapping the button is statically positioned, so this
-    // resolves all the way to the scroll container.
-    const rowTop = row.offsetTop + (row.parentElement?.offsetTop ?? 0);
-    const rowBottom = rowTop + row.offsetHeight;
-    const viewTop = list.scrollTop;
-    const viewBottom = viewTop + list.clientHeight;
-    if (rowTop < viewTop + PAD) {
-      list.scrollTop = Math.max(0, rowTop - PAD);
-    } else if (rowBottom > viewBottom - PAD) {
-      list.scrollTop = rowBottom - list.clientHeight + PAD;
-    }
-  }, [safe, filtered.length]);
+    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [safe]);
 
   const grouped = useMemo(() => groupBySection(filtered), [filtered]);
 
@@ -306,19 +287,13 @@ function PaletteBody({
               if (filtered.length === 0) return;
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                // Functional setState — `safe` from the closure is stale
-                // when arrow events fire faster than React re-renders
-                // (key-repeat at 30Hz vs commit at 60Hz). Reading
-                // `prev` from React's queued state lets each repeat
-                // advance by one regardless of batching.
-                const len = filtered.length;
-                setIndex((prev) => (Math.min(prev, len - 1) + 1) % len);
+                const last = filtered.length - 1;
+                setIndex((prev) => Math.min(prev + 1, last));
                 return;
               }
               if (e.key === "ArrowUp") {
                 e.preventDefault();
-                const len = filtered.length;
-                setIndex((prev) => (Math.min(prev, len - 1) - 1 + len) % len);
+                setIndex((prev) => Math.max(prev - 1, 0));
                 return;
               }
               if (e.key === "Enter") {
