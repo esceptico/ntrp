@@ -286,10 +286,13 @@ export function AgentRightSidebar() {
 
   const totalCount = agents.length + runningAutomations.length;
 
-  // Width of the panel including its 16px margin (right-2 + width
-   // calc), so animating `x: panelTranslateWidth` slides it fully off
-   // screen. Mirror of App.tsx's `x: ±sidebarWidth` for the left.
-  const panelTranslateWidth = useStore((s) => s.prefs.sidebarWidth);
+  // Right panel runs at a fixed width — it used to share the
+  // `--sidebar-width` CSS var with the left rail, so dragging the left
+  // resize-handle would visibly stretch this one too. Hard-coded so the
+  // two are independent. Bump alongside RIGHT_PANEL_WIDTH below if you
+  // want to make it adjustable later.
+  const RIGHT_PANEL_WIDTH = 272;
+  const panelTranslateWidth = RIGHT_PANEL_WIDTH;
 
   return (
     <>
@@ -322,7 +325,7 @@ export function AgentRightSidebar() {
         initial={false}
         animate={{ x: collapsed ? panelTranslateWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-        className="glass-pane absolute top-2 right-2 z-30 flex w-[calc(var(--sidebar-width,272px)-16px)] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden rounded-xl"
+        className="glass-pane absolute top-2 right-2 z-30 flex w-[256px] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden rounded-xl"
       >
         {/* Drag region height tuned so the "Active" label's vertical
             center sits at viewport y=25 — same eye-line as the toggle
