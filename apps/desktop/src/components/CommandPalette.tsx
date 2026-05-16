@@ -168,7 +168,7 @@ function PaletteBody({
   query: string;
   setQuery: (q: string) => void;
   index: number;
-  setIndex: (n: number) => void;
+  setIndex: React.Dispatch<React.SetStateAction<number>>;
   crumbs: Crumb[];
   setCrumbs: React.Dispatch<React.SetStateAction<Crumb[]>>;
   onClose: () => void;
@@ -245,23 +245,29 @@ function PaletteBody({
     [setCrumbs, setQuery],
   );
 
-  // Keep the highlighted row in view while arrow-navigating. Only
-  // scrolls when the row is actually clipped; small breathing-room pads
-  // top and bottom so the highlighted row never sits flush against the
-  // edge. Section headers aren't sticky so no extra offset needed.
+  // Keep the highlighted row in view while arrow-navigating. Use the
+  // row's offset position relative to the scroll container (which is
+  // the row's offsetParent — the list has overflow:auto). Avoids
+  // getBoundingClientRect, which lies under the modal's scale/y motion
+  // transform and made earlier attempts jumpy.
   useLayoutEffect(() => {
     const row = activeRowRef.current;
     const list = listRef.current;
     if (!row || !list) return;
-    const rowBox = row.getBoundingClientRect();
-    const listBox = list.getBoundingClientRect();
     const PAD = 8;
-    if (rowBox.top < listBox.top + PAD) {
-      list.scrollTop -= listBox.top + PAD - rowBox.top;
-    } else if (rowBox.bottom > listBox.bottom - PAD) {
-      list.scrollTop += rowBox.bottom - (listBox.bottom - PAD);
+    // offsetTop walks up to the nearest positioned ancestor; the
+    // <li> wrapping the button is statically positioned, so this
+    // resolves all the way to the scroll container.
+    const rowTop = row.offsetTop + (row.parentElement?.offsetTop ?? 0);
+    const rowBottom = rowTop + row.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (rowTop < viewTop + PAD) {
+      list.scrollTop = Math.max(0, rowTop - PAD);
+    } else if (rowBottom > viewBottom - PAD) {
+      list.scrollTop = rowBottom - list.clientHeight + PAD;
     }
-  }, [safe]);
+  }, [safe, filtered.length]);
 
   const grouped = useMemo(() => groupBySection(filtered), [filtered]);
 
@@ -300,12 +306,19 @@ function PaletteBody({
               if (filtered.length === 0) return;
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setIndex((safe + 1) % filtered.length);
+                // Functional setState — `safe` from the closure is stale
+                // when arrow events fire faster than React re-renders
+                // (key-repeat at 30Hz vs commit at 60Hz). Reading
+                // `prev` from React's queued state lets each repeat
+                // advance by one regardless of batching.
+                const len = filtered.length;
+                setIndex((prev) => (Math.min(prev, len - 1) + 1) % len);
                 return;
               }
               if (e.key === "ArrowUp") {
                 e.preventDefault();
-                setIndex((safe - 1 + filtered.length) % filtered.length);
+                const len = filtered.length;
+                setIndex((prev) => (Math.min(prev, len - 1) - 1 + len) % len);
                 return;
               }
               if (e.key === "Enter") {
