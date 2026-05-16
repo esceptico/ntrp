@@ -65,12 +65,12 @@ export function Messages() {
   // as a "scroll from the top" on session switch.
   const seenContentRef = useRef(false);
   useLayoutEffect(() => {
-    if (seenContentRef.current || order.length === 0) return;
+    if (seenContentRef.current || !sessionReady || order.length === 0) return;
     seenContentRef.current = true;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
     scrollToBottom({ animation: "instant" });
-  }, [order.length, scrollRef, scrollToBottom]);
+  }, [order.length, scrollRef, scrollToBottom, sessionReady]);
 
   useLayoutEffect(() => {
     const anchor = topAnchorRef.current;
