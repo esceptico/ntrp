@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.formatting import format_lines_with_pagination
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 READ_FILE_DESCRIPTION = (
     "Read content from a file. Use for code, configs, logs, etc. "
@@ -415,6 +415,7 @@ read_file_tool = tool(
     display_name="ReadFile",
     description=READ_FILE_DESCRIPTION,
     input_model=ReadFileInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=read_file,
 )
 
@@ -422,6 +423,7 @@ list_files_tool = tool(
     display_name="ListFiles",
     description=LIST_FILES_DESCRIPTION,
     input_model=ListFilesInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=list_files,
 )
 
@@ -429,6 +431,7 @@ find_files_tool = tool(
     display_name="FindFiles",
     description=FIND_FILES_DESCRIPTION,
     input_model=FindFilesInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=find_files,
 )
 
@@ -436,6 +439,7 @@ search_text_tool = tool(
     display_name="SearchText",
     description=SEARCH_TEXT_DESCRIPTION,
     input_model=SearchTextInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=search_text,
 )
 
@@ -443,7 +447,7 @@ write_file_tool = tool(
     display_name="WriteFile",
     description=WRITE_FILE_DESCRIPTION,
     input_model=WriteFileInput,
-    mutates=True,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True),
     approval=approve_write_file,
     execute=write_file,
 )
@@ -452,7 +456,7 @@ edit_file_tool = tool(
     display_name="EditFile",
     description=EDIT_FILE_DESCRIPTION,
     input_model=EditFileInput,
-    mutates=True,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True),
     approval=approve_edit_file,
     execute=edit_file,
 )

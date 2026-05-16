@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from time import monotonic
 from typing import Self
 
-from ntrp.agent import Agent, AgentHooks
+from ntrp.agent import Agent, AgentHooks, RunBudget
 from ntrp.agent.ledger import SharedLedger
 from ntrp.context.models import SessionState
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
@@ -11,6 +12,7 @@ from ntrp.core.llm_client import llm_client
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
+from ntrp.llm.models import get_model
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import tool_schema_names
 from ntrp.tools.executor import ToolExecutor
@@ -21,9 +23,14 @@ class AgentConfig:
     model: str
     research_model: str | None
     max_depth: int
+    max_iterations: int | None = None
+    max_tool_calls: int | None = None
+    max_wall_time_seconds: float | None = None
+    max_cost: float | None = None
     reasoning_effort: str | None = None
     model_reasoning_efforts: dict[str, str] | None = None
     deferred_tools: bool = True
+    approval_timeout_seconds: int = 300
     compactor: Compactor | None = None
 
     @classmethod
@@ -32,9 +39,14 @@ class AgentConfig:
             model=model or config.chat_model,
             research_model=config.research_model,
             max_depth=config.max_depth,
+            max_iterations=config.agent_max_iterations,
+            max_tool_calls=config.agent_max_tool_calls,
+            max_wall_time_seconds=config.agent_max_wall_time_seconds,
+            max_cost=config.agent_max_cost,
             reasoning_effort=config.reasoning_effort_for(model or config.chat_model),
             model_reasoning_efforts=dict(config.model_reasoning_efforts),
             deferred_tools=config.deferred_tools,
+            approval_timeout_seconds=config.approval_timeout_seconds,
             compactor=SummaryCompactor(
                 threshold=config.compression_threshold,
                 max_messages=config.max_messages,
@@ -59,15 +71,23 @@ def create_agent(
     parent_tracker: UsageTracker | None = None,
     initial_input_tokens: int | None = None,
 ) -> Agent:
+    started_at = monotonic()
+    budget = RunBudget()
     run_ctx = RunContext(
         run_id=run_id,
         max_depth=config.max_depth,
+        max_iterations=config.max_iterations,
+        max_tool_calls=config.max_tool_calls,
+        max_wall_time_seconds=config.max_wall_time_seconds,
+        max_cost=config.max_cost,
+        started_at=started_at,
         extra_auto_approve=extra_auto_approve or set(),
         research_model=config.research_model,
         deferred_tools_enabled=config.deferred_tools,
         loaded_tools=loaded_tools if loaded_tools is not None else set(),
         allowed_tool_names=tool_schema_names(tools),
         loop_task_id=loop_task_id,
+        budget=budget,
     )
 
     bg_tasks = background_tasks or BackgroundTaskRegistry(session_id=session_state.session_id)
@@ -90,6 +110,12 @@ def create_agent(
         reasoning_effort=config.reasoning_effort,
         model_reasoning_efforts=config.model_reasoning_efforts or {},
         compactor=config.compactor,
+        max_iterations=config.max_iterations,
+        max_tool_calls=config.max_tool_calls,
+        max_wall_time_seconds=config.max_wall_time_seconds,
+        max_cost=config.max_cost,
+        started_at=started_at,
+        budget=budget,
     )
 
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)
@@ -99,6 +125,10 @@ def create_agent(
         client=llm_client,
         executor=ntrp_executor,
         model=config.model,
+        max_iterations=config.max_iterations,
+        max_tool_calls=config.max_tool_calls,
+        max_wall_time_seconds=config.max_wall_time_seconds,
+        max_cost=config.max_cost,
         max_depth=config.max_depth,
         reasoning_effort=config.reasoning_effort,
         prompt_cache_key=session_state.session_id,
@@ -117,4 +147,15 @@ def create_agent(
                 initial_input_tokens=initial_input_tokens,
             ),
         ),
+        cost_calculator=_response_cost,
+        cost_getter=(lambda: parent_tracker.cost) if parent_tracker is not None else None,
+        started_at=started_at,
+        budget=budget,
     )
+
+
+def _response_cost(response) -> float:
+    try:
+        return get_model(response.model).pricing.cost(response.usage)
+    except ValueError:
+        return 0.0

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import { useStore } from "../store";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
 import { ConnectionTab } from "./settings/ConnectionTab";
@@ -9,12 +9,13 @@ import { ModelsTab } from "./settings/ModelsTab";
 import { AgentTab } from "./settings/AgentTab";
 import { ContextTab } from "./settings/ContextTab";
 import { MCPTab } from "./settings/MCPTab";
+import { ToolsTab } from "./settings/ToolsTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
-type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "mcp" | "appearance";
+type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
 
 interface Tab {
   id: TabId;
@@ -29,6 +30,7 @@ const TABS: Tab[] = [
   { id: "models", label: "Models", icon: Sparkles },
   { id: "agent", label: "Agent", icon: Brain },
   { id: "context", label: "Context", icon: Database },
+  { id: "tools", label: "Tools", icon: Wrench },
   { id: "mcp", label: "MCP servers", icon: Boxes },
   { id: "appearance", label: "Appearance", icon: Palette },
 ];
@@ -130,6 +132,7 @@ export function SettingsModal() {
             {active === "models" && <ModelsTab />}
             {active === "agent" && <AgentTab serverConfig={serverConfig} />}
             {active === "context" && <ContextTab serverConfig={serverConfig} />}
+            {active === "tools" && <ToolsTab />}
             {active === "mcp" && <MCPTab />}
             {active === "appearance" && <AppearanceTab />}
           </div>

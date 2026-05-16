@@ -43,6 +43,7 @@ class RunState:
     cancel_terminal_emitted: bool = False
     backgrounded: bool = False
     drain_task: asyncio.Task | None = None
+    stop_reason: str | None = None
     # When the run was triggered by a loop, this is the loop's automation
     # task_id. Tools (schedule_wakeup, loop_done) read it to mutate the
     # right loop. None for ordinary user-initiated runs.

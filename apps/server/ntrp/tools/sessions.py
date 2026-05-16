@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 # How aggressively to trim each message's content when summarizing a session.
 # Tool calls and large tool results are the worst offenders — a single bash
@@ -290,7 +291,7 @@ list_recent_sessions_tool = tool(
     display_name="ListRecentSessions",
     description=LIST_RECENT_SESSIONS_DESCRIPTION,
     input_model=ListRecentSessionsInput,
-    requires={"session"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"session"})),
     execute=list_recent_sessions,
 )
 
@@ -298,7 +299,7 @@ read_session_tool = tool(
     display_name="ReadSession",
     description=READ_SESSION_DESCRIPTION,
     input_model=ReadSessionInput,
-    requires={"session"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"session"})),
     execute=read_session,
 )
 
@@ -306,7 +307,6 @@ create_session_tool = tool(
     display_name="CreateSession",
     description=CREATE_SESSION_DESCRIPTION,
     input_model=CreateSessionInput,
-    mutates=True,
-    requires={"session"},
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, permissions=frozenset({"session"})),
     execute=create_session,
 )

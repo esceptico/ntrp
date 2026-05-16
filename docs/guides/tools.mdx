@@ -119,6 +119,8 @@ Deferred group: `notifications`.
 
 Connected MCP server tools are deferred by server. Use `load_tools(group="mcp:<server>")`, for example `load_tools(group="mcp:obsidian")`. MCP tools still keep their own approval/mutation behavior after loading.
 
+MCP tools default to conservative external execution: approval required. Per-tool config can override that with `tool_policies.<tool_name>`. If a server is trusted, `trust_tool_annotations=true` lets ntrp use MCP `Tool.annotations` hints such as `readOnlyHint` and `destructiveHint`; explicit `tool_policies` still win.
+
 ## Deferred loading examples
 
 | Need | Load call |
@@ -144,6 +146,15 @@ Obsidian is handled through the `/obsidian` skill or an external MCP server.
 
 When a tool requires approval, the TUI shows a dialog with the tool name, arguments, and options to approve, reject, or always-allow that tool for the session. See [Auto-approve mode](/guides/tui#auto-approve-mode) for skipping approvals.
 
+Settings → Tools can override individual tools:
+
+| Override | Behavior |
+|----------|----------|
+| Default | Use the tool's policy |
+| Approve | Expose the tool and skip approval |
+| Ask | Expose the tool and require approval |
+| Deny | Hide the tool from the agent and block execution |
+
 ## User-defined tools
 
 Create custom tools in `~/.ntrp/tools/`. Each file is a Python module that exports a `tools` mapping:
@@ -151,7 +162,7 @@ Create custom tools in `~/.ntrp/tools/`. Each file is a Python module that expor
 ```python
 from pydantic import BaseModel, Field
 
-from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -168,9 +179,10 @@ tools = {
         display_name="Echo",
         description="Echo text back to the user.",
         input_model=EchoInput,
+        policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
         execute=echo,
     )
 }
 ```
 
-Use `mutates=True` plus an `approval=` function for tools that change external state. Use `requires={...}` to hide a tool unless a service is configured. Restart the server after adding or changing user tools.
+Use `policy=ToolPolicy(..., requires_approval=True)` plus an `approval=` function for tools that change source-of-truth state. Use `permissions=frozenset({...})` to hide a tool unless a service is configured. Restart the server after adding or changing user tools.

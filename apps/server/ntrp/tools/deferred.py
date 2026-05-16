@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.registry import ToolRegistry
+from ntrp.tools.core.registry import ToolRegistry, tool_changes_state
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 DEFERRED_SOURCES = frozenset(
     {"gmail", "calendar", "slack", "_automation", "_background", "_notifications", "_directives", "mcp"}
@@ -163,7 +164,7 @@ def build_deferred_catalog(
     for name, tool_obj in registry.tools.items():
         if allowed_names is not None and name not in allowed_names:
             continue
-        if not tool_obj.requires.issubset(capabilities):
+        if not tool_obj.policy.permissions.issubset(capabilities):
             continue
         source = registry.get_source(name)
         group = DEFERRED_TOOL_GROUP_BY_NAME.get(name, source)
@@ -180,13 +181,13 @@ def build_deferred_catalog(
 
 
 def initial_loaded_tool_names(
-    registry: ToolRegistry, capabilities: frozenset[str], *, mutates: bool | None = None
+    registry: ToolRegistry, capabilities: frozenset[str], *, read_only: bool | None = None
 ) -> set[str]:
     names: set[str] = set()
     for name, tool_obj in registry.tools.items():
-        if mutates is not None and tool_obj.mutates != mutates:
+        if read_only is not None and (tool_obj.policy.action == ToolAction.READ) != read_only:
             continue
-        if not tool_obj.requires.issubset(capabilities):
+        if not tool_obj.policy.permissions.issubset(capabilities):
             continue
         if is_deferred_tool(name, registry):
             continue
@@ -205,7 +206,7 @@ def visible_tool_names(
     for name, tool_obj in registry.tools.items():
         if allowed_names is not None and name not in allowed_names:
             continue
-        if not tool_obj.requires.issubset(capabilities):
+        if not tool_obj.policy.permissions.issubset(capabilities):
             continue
         if is_deferred_tool(name, registry) and name not in loaded:
             continue
@@ -224,7 +225,9 @@ def _deferred_prompt_groups(catalog: DeferredCatalog, registry: ToolRegistry) ->
                 "label": DEFERRED_GROUP_LABELS.get(source, source),
                 "description": GROUP_DESCRIPTIONS[source],
                 "tool_names": names,
-                "requires_approval": any((registry.get(name) and registry.get(name).mutates) for name in names),
+                "requires_approval": any(
+                    (tool_obj := registry.get(name)) is not None and tool_changes_state(tool_obj) for name in names
+                ),
             }
         )
     return groups
@@ -385,7 +388,7 @@ async def load_tools(execution: ToolExecution, args: LoadToolsInput) -> ToolResu
         if execution.ctx.run.allowed_tool_names is not None and name not in execution.ctx.run.allowed_tool_names:
             not_allowed.append(name)
             continue
-        if not tool_obj.requires.issubset(capabilities):
+        if not tool_obj.policy.permissions.issubset(capabilities):
             unavailable.append(name)
             continue
         if not is_deferred_tool(name, registry):
@@ -438,5 +441,6 @@ load_tools_tool = tool(
         "or names=['slack_search','slack_thread']."
     ),
     input_model=LoadToolsInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=load_tools,
 )

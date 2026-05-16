@@ -200,15 +200,60 @@ async def cancel_inject(
 
 
 @router.post("/tools/result")
-async def submit_tool_result(request: ToolResultRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+async def submit_tool_result(
+    request: ToolResultRequest,
+    run_registry: RunRegistry = Depends(require_run_registry),
+    runtime: Runtime = Depends(get_runtime),
+):
+    session_service = getattr(runtime, "session_service", None)
+    store = getattr(session_service, "store", None)
+
+    async def resolve_durable_approval_if_pending() -> bool:
+        if store is None:
+            return False
+        row = await store.get_tool_approval(run_id=request.run_id, tool_call_id=request.tool_id)
+        if row is None:
+            return False
+        if row["status"] != "pending":
+            raise HTTPException(status_code=409, detail="Approval already resolved")
+        resolved = await store.resolve_tool_approval(
+            run_id=request.run_id,
+            tool_call_id=request.tool_id,
+            status="approved" if request.approved else "rejected",
+            result_feedback=request.result.strip() or None,
+        )
+        if not resolved:
+            raise HTTPException(status_code=409, detail="Approval already resolved")
+        return True
+
     run = run_registry.get_run(request.run_id)
 
     if not run:
+        if await resolve_durable_approval_if_pending():
+            return {"status": "ok"}
         raise HTTPException(status_code=404, detail="Run not found")
 
     future = run.pending_approvals.get(request.tool_id)
     if future is None:
+        if await resolve_durable_approval_if_pending():
+            return {"status": "ok"}
         raise HTTPException(status_code=404, detail="No pending approval for this tool")
+    if future.done():
+        raise HTTPException(status_code=409, detail="Approval already resolved")
+
+    durable_row_exists = False
+    if store is not None:
+        try:
+            row = await store.get_tool_approval(run_id=request.run_id, tool_call_id=request.tool_id)
+            if row is not None:
+                durable_row_exists = True
+                if row["status"] != "pending":
+                    raise HTTPException(status_code=409, detail="Approval already resolved")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     if future.done():
         raise HTTPException(status_code=409, detail="Approval already resolved")
 
@@ -220,6 +265,18 @@ async def submit_tool_result(request: ToolResultRequest, run_registry: RunRegist
             "approved": request.approved,
         }
     )
+
+    if store is not None and durable_row_exists:
+        try:
+            await store.resolve_tool_approval(
+                run_id=request.run_id,
+                tool_call_id=request.tool_id,
+                status="approved" if request.approved else "rejected",
+                result_feedback=request.result.strip() or None,
+            )
+        except Exception:
+            pass
+
     return {"status": "ok"}
 
 

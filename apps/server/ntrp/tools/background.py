@@ -4,6 +4,7 @@ from ntrp.constants import BACKGROUND_AGENT_TIMEOUT
 from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 BACKGROUND_SYSTEM_PROMPT = (
     "You are a background agent. Complete the given task using available read-only tools, "
@@ -34,7 +35,7 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
     if not ctx.spawn_fn:
         return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
-    tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
+    tools = ctx.registry.get_schemas(read_only=True, capabilities=ctx.capabilities)
 
     spawn = await ctx.spawn_fn(
         ctx,
@@ -100,6 +101,7 @@ background_tool = tool(
     display_name="Background",
     description=BACKGROUND_DESCRIPTION,
     input_model=BackgroundInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=background,
 )
 
@@ -107,7 +109,7 @@ cancel_background_task_tool = tool(
     display_name="Cancel Background Task",
     description="Cancel a running background task by its ID.",
     input_model=CancelBackgroundTaskInput,
-    mutates=True,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True),
     execute=cancel_background_task,
 )
 
@@ -115,6 +117,7 @@ get_background_result_tool = tool(
     display_name="Get Background Result",
     description="Read the result of a completed background task by its ID.",
     input_model=GetBackgroundResultInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=get_background_result,
 )
 
@@ -124,6 +127,6 @@ list_background_tasks_tool = tool(
         "List currently running background tasks only. Finished task results are delivered automatically "
         "as hidden parent-conversation notifications — do not poll or inspect files for results."
     ),
-    volatile=True,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=list_background_tasks,
 )

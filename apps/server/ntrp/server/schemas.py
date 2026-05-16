@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from ntrp.memory.models import FactKind, FactLifetime
+from ntrp.tools.core.types import ToolOverrideDecision
 
 # --- Chat / run ---
 
@@ -304,6 +305,7 @@ class UpdateConfigRequest(BaseModel):
     summary_max_tokens: int | None = None
     consolidation_interval: int | None = None
     web_search: Literal["auto", "exa", "ddgs", "none"] | None = None
+    tool_overrides: dict[str, ToolOverrideDecision] | None = None
     integrations: IntegrationToggles | None = None
 
 

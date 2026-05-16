@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ntrp.constants import BASH_TIMEOUT
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 SAFE_COMMANDS = frozenset(
     {
@@ -171,7 +171,7 @@ bash_tool = tool(
     display_name="Bash",
     description=BASH_DESCRIPTION,
     input_model=BashInput,
-    mutates=True,
+    policy=ToolPolicy(action=ToolAction.EXECUTE, scope=ToolScope.INTERNAL, requires_approval=True),
     approval=approve_bash,
     execute=run_bash,
 )

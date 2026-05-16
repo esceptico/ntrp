@@ -9,6 +9,7 @@ import asyncio
 
 import pytest
 
+from ntrp.agent.tools.dispatch import _append_results
 from ntrp.agent.tools.runner import ToolRunner
 from ntrp.agent.types.events import ToolCompleted, ToolStarted
 from ntrp.agent.types.tool_call import FunctionCall, PendingToolCall, ToolCall
@@ -45,9 +46,9 @@ def _make_call(call_id: str, name: str) -> PendingToolCall:
 async def test_runner_executes_mutating_and_non_mutating_in_one_batch():
     """All tools should start in parallel — no second phase for mutating."""
     metas = {
-        "read_file": ToolMeta(name="read_file", display_name="Read", mutates=False, volatile=False),
-        "write_file": ToolMeta(name="write_file", display_name="Write", mutates=True, volatile=False),
-        "bash": ToolMeta(name="bash", display_name="Bash", mutates=True, volatile=False),
+        "read_file": ToolMeta(name="read_file", display_name="Read"),
+        "write_file": ToolMeta(name="write_file", display_name="Write"),
+        "bash": ToolMeta(name="bash", display_name="Bash"),
     }
     release = {cid: asyncio.Event() for cid in ("c1", "c2", "c3")}
     executor = _FakeExecutor(metas, release)
@@ -96,3 +97,20 @@ async def test_runner_handles_empty_call_list():
     runner = ToolRunner(executor=executor, depth=0, parent_id=None)
     events = [event async for event in runner.execute_all([])]
     assert events == []
+
+
+def test_append_results_uses_normal_missing_fallback():
+    messages: list[dict] = []
+    tool_calls = [
+        ToolCall(id="c1", type="function", function=FunctionCall(name="done", arguments="{}")),
+        ToolCall(id="c2", type="function", function=FunctionCall(name="missing", arguments="{}")),
+    ]
+
+    _append_results(
+        messages,
+        tool_calls,
+        {"c1": "ok"},
+        missing_content="Tool call result missing.",
+    )
+
+    assert [m["content"] for m in messages] == ["ok", "Tool call result missing."]

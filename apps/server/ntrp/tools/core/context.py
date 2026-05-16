@@ -1,17 +1,20 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from coolname import generate_slug
 
 from ntrp.agent import Role, ToolResult
+from ntrp.agent.agent import RunBudget
 from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import NTRP_TMP_BASE
 from ntrp.context.models import SessionState
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
 from ntrp.logging import get_logger
+from ntrp.tools.core.types import ToolOverrideDecision
 
 _logger = get_logger(__name__)
 
@@ -42,12 +45,22 @@ class RunContext:
     run_id: str
     current_depth: int = 0
     max_depth: int = 0
+    max_iterations: int | None = None
+    max_tool_calls: int | None = None
+    max_wall_time_seconds: float | None = None
+    max_cost: float | None = None
+    started_at: float | None = None
+    budget: RunBudget | None = None
     extra_auto_approve: set[str] = field(default_factory=set)
     research_model: str | None = None
     deferred_tools_enabled: bool = False
     loaded_tools: set[str] = field(default_factory=set)
     allowed_tool_names: set[str] | None = None
     loop_task_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.budget is None:
+            self.budget = RunBudget()
 
 
 @dataclass
@@ -59,6 +72,24 @@ class IOBridge:
     # registers `pending_approvals[tool_id] = Future()` and awaits it;
     # the /tools/result endpoint resolves the matching Future.
     pending_approvals: dict[str, "asyncio.Future[ApprovalResponse]"] | None = None
+    record_approval: Callable[..., Awaitable[None]] | None = None
+    resolve_approval: Callable[..., Awaitable[None]] | None = None
+    approval_timeout_seconds: int = 300
+
+
+async def _approval_callback_best_effort(
+    callback: Callable[..., Awaitable[None]] | None,
+    label: str,
+    **kwargs: Any,
+) -> None:
+    if not callback:
+        return
+    try:
+        await callback(**kwargs)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _logger.exception("Approval %s callback failed", label)
 
 
 RESULT_BASE = Path(NTRP_TMP_BASE)
@@ -277,10 +308,42 @@ class ToolExecution:
         diff: str | None = None,
         preview: str | None = None,
     ) -> Rejection | None:
-        if self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve:
+        override = self.ctx.registry.get_override(self.tool_name)
+        if override != ToolOverrideDecision.ASK and (
+            self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve
+        ):
             return None
 
+        tool = self.ctx.registry.get(self.tool_name)
+        action = tool.policy.action.value if tool else "write"
+        scope = tool.policy.scope.value if tool else "internal"
+        expires_at = (
+            datetime.now(UTC) + timedelta(seconds=self.ctx.io.approval_timeout_seconds)
+        ).isoformat()
+
+        await _approval_callback_best_effort(
+            self.ctx.io.record_approval,
+            "record",
+            run_id=self.ctx.run.run_id,
+            session_id=self.ctx.session_id,
+            tool_call_id=self.tool_id,
+            tool_name=self.tool_name,
+            action=action,
+            scope=scope,
+            preview=preview,
+            diff=diff,
+            expires_at=expires_at,
+        )
+
         if not self.ctx.io.emit or self.ctx.io.pending_approvals is None:
+            await _approval_callback_best_effort(
+                self.ctx.io.resolve_approval,
+                "resolve",
+                run_id=self.ctx.run.run_id,
+                tool_call_id=self.tool_id,
+                status="cancelled",
+                result_feedback="No UI connected — cannot approve",
+            )
             return Rejection(feedback="No UI connected — cannot approve")
 
         # Register a Future scoped to THIS tool_id and await it. Multiple
@@ -300,12 +363,49 @@ class ToolExecution:
                     content_preview=preview if not diff else None,
                 )
             )
-            response = await future
+            response = await asyncio.wait_for(future, timeout=self.ctx.io.approval_timeout_seconds)
+        except asyncio.CancelledError:
+            await _approval_callback_best_effort(
+                self.ctx.io.resolve_approval,
+                "resolve",
+                run_id=self.ctx.run.run_id,
+                tool_call_id=self.tool_id,
+                status="cancelled",
+                result_feedback="Approval cancelled",
+            )
+            raise
+        except TimeoutError:
+            await _approval_callback_best_effort(
+                self.ctx.io.resolve_approval,
+                "resolve",
+                run_id=self.ctx.run.run_id,
+                tool_call_id=self.tool_id,
+                status="expired",
+                result_feedback="Approval timed out",
+            )
+            return Rejection(feedback="Approval timed out")
         finally:
             self.ctx.io.pending_approvals.pop(self.tool_id, None)
 
         if not response["approved"]:
             feedback = response.get("result", "").strip() or None
+            await _approval_callback_best_effort(
+                self.ctx.io.resolve_approval,
+                "resolve",
+                run_id=self.ctx.run.run_id,
+                tool_call_id=self.tool_id,
+                status="rejected",
+                result_feedback=feedback,
+            )
             return Rejection(feedback=feedback)
+
+        await _approval_callback_best_effort(
+            self.ctx.io.resolve_approval,
+            "resolve",
+            run_id=self.ctx.run.run_id,
+            tool_call_id=self.tool_id,
+            status="approved",
+            result_feedback=response.get("result", "").strip() or None,
+        )
 
         return None

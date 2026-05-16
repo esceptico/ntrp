@@ -142,11 +142,13 @@ class Runtime:
             services["notifiers"] = self.notifier_service
         return services
 
-    def _create_executor(self) -> ToolExecutor:
+    def _create_executor(self, config: Config | None = None) -> ToolExecutor:
+        config = config or self.config
         mcp_tools = list(self.mcp_manager.tools) if self.mcp_manager else None
         return ToolExecutor(
             mcp_tools=mcp_tools,
             get_services=lambda: self.tool_services,
+            tool_overrides=config.tool_overrides,
         )
 
     # --- Subsystem lifecycle ---
@@ -165,7 +167,7 @@ class Runtime:
             await self.mcp_manager.connect(config.mcp_servers)
 
         if self.executor:
-            self.executor = self._create_executor()
+            self.executor = self._create_executor(config)
 
     # --- Connect / close ---
 

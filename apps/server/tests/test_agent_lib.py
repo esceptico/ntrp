@@ -26,6 +26,7 @@ from ntrp.agent import (
     TextStarted,
     ToolCall,
     ToolChoiceMode,
+    ToolCompleted,
     ToolMeta,
     ToolResult,
     Usage,
@@ -103,7 +104,7 @@ class FakeExecutor:
     def get_meta(self, name: str) -> ToolMeta | None:
         return self._meta.get(
             name,
-            ToolMeta(name=name, display_name=name, mutates=False, volatile=False),
+            ToolMeta(name=name, display_name=name),
         )
 
 
@@ -297,7 +298,7 @@ async def test_malformed_tool_arguments_becomes_empty_dict():
 
 
 # ============================================================
-# Multiple tool calls — concurrency by mutates flag
+# Multiple tool calls — concurrent dispatch
 # ============================================================
 
 
@@ -322,8 +323,8 @@ async def test_multiple_non_mutating_tools_run_concurrently():
     executor = FakeExecutor(
         {"a": slow_a, "b": slow_b},
         meta={
-            "a": ToolMeta(name="a", display_name="A", mutates=False, volatile=False),
-            "b": ToolMeta(name="b", display_name="B", mutates=False, volatile=False),
+            "a": ToolMeta(name="a", display_name="A"),
+            "b": ToolMeta(name="b", display_name="B"),
         },
     )
     agent = _make_agent(llm, executor)
@@ -346,8 +347,8 @@ async def test_mutating_tools_run_sequentially_after_non_mutating():
             "read": ToolResult(content="read", preview="r"),
         },
         meta={
-            "mut": ToolMeta(name="mut", display_name="Mut", mutates=True, volatile=False),
-            "read": ToolMeta(name="read", display_name="Read", mutates=False, volatile=False),
+            "mut": ToolMeta(name="mut", display_name="Mut"),
+            "read": ToolMeta(name="read", display_name="Read"),
         },
     )
     agent = _make_agent(llm, executor)
@@ -405,6 +406,128 @@ async def test_max_depth_stops_before_calling_llm():
     result = await agent.run(_msgs())
     assert result.stop_reason == StopReason.MAX_DEPTH
     assert llm.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_max_tool_calls_denies_batch_that_would_exceed_budget():
+    llm = FakeLLM([_response(tool_calls=[_tc("c1", "t", {}), _tc("c2", "t", {})])])
+    executor = FakeExecutor({"t": ToolResult(content="r", preview="r")})
+    agent = _make_agent(llm, executor, max_tool_calls=1)
+    messages = _msgs()
+
+    result = await agent.run(messages)
+
+    assert result.stop_reason == StopReason.MAX_TOOL_CALLS
+    assert executor.call_log == []
+    tool_msgs = [m for m in messages if m["role"] == "tool"]
+    assert [(m["tool_call_id"], m["content"]) for m in tool_msgs] == [
+        ("c1", "Tool call denied: max tool-call budget of 1 would be exceeded."),
+        ("c2", "Tool call denied: max tool-call budget of 1 would be exceeded."),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_max_wall_time_seconds_stops_after_tool_dispatch():
+    clock_values = iter([0.0, 0.0, 0.0, 0.0, 2.0])
+    llm = FakeLLM(
+        [
+            _response(tool_calls=[_tc("c1", "t", {})]),
+            _response(text="unreached"),
+        ]
+    )
+    executor = FakeExecutor({"t": ToolResult(content="r", preview="r")})
+    agent = _make_agent(llm, executor, max_wall_time_seconds=1.0, clock=lambda: next(clock_values))
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_WALL_TIME
+    assert llm.call_count == 1
+    assert executor.call_log == [("t", {})]
+
+
+@pytest.mark.asyncio
+async def test_max_wall_time_seconds_rechecks_after_prepare_before_model_call():
+    clock_values = iter([0.0, 0.0, 2.0])
+    llm = FakeLLM([_response(text="unreached")])
+
+    async def noop_middleware(request, next_request):
+        return await next_request(request)
+
+    agent = _make_agent(
+        llm,
+        FakeExecutor({}),
+        max_wall_time_seconds=1.0,
+        clock=lambda: next(clock_values),
+        model_request_middlewares=(noop_middleware,),
+    )
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_WALL_TIME
+    assert llm.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_max_cost_stops_after_model_response_before_tool_dispatch():
+    shared_cost = {"value": 0.0}
+
+    async def track_cost(response):
+        shared_cost["value"] = 1.0
+
+    llm = FakeLLM([_response(tool_calls=[_tc("c1", "t", {})], usage=Usage(prompt_tokens=10))])
+    executor = FakeExecutor({"t": ToolResult(content="r", preview="r")})
+    agent = _make_agent(
+        llm,
+        executor,
+        max_cost=0.5,
+        hooks=AgentHooks(on_response=track_cost),
+        cost_getter=lambda: shared_cost["value"],
+    )
+    messages = _msgs()
+
+    result = await agent.run(messages)
+
+    assert result.stop_reason == StopReason.MAX_COST
+    assert llm.call_count == 1
+    assert executor.call_log == []
+    assert [m for m in messages if m["role"] == "tool"] == [
+        {
+            "role": "tool",
+            "tool_call_id": "c1",
+            "content": "Tool call denied: max cost budget exceeded.",
+        }
+    ]
+
+
+def test_max_cost_requires_cost_source():
+    llm = FakeLLM([_response(text="ok")])
+
+    with pytest.raises(ValueError, match="max_cost requires"):
+        _make_agent(llm, FakeExecutor({}), max_cost=1.0)
+
+
+@pytest.mark.asyncio
+async def test_max_cost_stops_after_tool_dispatch_when_shared_cost_rolls_up():
+    shared_cost = {"value": 0.0}
+
+    def tool_spends(args):
+        shared_cost["value"] = 1.0
+        return ToolResult(content="r", preview="r")
+
+    llm = FakeLLM(
+        [
+            _response(tool_calls=[_tc("c1", "t", {})], usage=Usage(prompt_tokens=10)),
+            _response(text="unreached"),
+        ]
+    )
+    executor = FakeExecutor({"t": tool_spends})
+    agent = _make_agent(llm, executor, max_cost=0.5, cost_getter=lambda: shared_cost["value"])
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_COST
+    assert llm.call_count == 1
+    assert executor.call_log == [("t", {})]
 
 
 # ============================================================
@@ -641,6 +764,48 @@ async def test_cancellation_yields_cancelled_result_and_reraises():
         await task
 
 
+@pytest.mark.asyncio
+async def test_cancellation_appends_completed_and_cancelled_tool_results():
+    completed_seen = asyncio.Event()
+    slow_started = asyncio.Event()
+
+    class OneFastOneBlockedExecutor:
+        async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
+            if name == "fast":
+                return ToolResult(content="fast-result", preview="fast")
+            slow_started.set()
+            await asyncio.Event().wait()
+            return ToolResult(content="unreached", preview="slow")
+
+        def get_meta(self, name: str) -> ToolMeta:
+            return ToolMeta(name=name, display_name=name)
+
+    llm = FakeLLM([_response(tool_calls=[_tc("c1", "fast", {}), _tc("c2", "slow", {})])])
+    agent = _make_agent(llm, OneFastOneBlockedExecutor())
+    messages = _msgs()
+    events = []
+
+    async def consume():
+        async for event in agent.stream(messages):
+            events.append(event)
+            if isinstance(event, ToolCompleted) and event.tool_id == "c1":
+                completed_seen.set()
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(slow_started.wait(), timeout=1)
+    await asyncio.wait_for(completed_seen.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    tool_msgs = [m for m in messages if m["role"] == "tool"]
+    assert [(m["tool_call_id"], m["content"]) for m in tool_msgs] == [
+        ("c1", "fast-result"),
+        ("c2", "Tool call cancelled."),
+    ]
+
+
 async def _consume(gen):
     events = []
     async for e in gen:
@@ -779,7 +944,7 @@ async def test_usage_input_tokens_property_includes_cache():
 
 
 # ============================================================
-# Messages list ownership — caller owns, agent mutates
+# Messages list ownership — caller-owned message list changes during a run
 # ============================================================
 
 

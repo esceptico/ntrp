@@ -9,6 +9,7 @@ from ntrp.constants import WEB_SEARCH_MAX_RESULTS
 from ntrp.integrations.web.types import WebClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 WEB_SEARCH_DESCRIPTION = "Search the web for information. Returns titles, URLs, and content snippets."
 
@@ -110,7 +111,7 @@ web_search_tool = tool(
     display_name="WebSearch",
     description=WEB_SEARCH_DESCRIPTION,
     input_model=WebSearchInput,
-    requires={"web"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"web"})),
     execute=web_search,
 )
 
@@ -118,6 +119,6 @@ web_fetch_tool = tool(
     display_name="WebFetch",
     description=WEB_FETCH_DESCRIPTION,
     input_model=WebFetchInput,
-    requires={"web"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"web"})),
     execute=web_fetch,
 )

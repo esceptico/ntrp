@@ -10,10 +10,15 @@ from ntrp.context.models import SessionState
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.spawner import create_spawn_fn
-from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.deferred import build_deferred_tools_prompt, build_deferred_tools_prompt_for_schemas, load_tools_tool
+
+READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
+WRITE_INTERNAL_POLICY = ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True)
+READ_EXTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL)
+WRITE_EXTERNAL_POLICY = ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.EXTERNAL, requires_approval=True)
 
 
 class SearchInput(BaseModel):
@@ -32,26 +37,53 @@ def _registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register("load_tools", load_tools_tool, source="_system")
     registry.register(
-        "echo", tool(description="Always visible echo", input_model=SearchInput, execute=fake_echo), source="_system"
+        "echo",
+        tool(
+            description="Always visible echo",
+            input_model=SearchInput,
+            policy=READ_INTERNAL_POLICY,
+            execute=fake_echo,
+        ),
+        source="_system",
     )
     registry.register(
         "write_file",
-        tool(description="Write a local file", input_model=SearchInput, mutates=True, execute=fake_search),
+        tool(
+            description="Write a local file",
+            input_model=SearchInput,
+            policy=WRITE_INTERNAL_POLICY,
+            execute=fake_search,
+        ),
         source="_system",
     )
     registry.register(
         "edit_file",
-        tool(description="Edit a local file", input_model=SearchInput, mutates=True, execute=fake_search),
+        tool(
+            description="Edit a local file",
+            input_model=SearchInput,
+            policy=WRITE_INTERNAL_POLICY,
+            execute=fake_search,
+        ),
         source="_system",
     )
     registry.register(
         "background",
-        tool(description="Spawn a background agent", input_model=SearchInput, execute=fake_search),
+        tool(
+            description="Spawn a background agent",
+            input_model=SearchInput,
+            policy=READ_INTERNAL_POLICY,
+            execute=fake_search,
+        ),
         source="_background",
     )
     registry.register(
         "notify",
-        tool(description="Send a notification", input_model=SearchInput, mutates=True, execute=fake_search),
+        tool(
+            description="Send a notification",
+            input_model=SearchInput,
+            policy=WRITE_EXTERNAL_POLICY,
+            execute=fake_search,
+        ),
         source="_notifications",
     )
     registry.register(
@@ -59,14 +91,19 @@ def _registry() -> ToolRegistry:
         tool(
             description="Update persistent behavior directives",
             input_model=SearchInput,
-            mutates=True,
+            policy=WRITE_INTERNAL_POLICY,
             execute=fake_search,
         ),
         source="_directives",
     )
     registry.register(
         "slack_search",
-        tool(description="Search Slack messages across the workspace", input_model=SearchInput, execute=fake_search),
+        tool(
+            description="Search Slack messages across the workspace",
+            input_model=SearchInput,
+            policy=READ_EXTERNAL_POLICY,
+            execute=fake_search,
+        ),
         source="slack",
     )
     return registry
@@ -187,7 +224,7 @@ async def test_load_group_respects_run_allowed_names():
     registry = _registry()
     registry.register(
         "slack_post",
-        tool(description="Post to Slack", input_model=SearchInput, mutates=True, execute=fake_search),
+        tool(description="Post to Slack", input_model=SearchInput, policy=WRITE_EXTERNAL_POLICY, execute=fake_search),
         source="slack",
     )
     run = RunContext(

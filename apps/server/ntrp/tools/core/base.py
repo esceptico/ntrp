@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from ntrp.agent import ToolResult
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolPolicy
 
 
 def _inline_refs(schema: dict) -> dict:
@@ -36,20 +36,12 @@ __all__ = ["Tool", "ToolResult", "ApprovalInfo"]
 class Tool(ABC):
     display_name: str | None = None
     description: str
-    mutates: bool = False
-    volatile: bool = False
-    requires: frozenset[str] = frozenset()
+    policy: ToolPolicy
     input_model: type[BaseModel] | None = None
     # Semantic kind used by the UI to pick a rendering surface. "agent"
     # marks tools that internally spawn a sub-agent (research, etc.) so
     # the chat can render them as agent cards instead of plain rows.
     kind: str = "tool"
-    # Whether to offload large results to a temp file (return preview +
-    # path) when the content exceeds OFFLOAD_THRESHOLD. Default on; tools
-    # whose output is already paginated by the caller (or whose result
-    # is itself the answer the agent asked for and offloading would just
-    # force a re-read) can opt out by setting this to False.
-    offload: bool = True
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         return None
@@ -72,10 +64,12 @@ class Tool(ABC):
         }
 
     def get_metadata(self, name: str) -> dict:
+        policy = self.policy.model_dump(mode="json")
+        policy["permissions"] = sorted(policy["permissions"])
         return {
             "name": name,
             "display_name": self.display_name or name.replace("_", " ").title(),
             "description": self.description,
-            "mutates": self.mutates,
             "kind": self.kind,
+            "policy": policy,
         }

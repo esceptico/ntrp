@@ -6,7 +6,7 @@ from ntrp.memory.formatting import format_memory_context_render, model_memory_co
 from ntrp.memory.models import FactKind, FactLifetime, SourceType
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
 
@@ -152,8 +152,12 @@ remember_tool = tool(
     display_name="Remember",
     description=REMEMBER_DESCRIPTION,
     input_model=RememberInput,
-    mutates=True,
-    requires={"memory"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"memory"}),
+    ),
     approval=approve_remember,
     execute=remember,
 )
@@ -162,7 +166,7 @@ recall_tool = tool(
     display_name="Recall",
     description=RECALL_DESCRIPTION,
     input_model=RecallInput,
-    requires={"memory"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"memory"})),
     execute=recall,
 )
 
@@ -170,8 +174,12 @@ forget_tool = tool(
     display_name="Forget",
     description=FORGET_DESCRIPTION,
     input_model=ForgetInput,
-    mutates=True,
-    requires={"memory"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"memory"}),
+    ),
     approval=approve_forget,
     execute=forget,
 )

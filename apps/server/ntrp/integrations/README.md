@@ -49,7 +49,7 @@ When adding a new integration, decide deliberately:
 
 - Frequent, small, generally useful tools should stay always visible.
 - Large external-source toolsets should usually be deferred by integration id.
-- Mutating tools still need `approval=` or `mutates=True`; deferred loading does not replace approval.
+- State-changing tools still need `approval=` plus a `ToolPolicy` with `requires_approval=True`; deferred loading does not replace approval.
 - If the integration is deferred, make sure `GROUP_ALIASES` and `GROUP_DESCRIPTIONS` describe how the model should load it.
 
 ## Example: minimal integration
@@ -86,6 +86,7 @@ from pydantic import BaseModel, Field
 from ntrp.integrations.linear.client import LinearClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 
 class LinearSearchInput(BaseModel):
@@ -103,7 +104,7 @@ linear_tools = {
         display_name="LinearSearch",
         description="Search Linear issues by text",
         input_model=LinearSearchInput,
-        requires={"linear"},
+        policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"linear"})),
         execute=linear_search,
     )
 }

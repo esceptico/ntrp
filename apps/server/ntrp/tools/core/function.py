@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from ntrp.agent import ToolResult
 from ntrp.tools.core.base import Tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolPolicy
 
 ToolSet = dict[str, Tool]
 
@@ -27,25 +27,19 @@ class _FunctionTool(Tool):
         *,
         description: str,
         execute: ToolHandler,
+        policy: ToolPolicy,
         input_model: type[BaseModel] = EmptyInput,
         display_name: str | None = None,
-        mutates: bool = False,
-        volatile: bool = False,
-        requires: Iterable[str] = (),
         approval: ApprovalHandler | None = None,
         kind: str = "tool",
-        offload: bool = True,
     ):
         self.display_name = display_name
         self.description = description
         self.input_model = input_model
-        self.mutates = mutates
-        self.volatile = volatile
-        self.requires = frozenset(requires)
+        self.policy = policy
         self._execute = execute
         self._approval = approval
         self.kind = kind
-        self.offload = offload
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         if self._approval is None:
@@ -65,24 +59,18 @@ def tool(
     *,
     description: str,
     execute: ToolHandler,
+    policy: ToolPolicy,
     input_model: type[BaseModel] = EmptyInput,
     display_name: str | None = None,
-    mutates: bool = False,
-    volatile: bool = False,
-    requires: Iterable[str] = (),
     approval: ApprovalHandler | None = None,
     kind: str = "tool",
-    offload: bool = True,
 ) -> Tool:
     return _FunctionTool(
         description=description,
         execute=execute,
+        policy=policy,
         input_model=input_model,
         display_name=display_name,
-        mutates=mutates,
-        volatile=volatile,
-        requires=requires,
         approval=approval,
         kind=kind,
-        offload=offload,
     )

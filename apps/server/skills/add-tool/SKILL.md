@@ -14,7 +14,7 @@ Help the user create a custom tool. User tools live in `~/.ntrp/tools/` as Pytho
 Ask the user:
 1. What should the tool do?
 2. What parameters does it need?
-3. Does it modify external state? (if yes -> `mutates=True`, needs an approval function)
+3. Does it modify source-of-truth state? (if yes -> `policy.requires_approval=True`, needs an approval function)
 4. Does it need an existing source or service? (see available services below)
 
 ## Step 2: Scaffold the tool file
@@ -35,8 +35,9 @@ Use `read_file` on `~/.ntrp/tools/<tool_name>.py`, then use `bash` to apply edit
 - Fill in `display_name` and `description`
 - Update `ToolInput` fields to match the user's parameters
 - Implement the execute function
-- If `mutates=True`, uncomment and implement the approval function, then pass it as `approval=...`
-- If the tool needs a source/service, uncomment `requires={...}` and add service access (see patterns below)
+- Set `ToolPolicy.action` and `ToolPolicy.scope` to match the tool behavior
+- If `requires_approval=True`, uncomment and implement the approval function, then pass it as `approval=...`
+- If the tool needs a source/service, add `permissions=frozenset({...})` and service access (see patterns below)
 - Keep the module-level `tools = {"tool_name": tool(...)}` mapping
 
 ## Required shape
@@ -44,7 +45,7 @@ Use `read_file` on `~/.ntrp/tools/<tool_name>.py`, then use `bash` to apply edit
 ```python
 from pydantic import BaseModel, Field
 
-from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -61,6 +62,7 @@ tools = {
         display_name="MyTool",
         description="Describe when the agent should use this tool.",
         input_model=MyInput,
+        policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
         execute=my_tool,
     )
 }
@@ -89,7 +91,11 @@ tools = {
     "search_slack": tool(
         description="Search Slack messages.",
         input_model=MyInput,
-        requires={"slack"},
+        policy=ToolPolicy(
+            action=ToolAction.READ,
+            scope=ToolScope.EXTERNAL,
+            permissions=frozenset({"slack"}),
+        ),
         execute=search_slack,
     )
 }
@@ -104,7 +110,7 @@ async def recall_memory(execution: ToolExecution, args: MyInput) -> ToolResult:
 
 ## Available services
 
-Keys for `requires` and `execution.ctx.services`:
+Keys for `policy.permissions` and `execution.ctx.services`:
 
 | Key | Type | What it provides |
 |-----|------|-----------------|
@@ -129,10 +135,21 @@ Use `execution.ctx.get_client("service_id", ClientType)` for integration clients
 | `execute` | yes | Async function receiving `(ToolExecution, args)` and returning `ToolResult` |
 | `display_name` | no | Shown in the UI |
 | `input_model` | no | Pydantic `BaseModel`; omitted means no parameters |
-| `requires` | no | Service keys; tool is hidden when any is missing |
-| `mutates` | no | `True` marks the tool as mutating and runs approval middleware |
+| `policy` | yes | `ToolPolicy(action=..., scope=..., ...)`; controls visibility, approval, audit, and result handling |
 | `approval` | no | Async function returning `ApprovalInfo | None` before execution |
-| `volatile` | no | `True` disables result caching/offloading assumptions for changing data |
+
+Policy fields:
+
+| Field | Description |
+|-------|-------------|
+| `action` | `READ`, `DRAFT`, `WRITE`, or `EXECUTE` |
+| `scope` | `INTERNAL` for ntrp/local state, `EXTERNAL` for third-party systems |
+| `requires_approval` | `True` pauses for user approval before execution |
+| `permissions` | Service keys; tool is hidden when any is missing |
+| `timeout_seconds` | Optional per-tool execution timeout |
+| `audit` | Whether calls should be auditable |
+| `max_result_chars` | Optional context result limit |
+| `offload` | Whether large results can be offloaded to a reference |
 
 ## Step 4: Verify and inform
 

@@ -16,7 +16,6 @@ _SENTINEL = object()
 class _ResolvedCall:
     call: PendingToolCall
     display_name: str
-    mutates: bool
     kind: str = "tool"
 
 
@@ -42,7 +41,6 @@ class ToolRunner:
         return _ResolvedCall(
             call=call,
             display_name=meta.display_name if meta else call.name,
-            mutates=meta.mutates if meta else False,
             kind=meta.kind if meta else "tool",
         )
 

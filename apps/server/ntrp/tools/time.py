@@ -2,6 +2,7 @@ from datetime import datetime
 
 from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 
 async def current_time(execution: ToolExecution, args: EmptyInput) -> ToolResult:
@@ -13,5 +14,6 @@ async def current_time(execution: ToolExecution, args: EmptyInput) -> ToolResult
 current_time_tool = tool(
     display_name="Current Time",
     description="Get the current date and time.",
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=current_time,
 )

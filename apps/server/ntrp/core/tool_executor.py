@@ -1,12 +1,21 @@
+import asyncio
+import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
+from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
 from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import is_deferred_tool
 from ntrp.tools.executor import ToolExecutor
+
+LIVE_READ_TOOLS = frozenset({"list_background_tasks"})
+AUDIT_PREVIEW_MAX_CHARS = 500
+_logger = logging.get_logger(__name__)
 
 
 class NtrpToolExecutor:
@@ -39,25 +48,131 @@ class NtrpToolExecutor:
                 is_error=True,
             )
 
-        if self._ledger and not tool.mutates and not tool.volatile:
+        if self._ledger and tool.policy.action == ToolAction.READ and name not in LIVE_READ_TOOLS:
             identity = f"{name}:{json.dumps(args, sort_keys=True)}"
             already_read = await self._ledger.mark_accessed(identity)
         else:
             already_read = False
 
+        store = self._audit_store() if tool.policy.audit else None
+        if store:
+            await self._record_tool_call_started(store, name, args, tool_call_id, tool.policy.action, tool.policy.scope)
+
         execution = ToolExecution(tool_id=tool_call_id, tool_name=name, ctx=self._ctx)
-        result = await self._executor.registry.execute(name, execution, args)
-        if tool.offload:
+        try:
+            execute = self._executor.registry.execute(name, execution, args)
+            if tool.policy.timeout_seconds is None:
+                result = await execute
+            else:
+                try:
+                    result = await asyncio.wait_for(execute, timeout=tool.policy.timeout_seconds)
+                except TimeoutError:
+                    result = ToolResult(content="Tool call timed out.", preview="Timed out", is_error=True)
+                    if store:
+                        await self._record_tool_call_finished(store, tool_call_id, "timeout", result.preview)
+                    return result
+        except asyncio.CancelledError:
+            if store:
+                await self._record_tool_call_finished(store, tool_call_id, "cancelled", None)
+            raise
+        except Exception:
+            if store:
+                await self._record_tool_call_finished(store, tool_call_id, "error", None)
+            raise
+
+        result = self._truncate_result(result, tool.policy.max_result_chars)
+        if tool.policy.offload:
             result = self._maybe_offload(name, result)
 
         if already_read:
             result = ToolResult(
                 content=f"[Already read by another agent in this run]\n{result.content}",
                 preview=result.preview,
+                is_error=result.is_error,
                 data=result.data,
             )
 
+        if store:
+            await self._record_tool_call_finished(
+                store,
+                tool_call_id,
+                self._audit_status(result),
+                result.preview,
+            )
+
         return result
+
+    def _audit_store(self) -> Any | None:
+        store = self._ctx.services.get("store")
+        if store:
+            return store
+
+        session_service = self._ctx.services.get("session")
+        return getattr(session_service, "store", None)
+
+    def _args_hash(self, args: dict) -> str:
+        serialized = json.dumps(args, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    def _audit_preview(self, preview: str) -> str:
+        if len(preview) <= AUDIT_PREVIEW_MAX_CHARS:
+            return preview
+        return f"{preview[:AUDIT_PREVIEW_MAX_CHARS]}... [truncated]"
+
+    def _audit_status(self, result: ToolResult) -> str:
+        if result.is_error or result.preview == "Rejected":
+            return "error"
+        return "success"
+
+    async def _record_tool_call_started(
+        self,
+        store: Any,
+        name: str,
+        args: dict,
+        tool_call_id: str,
+        action: Any,
+        scope: Any,
+    ) -> None:
+        try:
+            await store.record_tool_call_started(
+                run_id=self._ctx.run.run_id,
+                session_id=self._ctx.session_id,
+                tool_call_id=tool_call_id,
+                tool_name=name,
+                action=str(action),
+                scope=str(scope),
+                args_hash=self._args_hash(args),
+            )
+        except Exception:
+            _logger.warning("Failed to record tool call audit start", exc_info=True)
+
+    async def _record_tool_call_finished(
+        self,
+        store: Any,
+        tool_call_id: str,
+        status: str,
+        result_preview: str | None,
+    ) -> None:
+        try:
+            await store.record_tool_call_finished(
+                run_id=self._ctx.run.run_id,
+                tool_call_id=tool_call_id,
+                status=status,
+                result_preview=self._audit_preview(result_preview) if result_preview is not None else None,
+            )
+        except Exception:
+            _logger.warning("Failed to record tool call audit finish", exc_info=True)
+
+    def _truncate_result(self, result: ToolResult, max_chars: int | None) -> ToolResult:
+        if max_chars is None or len(result.content) <= max_chars:
+            return result
+
+        return ToolResult(
+            content=f"{result.content[:max_chars]}... [truncated]",
+            preview=result.preview,
+            is_error=result.is_error,
+            data=result.data,
+        )
 
     def get_meta(self, name: str) -> ToolMeta | None:
         if name not in self._meta_cache:
@@ -66,8 +181,6 @@ class NtrpToolExecutor:
                 ToolMeta(
                     name=name,
                     display_name=tool.display_name or name,
-                    mutates=tool.mutates,
-                    volatile=tool.volatile,
                     kind=tool.kind,
                 )
                 if tool
@@ -95,4 +208,4 @@ class NtrpToolExecutor:
             f"Use bash(grep -n 'pattern' '{offload_path}') to find specific content, "
             f"or read_file(path='{offload_path}', offset=N, limit=M) to read a specific section."
         )
-        return ToolResult(content=compact, preview=result.preview, data=result.data)
+        return ToolResult(content=compact, preview=result.preview, is_error=result.is_error, data=result.data)

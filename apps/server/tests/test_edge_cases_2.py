@@ -21,7 +21,7 @@ from ntrp.memory.prefetch import (
     prefetch_memory_context,
 )
 from ntrp.services.chat import _retain_user_content, _time_gap_note
-from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from tests.helpers import MockCompletionClient, MockLLMClient, make_executor, make_test_executor, make_text_response
@@ -258,7 +258,13 @@ async def echo(execution: ToolExecution, args: EchoInput) -> ToolResult:
     return ToolResult(content=f"echo: {args.text}", preview="echo")
 
 
-ECHO_TOOL = tool(display_name="Echo", description="Echoes", input_model=EchoInput, execute=echo)
+ECHO_TOOL = tool(
+    display_name="Echo",
+    description="Echoes",
+    input_model=EchoInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+    execute=echo,
+)
 
 
 @pytest.mark.asyncio

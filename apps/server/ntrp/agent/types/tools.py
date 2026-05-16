@@ -17,6 +17,4 @@ class ToolResult:
 class ToolMeta:
     name: str
     display_name: str
-    mutates: bool
-    volatile: bool
     kind: str = "tool"

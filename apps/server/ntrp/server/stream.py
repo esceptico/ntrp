@@ -91,6 +91,7 @@ async def run_agent_loop(
                 if ctx.run.cancelled:
                     break
                 result = item.text
+                ctx.run.stop_reason = item.stop_reason.value
             else:
                 for sse in agent_events_to_sse(item):
                     if isinstance(sse, TextMessageEndEvent):

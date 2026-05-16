@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
+from ntrp.tools.core.types import ToolPolicy
+
 _HTTP_SCHEMES = frozenset({"http", "https"})
 
 
@@ -28,6 +30,8 @@ class MCPServerConfig:
     name: str
     transport: StdioTransport | HttpTransport
     tools: list[str] | None = None
+    tool_policies: dict[str, ToolPolicy] = field(default_factory=dict)
+    trust_tool_annotations: bool = False
 
 
 def _normalize_http_url(name: str, raw_url: object) -> str:
@@ -69,4 +73,24 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
     else:
         raise ValueError(f"MCP server {name!r}: unknown transport {transport_type!r} (expected 'stdio' or 'http')")
     tools = raw.get("tools")
-    return MCPServerConfig(name=name, transport=transport, tools=tools)
+    raw_policies = raw.get("tool_policies", {})
+    if raw_policies is None:
+        raw_policies = {}
+    if not isinstance(raw_policies, dict):
+        raise ValueError(f"MCP server {name!r}: tool_policies must be an object")
+
+    try:
+        tool_policies = {
+            tool_name: ToolPolicy.model_validate(policy)
+            for tool_name, policy in raw_policies.items()
+        }
+    except Exception as e:
+        raise ValueError(f"MCP server {name!r}: invalid tool_policies: {e}") from e
+
+    return MCPServerConfig(
+        name=name,
+        transport=transport,
+        tools=tools,
+        tool_policies=tool_policies,
+        trust_tool_annotations=bool(raw.get("trust_tool_annotations", False)),
+    )

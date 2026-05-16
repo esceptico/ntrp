@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from ntrp.integrations.slack.client import SlackClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 from ntrp.utils import truncate
 
 _TEXT_TRUNCATE = 280
@@ -184,7 +185,7 @@ slack_search_tool = tool(
     display_name="SlackSearch",
     description=SLACK_SEARCH_DESCRIPTION,
     input_model=SlackSearchInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_search,
 )
 
@@ -192,7 +193,7 @@ slack_channel_tool = tool(
     display_name="SlackChannel",
     description="Read recent message history from a Slack channel.",
     input_model=SlackChannelInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_channel,
 )
 
@@ -200,7 +201,7 @@ slack_thread_tool = tool(
     display_name="SlackThread",
     description=SLACK_THREAD_DESCRIPTION,
     input_model=SlackThreadInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_thread,
 )
 
@@ -208,7 +209,7 @@ slack_channels_tool = tool(
     display_name="SlackChannels",
     description="List Slack channels you can access. Optional query filters by name substring.",
     input_model=SlackChannelsInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_channels,
 )
 
@@ -216,7 +217,7 @@ slack_dms_tool = tool(
     display_name="SlackDMs",
     description="List open Slack direct messages (1-on-1). Shows peer name and DM channel id.",
     input_model=SlackDmsInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_dms,
 )
 
@@ -224,7 +225,7 @@ slack_dm_tool = tool(
     display_name="SlackDM",
     description=SLACK_DM_DESCRIPTION,
     input_model=SlackDmInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_dm,
 )
 
@@ -232,7 +233,7 @@ slack_users_tool = tool(
     display_name="SlackUsers",
     description="Search Slack workspace members by name, username, or email.",
     input_model=SlackUsersInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_users,
 )
 
@@ -240,6 +241,6 @@ slack_user_tool = tool(
     display_name="SlackUser",
     description="Read a Slack user's profile (name, email, title, status, timezone).",
     input_model=SlackUserInput,
-    requires={"slack"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_user,
 )

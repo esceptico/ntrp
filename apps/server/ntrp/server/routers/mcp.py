@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from ntrp.mcp.models import HttpTransport, parse_server_config
 from ntrp.mcp.oauth import OAuthOptions, clear_tokens, run_mcp_oauth
+from ntrp.mcp.tool import MCPTool
 from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.services.config import ConfigService
@@ -25,11 +26,22 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
         tools = []
         if session and session.connected:
             for t in session.all_tools:
+                policy_tool = MCPTool(
+                    name,
+                    t,
+                    session,
+                    policy=session.config.tool_policies.get(t.name),
+                    trust_annotations=session.config.trust_tool_annotations,
+                )
+                metadata = policy_tool.get_metadata(policy_tool.name)
                 tools.append(
                     {
                         "name": t.name,
+                        "full_name": policy_tool.name,
                         "description": t.description or "",
                         "enabled": allowed is None or t.name in allowed,
+                        "policy": metadata["policy"],
+                        "override": runtime.config.tool_overrides.get(policy_tool.name),
                     }
                 )
         servers.append(

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 
 class UseSkillInput(BaseModel):
@@ -42,7 +42,11 @@ use_skill_tool = tool(
     display_name="UseSkill",
     description=USE_SKILL_DESCRIPTION,
     input_model=UseSkillInput,
-    requires={"skill_registry"},
+    policy=ToolPolicy(
+        action=ToolAction.READ,
+        scope=ToolScope.INTERNAL,
+        permissions=frozenset({"skill_registry"}),
+    ),
     execute=use_skill,
 )
 
@@ -112,8 +116,12 @@ create_skill_tool = tool(
     display_name="CreateSkill",
     description=CREATE_SKILL_DESCRIPTION,
     input_model=CreateSkillInput,
-    mutates=True,
-    requires={"skill_service"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"skill_service"}),
+    ),
     approval=approve_create_skill,
     execute=create_skill,
 )

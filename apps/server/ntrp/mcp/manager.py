@@ -42,7 +42,15 @@ class MCPManager:
                 await session.connect()
                 self._sessions[name] = session
                 for mcp_tool in session.tools:
-                    self._tools.append(MCPTool(name, mcp_tool, session))
+                    self._tools.append(
+                        MCPTool(
+                            name,
+                            mcp_tool,
+                            session,
+                            policy=config.tool_policies.get(mcp_tool.name),
+                            trust_annotations=config.trust_tool_annotations,
+                        )
+                    )
                 _logger.info("MCP server %r connected", name, tools=len(session.tools))
             except BaseException as e:
                 detail = describe_mcp_error(e)

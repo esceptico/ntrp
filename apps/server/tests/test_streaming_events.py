@@ -5,7 +5,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from ntrp.agent import ReasoningContentDelta, ReasoningDelta, TextDelta, TextEnded, TextStarted
+from ntrp.agent import (
+    ReasoningContentDelta,
+    ReasoningDelta,
+    Result,
+    StopReason,
+    TextDelta,
+    TextEnded,
+    TextStarted,
+    Usage,
+)
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import create_spawn_fn
@@ -428,7 +437,7 @@ async def test_run_chat_emits_cancelled_when_task_cancelled_before_agent_loop():
         is_init=False,
         executor=SimpleNamespace(),
         tools=[],
-        config=SimpleNamespace(),
+        config=SimpleNamespace(approval_timeout_seconds=300),
         available_integrations=[],
         integration_errors={},
         session_service=NoopSessionService(),
@@ -449,6 +458,105 @@ async def test_run_chat_emits_cancelled_when_task_cancelled_before_agent_loop():
     assert run.cancel_terminal_emitted is True
     assert run.status == RunStatus.CANCELLED
     assert registry.get_active_run("sess-1") is None
+
+
+@pytest.mark.asyncio
+async def test_run_chat_persists_budget_stop_reason(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+            self.statuses = []
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, run_id, status, *, stop_reason=None, last_seq=None):
+            self.statuses.append((run_id, status, stop_reason, last_seq))
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+
+        async def stream(self, messages):
+            yield Result(text="", stop_reason=StopReason.MAX_COST, steps=0, usage=Usage())
+
+    service = RecordingSessionService()
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, SessionBus(session_id="sess-1"))
+
+    assert service.statuses[-1][1] == RunStatus.COMPLETED.value
+    assert service.statuses[-1][2] == StopReason.MAX_COST.value
+
+
+@pytest.mark.asyncio
+async def test_run_chat_does_not_overwrite_error_status(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+            self.statuses = []
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def record_chat_run_status(self, run_id, status, *, stop_reason=None, last_seq=None):
+            self.statuses.append((status, stop_reason))
+
+    service = RecordingSessionService()
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, SessionBus(session_id="sess-1"))
+
+    assert service.statuses[-1] == (RunStatus.ERROR.value, "boom")
+    assert all(status != RunStatus.COMPLETED.value for status, _ in service.statuses)
 
 
 @pytest.mark.asyncio
@@ -483,7 +591,7 @@ async def test_cancelled_run_finally_drops_pending_without_persisting():
         is_init=False,
         executor=SimpleNamespace(),
         tools=[],
-        config=SimpleNamespace(),
+        config=SimpleNamespace(approval_timeout_seconds=300),
         available_integrations=[],
         integration_errors={},
         session_service=session_service,
@@ -524,7 +632,7 @@ async def test_cancelled_run_finally_does_not_clear_newer_replay_events():
         is_init=False,
         executor=SimpleNamespace(),
         tools=[],
-        config=SimpleNamespace(),
+        config=SimpleNamespace(approval_timeout_seconds=300),
         available_integrations=[],
         integration_errors={},
         session_service=NoopSessionService(),
@@ -572,7 +680,7 @@ async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monke
         is_init=False,
         executor=SimpleNamespace(),
         tools=[],
-        config=SimpleNamespace(),
+        config=SimpleNamespace(approval_timeout_seconds=300),
         available_integrations=[],
         integration_errors={},
         session_service=NoopSessionService(),
@@ -640,6 +748,52 @@ async def test_backgrounded_drain_cancel_does_not_save_merged_output():
     await asyncio.wait_for(task, timeout=1)
 
     assert ctx.session_service.saved == []
+
+
+@pytest.mark.asyncio
+async def test_backgrounded_drain_persists_budget_stop_reason():
+    run = RunState(run_id="run-1", session_id="sess-1", backgrounded=True)
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.statuses: list[tuple[str, str | None]] = []
+
+        async def load(self, session_id=None):
+            return SessionData(state=session_state, messages=[])
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def record_chat_run_status(self, run_id, status, *, stop_reason=None, last_seq=None):
+            self.statuses.append((status, stop_reason))
+
+    async def gen():
+        yield Result(text="", stop_reason=StopReason.MAX_COST, steps=0, usage=Usage())
+
+    service = RecordingSessionService()
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(registry=SimpleNamespace(get=lambda _name: None)),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=RunRegistry(),
+    )
+
+    await _drain_backgrounded(
+        gen(),
+        SimpleNamespace(tools=[]),
+        ctx,
+        BackgroundTaskRegistry(session_id="sess-1"),
+        UsageTracker(),
+    )
+
+    assert service.statuses[-1] == (RunStatus.COMPLETED.value, StopReason.MAX_COST.value)
 
 
 @pytest.mark.asyncio

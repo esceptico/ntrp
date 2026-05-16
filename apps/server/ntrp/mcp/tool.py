@@ -1,11 +1,12 @@
-from typing import Any, ClassVar, Protocol
+from typing import Any, Protocol
 
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, ToolAnnotations
 from mcp.types import Tool as McpTool
 
 from ntrp.mcp.results import call_tool_result_to_tool_result
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 
 class MCPToolSession(Protocol):
@@ -13,14 +14,27 @@ class MCPToolSession(Protocol):
 
 
 class MCPTool(Tool):
-    requires: ClassVar[frozenset[str]] = frozenset({"mcp"})
+    policy = ToolPolicy(
+        action=ToolAction.EXECUTE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"mcp"}),
+    )
     input_model = None
-    mutates = True
 
-    def __init__(self, server_name: str, mcp_tool: McpTool, session: MCPToolSession):
+    def __init__(
+        self,
+        server_name: str,
+        mcp_tool: McpTool,
+        session: MCPToolSession,
+        *,
+        policy: ToolPolicy | None = None,
+        trust_annotations: bool = False,
+    ):
         self._server_name = server_name
         self._mcp_tool = mcp_tool
         self._session = session
+        self.policy = policy or _policy_from_annotations(mcp_tool.annotations, trust_annotations) or self.policy
 
     @property
     def name(self) -> str:
@@ -55,3 +69,23 @@ class MCPTool(Tool):
                 "required": input_schema.get("required", []),
             }
         return {"type": "function", "function": schema}
+
+
+def _policy_from_annotations(annotations: ToolAnnotations | None, trusted: bool) -> ToolPolicy | None:
+    if not trusted or annotations is None:
+        return None
+    if annotations.readOnlyHint is True:
+        return ToolPolicy(
+            action=ToolAction.READ,
+            scope=ToolScope.EXTERNAL,
+            requires_approval=False,
+            permissions=frozenset({"mcp"}),
+        )
+    if annotations.destructiveHint is True:
+        return ToolPolicy(
+            action=ToolAction.WRITE,
+            scope=ToolScope.EXTERNAL,
+            requires_approval=True,
+            permissions=frozenset({"mcp"}),
+        )
+    return None

@@ -83,6 +83,253 @@ async def test_chat_run_and_queued_message_ledger(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_tool_call_round_trip(store: SessionStore):
+    await store.record_tool_call_started(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="read_state",
+        action="read",
+        scope="internal",
+        args_hash="abc123",
+    )
+    await store.record_tool_call_finished(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="success",
+        result_preview="ok",
+    )
+
+    rows = await store.list_tool_calls(run_id="run-1")
+
+    assert rows[0]["status"] == "success"
+    assert rows[0]["result_preview"] == "ok"
+    assert rows[0]["args_hash"] == "abc123"
+    assert rows[0]["ended_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_tool_approval_request_to_approved(store: SessionStore):
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="write_file",
+        action="write",
+        scope="internal",
+        preview="write a file",
+        diff="diff",
+        expires_at="2026-05-16T12:00:00+00:00",
+    )
+    await store.resolve_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="approved",
+        result_feedback="ok",
+    )
+
+    row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+
+    assert row is not None
+    assert row["status"] == "approved"
+    assert row["result_feedback"] == "ok"
+    assert row["resolved_at"] is not None
+    assert row["preview"] == "write a file"
+    assert row["diff"] == "diff"
+
+
+@pytest.mark.asyncio
+async def test_tool_approval_request_to_rejected(store: SessionStore):
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+    await store.resolve_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="rejected",
+        result_feedback="no",
+    )
+
+    row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+
+    assert row is not None
+    assert row["status"] == "rejected"
+    assert row["result_feedback"] == "no"
+    assert row["resolved_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_tool_approval_request_to_expired(store: SessionStore):
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+        expires_at="2026-05-16T12:00:00+00:00",
+    )
+    await store.expire_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        result_feedback="Approval timed out",
+    )
+
+    row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+
+    assert row is not None
+    assert row["status"] == "expired"
+    assert row["result_feedback"] == "Approval timed out"
+    assert row["resolved_at"] is not None
+    assert row["expires_at"] == "2026-05-16T12:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_tool_approval_late_result_does_not_overwrite_expired(store: SessionStore):
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+    assert await store.expire_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        result_feedback="Approval timed out",
+    )
+
+    resolved = await store.resolve_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="approved",
+        result_feedback="late ok",
+    )
+    row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+
+    assert resolved is False
+    assert row is not None
+    assert row["status"] == "expired"
+    assert row["result_feedback"] == "Approval timed out"
+
+
+@pytest.mark.asyncio
+async def test_tool_approval_late_result_does_not_overwrite_cancelled(store: SessionStore):
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+    assert await store.resolve_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="cancelled",
+        result_feedback="Approval cancelled",
+    )
+
+    resolved = await store.resolve_tool_approval(
+        run_id="run-1",
+        tool_call_id="call-1",
+        status="approved",
+        result_feedback="late ok",
+    )
+    row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+
+    assert resolved is False
+    assert row is not None
+    assert row["status"] == "cancelled"
+    assert row["result_feedback"] == "Approval cancelled"
+
+
+@pytest.mark.asyncio
+async def test_tool_call_audit_is_scoped_by_run(store: SessionStore):
+    await store.record_tool_call_started(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="read_state",
+        action="read",
+        scope="internal",
+        args_hash="run1",
+    )
+    await store.record_tool_call_started(
+        run_id="run-2",
+        session_id="s-2",
+        tool_call_id="call-1",
+        tool_name="read_state",
+        action="read",
+        scope="internal",
+        args_hash="run2",
+    )
+
+    rows_1 = await store.list_tool_calls(run_id="run-1")
+    rows_2 = await store.list_tool_calls(run_id="run-2")
+
+    assert rows_1[0]["args_hash"] == "run1"
+    assert rows_2[0]["args_hash"] == "run2"
+
+
+@pytest.mark.asyncio
+async def test_tool_call_schema_migrates_single_column_primary_key(tmp_path):
+    conn = await database.connect(tmp_path / "legacy_sessions.db")
+    await conn.executescript(
+        """
+        CREATE TABLE tool_calls (
+            run_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            tool_call_id TEXT PRIMARY KEY,
+            tool_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            args_hash TEXT,
+            status TEXT NOT NULL,
+            result_preview TEXT,
+            started_at TEXT NOT NULL,
+            ended_at TEXT
+        );
+        INSERT INTO tool_calls (
+            run_id, session_id, tool_call_id, tool_name, action, scope,
+            args_hash, status, result_preview, started_at, ended_at
+        )
+        VALUES (
+            'run-old', 's-old', 'call-1', 'read_state', 'read', 'internal',
+            'oldhash', 'success', 'ok', '2026-05-16T00:00:00+00:00', NULL
+        );
+        """
+    )
+    await conn.commit()
+    store = SessionStore(conn)
+
+    try:
+        await store.init_schema()
+        await store.record_tool_call_started(
+            run_id="run-new",
+            session_id="s-new",
+            tool_call_id="call-1",
+            tool_name="read_state",
+            action="read",
+            scope="internal",
+            args_hash="newhash",
+        )
+
+        old_rows = await store.list_tool_calls(run_id="run-old")
+        new_rows = await store.list_tool_calls(run_id="run-new")
+        assert old_rows[0]["args_hash"] == "oldhash"
+        assert new_rows[0]["args_hash"] == "newhash"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_latest_session_checkpoint_uses_chat_run_last_seq(store: SessionStore):
     await store.record_chat_run_started("run-1", "sess-1")
     await store.record_chat_run_status("run-1", "running", last_seq=12)

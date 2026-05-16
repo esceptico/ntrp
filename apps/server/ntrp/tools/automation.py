@@ -8,7 +8,7 @@ from ntrp.automation.triggers import build_trigger
 from ntrp.events.triggers import EVENT_APPROACHING
 from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 # --- Descriptions ---
 
@@ -480,8 +480,12 @@ create_automation_tool = tool(
     display_name="CreateAutomation",
     description=CREATE_AUTOMATION_DESCRIPTION,
     input_model=CreateAutomationInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     approval=approve_create_automation,
     execute=create_automation,
 )
@@ -489,7 +493,7 @@ create_automation_tool = tool(
 list_automations_tool = tool(
     display_name="ListAutomations",
     description=LIST_AUTOMATIONS_DESCRIPTION,
-    requires={"automation"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"automation"})),
     execute=list_automations,
 )
 
@@ -497,8 +501,12 @@ update_automation_tool = tool(
     display_name="UpdateAutomation",
     description=UPDATE_AUTOMATION_DESCRIPTION,
     input_model=UpdateAutomationInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     approval=approve_update_automation,
     execute=update_automation,
 )
@@ -507,8 +515,12 @@ delete_automation_tool = tool(
     display_name="DeleteAutomation",
     description=DELETE_AUTOMATION_DESCRIPTION,
     input_model=DeleteAutomationInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     approval=approve_delete_automation,
     execute=delete_automation,
 )
@@ -517,7 +529,7 @@ get_automation_result_tool = tool(
     display_name="AutomationResult",
     description=GET_AUTOMATION_RESULT_DESCRIPTION,
     input_model=GetAutomationResultInput,
-    requires={"automation"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"automation"})),
     execute=get_automation_result,
 )
 
@@ -525,8 +537,12 @@ run_automation_tool = tool(
     display_name="RunAutomation",
     description=RUN_AUTOMATION_DESCRIPTION,
     input_model=RunAutomationInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.EXECUTE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     approval=approve_run_automation,
     execute=run_automation,
 )
@@ -607,8 +623,12 @@ schedule_wakeup_tool = tool(
     display_name="ScheduleWakeup",
     description=SCHEDULE_WAKEUP_DESCRIPTION,
     input_model=ScheduleWakeupInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     execute=schedule_wakeup,
 )
 
@@ -616,8 +636,12 @@ loop_done_tool = tool(
     display_name="LoopDone",
     description=LOOP_DONE_DESCRIPTION,
     input_model=LoopDoneInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     execute=loop_done,
 )
 
@@ -772,8 +796,12 @@ create_loop_tool = tool(
     display_name="CreateLoop",
     description=CREATE_LOOP_DESCRIPTION,
     input_model=CreateLoopInput,
-    mutates=True,
-    requires={"automation"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"automation"}),
+    ),
     approval=approve_create_loop,
     execute=create_loop,
 )

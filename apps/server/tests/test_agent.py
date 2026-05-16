@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 
 from ntrp.agent import Agent, AgentHooks, Result, StopReason, ToolCompleted, ToolStarted
-from ntrp.tools.core import EmptyInput, Tool, ToolResult, tool
+from ntrp.tools.core import EmptyInput, Tool, ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import ToolExecution
 from tests.helpers import (
     MockCompletionClient,
@@ -26,8 +26,16 @@ async def fail(execution: ToolExecution, args: EmptyInput) -> ToolResult:
     raise RuntimeError("tool crashed")
 
 
-ECHO_TOOL = tool(display_name="Echo", description="Echoes input back", input_model=EchoInput, execute=echo)
-FAIL_TOOL = tool(display_name="Fail", description="Always fails", execute=fail)
+READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
+
+ECHO_TOOL = tool(
+    display_name="Echo",
+    description="Echoes input back",
+    input_model=EchoInput,
+    policy=READ_INTERNAL_POLICY,
+    execute=echo,
+)
+FAIL_TOOL = tool(display_name="Fail", description="Always fails", policy=READ_INTERNAL_POLICY, execute=fail)
 
 
 def _make_agent(mock_client: MockCompletionClient, tools: dict[str, Tool] | None = None) -> Agent:
@@ -190,3 +198,42 @@ async def test_create_agent_returns_agent_with_hooks():
     assert isinstance(agent.hooks, AgentHooks)
     assert agent.model_request_middlewares
     assert agent.prompt_cache_key == "test"
+
+
+def test_create_agent_wires_run_budget_config():
+    from datetime import UTC, datetime
+
+    from ntrp.context.models import SessionState
+    from ntrp.core.factory import AgentConfig, create_agent
+    from ntrp.core.usage_tracker import UsageTracker
+    from ntrp.tools.executor import ToolExecutor
+
+    tracker = UsageTracker()
+    executor = ToolExecutor(get_services=dict)
+    config = AgentConfig(
+        model="claude-sonnet-4-6",
+        research_model=None,
+        max_depth=3,
+        max_iterations=4,
+        max_tool_calls=5,
+        max_wall_time_seconds=6.0,
+        max_cost=7.0,
+    )
+    session_state = SessionState(session_id="test", started_at=datetime.now(UTC))
+
+    agent = create_agent(
+        executor=executor,
+        config=config,
+        tools=[],
+        session_state=session_state,
+        run_id="test-run",
+        parent_tracker=tracker,
+    )
+
+    assert agent.max_iterations == 4
+    assert agent.max_tool_calls == 5
+    assert agent.max_wall_time_seconds == 6.0
+    assert agent.max_cost == 7.0
+    tracker.cost = 8.0
+    assert agent.cost_getter is not None
+    assert agent.cost_getter() == 8.0

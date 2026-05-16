@@ -4,6 +4,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from ntrp.context.models import SessionData, SessionState
@@ -21,12 +22,17 @@ from ntrp.events.sse import (
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
-from ntrp.server.routers.chat import _event_stream
+from ntrp.server.routers.chat import _event_stream, submit_tool_result
 from ntrp.server.runtime import get_runtime
-from ntrp.server.schemas import ChatRequest
+from ntrp.server.schemas import ChatRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.services.chat import ChatDeps, _handle_background_result, expand_skill_command
 from ntrp.skills.registry import SkillRegistry
+
+
+class _RuntimeStub:
+    def __init__(self, store: SessionStore):
+        self.session_service = type("SessionServiceStub", (), {"store": store})()
 
 
 def _parse_sse_chunk(chunk: str) -> tuple[int, str, dict]:
@@ -37,6 +43,261 @@ def _parse_sse_chunk(chunk: str) -> tuple[int, str, dict]:
     seq = int(lines[0].split(": ", 1)[1])
     assert payload["seq"] == seq
     return seq, lines[1].split(": ", 1)[1], payload
+
+
+@pytest.mark.asyncio
+async def test_tools_result_resolves_durable_approval(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    future = asyncio.get_running_loop().create_future()
+    run.pending_approvals["call-1"] = future
+    await store.record_tool_approval_requested(
+        run_id=run.run_id,
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+
+    try:
+        response = await submit_tool_result(
+            ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="ok", approved=True),
+            run_registry=registry,
+            runtime=_RuntimeStub(store),
+        )
+
+        row = await store.get_tool_approval(run_id=run.run_id, tool_call_id="call-1")
+        assert response == {"status": "ok"}
+        assert row is not None
+        assert row["status"] == "approved"
+        assert row["result_feedback"] == "ok"
+        assert future.result()["approved"] is True
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_result_resolves_durable_approval_without_active_future(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    await store.record_tool_approval_requested(
+        run_id=run.run_id,
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+
+    try:
+        response = await submit_tool_result(
+            ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="no", approved=False),
+            run_registry=registry,
+            runtime=_RuntimeStub(store),
+        )
+
+        row = await store.get_tool_approval(run_id=run.run_id, tool_call_id="call-1")
+        assert response == {"status": "ok"}
+        assert row is not None
+        assert row["status"] == "rejected"
+        assert row["result_feedback"] == "no"
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_result_resolves_durable_approval_without_active_run(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    registry = RunRegistry()
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+
+    try:
+        response = await submit_tool_result(
+            ToolResultRequest(run_id="run-1", tool_id="call-1", result="ok", approved=True),
+            run_registry=registry,
+            runtime=_RuntimeStub(store),
+        )
+
+        row = await store.get_tool_approval(run_id="run-1", tool_call_id="call-1")
+        assert response == {"status": "ok"}
+        assert row is not None
+        assert row["status"] == "approved"
+        assert row["result_feedback"] == "ok"
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_result_wakes_active_future_when_durable_update_fails():
+    class FailingStore:
+        async def get_tool_approval(self, **kwargs):
+            return {"status": "pending"}
+
+        async def resolve_tool_approval(self, **kwargs):
+            raise RuntimeError("db unavailable")
+
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    future = asyncio.get_running_loop().create_future()
+    run.pending_approvals["call-1"] = future
+
+    response = await submit_tool_result(
+        ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="ok", approved=True),
+        run_registry=registry,
+        runtime=_RuntimeStub(FailingStore()),
+    )
+
+    assert response == {"status": "ok"}
+    assert future.done()
+    assert future.result() == {
+        "type": "tool_response",
+        "tool_id": "call-1",
+        "result": "ok",
+        "approved": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_tools_result_durable_fallback_conflicts_for_terminal_approval(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    await store.record_tool_approval_requested(
+        run_id=run.run_id,
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+    assert await store.expire_tool_approval(
+        run_id=run.run_id,
+        tool_call_id="call-1",
+        result_feedback="Approval timed out",
+    )
+
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await submit_tool_result(
+                ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="ok", approved=True),
+                run_registry=registry,
+                runtime=_RuntimeStub(store),
+            )
+
+        row = await store.get_tool_approval(run_id=run.run_id, tool_call_id="call-1")
+        assert exc.value.status_code == 409
+        assert row is not None
+        assert row["status"] == "expired"
+        assert row["result_feedback"] == "Approval timed out"
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_result_active_future_conflicts_for_terminal_durable_approval(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    future = asyncio.get_running_loop().create_future()
+    run.pending_approvals["call-1"] = future
+    await store.record_tool_approval_requested(
+        run_id=run.run_id,
+        session_id="s-1",
+        tool_call_id="call-1",
+        tool_name="bash",
+        action="execute",
+        scope="internal",
+    )
+    assert await store.expire_tool_approval(
+        run_id=run.run_id,
+        tool_call_id="call-1",
+        result_feedback="Approval timed out",
+    )
+
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await submit_tool_result(
+                ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="ok", approved=True),
+                run_registry=registry,
+                runtime=_RuntimeStub(store),
+            )
+
+        row = await store.get_tool_approval(run_id=run.run_id, tool_call_id="call-1")
+        assert exc.value.status_code == 409
+        assert row is not None
+        assert row["status"] == "expired"
+        assert not future.done()
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_result_conflicts_if_future_resolves_during_durable_update():
+    class ResolvingStore:
+        def __init__(self, future):
+            self.future = future
+
+        async def get_tool_approval(self, **kwargs):
+            self.future.cancel()
+            return {"status": "pending"}
+
+        async def resolve_tool_approval(self, **kwargs):
+            raise AssertionError("durable row should not resolve after future is already done")
+
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    future = asyncio.get_running_loop().create_future()
+    run.pending_approvals["call-1"] = future
+
+    with pytest.raises(HTTPException) as exc:
+        await submit_tool_result(
+            ToolResultRequest(run_id=run.run_id, tool_id="call-1", result="ok", approved=True),
+            run_registry=registry,
+            runtime=_RuntimeStub(ResolvingStore(future)),
+        )
+
+    assert exc.value.status_code == 409
+    assert future.cancelled()
 
 
 def test_message_ingested_event_serialization():

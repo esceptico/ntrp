@@ -5,6 +5,7 @@ import { useStore } from "../../store";
 import {
   type MCPServer,
   type MCPServerConfigPayload,
+  type ToolOverrideDecision,
   type MCPTransport,
   addMCPServerApi,
   listMCPServersApi,
@@ -14,12 +15,19 @@ import {
   updateMCPServerApi,
   updateMCPToolsApi,
 } from "../../api";
+import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
+
+const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
+  { value: "approve", label: "Approve" },
+  { value: "ask", label: "Ask" },
+  { value: "deny", label: "Deny" },
+];
 
 export function MCPTab() {
   const config = useStore((s) => s.config);
@@ -425,8 +433,10 @@ function ToolsSection({
   onChanged: () => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
+  const serverConfig = useStore((s) => s.serverConfig);
   const mounted = useMountedRef();
   const { busy, error, run } = useMutationState(mounted);
+  const overrides = serverConfig?.tool_overrides ?? {};
 
   const enabledNames = useMemo(
     () => new Set(server.tools.filter((t) => t.enabled).map((t) => t.name)),
@@ -443,6 +453,21 @@ function ToolsSection({
     });
   }
 
+  function baseDecision(tool: MCPServer["tools"][number]): ToolOverrideDecision {
+    return tool.policy.requires_approval ? "ask" : "approve";
+  }
+
+  function setToolDecision(tool: MCPServer["tools"][number], decision: ToolOverrideDecision) {
+    const next = { ...overrides };
+    if (decision === baseDecision(tool)) delete next[tool.full_name];
+    else next[tool.full_name] = decision;
+    void run(async () => {
+      await updateServerConfig({ tool_overrides: next });
+      await fetchServerConfig();
+      await onChanged();
+    });
+  }
+
   return (
     <div className="grid gap-2">
       <h4 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-faint">
@@ -452,7 +477,7 @@ function ToolsSection({
         {server.tools.map((t) => {
           const checked = enabledNames.has(t.name);
           return (
-            <li key={t.name} className="flex items-start gap-3 px-3 py-2">
+            <li key={t.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-2">
               <input
                 type="checkbox"
                 checked={checked}
@@ -474,6 +499,27 @@ function ToolsSection({
                     {t.description}
                   </div>
                 )}
+              </div>
+              <div className="grid grid-cols-3 gap-1 p-1 h-8 rounded-md bg-surface-soft border border-line-soft">
+                {TOOL_DECISIONS.map((decision) => {
+                  const current = overrides[t.full_name] ?? baseDecision(t);
+                  return (
+                    <button
+                      key={decision.value}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setToolDecision(t, decision.value)}
+                      className={clsx(
+                        "px-2 rounded-[5px] text-xs font-medium transition-colors disabled:opacity-50",
+                        current === decision.value
+                          ? "bg-bg-main text-ink shadow-sm"
+                          : "text-muted hover:text-ink hover:bg-bg-main/50",
+                      )}
+                    >
+                      {decision.label}
+                    </button>
+                  );
+                })}
               </div>
             </li>
           );

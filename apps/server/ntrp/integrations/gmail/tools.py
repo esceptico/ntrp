@@ -4,7 +4,7 @@ from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.integrations.gmail.client import MultiGmailSource
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 from ntrp.utils import truncate
 
 SEND_EMAIL_DESCRIPTION = "Send an email from a specified Gmail account. Requires approval."
@@ -129,7 +129,7 @@ emails_tool = tool(
     display_name="Emails",
     description=EMAILS_DESCRIPTION,
     input_model=EmailsInput,
-    requires={"gmail"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"gmail"})),
     execute=emails,
 )
 
@@ -137,7 +137,7 @@ read_email_tool = tool(
     display_name="ReadEmail",
     description=READ_EMAIL_DESCRIPTION,
     input_model=ReadEmailInput,
-    requires={"gmail"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"gmail"})),
     execute=read_email,
 )
 
@@ -145,8 +145,12 @@ send_email_tool = tool(
     display_name="SendEmail",
     description=SEND_EMAIL_DESCRIPTION,
     input_model=SendEmailInput,
-    mutates=True,
-    requires={"gmail"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"gmail"}),
+    ),
     approval=approve_send_email,
     execute=send_email,
 )

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 
 @dataclass(frozen=True)
@@ -40,9 +41,16 @@ async def validate_arguments(call: ToolCall, next_call: ToolNext) -> ToolResult:
 
 
 async def request_approval(call: ToolCall, next_call: ToolNext) -> ToolResult:
+    if not call.tool.policy.requires_approval:
+        return await next_call(call)
+
     info = await call.tool.approval_info(call.execution, **call.arguments)
     if info is None:
-        return await next_call(call)
+        info = ApprovalInfo(
+            description=f"Approve {call.tool.display_name or call.name}",
+            preview=None,
+            diff=None,
+        )
 
     rejection = await call.execution.request_approval(
         info.description,

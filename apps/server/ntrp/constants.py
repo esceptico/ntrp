@@ -14,6 +14,9 @@ DEFAULT_LIST_LIMIT = 50
 
 AGENT_MAX_DEPTH = 8
 AGENT_MAX_ITERATIONS = None
+AGENT_MAX_TOOL_CALLS = None
+AGENT_MAX_WALL_TIME_SECONDS = None
+AGENT_MAX_COST = None
 
 BASH_TIMEOUT = 120  # seconds — safety brake against runaway commands
 

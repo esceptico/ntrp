@@ -8,6 +8,7 @@ from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 _logger = get_logger(__name__)
 _SERVICE_NAME = "notifiers"
@@ -94,6 +95,11 @@ notify_tool = tool(
     display_name="Notify",
     description=NOTIFY_DESCRIPTION,
     input_model=NotifyInput,
-    requires={"notifiers"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"notifiers"}),
+    ),
     execute=notify,
 )

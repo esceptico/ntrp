@@ -1,4 +1,4 @@
-from ntrp.agent.agent import Agent, AgentEvent
+from ntrp.agent.agent import Agent, AgentEvent, RunBudget
 from ntrp.agent.hooks import (
     AgentHooks,
     GetPendingMessagesFn,
@@ -69,6 +69,7 @@ __all__ = [
     "ReasoningStarted",
     "Result",
     "Role",
+    "RunBudget",
     "SharedLedger",
     "SpecificTool",
     "SpawnContext",

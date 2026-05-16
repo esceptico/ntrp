@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ntrp.agent import Agent, Role
+from ntrp.agent.types.events import Result
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
@@ -31,6 +32,7 @@ from ntrp.server.stream import run_agent_loop
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
+from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
@@ -557,13 +559,14 @@ async def _drain_backgrounded(
     for t in ctx.tools:
         name = t["function"]["name"]
         tool = ctx.executor.registry.get(name)
-        if tool and not tool.mutates:
+        if tool and tool.policy.action == ToolAction.READ:
             read_only.add(name)
     agent.tools = [t for t in agent.tools if t["function"]["name"] in read_only]
     messages = ctx.run.messages
     try:
-        async for _ in gen:
-            pass
+        async for item in gen:
+            if isinstance(item, Result):
+                ctx.run.stop_reason = item.stop_reason.value
     except asyncio.CancelledError:
         return
     except Exception:
@@ -602,6 +605,7 @@ async def _drain_backgrounded(
                 ctx.session_service,
                 ctx.run.run_id,
                 RunStatus.COMPLETED.value,
+                stop_reason=ctx.run.stop_reason,
                 last_seq=None,
             )
     except Exception:
@@ -680,6 +684,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     tracker = UsageTracker()
     result: str | None = None
     run_finished = False
+    run_failed = False
 
     async def _emit_cancelled_terminal() -> None:
         if run.cancel_terminal_emitted:
@@ -708,7 +713,24 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             session_state.session_id,
             task_id,
         )
-        io = IOBridge(pending_approvals=run.pending_approvals, emit=bus.emit)
+
+        async def record_approval(**kwargs) -> None:
+            await ctx.session_service.store.record_tool_approval_requested(**kwargs)
+
+        async def resolve_approval(**kwargs) -> None:
+            if kwargs.get("status") == "expired":
+                kwargs.pop("status", None)
+                await ctx.session_service.store.expire_tool_approval(**kwargs)
+            else:
+                await ctx.session_service.store.resolve_tool_approval(**kwargs)
+
+        io = IOBridge(
+            pending_approvals=run.pending_approvals,
+            emit=bus.emit,
+            record_approval=record_approval,
+            resolve_approval=resolve_approval,
+            approval_timeout_seconds=ctx.config.approval_timeout_seconds,
+        )
         agent = create_agent(
             executor=ctx.executor,
             config=ctx.config,
@@ -812,6 +834,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         return
 
     except Exception as e:
+        run_failed = True
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
         await bus.emit(RunErrorEvent(run_id=run.run_id, message=str(e), recoverable=False))
         ctx.run_registry.error_run(run.run_id)
@@ -863,10 +886,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 # checkpoint watermark so any cursor below it gets a
                 # stream_reset → history reload on reconnect.
                 bus.mark_checkpoint()
+                if run_failed:
+                    return
                 await _record_run_status(
                     ctx.session_service,
                     run.run_id,
                     RunStatus.COMPLETED.value,
+                    stop_reason=run.stop_reason,
                     last_seq=bus.next_seq - 1,
                 )
                 ctx.run_registry.complete_run(run.run_id)

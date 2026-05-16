@@ -60,7 +60,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         )
 
     executor = deps.executor
-    tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
+    tools = executor.get_tools() if request.writable else executor.get_tools(read_only=True)
 
     agent_config = deps.config
     if request.model:

@@ -113,6 +113,7 @@ def _config_response(rt: Runtime) -> dict:
         "consolidation_interval": config.consolidation_interval,
         "memory_enabled": memory_connected,
         "integrations": integrations,
+        "tool_overrides": {name: decision.value for name, decision in config.tool_overrides.items()},
     }
 
 
@@ -180,7 +181,7 @@ async def update_config(
     runtime: Runtime = Depends(get_runtime),
     cfg_svc: ConfigService = Depends(require_config_service),
 ):
-    fields = req.model_dump(exclude_unset=True)
+    fields = req.model_dump(exclude_unset=True, mode="json")
     if toggles := fields.pop("integrations", None):
         fields.update({k: v for k, v in toggles.items() if v is not None})
     try:

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import ToolExecution
 
 # from ntrp.tools.core.types import ApprovalInfo
@@ -28,8 +28,12 @@ tools = {
         display_name="__DISPLAY_NAME__",
         description="TODO: what this tool does; the LLM reads this to decide when to use it",
         input_model=ToolInput,
-        # requires={"memory"},  # uncomment if the tool needs a service
-        # mutates=True,         # uncomment if the tool modifies external state
+        policy=ToolPolicy(
+            action=ToolAction.READ,
+            scope=ToolScope.INTERNAL,
+            # requires_approval=True,  # use for tools that change source-of-truth state
+            # permissions=frozenset({"memory"}),  # use if the tool needs a service
+        ),
         # approval=approve_tool,
         execute=execute_tool,
     )

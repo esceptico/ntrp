@@ -5,6 +5,13 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ntrp.constants import (
+    AGENT_MAX_COST,
+    AGENT_MAX_DEPTH,
+    AGENT_MAX_ITERATIONS,
+    AGENT_MAX_TOOL_CALLS,
+    AGENT_MAX_WALL_TIME_SECONDS,
+)
 from ntrp.embedder import EmbeddingConfig
 from ntrp.llm.models import (
     Provider,
@@ -16,6 +23,7 @@ from ntrp.llm.models import (
 )
 from ntrp.logging import get_logger
 from ntrp.settings import NTRP_DIR, load_user_settings
+from ntrp.tools.core.types import ToolOverrideDecision
 
 _logger = get_logger(__name__)
 
@@ -57,6 +65,11 @@ PERSIST_KEYS = frozenset(
         "compression_keep_ratio",
         "summary_max_tokens",
         "mcp_servers",
+        "tool_overrides",
+        "agent_max_iterations",
+        "agent_max_tool_calls",
+        "agent_max_wall_time_seconds",
+        "agent_max_cost",
         "web_search",
         "deferred_tools",
     }
@@ -116,14 +129,20 @@ class Config(BaseSettings):
 
     # MCP servers
     mcp_servers: dict[str, dict] | None = None
+    tool_overrides: dict[str, ToolOverrideDecision] = Field(default_factory=dict)
 
     # Agent
-    max_depth: int = 8
+    max_depth: int = AGENT_MAX_DEPTH
+    agent_max_iterations: int | None = AGENT_MAX_ITERATIONS
+    agent_max_tool_calls: int | None = AGENT_MAX_TOOL_CALLS
+    agent_max_wall_time_seconds: float | None = AGENT_MAX_WALL_TIME_SECONDS
+    agent_max_cost: float | None = AGENT_MAX_COST
     # Legacy global setting. New writes use model_reasoning_efforts so each
     # chat model keeps its own thinking level.
     reasoning_effort: str | None = None
     model_reasoning_efforts: dict[str, str] = Field(default_factory=dict)
     deferred_tools: bool = True
+    approval_timeout_seconds: int = 300
 
     # Context compaction
     compression_threshold: float = 0.8

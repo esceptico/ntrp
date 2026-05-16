@@ -12,6 +12,7 @@ from ntrp.agent import (
     ReasoningStarted,
     Result,
     Role,
+    RunBudget,
     ToolCompleted,
     ToolStarted,
 )
@@ -31,6 +32,7 @@ from ntrp.events.sse import (
     TaskStartedEvent,
     agent_events_to_sse,
 )
+from ntrp.llm.models import get_model
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
@@ -65,6 +67,13 @@ _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, Reasoning
 _SALVAGE_TOOL_CHAR_LIMIT = 4000
 _SALVAGE_MAX_TOKENS = 2000
 _SALVAGE_TAIL_RESULTS = 20
+
+
+def get_response_cost(response) -> float:
+    try:
+        return get_model(response.model).pricing.cost(response.usage)
+    except ValueError:
+        return 0.0
 
 
 def _clamp_for_salvage(msg: dict) -> dict:
@@ -163,6 +172,12 @@ def create_spawn_fn(
     reasoning_effort: str | None = None,
     model_reasoning_efforts: dict[str, str] | None = None,
     compactor: Compactor | None = None,
+    max_iterations: int | None = None,
+    max_tool_calls: int | None = None,
+    max_wall_time_seconds: float | None = None,
+    max_cost: float | None = None,
+    started_at: float | None = None,
+    budget: RunBudget | None = None,
 ):
     async def spawn_child(
         calling_ctx: ToolContext,
@@ -191,6 +206,12 @@ def create_spawn_fn(
             run_id=calling_ctx.run.run_id,
             current_depth=current_depth + 1,
             max_depth=max_depth,
+            max_iterations=max_iterations,
+            max_tool_calls=max_tool_calls,
+            max_wall_time_seconds=max_wall_time_seconds,
+            max_cost=max_cost,
+            started_at=calling_ctx.run.started_at if calling_ctx.run.started_at is not None else started_at,
+            budget=calling_ctx.run.budget or budget,
             extra_auto_approve=calling_ctx.run.extra_auto_approve,
             research_model=calling_ctx.run.research_model,
             deferred_tools_enabled=calling_ctx.run.deferred_tools_enabled,
@@ -220,6 +241,12 @@ def create_spawn_fn(
             reasoning_effort=child_reasoning_effort,
             model_reasoning_efforts=model_reasoning_efforts,
             compactor=compactor,
+            max_iterations=max_iterations,
+            max_tool_calls=max_tool_calls,
+            max_wall_time_seconds=max_wall_time_seconds,
+            max_cost=max_cost,
+            started_at=child_run.started_at,
+            budget=child_run.budget,
         )
 
         child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
@@ -258,17 +285,26 @@ def create_spawn_fn(
                 ),
             )
 
+        sub_tracker = UsageTracker()
+
         sub_agent = Agent(
             tools=filtered_tools,
             client=llm_client,
             executor=child_executor,
             model=child_model,
+            max_iterations=max_iterations,
+            max_tool_calls=max_tool_calls,
+            max_wall_time_seconds=max_wall_time_seconds,
+            max_cost=max_cost,
             max_depth=max_depth,
             current_depth=current_depth + 1,
             parent_id=parent_id,
             reasoning_effort=child_reasoning_effort,
             prompt_cache_key=child_state.session_id,
             model_request_middlewares=middlewares,
+            cost_getter=(lambda: calling_ctx.parent_tracker.cost) if calling_ctx.parent_tracker is not None else None,
+            started_at=child_run.started_at,
+            budget=child_run.budget,
         )
 
         # Each spawned subagent gets its own UsageTracker so we can attribute
@@ -278,11 +314,17 @@ def create_spawn_fn(
         # parent's `usage.prompt` is what drives the on-screen "context size"
         # gauge, and the parent's context never actually held the subagent's
         # internal back-and-forth.
-        sub_tracker = UsageTracker()
         # `hasattr` so test-fake agents without hooks don't trip — they just
         # won't accumulate usage, which is the right behavior for a fake.
         if hasattr(sub_agent, "hooks"):
             sub_agent.hooks.on_response = sub_tracker.track
+            if calling_ctx.parent_tracker is not None:
+
+                async def track_parent(response) -> None:
+                    await sub_tracker.track(response)
+                    calling_ctx.parent_tracker.cost += get_response_cost(response)
+
+                sub_agent.hooks.on_response = track_parent
         # Hand sub_tracker down so a nested sub-subagent rolls its cost into
         # *this* subagent's tracker — costs cascade up one level at a time.
         child_ctx.parent_tracker = sub_tracker
@@ -332,10 +374,7 @@ def create_spawn_fn(
                 return _deterministic_salvage(child_messages, str(exc))
 
         def _settle_with(text: str) -> SpawnResult:
-            """Build the final SpawnResult and roll subagent cost up to the
-            caller (foreground only)."""
-            if calling_ctx.parent_tracker is not None:
-                calling_ctx.parent_tracker.cost += sub_tracker.cost
+            """Build the final SpawnResult for the caller."""
             return SpawnResult(
                 text=text,
                 usage=sub_tracker.usage.to_dict(),

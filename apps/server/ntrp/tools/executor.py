@@ -7,6 +7,7 @@ from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.middleware import ToolMiddleware
 from ntrp.tools.core.registry import ToolRegistry
+from ntrp.tools.core.types import ToolOverrideDecision
 from ntrp.tools.discover import discover_user_tools
 
 _logger = get_logger(__name__)
@@ -28,9 +29,14 @@ class ToolExecutor:
         mcp_tools: list[Tool] | None = None,
         get_services: Callable[[], dict[str, Any]] = dict,
         tool_middlewares: Sequence[ToolMiddleware] | None = None,
+        tool_overrides: Mapping[str, ToolOverrideDecision | str] | None = None,
     ):
         self._get_services = get_services
-        self.registry = ToolRegistry() if tool_middlewares is None else ToolRegistry(middlewares=tool_middlewares)
+        self.registry = (
+            ToolRegistry(tool_overrides=tool_overrides)
+            if tool_middlewares is None
+            else ToolRegistry(middlewares=tool_middlewares, tool_overrides=tool_overrides)
+        )
         for integration in ALL_INTEGRATIONS:
             self._register_tools(integration.tools, source=integration.id, conflict="error")
 
@@ -43,12 +49,12 @@ class ToolExecutor:
         hidden = [
             (name, tool)
             for name, tool in self.registry.tools.items()
-            if tool.requires and not tool.requires.issubset(capabilities)
+            if tool.policy.permissions and not tool.policy.permissions.issubset(capabilities)
         ]
         if hidden:
             by_req = {}
             for name, tool in hidden:
-                key = ", ".join(sorted(tool.requires))
+                key = ", ".join(sorted(tool.policy.permissions))
                 by_req.setdefault(key, []).append(name)
             for req, names in by_req.items():
                 _logger.info("Tools hidden (missing %s): %s", req, ", ".join(names))
@@ -84,11 +90,11 @@ class ToolExecutor:
 
         return await self.registry.execute(tool_name, execution, arguments)
 
-    def get_tools(self, mutates: bool | None = None) -> list[dict]:
+    def get_tools(self, read_only: bool | None = None) -> list[dict]:
         return self.registry.get_schemas(
             capabilities=frozenset(self._get_services()),
-            mutates=mutates,
+            read_only=read_only,
         )
 
     def get_tool_metadata(self) -> list[dict]:
-        return [tool.get_metadata(name) for name, tool in self.registry.tools.items()]
+        return self.registry.get_metadata()

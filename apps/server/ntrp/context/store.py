@@ -96,6 +96,48 @@ CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_session_status
 CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_run_status
     ON chat_queued_messages(run_id, status);
 
+CREATE TABLE IF NOT EXISTS tool_calls (
+    run_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    args_hash TEXT,
+    status TEXT NOT NULL,
+    result_preview TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    PRIMARY KEY (run_id, tool_call_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_run
+    ON tool_calls(run_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started
+    ON tool_calls(session_id, started_at);
+
+CREATE TABLE IF NOT EXISTS tool_approvals (
+    run_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    preview TEXT,
+    diff TEXT,
+    status TEXT NOT NULL,
+    requested_at TEXT NOT NULL,
+    resolved_at TEXT,
+    expires_at TEXT,
+    result_feedback TEXT,
+    PRIMARY KEY (run_id, tool_call_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_approvals_run
+    ON tool_approvals(run_id);
+CREATE INDEX IF NOT EXISTS idx_tool_approvals_session_status
+    ON tool_approvals(session_id, status);
+
 CREATE TABLE IF NOT EXISTS session_events (
     session_id TEXT NOT NULL,
     seq INTEGER NOT NULL,
@@ -301,6 +343,38 @@ class SessionStore:
             "created_at": row["created_at"],
         }
 
+    def _tool_call_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "run_id": row["run_id"],
+            "session_id": row["session_id"],
+            "tool_call_id": row["tool_call_id"],
+            "tool_name": row["tool_name"],
+            "action": row["action"],
+            "scope": row["scope"],
+            "args_hash": row["args_hash"],
+            "status": row["status"],
+            "result_preview": row["result_preview"],
+            "started_at": row["started_at"],
+            "ended_at": row["ended_at"],
+        }
+
+    def _tool_approval_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "run_id": row["run_id"],
+            "session_id": row["session_id"],
+            "tool_call_id": row["tool_call_id"],
+            "tool_name": row["tool_name"],
+            "action": row["action"],
+            "scope": row["scope"],
+            "preview": row["preview"],
+            "diff": row["diff"],
+            "status": row["status"],
+            "requested_at": row["requested_at"],
+            "resolved_at": row["resolved_at"],
+            "expires_at": row["expires_at"],
+            "result_feedback": row["result_feedback"],
+        }
+
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         for col in (
@@ -314,7 +388,55 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
+        await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
+
+    async def _migrate_tool_calls_schema(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(tool_calls)")
+        if not rows:
+            return
+
+        pk_columns = [row["name"] for row in sorted(rows, key=lambda row: row["pk"]) if row["pk"]]
+        if pk_columns == ["run_id", "tool_call_id"]:
+            return
+
+        await self.conn.execute("ALTER TABLE tool_calls RENAME TO tool_calls_old")
+        await self.conn.execute(
+            """
+            CREATE TABLE tool_calls (
+                run_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                tool_call_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                action TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                args_hash TEXT,
+                status TEXT NOT NULL,
+                result_preview TEXT,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                PRIMARY KEY (run_id, tool_call_id)
+            )
+            """
+        )
+        await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO tool_calls (
+                run_id, session_id, tool_call_id, tool_name, action, scope,
+                args_hash, status, result_preview, started_at, ended_at
+            )
+            SELECT
+                run_id, session_id, tool_call_id, tool_name, action, scope,
+                args_hash, status, result_preview, started_at, ended_at
+            FROM tool_calls_old
+            """
+        )
+        await self.conn.execute("DROP TABLE tool_calls_old")
+        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id)")
+        await self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started ON tool_calls(session_id, started_at)"
+        )
+        await self.conn.commit()
 
     async def _migrate_background_agent_runs_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(background_agent_runs)")
@@ -612,6 +734,151 @@ class SessionStore:
         if not rows:
             return None
         return self._chat_run_payload(rows[0])
+
+    async def record_tool_call_started(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        tool_call_id: str,
+        tool_name: str,
+        action: str,
+        scope: str,
+        args_hash: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            INSERT INTO tool_calls (
+                run_id, session_id, tool_call_id, tool_name, action, scope,
+                args_hash, status, started_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)
+            ON CONFLICT(run_id, tool_call_id) DO UPDATE SET
+                run_id = excluded.run_id,
+                session_id = excluded.session_id,
+                tool_name = excluded.tool_name,
+                action = excluded.action,
+                scope = excluded.scope,
+                args_hash = excluded.args_hash,
+                status = excluded.status,
+                result_preview = NULL,
+                started_at = excluded.started_at,
+                ended_at = NULL
+            """,
+            (run_id, session_id, tool_call_id, tool_name, action, scope, args_hash, now),
+        )
+        await self.conn.commit()
+
+    async def record_tool_call_finished(
+        self,
+        *,
+        run_id: str,
+        tool_call_id: str,
+        status: str,
+        result_preview: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            UPDATE tool_calls
+            SET status = ?, result_preview = ?, ended_at = ?
+            WHERE run_id = ? AND tool_call_id = ?
+            """,
+            (status, result_preview, now, run_id, tool_call_id),
+        )
+        await self.conn.commit()
+
+    async def list_tool_calls(self, *, run_id: str) -> list[dict]:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT * FROM tool_calls WHERE run_id = ? ORDER BY started_at ASC",
+            (run_id,),
+        )
+        return [self._tool_call_payload(row) for row in rows]
+
+    async def record_tool_approval_requested(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        tool_call_id: str,
+        tool_name: str,
+        action: str,
+        scope: str,
+        preview: str | None = None,
+        diff: str | None = None,
+        expires_at: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            INSERT INTO tool_approvals (
+                run_id, session_id, tool_call_id, tool_name, action, scope,
+                preview, diff, status, requested_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            ON CONFLICT(run_id, tool_call_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                tool_name = excluded.tool_name,
+                action = excluded.action,
+                scope = excluded.scope,
+                preview = excluded.preview,
+                diff = excluded.diff,
+                status = excluded.status,
+                requested_at = excluded.requested_at,
+                resolved_at = NULL,
+                expires_at = excluded.expires_at,
+                result_feedback = NULL
+            """,
+            (run_id, session_id, tool_call_id, tool_name, action, scope, preview, diff, now, expires_at),
+        )
+        await self.conn.commit()
+
+    async def resolve_tool_approval(
+        self,
+        *,
+        run_id: str,
+        tool_call_id: str,
+        status: str,
+        result_feedback: str | None = None,
+    ) -> bool:
+        now = datetime.now(UTC).isoformat()
+        cursor = await self.conn.execute(
+            """
+            UPDATE tool_approvals
+            SET status = ?,
+                resolved_at = COALESCE(resolved_at, ?),
+                result_feedback = COALESCE(?, result_feedback)
+            WHERE run_id = ? AND tool_call_id = ?
+              AND status = 'pending'
+            """,
+            (status, now, result_feedback, run_id, tool_call_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def expire_tool_approval(
+        self,
+        *,
+        run_id: str,
+        tool_call_id: str,
+        result_feedback: str | None = None,
+    ) -> bool:
+        return await self.resolve_tool_approval(
+            run_id=run_id,
+            tool_call_id=tool_call_id,
+            status="expired",
+            result_feedback=result_feedback,
+        )
+
+    async def get_tool_approval(self, *, run_id: str, tool_call_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT * FROM tool_approvals WHERE run_id = ? AND tool_call_id = ?",
+            (run_id, tool_call_id),
+        )
+        if not rows:
+            return None
+        return self._tool_approval_payload(rows[0])
 
     async def mark_interrupted_chat_runs(self) -> int:
         now = datetime.now(UTC).isoformat()

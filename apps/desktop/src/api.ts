@@ -68,6 +68,29 @@ export interface HealthCheck {
   hasProviders: boolean;
 }
 
+export type ToolOverrideDecision = "approve" | "ask" | "deny";
+
+export interface ToolPolicyMetadata {
+  action: "read" | "draft" | "write" | "execute";
+  scope: "internal" | "external";
+  requires_approval: boolean;
+  permissions: string[];
+  timeout_seconds: number | null;
+  audit: boolean;
+  max_result_chars: number | null;
+  offload: boolean;
+}
+
+export interface ToolMetadata {
+  name: string;
+  display_name: string;
+  description: string;
+  kind: string;
+  source?: string | null;
+  policy: ToolPolicyMetadata;
+  override?: ToolOverrideDecision;
+}
+
 export interface ApiBridgeResponse {
   ok: boolean;
   status: number;
@@ -755,8 +778,11 @@ export type MCPTransport = "stdio" | "http";
 
 export interface MCPTool {
   name: string;
+  full_name: string;
   description: string;
   enabled: boolean;
+  policy: ToolPolicyMetadata;
+  override?: ToolOverrideDecision;
 }
 
 export interface MCPServer {
@@ -1065,6 +1091,7 @@ export interface ServerConfig {
   consolidation_interval: number;
   memory_enabled: boolean;
   integrations: Record<string, Record<string, unknown>>;
+  tool_overrides: Record<string, ToolOverrideDecision>;
 }
 
 export interface ModelGroup {
@@ -1102,6 +1129,7 @@ export type ServerConfigPatch = Partial<{
   summary_max_tokens: number;
   consolidation_interval: number;
   web_search: "auto" | "exa" | "ddgs" | "none";
+  tool_overrides: Record<string, ToolOverrideDecision>;
   integrations: { google?: boolean | null; memory?: boolean | null };
 }>;
 
@@ -1115,6 +1143,13 @@ function isStringArray(value: unknown): value is string[] {
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function isToolOverrideRecord(value: unknown): value is Record<string, ToolOverrideDecision> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => item === "approve" || item === "ask" || item === "deny")
+  );
 }
 
 function isStringArrayRecord(value: unknown): value is Record<string, string[]> {
@@ -1135,6 +1170,11 @@ export function parseServerConfig(data: unknown): ServerConfig {
     isStringRecord(data.model_reasoning_efforts),
     "Invalid /config response: missing model_reasoning_efforts",
   );
+  assertServerContract(
+    data.tool_overrides === undefined || isToolOverrideRecord(data.tool_overrides),
+    "Invalid /config response: invalid tool_overrides",
+  );
+  if (data.tool_overrides === undefined) data.tool_overrides = {};
   return data as unknown as ServerConfig;
 }
 
@@ -1158,6 +1198,10 @@ export async function patchServerConfig(
     body: JSON.stringify(patch),
   });
   return parseServerConfig(data);
+}
+
+export async function listToolsApi(config: AppConfig): Promise<{ tools: ToolMetadata[] }> {
+  return apiWithConfig(config, "/tools");
 }
 
 // ─── Automations ───────────────────────────────────────────────────

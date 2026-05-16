@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 CALENDAR_DESCRIPTION = """Browse or search calendar events.
 
@@ -265,7 +265,7 @@ calendar_tool = tool(
     display_name="Calendar",
     description=CALENDAR_DESCRIPTION,
     input_model=CalendarInput,
-    requires={"calendar"},
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"calendar"})),
     execute=calendar,
 )
 
@@ -273,8 +273,12 @@ create_calendar_event_tool = tool(
     display_name="CreateEvent",
     description=CREATE_CALENDAR_EVENT_DESCRIPTION,
     input_model=CreateCalendarEventInput,
-    mutates=True,
-    requires={"calendar"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"calendar"}),
+    ),
     approval=approve_create_calendar_event,
     execute=create_calendar_event,
 )
@@ -283,8 +287,12 @@ edit_calendar_event_tool = tool(
     display_name="EditEvent",
     description=EDIT_CALENDAR_EVENT_DESCRIPTION,
     input_model=EditCalendarEventInput,
-    mutates=True,
-    requires={"calendar"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"calendar"}),
+    ),
     approval=approve_edit_calendar_event,
     execute=edit_calendar_event,
 )
@@ -293,8 +301,12 @@ delete_calendar_event_tool = tool(
     display_name="DeleteEvent",
     description=DELETE_CALENDAR_EVENT_DESCRIPTION,
     input_model=DeleteCalendarEventInput,
-    mutates=True,
-    requires={"calendar"},
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"calendar"}),
+    ),
     approval=approve_delete_calendar_event,
     execute=delete_calendar_event,
 )

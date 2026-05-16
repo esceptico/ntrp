@@ -21,18 +21,24 @@ async def dispatch_tools(
                 results[event.tool_id] = event.result
             yield event
     except asyncio.CancelledError:
-        _append_results(messages, raw_tool_calls, results)
+        _append_results(messages, raw_tool_calls, results, missing_content="Tool call cancelled.")
         raise
 
-    _append_results(messages, raw_tool_calls, results)
+    _append_results(messages, raw_tool_calls, results, missing_content="Tool call result missing.")
 
 
-def _append_results(messages: list[dict], tool_calls: list[ToolCall], results: dict[str, str]) -> None:
+def _append_results(
+    messages: list[dict],
+    tool_calls: list[ToolCall],
+    results: dict[str, str],
+    *,
+    missing_content: str,
+) -> None:
     for tc in tool_calls:
         messages.append(
             {
                 "role": Role.TOOL,
                 "tool_call_id": tc.id,
-                "content": results.get(tc.id, "Error: tool execution failed"),
+                "content": results.get(tc.id, missing_content),
             }
         )

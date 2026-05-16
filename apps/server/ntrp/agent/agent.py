@@ -1,5 +1,7 @@
 import asyncio
-from collections.abc import AsyncGenerator, Sequence
+import time
+from collections.abc import AsyncGenerator, Callable, Sequence
+from dataclasses import dataclass
 from uuid import uuid4
 
 from ntrp.agent.hooks import AgentHooks
@@ -22,7 +24,7 @@ from ntrp.agent.types.events import (
     ToolCompleted,
     ToolStarted,
 )
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta
+from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, Role
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
@@ -42,6 +44,11 @@ AgentEvent = (
 )
 
 
+@dataclass
+class RunBudget:
+    tool_calls: int = 0
+
+
 class Agent:
     def __init__(
         self,
@@ -50,6 +57,9 @@ class Agent:
         executor: AgentToolExecutor,
         model: str,
         max_iterations: int | None = None,
+        max_tool_calls: int | None = None,
+        max_wall_time_seconds: float | None = None,
+        max_cost: float | None = None,
         max_depth: int = 3,
         current_depth: int = 0,
         parent_id: str | None = None,
@@ -58,11 +68,22 @@ class Agent:
         prompt_cache_key: str | None = None,
         hooks: AgentHooks | None = None,
         model_request_middlewares: Sequence[ModelRequestMiddleware] = (),
+        cost_calculator: Callable[[CompletionResponse], float] | None = None,
+        cost_getter: Callable[[], float] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        started_at: float | None = None,
+        budget: RunBudget | None = None,
     ):
+        if max_cost is not None and cost_calculator is None and cost_getter is None:
+            raise ValueError("max_cost requires cost_calculator or cost_getter")
+
         self.tools = tools
         self.client = client
         self.model = model
         self.max_iterations = max_iterations
+        self.max_tool_calls = max_tool_calls
+        self.max_wall_time_seconds = max_wall_time_seconds
+        self.max_cost = max_cost
         self.max_depth = max_depth
         self.current_depth = current_depth
         self.parent_id = parent_id
@@ -71,16 +92,23 @@ class Agent:
         self.prompt_cache_key = prompt_cache_key
         self.hooks = hooks or AgentHooks()
         self.model_request_middlewares = tuple(model_request_middlewares)
+        self.cost_calculator = cost_calculator
+        self.cost_getter = cost_getter
+        self._clock = clock
+        self._started_at = started_at
+        self._budget = budget or RunBudget()
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
         self._last_text_id: str | None = None
         self._usage = Usage()
+        self._cost = 0.0
 
     async def stream(self, messages: list[dict]) -> AsyncGenerator[AgentEvent]:
         if self.current_depth >= self.max_depth:
             yield self._result("", StopReason.MAX_DEPTH, 0)
             return
 
+        started_at = self._started_at if self._started_at is not None else self._clock()
         step = 0
         result_text = ""
         try:
@@ -91,7 +119,15 @@ class Agent:
                     yield self._result(result_text, StopReason.MAX_ITERATIONS, step)
                     return
 
+                if reason := self._budget_stop_reason(started_at):
+                    yield self._result(result_text, reason, step)
+                    return
+
                 step_model, step_tools, step_tool_choice, step_reasoning_effort = await self._prepare(step, messages)
+
+                if reason := self._budget_stop_reason(started_at):
+                    yield self._result(result_text, reason, step)
+                    return
 
                 async for event in self._call_llm(
                     messages, step_model, step_tools, step_tool_choice, step_reasoning_effort
@@ -99,6 +135,12 @@ class Agent:
                     yield event
 
                 response_message = self._last_response.choices[0].message
+                if reason := self._budget_stop_reason(started_at):
+                    if response_message.tool_calls:
+                        self._append_budget_denials(messages, response_message.tool_calls, reason)
+                    yield self._result(result_text, reason, step)
+                    return
+
                 if not response_message.tool_calls:
                     # A user message may have arrived during this LLM turn.
                     # Drain it before declaring the run finished so the agent
@@ -120,8 +162,18 @@ class Agent:
                     )
 
                 calls = parse_tool_calls(response_message.tool_calls)
+                if self._would_exceed_tool_budget(len(calls)):
+                    self._append_budget_denials(messages, response_message.tool_calls, StopReason.MAX_TOOL_CALLS)
+                    yield self._result(result_text, StopReason.MAX_TOOL_CALLS, step)
+                    return
+                self._record_tool_calls(len(calls))
+
                 async for event in dispatch_tools(self._runner, messages, calls, response_message.tool_calls):
                     yield event
+
+                if reason := self._budget_stop_reason(started_at):
+                    yield self._result(result_text, reason, step)
+                    return
 
                 step += 1
                 if self.hooks.on_step_finish:
@@ -147,6 +199,41 @@ class Agent:
 
     def _result(self, text: str, reason: StopReason, step: int) -> Result:
         return Result(text=text, stop_reason=reason, steps=step, usage=self._usage)
+
+    def _budget_stop_reason(self, started_at: float) -> StopReason | None:
+        if self.max_tool_calls is not None and self._budget.tool_calls >= self.max_tool_calls:
+            return StopReason.MAX_TOOL_CALLS
+        if self.max_wall_time_seconds is not None and self._clock() - started_at >= self.max_wall_time_seconds:
+            return StopReason.MAX_WALL_TIME
+        if self.max_cost is not None and self._current_cost() >= self.max_cost:
+            return StopReason.MAX_COST
+        return None
+
+    def _current_cost(self) -> float:
+        if self.cost_getter:
+            return self.cost_getter()
+        return self._cost
+
+    def _would_exceed_tool_budget(self, call_count: int) -> bool:
+        return self.max_tool_calls is not None and self._budget.tool_calls + call_count > self.max_tool_calls
+
+    def _record_tool_calls(self, call_count: int) -> None:
+        self._budget.tool_calls += call_count
+
+    def _append_budget_denials(self, messages: list[dict], tool_calls, reason: StopReason) -> None:
+        content = self._budget_denial_content(reason)
+        for tc in tool_calls:
+            messages.append({"role": Role.TOOL, "tool_call_id": tc.id, "content": content})
+
+    def _budget_denial_content(self, reason: StopReason) -> str:
+        if reason == StopReason.MAX_TOOL_CALLS:
+            assert self.max_tool_calls is not None
+            return f"Tool call denied: max tool-call budget of {self.max_tool_calls} would be exceeded."
+        if reason == StopReason.MAX_WALL_TIME:
+            return "Tool call denied: max wall-time budget exceeded."
+        if reason == StopReason.MAX_COST:
+            return "Tool call denied: max cost budget exceeded."
+        return f"Tool call denied: {reason.value}."
 
     async def _drain_pending(self, messages: list[dict]) -> None:
         if not self.hooks.get_pending_messages:
@@ -267,6 +354,8 @@ class Agent:
 
         self._last_response = response
         self._usage += response.usage
+        if self.cost_calculator:
+            self._cost += self.cost_calculator(response)
         if reasoning_started:
             yield ReasoningEnded(depth=self.current_depth, parent_id=self.parent_id, message_id=reasoning_id)
         elif reasoning := response.choices[0].message.reasoning_content:

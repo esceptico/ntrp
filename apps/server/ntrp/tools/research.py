@@ -7,6 +7,7 @@ from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
 from ntrp.logging import get_logger
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 _logger = get_logger(__name__)
 
@@ -104,7 +105,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
     if args.depth == "quick" or remaining <= 1:
         exclude.add("research")
 
-    tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
+    tools = ctx.registry.get_schemas(read_only=True, capabilities=ctx.capabilities)
     tools = [t for t in tools if t["function"]["name"] not in exclude]
     prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
     try:
@@ -132,6 +133,7 @@ research_tool = tool(
     display_name="Research",
     description=RESEARCH_DESCRIPTION,
     input_model=ResearchInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=research,
     kind="agent",
 )

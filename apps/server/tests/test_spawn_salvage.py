@@ -6,7 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ntrp.agent import Choice, CompletionResponse, Message, ReasoningContentDelta, Usage
+from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
+from ntrp.agent.types.tools import ToolMeta
+from ntrp.agent.types.tools import ToolResult as AgentToolResult
 from ntrp.context.models import SessionState
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import (
@@ -18,6 +20,11 @@ from ntrp.core.spawner import (
 from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
+
+
+class ParentTracker:
+    def __init__(self, cost: float = 0.0):
+        self.cost = cost
 
 
 def test_clamp_for_salvage_leaves_short_messages_alone():
@@ -157,6 +164,140 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spawn_cost_budget_uses_parent_spend(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            raise AssertionError("child should stop before model call")
+            yield  # pragma: no cover
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+        parent_tracker=ParentTracker(cost=1.0),
+    )
+
+    spawn = create_spawn_fn(
+        executor=executor,
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        max_cost=1.0,
+    )
+    result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
+
+    assert result.text == ""
+
+
+@pytest.mark.asyncio
+async def test_spawn_tool_call_budget_is_shared_with_parent(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            raise AssertionError("child should stop before model call")
+            yield  # pragma: no cover
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3, max_tool_calls=1),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+    assert ctx.run.budget is not None
+    ctx.run.budget.tool_calls = 1
+
+    spawn = create_spawn_fn(
+        executor=executor,
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        max_tool_calls=1,
+    )
+    result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
+
+    assert result.text == ""
+
+
+@pytest.mark.asyncio
+async def test_spawn_wall_time_budget_uses_parent_start(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            raise AssertionError("child should stop before model call")
+            yield  # pragma: no cover
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3, started_at=0.0),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    spawn = create_spawn_fn(
+        executor=executor,
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        max_wall_time_seconds=0.0,
+    )
+    result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
+
+    assert result.text == ""
+
+
+@pytest.mark.asyncio
+async def test_background_spawn_rolls_cost_into_parent_tracker(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(prompt_tokens=10),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    parent_tracker = ParentTracker(cost=0.0)
+    executor = make_executor()
+    bg_registry = BackgroundTaskRegistry(session_id="test")
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=bg_registry,
+        parent_tracker=parent_tracker,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="claude-sonnet-4-6", max_depth=3, current_depth=0)
+    result = await spawn(ctx, "task", system_prompt="sys", tools=[], background=True, timeout=1)
+    task_id = result.text.removeprefix("Background task ").split(" started:", 1)[0]
+    task = bg_registry._tasks[task_id]
+
+    await task
+
+    assert parent_tracker.cost > 0
+    assert task.done()
+    assert task_id not in bg_registry._tasks
+
+
+@pytest.mark.asyncio
 async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
     """End-to-end: the inner agent's LLM call raises, and spawn returns
     a partial-summary string instead of letting the exception escape."""
@@ -277,9 +418,6 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
     then the LLM dies on the next iteration. Salvage must see the tool
     results that were already accumulated — that's the entire point of
     the feature (don't throw away ~200 tool calls of paid work)."""
-    from ntrp.agent import FunctionCall, ToolCall
-    from ntrp.agent.types.tools import ToolMeta, ToolResult as AgentToolResult
-
     captured_salvage_messages: list = []
 
     class FakeLLM:
@@ -342,7 +480,7 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
             return AgentToolResult(content="apricots are good", preview="apricots", is_error=False)
 
         def get_meta(self, name):
-            return ToolMeta(name="finder", display_name="Finder", mutates=False, volatile=False, kind="tool")
+            return ToolMeta(name="finder", display_name="Finder", kind="tool")
 
     monkeypatch.setattr(
         "ntrp.core.spawner.NtrpToolExecutor", lambda *_args, **_kwargs: FinderExecutor()

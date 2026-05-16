@@ -11,7 +11,7 @@ import ntrp.database as database
 from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.tools.core import EmptyInput, Tool, ToolResult, tool
+from ntrp.tools.core import EmptyInput, Tool, ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, ToolExecution
 from tests.helpers import (
     MockCompletionClient,
@@ -30,7 +30,12 @@ async def slow(execution: ToolExecution, args: EmptyInput) -> ToolResult:
     return ToolResult(content="done", preview="done")
 
 
-SLOW_TOOL = tool(display_name="Slow", description="Takes a while", execute=slow)
+SLOW_TOOL = tool(
+    display_name="Slow",
+    description="Takes a while",
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+    execute=slow,
+)
 
 
 def _make_agent(client, tools: dict[str, Tool] | None = None) -> Agent:

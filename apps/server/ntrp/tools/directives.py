@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ntrp.settings import NTRP_DIR
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
 DIRECTIVES_PATH = NTRP_DIR / "directives.json"
 
@@ -44,7 +44,7 @@ set_directives_tool = tool(
     display_name="Set Directives",
     description=DESCRIPTION,
     input_model=SetDirectivesInput,
-    mutates=True,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True),
     approval=approve_set_directives,
     execute=set_directives,
 )
