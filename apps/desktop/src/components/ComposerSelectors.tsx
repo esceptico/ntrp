@@ -22,21 +22,6 @@ function shortModelLabel(model: string): string {
   return slash >= 0 ? model.slice(slash + 1) : model;
 }
 
-export function useOutsideClick(
-  ref: React.RefObject<HTMLElement | null>,
-  open: boolean,
-  onClose: () => void,
-) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, ref, onClose]);
-}
-
 export function ModelReasoningPicker({
   buttonLabel,
   currentModel,

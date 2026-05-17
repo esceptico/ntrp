@@ -99,3 +99,21 @@ export function useTimeTicker(intervalMs = 30_000): void {
     return () => clearInterval(id);
   }, [intervalMs]);
 }
+
+/** Calls `onClose` when a `mousedown` lands outside the element referenced
+ *  by `ref`. No-op when `open` is false (keeps the listener off when it
+ *  isn't needed). Used by popovers, dropdowns, and command pickers. */
+export function useOutsideClick(
+  ref: RefObject<HTMLElement | null>,
+  open: boolean,
+  onClose: () => void,
+): void {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, ref, onClose]);
+}
