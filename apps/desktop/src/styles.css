@@ -190,6 +190,21 @@
   color-scheme: dark;
 }
 
+/* Unified focus ring — keyboard-only via :focus-visible.
+   Per Phase 3 of the design-system tokens spec: every interactive
+   primitive resolves to --focus-ring unless it owns a custom rule
+   (e.g. .glass-switch composes its track shadow with the ring). */
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="switch"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 * {
   -electron-corner-smoothing: system-ui;
 }
@@ -707,7 +722,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 @layer components {
 .glass-surface {
   --glass-radius: 16px;
-  --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
 
   position: relative;
   isolation: isolate;
@@ -723,14 +737,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      as light catching the wet rim of the glass. NOT a static perimeter
      ring (that's "outline drawn on a card"). Light theme amplifies the
      rim 6× vs dark because translucent white over warm cream needs more
-     contrast to register; dark theme is already high-contrast. */
+     contrast to register; dark theme is already high-contrast.
+     Token-driven via --glass-drop-{light,dark} + --glass-rim-{light,dark}
+     (Phase 3 of the design-system tokens spec). */
   box-shadow:
-    var(--glass-drop),
-    inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-rim, 0.6));
+    var(--glass-drop-light),
+    var(--glass-rim-light);
 }
 .glass-surface[data-tone="dark"],
 :root.dark .glass-surface {
-  --glass-drop: 0 4px 14px -4px rgba(0, 0, 0, 0.32);
   /* Dark glass: tint is the theme's dark surface color at the slider's
      opacity (0 = transparent → see backdrop, 1 = solid dark surface).
      Same slider semantics as light, just a theme-appropriate base. */
@@ -755,12 +770,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
      so the slider value behaves consistently across themes — at slider
      60, light gets 0.6 alpha, dark gets 0.1 alpha. */
   box-shadow:
-    var(--glass-drop),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    inset 0 1px 0 0 rgba(255, 255, 255, calc(var(--gp-rim, 0.6) / 6));
+    var(--glass-drop-dark),
+    var(--glass-rim-dark);
 }
 .glass-surface[data-tone="light"] {
-  --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
   background: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
   backdrop-filter:
     blur(var(--gp-blur, 20px))
@@ -768,6 +781,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-backdrop-filter:
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
+  box-shadow:
+    var(--glass-drop-light),
+    var(--glass-rim-light);
 }
 
 /* ─── Linen material ─────────────────────────────────────────
@@ -783,10 +799,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-image: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  /* Modal-tier stacked shadow + hairline ink ring, both token-driven. */
   box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.04),
-    0 8px 24px rgba(20, 24, 28, 0.06),
-    inset 0 0 0 1px rgba(20, 24, 28, calc(0.08 * var(--gp-rim, 0.6) / 0.6));
+    var(--shadow-linen-modal),
+    inset 0 0 0 1px var(--ring-light);
 }
 :root[data-material="linen"].dark .glass-surface,
 :root[data-material="linen"] .glass-surface[data-tone="dark"] {
@@ -795,8 +811,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow:
-    0 4px 14px -4px rgba(0, 0, 0, 0.42),
-    inset 0 0 0 1px rgba(255, 255, 255, calc(0.06 * var(--gp-rim, 0.6) / 0.6));
+    var(--shadow-linen-modal),
+    inset 0 0 0 1px var(--ring-dark);
 }
 /* GlassToggle — self-contained segmented control. Variables are
    consumed by the component's inline styles; this block just resolves
@@ -931,6 +947,65 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .glass-radius-md { --glass-radius: 14px; }  /* panels: composer, modals, popovers, sidebars */
 .glass-radius-lg { --glass-radius: 18px; }  /* message bubbles, hero-ish surfaces */
 .glass-radius-pill { --glass-radius: 999px; }
+
+/* ─── Tokenized surface utilities (Phase 3) ──────────────────
+   Named handles for recurring inline patterns. Each one wraps the
+   right combination of ring + shadow + radius tokens so consumers
+   stop reaching for literal Tailwind classes. */
+
+/* Settings rails — outer panel containing rows of settings.
+   Replaces `rounded-[12px] border border-line-soft bg-bg-main/30
+   overflow-hidden` (consumers keep their own divide-y for content). */
+.surface-rail {
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--color-bg-main) 30%, transparent);
+  box-shadow: inset 0 0 0 1px var(--ring-light-soft);
+  overflow: hidden;
+}
+
+/* Popover surfaces — floating menus / dropdowns.
+   Standalone: a linen-style popover panel.
+   Combined with `.glass-surface`: in glass mode it just nudges the
+   radius down to popover-tier (10px) and leaves the glass recipe
+   intact; in linen mode it downshifts the modal-tier stacked shadow
+   that `.glass-surface` applies to the popover tier — closer to the
+   content, smaller spread. */
+.surface-popover:not(.glass-surface) {
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow:
+    var(--shadow-linen-popover),
+    inset 0 0 0 1px var(--ring-light);
+}
+.glass-surface.surface-popover {
+  --glass-radius: 10px;
+}
+:root[data-material="linen"] .glass-surface.surface-popover {
+  box-shadow:
+    var(--shadow-linen-popover),
+    inset 0 0 0 1px var(--ring-light);
+}
+:root[data-material="linen"].dark .glass-surface.surface-popover,
+:root[data-material="linen"] .glass-surface.surface-popover[data-tone="dark"] {
+  box-shadow:
+    var(--shadow-linen-popover),
+    inset 0 0 0 1px var(--ring-dark);
+}
+
+/* Cards — resting state with subtle lift; hovering deepens the shadow. */
+.surface-card {
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow:
+    var(--shadow-linen-rest),
+    inset 0 0 0 1px var(--ring-light-soft);
+  transition: box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.surface-card:hover {
+  box-shadow:
+    var(--shadow-linen-hover),
+    inset 0 0 0 1px var(--ring-light);
+}
 }
 /* Composer focus state: bump the framework's specular rim brighter
    instead of replacing it with a uniform ring. Same edge vocabulary

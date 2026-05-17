@@ -50,7 +50,7 @@ export function AppearanceTab() {
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+      <section className="surface-rail divide-y divide-line-soft/50">
         <SettingRow
           title="Mode"
           hint="Light, Dark, or follow your system preference."
@@ -86,7 +86,7 @@ export function AppearanceTab() {
         />
       </section>
 
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+      <section className="surface-rail divide-y divide-line-soft/50">
         <SettingRow
           title="Quick capture shortcut"
           hint="Global hotkey to summon the floating composer from anywhere. Enter creates a new session and sends the message."
@@ -94,7 +94,7 @@ export function AppearanceTab() {
         />
       </section>
 
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+      <section className="surface-rail divide-y divide-line-soft/50">
         <SettingRow
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
@@ -126,7 +126,7 @@ export function AppearanceTab() {
           (Tint/Blur/Saturate apply). Linen = solid + hairline ring +
           drop shadow (only Rim applies). Sliders are only rendered
           when they have effect — no dimmed dead UI. */}
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+      <section className="surface-rail divide-y divide-line-soft/50">
         <SettingRow
           title="Glass material"
           hint="Translucent surfaces with backdrop blur. Off = Linen — solid panels with a hairline ring."
@@ -444,7 +444,7 @@ function PalettePicker({
           <div
             ref={popoverRef}
             style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="glass-surface glass-radius-sm fixed z-[60] py-1"
+            className="glass-surface surface-popover fixed z-[60] py-1"
           >
             {PALETTES.map((p) => (
               <PaletteRow

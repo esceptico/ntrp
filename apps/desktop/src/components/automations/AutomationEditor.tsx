@@ -401,7 +401,7 @@ function ScheduleChip({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: EASE_DECELERATE }}
-            className="glass-surface glass-radius-md absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3"
+            className="glass-surface surface-popover absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3"
           >
             <GlassToggle
               size="sm"

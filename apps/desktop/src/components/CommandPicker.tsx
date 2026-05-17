@@ -97,7 +97,7 @@ export function CommandPicker({
   const activeName = filtered[index]?.name;
 
   return (
-    <div className="glass-surface glass-radius-md absolute left-0 right-0 bottom-full mb-2 overflow-hidden">
+    <div className="glass-surface surface-popover absolute left-0 right-0 bottom-full mb-2 overflow-hidden">
       <div ref={containerRef} className="max-h-[320px] overflow-y-auto scroll-thin">
         {builtins.length > 0 && (
           <Section title="Commands" entries={builtins} startIndex={0} activeIndex={index} onSelect={onSelect} setIndex={setIndex} />

@@ -141,7 +141,7 @@ export function LoopStatusBar() {
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
           style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-          className="glass-surface glass-radius-md w-[360px] p-3"
+          className="glass-surface surface-popover w-[360px] p-3"
         >
           <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
           <div className="space-y-1">

@@ -138,7 +138,7 @@ export function ModelReasoningPicker({
         <div
           ref={popoverRef}
           style={{ position: "fixed", ...coords, zIndex: 60 }}
-          className="glass-surface glass-radius-md w-[300px] overflow-hidden"
+          className="glass-surface surface-popover w-[300px] overflow-hidden"
         >
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">

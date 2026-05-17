@@ -12,7 +12,7 @@ export function ReadinessCard({ tone, label, detail, footnote, className }: Read
   return (
     <section
       className={clsx(
-        "rounded-[12px] border border-line-soft bg-surface-soft/45 px-3.5 py-3",
+        "surface-card px-3.5 py-3",
         className,
       )}
     >
