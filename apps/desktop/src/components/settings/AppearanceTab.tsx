@@ -175,20 +175,26 @@ export function AppearanceTab() {
  *  no text — gives blur/saturate something to chew without distracting
  *  from the slider feedback. */
 function GlassPreview() {
+  // Backdrop uses theme tokens (bg → sunken surface) so the preview looks
+  // like a real chat scroll behind a real glass panel. The text sample
+  // gives blur/saturate something to operate on without screaming for
+  // attention — same typography as actual chat messages so what you see
+  // is what you ship.
   return (
     <div
-      className="relative overflow-hidden rounded-[10px] border border-line-soft"
-      style={{ height: 120 }}
+      className="relative overflow-hidden rounded-[10px] border border-line-soft bg-bg"
+      style={{ height: 140 }}
     >
       <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(135deg, #6a5af9 0%, #b94dff 45%, #ff7e6b 100%)",
-          opacity: 0.6,
-        }}
         aria-hidden
-      />
+        className="absolute inset-0 p-3 text-sm text-muted leading-[1.5]"
+        style={{ columnCount: 2, columnGap: 16 }}
+      >
+        Reduce entropy. Capture thought. Background agents work the queue
+        while the composer stays ready. A second voice can compact, recall,
+        and surface what matters before you ask. Memory grows by use, not
+        by ceremony. The interface is the doctrine; the doctrine is glass.
+      </div>
       <div
         className="glass-surface"
         style={{

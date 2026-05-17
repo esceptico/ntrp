@@ -663,30 +663,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
   border-radius: var(--glass-radius);
-  box-shadow: var(--glass-drop);
-}
-/* Light: diagonal glimmer ring (revertible — delete this block). */
-.glass-surface::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.5) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  /* Specular luminance: a bright 1px hairline at the top edge that reads
+     as light catching the wet rim of the glass. NOT a static perimeter
+     ring (that's "outline drawn on a card"). Light theme amplifies the
+     rim 6× vs dark because translucent white over warm cream needs more
+     contrast to register; dark theme is already high-contrast. */
+  box-shadow:
+    var(--glass-drop),
+    inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-rim, 0.6));
 }
 .glass-surface[data-tone="dark"],
 :root.dark .glass-surface {
@@ -708,16 +692,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     blur(var(--gp-blur, 14px))
     saturate(var(--gp-saturate, 160%));
   /* b8093a77 composer recipe: faint full-perimeter ring + brighter
-     top-edge specular catching "light from above". */
+     top-edge specular catching "light from above". The rim divides by 6
+     so the slider value behaves consistently across themes — at slider
+     60, light gets 0.6 alpha, dark gets 0.1 alpha. */
   box-shadow:
     var(--glass-drop),
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-rim, 0.1));
-}
-/* Dark: suppress the light-mode diagonal glimmer. */
-:root.dark .glass-surface::before,
-.glass-surface[data-tone="dark"]::before {
-  content: none;
+    inset 0 1px 0 0 rgba(255, 255, 255, calc(var(--gp-rim, 0.6) / 6));
 }
 .glass-surface[data-tone="light"] {
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
