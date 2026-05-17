@@ -8,7 +8,9 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const PREFS_VERSION = 5;
+const PREFS_VERSION = 6;
+
+const RETIRED_PALETTES = new Set(["vercel", "github", "linear", "catppuccin"]);
 
 /* The canonical glass material. Defaults match the historic "frosted"
  * recipe — readable foreground over a lively background. */
@@ -57,6 +59,12 @@ export function loadPrefs(): Prefs {
     // 60px holdover doesn't blow past the new cap.
     if (ver < 5 && parsed.glass) {
       parsed.glass = { ...parsed.glass, blur: Math.min(parsed.glass.blur ?? 18, 18) };
+    }
+    // v5 → v6: palette list trimmed from 8 → 4 (vercel/github/linear/
+    // catppuccin retired). Migrate anyone parked on a dropped palette
+    // back to the default (graphite).
+    if (ver < 6 && parsed.palette && RETIRED_PALETTES.has(parsed.palette)) {
+      parsed.palette = "graphite";
     }
     return { ...DEFAULT_PREFS, ...parsed };
   } catch {

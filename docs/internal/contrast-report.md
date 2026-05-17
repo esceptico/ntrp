@@ -6,7 +6,7 @@ Targets: body text Lc ≥ 60, secondary/icons Lc ≥ 45 (Radix/APCA defaults).
 
 Phase 1 emits this report against the OKLCH ramps defined in `apps/desktop/src/lib/tokens/color.ts`. Failing rows are addressed in Phase 4 (color sweep) by adjusting individual ramp steps.
 
-**Summary**: 80 pass / 0 fail of 80 pairs.
+**Summary**: 40 pass / 0 fail of 40 pairs.
 
 | Palette | Theme | Pair | Lc | Target | Status |
 |---|---|---|---:|---:|:---:|
@@ -30,16 +30,6 @@ Phase 1 emits this report against the OKLCH ramps defined in `apps/desktop/src/l
 | graphite | dark | muted-on-bg | 57.0 | 45 | ✓ |
 | graphite | dark | accent-on-bg | 72.2 | 45 | ✓ |
 | graphite | dark | accent-fg-on-accent | 69.9 | 60 | ✓ |
-| vercel | light | ink-on-bg | 103.0 | 60 | ✓ |
-| vercel | light | ink-soft-on-bg | 84.2 | 45 | ✓ |
-| vercel | light | muted-on-bg | 84.2 | 45 | ✓ |
-| vercel | light | accent-on-bg | 82.0 | 45 | ✓ |
-| vercel | light | accent-fg-on-accent | 75.2 | 60 | ✓ |
-| vercel | dark | ink-on-bg | 95.7 | 60 | ✓ |
-| vercel | dark | ink-soft-on-bg | 57.0 | 45 | ✓ |
-| vercel | dark | muted-on-bg | 57.0 | 45 | ✓ |
-| vercel | dark | accent-on-bg | 71.1 | 45 | ✓ |
-| vercel | dark | accent-fg-on-accent | 68.4 | 60 | ✓ |
 | raycast | light | ink-on-bg | 103.0 | 60 | ✓ |
 | raycast | light | ink-soft-on-bg | 84.4 | 45 | ✓ |
 | raycast | light | muted-on-bg | 84.4 | 45 | ✓ |
@@ -50,26 +40,6 @@ Phase 1 emits this report against the OKLCH ramps defined in `apps/desktop/src/l
 | raycast | dark | muted-on-bg | 57.2 | 45 | ✓ |
 | raycast | dark | accent-on-bg | 67.8 | 45 | ✓ |
 | raycast | dark | accent-fg-on-accent | 64.8 | 60 | ✓ |
-| github | light | ink-on-bg | 102.8 | 60 | ✓ |
-| github | light | ink-soft-on-bg | 83.9 | 45 | ✓ |
-| github | light | muted-on-bg | 83.9 | 45 | ✓ |
-| github | light | accent-on-bg | 82.7 | 45 | ✓ |
-| github | light | accent-fg-on-accent | 75.9 | 60 | ✓ |
-| github | dark | ink-on-bg | 95.5 | 60 | ✓ |
-| github | dark | ink-soft-on-bg | 57.1 | 45 | ✓ |
-| github | dark | muted-on-bg | 57.1 | 45 | ✓ |
-| github | dark | accent-on-bg | 71.0 | 45 | ✓ |
-| github | dark | accent-fg-on-accent | 61.0 | 60 | ✓ |
-| linear | light | ink-on-bg | 102.8 | 60 | ✓ |
-| linear | light | ink-soft-on-bg | 84.1 | 45 | ✓ |
-| linear | light | muted-on-bg | 84.1 | 45 | ✓ |
-| linear | light | accent-on-bg | 83.5 | 45 | ✓ |
-| linear | light | accent-fg-on-accent | 76.7 | 60 | ✓ |
-| linear | dark | ink-on-bg | 95.6 | 60 | ✓ |
-| linear | dark | ink-soft-on-bg | 57.0 | 45 | ✓ |
-| linear | dark | muted-on-bg | 57.0 | 45 | ✓ |
-| linear | dark | accent-on-bg | 69.9 | 45 | ✓ |
-| linear | dark | accent-fg-on-accent | 67.0 | 60 | ✓ |
 | notion | light | ink-on-bg | 103.0 | 60 | ✓ |
 | notion | light | ink-soft-on-bg | 84.1 | 45 | ✓ |
 | notion | light | muted-on-bg | 84.1 | 45 | ✓ |
@@ -80,15 +50,5 @@ Phase 1 emits this report against the OKLCH ramps defined in `apps/desktop/src/l
 | notion | dark | muted-on-bg | 57.2 | 45 | ✓ |
 | notion | dark | accent-on-bg | 70.7 | 45 | ✓ |
 | notion | dark | accent-fg-on-accent | 68.0 | 60 | ✓ |
-| catppuccin | light | ink-on-bg | 102.9 | 60 | ✓ |
-| catppuccin | light | ink-soft-on-bg | 84.1 | 45 | ✓ |
-| catppuccin | light | muted-on-bg | 84.1 | 45 | ✓ |
-| catppuccin | light | accent-on-bg | 79.0 | 45 | ✓ |
-| catppuccin | light | accent-fg-on-accent | 71.3 | 60 | ✓ |
-| catppuccin | dark | ink-on-bg | 95.2 | 60 | ✓ |
-| catppuccin | dark | ink-soft-on-bg | 57.1 | 45 | ✓ |
-| catppuccin | dark | muted-on-bg | 57.1 | 45 | ✓ |
-| catppuccin | dark | accent-on-bg | 71.1 | 45 | ✓ |
-| catppuccin | dark | accent-fg-on-accent | 68.7 | 60 | ✓ |
 
 _All pairs pass._

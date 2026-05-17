@@ -37,12 +37,8 @@ export type ThemeChoice = "light" | "dark" | "system";
 export type PaletteId =
   | "warm"
   | "graphite"
-  | "vercel"
   | "raycast"
-  | "github"
-  | "linear"
-  | "notion"
-  | "catppuccin";
+  | "notion";
 
 export interface GlassParams {
   /** Tint opacity 0–100 (% white for light mode; framework derives dark). */

@@ -77,9 +77,9 @@ export function buildThemeView(
   };
 }
 
-/** Color-palette picker (graphite / warm / vercel / raycast / github /
- *  linear / notion / catppuccin). Labels come from PALETTES so adding a
- *  palette in lib/palettes.ts surfaces here automatically. */
+/** Color-palette picker (warm / graphite / raycast / notion). Labels
+ *  come from PALETTES so adding a palette in lib/palettes.ts surfaces
+ *  here automatically. */
 export function buildPaletteView(
   current: PaletteId,
   setPref: <K extends "palette">(key: K, value: PaletteId) => void,

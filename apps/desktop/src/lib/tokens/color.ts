@@ -186,16 +186,6 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     accentLight: o(0.610, 0.110, 175),
     accentDark: o(0.790, 0.105, 175),
   },
-  // Vercel — blue accent, pure neutrals.
-  vercel: {
-    neutralHueLight: 250,
-    neutralHueDark: 250,
-    neutralTintLight: 0.002,
-    neutralTintDark: 0.002,
-    accentLight: o(0.555, 0.190, 250),
-    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
-    accentDark: o(0.760, 0.165, 245),
-  },
   // Raycast — red accent.
   raycast: {
     neutralHueLight: 0,
@@ -206,21 +196,6 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
     accentDark: o(0.760, 0.180, 22),
   },
-  // GitHub — Primer blue.
-  github: {
-    neutralHueLight: 220,
-    neutralHueDark: 225,
-    accentLight: o(0.550, 0.180, 250),
-    accentDark: o(0.715, 0.135, 245),
-  },
-  // Linear — indigo / lavender.
-  linear: {
-    neutralHueLight: 260,
-    neutralHueDark: 265,
-    accentLight: o(0.560, 0.140, 275),
-    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
-    accentDark: o(0.770, 0.155, 275),
-  },
   // Notion — monochrome (accent is near-black on light, near-white on dark).
   notion: {
     neutralHueLight: 60,
@@ -229,15 +204,6 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralTintDark: 0.004,
     accentLight: o(0.215, 0.005, 60),
     accentDark: o(0.965, 0.004, 60),
-  },
-  // Catppuccin — blue accent on lavender/mauve neutrals.
-  catppuccin: {
-    neutralHueLight: 270,
-    neutralHueDark: 275,
-    neutralTintLight: 0.010,
-    neutralTintDark: 0.018,
-    accentLight: o(0.595, 0.190, 260),
-    accentDark: o(0.780, 0.130, 250),
   },
 };
 
@@ -258,12 +224,8 @@ function buildPalette(id: PaletteId): PaletteTokens {
 export const PALETTE_TOKENS: Record<PaletteId, PaletteTokens> = {
   warm: buildPalette("warm"),
   graphite: buildPalette("graphite"),
-  vercel: buildPalette("vercel"),
   raycast: buildPalette("raycast"),
-  github: buildPalette("github"),
-  linear: buildPalette("linear"),
   notion: buildPalette("notion"),
-  catppuccin: buildPalette("catppuccin"),
 };
 
 /** Format an OKLCH triple as a CSS `oklch(...)` string. */

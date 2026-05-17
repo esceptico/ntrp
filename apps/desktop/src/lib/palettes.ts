@@ -1,12 +1,8 @@
 export type PaletteId =
   | "warm"
   | "graphite"
-  | "vercel"
   | "raycast"
-  | "github"
-  | "linear"
-  | "notion"
-  | "catppuccin";
+  | "notion";
 
 export interface PaletteSwatch {
   /** Background color of the Aa chip. */
@@ -22,11 +18,8 @@ export interface PaletteMeta {
   dark: PaletteSwatch;
 }
 
-// Brand palettes use officially-documented colors where available
-// (Vercel Geist, GitHub Primer Primitives, Linear brand, Catppuccin
-// spec). Notion / Raycast publish only their wordmark color so the
-// surface neutrals there are best-effort approximations from product
-// chrome.
+// Notion / Raycast publish only their wordmark color so the surface
+// neutrals there are best-effort approximations from product chrome.
 export const PALETTES: PaletteMeta[] = [
   {
     id: "warm",
@@ -41,40 +34,16 @@ export const PALETTES: PaletteMeta[] = [
     dark: { bg: "#101112", accent: "#55d6be" },
   },
   {
-    id: "vercel",
-    label: "Vercel",
-    light: { bg: "#ffffff", accent: "#0068d6" },
-    dark: { bg: "#0a0a0a", accent: "#52a8ff" },
-  },
-  {
     id: "raycast",
     label: "Raycast",
     light: { bg: "#ffffff", accent: "#ff6363" },
     dark: { bg: "#1a1a1a", accent: "#ff6363" },
   },
   {
-    id: "github",
-    label: "GitHub",
-    light: { bg: "#ffffff", accent: "#0969da" },
-    dark: { bg: "#0d1117", accent: "#58a6ff" },
-  },
-  {
-    id: "linear",
-    label: "Linear",
-    light: { bg: "#ffffff", accent: "#5e6ad2" },
-    dark: { bg: "#1c1c1f", accent: "#7170ff" },
-  },
-  {
     id: "notion",
     label: "Notion",
     light: { bg: "#ffffff", accent: "#0f0f0f" },
     dark: { bg: "#191919", accent: "#ffffff" },
-  },
-  {
-    id: "catppuccin",
-    label: "Catppuccin",
-    light: { bg: "#eff1f5", accent: "#1e66f5" },
-    dark: { bg: "#1e1e2e", accent: "#89b4fa" },
   },
 ];
 
