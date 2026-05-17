@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
+import { ProgressiveBlurOverlay } from "./ScrollBlur";
 import { ICON } from "../lib/icons";
 
 function SidebarToggle() {
@@ -117,24 +118,15 @@ export function Chat() {
     >
       <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />
-        {/* Bottom fade — a gradient sitting between Messages and the
-            composer overlay. Text fades into bg before reaching the gap
-            below the floating composer card. Composer is z-10 (above
-            this z-5 layer), so its backdrop-filter blurs the gradient
-            and reads as glass landing on a clean bg edge. */}
         <div
           aria-hidden
           className="chat-bottom-fade absolute left-0 right-0 bottom-0 pointer-events-none z-[5]"
           style={{ height: "calc(var(--chat-bottom-h, 96px) + 24px)" }}
         />
-        {/* Soft bg-color fade behind the floating header card. No blur —
-            just lets messages dissolve into the bg as they scroll up
-            toward the chrome, so the card doesn't sit on a crisp text
-            edge. Mirrors `chat-bottom-fade`. */}
-        <div
-          aria-hidden
-          className="chat-top-fade absolute left-0 right-0 top-0 pointer-events-none z-[5]"
-          style={{ height: "72px" }}
+        <ProgressiveBlurOverlay
+          edge="top"
+          className="absolute left-0 right-0 top-0 z-[5]"
+          style={{ height: "52px" }}
         />
         <div className="absolute top-0 left-0 right-0 z-10">
           <ChatHeader />

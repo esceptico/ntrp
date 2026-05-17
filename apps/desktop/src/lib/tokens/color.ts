@@ -92,20 +92,15 @@ function neutralRampLight(hue: number, tint = 0.004): Ramp12 {
 }
 
 function neutralRampDark(hue: number, tint = 0.006): Ramp12 {
-  // Step 1→2 delta tightened from 0.030 → 0.022 OKLCH L so elevated
-  // surfaces "lift" instead of "split" from the app bg. Step 1 lifted
-  // from 0.165 → 0.180 to match Radix dark scale baselines (~0.178);
-  // near-black is perceptually nonlinear, so a darker step 1 makes any
-  // surface delta feel larger. See docs/research/color-rules-dark-surfaces.md.
   return [
-    o(0.180, tint * 0.8, hue), // 1 app bg
-    o(0.202, tint, hue),       // 2 subtle      Δ=0.022
-    o(0.230, tint * 1.1, hue), // 3 ui rest     Δ=0.028
-    o(0.265, tint * 1.2, hue), // 4 ui hover    Δ=0.035
-    o(0.300, tint * 1.3, hue), // 5 ui active   Δ=0.035
-    o(0.335, tint * 1.3, hue), // 6 line soft
-    o(0.385, tint * 1.3, hue), // 7 line
-    o(0.455, tint * 1.4, hue), // 8 line strong
+    o(0.165, tint * 0.8, hue), // 1 app bg
+    o(0.195, tint, hue),       // 2 subtle
+    o(0.225, tint * 1.1, hue), // 3 ui rest
+    o(0.260, tint * 1.2, hue), // 4 ui hover
+    o(0.295, tint * 1.3, hue), // 5 ui active
+    o(0.330, tint * 1.3, hue), // 6 line soft
+    o(0.380, tint * 1.3, hue), // 7 line
+    o(0.450, tint * 1.4, hue), // 8 line strong
     o(0.620, tint * 1.6, hue), // 9 solid
     o(0.680, tint * 1.6, hue), // 10 solid hover
     o(0.745, tint * 1.2, hue), // 11 muted text
@@ -173,40 +168,39 @@ interface PaletteAnchor {
 }
 
 const ANCHORS: Record<PaletteId, PaletteAnchor> = {
-  // Warm — orange accent, cream neutrals (current default).
+  // Warm — orange accent, amber-tinted dark surfaces.
   warm: {
     neutralHueLight: 70,
-    neutralHueDark: 60,
+    neutralHueDark: 55,
     neutralTintLight: 0.008,
-    neutralTintDark: 0.010,
+    neutralTintDark: 0.030,
     accentLight: o(0.610, 0.155, 50),
-    // Dark step 9 lifted from 0.700 → 0.760 to clear APCA Lc 60 for
-    // neutral-1 (the white-ish fg) on the solid accent fill.
     accentDark: o(0.760, 0.155, 55),
   },
-  // Graphite — teal accent, near-pure neutrals.
+  // Graphite — teal accent, cool blue-gray dark surfaces.
   graphite: {
     neutralHueLight: 210,
     neutralHueDark: 220,
+    neutralTintLight: 0.004,
+    neutralTintDark: 0.022,
     accentLight: o(0.610, 0.110, 175),
     accentDark: o(0.790, 0.105, 175),
   },
-  // Raycast — red accent.
+  // Raycast — red accent, warm-red dark surfaces.
   raycast: {
     neutralHueLight: 0,
-    neutralHueDark: 0,
+    neutralHueDark: 15,
     neutralTintLight: 0.002,
-    neutralTintDark: 0.002,
+    neutralTintDark: 0.018,
     accentLight: o(0.660, 0.200, 22),
-    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
     accentDark: o(0.760, 0.180, 22),
   },
-  // Notion — monochrome (accent is near-black on light, near-white on dark).
+  // Notion — monochrome, near-neutral dark surfaces.
   notion: {
     neutralHueLight: 60,
     neutralHueDark: 60,
     neutralTintLight: 0.003,
-    neutralTintDark: 0.004,
+    neutralTintDark: 0.006,
     accentLight: o(0.215, 0.005, 60),
     accentDark: o(0.965, 0.004, 60),
   },

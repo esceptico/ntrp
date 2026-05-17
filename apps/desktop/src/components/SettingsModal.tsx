@@ -106,8 +106,8 @@ export function SettingsModal() {
           </div>
         </aside>
 
-        <div className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 min-w-0">
-          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-3">
+        <div className="relative min-h-0 min-w-0">
+          <header className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-5 pt-4 pb-3">
             <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
               {TABS.find((t) => t.id === active)?.label}
             </div>
@@ -116,26 +116,28 @@ export function SettingsModal() {
             </IconButton>
           </header>
 
-          <div className="overflow-y-auto scroll-thin px-5 py-4">
+          <div className="absolute inset-0 overflow-y-auto scroll-thin px-5 pt-[56px] pb-4">
             <ScrollBlurTop />
-            {active === "connection" && (
-              <ConnectionTab
-                formRef={formRef}
-                draft={draft}
-                error={error}
-                saving={saving}
-                onUpdate={setConnectionDraft}
-                onSubmit={submitConnection}
-              />
-            )}
-            {active === "providers" && <ProvidersTab />}
-            {active === "integrations" && <IntegrationsTab />}
-            {active === "models" && <ModelsTab />}
-            {active === "agent" && <AgentTab serverConfig={serverConfig} />}
-            {active === "context" && <ContextTab serverConfig={serverConfig} />}
-            {active === "tools" && <ToolsTab />}
-            {active === "mcp" && <MCPTab />}
-            {active === "appearance" && <AppearanceTab />}
+            <div className="pt-1">
+              {active === "connection" && (
+                <ConnectionTab
+                  formRef={formRef}
+                  draft={draft}
+                  error={error}
+                  saving={saving}
+                  onUpdate={setConnectionDraft}
+                  onSubmit={submitConnection}
+                />
+              )}
+              {active === "providers" && <ProvidersTab />}
+              {active === "integrations" && <IntegrationsTab />}
+              {active === "models" && <ModelsTab />}
+              {active === "agent" && <AgentTab serverConfig={serverConfig} />}
+              {active === "context" && <ContextTab serverConfig={serverConfig} />}
+              {active === "tools" && <ToolsTab />}
+              {active === "mcp" && <MCPTab />}
+              {active === "appearance" && <AppearanceTab />}
+            </div>
           </div>
         </div>
     </PageModal>

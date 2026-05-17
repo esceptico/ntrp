@@ -55,27 +55,33 @@
      reading. The sidebar still separates from chat through material
      contrast: sidebar chrome sits over bg-main/white while chat uses
      the warmer bg cream. */
-  --color-bg: #faf9f3;
-  --color-bg-main: #ffffff;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f3f3f2;
-  --color-surface-sunken: #ebebea;
-  --color-code-bg: #f5f5f4;
+  /* Color tokens reference the OKLCH ramp vars written by applyTokens()
+     at runtime (see lib/tokens/color.ts + lib/theme.ts). Hex fallbacks
+     are the warm-palette light values — used before JS hydrates and as
+     a safety net if the ramp vars aren't set. Inside @theme so Tailwind
+     v4 generates `bg-accent`, `text-accent`, etc. as var() references
+     instead of baking in static colors. */
+  --color-bg: var(--color-neutral-1, #faf9f3);
+  --color-bg-main: var(--color-neutral-1, #ffffff);
+  --color-surface: var(--color-neutral-2, #ffffff);
+  --color-surface-soft: var(--color-neutral-3, #f3f3f2);
+  --color-surface-sunken: var(--color-neutral-4, #ebebea);
+  --color-code-bg: var(--color-neutral-2, #f5f5f4);
 
-  --color-line: #e8e8e7;
-  --color-line-soft: #f0f0ef;
-  --color-line-strong: #d6d6d4;
+  --color-line: var(--color-neutral-5, #e8e8e7);
+  --color-line-soft: var(--color-neutral-4, #f0f0ef);
+  --color-line-strong: var(--color-neutral-7, #d6d6d4);
 
-  --color-ink: #1a1a1a;
-  --color-ink-soft: #3a3a3a;
-  --color-on-ink: #f5f5f5;
-  --color-muted: #6e6e6e;
-  --color-faint: #9d9d9d;
-  --color-whisper: #c0c0c0;
+  --color-ink: var(--color-neutral-12, #1a1a1a);
+  --color-ink-soft: var(--color-neutral-11, #3a3a3a);
+  --color-on-ink: var(--color-neutral-1, #f5f5f5);
+  --color-muted: var(--color-neutral-11, #6e6e6e);
+  --color-faint: var(--color-neutral-9, #9d9d9d);
+  --color-whisper: var(--color-neutral-8, #c0c0c0);
 
-  --color-accent: #b85c1f;
-  --color-accent-soft: rgba(184, 92, 31, 0.1);
-  --color-accent-strong: #9c4d18;
+  --color-accent: var(--color-accent-9, #b85c1f);
+  --color-accent-soft: var(--color-accent-3, rgba(184, 92, 31, 0.1));
+  --color-accent-strong: var(--color-accent-11, #9c4d18);
 
   --color-ok: #4f8a3a;
   --color-ok-soft: rgba(79, 138, 58, 0.12);
@@ -436,107 +442,101 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-color: transparent;
 }
 
-/* Soft fade behind the floating header card — bg-color gradient only,
-   no blur. Mirrors `.chat-bottom-fade` for the composer: messages
-   dissolve into bg as they scroll up under the chrome instead of
-   crisply abutting the card edge. */
-.chat-top-fade {
-  background: linear-gradient(
-    to bottom,
-    var(--color-bg) 35%,
-    color-mix(in oklab, var(--color-bg) 60%, transparent) 70%,
-    transparent 100%
-  );
-}
-
-
-/* Mask-based scroll edge fade — content dissolves under sticky chrome
-   instead of hard-clipping. Used for bottom edges and as Glass-mode
-   fallback for the top (where a real blur band nests inside the
-   slab's own backdrop-filter and stripes). The top edge now prefers
-   `<ScrollBlurTop />` for a real scroll-edge blur in Linen. */
+/* Mask-based scroll edge fade — content itself dissolves instead of a
+   color veil being painted above it. */
 .scroll-fade-top {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
           mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
 }
 
-/* Real backdrop-filter scroll-edge blur band. Sits as a sticky FIRST
-   child of a scroll container, pinned to top:0. Negative margin-bottom
-   pulls it out of layout flow so content scrolls under it. Mask fades
-   the blur effect into nothing at the bottom of the band.
-
-   Per-material strength: Linen-mode `.glass-surface` has no
-   backdrop-filter, so the band samples the page cleanly at 14px. In
-   Glass mode the slab itself is already filtering, so nesting another
-   backdrop-filter produces visible stripes across rows — we fall back
-   to a pure opacity mask there. Reduced-transparency / motion users
-   also get the mask fallback (the ambient blur can be uncomfortable). */
-/* Progressive blur on scroll-top. 7 stacked backdrop-filter layers
-   with progressively smaller blur radii (16 → 0.5 px), each masked
-   to a narrow band overlapping its neighbors by ~50% so the
-   effective blur radius slides smoothly across the strip. Heaviest
-   at the top (closest to chrome above), clearest at the bottom.
-   Visibility gated on data-scrolled — at scrollTop=0 the whole
-   strip is opacity:0 so Chromium's compositor-layer artifact over
-   uniform bg doesn't show. Fades in via opacity transition as soon
-   as content scrolls past.
-   Linen mode only — Glass-mode slab already has backdrop-filter, so
-   nesting more inside would hit the containing-block trap. */
-.scroll-blur-top {
+/* Progressive blur edge overlay.
+   Performance-biased version of the reference recipe: four blur passes
+   instead of seven, capped at 16px, over a small strip. Keep this
+   outside rounded/overflow-hidden wrappers — Chromium breaks stacked
+   backdrop filters when clipped. */
+.progressive-blur {
+  pointer-events: none;
+  overflow: visible;
+}
+.progressive-blur > div,
+.progressive-blur::before,
+.progressive-blur::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.scroll-mask-top-sentinel {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 64px;
-  margin-bottom: -64px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-.scroll-blur-top[data-scrolled="true"] {
-  opacity: 1;
-}
-.scroll-blur-top > div {
-  position: absolute;
-  inset: 0;
+  height: 1px;
+  margin-bottom: -1px;
   pointer-events: none;
 }
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(1) {
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
+.scroll-mask-top {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.08) 20px, rgba(0,0,0,0.4) 56px, #000 120px);
+          mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.08) 20px, rgba(0,0,0,0.4) 56px, #000 120px);
 }
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(2) {
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
-}
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(3) {
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
-}
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(4) {
-  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
-}
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(5) {
-  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
-}
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(6) {
-  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
-}
-:root[data-material="linen"] .scroll-blur-top > div:nth-child(7) {
+
+.progressive-blur-bottom::before {
+  z-index: 1;
   -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 34%, rgba(0,0,0,0) 54%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 34%, rgba(0,0,0,0) 54%);
+}
+.progressive-blur-bottom > div:nth-child(1) {
+  z-index: 2;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 22%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 22%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
+}
+.progressive-blur-bottom > div:nth-child(2) {
+  z-index: 3;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 44%, rgba(0,0,0,1) 58%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 96%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 44%, rgba(0,0,0,1) 58%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 96%);
+}
+.progressive-blur-bottom > div:nth-child(3) {
+  z-index: 4;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 66%, rgba(0,0,0,1) 82%, rgba(0,0,0,1) 100%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 66%, rgba(0,0,0,1) 82%, rgba(0,0,0,1) 100%);
+}
+.progressive-blur-top::before {
+  z-index: 4;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 18%, rgba(0,0,0,0) 42%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 18%, rgba(0,0,0,0) 42%);
+}
+.progressive-blur-top > div:nth-child(1) {
+  z-index: 3;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 10%, rgba(0,0,0,1) 28%, rgba(0,0,0,1) 48%, rgba(0,0,0,0) 70%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 10%, rgba(0,0,0,1) 28%, rgba(0,0,0,1) 48%, rgba(0,0,0,0) 70%);
+}
+.progressive-blur-top > div:nth-child(2) {
+  z-index: 2;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 36%, rgba(0,0,0,1) 52%, rgba(0,0,0,1) 72%, rgba(0,0,0,0) 92%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 36%, rgba(0,0,0,1) 52%, rgba(0,0,0,1) 72%, rgba(0,0,0,0) 92%);
+}
+.progressive-blur-top > div:nth-child(3) {
+  z-index: 1;
+  -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
+  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 58%, rgba(0,0,0,1) 76%, rgba(0,0,0,0) 100%);
+          mask: linear-gradient(to bottom, rgba(0,0,0,0) 58%, rgba(0,0,0,1) 76%, rgba(0,0,0,0) 100%);
+}
+.progressive-blur-bottom::after {
+  z-index: 5;
+  background: linear-gradient(to bottom, transparent 0%, color-mix(in oklab, var(--color-bg) 24%, transparent) 68%, color-mix(in oklab, var(--color-bg) 62%, transparent) 100%);
+}
+.progressive-blur-top::after {
+  z-index: 5;
+  background: linear-gradient(to top, transparent 0%, color-mix(in oklab, var(--color-bg) 24%, transparent) 68%, color-mix(in oklab, var(--color-bg) 62%, transparent) 100%);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
-  :root[data-material="linen"] .scroll-blur-top > div {
+  .progressive-blur::before,
+  .progressive-blur > div {
     -webkit-backdrop-filter: none;
             backdrop-filter: none;
   }
@@ -581,13 +581,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   padding-bottom: calc(var(--chat-bottom-h, 96px) + 2.5rem);
 }
 
-/* Soft fade-to-bg sitting between Messages and the composer overlay.
-   Text physically dissolves into the bg as it scrolls toward the
-   bottom — no peeking through the gap below the floating card. The
-   composer sits above (higher z), so its backdrop-filter reads the
-   gradient as part of its blur source: the bottom of the card naturally
-   feels like glass landing on a solid bg edge.
-   Height tracks `--chat-bottom-h` so the fade scales with the composer. */
 .chat-bottom-fade {
   background: linear-gradient(
     to top,
@@ -1740,9 +1733,9 @@ main[data-has-approval="false"] .scroll-messages {
     --color-faint: #575653;
     --color-whisper: #403e3c;
 
-    --color-accent: #da702c;
-    --color-accent-soft: rgba(218, 112, 44, 0.14);
-    --color-accent-strong: #e78a4d;
+    --color-accent: var(--color-accent-9);
+    --color-accent-soft: var(--color-accent-3);
+    --color-accent-strong: var(--color-accent-11);
 
     --color-ok: #879a39;
     --color-ok-soft: rgba(135, 154, 57, 0.14);
@@ -1771,6 +1764,62 @@ main[data-has-approval="false"] .scroll-messages {
     --hl-tag: #ea6962;
     --hl-meta: #7c6f64;
     --hl-symbol: #7daea3;
+}
+
+/* Dark palette surfaces: keep dark mode restrained, but preserve each
+   palette's old product feel. Accent vars still come from runtime tokens. */
+:root.dark.palette-graphite {
+    --color-bg: #101112;
+    --color-bg-main: #121314;
+    --color-surface: #171819;
+    --color-surface-soft: #1e2022;
+    --color-surface-sunken: #25282a;
+    --color-code-bg: #1e2022;
+    --color-line: #303337;
+    --color-line-soft: #25282b;
+    --color-line-strong: #3f4348;
+    --color-ink: #d4d7dc;
+    --color-ink-soft: #bcc0c7;
+    --color-on-ink: #101112;
+    --color-muted: #9a9da3;
+    --color-faint: #6b6e74;
+    --color-whisper: #4a4d52;
+}
+
+:root.dark.palette-raycast {
+    --color-bg: #0d0d0d;
+    --color-bg-main: #1a1a1a;
+    --color-surface: #1f1f1f;
+    --color-surface-soft: #262626;
+    --color-surface-sunken: #303030;
+    --color-code-bg: #262626;
+    --color-line: #3a3a3a;
+    --color-line-soft: #2e2e2e;
+    --color-line-strong: #4a4a4a;
+    --color-ink: #f5f5f5;
+    --color-ink-soft: #d4d4d4;
+    --color-on-ink: #1a1a1a;
+    --color-muted: #a1a1a1;
+    --color-faint: #6f6f6f;
+    --color-whisper: #4a4a4a;
+}
+
+:root.dark.palette-notion {
+    --color-bg: #131313;
+    --color-bg-main: #191919;
+    --color-surface: #202020;
+    --color-surface-soft: #2c2c2c;
+    --color-surface-sunken: #373737;
+    --color-code-bg: #2c2c2c;
+    --color-line: #3f3f3f;
+    --color-line-soft: #303030;
+    --color-line-strong: #4d4d4d;
+    --color-ink: #e6e6e6;
+    --color-ink-soft: #c7c7c7;
+    --color-on-ink: #191919;
+    --color-muted: #9b9b9b;
+    --color-faint: #6f6e6b;
+    --color-whisper: #4a4946;
 }
 
 /* Scrollbar thumbs: lighter for visibility */
