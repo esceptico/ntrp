@@ -14,7 +14,7 @@ import { Chip } from "./Chip";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
-import { useTimeoutFlag } from "../lib/hooks";
+import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 
 /** Read a single File and return its bytes as base64 + media type. */
@@ -80,6 +80,15 @@ export function Composer() {
   const filteredCommands = useMemo(
     () => (query !== null ? filterCommands(allCommands, query) : []),
     [allCommands, query],
+  );
+
+  const pickerNav = useListNav(
+    filteredCommands.length,
+    (i) => {
+      const entry = filteredCommands[i];
+      if (entry) applyPickerSelection(entry);
+    },
+    { index: pickerIndex, setIndex: setPickerIndex },
   );
 
   // Track the query for which the user explicitly dismissed the picker (via
@@ -385,18 +394,6 @@ export function Composer() {
               return;
             }
             if (pickerOpen && filteredCommands.length > 0) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setPickerIndex((pickerIndex + 1) % filteredCommands.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setPickerIndex(
-                  (pickerIndex - 1 + filteredCommands.length) % filteredCommands.length,
-                );
-                return;
-              }
               if (e.key === "Tab") {
                 e.preventDefault();
                 applyPickerSelection(filteredCommands[pickerIndex]);
@@ -408,9 +405,12 @@ export function Composer() {
                 setPickerOpen(false);
                 return;
               }
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                applyPickerSelection(filteredCommands[pickerIndex]);
+              if (
+                e.key === "ArrowDown" ||
+                e.key === "ArrowUp" ||
+                (e.key === "Enter" && !e.shiftKey)
+              ) {
+                pickerNav.onKeyDown(e);
                 return;
               }
             }

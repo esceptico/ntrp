@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Search } from "lucide-react";
 import { ICON } from "../../lib/icons";
+import { useListNav } from "../../lib/hooks";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { Row } from "./Row";
 import { filterEntries, groupBySection } from "./filter";
@@ -60,7 +61,6 @@ export function PaletteBody({
   }, [staleCrumbs, setCrumbs]);
 
   const filtered = useMemo(() => filterEntries(view.entries, query), [view.entries, query]);
-  const safe = Math.min(index, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -96,13 +96,6 @@ export function PaletteBody({
     [setCrumbs, setQuery],
   );
 
-  // Keep the highlighted row in view while arrow-navigating.
-  useLayoutEffect(() => {
-    activeRowRef.current?.scrollIntoView({ block: "nearest" });
-  }, [safe]);
-
-  const grouped = useMemo(() => groupBySection(filtered), [filtered]);
-
   function activate(entry: CommandEntry) {
     if (entry.children) {
       pushCrumb(entry);
@@ -113,6 +106,23 @@ export function PaletteBody({
       void entry.run();
     }
   }
+
+  const nav = useListNav(
+    filtered.length,
+    (i) => {
+      const entry = filtered[i];
+      if (entry) activate(entry);
+    },
+    { index, setIndex },
+  );
+  const safe = nav.index;
+
+  // Keep the highlighted row in view while arrow-navigating.
+  useLayoutEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [safe]);
+
+  const grouped = useMemo(() => groupBySection(filtered), [filtered]);
 
   return (
     <>
@@ -136,21 +146,7 @@ export function PaletteBody({
                 return;
               }
               if (filtered.length === 0) return;
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                const last = filtered.length - 1;
-                setIndex((prev) => Math.min(prev + 1, last));
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setIndex((prev) => Math.max(prev - 1, 0));
-                return;
-              }
-              if (e.key === "Enter") {
-                e.preventDefault();
-                activate(filtered[safe]);
-              }
+              nav.onKeyDown(e);
             }}
             placeholder={view.placeholder}
             spellCheck={false}

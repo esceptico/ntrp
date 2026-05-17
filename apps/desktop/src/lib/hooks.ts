@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+} from "react";
 
 /** Returns `[flag, fire]`. `fire()` flips the flag true and schedules
  *  it back to false after `durationMs`. The pending timeout is cleared
@@ -98,6 +105,62 @@ export function useTimeTicker(intervalMs = 30_000): void {
     const id = setInterval(() => setTick((n) => n + 1), intervalMs);
     return () => clearInterval(id);
   }, [intervalMs]);
+}
+
+/** Roving-index keyboard nav for a list of options. Pass `items.length`
+ *  and either controlled `{index, setIndex}` or omit both to use internal
+ *  state. Returns `{index, setIndex, onKeyDown}` — wire `onKeyDown` to the
+ *  input/container that owns focus.
+ *
+ *  Handles ArrowUp/ArrowDown (clamped to [0, length-1]) and Enter
+ *  (invokes `onEnter(index)`). Escape/Backspace are NOT handled — owners
+ *  with drill-down or close semantics keep that logic. */
+export function useListNav(
+  length: number,
+  onEnter: (index: number) => void,
+  controlled?: { index: number; setIndex: (i: number) => void },
+): {
+  index: number;
+  setIndex: (i: number) => void;
+  onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void;
+} {
+  const [internal, setInternal] = useState(0);
+  const rawIndex = controlled ? controlled.index : internal;
+  const setIndex = controlled ? controlled.setIndex : setInternal;
+  const last = Math.max(0, length - 1);
+  const index = Math.min(Math.max(rawIndex, 0), last);
+
+  // Converge controlled state when it falls out of bounds (shorter list after
+  // a filter change). Uncontrolled state can't drift past `last` because
+  // setIndex calls below all clamp.
+  useEffect(() => {
+    if (rawIndex !== index) setIndex(index);
+  }, [rawIndex, index, setIndex]);
+
+  const enterRef = useRef(onEnter);
+  enterRef.current = onEnter;
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLElement>) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setIndex(Math.min(index + 1, last));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setIndex(Math.max(index - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        enterRef.current(index);
+      }
+    },
+    [index, last, setIndex],
+  );
+
+  return { index, setIndex, onKeyDown };
 }
 
 /** Calls `onClose` when a `mousedown` lands outside the element referenced

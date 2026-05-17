@@ -15,6 +15,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { BUILTIN_COMMANDS } from "../actions";
 import { ICON } from "../lib/icons";
+import { PickerRow } from "./PickerRow";
 
 export interface CommandEntry {
   name: string;
@@ -147,17 +148,16 @@ function Section({
           const Icon = iconFor(entry);
           const active = idx === activeIndex;
           return (
-            <button
+            <PickerRow
               key={`${entry.kind}:${entry.name}`}
-              type="button"
+              active={active}
               data-cmd-idx={idx}
               onMouseDown={(e) => {
                 e.preventDefault();
                 onSelect(entry);
               }}
-              onMouseEnter={() => setIndex(idx)}
-              data-active={active ? "true" : undefined}
-              className="app-row group/cmd w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-ink-soft text-left"
+              onMouseMove={() => setIndex(idx)}
+              className="app-row group/cmd flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-ink-soft"
             >
               <span
                 className={clsx(
@@ -173,7 +173,7 @@ function Section({
               <span className="text-sm text-muted truncate flex-1 min-w-0 text-right">
                 {entry.description}
               </span>
-            </button>
+            </PickerRow>
           );
         })}
       </div>

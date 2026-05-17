@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
+import { PickerRow } from "../PickerRow";
 import type { CommandEntry } from "./types";
 
 export function Row({
@@ -19,21 +20,13 @@ export function Row({
   const Icon = entry.icon;
   return (
     <li>
-      <button
+      <PickerRow
         ref={activeRef}
-        type="button"
-        // `onMouseMove` (not `onMouseEnter`) so keyboard navigation
-        // doesn't fight a stationary cursor — when arrow-scroll shifts
-        // a row under the mouse, mouseenter would fire and reset the
-        // active index back to whatever the cursor happens to cover,
-        // making it feel like rows got "skipped". Mousemove only fires
-        // on actual cursor motion, so hover takes over again the moment
-        // the user touches the mouse.
+        active={active}
         onMouseMove={onHover}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
-        data-active={active ? "true" : undefined}
-        className="app-row w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-ink-soft text-left"
+        className="app-row flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-ink-soft"
       >
         <span
           className={clsx(
@@ -58,7 +51,7 @@ export function Row({
             aria-hidden
           />
         )}
-      </button>
+      </PickerRow>
     </li>
   );
 }
