@@ -3,7 +3,7 @@ import { MotionConfig, motion } from "motion/react";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
-import { CommandPalette } from "./CommandPalette";
+import { CommandPalette } from "./commandPalette/CommandPalette";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
