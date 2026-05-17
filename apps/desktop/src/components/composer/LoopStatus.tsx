@@ -196,7 +196,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
 
   const detail = (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/30 backdrop-blur-sm p-4"
+      className="modal-scrim fixed inset-0 z-50 grid place-items-center p-4"
       onClick={onClose}
     >
       <div

@@ -240,7 +240,7 @@ export function AutomationEditor({
       {open && seed && (
         <motion.div
           key="automation-editor"
-          className="absolute inset-0 z-[60] grid place-items-center p-8 bg-[rgba(0,0,0,0.36)] backdrop-blur-md"
+          className="modal-scrim absolute inset-0 z-[60] grid place-items-center p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -248,7 +248,7 @@ export function AutomationEditor({
           onClick={onClose}
         >
           <motion.div
-            className="auto-editor w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[18px] bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
+            className="auto-editor glass-surface glass-radius-md w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -392,7 +392,7 @@ function ScheduleChip({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: MODAL_EASE }}
-            className="absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3 rounded-[12px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]"
+            className="glass-surface glass-radius-md absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3"
           >
             <GlassToggle
               size="sm"

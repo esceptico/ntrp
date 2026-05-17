@@ -442,7 +442,7 @@ function PalettePicker({
           <div
             ref={popoverRef}
             style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="fixed z-[60] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]"
+            className="glass-surface glass-radius-sm fixed z-[60] py-1"
           >
             {PALETTES.map((p) => (
               <PaletteRow

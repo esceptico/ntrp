@@ -58,7 +58,7 @@ export function ApprovalReviewModal() {
       {open && approval && (
         <motion.div
           key="approval-review"
-          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
+          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -66,7 +66,7 @@ export function ApprovalReviewModal() {
           onClick={() => close(null)}
         >
           <motion.div
-            className="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
+            className="glass-surface glass-radius-md w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
             initial={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }

@@ -518,7 +518,7 @@ function KindFilter({
         <span className="capitalize">{value ?? "All kinds"}</span>
       </Chip>
       {open && (
-        <div className="absolute top-full mt-1 right-0 z-10 w-[160px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
+        <div className="glass-surface glass-radius-sm absolute top-full mt-1 right-0 z-10 w-[160px] py-1">
           <KindOption
             label="All kinds"
             active={value === null}
@@ -585,7 +585,7 @@ function StatusFilter({
         <span>{factStatusFilterLabel(value)}</span>
       </Chip>
       {open && (
-        <div className="absolute top-full mt-1 right-0 z-10 w-[150px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
+        <div className="glass-surface glass-radius-sm absolute top-full mt-1 right-0 z-10 w-[150px] py-1">
           {FACT_STATUSES.map((s) => (
             <KindOption
               key={s}

@@ -52,7 +52,7 @@ export function CommandPalette() {
       {open && (
         <motion.div
           key="palette"
-          className="modal-scrim absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8 backdrop-blur-xl"
+          className="modal-scrim absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

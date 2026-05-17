@@ -61,7 +61,7 @@ export function SessionContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="fixed z-50 w-[160px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]"
+      className="glass-surface glass-radius-sm fixed z-50 w-[160px] py-1"
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
