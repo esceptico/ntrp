@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export function Field({
   label,
   value,
@@ -117,5 +119,22 @@ export function PercentField({
         </span>
       </div>
     </div>
+  );
+}
+
+/** Wraps a caller-provided control with a label. Use when the control
+ *  isn't a plain text input (a select, a toggle group, a custom editor). */
+export function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
+      {children}
+    </label>
   );
 }

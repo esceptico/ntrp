@@ -22,6 +22,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
 import { GlassSwitch } from "../GlassSwitch";
+import { LabeledField } from "./Field";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -359,7 +360,7 @@ function ServerForm({
       </h3>
 
       <div className="grid gap-3">
-        <Field label="Name">
+        <LabeledField label="Name">
           <input
             type="text"
             value={name}
@@ -369,7 +370,7 @@ function ServerForm({
             spellCheck={false}
             className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors disabled:bg-surface-soft disabled:text-muted"
           />
-        </Field>
+        </LabeledField>
 
         {transportLocked ? (
           <div className="inline-flex items-center h-8 px-3 rounded-md bg-surface-soft border border-line-soft text-sm font-medium text-ink-soft self-start">
@@ -559,7 +560,7 @@ function StdioFields({
 }) {
   return (
     <>
-      <Field label="Command to launch">
+      <LabeledField label="Command to launch">
         <input
           type="text"
           value={command}
@@ -568,9 +569,9 @@ function StdioFields({
           spellCheck={false}
           className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
         />
-      </Field>
+      </LabeledField>
 
-      <Field label="Arguments">
+      <LabeledField label="Arguments">
         <ListEditor
           values={argsList}
           onChange={onArgs}
@@ -578,11 +579,11 @@ function StdioFields({
           addLabel="Add argument"
           mono
         />
-      </Field>
+      </LabeledField>
 
-      <Field label="Environment variables">
+      <LabeledField label="Environment variables">
         <KeyValueEditor entries={envEntries} onChange={onEnv} addLabel="Add environment variable" />
-      </Field>
+      </LabeledField>
     </>
   );
 }
@@ -600,7 +601,7 @@ function HttpFields({
 }) {
   return (
     <>
-      <Field label="URL">
+      <LabeledField label="URL">
         <input
           type="text"
           value={url}
@@ -609,11 +610,11 @@ function HttpFields({
           spellCheck={false}
           className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
         />
-      </Field>
+      </LabeledField>
 
-      <Field label="Headers">
+      <LabeledField label="Headers">
         <KeyValueEditor entries={headerEntries} onChange={onHeaders} addLabel="Add header" />
-      </Field>
+      </LabeledField>
     </>
   );
 }
@@ -731,15 +732,6 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
     >
       <Trash2 size={ICON.SM} strokeWidth={2} />
     </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1.5">
-      <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
-      {children}
-    </label>
   );
 }
 
