@@ -4,7 +4,8 @@ import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
-import { SPRING_SMOOTH } from "../../lib/motion";
+// Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
+import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
 
@@ -138,7 +139,7 @@ export function ActivityTail({
         opacity: collapsed ? 0 : 1,
         height: collapsed ? 0 : targetHeight,
       }}
-      transition={SPRING_SMOOTH}
+      transition={SPRING_LAYOUT}
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >

@@ -8,14 +8,18 @@ import type {
   CreateAutomationPayload,
   UpdateAutomationPayload,
 } from "../../api";
-import { SPRING_SMOOTH } from "../../lib/motion";
+import {
+  ENTRY_GLASS,
+  ENTRY_LINEN,
+  EASE_DECELERATE,
+} from "../../lib/tokens/motion";
+import { useStore } from "../../store";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
 import { Chip } from "../Chip";
 import { GlassSwitch } from "../GlassSwitch";
 
 const MODAL_BACKDROP_DURATION = 0.2;
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 export type EditorSeed =
   | { kind: "create"; preset?: CreateAutomationPayload }
@@ -182,6 +186,11 @@ export function AutomationEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = !!seed;
+  const material = useStore((s) => s.prefs.material);
+  const isGlass = material === "glass";
+  const panelTransition = isGlass
+    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
+    : ENTRY_LINEN.spring;
 
   // (Re)hydrate the form whenever a new seed arrives.
   useEffect(() => {
@@ -244,7 +253,7 @@ export function AutomationEditor({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: MODAL_BACKDROP_DURATION, ease: MODAL_EASE }}
+          transition={{ duration: MODAL_BACKDROP_DURATION, ease: EASE_DECELERATE }}
           onClick={onClose}
         >
           <motion.div
@@ -252,7 +261,7 @@ export function AutomationEditor({
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={SPRING_SMOOTH}
+            transition={panelTransition}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
@@ -391,7 +400,7 @@ function ScheduleChip({
             initial={{ opacity: 0, y: 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
-            transition={{ duration: 0.16, ease: MODAL_EASE }}
+            transition={{ duration: 0.16, ease: EASE_DECELERATE }}
             className="glass-surface glass-radius-md absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3"
           >
             <GlassToggle

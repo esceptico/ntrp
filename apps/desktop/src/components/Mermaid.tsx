@@ -4,11 +4,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
-import { SPRING_SMOOTH } from "../lib/motion";
+import {
+  ENTRY_GLASS,
+  ENTRY_LINEN,
+  EASE_DECELERATE,
+} from "../lib/tokens/motion";
+import { useStore } from "../store";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
-
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 const RENDER_DEBOUNCE_MS = 400;
 const MIN_ZOOM = 0.1;
@@ -81,6 +84,11 @@ export function Mermaid({ code }: { code: string }) {
  *  remounts `PanelInner`, which re-runs fit-to-view for the new size. */
 function MermaidPanel({ svg, source }: { svg: string; source: string }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const material = useStore((s) => s.prefs.material);
+  const isGlass = material === "glass";
+  const panelTransition = isGlass
+    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
+    : ENTRY_LINEN.spring;
   const toggle = () => setFullscreen((v) => !v);
   const root = document.querySelector("#app");
 
@@ -101,7 +109,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: MODAL_EASE }}
+                transition={{ duration: 0.2, ease: EASE_DECELERATE }}
                 onClick={() => setFullscreen(false)}
               >
                 <motion.div
@@ -109,7 +117,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
                   initial={{ opacity: 0, scale: 0.96, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 6 }}
-                  transition={SPRING_SMOOTH}
+                  transition={panelTransition}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <PanelInner svg={svg} source={source} fullscreen onToggleFullscreen={toggle} />

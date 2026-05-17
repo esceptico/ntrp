@@ -34,8 +34,11 @@ export const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
  *
  * Spec lives in docs/internal/apple-design-intel.md.
  */
+// retiring: use SPRING_MODAL from lib/tokens/motion
 export const SPRING_SMOOTH = { type: "spring", stiffness: 439, damping: 42, mass: 1 } as const;
+// retiring: use SPRING_CARD or SPRING_LAYOUT from lib/tokens/motion
 export const SPRING_SNAPPY = { type: "spring", stiffness: 158, damping: 21.4, mass: 1 } as const;
+// retiring: prefer SPRING_CARD from lib/tokens/motion (no documented bouncy use case)
 export const SPRING_BOUNCY = { type: "spring", stiffness: 158, damping: 17.6, mass: 1 } as const;
 
 /** Popover / menu reveal — origin-anchored, snappy with a hint of bounce. */

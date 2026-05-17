@@ -2,13 +2,17 @@ import { type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
-import { SPRING_SMOOTH } from "../lib/motion";
+import {
+  ENTRY_GLASS,
+  ENTRY_LINEN,
+  EASE_DECELERATE,
+} from "../lib/tokens/motion";
+import { useStore } from "../store";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
 const BACKDROP_DURATION = 0.2;
-const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 export interface PageModalHeader {
   /** Main title — usually a string but any node so callers can include
@@ -63,6 +67,13 @@ export function PageModal({
   disableEscape,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
+  const material = useStore((s) => s.prefs.material);
+  const isGlass = material === "glass";
+  // Glass entries decelerate (slab "lands"); linen entries use the modal
+  // spring so body + surface arrive together (spec §3.3).
+  const panelTransition = isGlass
+    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
+    : ENTRY_LINEN.spring;
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -76,15 +87,15 @@ export function PageModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: BACKDROP_DURATION, ease: EASE }}
+          transition={{ duration: BACKDROP_DURATION, ease: EASE_DECELERATE }}
           onClick={onClose}
         >
           <motion.div
             className={`glass-surface glass-radius-md ${size} grid ${grid} overflow-hidden`}
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
+            initial={{ opacity: 0, scale: isGlass ? 0.96 : 0.95, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={SPRING_SMOOTH}
+            exit={{ opacity: 0, scale: isGlass ? 0.96 : 0.95, y: 6 }}
+            transition={panelTransition}
             onClick={(e) => e.stopPropagation()}
           >
             {header && (

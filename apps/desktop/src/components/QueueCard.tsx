@@ -4,9 +4,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { cancelQueuedMessage } from "../actions";
 import { useStore, type QueuedMessage } from "../store";
 import { ICON } from "../lib/icons";
+import { EASE_EMPHASIZED } from "../lib/tokens/motion";
 
-const CARD_TRANSITION = { duration: 0.24, ease: [0.32, 0.72, 0, 1] as const };
-const ROW_TRANSITION = { duration: 0.18, ease: [0.32, 0.72, 0, 1] as const };
+const CARD_TRANSITION = { duration: 0.24, ease: EASE_EMPHASIZED };
+const ROW_TRANSITION = { duration: 0.18, ease: EASE_EMPHASIZED };
 
 /** Pending user messages submitted while the agent was running. Renders
  *  as a stack of cards peeking out from behind the composer — the

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { useStore } from "../../store";
-import { SPRING_SMOOTH } from "../../lib/motion";
+import { DURATION_POPOVER, EASE_DECELERATE } from "../../lib/tokens/motion";
 
 /** Compact "two scales on one ring" budget meter. Outer arc = token
  *  pressure (parent context only — subagent internals don't count, per
@@ -218,7 +218,7 @@ export function BudgetDial() {
               initial={{ opacity: 0, y: 4, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 4, scale: 0.98 }}
-              transition={SPRING_SMOOTH}
+              transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
               style={{
                 position: "fixed",
                 bottom: coords.bottom,

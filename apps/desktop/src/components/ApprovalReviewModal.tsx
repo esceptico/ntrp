@@ -4,12 +4,15 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
-import { SPRING_SMOOTH, modalOriginTransform } from "../lib/motion";
+import { modalOriginTransform } from "../lib/motion";
+import {
+  ENTRY_GLASS,
+  ENTRY_LINEN,
+  EASE_DECELERATE,
+} from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
-
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 const DIFF_LINE = "block px-2 min-w-max";
 const DIFF_ADD = "bg-[rgba(79,138,58,0.10)] text-[#2e6620] dark:bg-[rgba(135,154,57,0.16)] dark:text-[#afc463]";
@@ -35,6 +38,11 @@ export function ApprovalReviewModal() {
   );
   const close = useStore((s) => s.setReviewingApproval);
   const liveOrigin = useStore((s) => s.modalOrigin);
+  const material = useStore((s) => s.prefs.material);
+  const isGlass = material === "glass";
+  const panelTransition = isGlass
+    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
+    : ENTRY_LINEN.spring;
 
   // Same snapshot pattern as PageModal — exit needs the origin that was
   // present at open time, even after the store has cleared it.
@@ -62,7 +70,7 @@ export function ApprovalReviewModal() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: MODAL_EASE }}
+          transition={{ duration: 0.18, ease: EASE_DECELERATE }}
           onClick={() => close(null)}
         >
           <motion.div
@@ -78,7 +86,7 @@ export function ApprovalReviewModal() {
                 ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
                 : { opacity: 0, scale: 0.96, y: 6 }
             }
-            transition={SPRING_SMOOTH}
+            transition={panelTransition}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center gap-2 px-5 pt-4 pb-3 min-w-0">
