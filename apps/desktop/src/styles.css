@@ -650,12 +650,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 @layer components {
 .glass-surface {
   --glass-radius: 16px;
-  --glass-tint: var(--gp-tint, rgba(255, 255, 255, 0.35));
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
 
   position: relative;
   isolation: isolate;
-  background: var(--glass-tint);
+  background: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
   backdrop-filter:
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
@@ -675,7 +674,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .glass-surface[data-tone="dark"],
 :root.dark .glass-surface {
   --glass-drop: 0 4px 14px -4px rgba(0, 0, 0, 0.32);
-  background-color: transparent;
+  /* Dark glass: same slider, ~40% of light intensity so a 35% slider
+     reads as a subtle ~14% bright lift over the dark backdrop instead
+     of an overpowering white wash. The noise + tiny gradient sit
+     ON TOP of the tinted color, preserving the textured look. */
+  background-color: rgba(255, 255, 255, calc(var(--gp-tint-alpha, 0.35) * 0.4));
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
     linear-gradient(
@@ -702,7 +705,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .glass-surface[data-tone="light"] {
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
-  background: var(--gp-tint, rgba(255, 255, 255, 0.35));
+  background: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
   backdrop-filter:
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
