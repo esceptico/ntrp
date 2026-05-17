@@ -175,26 +175,45 @@ export function AppearanceTab() {
  *  no text — gives blur/saturate something to chew without distracting
  *  from the slider feedback. */
 function GlassPreview() {
-  // Backdrop uses theme tokens (bg → sunken surface) so the preview looks
-  // like a real chat scroll behind a real glass panel. The text sample
-  // gives blur/saturate something to operate on without screaming for
-  // attention — same typography as actual chat messages so what you see
-  // is what you ship.
+  // Backdrop is a mini fake-chat — real theme typography + theme surface
+  // variation + an accent splash so every slider has something to do:
+  //  • tint: lightens against the cream/sunken bands
+  //  • blur: smears the text and the accent chip
+  //  • saturate: pumps the accent color
+  //  • rim: visible against the dark text behind
+  // Mirrors what a real glass surface sees over actual chat content.
   return (
     <div
-      className="relative overflow-hidden rounded-[10px] border border-line-soft bg-bg"
-      style={{ height: 140 }}
+      className="relative overflow-hidden rounded-[10px] border border-line-soft"
+      style={{ height: 160 }}
     >
+      {/* Layered theme surfaces — gives glass some luminance variation
+          to blur, not a flat field. */}
+      <div className="absolute inset-0 bg-bg" aria-hidden />
       <div
         aria-hidden
-        className="absolute inset-0 p-3 text-sm text-muted leading-[1.5]"
-        style={{ columnCount: 2, columnGap: 16 }}
-      >
-        Reduce entropy. Capture thought. Background agents work the queue
-        while the composer stays ready. A second voice can compact, recall,
-        and surface what matters before you ask. Memory grows by use, not
-        by ceremony. The interface is the doctrine; the doctrine is glass.
+        className="absolute left-0 top-0 bottom-0 w-1/2 bg-surface-sunken"
+      />
+
+      {/* Fake message stack — theme typography + accent badge so the
+          saturate slider has chromatic content to operate on. */}
+      <div aria-hidden className="absolute inset-0 p-3 grid gap-2 content-start">
+        <div className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-accent" />
+          <div className="h-2 w-24 rounded bg-ink/60" />
+        </div>
+        <div className="h-2 w-3/4 rounded bg-ink/30" />
+        <div className="h-2 w-2/3 rounded bg-ink/30" />
+        <div className="flex items-center gap-2 pt-1">
+          <span className="inline-flex h-5 items-center gap-1 px-2 rounded-full bg-accent-soft text-accent-strong text-[10px] font-medium">
+            running
+          </span>
+          <div className="h-2 w-16 rounded bg-ink/40" />
+        </div>
+        <div className="h-2 w-1/2 rounded bg-ink/25" />
       </div>
+
+      {/* Glass surface on top — what we're tuning. */}
       <div
         className="glass-surface"
         style={{
@@ -202,9 +221,8 @@ function GlassPreview() {
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: 220,
-          height: 76,
-          borderRadius: 14,
+          width: 240,
+          height: 88,
           display: "grid",
           placeItems: "center",
           fontSize: 13,
