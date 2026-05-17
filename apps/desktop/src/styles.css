@@ -471,78 +471,82 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    backdrop-filter produces visible stripes across rows — we fall back
    to a pure opacity mask there. Reduced-transparency / motion users
    also get the mask fallback (the ambient blur can be uncomfortable). */
-/* Progressive backdrop blur (macOS/iOS scroll-edge pattern). 6 stacked
-   sibling layers each with a different blur radius, masked to
-   overlapping bands so the effective blur fades smoothly from heavy
-   (top of strip) to none (bottom). Single backdrop-filter + mask
-   doesn't work — produces a hard rectangle.
-   Linen-mode only: in Glass mode the parent slab already has
-   backdrop-filter, so nesting more inside hits the containing-block
-   trap and produces stripes. We fall back to opacity gradient there
-   and under reduced-transparency / reduced-motion. */
+/* Progressive blur on scroll-top — content blurs heavily at the top
+   of the scroll viewport and fades to clear below. 7 stacked
+   `backdrop-filter` layers with doubling blur radii (0.5 → 32 px),
+   each masked to a narrow band that overlaps its neighbors by ~50%,
+   plus an 8th solid-color cap layer that fades from --color-bg at the
+   top to transparent at the bottom to hide the seam where blur
+   abruptly ends. Recipe per kennethnym.com/blog/progressive-blur-in-css
+   and skiper-ui.com.
+   Linen-mode only — Glass mode would nest with the slab's own
+   backdrop-filter (containing-block trap), so the blur layers go inert
+   and only the cap remains. Same under prefers-reduced-* media. */
 .scroll-blur-top {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 64px;
-  margin-bottom: -64px;
+  height: 96px;
+  margin-bottom: -96px;
   pointer-events: none;
-  /* Default (Glass + reduced-* fallback): pure opacity gradient. */
-  background: linear-gradient(to bottom,
-    color-mix(in oklab, var(--color-bg) 75%, transparent) 0%,
-    color-mix(in oklab, var(--color-bg) 35%, transparent) 50%,
-    transparent 100%);
 }
 .scroll-blur-top > div {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-/* Layers are inert in Glass / fallback mode (the wrapper's bg-gradient
-   carries the fade by itself). Linen mode below turns them on. */
-:root[data-material="linen"] .scroll-blur-top {
-  background: transparent;
-}
+/* Layers 1–7: progressively lighter blur, heaviest at TOP of strip. */
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(1) {
-  -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 25%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 25%);
+  -webkit-backdrop-filter: blur(32px); backdrop-filter: blur(32px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
 }
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(2) {
-  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12%, rgba(0,0,0,1) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,0) 50%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12%, rgba(0,0,0,1) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,0) 50%);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
 }
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(3) {
-  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62%);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
 }
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(4) {
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 75%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 75%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
 }
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(5) {
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 88%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 88%);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
 }
 :root[data-material="linen"] .scroll-blur-top > div:nth-child(6) {
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,1) 100%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,1) 100%);
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(7) {
+  -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
+}
+/* Layer 8: solid bg-color cap. Fades --color-bg from full opacity at
+   the strip's top edge to transparent at the bottom. Hides the seam
+   where blur ends abruptly when content is scrolled past, AND tints
+   the very top of the strip toward the chrome above for continuity. */
+.scroll-blur-top > div:nth-child(8) {
+  background: linear-gradient(
+    to bottom,
+    var(--color-bg) 0%,
+    color-mix(in oklab, var(--color-bg) 50%, transparent) 30%,
+    transparent 60%
+  );
 }
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   :root[data-material="linen"] .scroll-blur-top > div {
     -webkit-backdrop-filter: none;
             backdrop-filter: none;
-  }
-  :root[data-material="linen"] .scroll-blur-top {
-    background: linear-gradient(to bottom,
-      color-mix(in oklab, var(--color-bg) 75%, transparent) 0%,
-      color-mix(in oklab, var(--color-bg) 35%, transparent) 50%,
-      transparent 100%);
   }
 }
 
