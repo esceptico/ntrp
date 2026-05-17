@@ -674,11 +674,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .glass-surface[data-tone="dark"],
 :root.dark .glass-surface {
   --glass-drop: 0 4px 14px -4px rgba(0, 0, 0, 0.32);
-  /* Dark glass: same slider, ~40% of light intensity so a 35% slider
-     reads as a subtle ~14% bright lift over the dark backdrop instead
-     of an overpowering white wash. The noise + tiny gradient sit
-     ON TOP of the tinted color, preserving the textured look. */
-  background-color: rgba(255, 255, 255, calc(var(--gp-tint-alpha, 0.35) * 0.4));
+  /* Dark glass: tint is the theme's dark surface color at the slider's
+     opacity (0 = transparent → see backdrop, 1 = solid dark surface).
+     Same slider semantics as light, just a theme-appropriate base. */
+  background-color: rgba(20, 22, 28, var(--gp-tint-alpha, 0.35));
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
     linear-gradient(
@@ -883,12 +882,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 /* Modal scrim — the dim layer between a modal and the chat behind.
-   Dark: traditional dark scrim (0.32 alpha black) — focuses attention
-   onto the modal by darkening backdrop. Light: very faint dark wash
-   (0.08 alpha) — too much darkening here would shade the modal's
-   own backdrop-filter sample into gray, killing the glass identity. */
+   Light: very faint dark wash (0.08 alpha). Dark: 0.32 alpha black.
+   Fixed 8px backdrop-filter blur so the page softens behind the modal
+   for focus separation. NOT tied to --gp-blur on purpose: the modal's
+   own .glass-surface uses --gp-blur, and stacking the user-controlled
+   blur on top of an already-heavily-blurred backdrop kills slider
+   visibility. Keep this scrim blur small so the slider still moves
+   things on the modal itself. */
 .modal-scrim {
   background-color: rgba(20, 24, 28, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 :root.dark .modal-scrim {
   background-color: rgba(0, 0, 0, 0.32);
