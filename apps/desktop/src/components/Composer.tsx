@@ -284,7 +284,7 @@ export function Composer() {
           already-filtered form bg instead of the chat content beneath,
           producing a flat/invisible blur. Lifting the picker out lets
           its own glass material sample from the page directly. */}
-      <div className="relative max-w-[760px] mx-auto">
+      <div className="composer-wrap relative max-w-[760px] mx-auto">
         {pickerOpen && query !== null && (
           <CommandPicker query={query} onSelect={applyPickerSelection} />
         )}
@@ -432,7 +432,7 @@ export function Composer() {
           placeholder="Message ntrp…"
           className="w-full min-h-[64px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
         />
-        <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-2">
+        <div className="composer-toolbar flex items-center gap-1.5 px-2 pt-1.5 pb-2">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -451,7 +451,7 @@ export function Composer() {
             title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
             aria-label={skipApprovals ? "Auto-approve enabled — click to require approval" : "Click to enable auto-approve"}
           >
-            {skipApprovals ? "Auto" : "Approve"}
+            <span className="composer-chip-label">{skipApprovals ? "Auto" : "Approve"}</span>
           </Chip>
           <LoopStatusBar />
           <span className="flex-1" />

@@ -130,9 +130,15 @@ export function LoopStatusBar() {
         aria-label="Active loops"
       >
         {loops.length === 1 ? (
-          <>Loop · <RollingDigits value={countdown} /></>
+          <>
+            <span className="composer-loop-label">Loop · </span>
+            <RollingDigits value={countdown} />
+          </>
         ) : (
-          <>Loops · {loops.length} · next <RollingDigits value={countdown} /></>
+          <>
+            <span className="composer-loop-label">Loops · {loops.length} · next </span>
+            <RollingDigits value={countdown} />
+          </>
         )}
       </Chip>
       {open && coords && createPortal(

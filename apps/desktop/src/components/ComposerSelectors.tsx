@@ -122,12 +122,12 @@ export function ModelReasoningPicker({
           disabled && "opacity-60",
         )}
       >
-        <span className="truncate font-mono text-xs text-ink-soft">
+        <span className="composer-model-label truncate font-mono text-xs text-ink-soft">
           {buttonLabel ?? shortModelLabel(currentModel)}
         </span>
         {efforts.length > 0 && (
           <>
-            <span className="text-whisper">·</span>
+            <span className="composer-effort-separator text-whisper">·</span>
             <span className="text-faint">{currentEffort ?? "off"}</span>
           </>
         )}
