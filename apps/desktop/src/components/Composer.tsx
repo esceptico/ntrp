@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
 import { enqueueMessage, isBuiltin, respondToAllApprovals, runBuiltinCommand, sendMessage, stopRun, toggleAuto, viewSkill } from "../actions";
 import { QueueCard } from "./QueueCard";
+import { GoalStrip } from "./GoalStrip";
 import {
   CommandPicker,
   filterCommands,
@@ -275,6 +276,7 @@ export function Composer() {
   return (
     <div className="px-7 pb-2">
       <div className="max-w-[760px] mx-auto">
+        <GoalStrip />
         <QueueCard />
       </div>
       {/* Wrapper exists so the CommandPicker can sit as a sibling of

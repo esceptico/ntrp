@@ -147,6 +147,34 @@ class SessionService:
         except Exception as e:
             _logger.warning("Failed to record chat compaction: %s", e)
 
+    async def set_goal(self, session_id: str, objective: str, token_budget: int | None = None) -> dict | None:
+        try:
+            return await self.store.set_goal(session_id, objective, token_budget=token_budget)
+        except Exception as e:
+            _logger.warning("Failed to set goal: %s", e)
+            return None
+
+    async def get_goal(self, session_id: str) -> dict | None:
+        try:
+            return await self.store.get_goal(session_id)
+        except Exception as e:
+            _logger.warning("Failed to load goal: %s", e)
+            return None
+
+    async def update_goal(self, session_id: str, **kwargs) -> dict | None:
+        try:
+            return await self.store.update_goal(session_id, **kwargs)
+        except Exception as e:
+            _logger.warning("Failed to update goal: %s", e)
+            return None
+
+    async def clear_goal(self, session_id: str) -> bool:
+        try:
+            return await self.store.clear_goal(session_id)
+        except Exception as e:
+            _logger.warning("Failed to clear goal: %s", e)
+            return False
+
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         return await self.store.list_sessions(limit=limit)
 

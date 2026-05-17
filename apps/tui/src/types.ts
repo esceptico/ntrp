@@ -1,4 +1,5 @@
 import type { ToolChainItem } from "./components/toolchain/types.js";
+import type { SessionGoal } from "./api/sessions.js";
 
 export interface ThinkingEvent {
   type: "thinking";
@@ -162,6 +163,17 @@ export interface MessageIngestedEvent {
   run_id: string;
 }
 
+export interface GoalUpdatedEvent {
+  type: "goal_updated";
+  session_id: string;
+  goal: SessionGoal;
+}
+
+export interface GoalClearedEvent {
+  type: "goal_cleared";
+  session_id: string;
+}
+
 export type ServerEvent =
   | ThinkingEvent
   | ReasoningStartEvent
@@ -183,7 +195,9 @@ export type ServerEvent =
   | RunErrorEvent
   | RunCancelledEvent
   | RunBackgroundedEvent
-  | MessageIngestedEvent;
+  | MessageIngestedEvent
+  | GoalUpdatedEvent
+  | GoalClearedEvent;
 
 export interface Message {
   id?: string;

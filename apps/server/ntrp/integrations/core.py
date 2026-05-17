@@ -35,6 +35,7 @@ from ntrp.tools.files import (
     search_text_tool,
     write_file_tool,
 )
+from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
@@ -61,7 +62,14 @@ SYSTEM = Integration(
 MEMORY_TOOLS = Integration(
     id="_memory",
     label="Memory",
-    tools={"remember": remember_tool, "recall": recall_tool, "forget": forget_tool},
+    tools={
+        "remember": remember_tool,
+        "recall": recall_tool,
+        "forget": forget_tool,
+        "get_goal": get_goal_tool,
+        "complete_goal": complete_goal_tool,
+        "block_goal": block_goal_tool,
+    },
 )
 
 AUTOMATION = Integration(

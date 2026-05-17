@@ -41,6 +41,36 @@ export interface SessionListItem {
   archived_at?: string | null;
 }
 
+export interface SessionGoal {
+  session_id: string;
+  goal_id: string;
+  objective: string;
+  status: "active" | "paused" | "blocked" | "budget_limited" | "complete";
+  evidence: Array<{ text: string; created_at: string }>;
+  blocked_reason?: string | null;
+  token_budget?: number | null;
+  tokens_used: number;
+  time_used_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGoal(config: Config, sessionId: string): Promise<SessionGoal | null> {
+  return api.get<SessionGoal | null>(`${config.serverUrl}/sessions/${sessionId}/goal`);
+}
+
+export async function setGoal(config: Config, sessionId: string, objective: string): Promise<SessionGoal> {
+  return api.post<SessionGoal>(`${config.serverUrl}/sessions/${sessionId}/goal`, { objective });
+}
+
+export async function updateGoal(config: Config, sessionId: string, status: SessionGoal["status"]): Promise<SessionGoal> {
+  return api.patch<SessionGoal>(`${config.serverUrl}/sessions/${sessionId}/goal`, { status });
+}
+
+export async function clearGoal(config: Config, sessionId: string): Promise<{ status: string }> {
+  return api.delete<{ status: string }>(`${config.serverUrl}/sessions/${sessionId}/goal`);
+}
+
 export async function listSessions(config: Config): Promise<{ sessions: SessionListItem[] }> {
   return api.get<{ sessions: SessionListItem[] }>(`${config.serverUrl}/sessions`);
 }

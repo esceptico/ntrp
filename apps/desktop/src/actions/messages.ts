@@ -14,7 +14,15 @@ import {
 } from "../store/run-lifecycle";
 import { clearCachedStoppingRun } from "../store/session-cache";
 
-export async function sendMessage(text: string, images: ImageBlock[] = []): Promise<void> {
+interface SendMessageOptions {
+  meta?: boolean;
+}
+
+export async function sendMessage(
+  text: string,
+  images: ImageBlock[] = [],
+  options: SendMessageOptions = {},
+): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
   const sendSessionId = s.currentSessionId;
@@ -51,13 +59,15 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
   // Use the same id locally and on the server so /session/revert can match
   // this user message back to its saved row when the user later edits it.
   const userMessageId = crypto.randomUUID();
-  s.appendMessage({
-    id: userMessageId,
-    role: "user",
-    content: trimmedText,
-    turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
-    images: images.length > 0 ? images : undefined,
-  });
+  if (!options.meta) {
+    s.appendMessage({
+      id: userMessageId,
+      role: "user",
+      content: trimmedText,
+      turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
+      images: images.length > 0 ? images : undefined,
+    });
+  }
   messagesScroll.scrollToBottom?.("smooth");
   setState((state) =>
     reduceRunStarted(state, { runId: null, sessionId: sendSessionId }),
@@ -71,7 +81,7 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
         session_id: sendSessionId,
         skip_approvals: s.skipApprovals,
         images: images.length > 0 ? images : undefined,
-        client_id: userMessageId,
+        client_id: options.meta ? `loop:goal:${Date.now()}` : userMessageId,
       }),
     });
     setState((state) =>
@@ -94,20 +104,30 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
 /** Submit a message while a run is in flight. Server queues it onto the
  *  active run's inject_queue; we render it as a "Queued" bubble above
  *  the composer until `message_ingested` arrives. */
-export async function enqueueMessage(text: string, images: ImageBlock[] = []): Promise<void> {
+interface EnqueueMessageOptions {
+  meta?: boolean;
+}
+
+export async function enqueueMessage(
+  text: string,
+  images: ImageBlock[] = [],
+  options: EnqueueMessageOptions = {},
+): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
   const trimmed = text.trim();
   if (!trimmed && images.length === 0) return;
 
-  const clientId = crypto.randomUUID();
-  s.addQueuedMessage({
-    clientId,
-    text: trimmed,
-    images: images.length > 0 ? images : undefined,
-    status: "pending",
-    enqueuedAt: Date.now(),
-  });
+  const clientId = options.meta ? `loop:goal:${Date.now()}` : crypto.randomUUID();
+  if (!options.meta) {
+    s.addQueuedMessage({
+      clientId,
+      text: trimmed,
+      images: images.length > 0 ? images : undefined,
+      status: "pending",
+      enqueuedAt: Date.now(),
+    });
+  }
 
   try {
     await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
@@ -121,7 +141,7 @@ export async function enqueueMessage(text: string, images: ImageBlock[] = []): P
       }),
     });
   } catch {
-    s.setQueuedMessageStatus(clientId, "failed");
+    if (!options.meta) s.setQueuedMessageStatus(clientId, "failed");
   }
 }
 

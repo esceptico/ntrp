@@ -4,6 +4,7 @@ import type {
   Automation,
   ModelsResponse,
   ServerConfig,
+  SessionGoal,
   SessionListItem,
   SkillDescriptor,
 } from "../api";
@@ -334,6 +335,7 @@ export interface State {
   modalOrigin: { x: number; y: number } | null;
   loops: ServerLoop[];
   backgroundAgents: BackgroundAgentsDomainState;
+  goals: Record<string, SessionGoal>;
   prefs: Prefs;
 }
 
@@ -425,6 +427,7 @@ export interface Actions {
   automationFinished: (taskId: string) => void;
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
+  setGoal: (sessionId: string, goal: SessionGoal | null) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
   openArchive: (origin?: { x: number; y: number } | null) => void;
   closeArchive: () => void;

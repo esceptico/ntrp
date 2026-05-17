@@ -1,5 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { Message, PendingApproval, TokenUsage } from "../types.js";
+import type { SessionGoal } from "../api/sessions.js";
 import { ZERO_USAGE } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
 import {
@@ -61,6 +62,7 @@ export interface SessionStreamState {
   completedBackgroundTasks: { id: string; status: string }[];
   backgroundTasks: Map<string, BackgroundTask>;
   queuedMessages: QueuedMessage[];
+  goal: SessionGoal | null;
 }
 
 function createSessionState(): SessionStreamState {
@@ -85,6 +87,7 @@ function createSessionState(): SessionStreamState {
     completedBackgroundTasks: [],
     backgroundTasks: new Map(),
     queuedMessages: [],
+    goal: null,
   };
 }
 

@@ -96,6 +96,36 @@ class ChatRunsStatusResponse(BaseModel):
     background_task_sessions: list[BackgroundTaskSessionStatusResponse] = Field(default_factory=list)
 
 
+class GoalEvidenceResponse(BaseModel):
+    text: str
+    created_at: str
+
+
+class SessionGoalResponse(BaseModel):
+    session_id: str
+    goal_id: str
+    objective: str
+    status: Literal["active", "paused", "blocked", "budget_limited", "complete"]
+    evidence: list[GoalEvidenceResponse] = Field(default_factory=list)
+    blocked_reason: str | None = None
+    token_budget: int | None = None
+    tokens_used: int = 0
+    time_used_seconds: int = 0
+    created_at: str
+    updated_at: str
+
+
+class SetSessionGoalRequest(BaseModel):
+    objective: str = Field(..., min_length=1, max_length=100_000)
+    token_budget: int | None = Field(default=None, gt=0)
+
+
+class UpdateSessionGoalRequest(BaseModel):
+    status: Literal["active", "paused", "blocked", "budget_limited", "complete"] | None = None
+    evidence: str | None = Field(default=None, max_length=20_000)
+    blocked_reason: str | None = Field(default=None, max_length=20_000)
+
+
 OutboxEventId = Annotated[int, Field(gt=0)]
 FactId = Annotated[int, Field(gt=0)]
 ObservationId = Annotated[int, Field(gt=0)]

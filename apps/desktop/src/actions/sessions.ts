@@ -9,6 +9,7 @@ import {
   type SessionListItem,
 } from "../api";
 import { getState } from "../store";
+import { fetchGoal } from "./goals";
 import { loadHistory, type LoadHistoryOptions } from "./history";
 
 export async function switchSession(sessionId: string, historyOptions: LoadHistoryOptions = {}): Promise<void> {
@@ -17,6 +18,7 @@ export async function switchSession(sessionId: string, historyOptions: LoadHisto
   // Cache is only a fast visual restore. Always reconcile with canonical
   // history so a stale/corrupted projection cannot survive until Cmd+R.
   await loadHistory(sessionId, historyOptions);
+  await fetchGoal(sessionId);
 }
 
 export async function createSession(): Promise<void> {

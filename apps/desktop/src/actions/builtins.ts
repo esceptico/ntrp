@@ -2,7 +2,9 @@ import { apiWithConfig, type SessionListItem } from "../api";
 import { getState } from "../store";
 import { forgetEventSeqForSession } from "../store/chat-stream";
 import { loadHistory } from "./history";
+import { enqueueMessage, sendMessage } from "./messages";
 import { switchSession } from "./sessions";
+import { clearGoal, setGoal, updateGoal } from "./goals";
 import { appendError, appendStatus, formatCost, formatTokens } from "./_shared";
 
 export interface BuiltinCommand {
@@ -21,6 +23,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
   { name: "branch", description: "Branch into a new session" },
   { name: "rename", description: "Rename this session", hidden: true },
   { name: "cost", description: "Show usage so far" },
+  { name: "goal", description: "Set or show this session's goal" },
 ];
 
 const BUILTIN_NAMES = new Set(BUILTIN_COMMANDS.map((c) => c.name));
@@ -37,6 +40,35 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
       appendStatus(
         `Last context: ${formatTokens(u.lastPrompt)} tokens · Total: ${formatTokens(u.totalTokens)} tokens · ${formatCost(u.totalCost)}`,
       );
+      return;
+    }
+    case "goal": {
+      const arg = args.trim();
+      if (arg === "pause") {
+        await updateGoal("paused");
+        return;
+      }
+      if (arg === "resume") {
+        await updateGoal("active");
+        return;
+      }
+      if (arg === "clear") {
+        await clearGoal();
+        return;
+      }
+      if (arg === "complete") {
+        await updateGoal("complete");
+        return;
+      }
+      const goal = await setGoal(arg);
+      if (arg && goal) {
+        const prompt = `Continue working toward this goal: ${goal.objective}`;
+        if (s.running) {
+          await enqueueMessage(prompt, [], { meta: true });
+        } else {
+          await sendMessage(prompt, [], { meta: true });
+        }
+      }
       return;
     }
     case "clear": {

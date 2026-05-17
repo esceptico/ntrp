@@ -4,7 +4,9 @@ from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
-from ntrp.server.deps import require_run_registry, require_session_service
+from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
+from ntrp.server.bus import BusRegistry
+from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     BranchRequest,
@@ -12,13 +14,24 @@ from ntrp.server.schemas import (
     CreateSessionRequest,
     RenameSessionRequest,
     RevertRequest,
+    SessionGoalResponse,
     SessionResponse,
     SetSessionAutoRequest,
+    SetSessionGoalRequest,
+    UpdateSessionGoalRequest,
 )
 from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
 
 router = APIRouter(tags=["session"])
+
+
+async def _emit_goal_event(buses: BusRegistry, session_id: str, goal: dict | None) -> None:
+    bus = buses.get_or_create(session_id)
+    if goal is None:
+        await bus.emit(GoalClearedEvent(session_id=session_id))
+    else:
+        await bus.emit(GoalUpdatedEvent(session_id=session_id, goal=goal))
 
 
 @router.get("/session/history")
@@ -182,6 +195,67 @@ async def get_session(
         integration_errors=runtime.get_integration_errors(),
         name=session_state.name,
     )
+
+
+@router.get("/sessions/{session_id}/goal", response_model=SessionGoalResponse | None)
+async def get_session_goal(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+):
+    return await svc.get_goal(session_id)
+
+
+@router.post("/sessions/{session_id}/goal", response_model=SessionGoalResponse)
+async def set_session_goal(
+    session_id: str,
+    req: SetSessionGoalRequest,
+    svc: SessionService = Depends(require_session_service),
+    buses: BusRegistry = Depends(get_bus_registry),
+):
+    if not await svc.load(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    objective = req.objective.strip()
+    if not objective:
+        raise HTTPException(status_code=422, detail="Goal objective cannot be blank")
+    goal = await svc.set_goal(session_id, objective, token_budget=req.token_budget)
+    if not goal:
+        raise HTTPException(status_code=500, detail="Failed to set goal")
+    await _emit_goal_event(buses, session_id, goal)
+    return goal
+
+
+@router.patch("/sessions/{session_id}/goal", response_model=SessionGoalResponse)
+async def update_session_goal(
+    session_id: str,
+    req: UpdateSessionGoalRequest,
+    svc: SessionService = Depends(require_session_service),
+    buses: BusRegistry = Depends(get_bus_registry),
+):
+    blocked_reason = req.blocked_reason.strip() if req.blocked_reason else None
+    if req.status == "blocked" and not blocked_reason:
+        raise HTTPException(status_code=422, detail="blocked_reason is required when blocking a goal")
+    goal = await svc.update_goal(
+        session_id,
+        status=req.status,
+        evidence=req.evidence.strip() if req.evidence else None,
+        blocked_reason=blocked_reason,
+    )
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    await _emit_goal_event(buses, session_id, goal)
+    return goal
+
+
+@router.delete("/sessions/{session_id}/goal")
+async def clear_session_goal(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+    buses: BusRegistry = Depends(get_bus_registry),
+):
+    cleared = await svc.clear_goal(session_id)
+    if cleared:
+        await _emit_goal_event(buses, session_id, None)
+    return {"status": "cleared", "session_id": session_id}
 
 
 @router.post("/session/clear")

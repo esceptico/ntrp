@@ -8,6 +8,7 @@ import {
   Layers,
   RotateCcw,
   Sparkles,
+  Target,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const BUILTIN_ICONS: Record<string, LucideIcon> = {
   rename: Edit3,
   branch: GitBranch,
   cost: DollarSign,
+  goal: Target,
 };
 
 function iconFor(entry: CommandEntry): LucideIcon {

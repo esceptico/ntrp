@@ -201,7 +201,21 @@ CREATE TABLE IF NOT EXISTS background_agent_events (
 
 CREATE INDEX IF NOT EXISTS idx_background_agent_events_task
     ON background_agent_events(task_id);
-	"""
+
+CREATE TABLE IF NOT EXISTS session_goals (
+    session_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('active', 'paused', 'blocked', 'budget_limited', 'complete')),
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    blocked_reason TEXT,
+    token_budget INTEGER,
+    tokens_used INTEGER NOT NULL DEFAULT 0,
+    time_used_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+		"""
 
 SQL_SAVE_SESSION = """
 INSERT INTO sessions (
@@ -376,6 +390,21 @@ class SessionStore:
             "result_feedback": row["result_feedback"],
         }
 
+    def _goal_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "session_id": row["session_id"],
+            "goal_id": row["goal_id"],
+            "objective": row["objective"],
+            "status": row["status"],
+            "evidence": json.loads(row["evidence_json"] or "[]"),
+            "blocked_reason": row["blocked_reason"],
+            "token_budget": row["token_budget"],
+            "tokens_used": int(row["tokens_used"] or 0),
+            "time_used_seconds": int(row["time_used_seconds"] or 0),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         for col in (
@@ -392,6 +421,145 @@ class SessionStore:
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
         await self._migrate_chat_compactions_schema()
+
+    async def set_goal(
+        self,
+        session_id: str,
+        objective: str,
+        *,
+        token_budget: int | None = None,
+    ) -> dict:
+        lock = await self._session_write_lock(session_id)
+        async with lock:
+            return await self._set_goal_unlocked(session_id, objective, token_budget=token_budget)
+
+    async def _set_goal_unlocked(
+        self,
+        session_id: str,
+        objective: str,
+        *,
+        token_budget: int | None = None,
+    ) -> dict:
+        now = datetime.now(UTC).isoformat()
+        goal_id = uuid4().hex
+        await self.conn.execute(
+            """
+            INSERT INTO session_goals (
+                session_id, goal_id, objective, status, evidence_json,
+                blocked_reason, token_budget, tokens_used, time_used_seconds,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, 'active', '[]', NULL, ?, 0, 0, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                goal_id = excluded.goal_id,
+                objective = excluded.objective,
+                status = excluded.status,
+                evidence_json = excluded.evidence_json,
+                blocked_reason = NULL,
+                token_budget = excluded.token_budget,
+                tokens_used = 0,
+                time_used_seconds = 0,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
+            """,
+            (session_id, goal_id, objective, token_budget, now, now),
+        )
+        await self.conn.commit()
+        goal = await self.get_goal(session_id)
+        if goal is None:
+            raise RuntimeError("goal insert failed")
+        return goal
+
+    async def get_goal(self, session_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT * FROM session_goals WHERE session_id = ?",
+            (session_id,),
+        )
+        return self._goal_payload(rows[0]) if rows else None
+
+    async def clear_goal(self, session_id: str) -> bool:
+        lock = await self._session_write_lock(session_id)
+        async with lock:
+            cursor = await self.conn.execute("DELETE FROM session_goals WHERE session_id = ?", (session_id,))
+            await self.conn.commit()
+            return cursor.rowcount > 0
+
+    async def update_goal(
+        self,
+        session_id: str,
+        *,
+        goal_id: str | None = None,
+        status: str | None = None,
+        evidence: str | None = None,
+        blocked_reason: str | None = None,
+        tokens_used_delta: int = 0,
+        time_used_seconds_delta: int = 0,
+    ) -> dict | None:
+        lock = await self._session_write_lock(session_id)
+        async with lock:
+            return await self._update_goal_unlocked(
+                session_id,
+                goal_id=goal_id,
+                status=status,
+                evidence=evidence,
+                blocked_reason=blocked_reason,
+                tokens_used_delta=tokens_used_delta,
+                time_used_seconds_delta=time_used_seconds_delta,
+            )
+
+    async def _update_goal_unlocked(
+        self,
+        session_id: str,
+        *,
+        goal_id: str | None = None,
+        status: str | None = None,
+        evidence: str | None = None,
+        blocked_reason: str | None = None,
+        tokens_used_delta: int = 0,
+        time_used_seconds_delta: int = 0,
+    ) -> dict | None:
+        current = await self.get_goal(session_id)
+        if current is None:
+            return None
+        if goal_id is not None and current["goal_id"] != goal_id:
+            return None
+        next_evidence = list(current["evidence"])
+        if evidence:
+            next_evidence.append({"text": evidence, "created_at": datetime.now(UTC).isoformat()})
+        next_status = status or current["status"]
+        next_tokens_used = current["tokens_used"] + max(0, tokens_used_delta)
+        if (
+            status is None
+            and current.get("token_budget")
+            and next_tokens_used >= current["token_budget"]
+            and current["status"] == "active"
+        ):
+            next_status = "budget_limited"
+        next_blocked_reason = blocked_reason if next_status == "blocked" else None
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            UPDATE session_goals
+            SET status = ?,
+                evidence_json = ?,
+                blocked_reason = ?,
+                tokens_used = tokens_used + ?,
+                time_used_seconds = time_used_seconds + ?,
+                updated_at = ?
+            WHERE session_id = ?
+            """,
+            (
+                next_status,
+                json.dumps(next_evidence),
+                next_blocked_reason,
+                max(0, tokens_used_delta),
+                max(0, time_used_seconds_delta),
+                now,
+                session_id,
+            ),
+        )
+        await self.conn.commit()
+        return await self.get_goal(session_id)
 
     async def _migrate_chat_compactions_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(chat_compactions)")

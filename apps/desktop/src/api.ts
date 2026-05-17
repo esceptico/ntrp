@@ -18,6 +18,20 @@ export interface SessionListItem {
   origin_automation_id?: string | null;
 }
 
+export interface SessionGoal {
+  session_id: string;
+  goal_id: string;
+  objective: string;
+  status: "active" | "paused" | "blocked" | "budget_limited" | "complete";
+  evidence: { text: string; created_at: string }[];
+  blocked_reason?: string | null;
+  token_budget?: number | null;
+  tokens_used: number;
+  time_used_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface HistoryToolCall {
   id: string;
   name: string;
@@ -148,6 +162,8 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "compaction_started"; run_id: string }
   | { type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number }
   | { type: "message_ingested"; client_id: string; run_id: string }
+  | { type: "goal_updated"; session_id: string; goal: SessionGoal }
+  | { type: "goal_cleared"; session_id: string }
 );
 
 export const STORAGE_KEY = "ntrp.desktop.config";

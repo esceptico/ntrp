@@ -16,6 +16,7 @@ export const COMMANDS = [
   { name: "settings", description: "Model, connections, and UI settings" },
   { name: "reasoning", description: "Set effort or show/hide reasoning output" },
   { name: "approvals", description: "Toggle approval prompts for new runs" },
+  { name: "goal", description: "Set or show this session's goal" },
   { name: "retry", description: "Revert last exchange and resend" },
   { name: "undo", description: "Revert last exchange" },
   { name: "compact", description: "Summarize old messages to save tokens" },

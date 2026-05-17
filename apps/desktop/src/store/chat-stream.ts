@@ -353,6 +353,12 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
         at: ts,
       });
       return;
+    case "goal_updated":
+      s.setGoal(event.session_id, event.goal);
+      return;
+    case "goal_cleared":
+      s.setGoal(event.session_id, null);
+      return;
     default: {
       const result = applyChatEventToTranscript(chatStreamState, event, {
         getProjectionState: () => chatStreamState,

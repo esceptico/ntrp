@@ -15,6 +15,10 @@ import {
   renameSession,
   deleteSession,
   restoreSession,
+  getGoal,
+  setGoal,
+  updateGoal,
+  clearGoal,
   type SessionListItem,
 } from "../api/client.js";
 import { deleteCredentials } from "../lib/secrets.js";
@@ -40,6 +44,8 @@ interface CommandContext {
   addMessage: (msg: { role: string; content: string }) => void;
   clearMessages: () => void;
   sendMessage: (msg: string, images?: ImageBlock[]) => void;
+  enqueueMessage: (msg: string, images?: ImageBlock[]) => void;
+  isStreaming: boolean;
   setStatus: (status: StatusType) => void;
   setReasoningEffort: (effort: string | null) => Promise<boolean>;
   showReasoning: boolean;
@@ -66,6 +72,48 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   connect: ({ openDialog }) => { openDialog("providers"); return true; },
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
   automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
+  goal: async ({ config, sessionId, addMessage, sendMessage, enqueueMessage, isStreaming }, args) => {
+    if (!sessionId) {
+      addMessage({ role: "error", content: "No active session" });
+      return true;
+    }
+    const text = args.join(" ").trim();
+    try {
+      if (!text) {
+        const goal = await getGoal(config, sessionId);
+        addMessage({ role: "status", content: goal ? `Goal: ${goal.objective} (${goal.status})` : "No active goal." });
+        return true;
+      }
+      if (text === "pause") {
+        await updateGoal(config, sessionId, "paused");
+        addMessage({ role: "status", content: "Goal paused." });
+        return true;
+      }
+      if (text === "resume") {
+        await updateGoal(config, sessionId, "active");
+        addMessage({ role: "status", content: "Goal resumed." });
+        return true;
+      }
+      if (text === "clear") {
+        await clearGoal(config, sessionId);
+        addMessage({ role: "status", content: "Goal cleared." });
+        return true;
+      }
+      if (text === "complete") {
+        await updateGoal(config, sessionId, "complete");
+        addMessage({ role: "status", content: "Goal complete." });
+        return true;
+      }
+      const goal = await setGoal(config, sessionId, text);
+      addMessage({ role: "status", content: `Goal set: ${goal.objective}` });
+      const prompt = `Continue working toward this goal: ${goal.objective}`;
+      if (isStreaming) enqueueMessage(prompt);
+      else sendMessage(prompt);
+    } catch (error) {
+      addMessage({ role: "error", content: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  },
   theme: ({ openDialog }) => { openDialog("theme"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 

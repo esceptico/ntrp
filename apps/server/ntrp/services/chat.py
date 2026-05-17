@@ -71,6 +71,7 @@ class ChatContext:
     session_service: SessionService
     run_registry: RunRegistry
     initial_input_tokens: int | None = None
+    goal_id: str | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
@@ -228,6 +229,8 @@ async def _prepare_messages(
     images: list[dict] | None = None,
     context: list[dict] | None = None,
     client_id: str | None = None,
+    session_id: str | None = None,
+    goal_context: dict | None = None,
 ) -> list[dict]:
     memory_context = None
     if deps.memory:
@@ -246,7 +249,6 @@ async def _prepare_messages(
         if deps.agent_config.deferred_tools
         else None
     )
-
     system_blocks = build_system_blocks(
         source_details={},
         memory_context=memory_context,
@@ -254,6 +256,7 @@ async def _prepare_messages(
         directives=directives,
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,
+        goal_context=goal_context,
         use_cache_control=_is_anthropic(deps.chat_model),
     )
 
@@ -394,6 +397,8 @@ async def prepare_chat(
         session_state.name = name_candidate[:50]
 
     tools = deps.executor.get_tools()
+    get_goal = getattr(deps.session_service, "get_goal", None)
+    goal_context = await get_goal(session_state.session_id) if get_goal else None
     messages = await _prepare_messages(
         deps,
         messages,
@@ -403,6 +408,8 @@ async def prepare_chat(
         images=images,
         context=context,
         client_id=client_id,
+        session_id=session_state.session_id,
+        goal_context=goal_context,
     )
 
     run = registry.create_run(session_state.session_id)
@@ -422,6 +429,7 @@ async def prepare_chat(
         session_service=deps.session_service,
         run_registry=deps.run_registry,
         initial_input_tokens=session_data.last_input_tokens,
+        goal_id=goal_context["goal_id"] if goal_context else None,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
     )
@@ -881,6 +889,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     if input_tokens is not None:
                         metadata["last_input_tokens"] = input_tokens
                     metadata["last_message_count"] = len(run.messages)
+                if run.usage.total_tokens:
+                    await ctx.session_service.update_goal(
+                        session_state.session_id,
+                        goal_id=ctx.goal_id,
+                        tokens_used_delta=run.usage.total_tokens,
+                        time_used_seconds_delta=max(0, int((datetime.now(UTC) - run.created_at).total_seconds())),
+                    )
                 await ctx.session_service.save(session_state, _persistable_messages(run), metadata=metadata)
                 # Disk now holds the canonical end-of-run state; advance the
                 # checkpoint watermark so any cursor below it gets a

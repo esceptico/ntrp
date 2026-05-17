@@ -164,6 +164,56 @@ async def test_tool_approval_request_to_rejected(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_session_goal_lifecycle(store: SessionStore):
+    goal = await store.set_goal("sess-1", "Ship the goal feature")
+
+    assert goal["session_id"] == "sess-1"
+    assert goal["objective"] == "Ship the goal feature"
+    assert goal["status"] == "active"
+    assert goal["evidence"] == []
+
+    updated = await store.update_goal(
+        "sess-1",
+        status="blocked",
+        blocked_reason="Needs approval",
+        evidence="Write operation requested",
+    )
+    assert updated is not None
+    assert updated["status"] == "blocked"
+    assert updated["blocked_reason"] == "Needs approval"
+    assert updated["evidence"][-1]["text"] == "Write operation requested"
+
+    completed = await store.update_goal("sess-1", status="complete", evidence="Tests passed")
+    assert completed is not None
+    assert completed["status"] == "complete"
+    assert completed["blocked_reason"] is None
+    assert completed["evidence"][-1]["text"] == "Tests passed"
+
+    assert await store.clear_goal("sess-1") is True
+    assert await store.get_goal("sess-1") is None
+
+
+@pytest.mark.asyncio
+async def test_session_goal_budget_and_goal_id_guard(store: SessionStore):
+    goal = await store.set_goal("sess-1", "Ship the goal feature", token_budget=100)
+
+    stale = await store.update_goal("sess-1", goal_id="old-goal", tokens_used_delta=50)
+    assert stale is None
+    assert (await store.get_goal("sess-1"))["tokens_used"] == 0
+
+    updated = await store.update_goal(
+        "sess-1",
+        goal_id=goal["goal_id"],
+        tokens_used_delta=120,
+        time_used_seconds_delta=3,
+    )
+    assert updated is not None
+    assert updated["tokens_used"] == 120
+    assert updated["time_used_seconds"] == 3
+    assert updated["status"] == "budget_limited"
+
+
+@pytest.mark.asyncio
 async def test_tool_approval_request_to_expired(store: SessionStore):
     await store.record_tool_approval_requested(
         run_id="run-1",

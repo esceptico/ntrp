@@ -140,6 +140,7 @@ export const useStore = create<State & Actions>((set) => ({
   modalOrigin: null,
   loops: [],
   backgroundAgents: createBackgroundAgentsDomainState(),
+  goals: {},
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -448,6 +449,13 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({
       backgroundAgents: reduceBackgroundAgentUpsert(s.backgroundAgents, agent),
     })),
+  setGoal: (sessionId, goal) =>
+    set((s) => {
+      const goals = { ...s.goals };
+      if (goal) goals[sessionId] = goal;
+      else delete goals[sessionId];
+      return { goals };
+    }),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),

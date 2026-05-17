@@ -67,6 +67,8 @@ class EventType(StrEnum):
     AUTOMATION_FINISHED = "automation_finished"
     COMPACTION_STARTED = "compaction_started"
     COMPACTION_FINISHED = "compaction_finished"
+    GOAL_UPDATED = "goal_updated"
+    GOAL_CLEARED = "goal_cleared"
 
 
 def _now_ms() -> int:
@@ -386,6 +388,19 @@ class CompactionFinishedEvent(SSEEvent):
     messages_after: int = 0
 
 
+@dataclass(frozen=True)
+class GoalUpdatedEvent(SSEEvent):
+    type: EventType = field(default=EventType.GOAL_UPDATED, init=False)
+    session_id: str = ""
+    goal: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class GoalClearedEvent(SSEEvent):
+    type: EventType = field(default=EventType.GOAL_CLEARED, init=False)
+    session_id: str = ""
+
+
 _EVENT_CLASSES = {
     EventType.RUN_STARTED.value: RunStartedEvent,
     EventType.RUN_FINISHED.value: RunFinishedEvent,
@@ -417,6 +432,8 @@ _EVENT_CLASSES = {
     EventType.AUTOMATION_FINISHED.value: AutomationFinishedEvent,
     EventType.COMPACTION_STARTED.value: CompactionStartedEvent,
     EventType.COMPACTION_FINISHED.value: CompactionFinishedEvent,
+    EventType.GOAL_UPDATED.value: GoalUpdatedEvent,
+    EventType.GOAL_CLEARED.value: GoalClearedEvent,
 }
 
 

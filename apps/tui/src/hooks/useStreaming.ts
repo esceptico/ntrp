@@ -3,7 +3,7 @@ import { useStore } from "zustand";
 import type { Message, ServerEvent, Config, PendingApproval, TokenUsage } from "../types.js";
 import { ZERO_USAGE } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, getBackgroundTasks, revertSession, cancelQueuedMessage, type ImageBlock } from "../api/client.js";
+import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, getBackgroundTasks, revertSession, cancelQueuedMessage, getGoal, type ImageBlock } from "../api/client.js";
 import {
   MAX_TOOL_DESCRIPTION_CHARS,
   MAX_ASSISTANT_CHARS,
@@ -422,6 +422,14 @@ export function useStreaming({
           break;
         }
 
+        case "goal_updated":
+          s.goal = event.goal;
+          break;
+
+        case "goal_cleared":
+          s.goal = null;
+          break;
+
         default: {
           const _exhaustive: never = event;
           return _exhaustive;
@@ -785,6 +793,9 @@ export function useStreaming({
       });
     }
     setViewedId(sessionId);
+    getGoal(configRef.current, sessionId)
+      .then((goal) => mutateSession(sessionId, (s) => { s.goal = goal; }))
+      .catch(() => {});
   }, [sessionId, initialMessages, getSession, mutateSession, setViewedId]);
 
   // Auto-process background task results

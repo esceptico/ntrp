@@ -247,6 +247,8 @@ function AppContent({
     addMessage: (msg) => addMessage(msg as Message),
     clearMessages,
     sendMessage,
+    enqueueMessage,
+    isStreaming,
     setStatus,
     setReasoningEffort,
     showReasoning: settings.ui.showReasoning,
@@ -282,7 +284,8 @@ function AppContent({
       if (!trimmed && !images?.length) return;
 
       if (trimmed.startsWith("/")) {
-        if (pendingApproval || isStreaming) return;
+        const isGoalCommand = trimmed === "/goal" || trimmed.startsWith("/goal ");
+        if ((pendingApproval || isStreaming) && !isGoalCommand) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
