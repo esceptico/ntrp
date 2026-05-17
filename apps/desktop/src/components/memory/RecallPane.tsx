@@ -13,6 +13,7 @@ import {
   observationEvidenceTone,
 } from "../../lib/memoryTrust";
 import { ErrorPill, GhostBtn, Pill } from "./shared";
+import { ScrollBlurTop } from "../ScrollBlur";
 import { ICON } from "../../lib/icons";
 
 export function RecallPane({
@@ -70,7 +71,8 @@ export function RecallPane({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto scroll-thin scroll-fade-top px-7 py-5">
+      <div className="min-h-0 overflow-y-auto scroll-thin px-7 py-5">
+        <ScrollBlurTop />
         {!result ? (
           <div className="grid h-full place-items-center text-base italic text-faint">Run a query to inspect recall</div>
         ) : (

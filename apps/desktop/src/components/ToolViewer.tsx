@@ -9,6 +9,7 @@ import { highlight } from "../highlight";
 import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
+import { ScrollBlurTop } from "./ScrollBlur";
 import {
   ENTRY_GLASS,
   ENTRY_LINEN,
@@ -158,7 +159,8 @@ export function ToolViewer() {
               </IconButton>
             </header>
 
-            <div className="overflow-y-auto scroll-thin scroll-fade-top px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+              <ScrollBlurTop />
               {live && isAgent(live) ? (
                 <AgentBody item={live} descendants={descendants} />
               ) : (

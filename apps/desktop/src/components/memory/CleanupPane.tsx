@@ -19,6 +19,7 @@ import {
 } from "../../lib/memoryMaintenance";
 import { DetailPlaceholder, ErrorPill, GhostBtn, ListColumn, PaneShell, Pill, PrimaryBtn, SearchInput } from "./shared";
 import { ICON } from "../../lib/icons";
+import { ScrollBlurTop } from "../ScrollBlur";
 
 type DuplicateCandidateKind = "fact" | "pattern";
 
@@ -327,7 +328,8 @@ function DuplicateCandidateDetail({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin scroll-fade-top px-7">
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin px-7">
+        <ScrollBlurTop />
         <div className="grid gap-3">
           <DuplicateSide
             label={`Left ${noun}`}
@@ -439,7 +441,8 @@ function CleanupDetail({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin scroll-fade-top px-7">
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin px-7">
+        <ScrollBlurTop />
         <p className="m-0 whitespace-pre-wrap text-md leading-relaxed text-ink">{candidate.summary}</p>
         <dl className="mt-6 grid grid-cols-[130px_minmax(0,1fr)] gap-y-2 text-sm">
           <dt className="text-faint">Created</dt>

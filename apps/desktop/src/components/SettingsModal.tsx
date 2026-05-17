@@ -14,6 +14,7 @@ import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
+import { ScrollBlurTop } from "./ScrollBlur";
 
 type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
 
@@ -115,7 +116,8 @@ export function SettingsModal() {
             </IconButton>
           </header>
 
-          <div className="overflow-y-auto scroll-thin scroll-fade-top px-5 py-4">
+          <div className="overflow-y-auto scroll-thin px-5 py-4">
+            <ScrollBlurTop />
             {active === "connection" && (
               <ConnectionTab
                 formRef={formRef}

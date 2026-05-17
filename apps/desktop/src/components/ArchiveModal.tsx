@@ -12,6 +12,7 @@ import { PageModal } from "./PageModal";
 import { useMountedRef, useMutationState } from "../lib/hooks";
 import { formatRelativePast } from "../lib/format";
 import { ICON } from "../lib/icons";
+import { ScrollBlurTop } from "./ScrollBlur";
 
 export function ArchiveModal() {
   const open = useStore((s) => s.archiveOpen);
@@ -52,7 +53,8 @@ export function ArchiveModal() {
         actions: <SearchInput value={query} onChange={setQuery} />,
       }}
     >
-      <div className="overflow-y-auto scroll-thin scroll-fade-top px-3 py-3">
+      <div className="overflow-y-auto scroll-thin px-3 py-3">
+        <ScrollBlurTop />
         {filtered === null ? (
           <Empty>Loading…</Empty>
         ) : filtered.length === 0 ? (

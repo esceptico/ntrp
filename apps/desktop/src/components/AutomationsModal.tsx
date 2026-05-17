@@ -11,6 +11,7 @@ import { templatesByCategory, type AutomationTemplate } from "./automations/temp
 import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
+import { ScrollBlurTop } from "./ScrollBlur";
 
 type Tab = "active" | "channels" | "internal" | "templates";
 
@@ -76,7 +77,8 @@ export function AutomationsModal() {
           <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
         </nav>
 
-        <div className="overflow-y-auto scroll-thin scroll-fade-top px-6 py-5">
+        <div className="overflow-y-auto scroll-thin px-6 py-5">
+          <ScrollBlurTop />
           {tab === "active" ? (
             <ActiveList
               automations={automationGroups?.user ?? null}

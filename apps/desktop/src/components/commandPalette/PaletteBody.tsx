@@ -7,6 +7,7 @@ import { Row } from "./Row";
 import { filterEntries, groupBySection } from "./filter";
 import { useEntries } from "./useEntries";
 import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
+import { ScrollBlurTop } from "../ScrollBlur";
 
 export function PaletteBody({
   query,
@@ -155,7 +156,8 @@ export function PaletteBody({
         </div>
       </div>
 
-      <div ref={listRef} className="overflow-y-auto scroll-thin scroll-fade-top pb-2">
+      <div ref={listRef} className="overflow-y-auto scroll-thin pb-2">
+        <ScrollBlurTop />
         {filtered.length === 0 ? (
           <div className="grid place-items-center min-h-[120px] text-sm italic text-faint">
             Nothing matches.

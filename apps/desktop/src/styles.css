@@ -451,14 +451,56 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 
 /* Mask-based scroll edge fade — content dissolves under sticky chrome
-   instead of hard-clipping. Pure opacity mask (not a real backdrop
-   blur) — a sticky-child blur band sounded right but stacks badly
-   inside the slab's own backdrop-filter context and produces visible
-   stripes across rows. Mask fade ships clean. */
+   instead of hard-clipping. Used for bottom edges and as Glass-mode
+   fallback for the top (where a real blur band nests inside the
+   slab's own backdrop-filter and stripes). The top edge now prefers
+   `<ScrollBlurTop />` for a real scroll-edge blur in Linen. */
 .scroll-fade-top {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
           mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
 }
+
+/* Real backdrop-filter scroll-edge blur band. Sits as a sticky FIRST
+   child of a scroll container, pinned to top:0. Negative margin-bottom
+   pulls it out of layout flow so content scrolls under it. Mask fades
+   the blur effect into nothing at the bottom of the band.
+
+   Per-material strength: Linen-mode `.glass-surface` has no
+   backdrop-filter, so the band samples the page cleanly at 14px. In
+   Glass mode the slab itself is already filtering, so nesting another
+   backdrop-filter produces visible stripes across rows — we fall back
+   to a pure opacity mask there. Reduced-transparency / motion users
+   also get the mask fallback (the ambient blur can be uncomfortable). */
+.scroll-blur-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 32px;
+  margin-bottom: -32px;
+  pointer-events: none;
+  /* Default: opacity mask only — covers Glass mode + any container we
+     haven't tagged as a clean blur context. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+  background: linear-gradient(to bottom,
+    color-mix(in oklab, var(--color-bg) 85%, transparent) 0%,
+    transparent 100%);
+}
+:root[data-material="linen"] .scroll-blur-top {
+  background: transparent;
+  -webkit-backdrop-filter: blur(14px);
+          backdrop-filter: blur(14px);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
+  :root[data-material="linen"] .scroll-blur-top {
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+    background: linear-gradient(to bottom,
+      color-mix(in oklab, var(--color-bg) 85%, transparent) 0%,
+      transparent 100%);
+  }
+}
+
 .scroll-fade-bottom {
   -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
           mask-image: linear-gradient(to top, transparent 0, #000 24px);
