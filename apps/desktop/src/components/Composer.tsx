@@ -300,7 +300,7 @@ export function Composer() {
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}
-        className="composer-card glass-surface glass-frosted glass-radius-md relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
+        className="composer-card glass-surface glass-radius-md relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
       >
         {selectedSkill && (
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">

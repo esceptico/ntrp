@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
 function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void }) {
   return (
     <div className="absolute inset-0 grid place-items-center p-8">
-      <div className="glass-surface glass-heavy glass-radius-md max-w-[480px] rounded-[14px] p-6">
+      <div className="glass-surface glass-radius-md max-w-[480px] rounded-[14px] p-6">
         <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
           Something went wrong rendering this view.
         </div>

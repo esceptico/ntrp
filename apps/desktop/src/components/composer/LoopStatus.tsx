@@ -141,7 +141,7 @@ export function LoopStatusBar() {
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
           style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-          className="glass-surface glass-heavy glass-radius-md w-[360px] rounded-[14px] p-3"
+          className="glass-surface glass-radius-md w-[360px] rounded-[14px] p-3"
         >
           <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
           <div className="space-y-1">
@@ -202,7 +202,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
       <div
         role="dialog"
         aria-label="Loop detail"
-        className="glass-surface glass-heavy glass-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[14px]"
+        className="glass-surface glass-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
