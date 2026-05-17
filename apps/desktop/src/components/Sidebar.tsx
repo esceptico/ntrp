@@ -10,7 +10,7 @@ import { archiveSession, createSession, fetchAutomations, renameSession, switchS
 import { ICON } from "../lib/icons";
 import { formatRelativePast } from "../lib/format";
 import { StatusDot } from "./AgentRightSidebar";
-import { useTimeTicker } from "../lib/hooks";
+import { useTimeTicker, useVisibilityPoll } from "../lib/hooks";
 
 const DAY_MS = 86_400_000;
 
@@ -626,33 +626,11 @@ function ContextItem({
   );
 }
 
-/** Background poll for automations so the sidebar card stays fresh.
- *  There's no SSE for automation start/stop today, so we ask every 20s.
- *  Cheap GET, only when the app is foregrounded — pause when the tab is
- *  hidden so a background instance isn't hitting the backend on a timer. */
-function useAutomationsPoll(): void {
-  useEffect(() => {
-    let cancelled = false;
-    const tick = () => { if (!cancelled) void fetchAutomations(); };
-    tick();
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") tick();
-    }, 20_000);
-    const onVis = () => { if (document.visibilityState === "visible") tick(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
-}
-
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
   const openMemory = useStore((s) => s.openMemory);
-  useAutomationsPoll();
+  useVisibilityPoll(fetchAutomations, 20_000);
 
   return (
     <aside className="sidebar flex flex-col h-full">

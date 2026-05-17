@@ -117,3 +117,37 @@ export function useOutsideClick(
     return () => document.removeEventListener("mousedown", handler);
   }, [open, ref, onClose]);
 }
+
+/** Invokes `callback` once on mount, then on each `intervalMs` tick
+ *  (skipped when the document is hidden), and again on every visibility
+ *  transition back to "visible". The latest `callback` is captured in a
+ *  ref so consumers don't need to memoize it.
+ *
+ *  Use for background data refresh that should pause when the user
+ *  switches away from the window (saves API calls, respects user focus). */
+export function useVisibilityPoll(
+  callback: () => void | Promise<void>,
+  intervalMs: number,
+): void {
+  const cbRef = useRef(callback);
+  cbRef.current = callback;
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      if (!cancelled) void cbRef.current();
+    };
+    tick();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") tick();
+    }, intervalMs);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [intervalMs]);
+}
