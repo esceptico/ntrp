@@ -75,14 +75,28 @@ export function GlassToggle({
       setReady(true);
       return;
     }
-    const btn = btnRefs.current[activeIndex];
+    const measure = () => {
+      const btn = btnRefs.current[activeIndex];
+      const track = trackRef.current;
+      if (!btn || !track) return;
+
+      // offset* is layout-space, unlike getBoundingClientRect(), which is
+      // distorted while modals/popovers are animating scale transforms.
+      setPill({ x: btn.offsetLeft, w: btn.offsetWidth });
+    };
+
+    measure();
+    const readyId = requestAnimationFrame(() => setReady(true));
+    const resizeObserver = new ResizeObserver(measure);
     const track = trackRef.current;
-    if (!btn || !track) return;
-    const b = btn.getBoundingClientRect();
-    const tr = track.getBoundingClientRect();
-    setPill({ x: b.left - tr.left, w: b.width });
-    const id = requestAnimationFrame(() => setReady(true));
-    return () => cancelAnimationFrame(id);
+    if (track) resizeObserver.observe(track);
+    for (const btn of btnRefs.current) {
+      if (btn) resizeObserver.observe(btn);
+    }
+    return () => {
+      cancelAnimationFrame(readyId);
+      resizeObserver.disconnect();
+    };
   }, [activeIndex, items.length]);
 
   const setRefs = (node: HTMLDivElement | null) => {

@@ -1189,6 +1189,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow: inset 0 0 0 1px var(--ring-light-soft);
   overflow: hidden;
 }
+:root[data-material="linen"].dark .surface-rail {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, white 7%, transparent);
+}
 
 /* Popover surfaces — floating menus / dropdowns.
    Standalone: a linen-style popover panel.
@@ -1820,6 +1824,66 @@ main[data-has-approval="false"] .scroll-messages {
     --color-muted: #9b9b9b;
     --color-faint: #6f6e6b;
     --color-whisper: #4a4946;
+}
+
+/* Linen dark: keep elevation steps close to the background. This avoids
+   bright slate slabs while preserving readable secondary text. */
+:root[data-material="linen"].dark {
+    --color-bg: #141312;
+    --color-bg-main: #191817;
+    --color-surface: #1d1b19;
+    --color-surface-soft: #22201d;
+    --color-surface-sunken: #282522;
+    --color-code-bg: #22201d;
+
+    --color-line: #393531;
+    --color-line-soft: #2b2926;
+    --color-line-strong: #47423d;
+
+    --color-ink: #ddd9cf;
+    --color-ink-soft: #c6c1b7;
+    --color-muted: #aaa39a;
+    --color-faint: #8c857b;
+    --color-whisper: #625b54;
+}
+
+:root[data-material="linen"].dark.palette-graphite {
+    --color-bg: #131415;
+    --color-bg-main: #17191a;
+    --color-surface: #1b1d1f;
+    --color-surface-soft: #202326;
+    --color-surface-sunken: #262a2d;
+    --color-code-bg: #202326;
+
+    --color-line: #373c41;
+    --color-line-soft: #2a2d31;
+    --color-line-strong: #454b52;
+
+    --color-ink: #dde1e6;
+    --color-ink-soft: #c5c9d0;
+    --color-muted: #aab0b7;
+    --color-faint: #8a9097;
+    --color-whisper: #636a71;
+}
+
+:root[data-material="linen"].dark.palette-raycast,
+:root[data-material="linen"].dark.palette-notion {
+    --color-bg: #151515;
+    --color-bg-main: #1a1a1a;
+    --color-surface: #202020;
+    --color-surface-soft: #252525;
+    --color-surface-sunken: #2b2b2b;
+    --color-code-bg: #242424;
+
+    --color-line: #3a3a3a;
+    --color-line-soft: #2d2d2d;
+    --color-line-strong: #484848;
+
+    --color-ink: #e3e0db;
+    --color-ink-soft: #c9c5bf;
+    --color-muted: #aaa59e;
+    --color-faint: #89837c;
+    --color-whisper: #625d58;
 }
 
 /* Scrollbar thumbs: lighter for visibility */

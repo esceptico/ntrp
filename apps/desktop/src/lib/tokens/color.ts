@@ -173,25 +173,25 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralHueLight: 70,
     neutralHueDark: 55,
     neutralTintLight: 0.008,
-    neutralTintDark: 0.030,
+    neutralTintDark: 0.010,
     accentLight: o(0.610, 0.155, 50),
     accentDark: o(0.760, 0.155, 55),
   },
-  // Graphite — teal accent, cool blue-gray dark surfaces.
+  // Graphite — teal accent, near-pure dark neutrals.
   graphite: {
     neutralHueLight: 210,
     neutralHueDark: 220,
     neutralTintLight: 0.004,
-    neutralTintDark: 0.022,
+    neutralTintDark: 0.006,
     accentLight: o(0.610, 0.110, 175),
     accentDark: o(0.790, 0.105, 175),
   },
-  // Raycast — red accent, warm-red dark surfaces.
+  // Raycast — red accent, mostly neutral dark surfaces.
   raycast: {
     neutralHueLight: 0,
-    neutralHueDark: 15,
+    neutralHueDark: 0,
     neutralTintLight: 0.002,
-    neutralTintDark: 0.018,
+    neutralTintDark: 0.002,
     accentLight: o(0.660, 0.200, 22),
     accentDark: o(0.760, 0.180, 22),
   },
