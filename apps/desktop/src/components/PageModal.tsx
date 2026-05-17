@@ -118,7 +118,34 @@ export function PageModal({
                 </div>
               </header>
             )}
-            {children}
+            {/* Phase 5: Glass entry — content fades 100 ms after the slab
+                lands so the surface "materializes first, content surfaces
+                through it" (research §3). Linen mode shows them together.
+                Chose option (b) from the spec: wrap children in a motion.div
+                that occupies the body row of the panel grid. Only applied
+                when the structured `header` shell is in use — callers that
+                override `grid` (e.g. SettingsModal with a sidebar layout)
+                pass no header and supply their own multi-cell children, so
+                wrapping would collapse them into a single cell. Those
+                modals fall back to a single immediate fade, which matches
+                the slab opacity already coming from the parent. */}
+            {header ? (
+              <motion.div
+                className="min-h-0 min-w-0 grid grid-rows-[minmax(0,1fr)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  duration: 0.18,
+                  ease: EASE_DECELERATE,
+                  delay: isGlass ? 0.1 : 0,
+                }}
+              >
+                {children}
+              </motion.div>
+            ) : (
+              children
+            )}
           </motion.div>
         </motion.div>
       )}

@@ -8,6 +8,17 @@
    maintaining a parallel `.dark .foo` selector block. */
 @custom-variant dark (&:where(:root.dark, :root.dark *));
 
+/* Register --gp-rim as an animatable <number> so CSS `transition` can
+   actually interpolate it on hover/press (Phase 5). Without @property,
+   custom-property transitions step instead of tweening. The slider's
+   underlying value lives on --gp-rim-base; --gp-rim is what surfaces
+   bind to and what the interaction states bump. */
+@property --gp-rim {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.6;
+}
+
 /* ─── Theme tokens (Flexoki-flavored) ──────────────────────── */
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
@@ -776,6 +787,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow:
     var(--glass-drop-light),
     var(--glass-rim-light);
+  /* Phase 5 interaction polish: rim/shadow animate on hover/press.
+     GPU-friendly props only — never width/height/top/left.
+     Glass uses the snappy out-cubic from research (EASE_HOVER) for
+     rim brightness; linen uses standard ease-out for shadow lift. */
+  transition:
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    --gp-rim 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .glass-surface[data-tone="dark"],
 :root.dark .glass-surface {
@@ -1032,12 +1050,65 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow:
     var(--shadow-linen-rest),
     inset 0 0 0 1px var(--ring-light-soft);
-  transition: box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* EASE_HOVER for the snappy out-cubic feel; --gp-rim animates a touch
+     faster so the rim brightness lands ahead of the shadow tier change. */
+  transition:
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    --gp-rim 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.surface-card:hover {
+
+/* ─── Phase 5: per-material interaction polish ─────────────────
+   Glass surfaces respond with rim brightness changes (no scale, no
+   filter — the spec's "in-place luminance change, not motion"); linen
+   surfaces respond with shadow depth shifts. The two modes feel
+   distinct without diverging in layout. */
+
+/* Glass hover — rim drifts up. Bumps the applied --gp-rim relative
+   to the user's slider value (--gp-rim-base). */
+:root[data-material="glass"] .surface-card:hover,
+:root[data-material="glass"] .glass-surface:hover {
+  --gp-rim: calc(var(--gp-rim-base, 0.6) + 0.08);
+}
+
+/* Glass press — rim brightens further. Tap feedback in the 80 ms
+   range per the microactions doc; the rim-only change keeps it in
+   place (no scale, no filter brightness which would composite
+   separately from the backdrop and read as detached). */
+:root[data-material="glass"] .surface-card:active,
+:root[data-material="glass"] .glass-surface:active,
+:root[data-material="glass"] .surface-card[aria-pressed="true"],
+:root[data-material="glass"] .glass-surface[aria-pressed="true"] {
+  --gp-rim: calc(var(--gp-rim-base, 0.6) + 0.15);
+}
+
+/* Linen hover — shadow rest → hover. Surface-card already has this in
+   the base rule; restate it under [data-material="linen"] to make the
+   intent explicit and to prevent any glass rim cascade from leaking. */
+:root[data-material="linen"] .surface-card:hover {
   box-shadow:
     var(--shadow-linen-hover),
     inset 0 0 0 1px var(--ring-light);
+}
+:root[data-material="linen"].dark .surface-card:hover {
+  box-shadow:
+    var(--shadow-linen-hover),
+    inset 0 0 0 1px var(--ring-dark);
+}
+
+/* Linen press — shadow stays at the hover tier (cards "settle" but
+   keep the same depth band — adequate signal without inventing a new
+   tier). Transition handled by the base .surface-card rule. */
+:root[data-material="linen"] .surface-card:active,
+:root[data-material="linen"] .surface-card[aria-pressed="true"] {
+  box-shadow:
+    var(--shadow-linen-hover),
+    inset 0 0 0 1px var(--ring-light);
+}
+:root[data-material="linen"].dark .surface-card:active,
+:root[data-material="linen"].dark .surface-card[aria-pressed="true"] {
+  box-shadow:
+    var(--shadow-linen-hover),
+    inset 0 0 0 1px var(--ring-dark);
 }
 }
 /* Composer focus state: bump the framework's specular rim brighter
