@@ -72,7 +72,7 @@ export function PageModal({
       {open && (
         <motion.div
           key="page-modal"
-          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-4 sm:p-8 backdrop-blur-sm"
+          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-4 sm:p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

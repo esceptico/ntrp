@@ -175,54 +175,57 @@ export function AppearanceTab() {
  *  no text — gives blur/saturate something to chew without distracting
  *  from the slider feedback. */
 function GlassPreview() {
-  // Backdrop is a mini fake-chat — real theme typography + theme surface
-  // variation + an accent splash so every slider has something to do:
-  //  • tint: lightens against the cream/sunken bands
-  //  • blur: smears the text and the accent chip
-  //  • saturate: pumps the accent color
-  //  • rim: visible against the dark text behind
-  // Mirrors what a real glass surface sees over actual chat content.
+  // The glass card spans most of the preview so the colored content sits
+  // BEHIND it — that's the only way tint/saturate/blur do visible work.
+  // A strip of raw content peeks above and below the card so you can
+  // compare "raw" vs "through glass" at a glance.
+  //   • tint:     mixes white into the cream/accent-soft gradient
+  //   • blur:     smears the bars + accent badge
+  //   • saturate: pumps the accent gradient + badge color
+  //   • rim:      visible against the ink-tone bars behind the card
   return (
     <div
       className="relative overflow-hidden rounded-[10px] border border-line-soft"
-      style={{ height: 160 }}
+      style={{ height: 180 }}
     >
-      {/* Layered theme surfaces — gives glass some luminance variation
-          to blur, not a flat field. */}
-      <div className="absolute inset-0 bg-bg" aria-hidden />
+      {/* Diagonal theme-color gradient — actual hue for saturate to pump. */}
       <div
+        className="absolute inset-0"
         aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-1/2 bg-surface-sunken"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--color-surface-sunken) 0%, var(--color-bg) 35%, var(--color-accent-soft) 100%)",
+        }}
       />
 
-      {/* Fake message stack — theme typography + accent badge so the
-          saturate slider has chromatic content to operate on. */}
-      <div aria-hidden className="absolute inset-0 p-3 grid gap-2 content-start">
+      {/* Fake chat content — bars span full width so they extend behind
+          the glass card AND show on the strips above/below it. */}
+      <div aria-hidden className="absolute inset-0 px-4 py-3 grid gap-2 content-center">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-accent" />
-          <div className="h-2 w-24 rounded bg-ink/60" />
+          <div className="h-2 w-2 rounded-full bg-accent shrink-0" />
+          <div className="h-2 flex-1 rounded bg-ink/55" />
         </div>
-        <div className="h-2 w-3/4 rounded bg-ink/30" />
-        <div className="h-2 w-2/3 rounded bg-ink/30" />
-        <div className="flex items-center gap-2 pt-1">
-          <span className="inline-flex h-5 items-center gap-1 px-2 rounded-full bg-accent-soft text-accent-strong text-[10px] font-medium">
+        <div className="h-2 w-full rounded bg-ink/35" />
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-5 items-center px-2 rounded-full bg-accent-soft text-accent-strong text-[10px] font-medium shrink-0">
             running
           </span>
-          <div className="h-2 w-16 rounded bg-ink/40" />
+          <div className="h-2 flex-1 rounded bg-ink/40" />
         </div>
-        <div className="h-2 w-1/2 rounded bg-ink/25" />
+        <div className="h-2 w-full rounded bg-ink/30" />
+        <div className="h-2 w-3/4 rounded bg-ink/25" />
       </div>
 
-      {/* Glass surface on top — what we're tuning. */}
+      {/* Glass card overlays the middle band — content is right behind it,
+          and a strip of raw content peeks at top + bottom. */}
       <div
         className="glass-surface"
         style={{
           position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 240,
-          height: 88,
+          top: 32,
+          bottom: 32,
+          left: 16,
+          right: 16,
           display: "grid",
           placeItems: "center",
           fontSize: 13,
