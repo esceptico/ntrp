@@ -44,14 +44,6 @@ export type PaletteId =
   | "notion"
   | "catppuccin";
 
-export type GlassVariantId =
-  | "frosted"
-  | "heavy"
-  | "static"
-  | "clear"
-  | "smoke"
-  | "milk";
-
 export interface GlassParams {
   /** Tint opacity 0–100 (% white for light mode; framework derives dark). */
   tint: number;
@@ -63,7 +55,7 @@ export interface GlassParams {
   rim: number;
 }
 
-export type GlassPrefs = Record<GlassVariantId, GlassParams>;
+export type GlassPrefs = GlassParams;
 
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;

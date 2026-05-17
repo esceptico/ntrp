@@ -8,20 +8,15 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const PREFS_VERSION = 3;
+const PREFS_VERSION = 4;
 
-/* Rim values match the actual CSS fallbacks. Only frosted (dark), smoke,
- * and milk have a `--gp-{variant}-rim` CSS property wired up — for
- * heavy/static/clear the slider currently has no visual effect (their
- * styles.css blocks don't include a parameterized rim inset). Defaulted
- * to 0 to signal that nothing is happening. */
+/* The canonical glass material. Defaults match the historic "frosted"
+ * recipe — readable foreground over a lively background. */
 export const DEFAULT_GLASS_PREFS: GlassPrefs = {
-  frosted: { tint: 35, blur: 20, saturate: 180, rim: 10 },
-  heavy:   { tint: 18, blur: 40, saturate: 180, rim: 0 },
-  static:  { tint: 86, blur: 0,  saturate: 100, rim: 0 },
-  clear:   { tint: 4,  blur: 2,  saturate: 160, rim: 0 },
-  smoke:   { tint: 55, blur: 20, saturate: 120, rim: 6 },
-  milk:    { tint: 50, blur: 24, saturate: 140, rim: 90 },
+  tint: 35,
+  blur: 20,
+  saturate: 180,
+  rim: 60,
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -51,7 +46,9 @@ export function loadPrefs(): Prefs {
     // v2 → v3: glass prefs shipped with wrong rim defaults (60/75/60/35
     // instead of 10/0/0/0). Force a reset to the corrected defaults so
     // existing users don't carry the over-bright rim forward.
-    if (ver < 3) {
+    // v3 → v4: glass framework collapsed from a per-variant Record to a
+    // single GlassParams. Reset rather than trying to pick a variant.
+    if (ver < 4) {
       parsed.glass = DEFAULT_GLASS_PREFS;
     }
     return { ...DEFAULT_PREFS, ...parsed };

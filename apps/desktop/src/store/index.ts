@@ -57,7 +57,6 @@ export type {
   CachedSessionState,
   GlassParams,
   GlassPrefs,
-  GlassVariantId,
   ImageBlock,
   MarkdownViewState,
   PaletteId,
