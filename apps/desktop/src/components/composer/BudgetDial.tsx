@@ -225,7 +225,7 @@ export function BudgetDial() {
                 right: coords.right,
                 zIndex: 60,
               }}
-              className="glass-surface glass-radius-md w-[300px] rounded-[12px] p-3 text-sm"
+              className="glass-surface glass-radius-md w-[300px] p-3 text-sm"
             >
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium text-muted">Context budget</span>

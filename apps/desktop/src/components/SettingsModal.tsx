@@ -69,10 +69,9 @@ export function SettingsModal() {
       onClose={close}
       size="w-[min(1000px,calc(100vw-32px))] h-[min(740px,calc(100vh-32px))] sm:w-[min(1000px,calc(100vw-64px))] sm:h-[min(740px,calc(100vh-64px))]"
       grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
-      rounded="rounded-2xl"
       disableEscape={saving}
     >
-        <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col min-h-0">
+        <aside className="border-r border-line-soft flex flex-col min-h-0">
           <div className="px-3 pt-4 pb-2 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
             Settings
           </div>

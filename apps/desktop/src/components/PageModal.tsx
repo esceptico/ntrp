@@ -42,19 +42,17 @@ export interface PageModalProps {
    *  modal owns the Escape key (e.g., automation editor inside the
    *  Automations modal). */
   disableEscape?: boolean;
-  /** Optional rounded panel corner radius class (e.g. `"rounded-[14px]"`). */
-  rounded?: string;
 }
 
 const DEFAULT_SIZE =
   "w-[min(960px,calc(100vw-32px))] h-[min(680px,calc(100vh-32px))] sm:w-[min(960px,calc(100vw-80px))] sm:h-[min(680px,calc(100vh-80px))]";
 const DEFAULT_GRID = "grid-rows-[auto_minmax(0,1fr)]";
-const DEFAULT_ROUNDED = "rounded-[14px]";
 
 /** Standard portal+backdrop+panel modal shell used across Settings,
  *  Automations, Archive, Memory. Callers compose their own header / body
  *  inside `children`. Closes on backdrop click and Escape (unless
- *  `disableEscape` is set). */
+ *  `disableEscape` is set). Corner radius comes from .glass-radius-md —
+ *  callers cannot override (was the source of per-modal radius drift). */
 export function PageModal({
   open,
   onClose,
@@ -62,7 +60,6 @@ export function PageModal({
   header,
   size = DEFAULT_SIZE,
   grid = DEFAULT_GRID,
-  rounded = DEFAULT_ROUNDED,
   disableEscape,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
@@ -83,7 +80,7 @@ export function PageModal({
           onClick={onClose}
         >
           <motion.div
-            className={`glass-surface glass-radius-md ${size} grid ${grid} ${rounded} overflow-hidden`}
+            className={`glass-surface glass-radius-md ${size} grid ${grid} overflow-hidden`}
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}

@@ -832,24 +832,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     inset 0 0 0 1px rgba(255, 255, 255, 0.18),
     0 2px 8px rgba(0, 0, 0, 0.4);
 }
-.glass-radius-sm { --glass-radius: 10px; }
-.glass-radius-md { --glass-radius: 16px; }
-.glass-radius-lg { --glass-radius: 20px; }
+.glass-radius-sm { --glass-radius: 10px; }  /* cards in lists (automation cards, etc.) */
+.glass-radius-md { --glass-radius: 14px; }  /* panels: composer, modals, popovers, sidebars */
+.glass-radius-lg { --glass-radius: 18px; }  /* message bubbles, hero-ish surfaces */
 .glass-radius-pill { --glass-radius: 999px; }
 }
+/* Composer focus state: bump the framework's specular rim brighter
+   instead of replacing it with a uniform ring. Same edge vocabulary
+   as every other glass surface, just amplified. */
 .composer-card.glass-surface:focus-within {
-  border-color: transparent;
-  box-shadow:
-    0 8px 24px -12px rgba(31, 38, 135, 0.25),
-    inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 14%, transparent),
-    inset 0 -0.5px 0 rgba(0, 0, 0, 0.08);
+  --gp-rim: 0.9;
 }
 :root.dark .composer-card.glass-surface:focus-within {
-  border-color: transparent;
-  box-shadow:
-    0 4px 14px -4px rgba(0, 0, 0, 0.32),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
-    inset 0 -0.5px 0 rgba(0, 0, 0, 0.18);
+  --gp-rim: 0.18;
 }
 
 /* Send acknowledgement — when the user submits, the composer's

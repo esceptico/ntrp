@@ -22,7 +22,6 @@ export function MarkdownViewer() {
       open={!!view}
       onClose={() => close(null)}
       size="w-[min(720px,calc(100vw-32px))] max-h-[calc(100vh-32px)] sm:w-[min(720px,calc(100vw-80px))] sm:max-h-[calc(100vh-80px)]"
-      rounded="rounded-2xl"
       header={
         view
           ? {
