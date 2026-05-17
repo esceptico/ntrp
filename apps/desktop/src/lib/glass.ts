@@ -16,7 +16,11 @@ import type { GlassParams, Material } from "../store";
 function applyGlassParams(p: GlassParams): void {
   const root = document.documentElement;
   root.style.setProperty("--gp-tint-alpha", String(clamp(p.tint, 0, 100) / 100));
-  root.style.setProperty("--gp-blur", `${clamp(p.blur, 0, 60)}px`);
+  // Cap blur at 18px (strictly < 20px per glass-design.md §5). Two
+  // translucent glass layers can stack at runtime (scrim + modal,
+  // sidebar + bubble, composer + popover); cumulative blur must stay
+  // budgeted. 18px keeps full visual identity while honoring the rule.
+  root.style.setProperty("--gp-blur", `${clamp(p.blur, 0, 18)}px`);
   root.style.setProperty("--gp-saturate", `${clamp(p.saturate, 0, 400)}%`);
   const rim = String(clamp(p.rim, 0, 100) / 100);
   root.style.setProperty("--gp-rim-base", rim);

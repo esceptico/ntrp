@@ -152,10 +152,10 @@ export function AppearanceTab() {
             />
             <SliderRow
               title="Blur"
-              hint="Backdrop blur radius."
+              hint="Backdrop blur radius (capped at 18px — two glass layers can stack at runtime; per-layer must stay under 20px per glass-design.md)."
               value={glass.blur}
               min={0}
-              max={60}
+              max={18}
               unit="px"
               onChange={(v) => setPref("glass", { ...glass, blur: v })}
             />

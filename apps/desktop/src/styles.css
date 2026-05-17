@@ -785,10 +785,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
   backdrop-filter:
-    blur(var(--gp-blur, 20px))
+    blur(var(--gp-blur, 18px))
     saturate(var(--gp-saturate, 180%));
   -webkit-backdrop-filter:
-    blur(var(--gp-blur, 20px))
+    blur(var(--gp-blur, 18px))
     saturate(var(--gp-saturate, 180%));
   border-radius: var(--glass-radius);
   /* Specular luminance: a bright 1px hairline at the top edge that reads
@@ -850,10 +850,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
   backdrop-filter:
-    blur(var(--gp-blur, 20px))
+    blur(var(--gp-blur, 18px))
     saturate(var(--gp-saturate, 180%));
   -webkit-backdrop-filter:
-    blur(var(--gp-blur, 20px))
+    blur(var(--gp-blur, 18px))
     saturate(var(--gp-saturate, 180%));
   box-shadow:
     var(--glass-drop-light),
@@ -1068,6 +1068,30 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .glass-surface.surface-popover {
   --glass-radius: 10px;
+  /* Popovers always paint solid — never a translucent backdrop-filter
+     layer. Reason: every popover overlaps a glass surface (composer,
+     modal, sidebar) or sits inside one, which would push the visible
+     stack to 2-3 backdrop-filter layers (cap is 2). Drop the blur and
+     opt into the linen recipe (solid surface + popover-tier shadow +
+     ring) regardless of material. The popover still reads as floating
+     chrome — identity comes from the shadow + ring, not the blur.
+     This restores the cap of ≤2 stacked backdrop-filters everywhere:
+       scrim (8px) + modal (≤18px) = 2 layers, ≤26px cumulative.
+       composer (≤18px) + popover (none) = 1 backdrop-filter layer.
+     glass-design.md §5 + memory/feedback_backdrop_filter_containing_block. */
+  background: var(--color-surface);
+  background-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    var(--shadow-linen-popover),
+    inset 0 0 0 1px var(--ring-light);
+}
+:root.dark .glass-surface.surface-popover,
+.glass-surface.surface-popover[data-tone="dark"] {
+  box-shadow:
+    var(--shadow-linen-popover),
+    inset 0 0 0 1px var(--ring-dark);
 }
 :root[data-material="linen"] .glass-surface.surface-popover {
   box-shadow:

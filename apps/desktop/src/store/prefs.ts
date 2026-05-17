@@ -8,13 +8,13 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const PREFS_VERSION = 4;
+const PREFS_VERSION = 5;
 
 /* The canonical glass material. Defaults match the historic "frosted"
  * recipe — readable foreground over a lively background. */
 export const DEFAULT_GLASS_PREFS: GlassPrefs = {
   tint: 35,
-  blur: 20,
+  blur: 18,
   saturate: 180,
   rim: 60,
 };
@@ -51,6 +51,12 @@ export function loadPrefs(): Prefs {
     // single GlassParams. Reset rather than trying to pick a variant.
     if (ver < 4) {
       parsed.glass = DEFAULT_GLASS_PREFS;
+    }
+    // v4 → v5: backdrop-blur audit capped per-layer blur at < 20px
+    // (glass-design.md §5). Clamp any existing user value down so a
+    // 60px holdover doesn't blow past the new cap.
+    if (ver < 5 && parsed.glass) {
+      parsed.glass = { ...parsed.glass, blur: Math.min(parsed.glass.blur ?? 18, 18) };
     }
     return { ...DEFAULT_PREFS, ...parsed };
   } catch {
