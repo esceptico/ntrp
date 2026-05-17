@@ -643,17 +643,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    rules beat layered rules regardless of specificity — we hit this
    when `position: relative` here silently overrode `.absolute` on
    the sidebars. */
+/* Glass layering rule:
+   When stacking glass surfaces, each elevation step up = +4px blur,
+   +5% tint, +0.05 rim opacity. Don't break this without reason —
+   it's what makes depth read as depth instead of as visual noise. */
 @layer components {
 .glass-surface {
   --glass-radius: 16px;
-  --glass-tint: rgba(255, 255, 255, 0.35);
+  --glass-tint: var(--gp-frosted-tint, rgba(255, 255, 255, 0.35));
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
 
   position: relative;
   isolation: isolate;
   background: var(--glass-tint);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter:
+    blur(var(--gp-frosted-blur, 20px))
+    saturate(var(--gp-frosted-saturate, 180%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-frosted-blur, 20px))
+    saturate(var(--gp-frosted-saturate, 180%));
   border-radius: var(--glass-radius);
   box-shadow: var(--glass-drop);
 }
@@ -693,14 +701,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     );
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter:
+    blur(var(--gp-frosted-blur, 14px))
+    saturate(var(--gp-frosted-saturate, 160%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-frosted-blur, 14px))
+    saturate(var(--gp-frosted-saturate, 160%));
   /* b8093a77 composer recipe: faint full-perimeter ring + brighter
      top-edge specular catching "light from above". */
   box-shadow:
     var(--glass-drop),
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+    inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-frosted-rim, 0.1));
 }
 /* Dark: suppress the light-mode diagonal glimmer. */
 :root.dark .glass-surface::before,
@@ -709,17 +721,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .glass-surface[data-tone="light"] {
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: var(--gp-frosted-tint, rgba(255, 255, 255, 0.35));
+  backdrop-filter:
+    blur(var(--gp-frosted-blur, 20px))
+    saturate(var(--gp-frosted-saturate, 180%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-frosted-blur, 20px))
+    saturate(var(--gp-frosted-saturate, 180%));
 }
 .glass-frosted {
   /* Default surface recipe; class kept for semantic variant use. */
 }
 .glass-clear {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(2px) saturate(160%);
-  -webkit-backdrop-filter: blur(2px) saturate(160%);
+  background: var(--gp-clear-tint, rgba(255, 255, 255, 0.04));
+  backdrop-filter:
+    blur(var(--gp-clear-blur, 2px))
+    saturate(var(--gp-clear-saturate, 160%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-clear-blur, 2px))
+    saturate(var(--gp-clear-saturate, 160%));
 }
 :root.dark .glass-clear,
 .glass-clear[data-tone="dark"] {
@@ -733,14 +753,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     );
 }
 .glass-clear[data-tone="light"] {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--gp-clear-tint, rgba(255, 255, 255, 0.04));
 }
 .glass-heavy {
   /* Thicker material — punch the rim mid slightly. */
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.32);
-  background: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  background: var(--gp-heavy-tint, rgba(255, 255, 255, 0.18));
+  backdrop-filter:
+    blur(var(--gp-heavy-blur, 40px))
+    saturate(var(--gp-heavy-saturate, 180%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-heavy-blur, 40px))
+    saturate(var(--gp-heavy-saturate, 180%));
 }
 :root.dark .glass-heavy,
 .glass-heavy[data-tone="dark"] {
@@ -755,19 +779,27 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     );
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter:
+    blur(var(--gp-heavy-blur, 28px))
+    saturate(var(--gp-heavy-saturate, 180%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-heavy-blur, 28px))
+    saturate(var(--gp-heavy-saturate, 180%));
 }
 .glass-heavy[data-tone="light"] {
   --glass-drop: 0 8px 24px -12px rgba(31, 38, 135, 0.32);
-  background: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  background: var(--gp-heavy-tint, rgba(255, 255, 255, 0.18));
+  backdrop-filter:
+    blur(var(--gp-heavy-blur, 40px))
+    saturate(var(--gp-heavy-saturate, 180%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-heavy-blur, 40px))
+    saturate(var(--gp-heavy-saturate, 180%));
 }
 .glass-static {
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: var(--gp-static-tint, rgba(255, 255, 255, 0.86));
+  backdrop-filter: blur(var(--gp-static-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--gp-static-blur, 0px));
 }
 :root.dark .glass-static,
 .glass-static[data-tone="dark"] {
@@ -780,7 +812,38 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-repeat: repeat;
 }
 .glass-static[data-tone="light"] {
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--gp-static-tint, rgba(255, 255, 255, 0.86));
+}
+.glass-smoke {
+  background-color: var(--gp-smoke-tint, rgba(10, 10, 30, 0.55));
+  backdrop-filter:
+    blur(var(--gp-smoke-blur, 20px))
+    saturate(var(--gp-smoke-saturate, 120%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-smoke-blur, 20px))
+    saturate(var(--gp-smoke-saturate, 120%));
+  box-shadow:
+    var(--glass-drop, 0 4px 14px -4px rgba(0, 0, 0, 0.32)),
+    inset 0 1px 0 rgba(255, 255, 255, var(--gp-smoke-rim, 0.06));
+  /* Always dark — ignores host theme. Use for floating surfaces over
+     saturated/photo backdrops where ink-text contrast matters. */
+  color: rgba(255, 255, 255, 0.95);
+}
+.glass-milk {
+  background: var(--gp-milk-tint, rgba(255, 255, 255, 0.5));
+  backdrop-filter:
+    blur(var(--gp-milk-blur, 24px))
+    saturate(var(--gp-milk-saturate, 140%));
+  -webkit-backdrop-filter:
+    blur(var(--gp-milk-blur, 24px))
+    saturate(var(--gp-milk-saturate, 140%));
+  box-shadow:
+    var(--glass-drop, 0 8px 24px -12px rgba(31, 38, 135, 0.25)),
+    inset 0 1px 0 rgba(255, 255, 255, var(--gp-milk-rim, 0.9));
+}
+:root.dark .glass-milk,
+.glass-milk[data-tone="dark"] {
+  background: var(--gp-milk-tint-dark, rgba(255, 255, 255, 0.18));
 }
 /* GlassToggle — self-contained segmented control. Variables are
    consumed by the component's inline styles; this block just resolves
