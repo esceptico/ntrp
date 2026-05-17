@@ -81,7 +81,7 @@ export function ApprovalReviewModal() {
             transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-line-soft min-w-0">
+            <header className="flex items-center gap-2 px-5 pt-4 pb-3 min-w-0">
               <span className="font-mono text-base font-medium text-ink truncate">
                 {approval.toolName}
               </span>
@@ -97,7 +97,7 @@ export function ApprovalReviewModal() {
               </IconButton>
             </header>
 
-            <div className="overflow-y-auto scroll-thin">
+            <div className="overflow-y-auto scroll-thin scroll-fade-top">
               {approval.diff ? (
                 <div className="font-mono text-xs leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
                   <div>

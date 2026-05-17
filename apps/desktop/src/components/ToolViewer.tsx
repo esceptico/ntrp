@@ -125,7 +125,7 @@ export function ToolViewer() {
             transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">
+            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
               <div className="min-w-0 flex-1 flex items-center gap-2.5">
                 {live && isAgent(live) && (
                   <span
@@ -151,7 +151,7 @@ export function ToolViewer() {
               </IconButton>
             </header>
 
-            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+            <div className="overflow-y-auto scroll-thin scroll-fade-top px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
               {live && isAgent(live) ? (
                 <AgentBody item={live} descendants={descendants} />
               ) : (

@@ -117,7 +117,7 @@ export function SessionList() {
         </div>
       )}
 
-      <div className={clsx("flex-1 min-h-0 overflow-y-auto scroll-thin pb-3", !searchActive && "pt-3")}>
+      <div className={clsx("flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-both pb-3", !searchActive && "pt-3")}>
         {sessions.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}

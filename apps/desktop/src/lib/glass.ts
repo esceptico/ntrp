@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "../store";
-import type { GlassParams } from "../store";
+import type { GlassParams, Material } from "../store";
 
 /** Write the user's glass params onto :root as CSS custom properties.
  *  `.glass-surface` reads these via `var(--gp-X, fallback)`. Tint is
@@ -19,10 +19,21 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/** Subscribes to prefs.glass and applies the params to :root every change. */
+/** Subscribes to glass + material prefs and applies them to :root every
+ *  change. Material is written as `data-material` so CSS can swap the
+ *  whole .glass-surface recipe between translucent glass and solid linen
+ *  via attribute selector. */
 export function useGlassEffect(): void {
   const glass = useStore((s) => s.prefs.glass);
+  const material = useStore((s) => s.prefs.material);
   useEffect(() => {
     applyGlassParams(glass);
   }, [glass]);
+  useEffect(() => {
+    applyMaterial(material);
+  }, [material]);
+}
+
+function applyMaterial(m: Material): void {
+  document.documentElement.dataset.material = m;
 }

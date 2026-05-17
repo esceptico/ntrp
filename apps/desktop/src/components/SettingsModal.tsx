@@ -71,11 +71,11 @@ export function SettingsModal() {
       grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       disableEscape={saving}
     >
-        <aside className="border-r border-line-soft flex flex-col min-h-0">
+        <aside className="flex flex-col min-h-0">
           <div className="px-3 pt-4 pb-2 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
             Settings
           </div>
-          <nav className="flex flex-col gap-px px-2 pb-3 overflow-y-auto scroll-thin">
+          <nav className="flex flex-col gap-px px-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = active === tab.id;
@@ -106,7 +106,7 @@ export function SettingsModal() {
         </aside>
 
         <div className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 min-w-0">
-          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-3 border-b border-line-soft">
+          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-3">
             <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
               {TABS.find((t) => t.id === active)?.label}
             </div>
@@ -115,7 +115,7 @@ export function SettingsModal() {
             </IconButton>
           </header>
 
-          <div className="overflow-y-auto scroll-thin px-5 py-4">
+          <div className="overflow-y-auto scroll-thin scroll-fade-top px-5 py-4">
             {active === "connection" && (
               <ConnectionTab
                 formRef={formRef}

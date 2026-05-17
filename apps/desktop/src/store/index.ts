@@ -59,6 +59,7 @@ export type {
   GlassPrefs,
   ImageBlock,
   MarkdownViewState,
+  Material,
   PaletteId,
   Prefs,
   QueuedMessage,

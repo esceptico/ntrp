@@ -52,7 +52,7 @@ export function ArchiveModal() {
         actions: <SearchInput value={query} onChange={setQuery} />,
       }}
     >
-      <div className="overflow-y-auto scroll-thin px-3 py-3">
+      <div className="overflow-y-auto scroll-thin scroll-fade-top px-3 py-3">
         {filtered === null ? (
           <Empty>Loading…</Empty>
         ) : filtered.length === 0 ? (

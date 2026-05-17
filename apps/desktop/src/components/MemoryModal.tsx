@@ -82,7 +82,7 @@ export function MemoryModal() {
         </button>
       </header>
 
-      <nav className="relative z-10 flex flex-wrap items-end gap-4 mx-6 mt-3 overflow-visible border-b border-line-soft">
+      <nav className="relative z-10 flex flex-wrap items-end gap-4 mx-6 mt-3 overflow-visible">
         {PRIMARY_TABS.map((t) => (
           <TabButton
             key={t.id}

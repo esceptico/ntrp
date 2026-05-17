@@ -24,6 +24,7 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingIntensity: "normal",
   theme: "system",
   palette: "graphite",
+  material: "linen",
   sidebarHidden: false,
   sidebarWidth: 272,
   showReasoningInChat: true,

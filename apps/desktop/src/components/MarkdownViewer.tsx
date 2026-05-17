@@ -41,7 +41,7 @@ export function MarkdownViewer() {
       }
     >
       {view && (
-        <div className="overflow-y-auto scroll-thin px-5 py-4">
+        <div className="overflow-y-auto scroll-thin scroll-fade-top px-5 py-4">
           <Markdown content={view.content} className="text-md leading-[1.6] text-ink" />
         </div>
       )}

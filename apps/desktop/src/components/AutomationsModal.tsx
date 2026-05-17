@@ -59,7 +59,7 @@ export function AutomationsModal() {
           ),
         }}
       >
-        <nav className="flex items-center gap-5 px-6 border-b border-line-soft">
+        <nav className="flex items-center gap-5 px-6">
           <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
           <TabButton
             label="Channels"
@@ -76,7 +76,7 @@ export function AutomationsModal() {
           <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
         </nav>
 
-        <div className="overflow-y-auto scroll-thin px-6 py-5">
+        <div className="overflow-y-auto scroll-thin scroll-fade-top px-6 py-5">
           {tab === "active" ? (
             <ActiveList
               automations={automationGroups?.user ?? null}

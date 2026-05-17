@@ -57,11 +57,21 @@ export interface GlassParams {
 
 export type GlassPrefs = GlassParams;
 
+/** Surface material.
+ *  - "glass": translucent + backdrop-filter (blur/saturate). The
+ *    tint/blur/saturate/rim sliders apply.
+ *  - "linen": solid surface with a hairline ink ring and a soft drop
+ *    shadow. No backdrop-filter, no SVG noise — cheaper to paint and
+ *    reads as an architectural panel rather than translucent glass.
+ *    Tint/blur/saturate sliders don't apply (rim still does). */
+export type Material = "glass" | "linen";
+
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
   palette: PaletteId;
+  material: Material;
   sidebarHidden: boolean;
   /** Sidebar width in pixels. User-resizable via the right-edge drag
    *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the

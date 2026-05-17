@@ -14,8 +14,10 @@ export function PaneShell({
 }) {
   return (
     <div className="grid grid-cols-[minmax(280px,360px)_minmax(0,1fr)] h-full">
-      <div className="flex flex-col min-h-0 bg-bg-main/50">{list}</div>
-      <div className="min-h-0 overflow-y-auto scroll-thin">{detail}</div>
+      <div className="flex flex-col min-h-0">{list}</div>
+      <div className="min-h-0 overflow-y-auto scroll-thin scroll-fade-top">
+        {detail}
+      </div>
     </div>
   );
 }
@@ -40,7 +42,7 @@ export function ListColumn<T>({
   return (
     <>
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">{toolbar}</div>
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-2 pb-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-2 pb-3">
         {loading ? (
           <Empty>Loading…</Empty>
         ) : error ? (
@@ -81,7 +83,7 @@ export function DetailShell({
   return (
     <div className="flex flex-col h-full">
       <div className="px-7 pt-6 pb-3">{header}</div>
-      <div className="flex-1 min-h-0 px-7 overflow-y-auto scroll-thin">
+      <div className="flex-1 min-h-0 px-7 overflow-y-auto scroll-thin scroll-fade-top">
         {body}
         <div className="mt-7 mb-6">{meta}</div>
       </div>

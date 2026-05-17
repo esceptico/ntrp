@@ -155,7 +155,7 @@ export function PaletteBody({
         </div>
       </div>
 
-      <div ref={listRef} className="overflow-y-auto scroll-thin pb-2 border-t border-line-soft/60">
+      <div ref={listRef} className="overflow-y-auto scroll-thin scroll-fade-top pb-2">
         {filtered.length === 0 ? (
           <div className="grid place-items-center min-h-[120px] text-sm italic text-faint">
             Nothing matches.

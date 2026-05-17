@@ -292,6 +292,24 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 
+/* Mask-based scroll edge fade — content dissolves under sticky chrome
+   instead of hard-clipping. Pure opacity mask (not a real backdrop
+   blur) — a sticky-child blur band sounded right but stacks badly
+   inside the slab's own backdrop-filter context and produces visible
+   stripes across rows. Mask fade ships clean. */
+.scroll-fade-top {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
+}
+.scroll-fade-bottom {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
+          mask-image: linear-gradient(to top, transparent 0, #000 24px);
+}
+.scroll-fade-both {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
    "drag" regions otherwise bleed through, and the OS swallows clicks
@@ -712,21 +730,55 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
 }
+
+/* ─── Linen material ─────────────────────────────────────────
+   Solid surface, hairline ink ring, soft 2-step drop shadow. No
+   backdrop-filter, no SVG noise — cheaper to paint than glass and
+   reads as an architectural panel rather than translucent material.
+   The Tint / Blur / Saturate sliders don't affect linen (the
+   AppearanceTab UI dims them when linen is active). Rim still maps
+   to the inset hairline opacity.
+   Switched at runtime via `data-material="linen"` on <html>. */
+:root[data-material="linen"] .glass-surface {
+  background: var(--color-surface);
+  background-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 1px 2px rgba(20, 24, 28, 0.04),
+    0 8px 24px rgba(20, 24, 28, 0.06),
+    inset 0 0 0 1px rgba(20, 24, 28, calc(0.08 * var(--gp-rim, 0.6) / 0.6));
+}
+:root[data-material="linen"].dark .glass-surface,
+:root[data-material="linen"] .glass-surface[data-tone="dark"] {
+  background: var(--color-surface);
+  background-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 4px 14px -4px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(255, 255, 255, calc(0.06 * var(--gp-rim, 0.6) / 0.6));
+}
 /* GlassToggle — self-contained segmented control. Variables are
    consumed by the component's inline styles; this block just resolves
    them per color scheme. Light defaults live on the element; the dark
    override flips them under :root.dark. */
 .glass-toggle {
-  --gt-track-bg: rgba(255, 255, 255, 0.35);
-  --gt-track-border: rgba(255, 255, 255, 0.55);
+  /* Light values use ink-derived alphas (not white). White-on-light is
+     invisible on flat panels (settings rails, Linen surfaces) — the
+     old white-derived values were tuned for translucent glass over
+     chat-bg and vanished anywhere else. Ink-derived borders read on
+     both flat light panels AND light-mode glass surfaces. */
+  --gt-track-bg: rgba(20, 24, 28, 0.04);
+  --gt-track-border: rgba(20, 24, 28, 0.14);
   --gt-track-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 8px 24px -12px rgba(31, 38, 135, 0.25);
-  --gt-pill-bg: rgba(255, 255, 255, 0.75);
-  --gt-pill-border: rgba(255, 255, 255, 0.9);
+    0 1px 2px rgba(20, 24, 28, 0.04);
+  --gt-pill-bg: #ffffff;
+  --gt-pill-border: rgba(20, 24, 28, 0.10);
   --gt-pill-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 2px 8px rgba(31, 38, 135, 0.18);
+    0 1px 2px rgba(20, 24, 28, 0.08),
+    0 4px 12px rgba(20, 24, 28, 0.06);
   --gt-fg: rgba(20, 20, 30, 0.92);
   --gt-fg-muted: rgba(20, 20, 30, 0.55);
   /* No backdrop-filter — N toggles in a list (per-tool decision pickers
@@ -751,16 +803,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    frosted material; knob travels along the track. Variables resolved
    per color scheme; consumed via inline styles in the component. */
 .glass-switch {
-  --gs-track-bg: rgba(255, 255, 255, 0.35);
-  --gs-track-border: rgba(255, 255, 255, 0.55);
+  /* Light values: ink-derived alphas, same reason as .glass-toggle —
+     white-on-light vanished on flat panels. */
+  --gs-track-bg: rgba(20, 24, 28, 0.06);
+  --gs-track-border: rgba(20, 24, 28, 0.14);
   --gs-track-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 8px 24px -12px rgba(31, 38, 135, 0.25);
-  --gs-knob-bg: rgba(255, 255, 255, 0.75);
-  --gs-knob-border: rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(20, 24, 28, 0.04);
+  --gs-knob-bg: #ffffff;
+  --gs-knob-border: rgba(20, 24, 28, 0.10);
   --gs-knob-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 2px 8px rgba(31, 38, 135, 0.18);
+    0 1px 2px rgba(20, 24, 28, 0.08),
+    0 2px 6px rgba(20, 24, 28, 0.06);
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -881,14 +935,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   to { opacity: 0; }
 }
 
-/* Modal scrim — the dim layer between a modal and the chat behind.
-   Light: very faint dark wash (0.08 alpha). Dark: 0.32 alpha black.
-   Fixed 8px backdrop-filter blur so the page softens behind the modal
-   for focus separation. NOT tied to --gp-blur on purpose: the modal's
-   own .glass-surface uses --gp-blur, and stacking the user-controlled
-   blur on top of an already-heavily-blurred backdrop kills slider
-   visibility. Keep this scrim blur small so the slider still moves
-   things on the modal itself. */
+/* Modal scrim — dim + blur layer between a modal and the chat behind.
+   Note: backdrop-filter on the scrim establishes a containing block for
+   descendant backdrop-filters, so the modal's own .glass-surface
+   samples this scrim's already-blurred output rather than the page —
+   the modal's blur slider will read as nearly no-op in Glass mode. Fine
+   trade in Linen mode (the modal has no backdrop-filter to begin with)
+   and acceptable in Glass mode given how much the scrim blur helps
+   visually separate the modal from the chat. */
 .modal-scrim {
   background-color: rgba(20, 24, 28, 0.08);
   backdrop-filter: blur(8px);

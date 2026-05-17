@@ -5,6 +5,7 @@ import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, t
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
+  type Material,
   type PaletteId,
   type ThemeChoice,
   type ThinkingAnimation,
@@ -16,7 +17,6 @@ import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
 import { GlassSwitch } from "../GlassSwitch";
-import { RangeField } from "./RangeField";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -44,7 +44,9 @@ export function AppearanceTab() {
   const palette = useStore((s) => s.prefs.palette);
   const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
   const glass = useStore((s) => s.prefs.glass);
+  const material = useStore((s) => s.prefs.material);
   const setPref = useStore((s) => s.setPref);
+  const isGlass = material === "glass";
 
   return (
     <div className="grid gap-6">
@@ -118,113 +120,123 @@ export function AppearanceTab() {
         </div>
       </section>
 
-      {/* === Glass ===
-          Per the consolidation pass, glass is one canonical material now;
-          these four knobs tune it everywhere it appears across the app. */}
-      <section className="grid gap-3">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <h3 className="m-0 text-sm font-medium text-ink">Glass</h3>
-            <p className="m-0 mt-0.5 text-xs text-faint leading-[1.4]">
-              Tune the frosted material used across every glass surface. Changes apply live.
-            </p>
-          </div>
+      {/* === Material ===
+          Same .glass-surface CSS class, two recipes swapped via
+          :root[data-material]. Glass = translucent + backdrop-filter
+          (Tint/Blur/Saturate apply). Linen = solid + hairline ring +
+          drop shadow (only Rim applies). Sliders are only rendered
+          when they have effect — no dimmed dead UI. */}
+      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+        <SettingRow
+          title="Glass material"
+          hint="Translucent surfaces with backdrop blur. Off = Linen — solid panels with a hairline ring."
+          control={
+            <GlassSwitch
+              size="sm"
+              checked={isGlass}
+              onChange={(next) => setPref("material", (next ? "glass" : "linen") as Material)}
+              aria-label="Use glass material"
+            />
+          }
+        />
+        {isGlass && (
+          <>
+            <SliderRow
+              title="Tint"
+              hint="Opacity of the surface color over the backdrop."
+              value={glass.tint}
+              min={0}
+              max={100}
+              unit="%"
+              onChange={(v) => setPref("glass", { ...glass, tint: v })}
+            />
+            <SliderRow
+              title="Blur"
+              hint="Backdrop blur radius."
+              value={glass.blur}
+              min={0}
+              max={60}
+              unit="px"
+              onChange={(v) => setPref("glass", { ...glass, blur: v })}
+            />
+            <SliderRow
+              title="Saturate"
+              hint="Color intensity pulled from behind the surface."
+              value={glass.saturate}
+              min={0}
+              max={250}
+              unit="%"
+              onChange={(v) => setPref("glass", { ...glass, saturate: v })}
+            />
+          </>
+        )}
+        <SliderRow
+          title="Rim"
+          hint="Top-edge specular highlight strength."
+          value={glass.rim}
+          min={0}
+          max={100}
+          unit="%"
+          onChange={(v) => setPref("glass", { ...glass, rim: v })}
+        />
+        <div className="px-4 py-2.5 flex justify-end">
           <button
             type="button"
-            onClick={() => setPref("glass", DEFAULT_GLASS_PREFS)}
+            onClick={() => {
+              setPref("glass", DEFAULT_GLASS_PREFS);
+              setPref("material", "linen");
+            }}
             className="text-xs font-medium text-muted hover:text-ink transition-colors"
           >
-            Reset
+            Reset to defaults
           </button>
-        </div>
-
-        <GlassPreview />
-
-        <div className="grid gap-2.5">
-          <RangeField
-            label="Tint"
-            value={glass.tint}
-            onChange={(v) => setPref("glass", { ...glass, tint: v })}
-            min={0} max={100} unit="%"
-          />
-          <RangeField
-            label="Blur"
-            value={glass.blur}
-            onChange={(v) => setPref("glass", { ...glass, blur: v })}
-            min={0} max={60} unit="px"
-          />
-          <RangeField
-            label="Saturate"
-            value={glass.saturate}
-            onChange={(v) => setPref("glass", { ...glass, saturate: v })}
-            min={0} max={250} unit="%"
-          />
-          <RangeField
-            label="Rim"
-            value={glass.rim}
-            onChange={(v) => setPref("glass", { ...glass, rim: v })}
-            min={0} max={100} unit="%"
-          />
         </div>
       </section>
     </div>
   );
 }
 
-/** Calm static gradient backdrop with one glass card centered. No motion,
- *  no text — gives blur/saturate something to chew without distracting
- *  from the slider feedback. */
-function GlassPreview() {
-  // Single-color backdrop (theme chat-bg) — same uniform field the real
-  // app sits over. All visual variation comes from CONTENT (bars + accent
-  // badge), so the glass effect looks uniform across the card instead of
-  // asymmetrically smudged by a backdrop gradient.
-  //   • tint:     opacity of the theme surface color over the backdrop
-  //   • blur:     smears the bars + accent badge
-  //   • saturate: pumps the accent badge color
-  //   • rim:      visible against the ink-tone bars behind the card
+/** Slider in a SettingRow's control slot — title/hint live on the row
+ *  (matches every other Appearance row), so the slider itself is just
+ *  the input + value readout. Fixed-width track keeps the right edge
+ *  aligned across rows. */
+function SliderRow({
+  title,
+  hint,
+  value,
+  min,
+  max,
+  unit,
+  onChange,
+}: {
+  title: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  unit: string;
+  onChange: (next: number) => void;
+}) {
   return (
-    <div
-      className="relative overflow-hidden rounded-[10px] border border-line-soft bg-bg"
-      style={{ height: 180 }}
-    >
-      {/* Fake chat content — bars span full width so they extend behind
-          the glass card AND show on the strips above/below it. */}
-      <div aria-hidden className="absolute inset-0 px-4 py-3 grid gap-2 content-center">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-accent shrink-0" />
-          <div className="h-2 flex-1 rounded bg-ink/55" />
-        </div>
-        <div className="h-2 w-full rounded bg-ink/35" />
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 items-center px-2 rounded-full bg-accent-soft text-accent-strong text-[10px] font-medium shrink-0">
-            running
+    <SettingRow
+      title={title}
+      hint={hint}
+      control={
+        <div className="flex items-center gap-3 w-[220px]">
+          <input
+            type="range"
+            value={value}
+            min={min}
+            max={max}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="flex-1 accent-accent cursor-pointer"
+          />
+          <span className="w-12 text-right text-sm text-ink-soft tabular-nums font-mono">
+            {Math.round(value)}{unit}
           </span>
-          <div className="h-2 flex-1 rounded bg-ink/40" />
         </div>
-        <div className="h-2 w-full rounded bg-ink/30" />
-        <div className="h-2 w-3/4 rounded bg-ink/25" />
-      </div>
-
-      {/* Glass card overlays the middle band — content is right behind it,
-          and a strip of raw content peeks at top + bottom. */}
-      <div
-        className="glass-surface"
-        style={{
-          position: "absolute",
-          top: 32,
-          bottom: 32,
-          left: 16,
-          right: 16,
-          display: "grid",
-          placeItems: "center",
-          fontSize: 13,
-          fontWeight: 500,
-        }}
-      >
-        Preview surface
-      </div>
-    </div>
+      }
+    />
   );
 }
 

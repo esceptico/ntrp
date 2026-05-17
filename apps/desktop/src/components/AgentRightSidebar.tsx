@@ -337,7 +337,7 @@ export function AgentRightSidebar() {
           </span>
         </div>
         <div className="flex min-h-0 flex-col">
-          <div className="min-h-0 overflow-y-auto px-3 pb-3 pt-1">
+          <div className="min-h-0 overflow-y-auto scroll-thin scroll-fade-top px-3 pb-3 pt-1">
             {hasAgents && (
               <section>
                 {both && <SectionHeader label="Agents" count={agents.length} />}

@@ -88,7 +88,7 @@ export function PageModal({
             onClick={(e) => e.stopPropagation()}
           >
             {header && (
-              <header className="flex items-start justify-between gap-3 px-5 pt-[18px] pb-3 border-b border-line-soft">
+              <header className="flex items-start justify-between gap-3 px-5 pt-[18px] pb-3">
                 <div className="min-w-0">
                   <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
                     {header.title}
