@@ -15,12 +15,13 @@ import {
 } from "../../api";
 import { fetchServerConfig } from "../../actions";
 import { useStore } from "../../store";
+import { ReadinessCard } from "../ReadinessCard";
+import { SectionHeader } from "../SectionHeader";
 import {
   providerActionLabel,
   providerConnectionPill,
   providerModelCountLabel,
   providerReadinessSummary,
-  type ProviderReadinessSummary,
 } from "../../lib/providerConnection";
 import {
   canSaveCustomModelDraft,
@@ -288,7 +289,12 @@ export function ProvidersTab() {
           <SettingsConnectionHint />
         ) : (
           <>
-            <ProviderReadinessCard summary={readiness} />
+            <ReadinessCard
+              tone={readiness.ready ? "ok" : "warn"}
+              label={readiness.label}
+              detail={readiness.detail}
+              footnote={`${readiness.connectedProviderCount} connected · ${readiness.availableModelCount} available models`}
+            />
             <ProviderSection
               title="Ready providers"
               detail={`${connectedProviders.length} connected`}
@@ -310,27 +316,6 @@ export function ProvidersTab() {
   );
 }
 
-function ProviderReadinessCard({ summary }: { summary: ProviderReadinessSummary }) {
-  return (
-    <section className="rounded-[12px] border border-line-soft bg-surface-soft/45 px-3.5 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={clsx(
-            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-            summary.ready ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
-          )}
-        >
-          {summary.label}
-        </span>
-        <div className="text-sm text-ink-soft">{summary.detail}</div>
-      </div>
-      <div className="mt-1.5 text-xs text-faint">
-        {summary.connectedProviderCount} connected · {summary.availableModelCount} available models
-      </div>
-    </section>
-  );
-}
-
 function ProviderSection({
   title,
   detail,
@@ -346,10 +331,7 @@ function ProviderSection({
 
   return (
     <section className="grid gap-2">
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
-        <div className="text-xs text-faint">{detail}</div>
-      </div>
+      <SectionHeader label={title} detail={detail} className="px-0.5" />
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (

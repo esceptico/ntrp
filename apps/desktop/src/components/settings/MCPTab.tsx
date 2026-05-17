@@ -23,6 +23,7 @@ import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
 import { GlassSwitch } from "../GlassSwitch";
 import { LabeledField } from "./Field";
+import { SectionHeader } from "../SectionHeader";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -123,20 +124,20 @@ function ServerList({
       </div>
 
       <div className="grid gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="m-0 text-sm font-medium uppercase tracking-[0.06em] text-faint">
-            Servers
-          </h3>
-          {!loadError && (
-            <button
-              type="button"
-              onClick={onAdd}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
-            >
-              <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
-            </button>
-          )}
-        </div>
+        <SectionHeader
+          label="Servers"
+          action={
+            !loadError && (
+              <button
+                type="button"
+                onClick={onAdd}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+              >
+                <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
+              </button>
+            )
+          }
+        />
 
         {servers === null ? (
           <Empty>Loading…</Empty>
@@ -480,9 +481,7 @@ function ToolsSection({
 
   return (
     <div className="grid gap-2">
-      <h4 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-faint">
-        Tools ({server.tools.length})
-      </h4>
+      <SectionHeader label="Tools" count={server.tools.length} />
       <ul className="rounded-md border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
         {server.tools.map((t) => {
           const checked = enabledNames.has(t.name);

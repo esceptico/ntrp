@@ -22,6 +22,8 @@ import {
 } from "../../api";
 import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { useStore } from "../../store";
+import { ReadinessCard } from "../ReadinessCard";
+import { SectionHeader } from "../SectionHeader";
 import {
   googleConnectionSummary,
   type GoogleConnectionSummary,
@@ -65,6 +67,8 @@ export function IntegrationsTab() {
     () => googleConnectionSummary(googleEnabled, gmailAccounts),
     [gmailAccounts, googleEnabled],
   );
+  const readyToolsCount =
+    (googleSummary.tone === "ready" ? 1 : 0) + connectedSlackServices.length;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -195,9 +199,11 @@ export function IntegrationsTab() {
         <SettingsConnectionHint />
       ) : (
         <>
-          <IntegrationsReadinessCard
-            google={googleSummary}
-            connectedSlackCount={connectedSlackServices.length}
+          <ReadinessCard
+            tone={readyToolsCount > 0 ? "ok" : "warn"}
+            label={readyToolsCount > 0 ? "Tools ready" : "Connect tools"}
+            detail={`Google: ${googleSummary.label} · Slack: ${connectedSlackServices.length || "none"}`}
+            footnote="Tool integrations are optional, but connected tools become available to the agent."
           />
 
           <GoogleCard
@@ -231,36 +237,6 @@ export function IntegrationsTab() {
         </>
       )}
     </div>
-  );
-}
-
-function IntegrationsReadinessCard({
-  google,
-  connectedSlackCount,
-}: {
-  google: GoogleConnectionSummary;
-  connectedSlackCount: number;
-}) {
-  const readyCount = (google.tone === "ready" ? 1 : 0) + connectedSlackCount;
-  return (
-    <section className="rounded-[12px] border border-line-soft bg-surface-soft/45 px-3.5 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={clsx(
-            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-            readyCount > 0 ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
-          )}
-        >
-          {readyCount > 0 ? "Tools ready" : "Connect tools"}
-        </span>
-        <div className="text-sm text-ink-soft">
-          Google: {google.label} · Slack: {connectedSlackCount || "none"}
-        </div>
-      </div>
-      <div className="mt-1.5 text-xs text-faint">
-        Tool integrations are optional, but connected tools become available to the agent.
-      </div>
-    </section>
   );
 }
 
@@ -465,7 +441,7 @@ function ServiceSection({
   const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
   return (
     <section className="grid gap-2">
-      <div className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+      <SectionHeader label={title} />
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (
