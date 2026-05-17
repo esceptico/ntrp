@@ -471,28 +471,72 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    backdrop-filter produces visible stripes across rows — we fall back
    to a pure opacity mask there. Reduced-transparency / motion users
    also get the mask fallback (the ambient blur can be uncomfortable). */
-/* Subtle scroll-edge blur — short sticky bar at top of scroll viewport
-   with a soft gradient mask. Modeled on macOS Safari toolbar / iOS
-   Settings header: 32px tall, mild blur, fades out at the bottom.
-   Linen-mode only — Glass mode would nest with the slab's own
-   backdrop-filter (containing-block trap). Same fallback under
-   prefers-reduced-* media. */
+/* Progressive blur on scroll-top. 7 stacked backdrop-filter layers
+   with progressively smaller blur radii (16 → 0.5 px), each masked
+   to a narrow band overlapping its neighbors by ~50% so the
+   effective blur radius slides smoothly across the strip. Heaviest
+   at the top (closest to chrome above), clearest at the bottom.
+   Visibility gated on data-scrolled — at scrollTop=0 the whole
+   strip is opacity:0 so Chromium's compositor-layer artifact over
+   uniform bg doesn't show. Fades in via opacity transition as soon
+   as content scrolls past.
+   Linen mode only — Glass-mode slab already has backdrop-filter, so
+   nesting more inside would hit the containing-block trap. */
 .scroll-blur-top {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 32px;
-  margin-bottom: -32px;
+  height: 64px;
+  margin-bottom: -64px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.scroll-blur-top[data-scrolled="true"] {
+  opacity: 1;
+}
+.scroll-blur-top > div {
+  position: absolute;
+  inset: 0;
   pointer-events: none;
 }
-:root[data-material="linen"] .scroll-blur-top {
-  -webkit-backdrop-filter: blur(8px);
-          backdrop-filter: blur(8px);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(1) {
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12.5%, rgba(0,0,0,0) 25%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(2) {
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12.5%, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 37.5%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(3) {
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 37.5%, rgba(0,0,0,0) 50%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(4) {
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 37.5%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62.5%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(5) {
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62.5%, rgba(0,0,0,0) 75%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(6) {
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62.5%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 87.5%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(7) {
+  -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
-  :root[data-material="linen"] .scroll-blur-top {
+  :root[data-material="linen"] .scroll-blur-top > div {
     -webkit-backdrop-filter: none;
             backdrop-filter: none;
   }
