@@ -175,29 +175,19 @@ export function AppearanceTab() {
  *  no text — gives blur/saturate something to chew without distracting
  *  from the slider feedback. */
 function GlassPreview() {
-  // The glass card spans most of the preview so the colored content sits
-  // BEHIND it — that's the only way tint/saturate/blur do visible work.
-  // A strip of raw content peeks above and below the card so you can
-  // compare "raw" vs "through glass" at a glance.
-  //   • tint:     mixes white into the cream/accent-soft gradient
+  // Single-color backdrop (theme chat-bg) — same uniform field the real
+  // app sits over. All visual variation comes from CONTENT (bars + accent
+  // badge), so the glass effect looks uniform across the card instead of
+  // asymmetrically smudged by a backdrop gradient.
+  //   • tint:     opacity of the theme surface color over the backdrop
   //   • blur:     smears the bars + accent badge
-  //   • saturate: pumps the accent gradient + badge color
+  //   • saturate: pumps the accent badge color
   //   • rim:      visible against the ink-tone bars behind the card
   return (
     <div
-      className="relative overflow-hidden rounded-[10px] border border-line-soft"
+      className="relative overflow-hidden rounded-[10px] border border-line-soft bg-bg"
       style={{ height: 180 }}
     >
-      {/* Diagonal theme-color gradient — actual hue for saturate to pump. */}
-      <div
-        className="absolute inset-0"
-        aria-hidden
-        style={{
-          background:
-            "linear-gradient(135deg, var(--color-surface-sunken) 0%, var(--color-bg) 35%, var(--color-accent-soft) 100%)",
-        }}
-      />
-
       {/* Fake chat content — bars span full width so they extend behind
           the glass card AND show on the strips above/below it. */}
       <div aria-hidden className="absolute inset-0 px-4 py-3 grid gap-2 content-center">
