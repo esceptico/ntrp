@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
+import { Boxes, Brain, Cable, Database, Droplets, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import { useStore } from "../store";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
 import { ConnectionTab } from "./settings/ConnectionTab";
@@ -11,11 +11,12 @@ import { ContextTab } from "./settings/ContextTab";
 import { MCPTab } from "./settings/mcp/MCPTab";
 import { ToolsTab } from "./settings/ToolsTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
+import { GlassTab } from "./settings/GlassTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
-type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
+type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance" | "glass";
 
 interface Tab {
   id: TabId;
@@ -33,6 +34,7 @@ const TABS: Tab[] = [
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "mcp", label: "MCP servers", icon: Boxes },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "glass", label: "Glass", icon: Droplets },
 ];
 
 export function SettingsModal() {
@@ -135,6 +137,7 @@ export function SettingsModal() {
             {active === "tools" && <ToolsTab />}
             {active === "mcp" && <MCPTab />}
             {active === "appearance" && <AppearanceTab />}
+            {active === "glass" && <GlassTab />}
           </div>
         </div>
     </PageModal>

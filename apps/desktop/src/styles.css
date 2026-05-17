@@ -107,6 +107,10 @@
   0%, 100% { opacity: 0.4; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
 }
+@keyframes glassPreviewScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
