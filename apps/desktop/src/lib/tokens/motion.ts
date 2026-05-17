@@ -6,8 +6,6 @@
  * Existing consumers still import from `../motion`; this module is the
  * canonical destination — Phase 2 will sweep call sites.
  */
-import { SPRING_SMOOTH as LEGACY_SPRING_SMOOTH } from "../motion";
-
 // ─── Springs ──────────────────────────────────────────────────
 // Stiffness/damping pairs tuned to use case. Higher stiffness = faster
 // settle; higher damping = less overshoot. `mass: 1` keeps the visual
@@ -21,14 +19,6 @@ export const SPRING_CARD = { type: "spring", stiffness: 260, damping: 26, mass: 
 export const SPRING_TAP = { type: "spring", stiffness: 380, damping: 30, mass: 1 } as const;
 /** Layout / FLIP / list reorders. Slower, longer settle for shared element. */
 export const SPRING_LAYOUT = { type: "spring", stiffness: 220, damping: 28, mass: 1 } as const;
-
-/**
- * Compatibility re-export — keeps `import { SPRING_SMOOTH } from ".../motion-tokens"`
- * working while Phase 2 sweeps imports to `SPRING_MODAL`. Mirrors the legacy
- * SPRING_SMOOTH value (not SPRING_MODAL) so re-export semantics are exact;
- * Phase 2 retargets at call sites.
- */
-export const SPRING_SMOOTH = LEGACY_SPRING_SMOOTH;
 
 // ─── Eases (cubic-bezier tuples) ─────────────────────────────
 

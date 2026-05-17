@@ -319,3 +319,37 @@ The "what makes glass feel like glass" and "what makes linen feel like linen" in
 - Skeleton/shimmer per material.
 - Chat-specific token pass (message bubbles, tool cards, reasoning).
 - Sound design tokens (research not commissioned yet).
+- **Color alias retirement** (deferred from Phase 6): the `--color-*` legacy
+  aliases in `:root` still resolve to `--color-neutral-N` / `--color-accent-N`.
+  Per-palette `:root.palette-*` blocks continue to override them directly, so
+  the aliases are load-bearing until those overrides are rewritten to consume
+  the ramp tokens. Out of scope for this spec.
+
+---
+
+## Implementation status
+
+Landed in six commits on `main`:
+
+| Phase | Commit     | Notes                                                                                                                                                |
+|-------|------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| P1    | `a65cae58` | Token modules + APCA report script. Zero behavior change.                                                                                            |
+| P2    | `675e1b88` | Motion sweep — components migrated to `SPRING_MODAL` / `SPRING_CARD` / etc. Old `SPRING_SMOOTH/SNAPPY/BOUNCY` left in place with retiring comments.   |
+| P3    | `e0dd896b` | Elevation sweep — `--shadow-{sm,md,lg}` tokens replace inline shadow strings outside chat surfaces.                                                  |
+| P4    | `9251671a` | Color sweep — OKLCH ramps wired through, APCA fixes per palette. Final contrast: **80/80 PASS** across all 8 (palette × light/dark) combos.          |
+| P5    | `3d55e36c` | Per-material interaction polish — glass rim drift via `@property`-registered custom prop; linen settle via spring.                                   |
+| P6    | _(this)_   | Cleanup. Deleted `SPRING_SMOOTH/SNAPPY/BOUNCY` from `lib/motion.ts` and the back-compat re-export from `lib/tokens/motion.ts`.                       |
+
+### Final state
+
+- **Motion**: `lib/tokens/motion.ts` is canonical. `lib/motion.ts` retains only what isn't duplicated there: `MOTION` durations dict, `originFromEvent` / `modalOriginTransform` helpers, and the `SPRING_POPOVER` / `SPRING_TAP_RELEASE` / `SPRING_ROW_ENTRY` springs that have no token-module equivalent yet (still single-consumer each — promote when a second appears).
+- **Color**: ramps live in `styles.css` `:root` and per-palette blocks. Semantic aliases (`--color-ink`, `--color-line`, etc.) resolve to ramp steps. Legacy `--color-*` aliases retained — see "deferred" item above.
+- **Elevation**: `--shadow-{sm,md,lg}` tokens consumed via `shadow-[var(--shadow-N)]` Tailwind arbitrary values or direct `box-shadow` in CSS. A handful of bespoke chat-bubble shadows (Composer send button, Messages anchor pill) remain inline by design — content-overlay specific, not surface elevation.
+- **Per-material entries**: only `PageModal` consumes `ENTRY_GLASS` / `ENTRY_LINEN`. `ApprovalReviewModal` and `ToolViewer` still compose their own portal animation via `modalOriginTransform` — listed as a future polish task.
+
+### Verification (Phase 6)
+
+- `npx tsc --noEmit` from `apps/desktop/`: clean.
+- `bun run apps/desktop/scripts/validate-contrast.ts`: 80/80 PASS.
+- No remaining importers of `SPRING_SMOOTH` / `SPRING_SNAPPY` / `SPRING_BOUNCY` anywhere in the source tree.
+- No inline `[0.2, 0.8, 0.2, 1]` / `[0.32, 0.72, 0, 1]` ease tuples outside the motion modules themselves.

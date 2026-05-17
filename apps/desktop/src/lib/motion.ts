@@ -23,24 +23,6 @@ export const EASE_EMPHASIZED = [0.32, 0.72, 0, 1] as const;
 /** Ease-out used for landings on popovers and small UI scale-ins. */
 export const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
 
-/**
- * Apple SwiftUI spring presets, converted to framer-motion via
- * stiffness = (2π / duration)², damping = 4π × (1 − bounce) / duration.
- *
- * `SPRING_SMOOTH` is tuned to ~0.3s instead of SwiftUI's 0.5s default —
- * the longer duration felt too slow on modal entries. Other presets
- * keep the SwiftUI defaults for now; reach for these only when a user
- * test confirms the feel is right.
- *
- * Spec lives in docs/internal/apple-design-intel.md.
- */
-// retiring: use SPRING_MODAL from lib/tokens/motion
-export const SPRING_SMOOTH = { type: "spring", stiffness: 439, damping: 42, mass: 1 } as const;
-// retiring: use SPRING_CARD or SPRING_LAYOUT from lib/tokens/motion
-export const SPRING_SNAPPY = { type: "spring", stiffness: 158, damping: 21.4, mass: 1 } as const;
-// retiring: prefer SPRING_CARD from lib/tokens/motion (no documented bouncy use case)
-export const SPRING_BOUNCY = { type: "spring", stiffness: 158, damping: 17.6, mass: 1 } as const;
-
 /** Popover / menu reveal — origin-anchored, snappy with a hint of bounce. */
 export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mass: 1 } as const;
 
@@ -50,7 +32,7 @@ export const SPRING_TAP_RELEASE = { type: "spring", stiffness: 400, damping: 22,
 /** Row settles — Control Center–style spring for sibling-row entrances.
  *  Used by `TurnGroup`'s work-block stagger (Rauno's Depth essay:
  *  "Spring rows = organic feedback — Control Center–style spring per row").
- *  Snappier than SPRING_SMOOTH; not as elastic as SPRING_BOUNCY. */
+ *  Snappier than SPRING_MODAL; livelier than SPRING_CARD. */
 export const SPRING_ROW_ENTRY = { type: "spring", stiffness: 360, damping: 28, mass: 0.8 } as const;
 
 /** Returns the viewport-space center of an element. Used as the spatial
