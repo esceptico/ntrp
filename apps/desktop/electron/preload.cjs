@@ -6,6 +6,14 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
     reload: () => ipcRenderer.invoke("app:reload"),
     quit: () => ipcRenderer.invoke("app:quit"),
   },
+  window: {
+    isFullScreen: () => ipcRenderer.invoke("window:isFullScreen"),
+    onFullScreenChange: callback => {
+      const listener = (_event, isFullScreen) => callback(isFullScreen);
+      ipcRenderer.on("window:fullscreen-changed", listener);
+      return () => ipcRenderer.off("window:fullscreen-changed", listener);
+    },
+  },
   config: {
     get: () => ipcRenderer.invoke("config:get"),
     set: config => ipcRenderer.invoke("config:set", config),

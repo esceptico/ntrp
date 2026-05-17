@@ -323,6 +323,12 @@ function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow?.webContents.send("window:fullscreen-changed", true);
+  });
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow?.webContents.send("window:fullscreen-changed", false);
+  });
 
   if (isDev) {
     mainWindow.loadURL(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
@@ -469,6 +475,11 @@ app.whenReady().then(() => {
   ipcMain.handle("app:quit", event => {
     assertTrustedSender(event);
     app.quit();
+  });
+  ipcMain.handle("window:isFullScreen", event => {
+    assertTrustedSender(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win?.isFullScreen() ?? false;
   });
   ipcMain.handle("config:get", event => {
     assertTrustedSender(event);

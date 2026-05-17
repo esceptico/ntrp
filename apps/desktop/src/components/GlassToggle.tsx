@@ -140,15 +140,16 @@ export function GlassToggle({
     boxShadow: "var(--gt-track-shadow)",
   };
 
+  const pillGrow = 2;
   const pillStyle: CSSProperties = {
     position: "absolute",
     // top/bottom symmetric — explicit height + border-box + 1px border
     // gave a 2px vertical asymmetry (top gap > bottom gap).
-    top: sz.pad,
-    bottom: sz.pad,
+    top: Math.max(2, sz.pad - pillGrow),
+    bottom: Math.max(2, sz.pad - pillGrow),
     left: 0,
-    width: pill?.w ?? 0,
-    transform: `translateX(${pill?.x ?? 0}px)`,
+    width: pill ? pill.w + pillGrow * 2 : 0,
+    transform: `translateX(${pill ? pill.x - pillGrow : 0}px)`,
     borderRadius: 999,
     background: "var(--gt-pill-bg)",
     border: "1px solid var(--gt-pill-border)",

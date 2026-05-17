@@ -48,6 +48,20 @@ function useHash(): string {
   return hash;
 }
 
+function useFullscreenClass(): void {
+  useEffect(() => {
+    const setFullscreen = (isFullScreen: boolean) => {
+      document.documentElement.dataset.fullscreen = isFullScreen ? "true" : "false";
+    };
+    void window.ntrpDesktop?.window?.isFullScreen?.().then(setFullscreen);
+    const unsubscribe = window.ntrpDesktop?.window?.onFullScreenChange?.(setFullscreen);
+    return () => {
+      unsubscribe?.();
+      delete document.documentElement.dataset.fullscreen;
+    };
+  }, []);
+}
+
 export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -66,6 +80,7 @@ export function App() {
 
   useThemeEffect();
   useGlassEffect();
+  useFullscreenClass();
 
   useEffect(() => {
     if (hash === "#trace-demo") return;

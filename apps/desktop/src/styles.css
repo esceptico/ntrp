@@ -397,6 +397,7 @@ body.quick-capture-mode .quick-capture-card {
   -webkit-app-region: no-drag;
 }
 .sidebar-toggle      { left: 84px; }
+html[data-fullscreen="true"] .sidebar-toggle { left: 18px; }
 .right-sidebar-toggle { right: 14px; }
 .sidebar-toggle *,
 .right-sidebar-toggle * { -webkit-app-region: no-drag; }
@@ -429,6 +430,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-app-region: drag;
 }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
+
+.settings-sidebar-card {
+  --glass-radius: 10px;
+}
 
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }

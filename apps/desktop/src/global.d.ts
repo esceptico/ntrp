@@ -9,6 +9,12 @@ interface Window {
       /** Quit the Electron app entirely. */
       quit: () => Promise<void>;
     };
+    window: {
+      /** Current native fullscreen state for the containing Electron window. */
+      isFullScreen: () => Promise<boolean>;
+      /** Subscribe to native fullscreen changes. */
+      onFullScreenChange: (callback: (isFullScreen: boolean) => void) => () => void;
+    };
     config: {
       get: () => Promise<{ serverUrl: string; apiKey: string }>;
       set: (config: { serverUrl: string; apiKey: string }) => Promise<{ serverUrl: string; apiKey: string }>;

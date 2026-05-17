@@ -69,14 +69,12 @@ export function SettingsModal() {
       open={open}
       onClose={close}
       size="w-[min(1000px,calc(100vw-32px))] h-[min(740px,calc(100vh-32px))] sm:w-[min(1000px,calc(100vw-64px))] sm:h-[min(740px,calc(100vh-64px))]"
-      grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
+      grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       disableEscape={saving}
     >
-        <aside className="flex flex-col min-h-0">
-          <div className="px-3 pt-4 pb-2 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-            Settings
-          </div>
-          <nav className="flex flex-col gap-px px-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom">
+        <aside className="sidebar glass-surface settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
+          <div className="drag-spacer shrink-0 h-[22px]" />
+          <nav className="flex flex-col gap-px px-2.5 pt-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = active === tab.id;
@@ -86,24 +84,17 @@ export function SettingsModal() {
                   type="button"
                   onClick={() => setActive(tab.id)}
                   data-active={isActive ? "true" : undefined}
-                  className="app-row flex items-center gap-2 px-2.5 py-1.5 rounded-md text-base font-medium tracking-[-0.005em] text-ink-soft text-left"
+                  title={tab.label}
+                  className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-base font-medium text-ink-soft text-left tracking-[-0.005em]"
                 >
-                  <Icon size={ICON.SM} strokeWidth={2} className="shrink-0" />
-                  {tab.label}
+                  <span className="grid place-items-center w-4 h-4 shrink-0">
+                    <Icon size={ICON.LG} strokeWidth={2} />
+                  </span>
+                  <span className="truncate">{tab.label}</span>
                 </button>
               );
             })}
           </nav>
-          <div className="mt-auto px-3 pb-3 text-2xs text-faint shrink-0">
-            <button
-              type="button"
-              onClick={close}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
-            >
-              Close
-            </button>
-          </div>
         </aside>
 
         <div className="relative min-h-0 min-w-0">
