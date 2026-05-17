@@ -142,12 +142,51 @@
 
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
+  /* ─── Design-system tokens (Phase 1) ────────────────────────
+     Added by docs/superpowers/specs/2026-05-17-design-system-tokens-design.md.
+     No consumers yet — Phase 3 sweeps inline shadow/ring strings to these.
+
+     Ring alphas (ink-derived on light, white-derived on dark): */
+  --ring-light: rgba(20, 24, 28, 0.10);
+  --ring-light-soft: rgba(20, 24, 28, 0.06);
+  --ring-light-strong: rgba(20, 24, 28, 0.14);
+  --ring-dark: rgba(255, 255, 255, 0.08);
+  --ring-dark-soft: rgba(255, 255, 255, 0.05);
+  --ring-dark-strong: rgba(255, 255, 255, 0.14);
+
+  /* Linen shadow recipes — stacked Tailwind pattern, light defaults. */
+  --shadow-linen-rest:    0 1px 2px rgb(0 0 0 / .04),  0 4px 12px rgb(0 0 0 / .06);
+  --shadow-linen-hover:   0 2px 4px rgb(0 0 0 / .05),  0 8px 20px rgb(0 0 0 / .08);
+  --shadow-linen-popover: 0 2px 4px rgb(0 0 0 / .06),  0 12px 32px rgb(0 0 0 / .12);
+  --shadow-linen-modal:   0 4px 8px rgb(0 0 0 / .08),  0 20px 48px rgb(0 0 0 / .16);
+
+  /* Glass rim + drop — tokenizes what already lives in .glass-surface. */
+  --glass-drop-light: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
+  --glass-drop-dark:  0 4px 14px -4px rgba(0, 0, 0, 0.32);
+  --glass-rim-light:  inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-rim, 0.6));
+  --glass-rim-dark:   inset 0 1px 0 0 rgba(255, 255, 255, calc(var(--gp-rim, 0.6) / 6)),
+                      inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+
+  /* Focus ring — drives :focus-visible across interactive primitives in Phase 3. */
+  --focus-ring: 0 0 0 2px var(--color-accent-soft),
+                0 0 0 3px var(--color-accent);
+
   color-scheme: light;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 :root.dark {
+  /* Dark-mode overrides for the design-system tokens above. */
+  --ring-light: rgba(255, 255, 255, 0.08);
+  --ring-light-soft: rgba(255, 255, 255, 0.05);
+  --ring-light-strong: rgba(255, 255, 255, 0.14);
+
+  --shadow-linen-rest:    0 2px 4px rgba(0,0,0,.4);
+  --shadow-linen-hover:   0 2px 4px rgba(0,0,0,.4),  0 4px 12px rgba(0,0,0,.3);
+  --shadow-linen-popover: 0 4px 12px rgba(0,0,0,.5);
+  --shadow-linen-modal:   0 8px 32px rgba(0,0,0,.6);
+
   color-scheme: dark;
 }
 
