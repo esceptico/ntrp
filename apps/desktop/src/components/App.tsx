@@ -35,6 +35,7 @@ import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useAutomationEvents } from "../hooks/useAutomationEvents";
 import { useThemeEffect } from "../lib/theme";
+import { useGlassEffect } from "../lib/glass";
 import { bootstrap, createSession, sendMessage } from "../actions";
 
 function useHash(): string {
@@ -64,6 +65,7 @@ export function App() {
   }, [sidebarWidth]);
 
   useThemeEffect();
+  useGlassEffect();
 
   useEffect(() => {
     if (hash === "#trace-demo") return;

@@ -44,6 +44,27 @@ export type PaletteId =
   | "notion"
   | "catppuccin";
 
+export type GlassVariantId =
+  | "frosted"
+  | "heavy"
+  | "static"
+  | "clear"
+  | "smoke"
+  | "milk";
+
+export interface GlassParams {
+  /** Tint opacity 0–100 (% white for light mode; framework derives dark). */
+  tint: number;
+  /** Backdrop-filter blur in px. */
+  blur: number;
+  /** Backdrop-filter saturate %. */
+  saturate: number;
+  /** Top-edge specular rim opacity 0–100 (%). */
+  rim: number;
+}
+
+export type GlassPrefs = Record<GlassVariantId, GlassParams>;
+
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
@@ -60,6 +81,7 @@ export interface Prefs {
    *  process via IPC; main re-registers on change. Empty string disables
    *  the shortcut entirely. */
   quickCaptureShortcut: string;
+  glass: GlassPrefs;
 }
 
 /** A user message submitted while a run was already active. The server

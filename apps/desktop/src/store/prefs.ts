@@ -1,4 +1,4 @@
-import type { Prefs } from "./types";
+import type { GlassPrefs, Prefs } from "./types";
 
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 380;
@@ -10,6 +10,15 @@ export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 const PREFS_KEY = "ntrp.desktop.prefs";
 const PREFS_VERSION = 2;
 
+export const DEFAULT_GLASS_PREFS: GlassPrefs = {
+  frosted: { tint: 35, blur: 20, saturate: 180, rim: 60 },
+  heavy:   { tint: 18, blur: 40, saturate: 180, rim: 75 },
+  static:  { tint: 86, blur: 0,  saturate: 100, rim: 60 },
+  clear:   { tint: 4,  blur: 2,  saturate: 160, rim: 35 },
+  smoke:   { tint: 55, blur: 20, saturate: 120, rim: 6 },
+  milk:    { tint: 50, blur: 24, saturate: 140, rim: 90 },
+};
+
 export const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
@@ -19,6 +28,7 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarWidth: 272,
   showReasoningInChat: true,
   quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
+  glass: DEFAULT_GLASS_PREFS,
 };
 
 export function loadPrefs(): Prefs {
