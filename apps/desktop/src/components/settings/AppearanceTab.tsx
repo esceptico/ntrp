@@ -10,11 +10,13 @@ import {
   type ThinkingAnimation,
   type ThinkingIntensity,
 } from "../../store";
+import { DEFAULT_GLASS_PREFS } from "../../store/prefs";
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
 import { GlassSwitch } from "../GlassSwitch";
+import { RangeField } from "./RangeField";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -41,6 +43,7 @@ export function AppearanceTab() {
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
   const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
+  const glass = useStore((s) => s.prefs.glass);
   const setPref = useStore((s) => s.setPref);
 
   return (
@@ -114,6 +117,96 @@ export function AppearanceTab() {
           ))}
         </div>
       </section>
+
+      {/* === Glass ===
+          Per the consolidation pass, glass is one canonical material now;
+          these four knobs tune it everywhere it appears across the app. */}
+      <section className="grid gap-3">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <h3 className="m-0 text-sm font-medium text-ink">Glass</h3>
+            <p className="m-0 mt-0.5 text-xs text-faint leading-[1.4]">
+              Tune the frosted material used across every glass surface. Changes apply live.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPref("glass", DEFAULT_GLASS_PREFS)}
+            className="text-xs font-medium text-muted hover:text-ink transition-colors"
+          >
+            Reset
+          </button>
+        </div>
+
+        <GlassPreview />
+
+        <div className="grid gap-2.5">
+          <RangeField
+            label="Tint"
+            value={glass.tint}
+            onChange={(v) => setPref("glass", { ...glass, tint: v })}
+            min={0} max={100} unit="%"
+          />
+          <RangeField
+            label="Blur"
+            value={glass.blur}
+            onChange={(v) => setPref("glass", { ...glass, blur: v })}
+            min={0} max={60} unit="px"
+          />
+          <RangeField
+            label="Saturate"
+            value={glass.saturate}
+            onChange={(v) => setPref("glass", { ...glass, saturate: v })}
+            min={0} max={250} unit="%"
+          />
+          <RangeField
+            label="Rim"
+            value={glass.rim}
+            onChange={(v) => setPref("glass", { ...glass, rim: v })}
+            min={0} max={100} unit="%"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Calm static gradient backdrop with one glass card centered. No motion,
+ *  no text — gives blur/saturate something to chew without distracting
+ *  from the slider feedback. */
+function GlassPreview() {
+  return (
+    <div
+      className="relative overflow-hidden rounded-[10px] border border-line-soft"
+      style={{ height: 120 }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(135deg, #6a5af9 0%, #b94dff 45%, #ff7e6b 100%)",
+          opacity: 0.6,
+        }}
+        aria-hidden
+      />
+      <div
+        className="glass-surface"
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 220,
+          height: 76,
+          borderRadius: 14,
+          display: "grid",
+          placeItems: "center",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Preview surface
+      </div>
     </div>
   );
 }
