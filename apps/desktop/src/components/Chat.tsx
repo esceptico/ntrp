@@ -5,7 +5,6 @@ import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
-import { ProgressiveBlurOverlay } from "./ScrollBlur";
 import { ICON } from "../lib/icons";
 
 function SidebarToggle() {
@@ -122,11 +121,6 @@ export function Chat() {
           aria-hidden
           className="chat-bottom-fade absolute left-0 right-0 bottom-0 pointer-events-none z-[5]"
           style={{ height: "calc(var(--chat-bottom-h, 96px) + 24px)" }}
-        />
-        <ProgressiveBlurOverlay
-          edge="top"
-          className="absolute left-0 right-0 top-0 z-[5]"
-          style={{ height: "52px" }}
         />
         <div className="absolute top-0 left-0 right-0 z-10">
           <ChatHeader />

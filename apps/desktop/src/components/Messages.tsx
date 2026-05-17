@@ -13,6 +13,7 @@ import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
+import { ScrollBlurTop } from "./ScrollBlur";
 import { ICON } from "../lib/icons";
 
 // Parent (Chat) remounts this component on session change via key={sessionId}
@@ -205,6 +206,7 @@ export function Messages() {
         onScroll={handleScroll}
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0"
       >
+        <ScrollBlurTop />
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3">
           {!sessionReady
             ? null
