@@ -10,6 +10,7 @@ import {
   useCommandList,
   type CommandEntry,
 } from "./CommandPicker";
+import { Chip } from "./Chip";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
@@ -441,29 +442,17 @@ export function Composer() {
           >
             <ImagePlus size={ICON.LG} strokeWidth={2} />
           </button>
-          <button
-            type="button"
+          <Chip
+            size="sm"
+            active={skipApprovals}
+            tone="accent"
+            leading={skipApprovals ? <ShieldOff size={ICON.SM} strokeWidth={2} /> : <ShieldCheck size={ICON.SM} strokeWidth={2} />}
             onClick={() => void toggleAuto(!skipApprovals)}
             title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
-            className={clsx(
-              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none",
-              skipApprovals
-                ? "bg-accent-soft text-accent-strong hover:bg-accent-soft/80"
-                : "text-muted hover:bg-surface-soft hover:text-ink",
-            )}
+            aria-label={skipApprovals ? "Auto-approve enabled — click to require approval" : "Click to enable auto-approve"}
           >
-            {skipApprovals ? (
-              <>
-                <ShieldOff size={ICON.LG} strokeWidth={2} />
-                Auto
-              </>
-            ) : (
-              <>
-                <ShieldCheck size={ICON.LG} strokeWidth={2} />
-                Approve
-              </>
-            )}
-          </button>
+            {skipApprovals ? "Auto" : "Approve"}
+          </Chip>
           <LoopStatusBar />
           <span className="flex-1" />
           <BudgetDial />

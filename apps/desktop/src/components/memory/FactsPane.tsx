@@ -27,6 +27,7 @@ import {
 import { selectedMemoryItem, type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import { ICON } from "../../lib/icons";
+import { Chip } from "../Chip";
 import {
   DetailMeta,
   DetailPlaceholder,
@@ -505,19 +506,17 @@ function KindFilter({
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
+      <Chip
+        size="sm"
+        active={!!value}
+        tone="ink"
+        trailing={<ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />}
         onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
-          value
-            ? "bg-ink text-on-ink"
-            : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
-        )}
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         <span className="capitalize">{value ?? "All kinds"}</span>
-        <ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />
-      </button>
+      </Chip>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[160px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
           <KindOption
@@ -574,19 +573,17 @@ function StatusFilter({
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
+      <Chip
+        size="sm"
+        active={value !== "active"}
+        tone="ink"
+        trailing={<ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />}
         onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
-          value !== "active"
-            ? "bg-ink text-on-ink"
-            : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
-        )}
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         <span>{factStatusFilterLabel(value)}</span>
-        <ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />
-      </button>
+      </Chip>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[150px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
           {FACT_STATUSES.map((s) => (

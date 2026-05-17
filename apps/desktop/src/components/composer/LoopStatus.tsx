@@ -6,6 +6,7 @@ import { refreshLoops, stopLoop } from "../../actions";
 import { useEscapeKey } from "../../lib/hooks";
 import { ICON } from "../../lib/icons";
 import { formatLoopCountdown } from "../../lib/loops";
+import { Chip } from "../Chip";
 import { Markdown } from "../Markdown";
 import { RollingToken } from "../trace/RollingToken";
 
@@ -116,23 +117,24 @@ export function LoopStatusBar() {
 
   return (
     <div className="relative flex items-center">
-      <button
+      <Chip
         ref={triggerRef}
-        type="button"
+        size="sm"
+        tone="neutral"
+        variant="ghost"
+        leading={<Repeat2 size={ICON.SM} strokeWidth={2} />}
         onMouseEnter={show}
         onMouseLeave={scheduleHide}
         onFocus={show}
         onBlur={scheduleHide}
-        className="inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         aria-label="Active loops"
       >
-        <Repeat2 size={ICON.SM} strokeWidth={2} />
         {loops.length === 1 ? (
           <>Loop · <RollingDigits value={countdown} /></>
         ) : (
           <>Loops · {loops.length} · next <RollingDigits value={countdown} /></>
         )}
-      </button>
+      </Chip>
       {open && coords && createPortal(
         <div
           ref={popoverRef}

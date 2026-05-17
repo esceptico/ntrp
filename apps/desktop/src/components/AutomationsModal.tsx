@@ -8,6 +8,7 @@ import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationF
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
+import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 
@@ -357,19 +358,23 @@ function AutomationCard({
             {(running || automation.builtin || trustLabel || isChannelAutomation(automation)) && (
               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 {running && (
-                  <Tag tone="accent">
-                    <Circle size={5} strokeWidth={3} fill="currentColor" />
+                  <Badge
+                    tone="accent"
+                    leading={<Circle size={5} strokeWidth={3} fill="currentColor" />}
+                  >
                     running
-                  </Tag>
+                  </Badge>
                 )}
                 {isChannelAutomation(automation) && (
-                  <Tag tone="neutral">
-                    <Radio size={9} strokeWidth={2.2} />
+                  <Badge
+                    tone="neutral"
+                    leading={<Radio size={9} strokeWidth={2.2} />}
+                  >
                     channel
-                  </Tag>
+                  </Badge>
                 )}
-                {automation.builtin && <Tag tone="neutral">builtin</Tag>}
-                {trustLabel && <Tag tone={automationTrustTone(automation)}>{trustLabel}</Tag>}
+                {automation.builtin && <Badge tone="neutral">builtin</Badge>}
+                {trustLabel && <Badge tone={automationTrustTone(automation)}>{trustLabel}</Badge>}
               </div>
             )}
           </div>
@@ -439,27 +444,6 @@ function AutomationCard({
         </div>
       </div>
     </article>
-  );
-}
-
-function Tag({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "accent" | "bad";
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex max-w-full shrink-0 items-center gap-1 px-1.5 h-[18px] rounded-full text-2xs font-medium tracking-[0.005em] whitespace-nowrap",
-        tone === "accent" && "bg-accent-soft text-accent-strong",
-        tone === "neutral" && "bg-surface-sunken text-muted",
-        tone === "bad" && "bg-bad-soft text-bad",
-      )}
-    >
-      {children}
-    </span>
   );
 }
 

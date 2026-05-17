@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { CalendarClock, ChevronDown, Clock, RotateCcw, X } from "lucide-react";
-import clsx from "clsx";
 import { createAutomation, updateAutomation } from "../../actions";
 import type {
   Automation,
@@ -12,6 +11,7 @@ import type {
 import { SPRING_SMOOTH } from "../../lib/motion";
 import { ICON } from "../../lib/icons";
 import { GlassToggle } from "../GlassToggle";
+import { Chip } from "../Chip";
 import { GlassSwitch } from "../GlassSwitch";
 
 const MODAL_BACKDROP_DURATION = 0.2;
@@ -376,12 +376,13 @@ function ScheduleChip({
   return (
     <div ref={wrapRef} className="relative">
       <Chip
+        size="md"
         active={open}
-        icon={<Clock size={ICON.XS} strokeWidth={2} />}
+        leading={<Clock size={ICON.XS} strokeWidth={2} />}
+        trailing={<ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-60" />}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="truncate max-w-[210px]">{scheduleLabel(schedule)}</span>
-        <ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-60 shrink-0" />
       </Chip>
 
       <AnimatePresence>
@@ -530,33 +531,3 @@ function ScheduleField({
   );
 }
 
-function Chip({
-  icon,
-  children,
-  active,
-  onClick,
-  title,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={clsx(
-        "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-sm font-medium tracking-[-0.005em] transition-colors select-none",
-        active
-          ? "bg-surface text-ink shadow-[var(--shadow-sm)] border border-line-soft"
-          : "bg-transparent text-muted hover:bg-surface hover:text-ink border border-transparent",
-      )}
-    >
-      <span className={clsx("shrink-0", active ? "text-accent-strong" : "text-faint")}>{icon}</span>
-      {children}
-    </button>
-  );
-}
