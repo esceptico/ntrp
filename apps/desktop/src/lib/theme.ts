@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useStore, type PaletteId, type ThemeChoice } from "../store";
 import { PALETTES } from "./palettes";
+import { applyTokens } from "./tokens/color";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const PALETTE_CLASSES = PALETTES.map((p) => `palette-${p.id}`);
@@ -13,11 +14,15 @@ function resolveDark(choice: ThemeChoice): boolean {
 
 function apply(choice: ThemeChoice, palette: PaletteId): void {
   const root = document.documentElement;
-  if (resolveDark(choice)) root.classList.add("dark");
+  const isDark = resolveDark(choice);
+  if (isDark) root.classList.add("dark");
   else root.classList.remove("dark");
   // Drop any other palette- class first so we don't accumulate stale ones.
   for (const cls of PALETTE_CLASSES) root.classList.remove(cls);
   root.classList.add(`palette-${palette}`);
+  // Phase 4: write OKLCH neutral/accent ramps to :root so consumers can
+  // reach them via `var(--color-neutral-N)` / `var(--color-accent-N)`.
+  applyTokens(palette, isDark ? "dark" : "light");
 }
 
 /** Effect that keeps the <html> `dark` + `palette-<id>` classes in sync

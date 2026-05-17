@@ -175,7 +175,9 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralTintLight: 0.008,
     neutralTintDark: 0.010,
     accentLight: o(0.610, 0.155, 50),
-    accentDark: o(0.700, 0.155, 55),
+    // Dark step 9 lifted from 0.700 → 0.760 to clear APCA Lc 60 for
+    // neutral-1 (the white-ish fg) on the solid accent fill.
+    accentDark: o(0.760, 0.155, 55),
   },
   // Graphite — teal accent, near-pure neutrals.
   graphite: {
@@ -191,7 +193,8 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralTintLight: 0.002,
     neutralTintDark: 0.002,
     accentLight: o(0.555, 0.190, 250),
-    accentDark: o(0.700, 0.165, 245),
+    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
+    accentDark: o(0.760, 0.165, 245),
   },
   // Raycast — red accent.
   raycast: {
@@ -200,7 +203,8 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralTintLight: 0.002,
     neutralTintDark: 0.002,
     accentLight: o(0.660, 0.200, 22),
-    accentDark: o(0.710, 0.180, 22),
+    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
+    accentDark: o(0.760, 0.180, 22),
   },
   // GitHub — Primer blue.
   github: {
@@ -214,7 +218,8 @@ const ANCHORS: Record<PaletteId, PaletteAnchor> = {
     neutralHueLight: 260,
     neutralHueDark: 265,
     accentLight: o(0.560, 0.140, 275),
-    accentDark: o(0.685, 0.155, 275),
+    // Lifted dark step 9 lightness for APCA Lc ≥ 60 on accent-fg.
+    accentDark: o(0.770, 0.155, 275),
   },
   // Notion — monochrome (accent is near-black on light, near-white on dark).
   notion: {
@@ -265,4 +270,21 @@ export const PALETTE_TOKENS: Record<PaletteId, PaletteTokens> = {
 export function formatOklch(c: Oklch): string {
   const l = (c.l * 100).toFixed(2);
   return `oklch(${l}% ${c.c.toFixed(4)} ${c.h.toFixed(2)})`;
+}
+
+/**
+ * Write `--color-neutral-{1..12}` and `--color-accent-{1..12}` to the
+ * root element for the given palette × theme. Additive — the legacy
+ * `--color-bg`, `--color-surface`, … vars are still set by the
+ * `:root.palette-*` blocks in `styles.css`. Aliases on `:root` map the
+ * legacy names to ramp steps as a fallback; the per-palette blocks
+ * override them so visuals don't change in Phase 4.
+ */
+export function applyTokens(palette: PaletteId, theme: "light" | "dark"): void {
+  const root = document.documentElement;
+  const ramps = PALETTE_TOKENS[palette][theme];
+  for (let i = 0; i < 12; i++) {
+    root.style.setProperty(`--color-neutral-${i + 1}`, formatOklch(ramps.neutral[i]));
+    root.style.setProperty(`--color-accent-${i + 1}`, formatOklch(ramps.accent[i]));
+  }
 }

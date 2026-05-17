@@ -142,6 +142,39 @@
 
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
+  /* ─── Phase 4 — legacy → ramp aliases ───────────────────────
+     The OKLCH `--color-neutral-{1..12}` / `--color-accent-{1..12}` vars
+     are written to :root by `applyTokens(palette, theme)` in
+     lib/theme.ts on every palette/theme change. These aliases let the
+     existing `--color-bg`, `--color-line`, … consumers keep working
+     while the ramps become the canonical source. Per-palette
+     `:root.palette-*` blocks (further down the file) override these
+     with hand-tuned hex literals so visuals don't shift in this
+     phase; the aliases primarily drive the default (warm) palette and
+     anything a palette block leaves unset.
+
+     Step picks follow the Radix scale documented in
+     lib/tokens/color.ts. Two non-obvious choices, kept for visual
+     parity with the current warm defaults:
+       --color-line       → neutral-5 (Radix step 6 reads too dark
+                            against the cream bg we ship today).
+       --color-line-soft  → neutral-4 (current `#f0f0ef` sits between
+                            step 3 and step 5; step 4 is closest).
+       --color-line-strong → neutral-7. */
+  --color-bg: var(--color-neutral-1);
+  --color-surface: var(--color-neutral-2);
+  --color-surface-soft: var(--color-neutral-3);
+  --color-line-soft: var(--color-neutral-4);
+  --color-line: var(--color-neutral-5);
+  --color-line-strong: var(--color-neutral-7);
+  --color-faint: var(--color-neutral-9);
+  --color-muted: var(--color-neutral-11);
+  --color-ink-soft: var(--color-neutral-11);
+  --color-ink: var(--color-neutral-12);
+  --color-accent: var(--color-accent-9);
+  --color-accent-soft: var(--color-accent-3);
+  --color-accent-strong: var(--color-accent-11);
+
   /* ─── Design-system tokens (Phase 1) ────────────────────────
      Added by docs/superpowers/specs/2026-05-17-design-system-tokens-design.md.
      No consumers yet — Phase 3 sweeps inline shadow/ring strings to these.
