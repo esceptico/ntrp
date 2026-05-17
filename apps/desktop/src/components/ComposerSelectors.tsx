@@ -6,6 +6,7 @@ import { useStore } from "../store";
 import { updateServerConfig, fetchServerConfig } from "../actions";
 import type { ModelGroup } from "../api";
 import { ICON } from "../lib/icons";
+import { GlassToggle } from "./GlassToggle";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -145,21 +146,12 @@ export function ModelReasoningPicker({
               <div className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
                 Reasoning effort
               </div>
-              <div className="flex flex-wrap gap-1">
-                <EffortPill
-                  label="off"
-                  active={currentEffort === null}
-                  onClick={() => onSelectEffort(null)}
-                />
-                {efforts.map((eff) => (
-                  <EffortPill
-                    key={eff}
-                    label={eff}
-                    active={currentEffort === eff}
-                    onClick={() => onSelectEffort(eff)}
-                  />
-                ))}
-              </div>
+              <GlassToggle
+                size="sm"
+                value={currentEffort ?? "off"}
+                onChange={(v) => onSelectEffort(v === "off" ? null : v)}
+                options={["off", ...efforts]}
+              />
             </div>
           )}
           <div className="grid">
@@ -266,27 +258,3 @@ export function ModelReasoningChip() {
   );
 }
 
-function EffortPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none capitalize",
-        active
-          ? "bg-accent-soft text-accent-strong"
-          : "text-muted hover:bg-surface-soft hover:text-ink",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
