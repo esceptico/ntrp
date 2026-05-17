@@ -89,3 +89,13 @@ export function useMutationState(mounted: RefObject<boolean>): MutationState {
 
   return { busy, error, run };
 }
+
+/** Forces a re-render every `intervalMs` ms. Use to refresh relative-time
+ *  labels ("2m ago") without each consumer wiring its own timer. */
+export function useTimeTicker(intervalMs = 30_000): void {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+}

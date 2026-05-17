@@ -10,16 +10,7 @@ import { archiveSession, createSession, fetchAutomations, renameSession, switchS
 import { ICON } from "../lib/icons";
 import { formatRelativePast } from "../lib/format";
 import { StatusDot } from "./AgentRightSidebar";
-
-/** Re-render the caller every `intervalMs` so `Date.now()`-based labels
- *  ("1m / 12h / 2d") tick forward without user interaction. */
-function useTimeTicker(intervalMs = 30_000): void {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-}
+import { useTimeTicker } from "../lib/hooks";
 
 const DAY_MS = 86_400_000;
 
