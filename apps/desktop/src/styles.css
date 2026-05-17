@@ -471,32 +471,77 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    backdrop-filter produces visible stripes across rows — we fall back
    to a pure opacity mask there. Reduced-transparency / motion users
    also get the mask fallback (the ambient blur can be uncomfortable). */
+/* Progressive backdrop blur (macOS/iOS scroll-edge pattern). 6 stacked
+   sibling layers each with a different blur radius, masked to
+   overlapping bands so the effective blur fades smoothly from heavy
+   (top of strip) to none (bottom). Single backdrop-filter + mask
+   doesn't work — produces a hard rectangle.
+   Linen-mode only: in Glass mode the parent slab already has
+   backdrop-filter, so nesting more inside hits the containing-block
+   trap and produces stripes. We fall back to opacity gradient there
+   and under reduced-transparency / reduced-motion. */
 .scroll-blur-top {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 32px;
-  margin-bottom: -32px;
+  height: 64px;
+  margin-bottom: -64px;
   pointer-events: none;
-  /* Default: opacity mask only — covers Glass mode + any container we
-     haven't tagged as a clean blur context. */
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
-          mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+  /* Default (Glass + reduced-* fallback): pure opacity gradient. */
   background: linear-gradient(to bottom,
-    color-mix(in oklab, var(--color-bg) 85%, transparent) 0%,
+    color-mix(in oklab, var(--color-bg) 75%, transparent) 0%,
+    color-mix(in oklab, var(--color-bg) 35%, transparent) 50%,
     transparent 100%);
 }
+.scroll-blur-top > div {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Layers are inert in Glass / fallback mode (the wrapper's bg-gradient
+   carries the fade by itself). Linen mode below turns them on. */
 :root[data-material="linen"] .scroll-blur-top {
   background: transparent;
-  -webkit-backdrop-filter: blur(14px);
-          backdrop-filter: blur(14px);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(1) {
+  -webkit-backdrop-filter: blur(0.5px); backdrop-filter: blur(0.5px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 25%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 25%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(2) {
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12%, rgba(0,0,0,1) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,0) 50%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 12%, rgba(0,0,0,1) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,0) 50%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(3) {
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 62%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(4) {
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 75%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 38%, rgba(0,0,0,1) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 75%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(5) {
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 88%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 88%);
+}
+:root[data-material="linen"] .scroll-blur-top > div:nth-child(6) {
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,1) 100%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 62%, rgba(0,0,0,1) 75%, rgba(0,0,0,1) 100%);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
-  :root[data-material="linen"] .scroll-blur-top {
+  :root[data-material="linen"] .scroll-blur-top > div {
     -webkit-backdrop-filter: none;
             backdrop-filter: none;
+  }
+  :root[data-material="linen"] .scroll-blur-top {
     background: linear-gradient(to bottom,
-      color-mix(in oklab, var(--color-bg) 85%, transparent) 0%,
+      color-mix(in oklab, var(--color-bg) 75%, transparent) 0%,
+      color-mix(in oklab, var(--color-bg) 35%, transparent) 50%,
       transparent 100%);
   }
 }
