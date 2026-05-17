@@ -1,36 +1,18 @@
 /**
- * Progressive blur for scroll-edge fading — content blurs heavily at
- * the top of the scroll viewport (where it meets the sticky chrome
- * above) and fades to perfectly clear below.
+ * Short, subtle scroll-edge blur — content blurs softly through a
+ * ~32px sticky band at the top of the scroll viewport. Modeled on
+ * macOS Safari's toolbar and iOS Settings header behavior: a single
+ * thin translucent bar with mild backdrop-filter and a gradient mask
+ * that fades the blur effect out at the bottom.
  *
- * Implementation follows Kenneth Nym's canonical recipe
- * (kennethnym.com/blog/progressive-blur-in-css) with a Skiper-UI-style
- * 8-layer stack:
- *   • 7 stacked `backdrop-filter` layers, blur radii double from 0.5px
- *     to 32px. Each layer is masked to a narrow visible band that
- *     overlaps its neighbors by ~50% so the effective blur radius
- *     varies smoothly along the strip.
- *   • Heavy-blur layer is the TOP of the strip (closest to the sticky
- *     header above); light-blur is the bottom.
- *   • An 8th layer on top is a solid `--color-bg` gradient that fades
- *     from bg-color at the top to transparent at the bottom. This
- *     hides the "blur abruptly ends" seam at the strip's top edge
- *     when content is scrolled past.
+ * Not the "progressive blur" hero-section effect (Kenneth Nym / Skiper-UI
+ * recipe). That's for 100-200px decorative reveals and produces a
+ * visible "blur zone" — wrong for tight modal chrome.
  *
- * Container has `pointer-events: none` and NO `border-radius` /
- * `overflow: hidden` (Chromium has known issues stacking
- * backdrop-filters inside a clipped wrapper).
- *
- * Glass mode: layered backdrop-filters would nest with the modal
- * slab's own filter (containing-block trap → visible stripes), so the
- * blur layers are inert and we fall back to just the bg-color gradient
- * cap. Same fallback under prefers-reduced-transparency /
- * prefers-reduced-motion.
+ * Linen-mode only. Glass mode falls through to nothing (the modal
+ * slab's own backdrop-filter takes care of context separation).
+ * prefers-reduced-* respected via CSS.
  */
 export function ScrollBlurTop() {
-  return (
-    <div aria-hidden className="scroll-blur-top">
-      <div /><div /><div /><div /><div /><div /><div />
-    </div>
-  );
+  return <div aria-hidden className="scroll-blur-top" />;
 }
