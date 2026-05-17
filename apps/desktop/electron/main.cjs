@@ -150,6 +150,20 @@ function apiHeaders(config, body) {
   return headers;
 }
 
+function apiNetworkErrorResponse(error, request) {
+  const cause = error && typeof error === "object" ? error.cause : null;
+  const code = cause && typeof cause === "object" && "code" in cause ? cause.code : null;
+  const suffix = code ? ` (${code})` : "";
+  return {
+    ok: false,
+    status: 0,
+    statusText: "Network Error",
+    contentType: "text/plain",
+    data: null,
+    text: `Network error for ${request.method} ${request.path}${suffix}`,
+  };
+}
+
 async function apiRequest(configInput, requestInput, signal) {
   const config = normalizeConfig(configInput);
   const request = normalizeApiRequest(requestInput);
@@ -179,6 +193,8 @@ async function apiRequest(configInput, requestInput, signal) {
       data,
       text,
     };
+  } catch (error) {
+    return apiNetworkErrorResponse(error, request);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
