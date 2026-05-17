@@ -531,18 +531,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
           mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 75%, rgba(0,0,0,1) 87.5%, rgba(0,0,0,1) 100%);
 }
-/* Layer 8: solid bg-color cap. Fades --color-bg from full opacity at
-   the strip's top edge to transparent at the bottom. Hides the seam
-   where blur ends abruptly when content is scrolled past, AND tints
-   the very top of the strip toward the chrome above for continuity. */
-.scroll-blur-top > div:nth-child(8) {
-  background: linear-gradient(
-    to bottom,
-    var(--color-bg) 0%,
-    color-mix(in oklab, var(--color-bg) 50%, transparent) 30%,
-    transparent 60%
-  );
-}
+/* Layer 8 (bg-color cap) intentionally absent. Kenneth Nym's recipe
+   adds a solid bg-color gradient to hide the "blur abruptly ends"
+   seam during scroll, but our scroll containers sit inside surfaces
+   of varying color (--color-surface for modals, --color-bg for chat,
+   transparent for settings rails) and a fixed cap color creates a
+   visible tinted rectangle wherever the cap color doesn't match the
+   surface beneath. Layered backdrop-filters blurring a uniform bg
+   produce uniform bg (i.e. invisible) so the strip is naturally
+   invisible over empty space. If a real seam shows up during scroll
+   in a specific container, add a per-container ::after gradient at
+   that consumer rather than baking one in here. */
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   :root[data-material="linen"] .scroll-blur-top > div {
     -webkit-backdrop-filter: none;

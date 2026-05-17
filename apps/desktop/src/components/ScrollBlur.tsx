@@ -30,7 +30,7 @@
 export function ScrollBlurTop() {
   return (
     <div aria-hidden className="scroll-blur-top">
-      <div /><div /><div /><div /><div /><div /><div /><div />
+      <div /><div /><div /><div /><div /><div /><div />
     </div>
   );
 }
