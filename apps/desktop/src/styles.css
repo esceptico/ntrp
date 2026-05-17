@@ -199,10 +199,10 @@
   --ring-dark-strong: rgba(255, 255, 255, 0.14);
 
   /* Linen shadow recipes — stacked Tailwind pattern, light defaults. */
-  --shadow-linen-rest:    0 1px 2px rgb(0 0 0 / .04),  0 4px 12px rgb(0 0 0 / .06);
-  --shadow-linen-hover:   0 2px 4px rgb(0 0 0 / .05),  0 8px 20px rgb(0 0 0 / .08);
-  --shadow-linen-popover: 0 2px 4px rgb(0 0 0 / .06),  0 12px 32px rgb(0 0 0 / .12);
-  --shadow-linen-modal:   0 4px 8px rgb(0 0 0 / .08),  0 20px 48px rgb(0 0 0 / .16);
+  --shadow-linen-rest:    0 1px 2px rgb(0 0 0 / .04),  0 2px 8px rgb(0 0 0 / .06);
+  --shadow-linen-hover:   0 1px 3px rgb(0 0 0 / .05),  0 4px 12px rgb(0 0 0 / .08);
+  --shadow-linen-popover: 0 2px 4px rgb(0 0 0 / .06),  0 8px 20px rgb(0 0 0 / .10);
+  --shadow-linen-modal:   0 3px 6px rgb(0 0 0 / .08),  0 12px 28px rgb(0 0 0 / .12);
 
   /* Glass rim + drop — tokenizes what already lives in .glass-surface. */
   --glass-drop-light: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
@@ -226,23 +226,21 @@
   --ring-light-soft: rgba(255, 255, 255, 0.05);
   --ring-light-strong: rgba(255, 255, 255, 0.14);
 
-  --shadow-linen-rest:    0 2px 4px rgba(0,0,0,.4);
-  --shadow-linen-hover:   0 2px 4px rgba(0,0,0,.4),  0 4px 12px rgba(0,0,0,.3);
-  --shadow-linen-popover: 0 4px 12px rgba(0,0,0,.5);
-  --shadow-linen-modal:   0 8px 32px rgba(0,0,0,.6);
+  --shadow-linen-rest:    0 1px 3px rgba(0,0,0,.35);
+  --shadow-linen-hover:   0 1px 3px rgba(0,0,0,.4),    0 4px 10px rgba(0,0,0,.25);
+  --shadow-linen-popover: 0 2px 6px rgba(0,0,0,.45),   0 6px 16px rgba(0,0,0,.3);
+  --shadow-linen-modal:   0 3px 8px rgba(0,0,0,.5),    0 8px 20px rgba(0,0,0,.4);
 
   color-scheme: dark;
 }
 
 /* Unified focus ring — keyboard-only via :focus-visible.
-   Per Phase 3 of the design-system tokens spec: every interactive
-   primitive resolves to --focus-ring unless it owns a custom rule
-   (e.g. .glass-switch composes its track shadow with the ring). */
+   Limited to clickable primitives (buttons, switches, tabs). Text
+   inputs / textareas / selects are EXCLUDED on purpose: they already
+   own a focus:border-accent treatment, and stacking --focus-ring on
+   top double-rings them. */
 button:focus-visible,
 [role="button"]:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
 [role="switch"]:focus-visible,
 [role="tab"]:focus-visible {
   outline: none;
@@ -769,7 +767,23 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
   position: relative;
   isolation: isolate;
-  background: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
+  /* Light glass: white tint as the base color, then SVG ink-noise grain
+     + a faint white tonal-depth gradient layered on top. Mirrors the
+     dark recipe so glass reads as a real material in both themes. The
+     feColorMatrix here uses BLACK (0,0,0) + alpha 0.03 — lower than
+     dark's 0.04 white because black noise on a light base smudges
+     more visibly. The gradient overlay is white at 4%→1% to add a
+     subtle paper-glow feel without washing out the backdrop. */
+  background-color: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, white 4%, transparent),
+      color-mix(in oklab, white 1%, transparent)
+    );
+  background-size: 240px 240px, auto;
+  background-repeat: repeat, no-repeat;
   backdrop-filter:
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
@@ -825,7 +839,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     var(--glass-rim-dark);
 }
 .glass-surface[data-tone="light"] {
-  background: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
+  background-color: rgba(255, 255, 255, var(--gp-tint-alpha, 0.35));
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, white 4%, transparent),
+      color-mix(in oklab, white 1%, transparent)
+    );
+  background-size: 240px 240px, auto;
+  background-repeat: repeat, no-repeat;
   backdrop-filter:
     blur(var(--gp-blur, 20px))
     saturate(var(--gp-saturate, 180%));
@@ -863,6 +886,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-backdrop-filter: none;
   box-shadow:
     var(--shadow-linen-modal),
+    inset 0 0 0 1px var(--ring-dark);
+}
+/* Small linen surfaces — list-item cards (.glass-radius-sm) inside
+   modals must NOT inherit the outer slab's modal-tier shadow. The big
+   shadow extends past the scroll viewport and clips. Rest-tier sits
+   well inside any reasonable container padding. */
+:root[data-material="linen"] .glass-surface.glass-radius-sm {
+  box-shadow:
+    var(--shadow-linen-rest),
+    inset 0 0 0 1px var(--ring-light);
+}
+:root[data-material="linen"].dark .glass-surface.glass-radius-sm,
+:root[data-material="linen"] .glass-surface.glass-radius-sm[data-tone="dark"] {
+  box-shadow:
+    var(--shadow-linen-rest),
     inset 0 0 0 1px var(--ring-dark);
 }
 /* GlassToggle — self-contained segmented control. Variables are
@@ -1420,12 +1458,83 @@ main[data-has-approval="false"] .scroll-messages {
   transition: filter var(--duration-panel) ease;
 }
 
-/* ─── Reduce motion ────────────────────────────────────────── */
+/* ─── Reduced motion ─────────────────────────────────────────
+   Motion's <MotionConfig reducedMotion="user"> already handles the
+   JS-driven side. This block neutralizes CSS-side transitions
+   (Phase 5 rim drift + shadow lift on hover/active) and the few
+   keyframe animations (status-dot-breathe, composer-just-sent,
+   thinking-rim) so the surface stays at its base appearance. */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 1ms !important;
+  /* Drop Phase 5 interactive transitions on glass + cards. */
+  .glass-surface,
+  .surface-card {
+    transition: none !important;
+  }
+  /* Reset per-material hover/active bumps — surfaces stay at rest. */
+  :root[data-material="glass"] .surface-card:hover,
+  :root[data-material="glass"] .surface-card:active,
+  :root[data-material="glass"] .surface-card[aria-pressed="true"],
+  :root[data-material="glass"] .glass-surface:hover,
+  :root[data-material="glass"] .glass-surface:active,
+  :root[data-material="glass"] .glass-surface[aria-pressed="true"],
+  :root[data-material="linen"] .surface-card:hover,
+  :root[data-material="linen"] .surface-card:active,
+  :root[data-material="linen"] .surface-card[aria-pressed="true"],
+  :root[data-material="linen"].dark .surface-card:hover,
+  :root[data-material="linen"].dark .surface-card:active,
+  :root[data-material="linen"].dark .surface-card[aria-pressed="true"] {
+    --gp-rim: var(--gp-rim-base);
+    box-shadow: inherit;
+  }
+  /* Standard reduced-motion stripper: kill keyframe + transition
+     durations everywhere. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Reduced transparency ───────────────────────────────────
+   When the OS reports prefers-reduced-transparency, force the
+   Linen recipe on .glass-surface regardless of the user's
+   data-material toggle. The toggle remains their stated
+   preference; the OS accessibility setting wins for as long as
+   it's active. Values mirror the :root[data-material="linen"]
+   .glass-surface block (and small-card override). */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-surface {
+    background: var(--color-surface);
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow:
+      var(--shadow-linen-modal),
+      inset 0 0 0 1px var(--ring-light);
+  }
+  :root.dark .glass-surface,
+  .glass-surface[data-tone="dark"] {
+    background: var(--color-surface);
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow:
+      var(--shadow-linen-modal),
+      inset 0 0 0 1px var(--ring-dark);
+  }
+  .glass-surface.glass-radius-sm {
+    box-shadow:
+      var(--shadow-linen-rest),
+      inset 0 0 0 1px var(--ring-light);
+  }
+  :root.dark .glass-surface.glass-radius-sm,
+  .glass-surface.glass-radius-sm[data-tone="dark"] {
+    box-shadow:
+      var(--shadow-linen-rest),
+      inset 0 0 0 1px var(--ring-dark);
   }
 }
 
