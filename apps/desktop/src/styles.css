@@ -95,8 +95,8 @@
      edge definition that reads as "macOS surface" without needing a
      visible border. Apple uses it on every elevated surface. */
   --shadow-sm: 0 0 0 0.5px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 50px rgba(0, 0, 0, 0.04);
-  --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.12), 0 24px 60px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 0 0 0.5px rgba(0, 0, 0, 0.045), 0 3px 14px rgba(0, 0, 0, 0.045), 0 10px 34px rgba(0, 0, 0, 0.028);
+  --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 3px 12px rgba(0, 0, 0, 0.04), 0 12px 34px rgba(0, 0, 0, 0.065), 0 22px 56px rgba(0, 0, 0, 0.035);
 
   --animate-roll-in: rollIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-fade-in: fadeIn 200ms ease-out;
@@ -269,12 +269,12 @@
   /* Linen shadow recipes — stacked Tailwind pattern, light defaults. */
   --shadow-linen-rest:    0 1px 2px rgb(0 0 0 / .04),  0 2px 8px rgb(0 0 0 / .06);
   --shadow-linen-hover:   0 1px 3px rgb(0 0 0 / .05),  0 4px 12px rgb(0 0 0 / .08);
-  --shadow-linen-popover: 0 2px 4px rgb(0 0 0 / .06),  0 8px 20px rgb(0 0 0 / .10);
-  --shadow-linen-modal:   0 3px 6px rgb(0 0 0 / .08),  0 12px 28px rgb(0 0 0 / .12);
+  --shadow-linen-popover: 0 2px 8px rgb(0 0 0 / .04),  0 8px 22px rgb(0 0 0 / .06);
+  --shadow-linen-modal:   0 3px 10px rgb(0 0 0 / .045), 0 14px 36px rgb(0 0 0 / .07);
 
   /* Glass rim + drop — tokenizes what already lives in .glass-surface. */
-  --glass-drop-light: 0 8px 24px -12px rgba(31, 38, 135, 0.25);
-  --glass-drop-dark:  0 4px 14px -4px rgba(0, 0, 0, 0.32);
+  --glass-drop-light: 0 10px 30px -18px rgba(20, 24, 28, 0.16);
+  --glass-drop-dark:  0 12px 32px -18px rgba(0, 0, 0, 0.34);
   --glass-rim-light:  inset 0 1px 0 0 rgba(255, 255, 255, var(--gp-rim, 0.6));
   --glass-rim-dark:   inset 0 1px 0 0 rgba(255, 255, 255, calc(var(--gp-rim, 0.6) / 6)),
                       inset 0 0 0 1px rgba(255, 255, 255, 0.03);
@@ -296,8 +296,8 @@
 
   --shadow-linen-rest:    0 1px 3px rgba(0,0,0,.35);
   --shadow-linen-hover:   0 1px 3px rgba(0,0,0,.4),    0 4px 10px rgba(0,0,0,.25);
-  --shadow-linen-popover: 0 2px 6px rgba(0,0,0,.45),   0 6px 16px rgba(0,0,0,.3);
-  --shadow-linen-modal:   0 3px 8px rgba(0,0,0,.5),    0 8px 20px rgba(0,0,0,.4);
+  --shadow-linen-popover: 0 3px 10px rgba(0,0,0,.26),  0 10px 26px rgba(0,0,0,.18);
+  --shadow-linen-modal:   0 4px 14px rgba(0,0,0,.28),  0 16px 40px rgba(0,0,0,.20);
 
   color-scheme: dark;
 }
@@ -1778,8 +1778,8 @@ main[data-has-approval="false"] .scroll-messages {
        (specular edge) instead of a darker line — same trick Apple
        uses to make panels read as elevated against deep grays. */
     --shadow-sm: 0 0 0 0.5px rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
-    --shadow-md: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.45), 0 12px 50px rgba(0, 0, 0, 0.25);
-    --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.55), 0 24px 60px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.28), 0 12px 42px rgba(0, 0, 0, 0.14);
+    --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 3px 12px rgba(0, 0, 0, 0.26), 0 16px 42px rgba(0, 0, 0, 0.34), 0 26px 64px rgba(0, 0, 0, 0.18);
 
     --hl-keyword: #ce9178;
     --hl-string: #afc463;
