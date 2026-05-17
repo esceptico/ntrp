@@ -8,7 +8,7 @@ import { IntegrationsTab } from "./settings/IntegrationsTab";
 import { ModelsTab } from "./settings/ModelsTab";
 import { AgentTab } from "./settings/AgentTab";
 import { ContextTab } from "./settings/ContextTab";
-import { MCPTab } from "./settings/MCPTab";
+import { MCPTab } from "./settings/mcp/MCPTab";
 import { ToolsTab } from "./settings/ToolsTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
