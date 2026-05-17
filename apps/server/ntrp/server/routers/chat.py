@@ -75,8 +75,9 @@ async def _event_stream(
 
     try:
         if subscription.replay_gap and after_seq is not None:
+            reset_seq = max(after_seq + 1, bus.checkpoint_seq)
             reset_record = StreamRecord(
-                seq=after_seq + 1,
+                seq=reset_seq,
                 session_id=session_id,
                 event=StreamResetEvent(reason="replay_gap"),
             )
