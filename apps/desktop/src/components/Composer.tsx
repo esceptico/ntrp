@@ -1,8 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Sparkles, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
-import { enqueueMessage, isBuiltin, respondToAllApprovals, runBuiltinCommand, sendMessage, stopRun, toggleAuto, viewSkill } from "../actions";
+import {
+  acceptGoalProposal,
+  cancelGoalProposal,
+  editGoalProposal,
+  enqueueMessage,
+  isBuiltin,
+  respondToAllApprovals,
+  runBuiltinCommand,
+  sendMessage,
+  stopRun,
+  toggleAuto,
+  viewSkill,
+} from "../actions";
 import { QueueCard } from "./QueueCard";
 import { GoalStatusBar } from "./GoalStrip";
 import {
@@ -73,6 +85,7 @@ export function Composer() {
   const addPendingImages = useStore((s) => s.addPendingImages);
   const removePendingImage = useStore((s) => s.removePendingImage);
   const clearPendingImages = useStore((s) => s.clearPendingImages);
+  const pendingGoalProposal = useStore((s) => s.pendingGoalProposal);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -278,6 +291,9 @@ export function Composer() {
       <div className="max-w-[760px] mx-auto">
         <QueueCard />
       </div>
+      {pendingGoalProposal && (
+        <GoalProposalCard objective={pendingGoalProposal.objective} />
+      )}
       {/* Wrapper exists so the CommandPicker can sit as a sibling of
           the form rather than a child. The form has backdrop-filter
           (`.glass-surface`), which establishes a backdrop-sampling
@@ -488,6 +504,47 @@ export function Composer() {
           )}
         </div>
       </form>
+      </div>
+    </div>
+  );
+}
+
+function GoalProposalCard({ objective }: { objective: string }) {
+  return (
+    <div className="max-w-[760px] mx-auto mb-2">
+      <div className="glass-surface glass-radius-md flex items-start gap-2 px-3 py-2">
+        <Target size={ICON.MD} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium text-muted">Proposed goal</div>
+          <div className="max-h-10 overflow-hidden text-sm leading-5 text-ink-soft">{objective}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void acceptGoalProposal()}
+          title="Accept goal"
+          aria-label="Accept goal"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-on-ink hover:opacity-90 transition-opacity"
+        >
+          <Check size={ICON.SM} strokeWidth={2.4} />
+        </button>
+        <button
+          type="button"
+          onClick={editGoalProposal}
+          title="Edit goal"
+          aria-label="Edit goal"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+        >
+          <Pencil size={ICON.SM} strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={cancelGoalProposal}
+          title="Cancel goal"
+          aria-label="Cancel goal"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+        >
+          <X size={ICON.SM} strokeWidth={2} />
+        </button>
       </div>
     </div>
   );

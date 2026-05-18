@@ -115,7 +115,7 @@ def test_goal_proposal_uses_recent_context_without_persisting(monkeypatch):
     svc = ProposalSessionService()
     app.dependency_overrides[require_session_service] = lambda: svc
     app.dependency_overrides[get_runtime] = lambda: RuntimeStub()
-    monkeypatch.setattr("ntrp.server.routers.session.llm_client", FakeLLM())
+    monkeypatch.setattr("ntrp.server.routers.session.llm_client", FakeLLM(), raising=False)
     try:
         response = TestClient(app).post("/sessions/sess-1/goal/propose")
     finally:

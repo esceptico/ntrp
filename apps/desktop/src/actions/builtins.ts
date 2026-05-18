@@ -4,7 +4,7 @@ import { forgetEventSeqForSession } from "../store/chat-stream";
 import { loadHistory } from "./history";
 import { enqueueMessage, sendMessage } from "./messages";
 import { switchSession } from "./sessions";
-import { clearGoal, setGoal, updateGoal } from "./goals";
+import { clearGoal, proposeGoal, setGoal, updateGoal } from "./goals";
 import { appendError, appendStatus, formatCost, formatTokens } from "./_shared";
 
 export interface BuiltinCommand {
@@ -58,6 +58,10 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
       }
       if (arg === "complete") {
         await updateGoal("complete");
+        return;
+      }
+      if (!arg) {
+        await proposeGoal();
         return;
       }
       const goal = await setGoal(arg);

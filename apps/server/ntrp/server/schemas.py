@@ -120,6 +120,10 @@ class SetSessionGoalRequest(BaseModel):
     token_budget: int | None = Field(default=None, gt=0)
 
 
+class GoalProposalResponse(BaseModel):
+    objective: str
+
+
 class UpdateSessionGoalRequest(BaseModel):
     status: Literal["active", "paused", "blocked", "budget_limited", "complete"] | None = None
     evidence: str | None = Field(default=None, max_length=20_000)

@@ -40,7 +40,16 @@ export {
   type BuiltinCommand,
 } from "./builtins";
 export { refreshLoops, stopLoop, toggleAuto } from "./loops";
-export { clearGoal, fetchGoal, setGoal, updateGoal } from "./goals";
+export {
+  acceptGoalProposal,
+  cancelGoalProposal,
+  clearGoal,
+  editGoalProposal,
+  fetchGoal,
+  proposeGoal,
+  setGoal,
+  updateGoal,
+} from "./goals";
 export {
   createAutomation,
   deleteAutomation,

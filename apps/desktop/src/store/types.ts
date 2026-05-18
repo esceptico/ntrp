@@ -25,6 +25,11 @@ export type Role =
   | "activity"
   | "approval";
 
+export interface PendingGoalProposal {
+  sessionId: string;
+  objective: string;
+}
+
 export type ThinkingAnimation =
   | "comet"
   | "breath"
@@ -336,6 +341,7 @@ export interface State {
   loops: ServerLoop[];
   backgroundAgents: BackgroundAgentsDomainState;
   goals: Record<string, SessionGoal>;
+  pendingGoalProposal: PendingGoalProposal | null;
   prefs: Prefs;
 }
 
@@ -445,6 +451,7 @@ export interface Actions {
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
   setGoal: (sessionId: string, goal: SessionGoal | null) => void;
+  setPendingGoalProposal: (proposal: PendingGoalProposal | null) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
   openArchive: (origin?: { x: number; y: number } | null) => void;
   closeArchive: () => void;

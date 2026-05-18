@@ -4,6 +4,7 @@ from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
+from ntrp.core.llm_client import llm_client
 from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
@@ -12,6 +13,7 @@ from ntrp.server.schemas import (
     BranchRequest,
     ClearSessionRequest,
     CreateSessionRequest,
+    GoalProposalResponse,
     RenameSessionRequest,
     RevertRequest,
     SessionGoalResponse,
@@ -24,6 +26,35 @@ from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
 
 router = APIRouter(tags=["session"])
+
+GOAL_PROPOSAL_SYSTEM_PROMPT = (
+    "Generate one concise session goal from the recent conversation. "
+    "Return only the objective text. Do not add explanation, bullets, quotes, or markdown."
+)
+
+
+def _goal_proposal_context(messages: list[dict], limit: int = 12) -> str:
+    rows: list[str] = []
+    for msg in messages[-limit:]:
+        raw_role = msg.get("role") or "unknown"
+        if raw_role == Role.SYSTEM or raw_role == "system":
+            continue
+        role = str(raw_role)
+        content = blocks_to_text(msg.get("content", "") or "").strip()
+        if not content:
+            continue
+        rows.append(f"{role}: {content}")
+    return "\n\n".join(rows)
+
+
+def _clean_goal_proposal(text: str) -> str:
+    objective = text.strip().strip("`").strip()
+    if (
+        (objective.startswith('"') and objective.endswith('"'))
+        or (objective.startswith("'") and objective.endswith("'"))
+    ):
+        objective = objective[1:-1].strip()
+    return objective
 
 
 async def _emit_goal_event(buses: BusRegistry, session_id: str, goal: dict | None) -> None:
@@ -221,6 +252,34 @@ async def set_session_goal(
         raise HTTPException(status_code=500, detail="Failed to set goal")
     await _emit_goal_event(buses, session_id, goal)
     return goal
+
+
+@router.post("/sessions/{session_id}/goal/propose", response_model=GoalProposalResponse)
+async def propose_session_goal(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+    runtime: Runtime = Depends(get_runtime),
+):
+    data = await svc.load(session_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    context = _goal_proposal_context(data.messages)
+    if not context:
+        raise HTTPException(status_code=422, detail="Not enough context to propose a goal")
+    response = await llm_client.complete(
+        runtime.config.chat_model,
+        [
+            {"role": Role.SYSTEM, "content": GOAL_PROPOSAL_SYSTEM_PROMPT},
+            {"role": Role.USER, "content": f"Recent conversation:\n\n{context}"},
+        ],
+        temperature=0,
+        max_tokens=120,
+    )
+    content = response.choices[0].message.content if response.choices else ""
+    objective = _clean_goal_proposal(content or "")
+    if not objective:
+        raise HTTPException(status_code=502, detail="Goal proposal was empty")
+    return GoalProposalResponse(objective=objective)
 
 
 @router.patch("/sessions/{session_id}/goal", response_model=SessionGoalResponse)

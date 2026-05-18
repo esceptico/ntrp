@@ -153,6 +153,7 @@ export const useStore = create<State & Actions>((set) => ({
   loops: [],
   backgroundAgents: createBackgroundAgentsDomainState(),
   goals: {},
+  pendingGoalProposal: null,
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -476,6 +477,7 @@ export const useStore = create<State & Actions>((set) => ({
       else delete goals[sessionId];
       return { goals };
     }),
+  setPendingGoalProposal: (pendingGoalProposal) => set({ pendingGoalProposal }),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),
