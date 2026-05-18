@@ -33,7 +33,7 @@ import {
   switchSession,
   toggleAuto,
 } from "../../actions";
-import { apiWithConfig } from "../../api";
+import { compactSessionApi } from "../../api";
 import { formatRelativePast } from "../../lib/format";
 import { lastAssistantId } from "./filter";
 import { buildPaletteView, buildProviderView, buildThemeView } from "./views";
@@ -89,10 +89,7 @@ export function useEntries(): CommandEntry[] {
       run: async () => {
         if (!currentSessionId) return;
         try {
-          await apiWithConfig(config, "/compact", {
-            method: "POST",
-            body: JSON.stringify({ session_id: currentSessionId }),
-          });
+          await compactSessionApi(config, currentSessionId);
         } catch {
           /* surfaced via the global error path */
         }

@@ -4,7 +4,7 @@ import { Archive, ChevronDown, Search, X } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/motion";
 import { useStore } from "../../store";
-import { apiWithConfig } from "../../api";
+import { compactSessionApi } from "../../api";
 import { archiveSession } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
@@ -225,10 +225,7 @@ export function SessionList() {
             closeMenu();
             const cfg = useStore.getState().config;
             try {
-              await apiWithConfig(cfg, "/compact", {
-                method: "POST",
-                body: JSON.stringify({ session_id: menu.sessionId }),
-              });
+              await compactSessionApi(cfg, menu.sessionId);
             } catch {
               /* ignore */
             }

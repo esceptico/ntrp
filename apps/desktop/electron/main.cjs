@@ -154,13 +154,16 @@ function apiNetworkErrorResponse(error, request) {
   const cause = error && typeof error === "object" ? error.cause : null;
   const code = cause && typeof cause === "object" && "code" in cause ? cause.code : null;
   const suffix = code ? ` (${code})` : "";
+  const aborted = error?.name === "AbortError" || error?.name === "TimeoutError";
   return {
     ok: false,
     status: 0,
-    statusText: "Network Error",
+    statusText: aborted ? "Request Timeout" : "Network Error",
     contentType: "text/plain",
     data: null,
-    text: `Network error for ${request.method} ${request.path}${suffix}`,
+    text: aborted
+      ? `Request timed out for ${request.method} ${request.path}`
+      : `Network error for ${request.method} ${request.path}${suffix}`,
   };
 }
 

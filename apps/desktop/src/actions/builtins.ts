@@ -1,4 +1,4 @@
-import { apiWithConfig, type SessionListItem } from "../api";
+import { apiWithConfig, compactSessionApi, type SessionListItem } from "../api";
 import { getState } from "../store";
 import { forgetEventSeqForSession } from "../store/chat-stream";
 import { loadHistory } from "./history";
@@ -93,10 +93,7 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
     case "compact": {
       if (!s.currentSessionId) return;
       try {
-        await apiWithConfig(s.config, "/compact", {
-          method: "POST",
-          body: JSON.stringify({ session_id: s.currentSessionId }),
-        });
+        await compactSessionApi(s.config, s.currentSessionId);
         await loadHistory(s.currentSessionId);
         appendStatus("Context compacted.");
       } catch (error) {

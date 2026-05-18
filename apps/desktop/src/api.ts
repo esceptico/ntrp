@@ -340,6 +340,25 @@ export async function cancelRun(config: AppConfig, runId: string): Promise<void>
   });
 }
 
+const COMPACT_TIMEOUT_MS = 180_000;
+
+export interface CompactResponse {
+  status: string;
+  message?: string;
+  message_count?: number;
+  before_messages?: number;
+  after_messages?: number;
+  messages_compressed?: number;
+}
+
+export async function compactSessionApi(config: AppConfig, sessionId: string): Promise<CompactResponse> {
+  return apiWithConfig<CompactResponse>(config, "/compact", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+    timeout: COMPACT_TIMEOUT_MS,
+  } as RequestInit & { timeout: number });
+}
+
 export type CancelQueuedResult = "cancelled" | "already_ingested" | "no_run";
 
 /** Cancel a message we queued via /chat/message while a run was active.
