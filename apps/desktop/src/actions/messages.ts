@@ -81,7 +81,7 @@ export async function sendMessage(
         session_id: sendSessionId,
         skip_approvals: s.skipApprovals,
         images: images.length > 0 ? images : undefined,
-        client_id: options.meta ? `loop:goal:${Date.now()}` : userMessageId,
+        client_id: options.meta ? `goal:${Date.now()}` : userMessageId,
       }),
     });
     setState((state) =>
@@ -118,7 +118,7 @@ export async function enqueueMessage(
   const trimmed = text.trim();
   if (!trimmed && images.length === 0) return;
 
-  const clientId = options.meta ? `loop:goal:${Date.now()}` : crypto.randomUUID();
+  const clientId = options.meta ? `goal:${Date.now()}` : crypto.randomUUID();
   if (!options.meta) {
     s.addQueuedMessage({
       clientId,

@@ -30,6 +30,11 @@ async def get_context_usage(
     resolved_session_id = data.state.session_id if data else session_id
     active_run = runtime.run_registry.get_active_run(resolved_session_id) if resolved_session_id else None
     messages = active_run.messages if active_run else (data.messages if data else [])
+    message_count = (
+        len(active_run.history_prefix) + len(active_run.messages)
+        if active_run
+        else len(messages)
+    )
     last_input_tokens = data.last_input_tokens if data else None
     tools = runtime.executor.get_tools() if runtime.executor else []
     allowed_tool_names = tool_schema_names(tools)
@@ -54,7 +59,7 @@ async def get_context_usage(
         "model": model,
         "limit": model_limit,
         "total": last_input_tokens,
-        "message_count": len(messages),
+        "message_count": message_count,
         "tool_count": len(tools),
         "visible_tool_count": len(visible_tools),
         "deferred_tool_count": len(deferred_tools),

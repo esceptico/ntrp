@@ -47,9 +47,16 @@ class _StubExecutor:
 
 
 class _StubSessionService:
-    def __init__(self, messages: list[dict], session_id: str = "sess-1") -> None:
+    def __init__(
+        self,
+        messages: list[dict],
+        session_id: str = "sess-1",
+        last_input_tokens: int | None = None,
+    ) -> None:
         self._messages = messages
         self._session_id = session_id
+        self._last_input_tokens = last_input_tokens
+        self.save_calls: list[tuple[list[dict], dict | None]] = []
         self.save_progress_calls: list[list[dict]] = []
 
     async def load(self, session_id: str | None = None) -> SessionData | None:
@@ -57,7 +64,7 @@ class _StubSessionService:
             session_id=session_id or self._session_id,
             started_at=datetime.now(UTC),
         )
-        return SessionData(state=state, messages=list(self._messages))
+        return SessionData(state=state, messages=list(self._messages), last_input_tokens=self._last_input_tokens)
 
     def create(
         self,
@@ -74,16 +81,51 @@ class _StubSessionService:
     async def save_progress(self, session_state, messages: list[dict]) -> None:
         self.save_progress_calls.append(list(messages))
 
+    async def save(self, session_state, messages: list[dict], metadata: dict | None = None) -> None:
+        self._messages = list(messages)
+        self._last_input_tokens = metadata.get("last_input_tokens") if metadata else None
+        self.save_calls.append((list(messages), metadata))
+
+
+class _LoopPreTurnCompactor:
+    def __init__(self):
+        self.seen: list[tuple[int, int | None]] = []
+
+    def should_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> bool:
+        self.seen.append((len(messages), last_input_tokens))
+        return True
+
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+        *,
+        rehydration_state: dict | None = None,
+    ) -> list[dict] | None:
+        return [
+            messages[0],
+            {"role": "assistant", "content": "[Session State Handoff]\nloop summary"},
+            *messages[-4:],
+        ]
+
 
 def _make_deps(session_service: _StubSessionService) -> ChatDeps:
-    return ChatDeps(
-        chat_model="gpt-5.2",
-        agent_config=AgentConfig(
+    return _make_deps_with_config(
+        session_service,
+        AgentConfig(
             model="gpt-5.2",
             research_model=None,
             max_depth=1,
             deferred_tools=False,
         ),
+    )
+
+
+def _make_deps_with_config(session_service: _StubSessionService, config: AgentConfig) -> ChatDeps:
+    return ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=config,
         executor=_StubExecutor(),
         session_service=session_service,
         run_registry=RunRegistry(),
@@ -137,6 +179,51 @@ async def test_loop_iteration_trims_history_to_window():
 
 
 @pytest.mark.asyncio
+async def test_loop_iteration_precompacts_full_history_before_trim():
+    history = _make_history(60)
+    compactor = _LoopPreTurnCompactor()
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    svc = _StubSessionService(history, last_input_tokens=314_000)
+    deps = _make_deps_with_config(
+        svc,
+        AgentConfig(
+            model="gpt-5.2",
+            research_model=None,
+            max_depth=1,
+            deferred_tools=False,
+            compactor=compactor,
+        ),
+    )
+
+    client_id = "loop:loop-compact:3"
+    ctx = await prepare_chat(
+        deps,
+        message="iteration prompt",
+        skip_approvals=None,
+        session_id="sess-1",
+        client_id=client_id,
+        loop_task_id=_loop_task_id_from_client_id(client_id),
+        emit=emit,
+    )
+
+    assert compactor.seen == [(len(history), 314_000)]
+    assert [event.type.value for event in emitted] == ["compaction_started", "compaction_finished"]
+    assert emitted[-1].messages_before == len(history)
+    assert emitted[-1].messages_after == 6
+    assert svc.save_calls
+    compacted, metadata = svc.save_calls[-1]
+    assert len(compacted) == 6
+    assert metadata == {"last_input_tokens": None, "last_message_count": 6}
+    assert ctx.initial_input_tokens is None
+    assert ctx.run.history_prefix == []
+    assert ctx.run.messages[-1]["client_id"] == client_id
+
+
+@pytest.mark.asyncio
 async def test_loop_iteration_under_window_keeps_all_history():
     # 30 prior messages — below the cap → no trimming.
     history = _make_history(30)
@@ -182,6 +269,33 @@ async def test_non_loop_chat_does_not_trim_history():
     assert prior[-1]["content"] == "msg-59"
     # Not flagged as meta — this is a real user message.
     assert "is_meta" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_goal_meta_chat_does_not_use_loop_iteration_window():
+    # Goal continuations are hidden/meta user messages, but they are not
+    # scheduler-loop ticks. They need full history so normal compaction can
+    # summarize old context instead of silently trimming it away.
+    history = _make_history(60)
+    svc = _StubSessionService(history)
+    deps = _make_deps(svc)
+
+    client_id = "goal:123"
+    ctx = await prepare_chat(
+        deps,
+        message="Continue working toward this goal",
+        skip_approvals=None,
+        session_id="sess-1",
+        client_id=client_id,
+        loop_task_id=_loop_task_id_from_client_id(client_id),
+    )
+
+    system, prior, user_msg = _split_history(ctx.run.messages)
+    assert len(system) == 1
+    assert len(prior) == 60
+    assert ctx.run.history_prefix == []
+    assert user_msg["client_id"] == client_id
+    assert user_msg.get("is_meta") is True
 
 
 @pytest.mark.asyncio

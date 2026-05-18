@@ -89,6 +89,18 @@ export {
   SIDEBAR_SNAP_THRESHOLD_PX,
 } from "./prefs";
 
+function inputTokens(usage: {
+  prompt: number;
+  completion: number;
+  total?: number;
+  cache_read?: number;
+  cache_write?: number;
+}): number {
+  return usage.total !== undefined
+    ? Math.max(0, usage.total - usage.completion)
+    : usage.prompt + (usage.cache_read ?? 0) + (usage.cache_write ?? 0);
+}
+
 export const useStore = create<State & Actions>((set) => ({
   config: { ...DEFAULT_CONFIG },
   sessions: [],
@@ -316,12 +328,20 @@ export const useStore = create<State & Actions>((set) => ({
   setDraft: (draft) => set({ draft }),
   setEditingId: (editingId) => set({ editingId }),
   resetUsage: () => set({ usage: initialUsage }),
-  accumulateUsage: ({ prompt, completion, cost, messageCount }) =>
+  accumulateUsage: ({ prompt, completion, total, cache_read, cache_write, cost, contextInputTokens, messageCount }) =>
     set((s) => ({
       usage: {
-        lastPrompt: prompt,
-        totalTokens: s.usage.totalTokens + prompt + completion,
+        lastPrompt: contextInputTokens ?? inputTokens({ prompt, completion, total, cache_read, cache_write }),
+        totalTokens: s.usage.totalTokens + (total ?? prompt + completion + (cache_read ?? 0) + (cache_write ?? 0)),
         totalCost: s.usage.totalCost + cost,
+        messageCount: messageCount ?? s.usage.messageCount,
+      },
+    })),
+  updateLiveUsage: ({ prompt, completion, total, cache_read, cache_write, messageCount }) =>
+    set((s) => ({
+      usage: {
+        ...s.usage,
+        lastPrompt: inputTokens({ prompt, completion, total, cache_read, cache_write }),
         messageCount: messageCount ?? s.usage.messageCount,
       },
     })),

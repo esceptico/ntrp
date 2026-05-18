@@ -13,6 +13,8 @@ from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import (
+    CompactionFinishedEvent,
+    CompactionStartedEvent,
     MessageIngestedEvent,
     RunBackgroundedEvent,
     RunCancelledEvent,
@@ -20,6 +22,7 @@ from ntrp.events.sse import (
     RunFinishedEvent,
     RunStartedEvent,
     ThinkingEvent,
+    TokenUsageEvent,
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
@@ -180,6 +183,45 @@ async def _resolve_session(deps: ChatDeps) -> SessionData:
     return SessionData(deps.session_service.create(), [])
 
 
+async def _maybe_precompact_loop_history(
+    deps: ChatDeps,
+    data: SessionData,
+    *,
+    emit: Callable[[object], Awaitable[None]] | None = None,
+) -> SessionData:
+    compactor = deps.agent_config.compactor
+    if not compactor:
+        return data
+    if not compactor.should_compact(data.messages, deps.chat_model, data.last_input_tokens):
+        return data
+    before_count = len(data.messages)
+    if emit:
+        await emit(CompactionStartedEvent())
+    try:
+        compacted = await compactor.maybe_compact(data.messages, deps.chat_model, data.last_input_tokens)
+    except Exception:
+        if emit:
+            await emit(CompactionFinishedEvent(messages_before=before_count, messages_after=before_count))
+        raise
+    if compacted is None:
+        if emit:
+            await emit(CompactionFinishedEvent(messages_before=before_count, messages_after=before_count))
+        return data
+    await deps.session_service.save(
+        data.state,
+        compacted,
+        metadata={"last_input_tokens": None, "last_message_count": len(compacted)},
+    )
+    if emit:
+        await emit(CompactionFinishedEvent(messages_before=before_count, messages_after=len(compacted)))
+    return SessionData(
+        state=data.state,
+        messages=compacted,
+        last_input_tokens=None,
+        last_message_count=len(compacted),
+    )
+
+
 def build_user_content(
     text: str,
     images: list[dict] | None = None,
@@ -218,6 +260,10 @@ def _retain_user_content(messages: list[dict]) -> list[dict]:
             msg = {**msg, "content": [b for b in msg["content"] if b.get("type") != "context"]}
         result.append(msg)
     return result
+
+
+def _is_meta_client_id(client_id: str | None) -> bool:
+    return bool(client_id and client_id.startswith(("loop:", "bg:", "goal:")))
 
 
 async def _prepare_messages(
@@ -286,7 +332,7 @@ async def _prepare_messages(
         # Loop/background-dispatched messages aren't user input. Tag
         # is_meta so the model sees them but the desktop transcript hides
         # the bubble. Mirrors Claude Code's isMeta convention.
-        if client_id.startswith(("loop:", "bg:")):
+        if _is_meta_client_id(client_id):
             user_msg["is_meta"] = True
     messages.append(user_msg)
 
@@ -360,6 +406,7 @@ async def prepare_chat(
     context: list[dict] | None = None,
     client_id: str | None = None,
     loop_task_id: str | None = None,
+    emit: Callable[[object], Awaitable[None]] | None = None,
 ) -> ChatContext:
     registry = deps.run_registry
 
@@ -374,6 +421,8 @@ async def prepare_chat(
     # it doesn't stomp the user's Auto toggle). Explicit bool = set/override.
     if skip_approvals is not None:
         session_state.skip_approvals = skip_approvals
+    if loop_task_id:
+        session_data = await _maybe_precompact_loop_history(deps, session_data, emit=emit)
     messages = session_data.messages
     history_prefix: list[dict] = []
     if loop_task_id:
@@ -463,7 +512,7 @@ async def submit_chat_message(
     session_service: SessionService | None = None,
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
-    is_meta_client = bool(client_id and client_id.startswith(("loop:", "bg:")))
+    is_meta_client = _is_meta_client_id(client_id)
 
     # Idempotent retry: a POST with a client_id we already accepted within
     # the dedup window returns the same run_id instead of starting a
@@ -499,6 +548,7 @@ async def submit_chat_message(
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     deps = build_deps()
+    bus = buses.get_or_create(session_id)
     ctx = await prepare_chat(
         deps,
         message,
@@ -508,6 +558,7 @@ async def submit_chat_message(
         context=context,
         client_id=client_id,
         loop_task_id=loop_task_id,
+        emit=bus.emit,
     )
     await _record_run_started(deps.session_service, ctx.run.run_id, ctx.session_state.session_id)
     if loop_task_id:
@@ -521,7 +572,6 @@ async def submit_chat_message(
     # the pre-submit history and the SSE replay carries agent events, not
     # the user message itself.
     await deps.session_service.save_progress(ctx.session_state, _persistable_messages(ctx.run))
-    bus = buses.get_or_create(session_id)
     task = asyncio.create_task(run_chat(ctx, bus))
     ctx.run.task = task
     _install_cancel_fallback(ctx.run, bus, run_registry, task)
@@ -645,6 +695,13 @@ def _merge_background_messages(current: list[dict], background: list[dict]) -> l
     return [*current, *background[prefix_len:]]
 
 
+def _response_input_tokens(response) -> int | None:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return None
+    return usage.prompt_tokens + usage.cache_read_tokens + usage.cache_write_tokens
+
+
 def _build_get_pending(bus: SessionBus, run: RunState, session_service: SessionService | None = None):
     """Closure that drains pending injects and emits message_ingested per client entry."""
 
@@ -753,7 +810,18 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             parent_tracker=tracker,
             initial_input_tokens=ctx.initial_input_tokens,
         )
-        agent.hooks.on_response = tracker.track
+        async def _track_response(response) -> None:
+            await tracker.track(response)
+            await bus.emit(
+                TokenUsageEvent(
+                    run_id=run.run_id,
+                    usage=response.usage.to_dict(),
+                    cost=tracker.cost,
+                    message_count=len(_persistable_messages(run)),
+                )
+            )
+
+        agent.hooks.on_response = _track_response
 
         async def _checkpoint(_step: int, _response, messages: list[dict]) -> None:
             # Persist after each agent step so a client navigating back to
@@ -824,7 +892,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             RunFinishedEvent(
                 run_id=run.run_id,
                 usage=usage_dict,
-                message_count=len(run.messages),
+                context_input_tokens=_response_input_tokens(getattr(agent, "_last_response", None)),
+                message_count=len(_persistable_messages(run)),
             )
         )
         run_finished = True
@@ -872,23 +941,17 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     run.messages.extend(pending_messages)
                 run.usage = tracker.usage
                 run_finished = True
-                last_tokens = getattr(agent, "_last_response", None)
-                if last_tokens and last_tokens.usage:
-                    u = last_tokens.usage
-                    input_tokens = u.prompt_tokens + u.cache_read_tokens + u.cache_write_tokens
-                else:
-                    input_tokens = None
-                # `run.messages` is the agent's working-set after this run —
-                # for loops that's the trimmed tail (compactor and pricing
-                # both operate on this), not the full disk transcript. We
-                # persist the working-set size so the next session-open
-                # shows the correct message-pressure number on the dial.
+                input_tokens = _response_input_tokens(getattr(agent, "_last_response", None))
+                # Persist the durable transcript size. Loop runs may trim the
+                # model working set, but pre-turn compaction still evaluates
+                # the saved transcript, so the UI pressure gauge should match
+                # that compaction trigger.
                 metadata: dict | None = None
                 if input_tokens is not None or run.messages:
                     metadata = {}
                     if input_tokens is not None:
                         metadata["last_input_tokens"] = input_tokens
-                    metadata["last_message_count"] = len(run.messages)
+                    metadata["last_message_count"] = len(_persistable_messages(run))
                 if run.usage.total_tokens:
                     await ctx.session_service.update_goal(
                         session_state.session_id,

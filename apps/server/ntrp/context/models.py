@@ -20,10 +20,7 @@ class SessionData:
     state: SessionState
     messages: list[dict]
     last_input_tokens: int | None = None
-    # Size of the agent's working-set after the most recent run. Equals
-    # `len(messages)` for ordinary chats, but loops trim history to a tail
-    # window before each tick — `messages` on disk grows much larger than
-    # what the agent (and the compactor) actually sees. The desktop's
-    # budget dial uses this for the message-pressure scale so it reflects
-    # what's actually heading into the next LLM call.
+    # Size of the durable transcript after the most recent run. The desktop's
+    # budget dial uses this for message-pressure because compaction uses the
+    # saved transcript, even when a loop trims its model working set.
     last_message_count: int | None = None

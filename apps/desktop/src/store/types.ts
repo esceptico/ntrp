@@ -362,7 +362,24 @@ export interface Actions {
   setDraft: (draft: string) => void;
   setEditingId: (id: string | null) => void;
   resetUsage: () => void;
-  accumulateUsage: (usage: { prompt: number; completion: number; cost: number; messageCount?: number }) => void;
+  accumulateUsage: (usage: {
+    prompt: number;
+    completion: number;
+    total?: number;
+    cache_read?: number;
+    cache_write?: number;
+    cost: number;
+    contextInputTokens?: number | null;
+    messageCount?: number;
+  }) => void;
+  updateLiveUsage: (usage: {
+    prompt: number;
+    completion: number;
+    total?: number;
+    cache_read?: number;
+    cache_write?: number;
+    messageCount?: number;
+  }) => void;
   /** Replace the budget-relevant fields without touching cumulative spend.
    *  Used when loading a session's persisted state — last prompt size and
    *  message count come from disk; cumulative cost/tokens start fresh

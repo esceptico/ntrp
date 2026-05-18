@@ -124,6 +124,7 @@ export function applyChatEventToTranscript(
       if (event.usage) {
         s.accumulateUsage({
           ...event.usage,
+          contextInputTokens: event.context_input_tokens,
           messageCount: event.message_count,
         });
       }
@@ -134,6 +135,14 @@ export function applyChatEventToTranscript(
         reduceRunCompleted(state, { runId: event.run_id, sessionId: event.session_id }),
       );
       s.resetCancellingQueuedMessages();
+      break;
+
+    case "token_usage":
+      if (s.currentRunId && s.currentRunId !== event.run_id) break;
+      s.updateLiveUsage({
+        ...event.usage,
+        messageCount: event.message_count,
+      });
       break;
 
     case "run_cancelled":

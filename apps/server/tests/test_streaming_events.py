@@ -516,6 +516,143 @@ async def test_run_chat_persists_budget_stop_reason(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_chat_records_durable_message_count_for_trimmed_loop(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.loop_task_id = "loop-1"
+    run.history_prefix = [{"role": "user", "content": f"old-{i}"} for i in range(3)]
+    run.messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "tick", "is_meta": True}]
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+            self.saved_metadata = None
+
+        async def save(self, session_state, messages, metadata=None):
+            self.saved_metadata = metadata
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, *args, **kwargs):
+            return None
+
+        async def update_goal(self, *args, **kwargs):
+            return None
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+            self._last_response = None
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=0, usage=Usage(prompt_tokens=1))
+
+    service = RecordingSessionService()
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, SessionBus(session_id="sess-1"))
+
+    assert service.saved_metadata["last_message_count"] == 5
+
+
+@pytest.mark.asyncio
+async def test_run_chat_emits_live_token_usage_after_model_response(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.messages = [{"role": "user", "content": "hi"}]
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, *args, **kwargs):
+            return None
+
+        async def update_goal(self, *args, **kwargs):
+            return None
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+            self._last_response = None
+
+        async def stream(self, messages):
+            response = make_text_response("done")
+            object.__setattr__(
+                response,
+                "usage",
+                Usage(prompt_tokens=10, completion_tokens=2, cache_read_tokens=3, cache_write_tokens=4),
+            )
+            self._last_response = response
+            messages.append({"role": "assistant", "content": "done"})
+            if self.hooks.on_response:
+                await self.hooks.on_response(response)
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=0, usage=response.usage)
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=RecordingSessionService(),
+        run_registry=registry,
+    )
+    bus = SessionBus(session_id="sess-1")
+
+    await run_chat(ctx, bus)
+
+    usage_events = [record.event for record in bus._recent if record.event.type.value == "token_usage"]
+    assert len(usage_events) == 1
+    event = usage_events[0]
+    assert event.run_id == run.run_id
+    assert event.usage == {"prompt": 10, "completion": 2, "total": 19, "cache_read": 3, "cache_write": 4}
+    assert event.cost == 0.0
+    assert event.message_count == 2
+    finished_events = [record.event for record in bus._recent if record.event.type.value == "RUN_FINISHED"]
+    assert finished_events[-1].context_input_tokens == 17
+
+
+@pytest.mark.asyncio
 async def test_run_chat_does_not_overwrite_error_status(monkeypatch):
     from ntrp.services import chat as chat_service
 

@@ -80,6 +80,25 @@ def test_context_usage_reports_loaded_deferred_tool_counts():
     assert data["visible_tool_count"] < data["tool_count"]
 
 
+def test_context_usage_counts_loop_prefix_during_active_run():
+    runtime = _Runtime()
+    run = runtime.run_registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    run.history_prefix = [{"role": "user", "content": f"old-{i}"} for i in range(3)]
+    run.messages = [{"role": "user", "content": "active"}]
+
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.dependency_overrides[require_session_service] = lambda: _SessionService()
+    try:
+        response = TestClient(app).get("/context?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+        app.dependency_overrides.pop(require_session_service, None)
+
+    assert response.status_code == 200
+    assert response.json()["message_count"] == 4
+
+
 def test_compact_rejects_active_run_to_avoid_overwriting_stream_state():
     runtime = _Runtime()
     session_service = _SessionService()

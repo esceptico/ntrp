@@ -419,6 +419,70 @@ test("done terminal event finalizes running state once", () => {
   });
 });
 
+test("usage totals include cached input tokens", () => {
+  const before = getState().usage.totalTokens;
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-cache", session_id: "session-cache", seq: 10, timestamp: 10 });
+  handleServerEvent({
+    type: "RUN_FINISHED",
+    run_id: "run-cache",
+    session_id: "session-cache",
+    seq: 11,
+    timestamp: 11,
+    usage: { prompt: 3, completion: 4, cache_read: 5, cache_write: 6, cost: 0.01 },
+    message_count: 2,
+  });
+
+  expect(getState().usage.totalTokens).toBe(before + 18);
+  expect(getState().usage.lastPrompt).toBe(14);
+});
+
+test("live token usage updates context pressure without adding final totals", () => {
+  const before = getState().usage.totalTokens;
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-live-usage", session_id: "session-live-usage", seq: 20, timestamp: 20 });
+  handleServerEvent({
+    type: "token_usage",
+    run_id: "run-live-usage",
+    session_id: "session-live-usage",
+    seq: 21,
+    timestamp: 21,
+    usage: { prompt: 7, completion: 2, total: 14, cache_read: 3, cache_write: 2 },
+    cost: 0.02,
+    message_count: 9,
+  });
+
+  expect(getState().usage.lastPrompt).toBe(12);
+  expect(getState().usage.messageCount).toBe(9);
+  expect(getState().usage.totalTokens).toBe(before);
+});
+
+test("final cumulative usage does not overwrite context pressure", () => {
+  const before = getState().usage.totalTokens;
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-final-pressure", session_id: "session-final-pressure", seq: 30, timestamp: 30 });
+  handleServerEvent({
+    type: "token_usage",
+    run_id: "run-final-pressure",
+    session_id: "session-final-pressure",
+    seq: 31,
+    timestamp: 31,
+    usage: { prompt: 100, completion: 10, total: 110 },
+    message_count: 7,
+  });
+  handleServerEvent({
+    type: "RUN_FINISHED",
+    run_id: "run-final-pressure",
+    session_id: "session-final-pressure",
+    seq: 32,
+    timestamp: 32,
+    usage: { prompt: 5000, completion: 100, total: 5100, cost: 0.5 },
+    context_input_tokens: 100,
+    message_count: 7,
+  });
+
+  expect(getState().usage.lastPrompt).toBe(100);
+  expect(getState().usage.messageCount).toBe(7);
+  expect(getState().usage.totalTokens).toBe(before + 5100);
+});
+
 test("stream_reset clears transient buffers and schedules one history reload", async () => {
   setState({ currentSessionId: "reset-session" });
   handleServerEvent({

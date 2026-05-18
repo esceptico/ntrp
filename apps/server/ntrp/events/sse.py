@@ -67,6 +67,7 @@ class EventType(StrEnum):
     AUTOMATION_FINISHED = "automation_finished"
     COMPACTION_STARTED = "compaction_started"
     COMPACTION_FINISHED = "compaction_finished"
+    TOKEN_USAGE = "token_usage"
     GOAL_UPDATED = "goal_updated"
     GOAL_CLEARED = "goal_cleared"
 
@@ -114,6 +115,9 @@ class RunFinishedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_FINISHED, init=False)
     run_id: str = ""
     usage: dict = field(default_factory=dict)
+    # Token pressure for the current context window. Unlike `usage`, this is
+    # not cumulative across model calls in a multi-step run.
+    context_input_tokens: int | None = None
     # Server-side message count after this run. The desktop's budget dial
     # checks it against `max_messages` for the message-pressure arc. 0 when
     # unavailable (cancelled runs etc.).
@@ -389,6 +393,15 @@ class CompactionFinishedEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
+class TokenUsageEvent(SSEEvent):
+    type: EventType = field(default=EventType.TOKEN_USAGE, init=False)
+    run_id: str = ""
+    usage: dict = field(default_factory=dict)
+    cost: float = 0.0
+    message_count: int = 0
+
+
+@dataclass(frozen=True)
 class GoalUpdatedEvent(SSEEvent):
     type: EventType = field(default=EventType.GOAL_UPDATED, init=False)
     session_id: str = ""
@@ -432,6 +445,7 @@ _EVENT_CLASSES = {
     EventType.AUTOMATION_FINISHED.value: AutomationFinishedEvent,
     EventType.COMPACTION_STARTED.value: CompactionStartedEvent,
     EventType.COMPACTION_FINISHED.value: CompactionFinishedEvent,
+    EventType.TOKEN_USAGE.value: TokenUsageEvent,
     EventType.GOAL_UPDATED.value: GoalUpdatedEvent,
     EventType.GOAL_CLEARED.value: GoalClearedEvent,
 }
