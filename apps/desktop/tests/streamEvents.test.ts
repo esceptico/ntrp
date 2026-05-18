@@ -55,6 +55,35 @@ test("continues assistant content by message id without moving prior text below 
   expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("read app");
 });
 
+test("live goal meta run shows subtle nudge marker", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "goal-run-1",
+    session_id: "session-1",
+    is_meta_run: true,
+    meta_client_id: "goal:goal-1:1",
+  });
+
+  const state = getState();
+  expect(state.order).toEqual(["goal-nudge-goal-run-1", "meta-user-goal-run-1"]);
+  expect(state.messages.get("goal-nudge-goal-run-1")?.role).toBe("status");
+  expect(state.messages.get("goal-nudge-goal-run-1")?.content).toBe("Goal nudge");
+  expect(state.messages.get("meta-user-goal-run-1")?.isMeta).toBe(true);
+});
+
+test("non-goal meta run stays visually hidden", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "loop-run-1",
+    session_id: "session-1",
+    is_meta_run: true,
+    meta_client_id: "loop:loop-1:1",
+  });
+
+  const state = getState();
+  expect(state.order).toEqual(["meta-user-loop-run-1"]);
+});
+
 test("live tool target matches persisted history formatting without description", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-live-target", session_id: "target-session" });
   handleServerEvent({
@@ -538,6 +567,29 @@ test("stream_reset clears transient buffers and schedules one history reload", a
 
   expect(lastEventSeqForSession("reset-session")).toBe(4);
   expect(reloads).toEqual(["reset-session"]);
+});
+
+test("stream_reset can rewind an impossible future cursor", async () => {
+  setState({ currentSessionId: "reset-future-session" });
+  handleServerEvent({
+    type: "thinking",
+    status: "future",
+    session_id: "reset-future-session",
+    seq: 44,
+  });
+
+  const reload = handleIncomingServerEvent(
+    {
+      type: "stream_reset",
+      reason: "replay_gap",
+      session_id: "reset-future-session",
+      seq: 1,
+    },
+    async () => undefined,
+  );
+  await reload;
+
+  expect(lastEventSeqForSession("reset-future-session")).toBe(1);
 });
 
 test("stream_reset cancels delayed activity items from the old projection", async () => {

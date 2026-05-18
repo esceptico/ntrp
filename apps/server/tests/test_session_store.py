@@ -740,7 +740,7 @@ async def test_metadata_round_trip(store: SessionStore):
 
 
 @pytest.mark.asyncio
-async def test_session_messages_are_stable_across_compaction(store: SessionStore):
+async def test_session_messages_preserve_raw_transcript_across_compaction(store: SessionStore):
     state = _make_state()
     original = [
         {"role": "user", "content": "first", "client_id": "u-1"},
@@ -864,7 +864,7 @@ async def test_legacy_chat_session_defaults_when_unset(store: SessionStore):
 
 
 @pytest.mark.asyncio
-async def test_session_episodes_survive_compaction_without_handoff_rows(store: SessionStore):
+async def test_session_episodes_preserve_raw_transcript_without_handoff_rows(store: SessionStore):
     state = _make_state()
     original = [
         {"role": "user", "content": "first", "client_id": "u-1"},

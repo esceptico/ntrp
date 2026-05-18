@@ -242,7 +242,7 @@ async def test_event_stream_emits_stream_reset_on_future_cursor():
     assert reset_payload["type"] == "stream_reset"
     assert reset_payload["reason"] == "replay_gap"
     assert reset_payload["session_id"] == "sess-1"
-    assert reset_payload["seq"] == 45
+    assert reset_payload["seq"] == 1
 
 
 @pytest.mark.asyncio
@@ -650,6 +650,142 @@ async def test_run_chat_emits_live_token_usage_after_model_response(monkeypatch)
     assert event.message_count == 2
     finished_events = [record.event for record in bus._recent if record.event.type.value == "RUN_FINISHED"]
     assert finished_events[-1].context_input_tokens == 17
+
+
+@pytest.mark.asyncio
+async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.messages = [{"role": "user", "content": "is this active?", "client_id": "user-1"}]
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+    dispatched = []
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class GoalSessionService:
+        store = Store()
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, *args, **kwargs):
+            return None
+
+        async def update_goal(self, *args, **kwargs):
+            return None
+
+        async def get_goal(self, session_id):
+            return {"goal_id": "goal-1", "status": "active", "objective": "Keep going"}
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+            self._last_response = None
+
+        async def stream(self, messages):
+            messages.append({"role": "assistant", "content": "Yes."})
+            yield Result(text="Yes.", stop_reason=StopReason.END_TURN, steps=0, usage=Usage())
+
+    async def dispatch(session_id, message, client_id=None, skip_approvals=False):
+        dispatched.append((session_id, message, client_id, skip_approvals))
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=GoalSessionService(),
+        run_registry=registry,
+        goal_id="goal-1",
+        dispatch_session_message=dispatch,
+    )
+
+    await run_chat(ctx, SessionBus(session_id="sess-1"))
+
+    assert len(dispatched) == 1
+    assert dispatched[0][0] == "sess-1"
+    assert dispatched[0][1].startswith("Continue working toward the active session goal.")
+    assert dispatched[0][2].startswith("goal:goal-1:")
+    assert dispatched[0][3] is True
+
+
+@pytest.mark.asyncio
+async def test_goal_continuation_without_tool_activity_does_not_spin(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.messages = [{"role": "user", "content": "Continue", "client_id": "goal:goal-1:1", "is_meta": True}]
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+    dispatched = []
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class GoalSessionService:
+        store = Store()
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, *args, **kwargs):
+            return None
+
+        async def update_goal(self, *args, **kwargs):
+            return None
+
+        async def get_goal(self, session_id):
+            return {"goal_id": "goal-1", "status": "active", "objective": "Keep going"}
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+            self._last_response = None
+
+        async def stream(self, messages):
+            messages.append({"role": "assistant", "content": "Still working."})
+            yield Result(text="Still working.", stop_reason=StopReason.END_TURN, steps=0, usage=Usage())
+
+    async def dispatch(*args, **kwargs):
+        dispatched.append((args, kwargs))
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=GoalSessionService(),
+        run_registry=registry,
+        goal_id="goal-1",
+        dispatch_session_message=dispatch,
+    )
+
+    await run_chat(ctx, SessionBus(session_id="sess-1"))
+
+    assert dispatched == []
 
 
 @pytest.mark.asyncio

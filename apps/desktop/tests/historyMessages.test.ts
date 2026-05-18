@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { historyMessagesToUi } from "../src/actions.js";
+import { historyMessagesToUi } from "../src/actions/history.ts";
 import type { HistoryMessage } from "../src/api.js";
 
 test("keeps one loaded activity group across reasoning-only history messages", () => {
@@ -52,4 +52,20 @@ test("keeps assistant content before tool activity when history row has both", (
   expect(items.map((item) => item.role)).toEqual(["user", "assistant", "activity"]);
   expect(items[1].content).toBe("I'll draft/send it to yourself.");
   expect(items[2].activity?.items[0].result).toBe("sent");
+});
+
+test("shows a subtle nudge marker for persisted goal meta turns", () => {
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "Continue", id: "goal:goal-1:1", is_meta: true },
+    { role: "assistant", content: "Working on it.", id: "assistant-1" },
+  ];
+
+  const items = historyMessagesToUi(messages, null);
+
+  expect(items.map((item) => [item.role, item.content])).toEqual([
+    ["status", "Goal nudge"],
+    ["user", "Continue"],
+    ["assistant", "Working on it."],
+  ]);
+  expect(items[1].isMeta).toBe(true);
 });

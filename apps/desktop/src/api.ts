@@ -119,11 +119,12 @@ type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: 
 
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
-  | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean }
+  | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean; meta_client_id?: string | null }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number; cost: number }; context_input_tokens?: number | null; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
   | { type: "RUN_ERROR"; run_id: string; message: string }
   | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number }
+  | { type: "thinking"; status: string }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
   | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string; depth?: number }

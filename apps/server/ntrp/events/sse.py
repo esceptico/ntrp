@@ -108,6 +108,7 @@ class RunStartedEvent(SSEEvent):
     # the agent's response renders as a fresh turn instead of being
     # grouped under the user's previous "Worked" block.
     is_meta_run: bool = False
+    meta_client_id: str | None = None
 
 
 @dataclass(frozen=True)

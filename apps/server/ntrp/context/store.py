@@ -693,6 +693,9 @@ class SessionStore:
             seen.add(message_id)
 
     async def _mirror_session_messages(self, session_id: str, messages: list[dict]) -> None:
+        # session_messages is the durable UI/debug transcript, not just a
+        # cache of the compacted model context. Rewrites update known rows
+        # and append new ones, but must not delete raw pre-compaction rows.
         if not messages:
             await self.conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
             await self.conn.execute("DELETE FROM session_episodes WHERE session_id = ?", (session_id,))

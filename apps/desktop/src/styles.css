@@ -1744,10 +1744,10 @@ main[data-has-approval="false"] .scroll-messages {
    user's theme choice (Light / Dark / System) — for "System" it
    mirrors `prefers-color-scheme` and listens for OS changes. */
 :root.dark {
-    --color-bg: #100f0f;
+    --color-bg: #171514;
     --color-bg-main: #1c1b1a;
-    --color-surface: #1c1b1a;
-    --color-surface-soft: #282726;
+    --color-surface: #201f1d;
+    --color-surface-soft: #292826;
     --color-surface-sunken: #343331;
     --color-code-bg: #282726;
 
@@ -1798,11 +1798,11 @@ main[data-has-approval="false"] .scroll-messages {
 /* Dark palette surfaces: keep dark mode restrained, but preserve each
    palette's old product feel. Accent vars still come from runtime tokens. */
 :root.dark.palette-graphite {
-    --color-bg: #101112;
-    --color-bg-main: #121314;
-    --color-surface: #171819;
-    --color-surface-soft: #1e2022;
-    --color-surface-sunken: #25282a;
+    --color-bg: #141516;
+    --color-bg-main: #171819;
+    --color-surface: #1b1d1f;
+    --color-surface-soft: #222528;
+    --color-surface-sunken: #292d30;
     --color-code-bg: #1e2022;
     --color-line: #303337;
     --color-line-soft: #25282b;
@@ -1816,10 +1816,10 @@ main[data-has-approval="false"] .scroll-messages {
 }
 
 :root.dark.palette-raycast {
-    --color-bg: #0d0d0d;
-    --color-bg-main: #1a1a1a;
-    --color-surface: #1f1f1f;
-    --color-surface-soft: #262626;
+    --color-bg: #161616;
+    --color-bg-main: #1b1b1b;
+    --color-surface: #212121;
+    --color-surface-soft: #282828;
     --color-surface-sunken: #303030;
     --color-code-bg: #262626;
     --color-line: #3a3a3a;
@@ -1834,11 +1834,11 @@ main[data-has-approval="false"] .scroll-messages {
 }
 
 :root.dark.palette-notion {
-    --color-bg: #131313;
-    --color-bg-main: #191919;
-    --color-surface: #202020;
-    --color-surface-soft: #2c2c2c;
-    --color-surface-sunken: #373737;
+    --color-bg: #171717;
+    --color-bg-main: #1b1b1b;
+    --color-surface: #212121;
+    --color-surface-soft: #2b2b2b;
+    --color-surface-sunken: #363636;
     --color-code-bg: #2c2c2c;
     --color-line: #3f3f3f;
     --color-line-soft: #303030;
@@ -1854,11 +1854,11 @@ main[data-has-approval="false"] .scroll-messages {
 /* Linen dark: keep elevation steps close to the background. This avoids
    bright slate slabs while preserving readable secondary text. */
 :root[data-material="linen"].dark {
-    --color-bg: #141312;
-    --color-bg-main: #191817;
-    --color-surface: #1d1b19;
-    --color-surface-soft: #22201d;
-    --color-surface-sunken: #282522;
+    --color-bg: #171615;
+    --color-bg-main: #1b1a19;
+    --color-surface: #201e1c;
+    --color-surface-soft: #24221f;
+    --color-surface-sunken: #2a2724;
     --color-code-bg: #22201d;
 
     --color-line: #393531;
@@ -1873,11 +1873,11 @@ main[data-has-approval="false"] .scroll-messages {
 }
 
 :root[data-material="linen"].dark.palette-graphite {
-    --color-bg: #131415;
-    --color-bg-main: #17191a;
-    --color-surface: #1b1d1f;
-    --color-surface-soft: #202326;
-    --color-surface-sunken: #262a2d;
+    --color-bg: #151719;
+    --color-bg-main: #191b1d;
+    --color-surface: #1d2022;
+    --color-surface-soft: #222629;
+    --color-surface-sunken: #282c30;
     --color-code-bg: #202326;
 
     --color-line: #373c41;
@@ -1893,11 +1893,11 @@ main[data-has-approval="false"] .scroll-messages {
 
 :root[data-material="linen"].dark.palette-raycast,
 :root[data-material="linen"].dark.palette-notion {
-    --color-bg: #151515;
-    --color-bg-main: #1a1a1a;
-    --color-surface: #202020;
-    --color-surface-soft: #252525;
-    --color-surface-sunken: #2b2b2b;
+    --color-bg: #181818;
+    --color-bg-main: #1c1c1c;
+    --color-surface: #222222;
+    --color-surface-soft: #272727;
+    --color-surface-sunken: #2d2d2d;
     --color-code-bg: #242424;
 
     --color-line: #3a3a3a;

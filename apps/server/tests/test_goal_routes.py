@@ -7,10 +7,12 @@ from ntrp.context.models import SessionData, SessionState
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_session_service
+from ntrp.server.runtime import get_runtime
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.core import EmptyInput
 from ntrp.tools.goals import complete_goal
+from tests.helpers import make_text_response
 
 
 class _GoalSessionService:
@@ -86,6 +88,42 @@ def test_goal_route_rejects_blank_objective_after_trim():
         app.dependency_overrides.pop(get_bus_registry, None)
 
     assert response.status_code == 422
+    assert svc.goal is None
+
+
+def test_goal_proposal_uses_recent_context_without_persisting(monkeypatch):
+    class ProposalSessionService(_GoalSessionService):
+        async def load(self, session_id: str | None = None):
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            return SessionData(
+                state=state,
+                messages=[
+                    {"role": "user", "content": "we need to fix the checkout retry bug"},
+                    {"role": "assistant", "content": "I found the retry path in payments."},
+                ],
+            )
+
+    class RuntimeStub:
+        config = type("Config", (), {"chat_model": "test-model"})()
+
+    class FakeLLM:
+        async def complete(self, model, messages, **kwargs):
+            assert model == "test-model"
+            assert "checkout retry bug" in messages[-1]["content"]
+            return make_text_response("Fix the checkout retry bug.")
+
+    svc = ProposalSessionService()
+    app.dependency_overrides[require_session_service] = lambda: svc
+    app.dependency_overrides[get_runtime] = lambda: RuntimeStub()
+    monkeypatch.setattr("ntrp.server.routers.session.llm_client", FakeLLM())
+    try:
+        response = TestClient(app).post("/sessions/sess-1/goal/propose")
+    finally:
+        app.dependency_overrides.pop(require_session_service, None)
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"objective": "Fix the checkout retry bug."}
     assert svc.goal is None
 
 

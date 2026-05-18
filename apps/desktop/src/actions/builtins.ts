@@ -62,11 +62,11 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
       }
       const goal = await setGoal(arg);
       if (arg && goal) {
-        const prompt = `Continue working toward this goal: ${goal.objective}`;
+        const prompt = `/goal ${goal.objective}`;
         if (s.running) {
-          await enqueueMessage(prompt, [], { meta: true });
+          await enqueueMessage(prompt);
         } else {
-          await sendMessage(prompt, [], { meta: true });
+          await sendMessage(prompt);
         }
       }
       return;

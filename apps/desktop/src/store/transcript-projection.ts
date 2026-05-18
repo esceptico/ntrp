@@ -110,6 +110,13 @@ export function applyChatEventToTranscript(
         error: null,
       }));
       if (event.is_meta_run) {
+        if (event.meta_client_id?.startsWith("goal:")) {
+          s.appendMessage({
+            id: `goal-nudge-${event.run_id}`,
+            role: "status",
+            content: "Goal nudge",
+          });
+        }
         s.appendMessage({
           id: `meta-user-${event.run_id}`,
           role: "user",
@@ -383,6 +390,15 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
 
     if (msg.role === "user") {
       activeActivityId = null;
+      if (msg.is_meta && stableId.startsWith("goal:")) {
+        items.push({
+          id: `${stableId}-nudge`,
+          role: "status",
+          sourceIndex,
+          sourceMessageId,
+          content: "Goal nudge",
+        });
+      }
       items.push({
         id: stableId,
         role: "user",

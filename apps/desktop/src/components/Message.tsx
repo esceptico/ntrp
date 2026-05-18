@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Terminal } from "lucide-react";
+import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Target, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
@@ -206,6 +206,15 @@ function SkillChip({ skill }: { skill: SkillDescriptor }) {
   );
 }
 
+function GoalChip() {
+  return (
+    <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-accent-soft/55 border border-accent/15 text-xs font-medium text-accent">
+      <Target size={ICON.XS} strokeWidth={2} />
+      <span>Goal</span>
+    </div>
+  );
+}
+
 const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   const message = useMessage(id);
   const skills = useStore((s) => s.skills);
@@ -216,8 +225,12 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
     () => detectSkillPrefix(message.content, skills),
     [message.content, skills],
   );
+  const goalMatch = useMemo(() => {
+    const match = message.content.match(/^\/goal\s+([\s\S]+)$/);
+    return match ? match[1].trim() : null;
+  }, [message.content]);
 
-  const visibleText = skillMatch ? skillMatch.rest : message.content;
+  const visibleText = goalMatch ?? (skillMatch ? skillMatch.rest : message.content);
   const showBubble = visibleText.trim().length > 0;
   const images = message.images ?? [];
 
@@ -245,7 +258,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
           {visibleText}
         </div>
       )}
-      {skillMatch && <SkillChip skill={skillMatch.skill} />}
+      {goalMatch ? <GoalChip /> : skillMatch && <SkillChip skill={skillMatch.skill} />}
       <MessageActions id={id} role="user" />
     </article>
   );

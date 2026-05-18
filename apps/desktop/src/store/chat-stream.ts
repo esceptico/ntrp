@@ -33,6 +33,7 @@ export interface ChatStreamState extends TranscriptProjectionState {
 interface EventCursorInput {
   session_id?: string | null;
   seq?: number;
+  type?: string;
 }
 
 export function createInitialChatStreamState(): ChatStreamState {
@@ -110,6 +111,11 @@ export function reduceEventCursor(
 ): { state: ChatStreamState; accepted: boolean } {
   if (typeof event.seq !== "number" || !event.session_id) {
     return { state, accepted: true };
+  }
+  if (event.type === "stream_reset") {
+    const lastEventSeqBySession = new Map(state.lastEventSeqBySession);
+    lastEventSeqBySession.set(event.session_id, event.seq);
+    return { state: { ...state, lastEventSeqBySession }, accepted: true };
   }
   if (state.replayGapBlockedSessions.has(event.session_id)) {
     return { state, accepted: false };
