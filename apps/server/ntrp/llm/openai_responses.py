@@ -97,6 +97,23 @@ async def stream_responses_completion(
                 raise RuntimeError("OpenAI response stream disconnected before completion") from exc
 
 
+async def complete_responses_completion(
+    client,
+    request: dict[str, Any],
+    *,
+    model: str,
+) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    response = await client.responses.create(**request)
+    parsed = parse_responses_response(response, model)
+    if parsed.choices:
+        msg = parsed.choices[0].message
+        if msg.reasoning_content:
+            yield ReasoningContentDelta(msg.reasoning_content)
+        if msg.content:
+            yield msg.content
+    yield parsed
+
+
 async def _stream_responses_completion_once(
     client,
     request: dict[str, Any],

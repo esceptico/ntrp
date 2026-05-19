@@ -17,7 +17,7 @@ from ntrp.agent import (
 from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.models import Provider, get_model
-from ntrp.llm.openai_responses import parse_responses_response, prepare_responses_request, stream_responses_completion
+from ntrp.llm.openai_responses import complete_responses_completion, parse_responses_response, prepare_responses_request
 from ntrp.llm.utils import blocks_to_text
 
 # Keys we attach for ntrp internals that must be stripped before an API call.
@@ -198,8 +198,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                 response_format,
                 **kwargs,
             )
-            request["stream"] = True
-            async for item in stream_responses_completion(self._client, request, model=model):
+            async for item in complete_responses_completion(self._client, request, model=model):
                 yield item
             return
 

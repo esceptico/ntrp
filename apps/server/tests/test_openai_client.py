@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from ntrp.llm.openai import OpenAIClient
-from ntrp.llm.openai_responses import stream_responses_completion
+from ntrp.llm.openai_responses import complete_responses_completion, stream_responses_completion
 
 
 def test_native_openai_request_includes_prompt_cache_key():
@@ -192,9 +192,28 @@ async def test_native_openai_tools_with_reasoning_use_responses_for_streaming():
     ]
 
     request = fake.responses.requests[0]
-    assert request["stream"] is True
+    assert "stream" not in request
     assert request["reasoning"] == {"effort": "high", "summary": "auto"}
     assert events[0] == "ok"
+    assert events[-1].choices[0].message.content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_completed_responses_call_emits_text_before_final_response():
+    fake = _FakeOpenAI()
+
+    events = [
+        item
+        async for item in complete_responses_completion(
+            fake,
+            {"model": "gpt-5.5", "input": "hi"},
+            model="gpt-5.5",
+        )
+    ]
+
+    assert fake.responses.requests[0] == {"model": "gpt-5.5", "input": "hi"}
+    assert events[0] == "ok"
+    assert events[-1].choices[0].message.content == "ok"
 
 
 @pytest.mark.asyncio

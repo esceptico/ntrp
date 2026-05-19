@@ -62,6 +62,24 @@ class _EmptyResponse:
     output = []
 
 
+class _FakeResponses:
+    def __init__(self):
+        self.requests: list[dict] = []
+
+    async def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return _Response()
+
+
+class _FakeOpenAI:
+    def __init__(self):
+        self.responses = _FakeResponses()
+        self.closed = False
+
+    async def close(self):
+        self.closed = True
+
+
 def test_prepare_responses_request_uses_codex_model_and_response_shapes():
     client = OpenAICodexClient()
 
@@ -210,3 +228,29 @@ async def test_completion_consumes_streaming_response(monkeypatch):
 
     assert parsed.model == "openai-codex/gpt-5.5"
     assert parsed.choices[0].message.content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_codex_stream_uses_completed_responses_call(monkeypatch):
+    fake = _FakeOpenAI()
+
+    async def fake_client(self):
+        return fake
+
+    monkeypatch.setattr(OpenAICodexClient, "_client", fake_client)
+
+    events = [
+        event
+        async for event in OpenAICodexClient()._stream_completion(
+            messages=[{"role": Role.USER, "content": "hi"}],
+            model="openai-codex/gpt-5.5",
+        )
+    ]
+
+    request = fake.responses.requests[0]
+    assert request["model"] == "gpt-5.5"
+    assert "stream" not in request
+    assert events[0].content == "thinking"
+    assert events[1] == "hello"
+    assert events[-1].choices[0].message.content == "hello"
+    assert fake.closed is True
