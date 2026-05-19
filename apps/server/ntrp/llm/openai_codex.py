@@ -11,7 +11,7 @@ from ntrp.agent import (
 from ntrp.llm.base import CompletionClient
 from ntrp.llm.openai_codex_auth import CODEX_BASE_URL, get_valid_tokens
 from ntrp.llm.openai_responses import (
-    complete_responses_completion,
+    buffered_stream_responses_completion,
     parse_responses_response,
     prepare_responses_request,
 )
@@ -79,7 +79,7 @@ class OpenAICodexClient(CompletionClient):
                 response_format=response_format,
                 **kwargs,
             )
-            async for item in complete_responses_completion(client, request, model=model):
+            async for item in buffered_stream_responses_completion(client, request, model=model):
                 yield item
         finally:
             await client.close()

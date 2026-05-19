@@ -74,29 +74,6 @@ def prepare_responses_request(
     return request
 
 
-async def stream_responses_completion(
-    client,
-    request: dict[str, Any],
-    *,
-    model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
-    attempts = 2 if request.get("stream") else 1
-    attempt = 0
-    emitted_to_agent = False
-
-    while True:
-        attempt += 1
-        try:
-            async for item in _stream_responses_completion_once(client, request, model=model):
-                if isinstance(item, str | ReasoningContentDelta):
-                    emitted_to_agent = True
-                yield item
-            return
-        except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
-            if emitted_to_agent or attempt >= attempts:
-                raise RuntimeError("OpenAI response stream disconnected before completion") from exc
-
-
 async def complete_responses_completion(
     client,
     request: dict[str, Any],
@@ -105,21 +82,50 @@ async def complete_responses_completion(
 ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
     response = await client.responses.create(**request)
     parsed = parse_responses_response(response, model)
-    if parsed.choices:
-        msg = parsed.choices[0].message
-        if msg.reasoning_content:
-            yield ReasoningContentDelta(msg.reasoning_content)
-        if msg.content:
-            yield msg.content
-    yield parsed
+    for item in _completion_response_items(parsed):
+        yield item
 
 
-async def _stream_responses_completion_once(
+async def buffered_stream_responses_completion(
     client,
     request: dict[str, Any],
     *,
     model: str,
 ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    request = {**request, "stream": True}
+    attempts = 2
+
+    for attempt in range(1, attempts + 1):
+        try:
+            parsed = await _collect_streamed_responses_completion(client, request, model=model)
+            for item in _completion_response_items(parsed):
+                yield item
+            return
+        except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
+            if attempt >= attempts:
+                raise RuntimeError("OpenAI response stream disconnected before completion") from exc
+
+
+def _completion_response_items(
+    response: CompletionResponse,
+) -> list[str | ReasoningContentDelta | CompletionResponse]:
+    items: list[str | ReasoningContentDelta | CompletionResponse] = []
+    if response.choices:
+        msg = response.choices[0].message
+        if msg.reasoning_content:
+            items.append(ReasoningContentDelta(msg.reasoning_content))
+        if msg.content:
+            items.append(msg.content)
+    items.append(response)
+    return items
+
+
+async def _collect_streamed_responses_completion(
+    client,
+    request: dict[str, Any],
+    *,
+    model: str,
+) -> CompletionResponse:
     stream = await client.responses.create(**request)
     text_parts: list[str] = []
     reasoning_parts: list[str] = []
@@ -134,19 +140,17 @@ async def _stream_responses_completion_once(
             delta = data.get("delta")
             if isinstance(delta, str) and delta:
                 text_parts.append(delta)
-                yield delta
             continue
 
         if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
             delta = data.get("delta")
             if isinstance(delta, str) and delta:
                 reasoning_parts.append(delta)
-                yield ReasoningContentDelta(delta)
             continue
 
         if event_type == "response.completed":
             final_response = event.response
-            continue
+            break
 
         if event_type == "response.output_item.done":
             item = data.get("item")
@@ -166,41 +170,30 @@ async def _stream_responses_completion_once(
                 raise RuntimeError(error["message"])
             raise RuntimeError("OpenAI response stream returned an error")
 
-    if final_response is not None:
-        parsed = parse_responses_response(final_response, model, completed_items or None)
-        if parsed.choices:
-            msg = parsed.choices[0].message
-            content = msg.content or ("".join(text_parts) or None)
-            reasoning_content = msg.reasoning_content or ("".join(reasoning_parts) or None)
-            if content != msg.content or reasoning_content != msg.reasoning_content:
-                parsed.choices[0] = Choice(
-                    message=Message(
-                        role=msg.role,
-                        content=content,
-                        tool_calls=msg.tool_calls,
-                        reasoning_content=reasoning_content,
-                        reasoning_encrypted_content=msg.reasoning_encrypted_content,
-                    ),
-                    finish_reason=parsed.choices[0].finish_reason,
-                )
-        yield parsed
-        return
+    if final_response is None:
+        raise RuntimeError("OpenAI response stream ended before completion")
 
-    yield CompletionResponse(
-        choices=[
-            Choice(
-                message=Message(
-                    role=Role.ASSISTANT,
-                    content="".join(text_parts) or None,
-                    tool_calls=None,
-                    reasoning_content="".join(reasoning_parts) or None,
-                ),
-                finish_reason=FinishReason.STOP,
-            )
-        ],
-        usage=Usage(),
-        model=model,
+    parsed = parse_responses_response(final_response, model, completed_items or None)
+    if not parsed.choices:
+        return parsed
+
+    msg = parsed.choices[0].message
+    content = msg.content or ("".join(text_parts) or None)
+    reasoning_content = msg.reasoning_content or ("".join(reasoning_parts) or None)
+    if content == msg.content and reasoning_content == msg.reasoning_content:
+        return parsed
+
+    parsed.choices[0] = Choice(
+        message=Message(
+            role=msg.role,
+            content=content,
+            tool_calls=msg.tool_calls,
+            reasoning_content=reasoning_content,
+            reasoning_encrypted_content=msg.reasoning_encrypted_content,
+        ),
+        finish_reason=parsed.choices[0].finish_reason,
     )
+    return parsed
 
 
 def parse_responses_response(

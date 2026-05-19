@@ -2,7 +2,10 @@ import httpx
 import pytest
 
 from ntrp.llm.openai import OpenAIClient
-from ntrp.llm.openai_responses import complete_responses_completion, stream_responses_completion
+from ntrp.llm.openai_responses import (
+    buffered_stream_responses_completion,
+    complete_responses_completion,
+)
 
 
 def test_native_openai_request_includes_prompt_cache_key():
@@ -83,7 +86,7 @@ class _Event:
 
 
 class _Stream:
-    def __init__(self, events: list[_Event]):
+    def __init__(self, events: list[_Event | BaseException]):
         self._events = iter(events)
 
     def __aiter__(self):
@@ -91,17 +94,12 @@ class _Stream:
 
     async def __anext__(self):
         try:
-            return next(self._events)
+            event = next(self._events)
         except StopIteration:
             raise StopAsyncIteration
-
-
-class _FailingStream:
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        raise httpx.RemoteProtocolError("peer closed connection without sending complete message body")
+        if isinstance(event, BaseException):
+            raise event
+        return event
 
 
 class _FakeResponses:
@@ -120,14 +118,21 @@ class _FakeResponses:
         return _Response()
 
 
-class _FlakyResponses:
+class _FlakyAfterDeltaResponses:
     def __init__(self):
         self.calls = 0
+        self.requests: list[dict] = []
 
     async def create(self, **kwargs):
+        self.requests.append(kwargs)
         self.calls += 1
         if self.calls == 1:
-            return _FailingStream()
+            return _Stream(
+                [
+                    _Event({"type": "response.output_text.delta", "delta": "partial"}),
+                    httpx.RemoteProtocolError("peer closed connection without sending complete message body"),
+                ]
+            )
         return _Stream(
             [
                 _Event({"type": "response.output_text.delta", "delta": "ok"}),
@@ -136,9 +141,9 @@ class _FlakyResponses:
         )
 
 
-class _FlakyOpenAI:
+class _FlakyAfterDeltaOpenAI:
     def __init__(self):
-        self.responses = _FlakyResponses()
+        self.responses = _FlakyAfterDeltaResponses()
 
 
 class _FakeChatCompletions:
@@ -217,17 +222,19 @@ async def test_completed_responses_call_emits_text_before_final_response():
 
 
 @pytest.mark.asyncio
-async def test_responses_stream_retries_transport_disconnect_before_emitting():
-    fake = _FlakyOpenAI()
+async def test_buffered_responses_stream_retries_disconnect_after_upstream_delta():
+    fake = _FlakyAfterDeltaOpenAI()
 
     events = [
         item
-        async for item in stream_responses_completion(
+        async for item in buffered_stream_responses_completion(
             fake,
-            {"model": "gpt-5.5", "input": "hi", "stream": True},
+            {"model": "gpt-5.5", "input": "hi"},
             model="gpt-5.5",
         )
     ]
 
     assert fake.responses.calls == 2
+    assert fake.responses.requests[0]["stream"] is True
     assert events[0] == "ok"
+    assert events[-1].choices[0].message.content == "ok"

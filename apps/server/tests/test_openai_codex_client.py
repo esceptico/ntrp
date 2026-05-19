@@ -68,7 +68,17 @@ class _FakeResponses:
 
     async def create(self, **kwargs):
         self.requests.append(kwargs)
-        return _Response()
+        if not kwargs.get("stream"):
+            raise AssertionError("OpenAI Codex backend requires stream=True")
+        return _Stream(
+            [
+                _Event({"type": "response.output_text.delta", "delta": "hello"}),
+                _Event({"type": "response.output_item.done", "item": _Response.output[0].model_dump()}),
+                _Event({"type": "response.output_item.done", "item": _Response.output[1].model_dump()}),
+                _Event({"type": "response.output_item.done", "item": _Response.output[2].model_dump()}),
+                _Event({"type": "response.completed"}, response=_EmptyResponse()),
+            ]
+        )
 
 
 class _FakeOpenAI:
@@ -78,6 +88,29 @@ class _FakeOpenAI:
 
     async def close(self):
         self.closed = True
+
+
+class _Event:
+    def __init__(self, data: dict, response=None):
+        self._data = data
+        self.response = response
+
+    def model_dump(self, exclude_none: bool = True) -> dict:
+        return self._data
+
+
+class _Stream:
+    def __init__(self, events: list[_Event]):
+        self._events = iter(events)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._events)
+        except StopIteration:
+            raise StopAsyncIteration
 
 
 def test_prepare_responses_request_uses_codex_model_and_response_shapes():
@@ -231,7 +264,7 @@ async def test_completion_consumes_streaming_response(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_codex_stream_uses_completed_responses_call(monkeypatch):
+async def test_codex_stream_uses_buffered_streaming_responses_call(monkeypatch):
     fake = _FakeOpenAI()
 
     async def fake_client(self):
@@ -249,7 +282,7 @@ async def test_codex_stream_uses_completed_responses_call(monkeypatch):
 
     request = fake.responses.requests[0]
     assert request["model"] == "gpt-5.5"
-    assert "stream" not in request
+    assert request["stream"] is True
     assert events[0].content == "thinking"
     assert events[1] == "hello"
     assert events[-1].choices[0].message.content == "hello"
