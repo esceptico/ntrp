@@ -144,11 +144,9 @@ export function Messages() {
   const metaFlags = useStore(
     useShallow((s) => order.map((id) => Boolean(s.messages.get(id)?.isMeta))),
   );
-  const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
-
   const visibleOrder = useMemo(
-    () => visibleMessageIds({ ids: order, roles, showReasoning }),
-    [order, roles, showReasoning],
+    () => visibleMessageIds({ ids: order, roles }),
+    [order, roles],
   );
 
   const roleById = useMemo(() => {

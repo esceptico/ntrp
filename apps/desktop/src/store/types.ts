@@ -79,7 +79,6 @@ export interface Prefs {
    *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the
    *  resize handler. Default matches the historic fixed width. */
   sidebarWidth: number;
-  showReasoningInChat: boolean;
   /** Electron accelerator string for the global quick-capture window
    *  shortcut, e.g. "CommandOrControl+Shift+Space". Pushed to the main
    *  process via IPC; main re-registers on change. Empty string disables

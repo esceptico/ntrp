@@ -42,7 +42,6 @@ export function AppearanceTab() {
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
-  const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
   const glass = useStore((s) => s.prefs.glass);
   const material = useStore((s) => s.prefs.material);
   const setPref = useStore((s) => s.setPref);
@@ -71,18 +70,6 @@ export function AppearanceTab() {
           title="Palette"
           hint="Color scheme used across the app."
           control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
-        />
-        <SettingRow
-          title="Reasoning in chat"
-          hint="Show or hide reasoning rows. Tool calls stay visible."
-          control={
-            <GlassSwitch
-              size="sm"
-              checked={showReasoning}
-              onChange={(next) => setPref("showReasoningInChat", next)}
-              aria-label="Show reasoning in chat"
-            />
-          }
         />
       </section>
 

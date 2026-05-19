@@ -8,7 +8,7 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const PREFS_VERSION = 6;
+const PREFS_VERSION = 7;
 
 const RETIRED_PALETTES = new Set(["vercel", "github", "linear", "catppuccin"]);
 
@@ -25,11 +25,10 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
   theme: "system",
-  palette: "graphite",
+  palette: "notion",
   material: "linen",
   sidebarHidden: false,
   sidebarWidth: 272,
-  showReasoningInChat: true,
   quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
   glass: DEFAULT_GLASS_PREFS,
 };
@@ -41,10 +40,10 @@ export function loadPrefs(): Prefs {
     const parsed = JSON.parse(raw) as Partial<Prefs> & { prefsVersion?: number };
     const ver = parsed.prefsVersion ?? 1;
     // One-time migration: bump anyone still on the legacy "warm" default
-    // to graphite when introducing the new default. Users who explicitly
-    // want warm can flip back from Settings → Appearance.
+    // to the current default. Users who explicitly want warm can flip
+    // back from Settings → Appearance.
     if (ver < 2 && parsed.palette === "warm") {
-      parsed.palette = "graphite";
+      parsed.palette = DEFAULT_PREFS.palette;
     }
     // v2 → v3: glass prefs shipped with wrong rim defaults (60/75/60/35
     // instead of 10/0/0/0). Force a reset to the corrected defaults so
@@ -62,10 +61,11 @@ export function loadPrefs(): Prefs {
     }
     // v5 → v6: palette list trimmed from 8 → 4 (vercel/github/linear/
     // catppuccin retired). Migrate anyone parked on a dropped palette
-    // back to the default (graphite).
+    // back to the current default.
     if (ver < 6 && parsed.palette && RETIRED_PALETTES.has(parsed.palette)) {
-      parsed.palette = "graphite";
+      parsed.palette = DEFAULT_PREFS.palette;
     }
+    Reflect.deleteProperty(parsed, "showReasoningInChat");
     return { ...DEFAULT_PREFS, ...parsed };
   } catch {
     return DEFAULT_PREFS;
