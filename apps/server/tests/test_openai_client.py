@@ -1,6 +1,8 @@
+import httpx
 import pytest
 
 from ntrp.llm.openai import OpenAIClient
+from ntrp.llm.openai_responses import stream_responses_completion
 
 
 def test_native_openai_request_includes_prompt_cache_key():
@@ -94,6 +96,14 @@ class _Stream:
             raise StopAsyncIteration
 
 
+class _FailingStream:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise httpx.RemoteProtocolError("peer closed connection without sending complete message body")
+
+
 class _FakeResponses:
     def __init__(self):
         self.requests: list[dict] = []
@@ -108,6 +118,27 @@ class _FakeResponses:
                 ]
             )
         return _Response()
+
+
+class _FlakyResponses:
+    def __init__(self):
+        self.calls = 0
+
+    async def create(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return _FailingStream()
+        return _Stream(
+            [
+                _Event({"type": "response.output_text.delta", "delta": "ok"}),
+                _Event({"type": "response.completed"}, response=_Response()),
+            ]
+        )
+
+
+class _FlakyOpenAI:
+    def __init__(self):
+        self.responses = _FlakyResponses()
 
 
 class _FakeChatCompletions:
@@ -163,4 +194,21 @@ async def test_native_openai_tools_with_reasoning_use_responses_for_streaming():
     request = fake.responses.requests[0]
     assert request["stream"] is True
     assert request["reasoning"] == {"effort": "high", "summary": "auto"}
+    assert events[0] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_retries_transport_disconnect_before_emitting():
+    fake = _FlakyOpenAI()
+
+    events = [
+        item
+        async for item in stream_responses_completion(
+            fake,
+            {"model": "gpt-5.5", "input": "hi", "stream": True},
+            model="gpt-5.5",
+        )
+    ]
+
+    assert fake.responses.calls == 2
     assert events[0] == "ok"

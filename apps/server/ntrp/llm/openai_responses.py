@@ -1,6 +1,8 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import httpx
+import openai
 from pydantic import BaseModel
 
 from ntrp.agent import (
@@ -73,6 +75,29 @@ def prepare_responses_request(
 
 
 async def stream_responses_completion(
+    client,
+    request: dict[str, Any],
+    *,
+    model: str,
+) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    attempts = 2 if request.get("stream") else 1
+    attempt = 0
+    emitted_to_agent = False
+
+    while True:
+        attempt += 1
+        try:
+            async for item in _stream_responses_completion_once(client, request, model=model):
+                if isinstance(item, str | ReasoningContentDelta):
+                    emitted_to_agent = True
+                yield item
+            return
+        except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
+            if emitted_to_agent or attempt >= attempts:
+                raise RuntimeError("OpenAI response stream disconnected before completion") from exc
+
+
+async def _stream_responses_completion_once(
     client,
     request: dict[str, Any],
     *,
