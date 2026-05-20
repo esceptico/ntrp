@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Target, Terminal } from "lucide-react";
+import { Box, Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Target, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
@@ -192,15 +192,15 @@ function detectSkillPrefix(
   return null;
 }
 
-function SkillChip({ skill }: { skill: SkillDescriptor }) {
+function SkillInlineToken({ skill }: { skill: SkillDescriptor }) {
   return (
     <button
       type="button"
       onClick={() => void viewSkill(skill.name)}
       title={skill.path ?? skill.name}
-      className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-xs font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors cursor-pointer"
+      className="inline-flex max-w-full items-center gap-1.5 align-baseline text-info hover:text-accent-strong transition-colors cursor-pointer"
     >
-      <Sparkles size={ICON.XS} strokeWidth={2} className="text-accent" />
+      <Box size={ICON.SM} strokeWidth={2} className="shrink-0" />
       <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
     </button>
   );
@@ -236,7 +236,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   }, [message.content]);
 
   const visibleText = goalMatch ?? (skillMatch ? skillMatch.rest : message.content);
-  const showBubble = visibleText.trim().length > 0;
+  const showBubble = visibleText.trim().length > 0 || Boolean(skillMatch);
   const images = message.images ?? [];
 
   return (
@@ -261,11 +261,16 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
       {goalMatch ? (
         <GoalMessageBubble objective={goalMatch} />
       ) : showBubble && (
-        <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] whitespace-pre-wrap break-words text-left">
-          {visibleText}
+        <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] break-words text-left">
+          {skillMatch && (
+            <>
+              <SkillInlineToken skill={skillMatch.skill} />
+              {visibleText.trim().length > 0 ? " " : null}
+            </>
+          )}
+          <span className="whitespace-pre-wrap">{visibleText}</span>
         </div>
       )}
-      {!goalMatch && skillMatch && <SkillChip skill={skillMatch.skill} />}
       <MessageActions id={id} role="user" />
     </article>
   );

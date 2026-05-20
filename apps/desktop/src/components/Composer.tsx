@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Sparkles, Square, Target, X } from "lucide-react";
+import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
 import {
@@ -319,28 +319,6 @@ export function Composer() {
         data-just-sent={justSent ? "true" : undefined}
         className="composer-card glass-surface glass-radius-md relative flex flex-col"
       >
-        {selectedSkill && (
-          <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
-            <button
-              type="button"
-              onClick={() => void viewSkill(selectedSkill.name)}
-              title={selectedSkill.path ?? selectedSkill.name}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-xs font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
-            >
-              <Sparkles size={ICON.SM} strokeWidth={2} className="text-accent" />
-              <span className="capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedSkill(null)}
-              className="grid place-items-center w-5 h-5 rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
-              title="Detach skill"
-              aria-label="Detach skill"
-            >
-              <X size={ICON.SM} strokeWidth={2} />
-            </button>
-          </div>
-        )}
         {editingId && (
           <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
             <span>Editing previous message — pressing send will replace it.</span>
@@ -387,68 +365,81 @@ export function Composer() {
             e.target.value = ""; // allow picking the same file again later
           }}
         />
-        <textarea
-          ref={inputRef}
-          id="message-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            // Backspace on empty draft + attached skill → detach the skill.
-            if (
-              e.key === "Backspace" &&
-              !pickerOpen &&
-              selectedSkill &&
-              draft.length === 0
-            ) {
-              e.preventDefault();
-              setSelectedSkill(null);
-              return;
-            }
-            // Esc cancels an in-flight run when the picker isn't open.
-            if (e.key === "Escape" && !pickerOpen && running) {
-              e.preventDefault();
-              void stopRun();
-              return;
-            }
-            if (pickerOpen && filteredCommands.length > 0) {
-              if (e.key === "Tab") {
-                e.preventDefault();
-                applyPickerSelection(filteredCommands[pickerIndex]);
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                dismissedQueryRef.current = query;
-                setPickerOpen(false);
-                return;
-              }
+        <div className="flex min-h-[64px] items-start gap-2 px-4 pt-[13px] pb-1">
+          {selectedSkill && (
+            <button
+              type="button"
+              onClick={() => void viewSkill(selectedSkill.name)}
+              title={`${selectedSkill.path ?? selectedSkill.name} - Backspace on empty input detaches`}
+              className="mt-[1px] inline-flex max-w-[240px] shrink-0 items-center gap-1.5 truncate text-md leading-[1.5] text-info hover:text-accent-strong transition-colors"
+            >
+              <Box size={ICON.MD} strokeWidth={2} className="shrink-0" />
+              <span className="truncate capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
+            </button>
+          )}
+          <textarea
+            ref={inputRef}
+            id="message-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Backspace on empty draft + attached skill → detach the skill.
               if (
-                e.key === "ArrowDown" ||
-                e.key === "ArrowUp" ||
-                (e.key === "Enter" && !e.shiftKey)
+                e.key === "Backspace" &&
+                !pickerOpen &&
+                selectedSkill &&
+                draft.length === 0
               ) {
-                pickerNav.onKeyDown(e);
+                e.preventDefault();
+                setSelectedSkill(null);
                 return;
               }
-            }
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          onPaste={(e) => {
-            const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-              f.type.startsWith("image/"),
-            );
-            if (files.length > 0) {
-              e.preventDefault();
-              void attachFiles(files);
-            }
-          }}
-          rows={1}
-          placeholder="Message ntrp…"
-          className="w-full min-h-[64px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
-        />
+              // Esc cancels an in-flight run when the picker isn't open.
+              if (e.key === "Escape" && !pickerOpen && running) {
+                e.preventDefault();
+                void stopRun();
+                return;
+              }
+              if (pickerOpen && filteredCommands.length > 0) {
+                if (e.key === "Tab") {
+                  e.preventDefault();
+                  applyPickerSelection(filteredCommands[pickerIndex]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  dismissedQueryRef.current = query;
+                  setPickerOpen(false);
+                  return;
+                }
+                if (
+                  e.key === "ArrowDown" ||
+                  e.key === "ArrowUp" ||
+                  (e.key === "Enter" && !e.shiftKey)
+                ) {
+                  pickerNav.onKeyDown(e);
+                  return;
+                }
+              }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+                f.type.startsWith("image/"),
+              );
+              if (files.length > 0) {
+                e.preventDefault();
+                void attachFiles(files);
+              }
+            }}
+            rows={1}
+            placeholder={selectedSkill ? "if needed" : "Message ntrp…"}
+            className="min-h-[44px] max-h-[220px] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
+          />
+        </div>
         <div className="composer-toolbar flex items-center gap-1.5 px-2 pt-1.5 pb-2">
           <button
             type="button"
