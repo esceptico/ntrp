@@ -106,6 +106,66 @@ async def buffered_stream_responses_completion(
                 raise RuntimeError("OpenAI response stream disconnected before completion") from exc
 
 
+async def stream_responses_completion(
+    client,
+    request: dict[str, Any],
+    *,
+    model: str,
+) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    request = {**request, "stream": True}
+    stream = await client.responses.create(**request)
+    text_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    completed_items: list[dict[str, Any]] = []
+    final_response = None
+
+    async for event in stream:
+        data = event.model_dump(exclude_none=True)
+        event_type = data.get("type")
+
+        if event_type == "response.output_text.delta":
+            delta = data.get("delta")
+            if isinstance(delta, str) and delta:
+                text_parts.append(delta)
+                yield delta
+            continue
+
+        if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
+            delta = data.get("delta")
+            if isinstance(delta, str) and delta:
+                reasoning_parts.append(delta)
+                yield ReasoningContentDelta(delta)
+            continue
+
+        if event_type == "response.completed":
+            final_response = event.response
+            break
+
+        if event_type == "response.output_item.done":
+            item = data.get("item")
+            if isinstance(item, dict):
+                completed_items.append(item)
+            continue
+
+        if event_type in ("response.failed", "response.incomplete"):
+            response = data.get("response")
+            error = response.get("error") if isinstance(response, dict) else None
+            message = error.get("message") if isinstance(error, dict) else None
+            raise RuntimeError(message or f"OpenAI response failed: {event_type}")
+
+        if event_type == "error":
+            error = data.get("error")
+            if isinstance(error, dict) and isinstance(error.get("message"), str):
+                raise RuntimeError(error["message"])
+            raise RuntimeError("OpenAI response stream returned an error")
+
+    if final_response is None:
+        raise RuntimeError("OpenAI response stream ended before completion")
+
+    parsed = parse_responses_response(final_response, model, completed_items or None)
+    yield _with_streamed_fallbacks(parsed, text_parts=text_parts, reasoning_parts=reasoning_parts)
+
+
 def _completion_response_items(
     response: CompletionResponse,
 ) -> list[str | ReasoningContentDelta | CompletionResponse]:
@@ -174,6 +234,15 @@ async def _collect_streamed_responses_completion(
         raise RuntimeError("OpenAI response stream ended before completion")
 
     parsed = parse_responses_response(final_response, model, completed_items or None)
+    return _with_streamed_fallbacks(parsed, text_parts=text_parts, reasoning_parts=reasoning_parts)
+
+
+def _with_streamed_fallbacks(
+    parsed: CompletionResponse,
+    *,
+    text_parts: list[str],
+    reasoning_parts: list[str],
+) -> CompletionResponse:
     if not parsed.choices:
         return parsed
 

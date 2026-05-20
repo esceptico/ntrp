@@ -109,8 +109,10 @@ def test_goal_proposal_uses_recent_context_without_persisting(monkeypatch):
     class FakeLLM:
         async def complete(self, model, messages, **kwargs):
             assert model == "test-model"
+            assert "latest unresolved user intent" in messages[0]["content"]
+            assert "concrete, action-oriented, and verifiable" in messages[0]["content"]
             assert "checkout retry bug" in messages[-1]["content"]
-            return make_text_response("Fix the checkout retry bug.")
+            return make_text_response("Goal: Fix the checkout retry bug.")
 
     svc = ProposalSessionService()
     app.dependency_overrides[require_session_service] = lambda: svc

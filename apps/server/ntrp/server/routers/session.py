@@ -28,8 +28,11 @@ from ntrp.services.session import SessionService
 router = APIRouter(tags=["session"])
 
 GOAL_PROPOSAL_SYSTEM_PROMPT = (
-    "Generate one concise session goal from the recent conversation. "
-    "Return only the objective text. Do not add explanation, bullets, quotes, or markdown."
+    "Draft the durable active goal for this session from the recent conversation. "
+    "Use the latest unresolved user intent, not a broad summary. "
+    "Make it concrete, action-oriented, and verifiable, with enough specifics for a later continuation. "
+    "Do not invent scope. If the user already stated the goal, preserve that intent. "
+    "Prefer one sentence under 30 words. Return only the objective text: no labels, bullets, quotes, or markdown."
 )
 
 
@@ -49,6 +52,9 @@ def _goal_proposal_context(messages: list[dict], limit: int = 12) -> str:
 
 def _clean_goal_proposal(text: str) -> str:
     objective = text.strip().strip("`").strip()
+    for prefix in ("Goal:", "Objective:", "- ", "* "):
+        if objective.startswith(prefix):
+            objective = objective[len(prefix) :].strip()
     if (
         (objective.startswith('"') and objective.endswith('"'))
         or (objective.startswith("'") and objective.endswith("'"))
