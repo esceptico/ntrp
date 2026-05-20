@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
-import { getState, setState } from "../src/store.js";
+import { getState, setState } from "../src/store/index.js";
 
 beforeEach(() => {
   resetStreamStateForTest();

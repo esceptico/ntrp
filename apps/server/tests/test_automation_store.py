@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import aiosqlite
 import pytest
 import pytest_asyncio
 
@@ -10,12 +9,12 @@ from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import TimeTrigger
+from ntrp.automation.triggers import KnowledgeEventTrigger, TimeTrigger
 from ntrp.constants import (
-    BUILTIN_CHAT_EXTRACTION_ID,
-    BUILTIN_CONSOLIDATION_ID,
-    BUILTIN_MEMORY_HEALTH_ID,
-    BUILTIN_MEMORY_MAINTENANCE_ID,
+    BUILTIN_KNOWLEDGE_HEALTH_ID,
+    BUILTIN_KNOWLEDGE_REFLECTION_ID,
+    BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+    BUILTIN_KNOWLEDGE_RETENTION_ID,
 )
 
 
@@ -31,14 +30,16 @@ async def automation_store(tmp_path: Path):
 def _automation(
     task_id: str,
     *,
+    name: str | None = None,
     enabled: bool = True,
     next_run_at: datetime | None = None,
     running_since: datetime | None = None,
     handler: str | None = None,
+    builtin: bool = False,
 ) -> Automation:
     return Automation(
         task_id=task_id,
-        name=task_id,
+        name=name or task_id,
         description=f"{task_id} description",
         model=None,
         triggers=[TimeTrigger(at="09:00")],
@@ -50,6 +51,7 @@ def _automation(
         running_since=running_since,
         writable=False,
         handler=handler,
+        builtin=builtin,
     )
 
 
@@ -65,29 +67,6 @@ async def test_count_state_is_persistent_and_clearable(automation_store: Automat
 
     assert await automation_store.increment_count("task-1", "session-1", now) == 1
     assert await automation_store.increment_count("task-1", "session-2", now) == 2
-
-
-@pytest.mark.asyncio
-async def test_chat_extraction_state_tracks_pending_and_cursor(automation_store: AutomationStore):
-    now = datetime.now(UTC)
-    messages = (
-        {"role": "user", "content": "one"},
-        {"role": "assistant", "content": "two"},
-    )
-
-    await automation_store.record_chat_extraction_activity("session-1", messages, now)
-
-    assert await automation_store.get_chat_extraction_cursor("session-1") == 0
-    assert await automation_store.list_pending_chat_extractions() == [("session-1", 0, messages)]
-
-    await automation_store.mark_chat_extraction_extracted("session-1", 2, now)
-    assert await automation_store.list_pending_chat_extractions() == []
-
-    next_messages = messages + ({"role": "user", "content": "three"},)
-    await automation_store.record_chat_extraction_activity("session-1", next_messages, now)
-
-    assert await automation_store.get_chat_extraction_cursor("session-1") == 2
-    assert await automation_store.list_pending_chat_extractions() == [("session-1", 2, next_messages)]
 
 
 @pytest.mark.asyncio
@@ -107,11 +86,6 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
     await automation_store.claim_next_event("event-task", now)
 
     await automation_store.increment_count("count-task", "session-1", now - timedelta(minutes=20))
-    await automation_store.record_chat_extraction_activity(
-        "session-1",
-        ({"role": "user", "content": "hello"},),
-        now - timedelta(minutes=15),
-    )
 
     status = await automation_store.get_status(now)
 
@@ -127,52 +101,63 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
     assert status["event_queue"]["scheduled"] == 1
     assert status["event_queue"]["claimed"] == 1
     assert status["count_state"]["total"] == 1
-    assert status["chat_extraction"]["total"] == 1
-    assert status["chat_extraction"]["pending"] == 1
 
 
 @pytest.mark.asyncio
-async def test_seed_builtins_keeps_memory_maintenance_non_destructive(automation_store: AutomationStore):
+async def test_seed_builtins_uses_knowledge_handlers(automation_store: AutomationStore):
     await seed_builtins(automation_store)
 
     automations = {automation.task_id: automation for automation in await automation_store.list_all()}
 
     assert {
-        BUILTIN_CHAT_EXTRACTION_ID,
-        BUILTIN_CONSOLIDATION_ID,
-        BUILTIN_MEMORY_MAINTENANCE_ID,
-        BUILTIN_MEMORY_HEALTH_ID,
+        BUILTIN_KNOWLEDGE_REFLECTION_ID,
+        BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+        BUILTIN_KNOWLEDGE_RETENTION_ID,
+        BUILTIN_KNOWLEDGE_HEALTH_ID,
     } <= set(automations)
-    assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
-    assert automations[BUILTIN_CONSOLIDATION_ID].enabled is True
-    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
-    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].enabled is True
-    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is False
-    assert "without applying changes" in automations[BUILTIN_MEMORY_MAINTENANCE_ID].description
-    assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
-    assert automations[BUILTIN_MEMORY_HEALTH_ID].enabled is True
-    assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
+    assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].handler == "knowledge_reflection"
+    assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].enabled is True
+    assert any(
+        isinstance(trigger, KnowledgeEventTrigger)
+        and trigger.object_types == ("episode",)
+        and trigger.actions == ("created",)
+        for trigger in automations[BUILTIN_KNOWLEDGE_REFLECTION_ID].triggers
+    )
+    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].handler == "knowledge_retention"
+    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].enabled is True
+    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].writable is False
+    assert "stale generated knowledge objects" in automations[BUILTIN_KNOWLEDGE_RETENTION_ID].description
+    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].handler == "knowledge_health"
+    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].enabled is True
+    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].writable is False
     assert all(automation.handler != "learning_review" for automation in automations.values())
 
 
 @pytest.mark.asyncio
-async def test_seed_builtins_updates_legacy_memory_maintenance_to_review_pass(automation_store: AutomationStore):
-    await automation_store.save(
-        _automation(
-            BUILTIN_MEMORY_MAINTENANCE_ID,
-            handler="memory_maintenance",
-            next_run_at=datetime.now(UTC),
-        )
-    )
+async def test_seed_builtins_removes_stale_knowledge_builtins(automation_store: AutomationStore):
+    stale_builtins = [
+        ("builtin:chat-extraction", "Knowledge Reflection", "knowledge_reflection"),
+        ("builtin:consolidation", "Knowledge Consolidation", "knowledge_reflection"),
+        ("builtin:memory-maintenance", "Knowledge Retention", "knowledge_retention"),
+        ("builtin:memory-health", "Knowledge Health Audit", "knowledge_health"),
+    ]
+    for task_id, name, handler in stale_builtins:
+        await automation_store.save(_automation(task_id, name=name, handler=handler, builtin=True))
+    await automation_store.save(_automation("builtin:other", name="Other Builtin", handler="other", builtin=True))
+    await automation_store.save(_automation("user-knowledge", handler="knowledge_reflection", builtin=False))
 
     await seed_builtins(automation_store)
 
-    automation = await automation_store.get(BUILTIN_MEMORY_MAINTENANCE_ID)
-    assert automation is not None
-    assert automation.handler == "memory_maintenance"
-    assert automation.enabled is True
-    assert automation.writable is False
-    assert "without applying changes" in automation.description
+    automations = {automation.task_id: automation for automation in await automation_store.list_all()}
+    assert {task_id for task_id, _, _ in stale_builtins}.isdisjoint(automations)
+    assert "builtin:other" in automations
+    assert "user-knowledge" in automations
+    assert {
+        BUILTIN_KNOWLEDGE_REFLECTION_ID,
+        BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+        BUILTIN_KNOWLEDGE_RETENTION_ID,
+        BUILTIN_KNOWLEDGE_HEALTH_ID,
+    } <= set(automations)
 
 
 @pytest.mark.asyncio
@@ -490,9 +475,7 @@ async def test_v5_migration_is_idempotent(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_v5_indexes_created(automation_store: AutomationStore):
     """The three new v5 indexes must exist after init_schema."""
-    rows = await automation_store.conn.execute_fetchall(
-        "SELECT name FROM sqlite_master WHERE type = 'index'"
-    )
+    rows = await automation_store.conn.execute_fetchall("SELECT name FROM sqlite_master WHERE type = 'index'")
     names = {row["name"] for row in rows}
     assert "idx_scheduled_tasks_parent" in names
     assert "idx_scheduled_tasks_thread_kind" in names

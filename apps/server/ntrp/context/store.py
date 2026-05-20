@@ -45,9 +45,9 @@ CREATE INDEX IF NOT EXISTS idx_session_messages_session_seq
 CREATE INDEX IF NOT EXISTS idx_session_messages_client
     ON session_messages(session_id, client_id);
 
-CREATE TABLE IF NOT EXISTS session_episodes (
+CREATE TABLE IF NOT EXISTS session_turns (
     session_id TEXT NOT NULL,
-    episode_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
     turn_index INTEGER NOT NULL,
     user_message_id TEXT NOT NULL,
     message_start_id TEXT NOT NULL,
@@ -56,12 +56,12 @@ CREATE TABLE IF NOT EXISTS session_episodes (
     message_end_seq INTEGER NOT NULL,
     started_at TEXT NOT NULL,
     ended_at TEXT NOT NULL,
-    PRIMARY KEY (session_id, episode_id),
+    PRIMARY KEY (session_id, turn_id),
     UNIQUE (session_id, turn_index)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_episodes_session_turn
-    ON session_episodes(session_id, turn_index);
+CREATE INDEX IF NOT EXISTS idx_session_turns_session_turn
+    ON session_turns(session_id, turn_index);
 
 CREATE TABLE IF NOT EXISTS chat_runs (
     run_id TEXT PRIMARY KEY,
@@ -418,9 +418,34 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
+        await self._migrate_session_turns_schema()
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
         await self._migrate_chat_compactions_schema()
+
+    async def _migrate_session_turns_schema(self) -> None:
+        # Older builds named per-user-turn transcript slices "session_episodes".
+        # Keep the data, but store it under the accurate name going forward.
+        rows = await self.conn.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_episodes'"
+        )
+        if not rows:
+            return
+        await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO session_turns (
+                session_id, turn_id, turn_index, user_message_id,
+                message_start_id, message_end_id, message_start_seq, message_end_seq,
+                started_at, ended_at
+            )
+            SELECT
+                session_id, episode_id, turn_index, user_message_id,
+                message_start_id, message_end_id, message_start_seq, message_end_seq,
+                started_at, ended_at
+            FROM session_episodes
+            """
+        )
+        await self.conn.commit()
 
     async def set_goal(
         self,
@@ -698,7 +723,7 @@ class SessionStore:
         # and append new ones, but must not delete raw pre-compaction rows.
         if not messages:
             await self.conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
-            await self.conn.execute("DELETE FROM session_episodes WHERE session_id = ?", (session_id,))
+            await self.conn.execute("DELETE FROM session_turns WHERE session_id = ?", (session_id,))
             return
 
         rows = await self.conn.execute_fetchall(
@@ -737,7 +762,7 @@ class SessionStore:
                     (session_id, message_id, next_seq, role, message_json, client_id, created_at),
                 )
                 next_seq += 1
-        await self._rebuild_session_episodes(session_id)
+        await self._rebuild_session_turns(session_id)
 
     def _message_row_payload(self, row: aiosqlite.Row) -> dict:
         return {
@@ -750,19 +775,19 @@ class SessionStore:
             "message": json.loads(row["message_json"]),
         }
 
-    def _is_episode_message(self, row: aiosqlite.Row) -> bool:
+    def _is_turn_message(self, row: aiosqlite.Row) -> bool:
         if row["role"] == "system":
             return False
         message = json.loads(row["message_json"])
         content = message.get("content", "")
         return not (isinstance(content, str) and content.startswith(SESSION_HANDOFF_MARKER))
 
-    async def _rebuild_session_episodes(self, session_id: str) -> None:
+    async def _rebuild_session_turns(self, session_id: str) -> None:
         rows = await self.conn.execute_fetchall(
             "SELECT * FROM session_messages WHERE session_id = ? ORDER BY seq ASC",
             (session_id,),
         )
-        await self.conn.execute("DELETE FROM session_episodes WHERE session_id = ?", (session_id,))
+        await self.conn.execute("DELETE FROM session_turns WHERE session_id = ?", (session_id,))
 
         current_start: aiosqlite.Row | None = None
         current_end: aiosqlite.Row | None = None
@@ -772,11 +797,11 @@ class SessionStore:
             nonlocal current_start, current_end, turn_index
             if current_start is None or current_end is None:
                 return
-            episode_id = f"{session_id}:{turn_index}"
+            turn_id = f"{session_id}:{turn_index}"
             await self.conn.execute(
                 """
-                INSERT INTO session_episodes (
-                    session_id, episode_id, turn_index, user_message_id,
+                INSERT INTO session_turns (
+                    session_id, turn_id, turn_index, user_message_id,
                     message_start_id, message_end_id, message_start_seq, message_end_seq,
                     started_at, ended_at
                 )
@@ -784,7 +809,7 @@ class SessionStore:
                 """,
                 (
                     session_id,
-                    episode_id,
+                    turn_id,
                     turn_index,
                     current_start["message_id"],
                     current_start["message_id"],
@@ -800,7 +825,7 @@ class SessionStore:
             current_end = None
 
         for row in rows:
-            if not self._is_episode_message(row):
+            if not self._is_turn_message(row):
                 continue
             if row["role"] == "user":
                 await flush_current()
@@ -1765,16 +1790,16 @@ class SessionStore:
                 "DELETE FROM session_messages WHERE session_id = ? AND seq >= ?",
                 (session_id, target_seq),
             )
-            await self._rebuild_session_episodes(session_id)
+            await self._rebuild_session_turns(session_id)
             await self.conn.commit()
             return cursor.rowcount > 0
 
-    async def list_session_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
+    async def list_session_turns(self, session_id: str, limit: int = 100) -> list[dict]:
         await self._ensure_session_messages(session_id)
         rows = await self.read_conn.execute_fetchall(
             """
             SELECT *
-            FROM session_episodes
+            FROM session_turns
             WHERE session_id = ?
             ORDER BY turn_index ASC
             LIMIT ?
@@ -1784,7 +1809,7 @@ class SessionStore:
         return [
             {
                 "session_id": row["session_id"],
-                "episode_id": row["episode_id"],
+                "turn_id": row["turn_id"],
                 "turn_index": row["turn_index"],
                 "user_message_id": row["user_message_id"],
                 "message_start_id": row["message_start_id"],
@@ -1796,3 +1821,9 @@ class SessionStore:
             }
             for row in rows
         ]
+
+    async def list_session_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
+        # Compatibility for old API/tool callers. These are transcript turns,
+        # not true memory episodes.
+        turns = await self.list_session_turns(session_id, limit=limit)
+        return [{**turn, "episode_id": turn["turn_id"]} for turn in turns]

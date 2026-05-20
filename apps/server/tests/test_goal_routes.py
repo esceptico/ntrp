@@ -8,9 +8,9 @@ from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_session_service
 from ntrp.server.runtime import get_runtime
+from ntrp.tools.core import EmptyInput
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.core import EmptyInput
 from ntrp.tools.goals import complete_goal
 from tests.helpers import make_text_response
 

@@ -1,3 +1,5 @@
+import sqlite3
+
 import aiosqlite
 
 from ntrp.logging import get_logger
@@ -71,6 +73,10 @@ CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
 CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    entity_type TEXT NOT NULL DEFAULT 'other',
+    lifecycle_status TEXT NOT NULL DEFAULT 'active',
+    merged_into_entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -151,6 +157,150 @@ CREATE TABLE IF NOT EXISTS memory_access_events (
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_created ON memory_access_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source);
 
+CREATE TABLE IF NOT EXISTS knowledge_objects (
+    id INTEGER PRIMARY KEY,
+    object_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    embedding BLOB,
+    status TEXT NOT NULL DEFAULT 'draft',
+    scope TEXT,
+    activation TEXT NOT NULL DEFAULT 'prompt',
+    proactiveness_level TEXT NOT NULL DEFAULT 'L0',
+    score REAL NOT NULL DEFAULT 0.0,
+    source_ids TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP,
+    superseded_by_object_id INTEGER REFERENCES knowledge_objects(id) ON DELETE SET NULL,
+    superseded_at TIMESTAMP,
+    supersession_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_objects_type_status ON knowledge_objects(object_type, status);
+CREATE INDEX IF NOT EXISTS idx_knowledge_objects_updated ON knowledge_objects(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_objects_scope ON knowledge_objects(scope);
+
+CREATE TABLE IF NOT EXISTS knowledge_entity_refs (
+    knowledge_object_id INTEGER NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (knowledge_object_id, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_entity_refs_entity ON knowledge_entity_refs(entity_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entity_refs_name ON knowledge_entity_refs(name);
+
+CREATE TABLE IF NOT EXISTS entity_mentions (
+    id INTEGER PRIMARY KEY,
+    knowledge_object_id INTEGER NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+    entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+    surface_text TEXT NOT NULL,
+    normalized_surface TEXT NOT NULL,
+    canonical_name TEXT,
+    entity_type_hint TEXT NOT NULL DEFAULT 'other',
+    evidence_quote TEXT,
+    extraction_confidence REAL NOT NULL DEFAULT 0.0,
+    resolution_confidence REAL,
+    resolution_status TEXT NOT NULL DEFAULT 'unresolved',
+    extractor TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'extractor',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_object ON entity_mentions(knowledge_object_id);
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity ON entity_mentions(entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_surface ON entity_mentions(normalized_surface);
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_status ON entity_mentions(resolution_status);
+
+CREATE TABLE IF NOT EXISTS entity_aliases (
+    id INTEGER PRIMARY KEY,
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    alias_text TEXT NOT NULL,
+    normalized_alias TEXT NOT NULL,
+    alias_type TEXT NOT NULL DEFAULT 'extracted',
+    source_mention_id INTEGER REFERENCES entity_mentions(id) ON DELETE SET NULL,
+    confidence REAL NOT NULL DEFAULT 0.0,
+    scope TEXT,
+    valid_from TIMESTAMP,
+    valid_to TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_aliases_lookup ON entity_aliases(normalized_alias, status);
+CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id);
+
+CREATE TABLE IF NOT EXISTS entity_resolution_candidates (
+    id INTEGER PRIMARY KEY,
+    mention_id INTEGER NOT NULL REFERENCES entity_mentions(id) ON DELETE CASCADE,
+    candidate_entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+    method TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 0.0,
+    features TEXT NOT NULL DEFAULT '{}',
+    rank INTEGER,
+    decision_status TEXT NOT NULL DEFAULT 'proposed',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_mention ON entity_resolution_candidates(mention_id);
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_entity ON entity_resolution_candidates(candidate_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_status ON entity_resolution_candidates(decision_status);
+
+CREATE TABLE IF NOT EXISTS entity_resolution_commits (
+    id INTEGER PRIMARY KEY,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'system',
+    before_entity_ids TEXT NOT NULL DEFAULT '[]',
+    after_entity_ids TEXT NOT NULL DEFAULT '[]',
+    evidence TEXT NOT NULL DEFAULT '{}',
+    reversible_patch TEXT NOT NULL DEFAULT '{}',
+    confidence REAL,
+    rule_version TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_commits_action ON entity_resolution_commits(action);
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_commits_created ON entity_resolution_commits(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS entity_identity_edges (
+    id INTEGER PRIMARY KEY,
+    entity_a_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    entity_b_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    relation TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.0,
+    evidence TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active',
+    commit_id INTEGER REFERENCES entity_resolution_commits(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_identity_edges_entities ON entity_identity_edges(entity_a_id, entity_b_id);
+CREATE INDEX IF NOT EXISTS idx_entity_identity_edges_relation ON entity_identity_edges(relation, status);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_objects_fts USING fts5(
+    title,
+    text,
+    content='knowledge_objects',
+    content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS knowledge_objects_ai AFTER INSERT ON knowledge_objects BEGIN
+    INSERT INTO knowledge_objects_fts(rowid, title, text) VALUES (new.id, new.title, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_objects_ad AFTER DELETE ON knowledge_objects BEGIN
+    INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, title, text) VALUES('delete', old.id, old.title, old.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_objects_au AFTER UPDATE ON knowledge_objects BEGIN
+    INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, title, text) VALUES('delete', old.id, old.title, old.text);
+    INSERT INTO knowledge_objects_fts(rowid, title, text) VALUES (new.id, new.title, new.text);
+END;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -192,8 +342,17 @@ class GraphDatabase:
             )
             await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
             await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
+            await self.conn.execute("DROP TABLE IF EXISTS knowledge_objects_vec")
             # Only trigger re-embed when there's existing data with stale embeddings
-            rows = await self.conn.execute_fetchall("SELECT EXISTS(SELECT 1 FROM facts WHERE embedding IS NOT NULL)")
+            rows = await self.conn.execute_fetchall("""
+                SELECT EXISTS(
+                    SELECT 1 FROM facts WHERE embedding IS NOT NULL
+                    UNION ALL
+                    SELECT 1 FROM observations WHERE embedding IS NOT NULL
+                    UNION ALL
+                    SELECT 1 FROM knowledge_objects WHERE embedding IS NOT NULL
+                )
+            """)
             if rows and rows[0][0]:
                 self.dim_changed = True
 
@@ -204,6 +363,9 @@ class GraphDatabase:
     async def clear_all(self) -> None:
         await self.conn.execute("DELETE FROM memory_access_events")
         await self.conn.execute("DELETE FROM memory_events")
+        await self.conn.execute("DELETE FROM knowledge_objects_vec")
+        await self.conn.execute("DELETE FROM knowledge_entity_refs")
+        await self.conn.execute("DELETE FROM knowledge_objects")
         await self.conn.execute("DELETE FROM temporal_checkpoints")
         await self.conn.execute("DELETE FROM obs_entity_refs")
         await self.conn.execute("DELETE FROM observation_facts")
@@ -217,18 +379,55 @@ class GraphDatabase:
 
     async def _init_vec_tables(self) -> None:
         dim = self.embedding_dim
-        await self.conn.execute(f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS observations_vec USING vec0(
-                observation_id INTEGER PRIMARY KEY,
-                embedding float[{dim}] distance_metric=cosine
-            );
-        """)
-        await self.conn.execute(f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
-                fact_id INTEGER PRIMARY KEY,
-                embedding float[{dim}] distance_metric=cosine
-            );
-        """)
+        existing = {
+            row[0]
+            for row in await self.conn.execute_fetchall(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)",
+                ("observations_vec", "facts_vec", "knowledge_objects_vec"),
+            )
+        }
+        # sqlite-vec can spend a long time opening large existing virtual tables
+        # even behind CREATE VIRTUAL TABLE IF NOT EXISTS. Check sqlite_master first
+        # so startup migrations do not block on no-op vec table creation.
+        async def create_vec_table(name: str, sql: str) -> None:
+            try:
+                await self.conn.execute(sql)
+            except sqlite3.OperationalError as exc:
+                if "no such module: vec0" in str(exc):
+                    _logger.warning("sqlite-vec extension unavailable; skipping %s", name)
+                    return
+                raise
+
+        if "observations_vec" not in existing:
+            await create_vec_table(
+                "observations_vec",
+                f"""
+                CREATE VIRTUAL TABLE observations_vec USING vec0(
+                    observation_id INTEGER PRIMARY KEY,
+                    embedding float[{dim}] distance_metric=cosine
+                );
+                """,
+            )
+        if "facts_vec" not in existing:
+            await create_vec_table(
+                "facts_vec",
+                f"""
+                CREATE VIRTUAL TABLE facts_vec USING vec0(
+                    fact_id INTEGER PRIMARY KEY,
+                    embedding float[{dim}] distance_metric=cosine
+                );
+                """,
+            )
+        if "knowledge_objects_vec" not in existing:
+            await create_vec_table(
+                "knowledge_objects_vec",
+                f"""
+                CREATE VIRTUAL TABLE knowledge_objects_vec USING vec0(
+                    knowledge_object_id INTEGER PRIMARY KEY,
+                    embedding float[{dim}] distance_metric=cosine
+                );
+                """,
+            )
 
     async def _get_meta(self, key: str) -> str | None:
         try:
@@ -244,6 +443,7 @@ class GraphDatabase:
         self.embedding_dim = new_dim
         await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
         await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
+        await self.conn.execute("DROP TABLE IF EXISTS knowledge_objects_vec")
         await self._init_vec_tables()
         await self._set_meta("embedding_dim", str(new_dim))
         await self.conn.commit()

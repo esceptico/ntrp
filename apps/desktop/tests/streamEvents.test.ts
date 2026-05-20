@@ -484,6 +484,27 @@ test("live token usage updates context pressure without adding final totals", ()
   expect(getState().usage.totalTokens).toBe(before);
 });
 
+test("tool token usage updates live totals without changing context pressure", () => {
+  const before = getState().usage.totalTokens;
+  const costBefore = getState().usage.totalCost;
+  const promptBefore = getState().usage.lastPrompt;
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-tool-usage", session_id: "session-tool-usage", seq: 24, timestamp: 24 });
+  handleServerEvent({
+    type: "token_usage",
+    run_id: "run-tool-usage",
+    session_id: "session-tool-usage",
+    seq: 25,
+    timestamp: 25,
+    usage: { prompt: 7, completion: 2, total: 12, cache_read: 3, cache_write: 0 },
+    cost: 0.02,
+    scope: "tool",
+  });
+
+  expect(getState().usage.lastPrompt).toBe(promptBefore);
+  expect(getState().usage.totalTokens).toBe(before + 12);
+  expect(getState().usage.totalCost).toBe(costBefore + 0.02);
+});
+
 test("final cumulative usage does not overwrite context pressure", () => {
   const before = getState().usage.totalTokens;
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-final-pressure", session_id: "session-final-pressure", seq: 30, timestamp: 30 });

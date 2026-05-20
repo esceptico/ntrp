@@ -17,7 +17,7 @@ class _Runtime:
             "last_tick_error": None,
             "last_activity_at": "2026-04-28T00:01:00+00:00",
             "running_tasks": 1,
-            "registered_handlers": ["chat_extraction", "consolidation"],
+            "registered_handlers": ["knowledge_reflection", "knowledge_retention", "knowledge_health"],
             "store": {
                 "observed_at": "2026-04-28T00:02:00+00:00",
                 "tasks": {
@@ -42,11 +42,6 @@ class _Runtime:
                     "total": 1,
                     "oldest_updated_at": "2026-04-28T00:00:00+00:00",
                 },
-                "chat_extraction": {
-                    "total": 1,
-                    "pending": 1,
-                    "oldest_pending_updated_at": "2026-04-28T00:00:00+00:00",
-                },
             },
         }
 
@@ -63,10 +58,9 @@ def test_scheduler_status_endpoint_returns_runtime_and_store_state():
     data = response.json()
     assert data["status"] == "running"
     assert data["running_tasks"] == 1
-    assert data["registered_handlers"] == ["chat_extraction", "consolidation"]
+    assert data["registered_handlers"] == ["knowledge_reflection", "knowledge_retention", "knowledge_health"]
     assert data["store"]["tasks"]["total"] == 4
     assert data["store"]["event_queue"]["claimed"] == 1
-    assert data["store"]["chat_extraction"]["pending"] == 1
 
 
 def test_scheduler_status_endpoint_has_response_model_in_openapi():

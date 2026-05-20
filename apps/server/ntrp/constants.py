@@ -23,7 +23,6 @@ BASH_TIMEOUT = 120  # seconds — safety brake against runaway commands
 RESEARCH_TIMEOUT = None
 SUBAGENT_DEFAULT_TIMEOUT = None
 BACKGROUND_AGENT_TIMEOUT = None
-CONSOLIDATION_PASS_TIMEOUT = None
 COMPACTION_TIMEOUT = None
 
 
@@ -53,7 +52,6 @@ OUTBOX_PRUNE_INTERVAL_SECONDS = 3600
 # --- Session ---
 
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history
-CONSOLIDATION_INTERVAL = 1800.0  # seconds between consolidation batches (30 min)
 
 # Iteration-mode loops re-enter the target session and would otherwise see
 # the entire prior history. Cap to the last N messages (system row at
@@ -88,53 +86,10 @@ EMAIL_FROM_TRUNCATE = 30
 SNIPPET_TRUNCATE = 120
 
 
-# --- Chat Extraction ---
+# --- Knowledge ---
 
-EXTRACTION_EVERY_N_TURNS = 10  # extract after every N completed runs
-EXTRACTION_CONTEXT_MESSAGES = 10  # preceding messages included for LLM understanding
-
-
-# --- Memory ---
-
-# Decay formula: score = DECAY_RATE ^ (hours / strength)
-# where strength = log(access_count + 1) + 1
-# Reference: Park et al. (2023) "Generative Agents" https://arxiv.org/abs/2304.03442
-MEMORY_DECAY_RATE = 0.99
-
-# Consolidation: per-fact LLM-driven consolidation into observations
-CONSOLIDATION_SEARCH_LIMIT = 5  # observation candidates to consider
-
-# Entity Resolution
-ENTITY_EXPANSION_MAX_FACTS = 50  # max facts returned from entity expansion
-ENTITY_EXPANSION_PER_ENTITY_LIMIT = 20  # max facts per entity during expansion
-ENTITY_EXPANSION_IDF_FLOOR = 0.2  # skip entities with IDF below this (freq > ~30)
-TEMPORAL_EXPANSION_LIMIT = 10  # facts fetched by temporal proximity search
-TEMPORAL_EXPANSION_BASE_SCORE = 0.3  # base score for temporally expanded facts
-
-# LLM temperatures
-EXTRACTION_TEMPERATURE = 0.0  # deterministic extraction
-CONSOLIDATION_TEMPERATURE = 0.1  # very deterministic for consolidation decisions
-
-# Fact dedup: skip storing near-identical facts at ingest time
-# Two independent paths — either one triggers dedup:
-FACT_DEDUP_TEXT_RATIO = 0.85  # SequenceMatcher ratio — model-independent, catches near-exact text
-FACT_DEDUP_EMBEDDING_SIMILARITY = 0.95  # cosine similarity — catches semantic duplicates
-
-# Forget operation
-FORGET_SIMILARITY_THRESHOLD = 0.8
-FORGET_SEARCH_LIMIT = 10
-
-# Recall: search and expand graph context
-RECALL_SEARCH_LIMIT = 5  # seed nodes from search
-RECALL_OBSERVATION_LIMIT = 5  # max observations in context
-RECALL_STANDALONE_FACT_LIMIT = 10  # max standalone facts (not bundled with observations)
-CONSOLIDATED_FACT_RECALL_WEIGHT = 0.85  # processed facts remain recallable, just slightly lower priority
-SYSTEM_PROMPT_OBSERVATION_LIMIT = 5  # max observations in system prompt memory context
+KNOWLEDGE_REFLECTION_EVERY_N_TURNS = 10
 OBSERVATION_HISTORY_LIMIT = 10  # max history entries kept per observation
-
-
-# V2 Retrieval Recency
-RECENCY_SIGMA_HOURS = 72  # Exponential boost: recency = exp(-hours_since_event / σ)
 
 
 # --- Search & Retrieval ---
@@ -145,13 +100,6 @@ RRF_OVERFETCH_FACTOR = 2
 # --- Context Compression (Summarizer) ---
 
 SUMMARY_MAX_TOKENS = 1500
-
-# --- Memory Consolidation ---
-
-CONSOLIDATION_MAX_BACKOFF_MULTIPLIER = 16
-USER_ENTITY_NAME = "User"
-
-OBSERVATION_DUPLICATE_SIMILARITY_THRESHOLD = 0.90
 
 # --- Automation ---
 
@@ -168,16 +116,16 @@ SCHEDULER_EVENT_MAX_RETRIES = 5
 SCHEDULER_EVENT_RETRY_BASE_SECONDS = 30
 SCHEDULER_EVENT_RETRY_MAX_SECONDS = 1800
 
-# Builtin automations
-BUILTIN_CHAT_EXTRACTION_ID = "builtin:chat-extraction"
-BUILTIN_CONSOLIDATION_ID = "builtin:consolidation"
-BUILTIN_MEMORY_MAINTENANCE_ID = "builtin:memory-maintenance"
-BUILTIN_MEMORY_HEALTH_ID = "builtin:memory-health"
-DEFAULT_EXTRACTION_IDLE_MINUTES = 5
-DEFAULT_CONSOLIDATION_IDLE_MINUTES = 5
-DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES = 30
-DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES = 24 * 60
-DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES = 24 * 60
+# Builtin knowledge automations
+BUILTIN_KNOWLEDGE_REFLECTION_ID = "builtin:knowledge-reflection"
+BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID = "builtin:knowledge-reflection-sweep"
+BUILTIN_KNOWLEDGE_RETENTION_ID = "builtin:knowledge-retention"
+BUILTIN_KNOWLEDGE_HEALTH_ID = "builtin:knowledge-health"
+DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES = 5
+DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES = 5
+DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES = 30
+DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES = 24 * 60
+DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES = 24 * 60
 
 # --- Monitor ---
 

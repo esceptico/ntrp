@@ -21,9 +21,7 @@ def _reject_control_bytes(name: str, value: str | None) -> None:
     if value is None:
         return
     if any(b in value for b in _CONTROL_BYTES):
-        raise ValueError(
-            "idempotency claim fields must not contain control bytes \\x1f or \\x00"
-        )
+        raise ValueError("idempotency claim fields must not contain control bytes \\x1f or \\x00")
 
 
 def _validate_idempotency_claim(
@@ -193,18 +191,6 @@ CREATE TABLE IF NOT EXISTS automation_count_state (
 CREATE INDEX IF NOT EXISTS idx_automation_count_state_updated_at
 ON automation_count_state(updated_at);
 
-CREATE TABLE IF NOT EXISTS chat_extraction_state (
-    session_id TEXT PRIMARY KEY,
-    cursor INTEGER NOT NULL DEFAULT 0,
-    messages TEXT NOT NULL,
-    message_count INTEGER NOT NULL,
-    pending INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_chat_extraction_state_pending
-ON chat_extraction_state(pending, updated_at);
-
 CREATE TABLE IF NOT EXISTS automation_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -302,7 +288,7 @@ _SQL_SET_WRITABLE = "UPDATE scheduled_tasks SET writable = ? WHERE task_id = ?"
 _SQL_UPDATE_METADATA = """
 UPDATE scheduled_tasks
 SET name = ?, description = ?, model = ?, triggers = ?,
-    enabled = ?, next_run_at = ?, writable = ?,
+    enabled = ?, next_run_at = ?, writable = ?, handler = ?,
     cooldown_minutes = ?,
     loop_prompt = ?, max_iterations = ?, stop_when = ?,
     max_age_days = ?,
@@ -427,46 +413,6 @@ _SQL_CLEAR_COUNT = "DELETE FROM automation_count_state WHERE task_id = ? AND ses
 
 _SQL_DELETE_COUNTS_BY_TASK = "DELETE FROM automation_count_state WHERE task_id = ?"
 
-_SQL_RECORD_CHAT_EXTRACTION_ACTIVITY = """
-INSERT INTO chat_extraction_state (session_id, cursor, messages, message_count, pending, updated_at)
-VALUES (?, 0, ?, ?, 1, ?)
-ON CONFLICT(session_id) DO UPDATE SET
-    cursor = CASE
-        WHEN chat_extraction_state.cursor > excluded.message_count THEN excluded.message_count
-        ELSE chat_extraction_state.cursor
-    END,
-    messages = excluded.messages,
-    message_count = excluded.message_count,
-    pending = CASE
-        WHEN (
-            CASE
-                WHEN chat_extraction_state.cursor > excluded.message_count THEN excluded.message_count
-                ELSE chat_extraction_state.cursor
-            END
-        ) < excluded.message_count THEN 1
-        ELSE 0
-    END,
-    updated_at = excluded.updated_at
-"""
-
-_SQL_LIST_PENDING_CHAT_EXTRACTION = """
-SELECT session_id, cursor, messages, message_count
-FROM chat_extraction_state
-WHERE pending = 1
-ORDER BY updated_at
-LIMIT ?
-"""
-
-_SQL_GET_CHAT_EXTRACTION_CURSOR = "SELECT cursor FROM chat_extraction_state WHERE session_id = ?"
-
-_SQL_MARK_CHAT_EXTRACTION_EXTRACTED = """
-UPDATE chat_extraction_state
-SET cursor = ?,
-    pending = CASE WHEN message_count > ? THEN 1 ELSE 0 END,
-    updated_at = ?
-WHERE session_id = ?
-"""
-
 _SQL_STATUS_TASKS = """
 SELECT
     COUNT(*) AS total,
@@ -524,15 +470,6 @@ SELECT
     MIN(updated_at) AS oldest_updated_at
 FROM automation_count_state
 """
-
-_SQL_STATUS_CHAT_EXTRACTION = """
-SELECT
-    COUNT(*) AS total,
-    SUM(CASE WHEN pending = 1 THEN 1 ELSE 0 END) AS pending,
-    MIN(CASE WHEN pending = 1 THEN updated_at END) AS oldest_pending_updated_at
-FROM chat_extraction_state
-"""
-
 
 # --- Migration ---
 
@@ -928,6 +865,7 @@ class AutomationStore:
                 int(automation.enabled),
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
                 int(automation.writable),
+                automation.handler,
                 automation.cooldown_minutes,
                 automation.loop_prompt,
                 automation.max_iterations,
@@ -952,9 +890,7 @@ class AutomationStore:
         thread_id (new) or target_session_id (legacy). Used by the
         scheduler's run-completed fast path to fire deferred session-bound
         work the moment the session goes idle."""
-        rows = await self.conn.execute_fetchall(
-            _SQL_LIST_SESSION_BOUND_BY_SESSION, (session_id, session_id)
-        )
+        rows = await self.conn.execute_fetchall(_SQL_LIST_SESSION_BOUND_BY_SESSION, (session_id, session_id))
         return [_row_to_automation(row) for row in rows]
 
     async def list_by_parent(self, parent_automation_id: str) -> list[Automation]:
@@ -1197,51 +1133,11 @@ class AutomationStore:
         await self.conn.execute(_SQL_CLEAR_COUNT, (task_id, session_id))
         await self.conn.commit()
 
-    async def record_chat_extraction_activity(
-        self,
-        session_id: str,
-        messages: tuple[dict, ...],
-        updated_at: datetime,
-    ) -> None:
-        await self.conn.execute(
-            _SQL_RECORD_CHAT_EXTRACTION_ACTIVITY,
-            (
-                session_id,
-                json.dumps(list(messages), default=str),
-                len(messages),
-                updated_at.isoformat(),
-            ),
-        )
-        await self.conn.commit()
-
-    async def list_pending_chat_extractions(self, limit: int = 100) -> list[tuple[str, int, tuple[dict, ...]]]:
-        rows = await self.conn.execute_fetchall(_SQL_LIST_PENDING_CHAT_EXTRACTION, (limit,))
-        return [
-            (
-                row["session_id"],
-                int(row["cursor"]),
-                tuple(json.loads(row["messages"])),
-            )
-            for row in rows
-        ]
-
-    async def get_chat_extraction_cursor(self, session_id: str) -> int:
-        rows = await self.conn.execute_fetchall(_SQL_GET_CHAT_EXTRACTION_CURSOR, (session_id,))
-        return int(rows[0]["cursor"]) if rows else 0
-
-    async def mark_chat_extraction_extracted(self, session_id: str, cursor: int, updated_at: datetime) -> None:
-        await self.conn.execute(
-            _SQL_MARK_CHAT_EXTRACTION_EXTRACTED,
-            (cursor, cursor, updated_at.isoformat(), session_id),
-        )
-        await self.conn.commit()
-
     async def get_status(self, now: datetime) -> dict:
         now_iso = now.isoformat()
         task_row = (await self.conn.execute_fetchall(_SQL_STATUS_TASKS, (now_iso,)))[0]
         queue_row = (await self.conn.execute_fetchall(_SQL_STATUS_EVENT_QUEUE, (now_iso, now_iso, now_iso)))[0]
         count_row = (await self.conn.execute_fetchall(_SQL_STATUS_COUNT_STATE))[0]
-        chat_row = (await self.conn.execute_fetchall(_SQL_STATUS_CHAT_EXTRACTION))[0]
 
         return {
             "observed_at": now_iso,
@@ -1266,10 +1162,5 @@ class AutomationStore:
             "count_state": {
                 "total": int(count_row["total"] or 0),
                 "oldest_updated_at": count_row["oldest_updated_at"],
-            },
-            "chat_extraction": {
-                "total": int(chat_row["total"] or 0),
-                "pending": int(chat_row["pending"] or 0),
-                "oldest_pending_updated_at": chat_row["oldest_pending_updated_at"],
             },
         }

@@ -6,7 +6,7 @@ export interface AutomationTabGroups {
   channels: Automation[];
 }
 
-const INTERNAL_HANDLERS = new Set(["chat_extraction", "consolidation", "memory_maintenance", "memory_health"]);
+const INTERNAL_HANDLERS = new Set(["knowledge_reflection", "knowledge_retention", "knowledge_health"]);
 
 export function isInternalAutomation(automation: Automation): boolean {
   return automation.builtin || (automation.handler != null && INTERNAL_HANDLERS.has(automation.handler));

@@ -114,9 +114,9 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
       />
 
       <NumberField
-        label="Consolidation interval"
+        label="Reflection interval"
         suffix="messages"
-        help="How many user messages between memory consolidation passes."
+        help="How many user messages between knowledge reflection passes."
         value={draft.consolidation_interval}
         min={1}
         max={500}

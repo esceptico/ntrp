@@ -806,12 +806,12 @@ async def test_delete_session_messages_from_trims_reverted_future(store: Session
     page = await store.list_session_messages("test-session", limit=10)
     assert [row["message_id"] for row in page["messages"]] == ["m-0", "m-1"]
 
-    episodes = await store.list_session_episodes("test-session")
-    assert [episode["message_start_id"] for episode in episodes] == ["m-0", "m-1"]
+    turns = await store.list_session_turns("test-session")
+    assert [turn["message_start_id"] for turn in turns] == ["m-0", "m-1"]
 
 
 @pytest.mark.asyncio
-async def test_session_episodes_group_durable_transcript_by_user_turn(store: SessionStore):
+async def test_session_turns_group_durable_transcript_by_user_turn(store: SessionStore):
     state = _make_state()
     messages = [
         {"role": "system", "content": "sys", "client_id": "sys"},
@@ -823,14 +823,54 @@ async def test_session_episodes_group_durable_transcript_by_user_turn(store: Ses
     ]
     await store.save_session(state, messages)
 
-    episodes = await store.list_session_episodes("test-session")
+    turns = await store.list_session_turns("test-session")
 
-    assert [
-        (episode["message_start_id"], episode["message_end_id"])
-        for episode in episodes
-    ] == [("u-1", "t-1"), ("u-2", "a-2")]
-    assert episodes[0]["started_at"] == "2026-01-01T00:00:00+00:00"
-    assert episodes[0]["ended_at"] == "2026-01-01T00:00:02+00:00"
+    assert [(turn["message_start_id"], turn["message_end_id"]) for turn in turns] == [("u-1", "t-1"), ("u-2", "a-2")]
+    assert turns[0]["started_at"] == "2026-01-01T00:00:00+00:00"
+    assert turns[0]["ended_at"] == "2026-01-01T00:00:02+00:00"
+
+
+@pytest.mark.asyncio
+async def test_legacy_session_episodes_migrate_to_session_turns(tmp_path: Path):
+    conn = await database.connect(tmp_path / "legacy-sessions.db")
+    read_conn = await database.connect(tmp_path / "legacy-sessions.db", readonly=True)
+    await conn.execute(
+        """
+        CREATE TABLE session_episodes (
+            session_id TEXT NOT NULL,
+            episode_id TEXT NOT NULL,
+            turn_index INTEGER NOT NULL,
+            user_message_id TEXT NOT NULL,
+            message_start_id TEXT NOT NULL,
+            message_end_id TEXT NOT NULL,
+            message_start_seq INTEGER NOT NULL,
+            message_end_seq INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, episode_id),
+            UNIQUE (session_id, turn_index)
+        )
+        """
+    )
+    await conn.execute(
+        """
+        INSERT INTO session_episodes VALUES (
+            'sess-1', 'sess-1:0', 0, 'u-1', 'u-1', 'a-1', 1, 2,
+            '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:01+00:00'
+        )
+        """
+    )
+    await conn.commit()
+
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    turns = await store.list_session_turns("sess-1")
+
+    assert turns[0]["turn_id"] == "sess-1:0"
+    assert turns[0]["message_start_id"] == "u-1"
+
+    await read_conn.close()
+    await conn.close()
 
 
 @pytest.mark.asyncio
@@ -864,7 +904,7 @@ async def test_legacy_chat_session_defaults_when_unset(store: SessionStore):
 
 
 @pytest.mark.asyncio
-async def test_session_episodes_preserve_raw_transcript_without_handoff_rows(store: SessionStore):
+async def test_session_turns_preserve_raw_transcript_without_handoff_rows(store: SessionStore):
     state = _make_state()
     original = [
         {"role": "user", "content": "first", "client_id": "u-1"},
@@ -882,9 +922,6 @@ async def test_session_episodes_preserve_raw_transcript_without_handoff_rows(sto
         ],
     )
 
-    episodes = await store.list_session_episodes("test-session")
+    turns = await store.list_session_turns("test-session")
 
-    assert [
-        (episode["message_start_id"], episode["message_end_id"])
-        for episode in episodes
-    ] == [("u-1", "a-1"), ("u-2", "a-2")]
+    assert [(turn["message_start_id"], turn["message_end_id"]) for turn in turns] == [("u-1", "a-1"), ("u-2", "a-2")]

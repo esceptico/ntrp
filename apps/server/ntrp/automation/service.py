@@ -33,13 +33,19 @@ class TriggerPatch:
     lead_minutes: int | str | None = None
     start: str | None = None
     end: str | None = None
+    idle_minutes: int | None = None
+    every_n: int | None = None
+    actions: object = None
+    object_types: object = None
+    statuses: object = None
+    scopes: object = None
 
     @property
     def has_changes(self) -> bool:
         return any(v is not None for v in asdict(self).values())
 
     @property
-    def overrides(self) -> dict[str, str | int]:
+    def overrides(self) -> dict[str, Any]:
         d = asdict(self)
         d.pop("trigger_type", None)
         return {k: v for k, v in d.items() if v is not None}
@@ -143,6 +149,12 @@ class AutomationService:
             time_fields = {"at", "every", "days", "start", "end"} & patch.overrides.keys()
             if time_fields:
                 raise ValueError(f"Time fields ({', '.join(sorted(time_fields))}) cannot be set on an event trigger")
+        elif effective_type in {"idle", "count", "knowledge_event"}:
+            time_fields = {"at", "every", "days", "start", "end", "event_type", "lead_minutes"} & patch.overrides.keys()
+            if time_fields:
+                raise ValueError(
+                    f"Time/event fields ({', '.join(sorted(time_fields))}) cannot be set on a {effective_type} trigger"
+                )
 
         return build_trigger(effective_type, **{k: v for k, v in merged.items() if v is not None})
 
@@ -157,6 +169,12 @@ class AutomationService:
         every: str | None = None,
         event_type: str | None = None,
         lead_minutes: int | str | None = None,
+        idle_minutes: int | None = None,
+        every_n: int | None = None,
+        actions: object = None,
+        object_types: object = None,
+        statuses: object = None,
+        scopes: object = None,
         start: str | None = None,
         end: str | None = None,
         writable: bool | None = None,
@@ -192,6 +210,12 @@ class AutomationService:
             lead_minutes=lead_minutes,
             start=start,
             end=end,
+            idle_minutes=idle_minutes,
+            every_n=every_n,
+            actions=actions,
+            object_types=object_types,
+            statuses=statuses,
+            scopes=scopes,
         )
 
         # Full triggers list replacement takes precedence over field-level patching
@@ -228,6 +252,12 @@ class AutomationService:
         every: str | None = None,
         event_type: str | None = None,
         lead_minutes: int | str | None = None,
+        idle_minutes: int | None = None,
+        every_n: int | None = None,
+        actions: object = None,
+        object_types: object = None,
+        statuses: object = None,
+        scopes: object = None,
         writable: bool = False,
         start: str | None = None,
         end: str | None = None,
@@ -256,6 +286,12 @@ class AutomationService:
                 lead_minutes=lead_minutes,
                 start=start,
                 end=end,
+                idle_minutes=idle_minutes,
+                every_n=every_n,
+                actions=actions,
+                object_types=object_types,
+                statuses=statuses,
+                scopes=scopes,
             )
             parsed_triggers = [trigger]
         else:

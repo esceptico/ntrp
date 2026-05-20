@@ -8,6 +8,15 @@ etc.) ride on the same channel as snake_case named non-canonical events.
 
 Every event includes a `timestamp` (Unix milliseconds) on the wire so
 clients can compute per-event timing without a local clock.
+
+Identity and visibility rules:
+- `seq` is assigned by `SessionBus` and is only the transport resume cursor.
+- `event_id` is optional domain-level idempotency for events that may be
+  delivered through more than one path.
+- `message_id`, `task_id`, and `run_id` identify domain objects, not stream
+  positions.
+- `model_visible` and `ui_visible` are independent. Background completions can
+  wake the model while staying hidden from the transcript UI.
 """
 
 import json
@@ -60,6 +69,7 @@ class EventType(StrEnum):
     RUN_BACKGROUNDED = "run_backgrounded"
     MESSAGE_INGESTED = "message_ingested"
     STREAM_RESET = "stream_reset"
+    STREAM_KEEPALIVE = "stream_keepalive"
     TASK_STARTED = "task_started"
     TASK_PROGRESS = "task_progress"
     TASK_FINISHED = "task_finished"
@@ -294,6 +304,7 @@ class QuestionEvent(SSEEvent):
 @dataclass(frozen=True)
 class BackgroundTaskEvent(SSEEvent):
     type: EventType = field(default=EventType.BACKGROUND_TASK, init=False)
+    event_id: str | None = None
     task_id: str = ""
     session_id: str = ""
     run_id: str | None = None
@@ -301,6 +312,8 @@ class BackgroundTaskEvent(SSEEvent):
     status: str = ""  # "started", "completed", "failed", "cancelled", "activity"
     detail: str | None = None
     result_ref: str | None = None
+    model_visible: bool = False
+    ui_visible: bool = True
     terminal: bool = False
 
 
@@ -366,6 +379,13 @@ class StreamResetEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
+class KeepaliveEvent(SSEEvent):
+    type: EventType = field(default=EventType.STREAM_KEEPALIVE, init=False)
+    session_id: str = ""
+    latest_seq: int = 0
+
+
+@dataclass(frozen=True)
 class AutomationProgressEvent(SSEEvent):
     type: EventType = field(default=EventType.AUTOMATION_PROGRESS, init=False)
     task_id: str = ""
@@ -399,7 +419,8 @@ class TokenUsageEvent(SSEEvent):
     run_id: str = ""
     usage: dict = field(default_factory=dict)
     cost: float = 0.0
-    message_count: int = 0
+    message_count: int | None = None
+    scope: str = "run"
 
 
 @dataclass(frozen=True)
@@ -442,6 +463,7 @@ _EVENT_CLASSES = {
     EventType.RUN_BACKGROUNDED.value: RunBackgroundedEvent,
     EventType.MESSAGE_INGESTED.value: MessageIngestedEvent,
     EventType.STREAM_RESET.value: StreamResetEvent,
+    EventType.STREAM_KEEPALIVE.value: KeepaliveEvent,
     EventType.AUTOMATION_PROGRESS.value: AutomationProgressEvent,
     EventType.AUTOMATION_FINISHED.value: AutomationFinishedEvent,
     EventType.COMPACTION_STARTED.value: CompactionStartedEvent,

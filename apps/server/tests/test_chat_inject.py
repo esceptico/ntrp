@@ -840,6 +840,40 @@ async def test_background_result_during_parent_run_queues_injection():
     assert calls == []
 
 
+@pytest.mark.asyncio
+async def test_background_result_during_parent_run_dedups_by_client_id():
+    run = RunState(run_id="cool-otter", session_id="sess-1")
+    calls = []
+
+    async def dispatch(session_id: str, message: str, client_id: str | None, skip_approvals: bool | None):
+        calls.append((session_id, message, client_id, skip_approvals))
+
+    message = {
+        "role": "user",
+        "content": "[background agent bg-1 completed]\n\nResult:\ndone",
+        "is_meta": True,
+        "client_id": "bg:bg-1:completed",
+    }
+
+    await _handle_background_result(
+        run=run,
+        session_id="sess-1",
+        messages=[message],
+        dispatch_session_message=dispatch,
+        run_finished=False,
+    )
+    await _handle_background_result(
+        run=run,
+        session_id="sess-1",
+        messages=[message],
+        dispatch_session_message=dispatch,
+        run_finished=False,
+    )
+
+    assert run.inject_queue == [message]
+    assert calls == []
+
+
 # --- DELETE /chat/inject/{client_id} ---
 
 

@@ -202,7 +202,7 @@ class Config(BaseSettings):
         object.__setattr__(self, "reasoning_effort", None)
 
     def _resolve_embedding_model(self) -> None:
-        if self.embedding_model:
+        if self.embedding_model or "embedding_model" in self.model_fields_set:
             return
         for field, (_, _, embedding) in MODEL_DEFAULTS.items():
             if embedding and getattr(self, field, None):

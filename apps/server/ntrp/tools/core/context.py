@@ -263,11 +263,14 @@ class BackgroundTaskRegistry:
         if emit:
             await emit(
                 BackgroundTaskEvent(
+                    event_id=f"bg:{task_id}:{status}",
                     task_id=task_id,
                     session_id=self.session_id,
                     command=label,
                     status=status,
                     result_ref=result_ref,
+                    model_visible=True,
+                    ui_visible=False,
                     terminal=True,
                 )
             )

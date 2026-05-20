@@ -20,6 +20,8 @@ from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
+    AutomationProgressEvent,
+    KeepaliveEvent,
     ReasoningMessageContentEvent,
     TaskFinishedEvent,
     TaskStartedEvent,
@@ -31,7 +33,8 @@ from ntrp.events.sse import (
     agent_events_to_sse,
 )
 from ntrp.server.bus import BusRegistry, SessionBus
-from ntrp.server.routers.chat import _event_stream
+from ntrp.server.routers.automation import _automation_event_stream
+from ntrp.server.routers.chat import _event_stream, _keepalive
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
 from ntrp.services.chat import ChatContext, _drain_backgrounded, run_chat
@@ -77,6 +80,22 @@ def test_text_boundary_sse_preserves_nested_scope():
         data = json.loads(event.to_sse()["data"])
         assert data["depth"] == 1
         assert data["parent_id"] == "call-research"
+
+
+def test_keepalive_is_typed_data_event_with_latest_seq():
+    chunk = _keepalive(session_id="sess-1", latest_seq=42)
+
+    assert "event: stream_keepalive" in chunk
+    assert "data: " in chunk
+
+    payload = json.loads(chunk.split("data: ", 1)[1])
+    assert payload["type"] == "stream_keepalive"
+    assert payload["session_id"] == "sess-1"
+    assert payload["seq"] == 42
+    assert payload["latest_seq"] == 42
+
+    event = KeepaliveEvent(session_id="sess-1", latest_seq=42)
+    assert json.loads(event.to_sse()["data"])["latest_seq"] == 42
 
 
 def test_task_lifecycle_events_include_parent_tool_call():
@@ -242,6 +261,69 @@ async def test_event_stream_emits_stream_reset_on_future_cursor():
     assert reset_payload["type"] == "stream_reset"
     assert reset_payload["reason"] == "replay_gap"
     assert reset_payload["session_id"] == "sess-1"
+    assert reset_payload["seq"] == 1
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_replays_after_seq():
+    buses = BusRegistry()
+    bus = buses.get_or_create("automation:events")
+    await bus.emit(AutomationProgressEvent(task_id="loop-a", status="old"))
+    await bus.emit(AutomationProgressEvent(task_id="loop-a", status="new"))
+
+    stream = _automation_event_stream(buses, after_seq=1)
+    try:
+        replay_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    replay_payload = json.loads(replay_chunk.split("data: ", 1)[1].strip())
+
+    assert "event: automation_progress" in replay_chunk
+    assert replay_payload["type"] == "automation_progress"
+    assert replay_payload["task_id"] == "loop-a"
+    assert replay_payload["status"] == "new"
+    assert replay_payload["seq"] == 2
+    assert replay_payload["replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_without_cursor_does_not_replay_old_events(monkeypatch):
+    monkeypatch.setattr("ntrp.server.routers.automation.KEEPALIVE_INTERVAL", 0)
+    buses = BusRegistry()
+    bus = buses.get_or_create("automation:events")
+    await bus.emit(AutomationProgressEvent(task_id="loop-a", status="old"))
+
+    stream = _automation_event_stream(buses)
+    try:
+        first_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    payload = json.loads(first_chunk.split("data: ", 1)[1].strip())
+
+    assert payload["type"] == "stream_keepalive"
+    assert payload["latest_seq"] == 1
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_emits_stream_reset_on_future_cursor():
+    buses = BusRegistry()
+    bus = buses.get_or_create("automation:events")
+    await bus.emit(AutomationProgressEvent(task_id="loop-a", status="old"))
+
+    stream = _automation_event_stream(buses, after_seq=44)
+    try:
+        reset_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    reset_payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+
+    assert "event: stream_reset" in reset_chunk
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "replay_gap"
+    assert reset_payload["session_id"] == "automation:events"
     assert reset_payload["seq"] == 1
 
 
@@ -1108,3 +1190,19 @@ async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
     assert end.depth == 2
     assert end.parent_id == "call-final"
     assert bus.cancelled_end_once is True
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_uses_typed_keepalive(monkeypatch):
+    monkeypatch.setattr("ntrp.server.routers.automation.KEEPALIVE_INTERVAL", 0)
+    buses = BusRegistry()
+    stream = _automation_event_stream(buses)
+    try:
+        chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert "event: stream_keepalive" in chunk
+    payload = json.loads(chunk.split("data: ", 1)[1])
+    assert payload["type"] == "stream_keepalive"
+    assert payload["session_id"] == "automation:events"

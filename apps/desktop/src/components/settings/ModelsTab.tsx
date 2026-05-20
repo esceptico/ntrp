@@ -14,7 +14,7 @@ const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
   },
   memory_model: {
     title: "Memory",
-    description: "Fact extraction and pattern consolidation.",
+    description: "Knowledge reflection, activation, and retention.",
   },
 };
 

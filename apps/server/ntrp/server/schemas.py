@@ -246,18 +246,11 @@ class SchedulerCountStateStatusResponse(BaseModel):
     oldest_updated_at: str | None = None
 
 
-class SchedulerChatExtractionStatusResponse(BaseModel):
-    total: int
-    pending: int
-    oldest_pending_updated_at: str | None = None
-
-
 class SchedulerStoreStatusResponse(BaseModel):
     observed_at: str
     tasks: SchedulerTaskStatusResponse
     event_queue: SchedulerEventQueueStatusResponse
     count_state: SchedulerCountStateStatusResponse
-    chat_extraction: SchedulerChatExtractionStatusResponse
 
 
 class SchedulerStatusResponse(BaseModel):
@@ -413,6 +406,12 @@ class CreateAutomationRequest(BaseModel):
     every: str | None = None
     event_type: str | None = None
     lead_minutes: int | str | None = None
+    idle_minutes: int | None = None
+    every_n: int | None = None
+    actions: list[str] | str | None = None
+    object_types: list[str] | str | None = None
+    statuses: list[str] | str | None = None
+    scopes: list[str] | str | None = None
     writable: bool = False
     start: str | None = None
     end: str | None = None
@@ -430,6 +429,12 @@ class UpdateAutomationRequest(BaseModel):
     every: str | None = None
     event_type: str | None = None
     lead_minutes: int | str | None = None
+    idle_minutes: int | None = None
+    every_n: int | None = None
+    actions: list[str] | str | None = None
+    object_types: list[str] | str | None = None
+    statuses: list[str] | str | None = None
+    scopes: list[str] | str | None = None
     start: str | None = None
     end: str | None = None
     writable: bool | None = None

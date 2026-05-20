@@ -7,7 +7,6 @@ import { formatReasoningEffort, parseReasoningEffortArg, reasoningEfforts, reaso
 import {
   branchSession,
   clearSession,
-  purgeMemory,
   compactContext,
   startIndexing,
   listSessions,
@@ -186,21 +185,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
       clearMessages();
     } catch (error) {
       addMessage({ role: "error", content: `Failed to clear session: ${error}` });
-    }
-    return true;
-  },
-
-  purge: async ({ config, addMessage }, args) => {
-    if (args[0] !== "confirm") {
-      addMessage({ role: "status", content: "This will delete all memory facts and links. Type /purge confirm to proceed." });
-      return true;
-    }
-    try {
-      const result = await purgeMemory(config);
-      const { facts, links } = result.deleted;
-      addMessage({ role: "status", content: `Memory purged: ${facts} facts, ${links} links` });
-    } catch (error) {
-      addMessage({ role: "error", content: `Failed to purge: ${error}` });
     }
     return true;
   },

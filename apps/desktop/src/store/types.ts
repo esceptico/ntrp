@@ -383,7 +383,9 @@ export interface Actions {
     total?: number;
     cache_read?: number;
     cache_write?: number;
+    cost?: number;
     messageCount?: number;
+    scope?: "run" | "tool";
   }) => void;
   /** Replace the budget-relevant fields without touching cumulative spend.
    *  Used when loading a session's persisted state — last prompt size and

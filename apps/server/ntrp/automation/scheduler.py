@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, TimeTrigger
+from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, KnowledgeEventTrigger, TimeTrigger
 from ntrp.constants import (
     SCHEDULER_DEDUP_TTL,
     SCHEDULER_EVENT_MAX_RETRIES,
@@ -16,7 +16,7 @@ from ntrp.constants import (
 )
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SSEEvent
-from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
+from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, KnowledgeObjectChanged, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry
@@ -397,7 +397,15 @@ class Scheduler:
         if not handler:
             raise RuntimeError(f"No handler registered for '{automation.handler}'")
         _logger.info("Executing internal automation %s: %s", automation.task_id, automation.description[:80])
-        ctx = context if isinstance(context, dict) else (json.loads(context) if context else None)
+        if isinstance(context, dict):
+            ctx = context
+        elif context:
+            try:
+                ctx = json.loads(context)
+            except json.JSONDecodeError:
+                ctx = {"event_context": context}
+        else:
+            ctx = None
         return await handler(ctx)
 
     async def _run_agent(self, automation: Automation, context: str | dict | None = None) -> str | None:
@@ -493,7 +501,7 @@ class Scheduler:
         event_type = event.event_type
         event_key = event.event_key
         context = event.format_context()
-        automations = await self.store.list_event_triggered(event_type)
+        automations = await self._matching_event_automations(event)
         for automation in automations:
             # Check lead_minutes for event_approaching triggers
             if event_type == EVENT_APPROACHING and isinstance(event, EventApproaching):
@@ -511,6 +519,19 @@ class Scheduler:
             await self.store.enqueue_event(automation.task_id, event_key, context, now)
             _logger.info("Event %s matched automation %s (%s)", event_type, automation.task_id, event_key)
             await self._start_next_queued_event_if_idle(automation.task_id)
+
+    async def _matching_event_automations(self, event: TriggerEvent) -> list[Automation]:
+        if isinstance(event, KnowledgeObjectChanged):
+            automations = await self.store.list_by_trigger_type("knowledge_event")
+            return [
+                automation
+                for automation in automations
+                if any(
+                    isinstance(trigger, KnowledgeEventTrigger) and trigger.matches(event)
+                    for trigger in automation.triggers
+                )
+            ]
+        return await self.store.list_event_triggered(event.event_type)
 
     def schedule_run(self, task_id: str) -> None:
         execution = asyncio.create_task(self._manual_run(task_id))

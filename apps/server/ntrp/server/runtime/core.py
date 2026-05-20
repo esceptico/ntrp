@@ -58,6 +58,7 @@ class Runtime:
             get_stores=lambda: self.stores,
             sync_mcp=lambda config: self.sync_mcp(config),
             is_closing=lambda: self._closing,
+            after_reload=self._after_config_reload,
         )
 
     @property
@@ -156,6 +157,10 @@ class Runtime:
     async def reload_config(self) -> None:
         await self.config_runtime.reload()
 
+    async def _after_config_reload(self) -> None:
+        if self.automation:
+            self.automation.sync_knowledge_event_dispatcher()
+
     async def sync_mcp(self, config: Config | None = None) -> None:
         config = config or self.config
         if self.mcp_manager:
@@ -212,6 +217,7 @@ class Runtime:
             stores=self.stores,
             build_operator_deps=self.build_operator_deps,
             get_memory=lambda: self.memory,
+            get_memory_service=lambda: self.memory_service,
             get_calendar_source=lambda: self.integrations.get_client("calendar"),
             indexer=self.indexer,
         )
@@ -275,6 +281,7 @@ class Runtime:
             enqueue_run_completed=self.stores.outbox.enqueue_run_completed if self.stores else None,
             dispatch_session_message=self.dispatch_session_message,
             memory=self.memory,
+            memory_service=self.memory_service,
             skill_registry=self.skill_registry,
             notifier_service=self.notifier_service,
         )
@@ -285,6 +292,7 @@ class Runtime:
         return OperatorDeps(
             executor=self.executor,
             memory=self.memory,
+            memory_service=self.memory_service,
             config=AgentConfig.from_config(self.config),
             source_details={},
             create_session=self.stores.sessions.create,

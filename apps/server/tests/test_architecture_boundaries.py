@@ -17,7 +17,6 @@ def test_backend_persistence_tables_are_only_referenced_by_owner_modules():
         "automation_event_dedupe": {server_path("ntrp/automation/store.py")},
         "automation_event_queue": {server_path("ntrp/automation/store.py")},
         "automation_count_state": {server_path("ntrp/automation/store.py")},
-        "chat_extraction_state": {server_path("ntrp/automation/store.py")},
         "monitor_state": {server_path("ntrp/monitor/store.py")},
         "memory_events": {
             server_path("ntrp/memory/store/base.py"),

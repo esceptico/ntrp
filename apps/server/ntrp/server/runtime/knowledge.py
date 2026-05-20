@@ -48,8 +48,8 @@ class KnowledgeRuntime:
 
     def tool_services(self) -> dict[str, object]:
         services: dict[str, object] = {}
-        if self.memory:
-            services["memory"] = self.memory
+        if self.memory_service:
+            services["memory"] = self.memory_service
         if self.search_index:
             services["search_index"] = self.search_index
         return services
@@ -81,15 +81,8 @@ class KnowledgeRuntime:
             db_path=self.config.memory_db_path,
             embedding=self.embedding,
             model=self.config.memory_model,
-            enqueue_fact_index_upsert=stores.outbox.enqueue_fact_index_upsert,
-            enqueue_fact_index_delete=stores.outbox.enqueue_fact_index_delete,
         )
-        self.memory_service = MemoryService(
-            self.memory,
-            enqueue_fact_index_upsert=stores.outbox.enqueue_fact_index_upsert,
-            enqueue_fact_index_delete=stores.outbox.enqueue_fact_index_delete,
-            enqueue_memory_index_clear=stores.outbox.enqueue_memory_index_clear,
-        )
+        self.memory_service = MemoryService(self.memory)
         self.memory_search_source = MemorySearchSource(self.memory.db)
 
     async def _close_memory(self) -> None:

@@ -1,5 +1,7 @@
 # Memory Improvement Plan
 
+Status: historical. This document describes the pre-`knowledge_objects` memory system and is kept only as migration/background context. The current architecture is `docs/internal/knowledge-system-architecture.md`; implementation notes are in `docs/internal/knowledge-system-implementation-notes.md`.
+
 Date: 2026-05-01
 
 This plan follows from the live DB review of `~/.ntrp/memory.db` and the current `apps/server/ntrp/memory` implementation.
@@ -1717,13 +1719,11 @@ recall: facts can be found even when no observation is good
 ntrp:
 
 ```text
-apps/server/ntrp/memory/facts.py
-apps/server/ntrp/memory/retrieval.py
-apps/server/ntrp/memory/consolidation.py
-apps/server/ntrp/memory/consolidation_runner.py
-apps/server/ntrp/memory/store/base.py
-apps/server/ntrp/memory/store/observations.py
-apps/server/ntrp/memory/chat_extraction.py
+apps/server/ntrp/knowledge/
+apps/server/ntrp/server/routers/knowledge.py
+apps/server/ntrp/server/runtime/knowledge.py
+apps/server/ntrp/memory/search_source.py
+apps/server/ntrp/tools/memory.py
 ```
 
 Dex prefetch:

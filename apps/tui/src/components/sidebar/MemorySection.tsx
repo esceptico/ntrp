@@ -38,7 +38,7 @@ export function MemorySection({ stats, width }: MemorySectionProps) {
   return (
     <box flexDirection="column">
       <SectionHeader label="MEMORY" />
-      {stats && <MemoryRow label="facts" value={formatCount(stats.fact_count)} width={width} />}
+      {stats && <MemoryRow label="evidence" value={formatCount(stats.fact_count)} width={width} />}
       {stats && <MemoryRow label="patterns" value={formatCount(stats.observation_count)} width={width} />}
     </box>
   );

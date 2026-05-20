@@ -78,6 +78,16 @@ test("switchSession preserves cached preview until canonical history replaces it
       api: {
         request: async (_config: unknown, request: { path: string }) => {
           requests.push(request.path);
+          if (request.path === "/sessions/A/goal") {
+            return {
+              ok: true,
+              status: 200,
+              statusText: "OK",
+              contentType: "application/json",
+              data: { goal: null },
+              text: "",
+            };
+          }
           return await new Promise((resolve) => {
             resolveRequest = resolve;
           });
@@ -124,6 +134,7 @@ test("switchSession preserves cached preview until canonical history replaces it
       text: "",
     });
     await switching;
+    expect(requests).toEqual(["/session/history?session_id=A", "/sessions/A/goal"]);
 
     expect(getState().messages.get("server-a-1")?.content).toBe("canonical A");
     expect(getState().messages.has("a-1")).toBe(false);

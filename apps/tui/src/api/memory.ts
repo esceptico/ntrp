@@ -1,80 +1,55 @@
 import type { Config } from "../types.js";
 import { api } from "./fetch.js";
 
-export interface Fact {
-  id: number;
-  text: string;
-  source_type: string;
-  source_ref: string | null;
-  created_at: string;
-  happened_at: string | null;
-  last_accessed_at: string;
-  access_count: number;
-  consolidated_at: string | null;
-  archived_at: string | null;
-  kind: FactKind;
-  lifetime: FactLifetime;
-  salience: number;
-  confidence: number;
-  expires_at: string | null;
-  pinned_at: string | null;
-  superseded_by_fact_id: number | null;
-  status: FactTrustStatus;
-}
-
-export type FactKind =
-  | "identity"
-  | "preference"
-  | "relationship"
-  | "decision"
-  | "project"
-  | "event"
-  | "artifact"
+export type KnowledgeObjectType =
+  | "source"
+  | "evidence_ref"
+  | "episode"
+  | "fact"
+  | "pattern"
+  | "lesson"
   | "procedure"
-  | "constraint"
-  | "note";
+  | "procedure_candidate"
+  | "artifact"
+  | "action_candidate"
+  | "sink_receipt"
+  | "outcome_feedback";
 
-export type FactLifetime = "durable" | "temporary";
-export type SourceType = "chat" | "explicit";
-export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
-export type FactTrustStatus = Exclude<FactStatus, "all">;
-export type FactAccessed = "never" | "used";
-export type FactLinkType = "semantic" | "entity" | "superseded_by" | "supersedes";
+export type KnowledgeObjectStatus = "draft" | "active" | "approved" | "rejected" | "archived" | "superseded";
 
-export interface FactEntityRef {
+export interface KnowledgeObject {
+  id: number;
+  object_type: KnowledgeObjectType;
+  title: string;
+  text: string;
+  status: KnowledgeObjectStatus;
+  scope: string | null;
+  activation: string;
+  proactiveness_level: string;
+  score: number;
+  source_ids: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  reviewed_at: string | null;
+}
+
+export interface KnowledgeSurface {
   name: string;
-  entity_id: number | null;
+  object_type: KnowledgeObjectType;
+  count: number;
+  description: string;
 }
 
-export interface FactFilters {
-  kind?: FactKind;
-  lifetime?: FactLifetime;
-  sourceType?: SourceType;
-  status?: FactStatus;
-  accessed?: FactAccessed;
-  entity?: string;
-}
-
-export interface FactDetails {
-  fact: Fact;
-  entities: FactEntityRef[];
-  linked_facts: Array<{
-    id: number;
-    text: string;
-    link_type: FactLinkType;
-    weight: number;
+export interface KnowledgeSummary {
+  surfaces: KnowledgeSurface[];
+  next_actions: Array<{
+    title: string;
+    detail: string;
+    activation: string;
+    proactiveness_level: string;
   }>;
-}
-
-export interface FactMetadataUpdate {
-  kind?: FactKind;
-  lifetime?: FactLifetime;
-  salience?: number;
-  confidence?: number;
-  expires_at?: string | null;
-  pinned?: boolean;
-  superseded_by_fact_id?: number | null;
-  archived?: boolean;
+  policy_version: string;
 }
 
 export interface Stats {
@@ -82,300 +57,67 @@ export interface Stats {
   observation_count: number;
 }
 
-export interface Observation {
-  id: number;
-  summary: string;
-  evidence_count: number;
-  access_count: number;
-  created_at: string;
-  updated_at: string;
-  last_accessed_at: string;
-  archived_at: string | null;
-  created_by: string;
-  policy_version: string;
-  evidence_level: ObservationEvidenceLevel;
-}
-
-export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
-
-export type ObservationStatus = "active" | "archived" | "all";
-export type ObservationAccessed = "never" | "used";
-
-export interface ObservationFilters {
-  status?: ObservationStatus;
-  accessed?: ObservationAccessed;
-  minSources?: number;
-  maxSources?: number;
-}
-
-export interface ObservationDetails {
-  observation: Observation;
-  supporting_facts: Fact[];
-  source_fact_ids: number[];
-  missing_source_fact_ids: number[];
-}
-
-export interface MemoryPruneCriteria {
-  older_than_days: number;
-  max_sources: number;
-  limit: number;
-  cutoff: string;
-}
-
-export interface MemoryPruneSummary {
-  total: number;
-  over_1000_chars: number;
-  empty_sources: number;
-}
-
-export interface MemoryPruneCandidate {
-  id: number;
-  summary: string;
-  created_at: string;
-  updated_at: string;
-  access_count: number;
-  evidence_count: number;
-  chars: number;
+export interface ActivationSignal {
+  name: string;
+  value: number | string | boolean | null;
   reason: string;
 }
 
-export interface MemoryPruneDryRun {
-  criteria: MemoryPruneCriteria;
-  summary: MemoryPruneSummary;
-  candidates: MemoryPruneCandidate[];
+export interface ActivationCandidate {
+  object_type: KnowledgeObjectType;
+  object_id: string;
+  title: string;
+  text: string;
+  score: number;
+  reasons: string[];
+  signals: ActivationSignal[];
+  source_ids: string[];
+  activation: string;
+  proactiveness_level: string;
 }
 
-export interface MemoryPruneApplyResult {
-  status: "archived" | "unchanged";
-  archived: number;
-  archived_ids: number[];
-  skipped_ids: number[];
-  candidates: MemoryPruneCandidate[];
-}
-
-export interface MemoryEvent {
-  id: number;
-  created_at: string;
-  actor: string;
-  action: string;
-  target_type: string;
-  target_id: number | null;
-  source_type: string | null;
-  source_ref: string | null;
-  reason: string | null;
-  policy_version: string;
-  details: Record<string, unknown>;
-}
-
-export interface MemoryAccessEvent {
-  id: number;
-  created_at: string;
-  source: string;
-  query: string | null;
-  retrieved_fact_ids: number[];
-  retrieved_observation_ids: number[];
-  injected_fact_ids: number[];
-  injected_observation_ids: number[];
-  omitted_fact_ids: number[];
-  omitted_observation_ids: number[];
-  bundled_fact_ids: number[];
-  formatted_chars: number;
-  policy_version: string;
-  details: Record<string, unknown>;
-}
-
-export interface MemoryStorageHealth {
-  vec_rows: number;
-  missing_vec_rows: number;
-  stale_vec_rows: number;
-  fts_rows: number;
-  missing_fts_rows: number;
-  stale_fts_rows: number;
-}
-
-export interface MemoryAudit {
-  facts: {
-    no_embedding: number;
-  };
-  observations: {
-    no_embedding: number;
-  };
-  storage: {
-    facts: MemoryStorageHealth;
-    observations: MemoryStorageHealth;
-  };
-  relations: Record<string, number>;
-}
-
-export interface MemoryRecallInspectResult {
+export interface ActivationBundle {
   query: string;
-  limit: number;
-  formatted_recall: string | null;
-  facts: Fact[];
-  observations: Observation[];
-  bundled_sources: Record<string, Fact[]>;
+  scope: string | null;
+  task: string | null;
+  budget_chars: number;
+  used_chars: number;
+  candidates: ActivationCandidate[];
+  omitted: ActivationCandidate[];
+  policy_version: string;
+  prompt_context: string | null;
 }
 
-export interface MemoryRepairEmbeddingsResult {
-  apply: boolean;
-  fact_ids: number[];
-  observation_ids: number[];
-  facts_repaired: number;
-  observations_repaired: number;
-}
-
-function factQuery(limit: number, filters?: FactFilters): string {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (filters?.kind) params.set("kind", filters.kind);
-  if (filters?.lifetime) params.set("lifetime", filters.lifetime);
-  if (filters?.sourceType) params.set("source_type", filters.sourceType);
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.accessed) params.set("accessed", filters.accessed);
-  if (filters?.entity?.trim()) params.set("entity", filters.entity.trim());
-  return params.toString();
-}
-
-function observationQuery(limit: number, filters?: ObservationFilters): string {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.accessed) params.set("accessed", filters.accessed);
-  if (filters?.minSources !== undefined) params.set("min_sources", String(filters.minSources));
-  if (filters?.maxSources !== undefined) params.set("max_sources", String(filters.maxSources));
-  return params.toString();
-}
-
-export async function getFacts(config: Config, limit = 50, filters?: FactFilters): Promise<{
-  facts: Fact[];
-  total: number;
-}> {
-  return api.get<{ facts: Fact[]; total: number }>(`${config.serverUrl}/facts?${factQuery(limit, filters)}`);
-}
-
-export async function getFactDetails(config: Config, factId: number, signal?: AbortSignal): Promise<FactDetails> {
-  return api.get<FactDetails>(`${config.serverUrl}/facts/${factId}`, { signal });
-}
-
-export async function updateFact(
-  config: Config,
-  factId: number,
-  text: string
-): Promise<{ fact: Fact; entity_refs: FactEntityRef[] }> {
-  return api.patch(`${config.serverUrl}/facts/${factId}`, { text });
-}
-
-export async function supersedeFact(
-  config: Config,
-  factId: number,
-  text: string
-): Promise<{ old_fact: Fact; new_fact: Fact; entity_refs: FactEntityRef[] }> {
-  return api.post(`${config.serverUrl}/facts/${factId}/supersede`, { text });
-}
-
-export async function updateFactMetadata(
-  config: Config,
-  factId: number,
-  update: FactMetadataUpdate
-): Promise<{ fact: Fact }> {
-  return api.patch<{ fact: Fact }>(`${config.serverUrl}/facts/${factId}/metadata`, update);
-}
-
-export async function deleteFact(
-  config: Config,
-  factId: number
-): Promise<{
-  status: string;
-  fact_id: number;
-  cascaded: { entity_refs: number };
-}> {
-  return api.delete(`${config.serverUrl}/facts/${factId}`);
+export async function getKnowledgeSummary(config: Config): Promise<KnowledgeSummary> {
+  return api.get<KnowledgeSummary>(`${config.serverUrl}/knowledge/summary`);
 }
 
 export async function getStats(config: Config): Promise<Stats> {
-  return api.get<Stats>(`${config.serverUrl}/stats`);
+  const summary = await getKnowledgeSummary(config);
+  const count = (type: KnowledgeObjectType) => summary.surfaces.find((surface) => surface.object_type === type)?.count ?? 0;
+  return {
+    fact_count: count("fact"),
+    observation_count: count("pattern"),
+  };
 }
 
-export async function inspectMemoryRecall(
+export async function listKnowledgeObjects(
+  config: Config,
+  filters: { object_type?: KnowledgeObjectType; status?: KnowledgeObjectStatus; limit?: number; offset?: number } = {},
+): Promise<{ objects: KnowledgeObject[] }> {
+  const params = new URLSearchParams();
+  if (filters.object_type) params.set("object_type", filters.object_type);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.limit != null) params.set("limit", String(filters.limit));
+  if (filters.offset != null) params.set("offset", String(filters.offset));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return api.get<{ objects: KnowledgeObject[] }>(`${config.serverUrl}/knowledge/objects${suffix}`);
+}
+
+export async function inspectKnowledgeActivation(
   config: Config,
   query: string,
-  limit = 5
-): Promise<MemoryRecallInspectResult> {
-  return api.post<MemoryRecallInspectResult>(`${config.serverUrl}/memory/recall/inspect`, { query, limit });
-}
-
-export async function getObservations(config: Config, limit = 50, filters?: ObservationFilters): Promise<{
-  observations: Observation[];
-  total: number;
-}> {
-  return api.get<{ observations: Observation[]; total: number }>(
-    `${config.serverUrl}/observations?${observationQuery(limit, filters)}`
-  );
-}
-
-export async function getObservationDetails(config: Config, observationId: number, signal?: AbortSignal): Promise<ObservationDetails> {
-  return api.get<ObservationDetails>(`${config.serverUrl}/observations/${observationId}`, { signal });
-}
-
-export async function updateObservation(
-  config: Config,
-  observationId: number,
-  summary: string
-): Promise<{
-  observation: Observation;
-}> {
-  return api.patch<{ observation: Observation }>(`${config.serverUrl}/observations/${observationId}`, { summary });
-}
-
-export async function deleteObservation(
-  config: Config,
-  observationId: number
-): Promise<{ status: string }> {
-  return api.delete(`${config.serverUrl}/observations/${observationId}`);
-}
-
-export async function getMemoryPruneDryRun(config: Config): Promise<MemoryPruneDryRun> {
-  return api.post<MemoryPruneDryRun>(`${config.serverUrl}/memory/prune/dry-run`, {});
-}
-
-export async function applyMemoryPrune(
-  config: Config,
-  observationIds: number[],
-  criteria: Pick<MemoryPruneCriteria, "older_than_days" | "max_sources">,
-  allMatching = false
-): Promise<MemoryPruneApplyResult> {
-  return api.post<MemoryPruneApplyResult>(`${config.serverUrl}/memory/prune/apply`, {
-    observation_ids: observationIds,
-    all_matching: allMatching,
-    older_than_days: criteria.older_than_days,
-    max_sources: criteria.max_sources,
-  });
-}
-
-export async function getMemoryEvents(config: Config, limit = 100): Promise<{ events: MemoryEvent[] }> {
-  return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
-}
-
-export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{
-  events: MemoryAccessEvent[];
-  facts?: Fact[];
-  observations?: Observation[];
-}> {
-  return api.get<{ events: MemoryAccessEvent[]; facts?: Fact[]; observations?: Observation[] }>(
-    `${config.serverUrl}/memory/access/events?limit=${limit}&include_records=true`
-  );
-}
-
-export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {
-  return api.get<MemoryAudit>(`${config.serverUrl}/memory/audit`);
-}
-
-export async function repairMemoryEmbeddings(
-  config: Config,
-  apply = false,
-  limit = 100
-): Promise<MemoryRepairEmbeddingsResult> {
-  return api.post<MemoryRepairEmbeddingsResult>(`${config.serverUrl}/memory/repair/embeddings`, { apply, limit });
-}
-
-export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {
-  return api.post<{ status: string; deleted: Record<string, number> }>(`${config.serverUrl}/memory/clear`);
+  limit = 5,
+): Promise<ActivationBundle> {
+  return api.post<ActivationBundle>(`${config.serverUrl}/knowledge/activation/inspect`, { query, limit });
 }

@@ -133,7 +133,7 @@ export function useEntries(): CommandEntry[] {
       label: "Memory",
       icon: Brain,
       run: openMemory,
-      search: "memory facts observations patterns",
+      search: "memory knowledge activation review procedures actions artifacts",
     });
     entries.push({
       id: "open:automations",

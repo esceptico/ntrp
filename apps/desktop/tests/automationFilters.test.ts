@@ -26,9 +26,9 @@ function automation(patch: Partial<Automation>): Automation {
 test("keeps user automations separate from internal automations", () => {
   const user = automation({ task_id: "user", name: "Daily brief" });
   const internal = automation({
-    task_id: "memory-maintenance",
-    name: "Memory Maintenance",
-    handler: "memory_maintenance",
+    task_id: "knowledge-retention",
+    name: "Knowledge Retention",
+    handler: "knowledge_retention",
     builtin: true,
   });
 
@@ -39,16 +39,16 @@ test("keeps user automations separate from internal automations", () => {
   });
 });
 
-test("treats known memory handlers as internal even before builtin metadata is set", () => {
-  const maintenance = automation({
-    task_id: "maintenance",
-    handler: "memory_health",
+test("treats known knowledge handlers as internal even before builtin metadata is set", () => {
+  const health = automation({
+    task_id: "health",
+    handler: "knowledge_health",
     builtin: false,
   });
 
-  expect(splitAutomationsForTabs([maintenance])).toEqual({
+  expect(splitAutomationsForTabs([health])).toEqual({
     user: [],
-    internal: [maintenance],
+    internal: [health],
     channels: [],
   });
 });

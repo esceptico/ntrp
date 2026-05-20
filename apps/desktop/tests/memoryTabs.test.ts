@@ -1,15 +1,14 @@
 import { expect, test } from "bun:test";
-import { advancedMemoryTabsVisible } from "../src/lib/memoryTabs.js";
+import { MEMORY_TABS, memoryTabLabels } from "../src/lib/memoryTabs.js";
 
-test("shows advanced tabs when the row is expanded", () => {
-  expect(advancedMemoryTabsVisible("search", true)).toBe(true);
+test("memory modal exposes explicit knowledge surfaces", () => {
+  expect(MEMORY_TABS.map((tab) => tab.id)).toEqual(["overview", "library", "review", "activation"]);
 });
 
-test("keeps advanced tabs visible for an active advanced pane", () => {
-  expect(advancedMemoryTabsVisible("cleanup", false)).toBe(true);
-});
+test("memory tab labels stay short enough for modal navigation", () => {
+  expect(memoryTabLabels().map((tab) => tab.label)).toEqual(["Overview", "Library", "Review", "Activation"]);
 
-test("collapses advanced tabs for primary panes", () => {
-  expect(advancedMemoryTabsVisible("facts", false)).toBe(false);
+  for (const tab of memoryTabLabels()) {
+    expect(tab.label.length).toBeLessThanOrEqual(10);
+  }
 });
-

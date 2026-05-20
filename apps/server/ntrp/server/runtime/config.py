@@ -21,6 +21,7 @@ class RuntimeConfig:
         get_stores: Callable[[], Stores | None],
         sync_mcp: Callable[[Config], Awaitable[None]],
         is_closing: Callable[[], bool],
+        after_reload: Callable[[], Awaitable[None]] | None = None,
     ):
         self.config = config
         self.service = ConfigService(on_config_change=self.reload)
@@ -30,6 +31,7 @@ class RuntimeConfig:
         self._get_stores = get_stores
         self._sync_mcp = sync_mcp
         self._is_closing = is_closing
+        self._after_reload = after_reload
 
         self._lock = asyncio.Lock()
         self._version = 1
@@ -54,6 +56,8 @@ class RuntimeConfig:
             integrations.sync(config)
             await self._get_knowledge().reload_config(config, self._get_stores())
             await self._sync_mcp(config)
+            if self._after_reload:
+                await self._after_reload()
 
             self.config = config
             self._mark_loaded()

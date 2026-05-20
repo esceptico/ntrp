@@ -17,7 +17,7 @@ from ntrp.core.spawner import (
     _salvage_summary,
     create_spawn_fn,
 )
-from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent
+from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent, TokenUsageEvent
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
 
@@ -295,6 +295,50 @@ async def test_background_spawn_rolls_cost_into_parent_tracker(monkeypatch):
     assert parent_tracker.cost > 0
     assert task.done()
     assert task_id not in bg_registry._tasks
+
+
+@pytest.mark.asyncio
+async def test_spawn_emits_live_token_usage_for_child_response(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(prompt_tokens=10, completion_tokens=2, cache_read_tokens=3),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    parent_tracker = ParentTracker(cost=0.0)
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+        parent_tracker=parent_tracker,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="claude-sonnet-4-6", max_depth=3, current_depth=0)
+
+    await spawn(ctx, "task", system_prompt="sys", tools=[], timeout=1)
+
+    usage_events = [event for event in emitted if isinstance(event, TokenUsageEvent)]
+    assert len(usage_events) == 1
+    assert usage_events[0].run_id == "run-1"
+    assert usage_events[0].usage == {"prompt": 10, "completion": 2, "total": 15, "cache_read": 3, "cache_write": 0}
+    assert usage_events[0].cost == parent_tracker.cost
 
 
 @pytest.mark.asyncio

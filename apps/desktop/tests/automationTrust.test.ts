@@ -23,11 +23,10 @@ function automation(patch: Partial<Automation>): Automation {
   };
 }
 
-test("labels internal memory automation trust level", () => {
-  expect(automationTrustLabel(automation({ handler: "memory_maintenance" }))).toBe("review-only");
-  expect(automationTrustLabel(automation({ handler: "memory_health" }))).toBe("read-only");
-  expect(automationTrustLabel(automation({ handler: "chat_extraction" }))).toBe("writes memory");
-  expect(automationTrustLabel(automation({ handler: "consolidation" }))).toBe("writes memory");
+test("labels internal knowledge automation trust level", () => {
+  expect(automationTrustLabel(automation({ handler: "knowledge_health" }))).toBe("read-only");
+  expect(automationTrustLabel(automation({ handler: "knowledge_retention" }))).toBe("retention");
+  expect(automationTrustLabel(automation({ handler: "knowledge_reflection" }))).toBe("learns context");
 });
 
 test("marks generic writable automations as higher trust", () => {

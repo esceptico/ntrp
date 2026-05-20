@@ -4,18 +4,18 @@ from datetime import UTC, datetime
 
 from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import CountTrigger, IdleTrigger, TimeTrigger, Trigger
+from ntrp.automation.triggers import CountTrigger, IdleTrigger, KnowledgeEventTrigger, TimeTrigger, Trigger
 from ntrp.constants import (
-    BUILTIN_CHAT_EXTRACTION_ID,
-    BUILTIN_CONSOLIDATION_ID,
-    BUILTIN_MEMORY_HEALTH_ID,
-    BUILTIN_MEMORY_MAINTENANCE_ID,
-    DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES,
-    DEFAULT_CONSOLIDATION_IDLE_MINUTES,
-    DEFAULT_EXTRACTION_IDLE_MINUTES,
-    DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
-    DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
-    EXTRACTION_EVERY_N_TURNS,
+    BUILTIN_KNOWLEDGE_HEALTH_ID,
+    BUILTIN_KNOWLEDGE_REFLECTION_ID,
+    BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+    BUILTIN_KNOWLEDGE_RETENTION_ID,
+    DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
+    DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
+    DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
+    DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES,
+    DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES,
+    KNOWLEDGE_REFLECTION_EVERY_N_TURNS,
 )
 from ntrp.logging import get_logger
 
@@ -36,56 +36,73 @@ class BuiltinSpec:
 
 BUILTINS = [
     BuiltinSpec(
-        task_id=BUILTIN_CHAT_EXTRACTION_ID,
-        name="Chat Extraction",
-        description="Extract durable facts from conversations",
+        task_id=BUILTIN_KNOWLEDGE_REFLECTION_ID,
+        name="Knowledge Reflection",
+        description="Reflect durable episodes into lessons, actions, procedures, and artifacts",
         triggers=[
-            CountTrigger(every_n=EXTRACTION_EVERY_N_TURNS),
-            IdleTrigger(idle_minutes=DEFAULT_EXTRACTION_IDLE_MINUTES),
+            KnowledgeEventTrigger(
+                actions=("created",),
+                object_types=("episode",),
+                statuses=("active",),
+            ),
+            CountTrigger(every_n=KNOWLEDGE_REFLECTION_EVERY_N_TURNS),
+            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES),
         ],
-        handler="chat_extraction",
-        cooldown_minutes=DEFAULT_EXTRACTION_IDLE_MINUTES,
+        handler="knowledge_reflection",
+        cooldown_minutes=DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
         writable=True,
     ),
     BuiltinSpec(
-        task_id=BUILTIN_CONSOLIDATION_ID,
-        name="Memory Consolidation",
-        description="Build supported memory patterns from pending facts",
+        task_id=BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+        name="Knowledge Reflection Sweep",
+        description="Run knowledge reflection over active episodes",
         triggers=[
             TimeTrigger(every="30m"),
-            IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
+            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES),
         ],
-        handler="consolidation",
-        cooldown_minutes=DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES,
+        handler="knowledge_reflection",
+        cooldown_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
         writable=True,
     ),
     BuiltinSpec(
-        task_id=BUILTIN_MEMORY_MAINTENANCE_ID,
-        name="Memory Maintenance",
-        description="Find memory review candidates without applying changes",
+        task_id=BUILTIN_KNOWLEDGE_RETENTION_ID,
+        name="Knowledge Retention",
+        description="Archive stale generated knowledge objects",
         triggers=[
             TimeTrigger(at="03:30", days="daily"),
-            IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
+            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES),
         ],
-        handler="memory_maintenance",
-        cooldown_minutes=DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
+        handler="knowledge_retention",
+        cooldown_minutes=DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES,
         writable=False,
     ),
     BuiltinSpec(
-        task_id=BUILTIN_MEMORY_HEALTH_ID,
-        name="Memory Health Audit",
-        description="Read-only memory health and provenance snapshot",
+        task_id=BUILTIN_KNOWLEDGE_HEALTH_ID,
+        name="Knowledge Health Audit",
+        description="Read-only knowledge health and provenance snapshot",
         triggers=[
             TimeTrigger(at="04:00", days="daily"),
         ],
-        handler="memory_health",
-        cooldown_minutes=DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
+        handler="knowledge_health",
+        cooldown_minutes=DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
         writable=False,
     ),
 ]
 
+_CURRENT_BUILTIN_IDS = {spec.task_id for spec in BUILTINS}
+_KNOWLEDGE_HANDLERS = {spec.handler for spec in BUILTINS}
+
 
 async def seed_builtins(store: AutomationStore) -> None:
+    for automation in await store.list_all():
+        if (
+            automation.builtin
+            and automation.handler in _KNOWLEDGE_HANDLERS
+            and automation.task_id not in _CURRENT_BUILTIN_IDS
+        ):
+            await store.delete(automation.task_id)
+            _logger.info("Removed stale builtin automation: %s", automation.task_id)
+
     for spec in BUILTINS:
         existing = await store.get(spec.task_id)
         if existing:

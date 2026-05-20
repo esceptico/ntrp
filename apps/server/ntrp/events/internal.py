@@ -12,22 +12,3 @@ class RunCompleted:
     messages: tuple[dict, ...]
     usage: Usage
     result: str | None
-
-
-# --- Memory ---
-
-
-@dataclass(frozen=True)
-class FactUpdated:
-    fact_id: int
-    text: str
-
-
-@dataclass(frozen=True)
-class FactDeleted:
-    fact_id: int
-
-
-@dataclass(frozen=True)
-class MemoryCleared:
-    pass

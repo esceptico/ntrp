@@ -1,14 +1,17 @@
 import asyncio
 import time
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
+from ntrp.events.sse import StreamResetEvent
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.bus import BusRegistry, stream_record_to_sse_string
+from ntrp.server.bus import BusRegistry, StreamRecord, stream_record_to_sse_string
 from ntrp.server.deps import get_bus_registry, require_automation_service, require_notifier_service
 from ntrp.server.middleware import SSEStreamingResponse
+from ntrp.server.routers.chat import _keepalive
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
@@ -57,6 +60,12 @@ async def create_automation(
             every=request.every,
             event_type=request.event_type,
             lead_minutes=request.lead_minutes,
+            idle_minutes=request.idle_minutes,
+            every_n=request.every_n,
+            actions=request.actions,
+            object_types=request.object_types,
+            statuses=request.statuses,
+            scopes=request.scopes,
             writable=request.writable,
             start=request.start,
             end=request.end,
@@ -75,22 +84,39 @@ async def list_automations(svc: AutomationService = Depends(require_automation_s
 
 
 KEEPALIVE_INTERVAL = 5
-SSE_KEEPALIVE = ": keepalive\n\n"
 AUTOMATION_BUS_KEY = "automation:events"
 
 
-async def _automation_event_stream(bus_registry: BusRegistry):
+async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | None = None):
     bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
-    queue = bus.subscribe()
+    subscription = bus.subscribe_with_replay(after_seq=after_seq) if after_seq is not None else None
+    queue = subscription.queue if subscription is not None else bus.subscribe()
     last_event_at = time.monotonic()
     try:
+        if subscription is not None and subscription.replay_gap:
+            newest_seq = bus.next_seq - 1
+            reset_seq = min(max(after_seq + 1, bus.checkpoint_seq), newest_seq)
+            reset_record = StreamRecord(
+                seq=reset_seq,
+                session_id=bus.session_id,
+                event=StreamResetEvent(reason="replay_gap"),
+            )
+            yield stream_record_to_sse_string(bus.session_id, reset_record)
+            last_event_at = time.monotonic()
+            await asyncio.sleep(0)
+
+        if subscription is not None:
+            for record in subscription.snapshot:
+                yield stream_record_to_sse_string(bus.session_id, record, replay=True)
+                await asyncio.sleep(0)
+
         while True:
             try:
                 record = await asyncio.wait_for(queue.get(), timeout=0.5)
             except TimeoutError:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
                     last_event_at = time.monotonic()
-                    yield SSE_KEEPALIVE
+                    yield _keepalive(AUTOMATION_BUS_KEY, bus.next_seq - 1)
                 continue
 
             if record is None:
@@ -106,9 +132,12 @@ async def _automation_event_stream(bus_registry: BusRegistry):
 
 
 @router.get("/automations/events")
-async def automation_events(bus_registry: BusRegistry = Depends(get_bus_registry)):
+async def automation_events(
+    bus_registry: BusRegistry = Depends(get_bus_registry),
+    after_seq: Annotated[int | None, Query(ge=0)] = None,
+):
     return SSEStreamingResponse(
-        _automation_event_stream(bus_registry),
+        _automation_event_stream(bus_registry, after_seq=after_seq),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -173,6 +202,12 @@ async def update_automation(
             every=request.every,
             event_type=request.event_type,
             lead_minutes=request.lead_minutes,
+            idle_minutes=request.idle_minutes,
+            every_n=request.every_n,
+            actions=request.actions,
+            object_types=request.object_types,
+            statuses=request.statuses,
+            scopes=request.scopes,
             start=request.start,
             end=request.end,
             writable=request.writable,

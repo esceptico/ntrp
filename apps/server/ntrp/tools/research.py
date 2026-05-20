@@ -1,9 +1,10 @@
 from pydantic import BaseModel, Field
 
 from ntrp.agent.ledger import SharedLedger
-from ntrp.constants import USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
+from ntrp.knowledge.activation import KnowledgeActivationService
+from ntrp.knowledge.models import ActivationRequest
 from ntrp.logging import get_logger
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -80,7 +81,10 @@ async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id:
     user_facts = []
     memory = ctx.services.get("memory")
     if memory:
-        user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
+        bundle = await KnowledgeActivationService(memory).inspect(
+            ActivationRequest(query="user identity preferences current projects", limit=5, task="research_context")
+        )
+        user_facts = bundle.candidates
 
     return RESEARCH_SYSTEM_PROMPT.render(
         base_prompt=RESEARCH_PROMPTS[depth],

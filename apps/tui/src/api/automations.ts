@@ -26,7 +26,15 @@ export interface CountTrigger {
   every_n: number;
 }
 
-export type Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger;
+export interface KnowledgeEventTrigger {
+  type: "knowledge_event";
+  actions?: string[];
+  object_types?: string[];
+  statuses?: string[];
+  scopes?: string[];
+}
+
+export type Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger | KnowledgeEventTrigger;
 
 export interface Automation {
   task_id: string;
@@ -50,7 +58,7 @@ export interface CreateAutomationData {
   name: string;
   description: string;
   model?: string;
-  trigger_type?: "time" | "event";
+  trigger_type?: "time" | "event" | "idle" | "count" | "knowledge_event";
   at?: string;
   days?: string;
   every?: string;
@@ -58,6 +66,12 @@ export interface CreateAutomationData {
   end?: string;
   event_type?: string;
   lead_minutes?: number;
+  idle_minutes?: number;
+  every_n?: number;
+  actions?: string[] | string;
+  object_types?: string[] | string;
+  statuses?: string[] | string;
+  scopes?: string[] | string;
   writable: boolean;
   triggers?: Trigger[];
   cooldown_minutes?: number;
@@ -67,7 +81,7 @@ export interface UpdateAutomationData {
   name?: string;
   description?: string;
   model?: string;
-  trigger_type?: "time" | "event";
+  trigger_type?: "time" | "event" | "idle" | "count" | "knowledge_event";
   at?: string;
   days?: string;
   every?: string;
@@ -75,6 +89,12 @@ export interface UpdateAutomationData {
   end?: string;
   event_type?: string;
   lead_minutes?: number;
+  idle_minutes?: number;
+  every_n?: number;
+  actions?: string[] | string;
+  object_types?: string[] | string;
+  statuses?: string[] | string;
+  scopes?: string[] | string;
   writable?: boolean;
   triggers?: Trigger[];
   cooldown_minutes?: number;
@@ -182,4 +202,3 @@ export function connectAutomationEvents(
 
   return () => controller.abort();
 }
-

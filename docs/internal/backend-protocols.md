@@ -25,7 +25,6 @@ The tables below are implementation details of their owning store. Other modules
 | `automation_event_dedupe` | `ntrp.automation.store` | `AutomationStore.claim_event()` and event dedupe helpers |
 | `automation_event_queue` | `ntrp.automation.store` | `AutomationStore` event queue methods |
 | `automation_count_state` | `ntrp.automation.store` | `AutomationStore` count trigger methods |
-| `chat_extraction_state` | `ntrp.automation.store` | Chat extraction cursor methods |
 | `monitor_state` | `ntrp.monitor.store` | `MonitorStateStore` namespace state methods |
 
 There is an architecture test that checks these table names do not appear in production modules outside their owner files. Tests may still inspect tables directly when they are exercising a store as a persistence adapter.
@@ -141,10 +140,9 @@ Current event types:
 
 | Event type | Producers | Runtime handler |
 | --- | --- | --- |
-| `run.completed` | Chat runs, operator runs, CLI runs | Record chat extraction activity, then call `Scheduler.handle_run_completed()` |
-| `memory.fact.index.upsert` | Fact create/update paths | Upsert the fact into the search index |
-| `memory.fact.index.delete` | Fact delete paths | Delete the fact from the search index |
-| `memory.index.clear` | Memory clear path | Clear memory rows from the search index |
+| `run.completed` | Chat runs, operator runs, CLI runs | Call `Scheduler.handle_run_completed()`, then capture source/evidence/episode objects in `knowledge_objects` |
+
+Search indexing now scans canonical knowledge objects through `MemorySearchSource`; the old `memory.fact.index.*` outbox events were removed with the fact/observation service surface.
 
 Processing model:
 

@@ -1,11 +1,8 @@
 from dataclasses import asdict
 
 from ntrp.agent import Usage
-from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared, RunCompleted
+from ntrp.events.internal import RunCompleted
 
-OUTBOX_FACT_INDEX_DELETE = "memory.fact.index.delete"
-OUTBOX_FACT_INDEX_UPSERT = "memory.fact.index.upsert"
-OUTBOX_MEMORY_INDEX_CLEAR = "memory.index.clear"
 OUTBOX_RUN_COMPLETED = "run.completed"
 
 
@@ -33,23 +30,3 @@ def run_completed_from_payload(payload: dict) -> RunCompleted:
         ),
         result=payload.get("result"),
     )
-
-
-def fact_index_upsert_payload(fact_id: int, text: str) -> dict:
-    return {"fact_id": fact_id, "text": text}
-
-
-def fact_updated_from_payload(payload: dict) -> FactUpdated:
-    return FactUpdated(fact_id=int(payload["fact_id"]), text=payload["text"])
-
-
-def fact_index_delete_payload(fact_id: int) -> dict:
-    return {"fact_id": fact_id}
-
-
-def fact_deleted_from_payload(payload: dict) -> FactDeleted:
-    return FactDeleted(fact_id=int(payload["fact_id"]))
-
-
-def memory_cleared_from_payload(_payload: dict) -> MemoryCleared:
-    return MemoryCleared()

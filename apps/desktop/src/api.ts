@@ -123,7 +123,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number; cost: number }; context_input_tokens?: number | null; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
   | { type: "RUN_ERROR"; run_id: string; message: string }
-  | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number }
+  | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool" }
   | { type: "thinking"; status: string }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
@@ -148,6 +148,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
   | {
       type: "background_task";
+      event_id?: string | null;
       task_id: string;
       session_id?: string;
       run_id?: string | null;
@@ -155,9 +156,12 @@ export type ServerEvent = CommonServerEventFields & (
       status: "started" | "activity" | "completed" | "failed" | "cancelled" | "interrupted" | "cancel_requested" | string;
       detail?: string | null;
       result_ref?: string | null;
+      model_visible?: boolean;
+      ui_visible?: boolean;
       terminal?: boolean;
     }
   | { type: "stream_reset"; reason: "replay_gap" | string }
+  | { type: "stream_keepalive"; latest_seq: number }
   | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
   | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status?: string; summary?: string; depth?: number }
   | { type: "task_finished"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
@@ -435,375 +439,194 @@ export async function permanentlyDeleteSessionApi(config: AppConfig, sessionId: 
   });
 }
 
-// ─── Memory ──────────────────────────────────────────────────────────
+// ─── Knowledge ───────────────────────────────────────────────────────
 
-export type FactKind =
-  | "identity"
-  | "preference"
-  | "relationship"
-  | "decision"
-  | "project"
-  | "event"
-  | "artifact"
+export type KnowledgeObjectType =
+  | "source"
+  | "evidence_ref"
+  | "episode"
+  | "fact"
+  | "pattern"
+  | "lesson"
   | "procedure"
-  | "constraint"
-  | "note";
+  | "procedure_candidate"
+  | "artifact"
+  | "action_candidate"
+  | "sink_receipt"
+  | "outcome_feedback";
 
-export type FactLifetime = "durable" | "temporary";
-export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
-export type FactTrustStatus = Exclude<FactStatus, "all">;
+export type KnowledgeObjectStatus = "draft" | "active" | "approved" | "rejected" | "archived" | "superseded";
 
-export interface Fact {
+export interface KnowledgeObject {
   id: number;
+  object_type: KnowledgeObjectType;
+  title: string;
   text: string;
-  source_type: string;
-  source_ref: string | null;
-  source_ref_parts: FactSourceRefParts | null;
+  status: KnowledgeObjectStatus;
+  scope: string | null;
+  activation: string;
+  proactiveness_level: string;
+  score: number;
+  source_ids: string[];
+  metadata: Record<string, unknown>;
   created_at: string;
-  happened_at: string | null;
-  last_accessed_at: string;
-  access_count: number;
-  consolidated_at: string | null;
-  archived_at: string | null;
-  kind: FactKind;
-  lifetime: FactLifetime;
-  salience: number;
-  confidence: number;
-  expires_at: string | null;
-  pinned_at: string | null;
-  valid_from: string | null;
-  valid_until: string | null;
-  superseded_by_fact_id: number | null;
-  status: FactTrustStatus;
+  updated_at: string;
+  reviewed_at: string | null;
 }
 
-export type FactSourceRefParts =
-  | {
-      kind: "chat_segment";
-      session_id: string;
-      message_start: number;
-      message_end: number;
-    }
-  | {
-      kind: string;
-      [key: string]: unknown;
-    };
-
-export interface FactEntityRef {
+export interface KnowledgeSurface {
   name: string;
-  entity_id: number | null;
+  object_type: KnowledgeObjectType;
+  count: number;
+  description: string;
 }
 
-export type FactLinkType = "superseded_by" | "supersedes";
-
-export interface LinkedFact {
-  id: number;
-  text: string;
-  link_type: FactLinkType;
-  weight: number;
+export interface KnowledgeNextAction {
+  title: string;
+  detail: string;
+  activation: string;
+  proactiveness_level: string;
 }
 
-export interface FactDetail {
-  fact: Fact;
-  entities: FactEntityRef[];
-  linked_facts: LinkedFact[];
-}
-
-export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
-
-export interface Observation {
-  id: number;
-  summary: string;
-  evidence_count: number;
-  access_count: number;
-  created_at: string;
-  updated_at: string;
-  last_accessed_at: string;
-  archived_at: string | null;
-  created_by: string | null;
-  policy_version: string | null;
-  evidence_level: ObservationEvidenceLevel;
-}
-
-export interface FactListFilters {
-  limit?: number;
-  offset?: number;
-  kind?: FactKind;
-  status?: FactStatus;
-  accessed?: "never" | "used";
-  entity?: string;
-}
-
-export async function listFactsApi(
-  config: AppConfig,
-  filters: FactListFilters = {},
-): Promise<{ facts: Fact[]; total: number }> {
-  const qs = new URLSearchParams();
-  qs.set("limit", String(filters.limit ?? 100));
-  if (filters.offset) qs.set("offset", String(filters.offset));
-  if (filters.kind) qs.set("kind", filters.kind);
-  if (filters.status) qs.set("status", filters.status);
-  if (filters.accessed) qs.set("accessed", filters.accessed);
-  if (filters.entity?.trim()) qs.set("entity", filters.entity.trim());
-  return apiWithConfig(config, `/facts?${qs.toString()}`, { timeout: 5000 } as RequestInit & { timeout: number });
-}
-
-export async function updateFactTextApi(config: AppConfig, id: number, text: string): Promise<{ fact: Fact }> {
-  return apiWithConfig(config, `/facts/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ text }),
-  });
-}
-
-export async function getFactApi(config: AppConfig, id: number): Promise<FactDetail> {
-  return apiWithConfig(config, `/facts/${id}`);
-}
-
-export async function supersedeFactApi(
-  config: AppConfig,
-  id: number,
-  text: string,
-): Promise<{ old_fact: Fact; new_fact: Fact; entity_refs: FactEntityRef[] }> {
-  return apiWithConfig(config, `/facts/${id}/supersede`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
-}
-
-export interface FactMetadataUpdate {
-  kind?: FactKind;
-  lifetime?: FactLifetime;
-  salience?: number;
-  confidence?: number;
-  expires_at?: string | null;
-  pinned?: boolean;
-  superseded_by_fact_id?: number | null;
-  archived?: boolean;
-}
-
-export async function updateFactMetadataApi(
-  config: AppConfig,
-  id: number,
-  payload: FactMetadataUpdate,
-): Promise<{ fact: Fact }> {
-  return apiWithConfig(config, `/facts/${id}/metadata`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteFactApi(config: AppConfig, id: number): Promise<void> {
-  await apiWithConfig(config, `/facts/${id}`, { method: "DELETE" });
-}
-
-export interface ObservationListFilters {
-  limit?: number;
-  offset?: number;
-  status?: "active" | "archived" | "all";
-  accessed?: "never" | "used";
-  minSources?: number;
-  maxSources?: number;
-}
-
-export async function listObservationsApi(
-  config: AppConfig,
-  filters: ObservationListFilters = {},
-): Promise<{ observations: Observation[]; total: number }> {
-  const qs = new URLSearchParams();
-  qs.set("limit", String(filters.limit ?? 100));
-  if (filters.offset) qs.set("offset", String(filters.offset));
-  if (filters.status) qs.set("status", filters.status);
-  if (filters.accessed) qs.set("accessed", filters.accessed);
-  if (filters.minSources !== undefined) qs.set("min_sources", String(filters.minSources));
-  if (filters.maxSources !== undefined) qs.set("max_sources", String(filters.maxSources));
-  return apiWithConfig(config, `/observations?${qs.toString()}`, { timeout: 5000 } as RequestInit & { timeout: number });
-}
-
-export async function updateObservationSummaryApi(
-  config: AppConfig,
-  id: number,
-  summary: string,
-): Promise<{ observation: Observation }> {
-  return apiWithConfig(config, `/observations/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ summary }),
-  });
-}
-
-export async function deleteObservationApi(config: AppConfig, id: number): Promise<void> {
-  await apiWithConfig(config, `/observations/${id}`, { method: "DELETE" });
-}
-
-export interface ObservationDetail {
-  observation: Observation;
-  supporting_facts: Fact[];
-  source_fact_ids: number[];
-  missing_source_fact_ids: number[];
-}
-
-export async function getObservationApi(config: AppConfig, id: number): Promise<ObservationDetail> {
-  return apiWithConfig(config, `/observations/${id}`);
-}
-
-// ─── Memory observability / review ───────────────────────────────────
-
-export interface MemoryStats {
-  fact_count: number;
-  observation_count: number;
-}
-
-export interface MemoryStorageHealth {
-  vec_rows: number;
-  missing_vec_rows: number;
-  stale_vec_rows: number;
-  fts_rows: number;
-  missing_fts_rows: number;
-  stale_fts_rows: number;
-}
-
-export interface MemoryAudit {
-  facts: { no_embedding: number };
-  observations: { no_embedding: number };
-  storage: {
-    facts: MemoryStorageHealth;
-    observations: MemoryStorageHealth;
-  };
-  relations: Record<string, number>;
-}
-
-export interface MemoryEvent {
-  id: number;
-  created_at: string;
-  actor: string;
-  action: string;
-  target_type: string;
-  target_id: number | null;
-  source_type: string | null;
-  source_ref: string | null;
-  reason: string | null;
+export interface KnowledgeSummary {
+  surfaces: KnowledgeSurface[];
+  next_actions: KnowledgeNextAction[];
   policy_version: string;
-  details: Record<string, unknown>;
 }
 
-export interface MemoryAccessEvent {
-  id: number;
-  created_at: string;
-  source: string;
-  query: string | null;
-  retrieved_fact_ids: number[];
-  retrieved_observation_ids: number[];
-  injected_fact_ids: number[];
-  injected_observation_ids: number[];
-  omitted_fact_ids: number[];
-  omitted_observation_ids: number[];
-  bundled_fact_ids: number[];
-  formatted_chars: number;
-  policy_version: string;
-  details: Record<string, unknown>;
-}
-
-export interface MemoryPruneCriteria {
-  older_than_days: number;
-  max_sources: number;
-  limit: number;
-  cutoff: string;
-}
-
-export interface MemoryPruneSummary {
-  total: number;
-  over_1000_chars: number;
-  empty_sources: number;
-}
-
-export interface MemoryPruneCandidate {
-  id: number;
-  summary: string;
-  created_at: string;
-  updated_at: string;
-  access_count: number;
-  evidence_count: number;
-  chars: number;
+export interface ActivationSignal {
+  name: string;
+  value: number | string | boolean | null;
   reason: string;
 }
 
-export interface MemoryPruneDryRun {
-  criteria: MemoryPruneCriteria;
-  summary: MemoryPruneSummary;
-  candidates: MemoryPruneCandidate[];
+export interface ActivationCandidate {
+  object_type: KnowledgeObjectType;
+  object_id: string;
+  title: string;
+  text: string;
+  score: number;
+  reasons: string[];
+  signals: ActivationSignal[];
+  source_ids: string[];
+  activation: string;
+  proactiveness_level: string;
 }
 
-export interface MemoryPruneApplyResult {
-  status: "archived" | "unchanged";
-  archived: number;
-  archived_ids: number[];
-  skipped_ids: number[];
-  candidates: MemoryPruneCandidate[];
-}
-
-export interface MemoryRecallInspectResult {
+export interface ActivationBundle {
   query: string;
-  limit: number;
-  formatted_recall: string | null;
-  facts: Fact[];
-  observations: Observation[];
-  bundled_sources: Record<string, Fact[]>;
-  fact_reasons: Record<string, string[]>;
-  observation_reasons: Record<string, string[]>;
+  scope: string | null;
+  task: string | null;
+  budget_chars: number;
+  used_chars: number;
+  candidates: ActivationCandidate[];
+  omitted: ActivationCandidate[];
+  policy_version: string;
+  prompt_context: string | null;
 }
 
-export async function getMemoryStatsApi(config: AppConfig): Promise<MemoryStats> {
-  return apiWithConfig(config, "/stats");
+export interface KnowledgeSourceTrace {
+  source_id: string;
+  object: KnowledgeObject | null;
 }
 
-export async function getMemoryAuditApi(config: AppConfig): Promise<MemoryAudit> {
-  return apiWithConfig(config, "/memory/audit");
+export interface KnowledgeSourceTraceResult {
+  object: KnowledgeObject;
+  sources: KnowledgeSourceTrace[];
+  policy_version: string;
 }
 
-export async function listMemoryEventsApi(
-  config: AppConfig,
-  limit = 100,
-  filters: { action?: string } = {},
-): Promise<{ events: MemoryEvent[] }> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (filters.action) params.set("action", filters.action);
-  return apiWithConfig(config, `/memory/events?${params.toString()}`);
+export interface KnowledgePruneResult {
+  candidates: KnowledgeObject[];
+  archived: KnowledgeObject[];
+  policy_version: string;
 }
 
-export async function listMemoryAccessEventsApi(
-  config: AppConfig,
-  limit = 100,
-): Promise<{ events: MemoryAccessEvent[]; facts?: Fact[]; observations?: Observation[] }> {
-  return apiWithConfig(config, `/memory/access/events?limit=${limit}&include_records=true`);
-}
-
-export async function inspectMemoryRecallApi(
+export async function inspectKnowledgeActivationApi(
   config: AppConfig,
   query: string,
   limit = 5,
-): Promise<MemoryRecallInspectResult> {
-  return apiWithConfig(config, "/memory/recall/inspect", {
+): Promise<ActivationBundle> {
+  return apiWithConfig(config, "/knowledge/activation/inspect", {
     method: "POST",
     body: JSON.stringify({ query, limit }),
   });
 }
 
-export async function getMemoryPruneDryRunApi(config: AppConfig): Promise<MemoryPruneDryRun> {
-  return apiWithConfig(config, "/memory/prune/dry-run", {
+export async function getKnowledgeSummaryApi(config: AppConfig): Promise<KnowledgeSummary> {
+  return apiWithConfig(config, "/knowledge/summary");
+}
+
+export async function listKnowledgeObjectsApi(
+  config: AppConfig,
+  filters: { object_type?: KnowledgeObjectType; status?: KnowledgeObjectStatus; limit?: number; offset?: number } = {},
+): Promise<{ objects: KnowledgeObject[] }> {
+  const params = new URLSearchParams();
+  if (filters.object_type) params.set("object_type", filters.object_type);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.limit != null) params.set("limit", String(filters.limit));
+  if (filters.offset != null) params.set("offset", String(filters.offset));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/objects${suffix}`);
+}
+
+export async function updateKnowledgeObjectApi(
+  config: AppConfig,
+  id: number,
+  patch: Partial<Pick<KnowledgeObject, "status" | "title" | "text" | "scope" | "activation" | "proactiveness_level" | "score" | "source_ids" | "metadata">>,
+): Promise<{ object: KnowledgeObject }> {
+  return apiWithConfig(config, `/knowledge/objects/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function getKnowledgeObjectSourcesApi(config: AppConfig, id: number): Promise<KnowledgeSourceTraceResult> {
+  return apiWithConfig(config, `/knowledge/objects/${id}/sources`);
+}
+
+export async function reflectKnowledgeApi(config: AppConfig): Promise<{ created: KnowledgeObject[]; skipped: number; policy_version: string }> {
+  return apiWithConfig(config, "/knowledge/processors/reflect", {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export async function applyMemoryPruneApi(
+export async function pruneKnowledgeApi(
   config: AppConfig,
-  payload: {
-    observation_ids?: number[];
-    all_matching?: boolean;
-    older_than_days: number;
-    max_sources: number;
-  },
-): Promise<MemoryPruneApplyResult> {
-  return apiWithConfig(config, "/memory/prune/apply", {
+  payload: { older_than_days?: number; limit?: number; apply?: boolean } = {},
+): Promise<KnowledgePruneResult> {
+  return apiWithConfig(config, "/knowledge/processors/prune", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function renderKnowledgeArtifactApi(
+  config: AppConfig,
+  payload: { title: string; object_ids: number[]; scope?: string | null },
+): Promise<{ object: KnowledgeObject }> {
+  return apiWithConfig(config, "/knowledge/artifacts/render", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function publishKnowledgeArtifactApi(
+  config: AppConfig,
+  payload: { artifact_id: number; sink: string; sink_ref?: string | null },
+): Promise<{ receipt: KnowledgeObject }> {
+  return apiWithConfig(config, "/knowledge/artifacts/publish", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function recordKnowledgeFeedbackApi(
+  config: AppConfig,
+  payload: { target_object_id?: number | null; query?: string | null; signal: string; detail?: string | null; score_delta?: number },
+): Promise<{ object: KnowledgeObject }> {
+  return apiWithConfig(config, "/knowledge/feedback", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -1243,7 +1066,7 @@ export async function listToolsApi(config: AppConfig): Promise<{ tools: ToolMeta
 
 // ─── Automations ───────────────────────────────────────────────────
 
-export type AutomationTriggerType = "time" | "event" | "idle" | "count";
+export type AutomationTriggerType = "time" | "event" | "idle" | "count" | "knowledge_event";
 
 export interface AutomationTrigger {
   type: AutomationTriggerType;
@@ -1259,8 +1082,14 @@ export interface AutomationTrigger {
   // Idle
   idle_minutes?: number;
   // Count
+  every_n?: number;
   threshold?: number;
   scope?: string;
+  // Knowledge event
+  actions?: string[];
+  object_types?: string[];
+  statuses?: string[];
+  scopes?: string[];
 }
 
 export type AutomationKind = "automation" | "loop";
@@ -1302,6 +1131,12 @@ export interface CreateAutomationPayload {
   every?: string;
   event_type?: string;
   lead_minutes?: number | string;
+  idle_minutes?: number;
+  every_n?: number;
+  actions?: string[] | string;
+  object_types?: string[] | string;
+  statuses?: string[] | string;
+  scopes?: string[] | string;
   writable?: boolean;
   start?: string;
   end?: string;

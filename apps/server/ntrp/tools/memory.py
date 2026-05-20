@@ -1,14 +1,18 @@
-from datetime import datetime
-
 from pydantic import BaseModel, Field
 
-from ntrp.memory.formatting import format_memory_context_render, model_memory_context
-from ntrp.memory.models import FactKind, FactLifetime, SourceType
+from ntrp.knowledge.activation import KnowledgeActivationService
+from ntrp.knowledge.models import (
+    ActivationRequest,
+    KnowledgeObjectCreate,
+    KnowledgeObjectStatus,
+    KnowledgeObjectType,
+    KnowledgeObjectUpdate,
+)
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 
-RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
+RECALL_DESCRIPTION = """Recall stored knowledge about a topic or entity.
 
 WHEN TO USE:
 - Before answering questions about the user, their preferences, people they know, or past conversations
@@ -16,41 +20,33 @@ WHEN TO USE:
 - Before asking the user something they may have already told you
 - When a topic comes up that might have stored context (projects, people, plans, opinions)
 
-The system prompt has contextual memory only — recall() searches the full store when this turn needs more.
+The system prompt has activated knowledge only — recall() searches the full knowledge store when this turn needs more.
 
-PREFER recall() FOR: Known facts, user preferences, stored knowledge, past context
+PREFER recall() FOR: Known facts, user preferences, stored knowledge, lessons, procedures, artifacts, and past context
 PREFER source tools FOR: Finding new info in email, files, or web pages; use search_text/read_file for local files"""
 
-FORGET_DESCRIPTION = "Delete facts from memory by semantic search."
+FORGET_DESCRIPTION = "Archive knowledge objects by semantic search."
 
-REMEMBER_DESCRIPTION = """Store a fact in memory for future recall.
+REMEMBER_DESCRIPTION = """Store a knowledge object for future activation.
 
 WHEN TO USE:
 - After learning something important about the user
 - After discovering a key fact from email, files, or connected services
 - To record user preferences or decisions
 
-IMPORTANT: Only store facts that would be useful to recall in 6+ months.
+IMPORTANT: Only store knowledge that would be useful to recall in 6+ months.
 BAD: "Python is a programming language" (not user-specific)"""
 
 
 class RememberInput(BaseModel):
-    fact: str = Field(description="The fact to remember (natural language).")
-    kind: FactKind = Field(
-        default=FactKind.NOTE,
-        description="Fact type: identity, preference, relationship, decision, project, event, artifact, procedure, constraint, or note.",
-    )
-    lifetime: FactLifetime = Field(
-        default=FactLifetime.DURABLE,
-        description="How long this fact should remain active: durable or temporary.",
-    )
+    fact: str = Field(description="The knowledge to remember (natural language).")
+    kind: str = Field(default="note", description="Knowledge type/scope label.")
+    lifetime: str = Field(default="durable", description="How long this should remain active: durable or temporary.")
     salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in the stated fact.")
     entities: list[str] | None = Field(default=None, description="Concrete entity names in the fact, including User.")
     source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
-    happened_at: str | None = Field(
-        default=None, description="ISO timestamp of when the event occurred (for temporal linking)."
-    )
+    happened_at: str | None = Field(default=None, description="ISO timestamp of when the event occurred.")
     expires_at: str | None = Field(default=None, description="ISO timestamp when a temporary fact expires.")
 
 
@@ -60,33 +56,32 @@ async def approve_remember(execution: ToolExecution, args: RememberInput) -> App
 
 async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
-    event_time = datetime.fromisoformat(args.happened_at) if args.happened_at else None
-    expires_at = datetime.fromisoformat(args.expires_at) if args.expires_at else None
-
-    result = await memory.remember(
-        text=args.fact,
-        source_type=SourceType.CHAT,
-        source_ref=args.source,
-        happened_at=event_time,
-        kind=args.kind,
-        lifetime=args.lifetime,
-        salience=args.salience,
-        confidence=args.confidence,
-        expires_at=expires_at,
-        entity_names=args.entities,
+    obj = await memory.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title=args.fact[:100],
+            text=args.fact,
+            status=KnowledgeObjectStatus.ACTIVE,
+            scope=args.kind,
+            activation="prompt",
+            proactiveness_level="L0",
+            score=args.salience * 0.2,
+            source_ids=[args.source] if args.source else [],
+            metadata={
+                "kind": args.kind,
+                "lifetime": args.lifetime,
+                "salience": args.salience,
+                "confidence": args.confidence,
+                "entities": args.entities or [],
+                "happened_at": args.happened_at,
+                "expires_at": args.expires_at,
+                "tool": "remember",
+            },
+        )
     )
 
-    if not result:
-        return ToolResult(content="Already known — reinforced existing memory.", preview="Already known")
-
-    entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
     return ToolResult(
-        content=(
-            f"Remembered: {result.fact.text}\n"
-            f"Kind: {result.fact.kind}\n"
-            f"Lifetime: {result.fact.lifetime}\n"
-            f"Entities: {entities}"
-        ),
+        content=f"Remembered knowledge #{obj.id}: {obj.text}\nScope: {obj.scope}\nStatus: {obj.status}",
         preview="Remembered",
     )
 
@@ -103,34 +98,14 @@ class RecallInput(BaseModel):
 
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
-    context = await memory.inspect_recall(query=args.query, limit=args.limit)
-    render_context = model_memory_context(context)
-    rendered = format_memory_context_render(
-        query_facts=render_context.facts,
-        query_observations=render_context.observations,
-        bundled_sources=render_context.bundled_sources,
+    bundle = await KnowledgeActivationService(memory).inspect(
+        ActivationRequest(query=args.query, limit=args.limit, task="recall_tool", record_access=True)
     )
-    await memory.record_context_access(
-        source="recall_tool",
-        query=args.query,
-        context=context,
-        formatted_chars=len(rendered.text) if rendered else 0,
-        injected_fact_ids=rendered.fact_ids if rendered else [],
-        injected_observation_ids=rendered.observation_ids if rendered else [],
-        bundled_fact_ids=rendered.bundled_fact_ids if rendered else [],
-        details={"limit": args.limit, "has_context": rendered is not None},
-    )
-    if rendered:
-        await memory.reinforce_accessed_memory(
-            fact_ids=rendered.fact_ids,
-            observation_ids=rendered.observation_ids,
-        )
-        obs_count = len(render_context.observations)
-        fact_count = len(render_context.facts)
-        return ToolResult(content=rendered.text, preview=f"{obs_count} patterns, {fact_count} facts")
+    if bundle.prompt_context:
+        return ToolResult(content=bundle.prompt_context, preview=f"{len(bundle.candidates)} knowledge objects")
     return ToolResult(
-        content="No memory found for this query. Try broader terms or use remember() to store facts first.",
-        preview="0 facts",
+        content="No knowledge found for this query. Try broader terms or use remember() to store durable knowledge first.",
+        preview="0 knowledge objects",
     )
 
 
@@ -144,8 +119,21 @@ async def approve_forget(execution: ToolExecution, args: ForgetInput) -> Approva
 
 async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
-    count = await memory.forget(query=args.query)
-    return ToolResult(content=f"Forgot {count} fact(s) related to '{args.query}'.", preview=f"Forgot {count}")
+    bundle = await KnowledgeActivationService(memory).inspect(
+        ActivationRequest(query=args.query, limit=20, task="forget_tool", include_actions=False)
+    )
+    count = 0
+    for candidate in bundle.candidates:
+        if not candidate.object_id.isdigit():
+            continue
+        await memory.knowledge_objects.update(
+            int(candidate.object_id),
+            KnowledgeObjectUpdate(status=KnowledgeObjectStatus.ARCHIVED),
+        )
+        count += 1
+    return ToolResult(
+        content=f"Archived {count} knowledge object(s) related to '{args.query}'.", preview=f"Archived {count}"
+    )
 
 
 remember_tool = tool(

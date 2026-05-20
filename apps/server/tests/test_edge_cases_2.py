@@ -11,15 +11,6 @@ import ntrp.database as database
 from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.memory.facts import SessionMemory
-from ntrp.memory.formatting import model_memory_context
-from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
-from ntrp.memory.prefetch import (
-    build_memory_prompt_context,
-    filter_prefetch_context,
-    memory_prefetch_query,
-    prefetch_memory_context,
-)
 from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
@@ -77,137 +68,6 @@ def test_time_gap_note_long_gap():
     assert result is not None
     assert result["content_type"] == "time_since_last_message"
     assert "hour" in result["content"]
-
-
-def _fact(fact_id: int, text: str) -> Fact:
-    now = datetime.now(UTC)
-    return Fact(
-        id=fact_id,
-        text=text,
-        embedding=None,
-        source_type=SourceType.EXPLICIT,
-        source_ref=None,
-        created_at=now,
-        happened_at=None,
-        last_accessed_at=now,
-        access_count=0,
-    )
-
-
-def _observation(obs_id: int, summary: str, source_fact_ids: list[int]) -> Observation:
-    now = datetime.now(UTC)
-    return Observation(
-        id=obs_id,
-        summary=summary,
-        embedding=None,
-        evidence_count=len(source_fact_ids),
-        source_fact_ids=source_fact_ids,
-        history=[],
-        created_at=now,
-        updated_at=now,
-        last_accessed_at=now,
-        access_count=0,
-    )
-
-
-def test_memory_prefetch_query_is_conservative():
-    assert memory_prefetch_query("") is None
-    assert memory_prefetch_query("/memory") is None
-    assert memory_prefetch_query("ok") is None
-    assert memory_prefetch_query("check alice project") == "check alice project"
-
-
-def test_filter_prefetch_context_removes_session_memory_duplicates():
-    session_fact = _fact(1, "User prefers concise replies")
-    user_fact = _fact(2, "User works on ntrp")
-    session_observation = _observation(10, "User often reviews backend architecture", [3])
-    session_memory = SessionMemory(
-        observations=[session_observation],
-        user_facts=[session_fact, user_fact],
-    )
-    context = FactContext(
-        facts=[session_fact, user_fact, _fact(4, "Alice owns the launch doc")],
-        observations=[session_observation, _observation(11, "Alice appears in project work", [4])],
-        bundled_sources={
-            10: [_fact(3, "Session source")],
-            11: [_fact(4, "Alice owns the launch doc")],
-        },
-    )
-
-    filtered = filter_prefetch_context(context, session_memory)
-
-    assert [fact.id for fact in filtered.facts] == [4]
-    assert [obs.id for obs in filtered.observations] == [11]
-    assert list(filtered.bundled_sources) == [11]
-
-
-def test_model_memory_context_keeps_facts_only_as_observation_evidence_when_possible():
-    observation = _observation(11, "User wants consolidated memory in prompts", [4])
-    bundled_fact = _fact(4, "User said raw facts are noisy")
-    standalone_fact = _fact(5, "User mentioned a temporary UI bug")
-    context = FactContext(
-        facts=[standalone_fact],
-        observations=[observation],
-        bundled_sources={observation.id: [bundled_fact]},
-    )
-
-    shaped = model_memory_context(context)
-
-    assert shaped.facts == []
-    assert shaped.observations == [observation]
-    assert shaped.bundled_sources == {observation.id: [bundled_fact]}
-
-
-@pytest.mark.asyncio
-async def test_prefetch_memory_context_can_be_prompt_context_without_session_snapshot():
-    observation = _observation(11, "User is redesigning memory around contextual consolidated observations", [4])
-    fact = _fact(4, "User rejected raw atomic prompt memory")
-
-    class Memory:
-        recorded = None
-
-        async def inspect_recall(self, *, query: str, limit: int, query_time=None):
-            assert query == "how should memory work now"
-            assert limit == 3
-            return FactContext(
-                facts=[],
-                observations=[observation],
-                bundled_sources={observation.id: [fact]},
-            )
-
-        async def record_context_access(self, **kwargs):
-            self.recorded = kwargs
-
-    memory = Memory()
-
-    rendered = await prefetch_memory_context(memory, "how should memory work now", source="chat_prefetch")
-
-    assert rendered is not None
-    assert "**Contextual memory**" in rendered
-    assert "contextual consolidated observations" in rendered
-    assert "raw atomic prompt memory" not in rendered
-    assert memory.recorded["injected_observation_ids"] == [observation.id]
-    assert memory.recorded["bundled_fact_ids"] == [fact.id]
-
-
-@pytest.mark.asyncio
-async def test_prompt_memory_does_not_auto_recall_from_weak_user_turn():
-    class Memory:
-        inspected = False
-
-        async def get_session_memory(self, **kwargs):
-            return SessionMemory(observations=[], user_facts=[])
-
-        async def inspect_recall(self, **kwargs):
-            self.inspected = True
-            raise AssertionError("prompt memory should not run implicit recall")
-
-    memory = Memory()
-
-    rendered = await build_memory_prompt_context(memory, "yeah print it pls", source="chat_prompt")
-
-    assert rendered is None
-    assert memory.inspected is False
 
 
 # --- Read connection sees committed writes ---
@@ -383,6 +243,7 @@ async def test_parallel_approvals_resolve_independently():
     their own Future. Resolving one's Future doesn't affect the
     other's — the old single-queue model would have raced."""
     import asyncio
+
     from ntrp.events.sse import ApprovalNeededEvent
 
     emitted: list = []
@@ -421,6 +282,7 @@ async def test_parallel_approvals_resolve_independently():
     pending["t1"].set_result({"approved": False, "result": "no"})
     result1 = await task1
     from ntrp.tools.core.context import Rejection
+
     assert isinstance(result1, Rejection)
     assert result1.feedback == "no"
 

@@ -74,6 +74,38 @@ test("reconnect keeps cursor but does not replay visual animations", () => {
   expect(state.connectionPhase).toBe("connecting");
 });
 
+test("stream connection binds transient projection state to the target session", () => {
+  let state = createInitialChatStreamState();
+
+  state = reduceStreamConnecting(state, "session-1");
+  expect(state.projectionSessionId).toBe("session-1");
+
+  state = {
+    ...state,
+    activeAssistantMessageId: "assistant-1",
+    pendingToolCalls: new Map([
+      [
+        "tool-1",
+        {
+          name: "ReadFile",
+          description: "",
+          argsBuffer: "{}",
+          depth: 0,
+          parentId: null,
+          semanticKind: "tool",
+          startSeq: 10,
+        },
+      ],
+    ]),
+  };
+
+  state = reduceStreamConnecting(state, "session-2");
+
+  expect(state.projectionSessionId).toBe("session-2");
+  expect(state.activeAssistantMessageId).toBeNull();
+  expect(state.pendingToolCalls.size).toBe(0);
+});
+
 test("disconnect rewinds cursor for a half-applied tool call", () => {
   let state = createInitialChatStreamState();
   state = reduceEventCursor(state, { session_id: "session-1", seq: 12 }).state;

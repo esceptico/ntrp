@@ -16,8 +16,8 @@ from ntrp.server.middleware import AuthMiddleware
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
 from ntrp.server.routers.context import router as context_router
-from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
+from ntrp.server.routers.knowledge import router as knowledge_router
 from ntrp.server.routers.loops import router as loops_router
 from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.ops import router as ops_router
@@ -40,9 +40,7 @@ def _loop_target_id(automation: Automation) -> str | None:
     return automation.thread_id or automation.target_session_id
 
 
-def _get_or_create_session_lock(
-    locks: dict[str, asyncio.Lock], session_id: str
-) -> asyncio.Lock:
+def _get_or_create_session_lock(locks: dict[str, asyncio.Lock], session_id: str) -> asyncio.Lock:
     lock = locks.get(session_id)
     if lock is None:
         lock = asyncio.Lock()
@@ -224,8 +222,8 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 
-app.include_router(data_router)
 app.include_router(gmail_router)
+app.include_router(knowledge_router)
 app.include_router(automation_router)
 app.include_router(chat_router)
 app.include_router(context_router)

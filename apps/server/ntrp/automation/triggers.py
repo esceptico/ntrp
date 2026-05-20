@@ -10,7 +10,7 @@ from ntrp.constants import (
     DAYS_IN_WEEK,
     MONITOR_EVENT_APPROACHING_HORIZON_MINUTES,
 )
-from ntrp.events.triggers import EVENT_APPROACHING
+from ntrp.events.triggers import EVENT_APPROACHING, KnowledgeObjectChanged
 
 DAY_NAMES: dict[str, int] = {
     "mon": 0,
@@ -343,7 +343,77 @@ class CountTrigger:
         return None
 
 
-Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger
+def _normalize_string_set(raw: object) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        values = raw.split(",")
+    elif isinstance(raw, (list, tuple, set)):
+        values = list(raw)
+    else:
+        values = [raw]
+    return tuple(sorted({str(value).strip() for value in values if str(value).strip()}))
+
+
+@dataclass
+class KnowledgeEventTrigger:
+    actions: tuple[str, ...] = ()
+    object_types: tuple[str, ...] = ()
+    statuses: tuple[str, ...] = ()
+    scopes: tuple[str, ...] = ()
+    type: Literal["knowledge_event"] = "knowledge_event"
+
+    def __post_init__(self) -> None:
+        self.actions = _normalize_string_set(self.actions)
+        self.object_types = _normalize_string_set(self.object_types)
+        self.statuses = _normalize_string_set(self.statuses)
+        self.scopes = _normalize_string_set(self.scopes)
+
+    def params(self) -> dict:
+        d: dict = {}
+        if self.actions:
+            d["actions"] = list(self.actions)
+        if self.object_types:
+            d["object_types"] = list(self.object_types)
+        if self.statuses:
+            d["statuses"] = list(self.statuses)
+        if self.scopes:
+            d["scopes"] = list(self.scopes)
+        return d
+
+    @property
+    def one_shot(self) -> bool:
+        return False
+
+    @property
+    def label(self) -> str:
+        parts = ["knowledge"]
+        if self.object_types:
+            parts.append(",".join(self.object_types))
+        if self.actions:
+            parts.append(",".join(self.actions))
+        if self.statuses:
+            parts.append(",".join(self.statuses))
+        if self.scopes:
+            parts.append(f"scope:{','.join(self.scopes)}")
+        return " ".join(parts)
+
+    def next_run(self, after: datetime) -> datetime | None:
+        return None
+
+    def matches(self, event: KnowledgeObjectChanged) -> bool:
+        if self.actions and event.action not in self.actions:
+            return False
+        if self.object_types and event.object_type not in self.object_types:
+            return False
+        if self.statuses and event.status not in self.statuses:
+            return False
+        if self.scopes and (event.scope or "") not in self.scopes:
+            return False
+        return True
+
+
+Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger | KnowledgeEventTrigger
 
 
 def _next_run_for_time(trigger: TimeTrigger, now: datetime) -> datetime:
@@ -399,11 +469,31 @@ def _build_count_trigger(
     return CountTrigger(every_n=int(every_n)), None
 
 
+def _build_knowledge_event_trigger(
+    *,
+    actions: object = None,
+    object_types: object = None,
+    statuses: object = None,
+    scopes: object = None,
+    **_kwargs: Any,
+) -> tuple[Trigger, datetime | None]:
+    return (
+        KnowledgeEventTrigger(
+            actions=_normalize_string_set(actions),
+            object_types=_normalize_string_set(object_types),
+            statuses=_normalize_string_set(statuses),
+            scopes=_normalize_string_set(scopes),
+        ),
+        None,
+    )
+
+
 BUILD_DISPATCH: dict[str, BuildHandler] = {
     "time": _build_time_trigger,
     "event": _build_event_trigger,
     "idle": _build_idle_trigger,
     "count": _build_count_trigger,
+    "knowledge_event": _build_knowledge_event_trigger,
 }
 
 
@@ -418,9 +508,13 @@ def build_trigger(
     end: str | None = None,
     idle_minutes: int | None = None,
     every_n: int | None = None,
+    actions: object = None,
+    object_types: object = None,
+    statuses: object = None,
+    scopes: object = None,
 ) -> tuple[Trigger, datetime | None]:
     if (handler := BUILD_DISPATCH.get(trigger_type)) is None:
-        raise ValueError(f"Invalid trigger_type '{trigger_type}'. Use: time, event, idle, count")
+        raise ValueError(f"Invalid trigger_type '{trigger_type}'. Use: time, event, idle, count, knowledge_event")
     return handler(
         at=at,
         days=days,
@@ -431,6 +525,10 @@ def build_trigger(
         end=end,
         idle_minutes=idle_minutes,
         every_n=every_n,
+        actions=actions,
+        object_types=object_types,
+        statuses=statuses,
+        scopes=scopes,
     )
 
 
@@ -459,11 +557,21 @@ def _parse_count_trigger(payload: dict) -> Trigger:
     return CountTrigger(every_n=payload["every_n"])
 
 
+def _parse_knowledge_event_trigger(payload: dict) -> Trigger:
+    return KnowledgeEventTrigger(
+        actions=payload.get("actions"),
+        object_types=payload.get("object_types"),
+        statuses=payload.get("statuses"),
+        scopes=payload.get("scopes"),
+    )
+
+
 PARSE_DISPATCH: dict[str, ParseHandler] = {
     "time": _parse_time_trigger,
     "event": _parse_event_trigger,
     "idle": _parse_idle_trigger,
     "count": _parse_count_trigger,
+    "knowledge_event": _parse_knowledge_event_trigger,
 }
 
 

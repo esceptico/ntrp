@@ -10,11 +10,30 @@ import { type AppConfig } from "../api";
  *  "read_file: tasks.md". `automation_finished` carries the final result
  *  string and signals that the row should drop out of the running list. */
 type AutomationEvent =
-  | { type: "automation_progress"; task_id: string; status: string }
-  | { type: "automation_finished"; task_id: string; result: string | null };
+  | { type: "automation_progress"; task_id: string; status: string; seq?: number }
+  | { type: "automation_finished"; task_id: string; result: string | null; seq?: number }
+  | { type: "stream_keepalive"; latest_seq: number; seq?: number }
+  | { type: "stream_reset"; reason: string; seq?: number };
 
 function headersFor(config: AppConfig): HeadersInit {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
+}
+
+export function automationEventsUrl(serverUrl: string, afterSeq: number | undefined): string {
+  const url = new URL(`${serverUrl}/automations/events`);
+  if (afterSeq !== undefined) {
+    url.searchParams.set("after_seq", String(afterSeq));
+  }
+  return url.toString();
+}
+
+export function reduceAutomationStreamCursor(
+  current: number | undefined,
+  event: Pick<AutomationEvent, "seq" | "type"> & { latest_seq?: number },
+): number | undefined {
+  const next = typeof event.latest_seq === "number" ? event.latest_seq : event.seq;
+  if (typeof next !== "number") return current;
+  return Math.max(current ?? 0, next);
 }
 
 /** Subscribe to `/automations/events` for the lifetime of the app. The
@@ -26,10 +45,9 @@ export function useAutomationEvents(): void {
   useEffect(() => {
     const controller = new AbortController();
     let disposed = false;
+    let afterSeq: number | undefined;
 
     const store = () => useStore.getState();
-
-    const url = `${config.serverUrl}/automations/events`;
 
     // Long-running SSE loop with reconnect on drop. Mirrors the chat
     // events fallback in useEvents (the desktop preload's
@@ -39,7 +57,7 @@ export function useAutomationEvents(): void {
       while (!disposed && !controller.signal.aborted) {
         try {
           store().automationStreamConnecting();
-          const response = await fetch(url, {
+          const response = await fetch(automationEventsUrl(config.serverUrl, afterSeq), {
             headers: { ...headersFor(config), Accept: "text/event-stream" },
             signal: controller.signal,
           });
@@ -62,6 +80,7 @@ export function useAutomationEvents(): void {
               if (!line.startsWith("data: ")) continue;
               try {
                 const event = JSON.parse(line.slice(6)) as AutomationEvent;
+                afterSeq = reduceAutomationStreamCursor(afterSeq, event);
                 if (event.type === "automation_progress") {
                   store().automationProgress(event.task_id, event.status);
                   // The "starting..." status is the scheduler's fire signal —
@@ -79,6 +98,10 @@ export function useAutomationEvents(): void {
                   // sidebar card immediately rather than after the next
                   // 20s poll catches up to running_since going null.
                   void fetchAutomations();
+                } else if (event.type === "stream_reset") {
+                  void fetchAutomations();
+                  const sid = useStore.getState().currentSessionId;
+                  if (sid) void refreshLoops(sid);
                 }
               } catch {
                 /* keep-alive / non-data line */

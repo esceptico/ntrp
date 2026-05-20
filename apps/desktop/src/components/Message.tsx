@@ -206,11 +206,16 @@ function SkillChip({ skill }: { skill: SkillDescriptor }) {
   );
 }
 
-function GoalChip() {
+function GoalMessageBubble({ objective }: { objective: string }) {
   return (
-    <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-accent-soft/55 border border-accent/15 text-xs font-medium text-accent">
-      <Target size={ICON.XS} strokeWidth={2} />
-      <span>Goal</span>
+    <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-left">
+      <div className="mb-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted">
+        <Target size={ICON.XS} strokeWidth={2} />
+        <span>Goal</span>
+      </div>
+      <div className="whitespace-pre-wrap break-words text-base leading-[1.45] text-ink">
+        {objective}
+      </div>
     </div>
   );
 }
@@ -253,12 +258,14 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
           ))}
         </div>
       )}
-      {showBubble && (
+      {goalMatch ? (
+        <GoalMessageBubble objective={goalMatch} />
+      ) : showBubble && (
         <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] whitespace-pre-wrap break-words text-left">
           {visibleText}
         </div>
       )}
-      {goalMatch ? <GoalChip /> : skillMatch && <SkillChip skill={skillMatch.skill} />}
+      {!goalMatch && skillMatch && <SkillChip skill={skillMatch.skill} />}
       <MessageActions id={id} role="user" />
     </article>
   );

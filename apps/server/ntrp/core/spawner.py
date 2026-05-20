@@ -30,6 +30,7 @@ from ntrp.events.sse import (
     SSEEvent,
     TaskFinishedEvent,
     TaskStartedEvent,
+    TokenUsageEvent,
     agent_events_to_sse,
 )
 from ntrp.llm.models import get_model
@@ -324,7 +325,17 @@ def create_spawn_fn(
 
                 async def track_parent(response) -> None:
                     await sub_tracker.track(response)
-                    calling_ctx.parent_tracker.cost += get_response_cost(response)
+                    cost = get_response_cost(response)
+                    calling_ctx.parent_tracker.cost += cost
+                    if parent_emit:
+                        await parent_emit(
+                            TokenUsageEvent(
+                                run_id=calling_ctx.run.run_id,
+                                usage=response.usage.to_dict(),
+                                cost=cost,
+                                scope="tool",
+                            )
+                        )
 
                 sub_agent.hooks.on_response = track_parent
         # Hand sub_tracker down so a nested sub-subagent rolls its cost into

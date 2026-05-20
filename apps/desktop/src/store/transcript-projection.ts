@@ -148,7 +148,9 @@ export function applyChatEventToTranscript(
       if (s.currentRunId && s.currentRunId !== event.run_id) break;
       s.updateLiveUsage({
         ...event.usage,
-        messageCount: event.message_count,
+        cost: event.cost,
+        messageCount: event.message_count ?? undefined,
+        scope: event.scope,
       });
       break;
 
@@ -203,6 +205,10 @@ export function applyChatEventToTranscript(
       break;
 
     case "TEXT_MESSAGE_END":
+      if (!event.depth && event.content !== undefined) {
+        reconcileAssistantContent(context, assistantIdFrom(event), event.content, ts);
+      }
+      break;
     case "REASONING_START":
     case "REASONING_MESSAGE_END":
     case "REASONING_END":
@@ -557,6 +563,30 @@ function appendAssistantDelta(
     id,
     role: "assistant",
     content: delta,
+    turn: { startedAt, endedAt: null, durationMs: null },
+  });
+}
+
+function reconcileAssistantContent(
+  context: ProjectionContext,
+  id: string,
+  content: string,
+  startedAt: number,
+): void {
+  const state = getState();
+  setActiveAssistantMessageId(context, id);
+  const existing = state.messages.get(id);
+  if (existing?.role === "assistant") {
+    if (existing.content !== content) state.mutateMessage(id, { content });
+    return;
+  }
+  if (content.length === 0) return;
+
+  endActivity(state);
+  state.appendMessage({
+    id,
+    role: "assistant",
+    content,
     turn: { startedAt, endedAt: null, durationMs: null },
   });
 }

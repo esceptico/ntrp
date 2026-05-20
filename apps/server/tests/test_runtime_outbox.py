@@ -5,13 +5,8 @@ import pytest
 from ntrp.agent import Usage
 from ntrp.events.internal import RunCompleted
 from ntrp.outbox import (
-    OUTBOX_FACT_INDEX_DELETE,
-    OUTBOX_FACT_INDEX_UPSERT,
-    OUTBOX_MEMORY_INDEX_CLEAR,
     OUTBOX_RUN_COMPLETED,
     OutboxEvent,
-    fact_index_delete_payload,
-    fact_index_upsert_payload,
     run_completed_payload,
 )
 from ntrp.server.runtime.outbox import RuntimeOutbox
@@ -57,11 +52,7 @@ class _OutboxStore:
 
 
 class _AutomationStore:
-    def __init__(self):
-        self.recorded = []
-
-    async def record_chat_extraction_activity(self, session_id, messages, observed_at):
-        self.recorded.append((session_id, messages, observed_at))
+    pass
 
 
 class _Scheduler:
@@ -93,7 +84,7 @@ class _Indexer:
         self.index = _Index()
 
 
-def _runtime_outbox(indexer=None):
+def _runtime_outbox(indexer=None, memory_service=None):
     outbox_store = _OutboxStore()
     automation_store = _AutomationStore()
     scheduler = _Scheduler()
@@ -102,13 +93,26 @@ def _runtime_outbox(indexer=None):
         automation_store=automation_store,
         scheduler=scheduler,
         indexer=indexer,
+        get_memory_service=lambda: memory_service,
     )
     return runtime_outbox, outbox_store, automation_store, scheduler
 
 
 @pytest.mark.asyncio
-async def test_runtime_outbox_routes_run_completed_to_automation_store_and_scheduler():
-    runtime_outbox, _, automation_store, scheduler = _runtime_outbox()
+async def test_runtime_outbox_routes_run_completed_to_scheduler_and_knowledge_capture():
+    class _KnowledgeObjects:
+        def __init__(self):
+            self.captured = []
+
+        async def assimilate_run_completed(self, event):
+            self.captured.append(event)
+
+    class _MemoryService:
+        def __init__(self):
+            self.knowledge_objects = _KnowledgeObjects()
+
+    memory_service = _MemoryService()
+    runtime_outbox, _, _, scheduler = _runtime_outbox(memory_service=memory_service)
     payload = run_completed_payload(
         RunCompleted(
             run_id="run-1",
@@ -121,32 +125,8 @@ async def test_runtime_outbox_routes_run_completed_to_automation_store_and_sched
 
     await runtime_outbox._on_run_completed(_event(OUTBOX_RUN_COMPLETED, payload))
 
-    assert automation_store.recorded[0][0] == "sess-1"
-    assert automation_store.recorded[0][1] == ({"role": "user", "content": "hi"},)
     assert scheduler.completed[0].run_id == "run-1"
-
-
-@pytest.mark.asyncio
-async def test_runtime_outbox_routes_memory_index_events_to_indexer():
-    indexer = _Indexer()
-    runtime_outbox, _, _, _ = _runtime_outbox(indexer=indexer)
-
-    await runtime_outbox._on_fact_upserted(
-        _event(OUTBOX_FACT_INDEX_UPSERT, fact_index_upsert_payload(5, "remember this"))
-    )
-    await runtime_outbox._on_fact_deleted(_event(OUTBOX_FACT_INDEX_DELETE, fact_index_delete_payload(5)))
-    await runtime_outbox._on_memory_cleared(_event(OUTBOX_MEMORY_INDEX_CLEAR, {}))
-
-    assert indexer.index.upserts == [
-        {
-            "source": "memory",
-            "source_id": "fact:5",
-            "title": "remember this",
-            "content": "remember this",
-        }
-    ]
-    assert indexer.index.deletes == [("memory", "fact:5")]
-    assert indexer.index.cleared == ["memory"]
+    assert memory_service.knowledge_objects.captured[0].run_id == "run-1"
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,10 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
+from ntrp.knowledge.activation import KnowledgeActivationService
+from ntrp.knowledge.models import ActivationRequest
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.prefetch import build_memory_prompt_context
+from ntrp.memory.service import MemoryService
 from ntrp.server.bus import SessionBus
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
@@ -22,6 +24,7 @@ from ntrp.tools.executor import ToolExecutor
 class OperatorDeps:
     executor: ToolExecutor
     memory: FactMemory | None
+    memory_service: MemoryService | None
     config: AgentConfig
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
@@ -51,13 +54,18 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     run_id = generate_slug(2)
 
     memory_context = None
-    if deps.memory:
-        memory_context = await build_memory_prompt_context(
-            deps.memory,
-            request.prompt,
-            source="operator_prompt",
-            details={"source_id": request.source_id},
+    if deps.memory_service:
+        bundle = await KnowledgeActivationService(deps.memory_service).inspect(
+            ActivationRequest(
+                query=request.prompt,
+                scope=f"source:{request.source_id}",
+                task="operator_prompt",
+                budget_chars=1_500,
+                limit=8,
+                record_access=True,
+            )
         )
+        memory_context = bundle.prompt_context
 
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(read_only=True)

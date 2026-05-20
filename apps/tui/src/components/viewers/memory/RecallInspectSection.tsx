@@ -16,7 +16,7 @@ function windowText(value: string, cursorPos: number, maxWidth: number): { text:
 }
 
 function wrappedLines(text: string | null, width: number): string[] {
-  if (!text) return ["No memory matches"];
+  if (!text) return ["No knowledge matches"];
   return text.split("\n").flatMap((line) => (line ? wrapText(line, width) : [""]));
 }
 
@@ -25,17 +25,14 @@ function sourceLines(tab: RecallInspectTabState, width: number): string[] {
   if (!result) return [];
 
   const lines: string[] = [];
-  if (result.observations.length > 0) {
-    lines.push("", "SOURCES - PATTERNS");
-    for (const obs of result.observations) {
-      lines.push(`${obs.evidence_count} facts · ${truncateText(obs.summary, Math.max(10, width - 12))}`);
-    }
-  }
-  if (result.facts.length > 0) {
-    lines.push("", "SOURCES - FACTS");
-    for (const fact of result.facts) {
-      const label = `${fact.kind} · ${fact.lifetime}`;
-      lines.push(`${label} · ${truncateText(fact.text, Math.max(10, width - label.length - 3))}`);
+  if (result.candidates.length > 0) {
+    lines.push("", "ACTIVATED");
+    for (const item of result.candidates) {
+      const label = `${item.object_type} · ${item.activation} · ${item.score.toFixed(2)}`;
+      lines.push(`${label} · ${truncateText(item.title, Math.max(10, width - label.length - 3))}`);
+      if (item.reasons.length > 0) {
+        lines.push(`why: ${truncateText(item.reasons.join(", "), Math.max(10, width - 5))}`);
+      }
     }
   }
   return lines;
@@ -49,7 +46,7 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
   const outputHeight = Math.max(3, height - 7);
   const lines = result
     ? [
-        ...wrappedLines(result.formatted_recall, contentWidth),
+        ...wrappedLines(result.prompt_context, contentWidth),
         ...sourceLines(tab, contentWidth),
       ]
     : [];
@@ -79,18 +76,18 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
           <text>
             <span fg={colors.text.secondary}>search result</span>
             <span fg={colors.text.disabled}> | </span>
-            <span fg={colors.text.muted}>{result.observations.length} patterns</span>
+            <span fg={colors.text.muted}>{result.candidates.length} activated</span>
             <span fg={colors.text.disabled}> | </span>
-            <span fg={colors.text.muted}>{result.facts.length} facts</span>
+            <span fg={colors.text.muted}>{result.omitted.length} omitted</span>
           </text>
         ) : (
-          <text><span fg={colors.text.disabled}>Enter a query to test retrieval</span></text>
+          <text><span fg={colors.text.disabled}>Enter a query to preview activation</span></text>
         )}
       </box>
 
       <box flexDirection="column" marginTop={1} height={outputHeight} overflow="hidden">
         {visible.map((line, index) => {
-          const isHeading = line.startsWith("**") || line.startsWith("SOURCES");
+          const isHeading = line.startsWith("**") || line.startsWith("SOURCES") || line === "ACTIVATED";
           return (
             <text key={`${offset}-${index}`}>
               <span fg={isHeading ? colors.text.secondary : colors.text.muted}>{line || " "}</span>

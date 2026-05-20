@@ -1,32 +1,17 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Search } from "lucide-react";
+import clsx from "clsx";
 import { useStore } from "../../store";
-import { type Fact, type MemoryRecallInspectResult, type Observation, inspectMemoryRecallApi } from "../../api";
-import { formatRelativePast } from "../../lib/format";
-import { factSourceSummary } from "../../lib/memoryProvenance";
-import { memoryRecallReasonLabel } from "../../lib/memoryRecallReasons";
-import {
-  factStatusLabel,
-  factStatusTone,
-  observationEvidenceLabel,
-  observationEvidenceTone,
-} from "../../lib/memoryTrust";
+import { type ActivationBundle, type ActivationCandidate, inspectKnowledgeActivationApi } from "../../api";
 import { ErrorPill, GhostBtn, Pill } from "./shared";
 import { ScrollBlurTop } from "../ScrollBlur";
 import { ICON } from "../../lib/icons";
 
-export function RecallPane({
-  onOpenFact,
-  onOpenPattern,
-}: {
-  onOpenFact?: (fact: Fact) => void;
-  onOpenPattern?: (pattern: Observation) => void;
-}) {
+export function RecallPane() {
   const config = useStore((s) => s.config);
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<MemoryRecallInspectResult | null>(null);
-  const [showPromptContext, setShowPromptContext] = useState(false);
+  const [result, setResult] = useState<ActivationBundle | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +21,7 @@ export function RecallPane({
     setLoading(true);
     setError(null);
     try {
-      setResult(await inspectMemoryRecallApi(config, trimmed));
-      setShowPromptContext(false);
+      setResult(await inspectKnowledgeActivationApi(config, trimmed));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -58,72 +42,51 @@ export function RecallPane({
                 if (e.key === "Enter") void run();
               }}
               spellCheck={false}
-              placeholder="Ask what memory would retrieve for a query"
+              placeholder="Ask what knowledge would activate for a query"
               className="h-9 w-full rounded-[8px] border border-line-soft bg-bg-main pl-9 pr-3 text-base text-ink outline-none transition-colors focus:border-line-strong"
             />
           </div>
           <GhostBtn onClick={() => void run()} disabled={loading || !query.trim()}>
-            {loading ? "Searching…" : "Run search"}
+            {loading ? "Inspecting..." : "Inspect activation"}
           </GhostBtn>
         </div>
         <div className="mt-2 flex items-center gap-2 text-xs text-faint">
-          {error ? <ErrorPill message={error} /> : <span>Preview the exact memory context before it reaches a prompt.</span>}
+          {error ? <ErrorPill message={error} /> : <span>Preview the activated knowledge bundle before it reaches the agent.</span>}
         </div>
       </div>
 
       <div className="min-h-0 overflow-y-auto scroll-thin px-7 py-5">
         <ScrollBlurTop />
         {!result ? (
-          <div className="grid h-full place-items-center text-base italic text-faint">Run a query to inspect recall</div>
+          <div className="grid h-full place-items-center text-base italic text-faint">Run a query to inspect activation</div>
         ) : (
           <div className="grid gap-5">
             <section className="min-w-0">
               <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-2">
-                <h3 className="m-0 text-base font-semibold text-ink">Recall results</h3>
+                <h3 className="m-0 text-base font-semibold text-ink">Activation bundle</h3>
                 <div className="flex items-center gap-1.5">
-                  <Pill>{result.observations.length} patterns</Pill>
-                  <Pill>{result.facts.length} facts</Pill>
-                  <GhostBtn onClick={() => setShowPromptContext((value) => !value)}>
-                    {showPromptContext ? "Hide prompt context" : "Show prompt context"}
-                  </GhostBtn>
+                  <Pill>{result.candidates.length} active</Pill>
+                  <Pill>{result.omitted.length} omitted</Pill>
+                  <Pill>{result.used_chars}/{result.budget_chars} chars</Pill>
                 </div>
               </div>
-              {showPromptContext && (
-                <pre className="m-0 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-line-soft bg-code-bg px-4 py-3 text-sm leading-relaxed text-ink-soft scroll-thin">
-                  {result.formatted_recall || "No memory matches"}
-                </pre>
-              )}
             </section>
 
             <div className="min-w-0">
               <SourceList
-                title="Patterns"
-                items={result.observations}
-                render={(obs) => (
-                  <PatternSource
-                    key={obs.id}
-                    observation={obs}
-                    sources={result.bundled_sources[String(obs.id)] ?? []}
-                    reasons={result.observation_reasons[String(obs.id)] ?? []}
-                    onOpen={() => onOpenPattern?.(obs)}
-                    onOpenFact={onOpenFact}
-                  />
-                )}
+                title="Active candidates"
+                items={result.candidates}
+                render={(candidate) => <ActivationItem key={`${candidate.object_type}:${candidate.object_id}`} candidate={candidate} />}
               />
-              <div className="mt-5">
-                <SourceList
-                  title="Facts"
-                  items={result.facts}
-                  render={(fact) => (
-                    <FactSource
-                      key={fact.id}
-                      fact={fact}
-                      reasons={result.fact_reasons[String(fact.id)] ?? []}
-                      onOpen={() => onOpenFact?.(fact)}
-                    />
-                  )}
-                />
-              </div>
+              {result.omitted.length > 0 && (
+                <div className="mt-5">
+                  <SourceList
+                    title="Omitted"
+                    items={result.omitted}
+                    render={(candidate) => <ActivationItem key={`${candidate.object_type}:${candidate.object_id}`} candidate={candidate} muted />}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -153,98 +116,36 @@ function SourceList<T>({
   );
 }
 
-function FactSource({ fact, reasons, onOpen }: { fact: Fact; reasons: string[]; onOpen?: () => void }) {
+function ActivationItem({ candidate, muted = false }: { candidate: ActivationCandidate; muted?: boolean }) {
   return (
     <li>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="block w-full rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-left transition-colors hover:border-line-strong hover:bg-surface-soft/40"
-      >
+      <div className="block w-full rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-left">
         <span className="mb-1 flex flex-wrap items-center gap-1.5">
-          <Pill>{fact.kind}</Pill>
-          <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
-          <span className="text-xs text-faint">
-            {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
-          </span>
+          <Pill>{candidate.object_type}</Pill>
+          <Pill>{candidate.activation}</Pill>
+          <Pill>{candidate.proactiveness_level}</Pill>
+          <span className="text-xs text-faint">score {candidate.score.toFixed(2)}</span>
         </span>
-        <RecallReasons reasons={reasons} />
-        <span className="block text-sm leading-snug text-ink-soft line-clamp-4">{fact.text}</span>
-      </button>
+        <span className="mb-1 block text-sm font-medium text-ink-soft">{candidate.title}</span>
+        <ActivationReasons reasons={candidate.reasons} />
+        <span className={clsx("block text-sm leading-snug line-clamp-4", muted ? "text-faint" : "text-ink-soft")}>{candidate.text}</span>
+        {candidate.signals.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {candidate.signals.slice(0, 4).map((signal) => (
+              <Pill key={`${signal.name}:${signal.reason}`}>{signal.name}: {String(signal.value)}</Pill>
+            ))}
+          </div>
+        )}
+      </div>
     </li>
   );
 }
 
-function PatternSource({
-  observation,
-  sources,
-  reasons,
-  onOpen,
-  onOpenFact,
-}: {
-  observation: Observation;
-  sources: Fact[];
-  reasons: string[];
-  onOpen?: () => void;
-  onOpenFact?: (fact: Fact) => void;
-}) {
-  return (
-    <li className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="-mx-1 -mt-1 block w-[calc(100%+0.5rem)] rounded-[6px] px-1 py-1 text-left transition-colors hover:bg-surface-soft/40"
-      >
-        <span className="mb-1 flex flex-wrap items-center gap-1.5">
-          <Pill tone={observationEvidenceTone(observation.evidence_level)}>
-            {observationEvidenceLabel(observation.evidence_level)}
-          </Pill>
-          <span className="text-xs text-faint">
-            {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
-          </span>
-        </span>
-        <RecallReasons reasons={reasons} />
-        <span className="block text-sm leading-snug text-ink-soft line-clamp-4">{observation.summary}</span>
-      </button>
-      {sources.length > 0 && (
-        <ul className="mt-2 flex list-none flex-col gap-1 border-t border-line-soft pt-2">
-          {sources.slice(0, 2).map((fact) => (
-            <li key={fact.id} className="min-w-0">
-              <button
-                type="button"
-                onClick={() => onOpenFact?.(fact)}
-                className="block w-full text-left text-xs leading-snug text-faint hover:text-ink-soft"
-              >
-                <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
-                <span aria-hidden> · </span>
-                <span>{factSourceSummary(fact)}</span>
-                <span aria-hidden> · </span>
-                <span className="line-clamp-2">{fact.text}</span>
-              </button>
-            </li>
-          ))}
-          {sources.length > 2 && (
-            <li>
-              <button
-                type="button"
-                onClick={onOpen}
-                className="text-left text-xs text-faint hover:text-ink-soft"
-              >
-                {sources.length - 2} more sources in pattern detail
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
-    </li>
-  );
-}
-
-function RecallReasons({ reasons }: { reasons: string[] }) {
+function ActivationReasons({ reasons }: { reasons: string[] }) {
   if (reasons.length === 0) return null;
   return (
     <span className="mb-1 block text-xs leading-snug text-faint">
-      Why: {reasons.map(memoryRecallReasonLabel).join(", ")}
+      Why: {reasons.join(", ")}
     </span>
   );
 }

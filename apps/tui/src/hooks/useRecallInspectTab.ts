@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Config } from "../types.js";
-import { inspectMemoryRecall, type MemoryRecallInspectResult } from "../api/client.js";
+import { inspectKnowledgeActivation, type ActivationBundle } from "../api/client.js";
 import { useTextInput } from "./useTextInput.js";
 import type { Key } from "./useKeypress.js";
 
@@ -8,7 +8,7 @@ export interface RecallInspectTabState {
   query: string;
   cursorPos: number;
   inputActive: boolean;
-  result: MemoryRecallInspectResult | null;
+  result: ActivationBundle | null;
   loading: boolean;
   error: string | null;
   scrollOffset: number;
@@ -20,7 +20,7 @@ export function useRecallInspectTab(config: Config): RecallInspectTabState {
   const [query, setQuery] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [inputActive, setInputActive] = useState(false);
-  const [result, setResult] = useState<MemoryRecallInspectResult | null>(null);
+  const [result, setResult] = useState<ActivationBundle | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -33,7 +33,7 @@ export function useRecallInspectTab(config: Config): RecallInspectTabState {
 
     setLoading(true);
     setError(null);
-    inspectMemoryRecall(config, trimmed)
+    inspectKnowledgeActivation(config, trimmed)
       .then((data) => {
         setResult(data);
         setScrollOffset(0);

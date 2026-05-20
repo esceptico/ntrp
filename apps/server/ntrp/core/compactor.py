@@ -1,4 +1,5 @@
 import asyncio
+import math
 from typing import Protocol
 
 from ntrp.agent import Role
@@ -48,10 +49,38 @@ def compact_needed(
 ) -> bool:
     if len(messages) > max_messages:
         return True
-    if actual_input_tokens is not None:
+    estimated_input_tokens = estimate_message_tokens(messages)
+    input_tokens = max(
+        actual_input_tokens or 0,
+        estimated_input_tokens,
+    )
+    if input_tokens:
         limit = get_model(model).max_context_tokens
-        return actual_input_tokens > int(limit * threshold)
+        return input_tokens > int(limit * threshold)
     return False
+
+
+def estimate_message_tokens(messages: list[dict]) -> int:
+    """Conservative local estimate for preflight compaction decisions.
+
+    API usage is authoritative after a successful call, but context-window
+    failures return no usage. Estimate from the persisted transcript so a
+    failed oversized run does not keep retrying with stale/empty token
+    metadata.
+    """
+    chars = 0
+    for msg in messages:
+        chars += 16
+        chars += len(str(msg.get("role", "")))
+        chars += len(blocks_to_text(msg.get("content", "")))
+        for tc in msg.get("tool_calls") or []:
+            function = tc.get("function") if isinstance(tc, dict) else None
+            if isinstance(function, dict):
+                chars += len(str(function.get("name", "")))
+                chars += len(str(function.get("arguments", "")))
+        if tool_call_id := msg.get("tool_call_id"):
+            chars += len(str(tool_call_id))
+    return math.ceil(chars / 3)
 
 
 def compactable_range(

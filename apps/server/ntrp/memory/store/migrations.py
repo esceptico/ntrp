@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 18
+CURRENT_VERSION = 28
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -325,6 +325,677 @@ async def _migrate_v18(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_valid_until ON facts(valid_until)")
 
 
+async def _migrate_v19(conn: aiosqlite.Connection) -> None:
+    """Add canonical knowledge object storage."""
+    _logger.info("Migration v19: adding knowledge object storage")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_objects (
+            id INTEGER PRIMARY KEY,
+            object_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            text TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            scope TEXT,
+            activation TEXT NOT NULL DEFAULT 'prompt',
+            proactiveness_level TEXT NOT NULL DEFAULT 'L0',
+            score REAL NOT NULL DEFAULT 0.0,
+            source_ids TEXT NOT NULL DEFAULT '[]',
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            superseded_by_object_id INTEGER REFERENCES knowledge_objects(id) ON DELETE SET NULL,
+            superseded_at TIMESTAMP,
+            supersession_reason TEXT
+        )
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_objects_type_status ON knowledge_objects(object_type, status)"
+    )
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_objects_updated ON knowledge_objects(updated_at DESC)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_objects_scope ON knowledge_objects(scope)")
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(knowledge_objects)")}
+    if "superseded_by_object_id" in columns:
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_knowledge_objects_superseded ON knowledge_objects(superseded_by_object_id)"
+        )
+
+
+async def _create_knowledge_objects_fts(conn: aiosqlite.Connection) -> None:
+    await conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_objects_fts USING fts5(
+            title,
+            text,
+            content='knowledge_objects',
+            content_rowid='id'
+        )
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS knowledge_objects_ai AFTER INSERT ON knowledge_objects BEGIN
+            INSERT INTO knowledge_objects_fts(rowid, title, text) VALUES (new.id, new.title, new.text);
+        END
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS knowledge_objects_ad AFTER DELETE ON knowledge_objects BEGIN
+            INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, title, text)
+            VALUES('delete', old.id, old.title, old.text);
+        END
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS knowledge_objects_au AFTER UPDATE ON knowledge_objects BEGIN
+            INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, title, text)
+            VALUES('delete', old.id, old.title, old.text);
+            INSERT INTO knowledge_objects_fts(rowid, title, text) VALUES (new.id, new.title, new.text);
+        END
+    """)
+    await conn.execute("INSERT INTO knowledge_objects_fts(knowledge_objects_fts) VALUES('rebuild')")
+
+
+async def _migrate_v20(conn: aiosqlite.Connection) -> None:
+    """Migrate legacy fact/observation memory into knowledge objects."""
+    _logger.info("Migration v20: migrating facts and observations to knowledge objects")
+
+    await _migrate_v19(conn)
+
+    if await _table_exists(conn, "facts"):
+        existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+        fact_defaults = {
+            "archived_at": "TIMESTAMP",
+            "superseded_by_fact_id": "INTEGER",
+            "salience": "INTEGER NOT NULL DEFAULT 0",
+            "lifetime": "TEXT NOT NULL DEFAULT 'durable'",
+            "kind": "TEXT NOT NULL DEFAULT 'note'",
+            "source_ref": "TEXT",
+            "confidence": "REAL NOT NULL DEFAULT 1.0",
+            "created_at": "TIMESTAMP",
+            "last_accessed_at": "TIMESTAMP",
+        }
+        for column, definition in fact_defaults.items():
+            if column not in existing:
+                await conn.execute(f"ALTER TABLE facts ADD COLUMN {column} {definition}")
+        await conn.execute("""
+            INSERT INTO knowledge_objects (
+                object_type, title, text, status, scope, activation, proactiveness_level,
+                score, source_ids, metadata, created_at, updated_at, reviewed_at
+            )
+            SELECT
+                'fact',
+                'Fact ' || f.id,
+                f.text,
+                CASE
+                    WHEN f.archived_at IS NOT NULL THEN 'archived'
+                    WHEN f.superseded_by_fact_id IS NOT NULL THEN 'superseded'
+                    ELSE 'active'
+                END,
+                f.kind,
+                'prompt',
+                'L0',
+                COALESCE(f.salience, 0) * 0.2,
+                json_array('legacy-fact:' || f.id),
+                json_object(
+                    'legacy_fact_id', f.id,
+                    'kind', f.kind,
+                    'lifetime', f.lifetime,
+                    'source_type', f.source_type,
+                    'source_ref', f.source_ref,
+                    'confidence', f.confidence
+                ),
+                COALESCE(f.created_at, CURRENT_TIMESTAMP),
+                COALESCE(f.last_accessed_at, f.created_at, CURRENT_TIMESTAMP),
+                NULL
+            FROM facts f
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM knowledge_objects ko, json_each(ko.source_ids) source
+                WHERE source.value = 'legacy-fact:' || f.id
+            )
+        """)
+
+    if await _table_exists(conn, "observations"):
+        existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(observations)")}
+        observation_defaults = {
+            "archived_at": "TIMESTAMP",
+            "created_by": "TEXT NOT NULL DEFAULT 'legacy'",
+            "policy_version": "TEXT NOT NULL DEFAULT 'legacy'",
+            "updated_at": "TIMESTAMP",
+            "source_fact_ids": "TEXT DEFAULT '[]'",
+            "created_at": "TIMESTAMP",
+        }
+        for column, definition in observation_defaults.items():
+            if column not in existing:
+                await conn.execute(f"ALTER TABLE observations ADD COLUMN {column} {definition}")
+        await conn.execute("""
+            INSERT INTO knowledge_objects (
+                object_type, title, text, status, scope, activation, proactiveness_level,
+                score, source_ids, metadata, created_at, updated_at, reviewed_at
+            )
+            SELECT
+                'pattern',
+                'Pattern ' || o.id,
+                o.summary,
+                CASE WHEN o.archived_at IS NOT NULL THEN 'archived' ELSE 'active' END,
+                o.created_by,
+                'prompt',
+                'L0',
+                MIN(COALESCE(json_array_length(o.source_fact_ids), 0) * 0.1, 1.0),
+                json_array('legacy-observation:' || o.id),
+                json_object(
+                    'legacy_observation_id', o.id,
+                    'source_fact_ids', json(o.source_fact_ids),
+                    'created_by', o.created_by,
+                    'policy_version', o.policy_version
+                ),
+                COALESCE(o.created_at, CURRENT_TIMESTAMP),
+                COALESCE(o.updated_at, o.created_at, CURRENT_TIMESTAMP),
+                NULL
+            FROM observations o
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM knowledge_objects ko, json_each(ko.source_ids) source
+                WHERE source.value = 'legacy-observation:' || o.id
+            )
+        """)
+
+
+async def _migrate_v21(conn: aiosqlite.Connection) -> None:
+    """Add full-text search for canonical knowledge objects."""
+    _logger.info("Migration v21: adding knowledge object full-text search")
+
+    await _migrate_v19(conn)
+    await _create_knowledge_objects_fts(conn)
+
+
+async def _migrate_v22(conn: aiosqlite.Connection) -> None:
+    """Add canonical knowledge object embedding storage."""
+    _logger.info("Migration v22: adding knowledge object embeddings")
+
+    await _migrate_v19(conn)
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(knowledge_objects)")}
+    if "embedding" not in columns:
+        await conn.execute("ALTER TABLE knowledge_objects ADD COLUMN embedding BLOB")
+
+
+async def _migrate_v23(conn: aiosqlite.Connection) -> None:
+    """Add first-class knowledge object supersession fields."""
+    _logger.info("Migration v23: adding knowledge object supersession fields")
+
+    await _migrate_v19(conn)
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(knowledge_objects)")}
+    for name, definition in (
+        ("superseded_by_object_id", "INTEGER REFERENCES knowledge_objects(id) ON DELETE SET NULL"),
+        ("superseded_at", "TIMESTAMP"),
+        ("supersession_reason", "TEXT"),
+    ):
+        if name not in columns:
+            await conn.execute(f"ALTER TABLE knowledge_objects ADD COLUMN {name} {definition}")
+
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_objects_superseded ON knowledge_objects(superseded_by_object_id)")
+    await conn.execute("""
+        UPDATE knowledge_objects
+        SET
+            superseded_by_object_id = COALESCE(
+                superseded_by_object_id,
+                CAST(json_extract(metadata, '$.superseded_by_object_id') AS INTEGER),
+                CAST(json_extract(metadata, '$.superseded_by_id') AS INTEGER),
+                CAST(json_extract(metadata, '$.replaced_by_object_id') AS INTEGER)
+            ),
+            superseded_at = COALESCE(
+                superseded_at,
+                json_extract(metadata, '$.superseded_at'),
+                json_extract(metadata, '$.invalidated_at'),
+                updated_at
+            ),
+            supersession_reason = COALESCE(
+                supersession_reason,
+                json_extract(metadata, '$.supersession_reason'),
+                json_extract(metadata, '$.semantic_contradiction.reason'),
+                json_extract(metadata, '$.supersession.reason')
+            ),
+            status = CASE
+                WHEN status NOT IN ('archived', 'rejected', 'superseded') THEN 'superseded'
+                ELSE status
+            END
+        WHERE
+            superseded_by_object_id IS NOT NULL
+            OR json_extract(metadata, '$.superseded_by_object_id') IS NOT NULL
+            OR json_extract(metadata, '$.superseded_by_id') IS NOT NULL
+            OR json_extract(metadata, '$.replaced_by_object_id') IS NOT NULL
+    """)
+
+
+async def _migrate_v24(conn: aiosqlite.Connection) -> None:
+    """Add normalized entity refs for knowledge objects."""
+    _logger.info("Migration v24: adding knowledge object entity refs")
+
+    await _migrate_v19(conn)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entities (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_entity_refs (
+            knowledge_object_id INTEGER NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+            entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (knowledge_object_id, entity_id)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_entity_refs_entity ON knowledge_entity_refs(entity_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_entity_refs_name ON knowledge_entity_refs(name)")
+
+    await conn.execute("""
+        INSERT OR IGNORE INTO entities (name, created_at, updated_at)
+        SELECT DISTINCT value, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM (
+            SELECT e.value AS value
+            FROM knowledge_objects ko, json_each(ko.metadata, '$.entities') e
+            WHERE json_valid(ko.metadata) AND typeof(e.value) = 'text' AND length(trim(e.value)) > 0
+            UNION
+            SELECT e.value AS value
+            FROM knowledge_objects ko, json_each(ko.metadata, '$.entity_graph.entities') e
+            WHERE json_valid(ko.metadata) AND typeof(e.value) = 'text' AND length(trim(e.value)) > 0
+        )
+    """)
+    await conn.execute("""
+        INSERT OR IGNORE INTO knowledge_entity_refs (knowledge_object_id, entity_id, name, created_at)
+        SELECT DISTINCT ko.id, ent.id, refs.name, CURRENT_TIMESTAMP
+        FROM knowledge_objects ko
+        JOIN (
+            SELECT ko_inner.id AS knowledge_object_id, e.value AS name
+            FROM knowledge_objects ko_inner, json_each(ko_inner.metadata, '$.entities') e
+            WHERE json_valid(ko_inner.metadata) AND typeof(e.value) = 'text' AND length(trim(e.value)) > 0
+            UNION
+            SELECT ko_inner.id AS knowledge_object_id, e.value AS name
+            FROM knowledge_objects ko_inner, json_each(ko_inner.metadata, '$.entity_graph.entities') e
+            WHERE json_valid(ko_inner.metadata) AND typeof(e.value) = 'text' AND length(trim(e.value)) > 0
+        ) refs ON refs.knowledge_object_id = ko.id
+        JOIN entities ent ON ent.name = refs.name COLLATE NOCASE
+    """)
+
+
+async def _migrate_v25(conn: aiosqlite.Connection) -> None:
+    """Add provenance-backed entity-resolution identity layer."""
+    _logger.info("Migration v25: adding entity mentions, aliases, candidates, identity edges, and commits")
+
+    entity_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(entities)")}
+    for name, definition in (
+        ("entity_type", "TEXT NOT NULL DEFAULT 'other'"),
+        ("lifecycle_status", "TEXT NOT NULL DEFAULT 'active'"),
+        ("merged_into_entity_id", "INTEGER REFERENCES entities(id) ON DELETE SET NULL"),
+        ("metadata", "TEXT NOT NULL DEFAULT '{}'"),
+    ):
+        if name not in entity_columns:
+            await conn.execute(f"ALTER TABLE entities ADD COLUMN {name} {definition}")
+
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_lifecycle ON entities(lifecycle_status)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_merged_into ON entities(merged_into_entity_id)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entity_mentions (
+            id INTEGER PRIMARY KEY,
+            knowledge_object_id INTEGER NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+            entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+            surface_text TEXT NOT NULL,
+            normalized_surface TEXT NOT NULL,
+            canonical_name TEXT,
+            entity_type_hint TEXT NOT NULL DEFAULT 'other',
+            evidence_quote TEXT,
+            extraction_confidence REAL NOT NULL DEFAULT 0.0,
+            resolution_confidence REAL,
+            resolution_status TEXT NOT NULL DEFAULT 'unresolved',
+            extractor TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'extractor',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_mentions_object ON entity_mentions(knowledge_object_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity ON entity_mentions(entity_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_mentions_surface ON entity_mentions(normalized_surface)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_mentions_status ON entity_mentions(resolution_status)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entity_aliases (
+            id INTEGER PRIMARY KEY,
+            entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+            alias_text TEXT NOT NULL,
+            normalized_alias TEXT NOT NULL,
+            alias_type TEXT NOT NULL DEFAULT 'extracted',
+            source_mention_id INTEGER REFERENCES entity_mentions(id) ON DELETE SET NULL,
+            confidence REAL NOT NULL DEFAULT 0.0,
+            scope TEXT,
+            valid_from TIMESTAMP,
+            valid_to TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_aliases_lookup ON entity_aliases(normalized_alias, status)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entity_resolution_candidates (
+            id INTEGER PRIMARY KEY,
+            mention_id INTEGER NOT NULL REFERENCES entity_mentions(id) ON DELETE CASCADE,
+            candidate_entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+            method TEXT NOT NULL,
+            score REAL NOT NULL DEFAULT 0.0,
+            features TEXT NOT NULL DEFAULT '{}',
+            rank INTEGER,
+            decision_status TEXT NOT NULL DEFAULT 'proposed',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_mention ON entity_resolution_candidates(mention_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_entity ON entity_resolution_candidates(candidate_entity_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_resolution_candidates_status ON entity_resolution_candidates(decision_status)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entity_resolution_commits (
+            id INTEGER PRIMARY KEY,
+            action TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'system',
+            before_entity_ids TEXT NOT NULL DEFAULT '[]',
+            after_entity_ids TEXT NOT NULL DEFAULT '[]',
+            evidence TEXT NOT NULL DEFAULT '{}',
+            reversible_patch TEXT NOT NULL DEFAULT '{}',
+            confidence REAL,
+            rule_version TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_resolution_commits_action ON entity_resolution_commits(action)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_resolution_commits_created ON entity_resolution_commits(created_at DESC)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS entity_identity_edges (
+            id INTEGER PRIMARY KEY,
+            entity_a_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+            entity_b_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+            relation TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0.0,
+            evidence TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'active',
+            commit_id INTEGER REFERENCES entity_resolution_commits(id) ON DELETE SET NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_identity_edges_entities ON entity_identity_edges(entity_a_id, entity_b_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_identity_edges_relation ON entity_identity_edges(relation, status)")
+
+    await conn.execute("""
+        INSERT OR IGNORE INTO entity_aliases (entity_id, alias_text, normalized_alias, alias_type, confidence, status, created_at, updated_at)
+        SELECT id, name, lower(name), 'canonical', 1.0, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM entities
+    """)
+
+
+async def _migrate_v26(conn: aiosqlite.Connection) -> None:
+    """Archive legacy reflect spam and prune identifier-like entity junk."""
+    _logger.info("Migration v26: archiving legacy reflect spam and pruning invalid entities")
+
+    await conn.execute("""
+        UPDATE knowledge_objects
+        SET
+            status = 'archived',
+            metadata = json_set(
+                CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,
+                '$.archived_reason', 'legacy_reflect_spam',
+                '$.archived_by_migration', 'v26'
+            ),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE status NOT IN ('archived', 'rejected', 'superseded')
+          AND json_valid(metadata)
+          AND json_extract(metadata, '$.processor') = 'reflect'
+          AND CAST(json_extract(metadata, '$.episode_id') AS INTEGER) IN (
+              SELECT id FROM knowledge_objects WHERE object_type = 'episode'
+          )
+    """)
+
+    await conn.execute("DROP TABLE IF EXISTS bad_entities_v26")
+    await conn.execute("""
+        CREATE TEMP TABLE bad_entities_v26 AS
+        SELECT id
+        FROM entities
+        WHERE lower(name) LIKE 'knowledge:%'
+           OR lower(name) LIKE 'session:%'
+           OR lower(name) LIKE 'run:%'
+           OR lower(name) LIKE 'turn:%'
+           OR (name GLOB '*[0-9]*' AND lower(name) NOT GLOB '*[a-z]*')
+           OR lower(name) GLOB '[0-9]* runs'
+           OR lower(name) GLOB '[0-9]* run details'
+           OR lower(name) GLOB '[0-9]* artifacts'
+           OR lower(name) LIKE '% utc window'
+    """)
+    await conn.execute("DELETE FROM knowledge_entity_refs WHERE entity_id IN (SELECT id FROM bad_entities_v26)")
+    await conn.execute("DELETE FROM entity_aliases WHERE entity_id IN (SELECT id FROM bad_entities_v26)")
+    await conn.execute("""
+        UPDATE entity_mentions
+        SET entity_id = NULL, resolution_status = 'ignored'
+        WHERE entity_id IN (SELECT id FROM bad_entities_v26)
+    """)
+    await conn.execute("DELETE FROM entity_resolution_candidates WHERE candidate_entity_id IN (SELECT id FROM bad_entities_v26)")
+    await conn.execute("""
+        DELETE FROM entity_identity_edges
+        WHERE entity_a_id IN (SELECT id FROM bad_entities_v26)
+           OR entity_b_id IN (SELECT id FROM bad_entities_v26)
+    """)
+    await conn.execute("DELETE FROM entities WHERE id IN (SELECT id FROM bad_entities_v26)")
+    await conn.execute("DROP TABLE IF EXISTS bad_entities_v26")
+
+
+
+async def _migrate_v27(conn: aiosqlite.Connection) -> None:
+    """Expose source/provenance and metadata rows as queryable views."""
+    _logger.info("Migration v27: adding knowledge source and metadata views")
+
+    await conn.execute("DROP VIEW IF EXISTS knowledge_object_source_refs")
+    await conn.execute("""
+        CREATE VIEW knowledge_object_source_refs AS
+        SELECT
+            ko.id AS knowledge_object_id,
+            'source_ids' AS source_field,
+            CASE
+                WHEN source.value LIKE 'knowledge:%' THEN 'knowledge'
+                WHEN source.value LIKE 'run:%' THEN 'run'
+                WHEN source.value LIKE 'turn:%' THEN 'turn'
+                WHEN instr(source.value, ':') > 0 THEN substr(source.value, 1, instr(source.value, ':') - 1)
+                ELSE 'external'
+            END AS source_kind,
+            source.value AS source_id,
+            target.id AS source_object_id,
+            target.object_type AS source_object_type,
+            target.status AS source_status,
+            target.title AS source_title,
+            target.created_at AS source_created_at
+        FROM knowledge_objects ko
+        JOIN json_each(CASE WHEN json_valid(ko.source_ids) THEN ko.source_ids ELSE '[]' END) AS source
+        LEFT JOIN knowledge_objects target ON source.value = 'knowledge:' || target.id
+        WHERE source.value IS NOT NULL AND trim(source.value) <> ''
+
+        UNION ALL
+
+        SELECT
+            ko.id AS knowledge_object_id,
+            'metadata.source_episode_id' AS source_field,
+            'knowledge' AS source_kind,
+            'knowledge:' || json_extract(ko.metadata, '$.source_episode_id') AS source_id,
+            target.id AS source_object_id,
+            target.object_type AS source_object_type,
+            target.status AS source_status,
+            target.title AS source_title,
+            target.created_at AS source_created_at
+        FROM knowledge_objects ko
+        LEFT JOIN knowledge_objects target ON target.id = CAST(json_extract(ko.metadata, '$.source_episode_id') AS INTEGER)
+        WHERE json_valid(ko.metadata)
+          AND json_extract(ko.metadata, '$.source_episode_id') IS NOT NULL
+
+        UNION ALL
+
+        SELECT
+            ko.id AS knowledge_object_id,
+            'metadata.source_run_ids' AS source_field,
+            'run' AS source_kind,
+            'run:' || run.value AS source_id,
+            NULL AS source_object_id,
+            NULL AS source_object_type,
+            NULL AS source_status,
+            NULL AS source_title,
+            NULL AS source_created_at
+        FROM knowledge_objects ko
+        JOIN json_each(CASE WHEN json_valid(ko.metadata) THEN json_extract(ko.metadata, '$.source_run_ids') ELSE '[]' END) AS run
+        WHERE run.value IS NOT NULL AND trim(run.value) <> ''
+
+        UNION ALL
+
+        SELECT
+            ko.id AS knowledge_object_id,
+            'metadata.source_turn_ids' AS source_field,
+            'turn' AS source_kind,
+            'turn:' || turn.value AS source_id,
+            NULL AS source_object_id,
+            NULL AS source_object_type,
+            NULL AS source_status,
+            NULL AS source_title,
+            NULL AS source_created_at
+        FROM knowledge_objects ko
+        JOIN json_each(CASE WHEN json_valid(ko.metadata) THEN json_extract(ko.metadata, '$.source_turn_ids') ELSE '[]' END) AS turn
+        WHERE turn.value IS NOT NULL AND trim(turn.value) <> ''
+    """)
+
+    await conn.execute("DROP VIEW IF EXISTS knowledge_object_metadata_entries")
+    await conn.execute("""
+        CREATE VIEW knowledge_object_metadata_entries AS
+        SELECT
+            ko.id AS knowledge_object_id,
+            entry.key AS metadata_key,
+            entry.type AS value_type,
+            entry.value AS value
+        FROM knowledge_objects ko
+        JOIN json_each(CASE WHEN json_valid(ko.metadata) THEN ko.metadata ELSE '{}' END) AS entry
+    """)
+
+
+async def _migrate_v28(conn: aiosqlite.Connection) -> None:
+    """Move activation telemetry out of active knowledge and expose activation item traces."""
+    _logger.info("Migration v28: archiving legacy activation telemetry and adding activation item view")
+
+    await conn.execute("""
+        UPDATE knowledge_objects
+        SET
+            status = 'archived',
+            metadata = json_set(
+                CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,
+                '$.archived_reason', 'activation_access_telemetry',
+                '$.archived_by_migration', 'v28'
+            ),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE object_type = 'outcome_feedback'
+          AND status NOT IN ('archived', 'rejected', 'superseded')
+          AND json_valid(metadata)
+          AND json_extract(metadata, '$.kind') = 'activation_access'
+    """)
+
+    await conn.execute("DROP VIEW IF EXISTS knowledge_activation_items")
+    await conn.execute("""
+        CREATE VIEW knowledge_activation_items AS
+        SELECT
+            event.id AS access_event_id,
+            event.created_at AS created_at,
+            event.source AS source,
+            event.query AS query,
+            CAST(json_extract(item.value, '$.rank') AS INTEGER) AS rank,
+            json_extract(item.value, '$.object_id') AS object_id,
+            CAST(json_extract(item.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
+            json_extract(item.value, '$.object_type') AS object_type,
+            CAST(json_extract(item.value, '$.score') AS REAL) AS score,
+            CASE WHEN json_extract(item.value, '$.selected') THEN 1 ELSE 0 END AS selected,
+            CASE WHEN json_extract(item.value, '$.injected') THEN 1 ELSE 0 END AS injected,
+            json_extract(item.value, '$.activation') AS activation,
+            json_extract(item.value, '$.proactiveness_level') AS proactiveness_level,
+            json_extract(item.value, '$.chars') AS chars,
+            json_extract(item.value, '$.reasons') AS reasons,
+            json_extract(item.value, '$.signals') AS signals,
+            json_extract(item.value, '$.source_ids') AS source_ids,
+            ko.title AS object_title,
+            ko.status AS object_status
+        FROM memory_access_events event
+        JOIN json_each(CASE
+            WHEN json_valid(event.details) AND json_type(event.details, '$.candidates') = 'array'
+            THEN json_extract(event.details, '$.candidates')
+            ELSE '[]'
+        END) AS item
+        LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(item.value, '$.object_id') AS INTEGER)
+
+        UNION ALL
+
+        SELECT
+            event.id AS access_event_id,
+            event.created_at AS created_at,
+            event.source AS source,
+            event.query AS query,
+            CAST(json_extract(omitted.value, '$.rank') AS INTEGER) AS rank,
+            json_extract(omitted.value, '$.object_id') AS object_id,
+            CAST(json_extract(omitted.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
+            json_extract(omitted.value, '$.object_type') AS object_type,
+            CAST(json_extract(omitted.value, '$.score') AS REAL) AS score,
+            0 AS selected,
+            0 AS injected,
+            json_extract(omitted.value, '$.activation') AS activation,
+            json_extract(omitted.value, '$.proactiveness_level') AS proactiveness_level,
+            json_extract(omitted.value, '$.chars') AS chars,
+            json_extract(omitted.value, '$.reasons') AS reasons,
+            json_extract(omitted.value, '$.signals') AS signals,
+            json_extract(omitted.value, '$.source_ids') AS source_ids,
+            ko.title AS object_title,
+            ko.status AS object_status
+        FROM memory_access_events event
+        JOIN json_each(CASE
+            WHEN json_valid(event.details) AND json_type(event.details, '$.omitted') = 'array'
+            THEN json_extract(event.details, '$.omitted')
+            ELSE '[]'
+        END) AS omitted
+        LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(omitted.value, '$.object_id') AS INTEGER)
+
+        UNION ALL
+
+        SELECT
+            event.id AS access_event_id,
+            event.created_at AS created_at,
+            event.source AS source,
+            event.query AS query,
+            CAST(fallback.key AS INTEGER) + 1 AS rank,
+            fallback.value AS object_id,
+            CAST(fallback.value AS INTEGER) AS knowledge_object_id,
+            json_extract(event.details, '$.candidate_types[' || fallback.key || ']') AS object_type,
+            NULL AS score,
+            1 AS selected,
+            CASE WHEN json_extract(event.details, '$.injected') THEN 1 ELSE 0 END AS injected,
+            NULL AS activation,
+            NULL AS proactiveness_level,
+            NULL AS chars,
+            NULL AS reasons,
+            NULL AS signals,
+            NULL AS source_ids,
+            ko.title AS object_title,
+            ko.status AS object_status
+        FROM memory_access_events event
+        JOIN json_each(CASE
+            WHEN json_valid(event.details)
+             AND json_type(event.details, '$.candidates') IS NULL
+             AND json_type(event.details, '$.candidate_ids') = 'array'
+            THEN json_extract(event.details, '$.candidate_ids')
+            ELSE '[]'
+        END) AS fallback
+        LEFT JOIN knowledge_objects ko ON ko.id = CAST(fallback.value AS INTEGER)
+    """)
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -339,6 +1010,16 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (16, _migrate_v16),
     (17, _migrate_v17),
     (18, _migrate_v18),
+    (19, _migrate_v19),
+    (20, _migrate_v20),
+    (21, _migrate_v21),
+    (22, _migrate_v22),
+    (23, _migrate_v23),
+    (24, _migrate_v24),
+    (25, _migrate_v25),
+    (26, _migrate_v26),
+    (27, _migrate_v27),
+    (28, _migrate_v28),
 ]
 
 
@@ -355,7 +1036,9 @@ async def run_migrations(conn: aiosqlite.Connection) -> None:
         await _set_version(conn, version)
         await conn.commit()
 
-    _logger.info("Vacuuming database after migrations")
-    await conn.execute("VACUUM")
+    # Do not VACUUM automatically during app startup. On real user DBs this can
+    # take minutes and block the server after an otherwise quick metadata-only
+    # migration. Maintenance can run VACUUM explicitly when needed.
+    await conn.execute("PRAGMA optimize")
     await conn.commit()
     _logger.info("Memory schema up to date (v%d)", CURRENT_VERSION)

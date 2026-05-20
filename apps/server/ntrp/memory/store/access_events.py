@@ -111,6 +111,19 @@ class MemoryAccessEventRepository:
             details=details or {},
         )
 
+    async def count(self, *, source: str | None = None) -> int:
+        where = []
+        params: list[object] = []
+        if source is not None:
+            where.append("source = ?")
+            params.append(source)
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        rows = await self.read_conn.execute_fetchall(
+            f"SELECT COUNT(*) AS count FROM memory_access_events {where_sql}",
+            tuple(params),
+        )
+        return int(rows[0]["count"]) if rows else 0
+
     async def list_recent(
         self,
         *,

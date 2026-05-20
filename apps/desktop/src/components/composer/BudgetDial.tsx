@@ -286,10 +286,7 @@ export function BudgetDial() {
                 )}
               </div>
               <div className="mt-2 text-[11px] text-faint leading-snug">
-                Auto-compacts when either scale hits 100%.
-                {usage.totalCost > 0
-                  ? " Subagent spend is rolled into the cost; their tokens stay off this gauge."
-                  : " Subagent tokens stay off this gauge."}
+                Auto-compacts when either scale hits 100%. Tool-agent tokens count toward session totals, not context pressure.
               </div>
             </motion.div>
           )}

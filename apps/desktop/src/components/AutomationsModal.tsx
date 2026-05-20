@@ -13,7 +13,7 @@ import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 import { ScrollBlurTop } from "./ScrollBlur";
 
-type Tab = "active" | "channels" | "internal" | "templates";
+type Tab = "active" | "channels" | "system" | "templates";
 
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
@@ -36,8 +36,8 @@ export function AutomationsModal() {
 
   const automationGroups = useMemo(() => (automations ? splitAutomationsForTabs(automations) : null), [automations]);
   const activeCount = automationGroups?.user.length ?? 0;
-  const internalCount = automationGroups?.internal.length ?? 0;
   const channelCount = automationGroups?.channels.length ?? 0;
+  const systemCount = automationGroups?.internal.length ?? 0;
 
   return (
     <>
@@ -69,10 +69,10 @@ export function AutomationsModal() {
             onClick={() => setTab("channels")}
           />
           <TabButton
-            label="Internal"
-            count={internalCount}
-            active={tab === "internal"}
-            onClick={() => setTab("internal")}
+            label="System"
+            count={systemCount}
+            active={tab === "system"}
+            onClick={() => setTab("system")}
           />
           <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
         </nav>
@@ -88,8 +88,8 @@ export function AutomationsModal() {
             />
           ) : tab === "channels" ? (
             <ChannelList automations={automationGroups?.channels ?? null} />
-          ) : tab === "internal" ? (
-            <InternalList automations={automationGroups?.internal ?? null} />
+          ) : tab === "system" ? (
+            <SystemList automations={automationGroups?.internal ?? null} />
           ) : (
             <TemplatesList
               onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
@@ -224,29 +224,34 @@ function ChannelList({ automations }: { automations: Automation[] | null }) {
   );
 }
 
-function InternalList({ automations }: { automations: Automation[] | null }) {
+function SystemList({ automations }: { automations: Automation[] | null }) {
   if (automations === null) {
     return <div className="text-sm text-faint">Loading…</div>;
   }
   if (automations.length === 0) {
     return (
-      <div className="grid gap-2 max-w-[420px] py-10">
-        <div className="text-md font-medium text-ink">No internal automations.</div>
+      <div className="grid gap-2 max-w-[520px] py-10">
+        <div className="text-md font-medium text-ink">No system automations.</div>
         <div className="text-sm text-muted leading-[1.5]">
-          Internal memory maintenance tasks will appear here when available.
+          Knowledge reflection, retention, and health checks are seeded by the server when memory is enabled.
         </div>
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-      {automations.map((automation) => (
-        <AutomationCard
-          key={automation.task_id}
-          automation={automation}
-          onEdit={() => undefined}
-        />
-      ))}
+    <div className="grid gap-3">
+      <div className="text-sm text-muted leading-[1.5] max-w-[720px]">
+        Background knowledge work is automatic. Power controls are limited to pause, run now, and inspect last result.
+      </div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
+        {automations.map((automation) => (
+          <AutomationCard
+            key={automation.task_id}
+            automation={automation}
+            onEdit={() => undefined}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -530,7 +535,14 @@ function formatTrigger(t: AutomationTrigger): string {
     return `on:${t.event_type ?? "?"}${lead}`;
   }
   if (t.type === "idle") return `idle ${t.idle_minutes}m`;
-  if (t.type === "count") return `count ${t.threshold ?? "?"}`;
+  if (t.type === "count") return `every ${t.every_n ?? t.threshold ?? "?"} turns`;
+  if (t.type === "knowledge_event") {
+    const objects = t.object_types?.length ? t.object_types.join(",") : "object";
+    const actions = t.actions?.length ? t.actions.join(",") : "changed";
+    const statuses = t.statuses?.length ? ` · ${t.statuses.join(",")}` : "";
+    const scopes = t.scopes?.length ? ` · ${t.scopes.join(",")}` : "";
+    return `knowledge:${objects} ${actions}${statuses}${scopes}`;
+  }
   return t.type;
 }
 

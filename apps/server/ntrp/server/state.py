@@ -67,13 +67,17 @@ class RunState:
         return len(self.inject_queue)
 
     def queue_injection(self, message: dict) -> None:
+        client_id = message.get("client_id")
+        if isinstance(client_id, str) and any(entry.get("client_id") == client_id for entry in self.inject_queue):
+            return
         self.inject_queue.append(message)
         self.updated_at = datetime.now(UTC)
 
     def queue_injections(self, messages: list[dict]) -> None:
         if not messages:
             return
-        self.inject_queue.extend(messages)
+        for message in messages:
+            self.queue_injection(message)
         self.updated_at = datetime.now(UTC)
 
     def cancel_injection(self, client_id: str) -> bool:

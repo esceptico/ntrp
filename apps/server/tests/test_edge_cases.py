@@ -225,3 +225,24 @@ async def test_registry_list_pending():
 
     event.set()
     await task
+
+
+@pytest.mark.asyncio
+async def test_registry_deliver_result_emits_hidden_model_visible_terminal_event():
+    registry = BackgroundTaskRegistry(session_id="sess-1")
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    await registry.deliver_result(
+        task_id="bg-1",
+        result="done",
+        label="research",
+        status="completed",
+        emit=emit,
+    )
+
+    assert emitted[0].event_id == "bg:bg-1:completed"
+    assert emitted[0].model_visible is True
+    assert emitted[0].ui_visible is False

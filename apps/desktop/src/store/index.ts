@@ -338,13 +338,20 @@ export const useStore = create<State & Actions>((set) => ({
         messageCount: messageCount ?? s.usage.messageCount,
       },
     })),
-  updateLiveUsage: ({ prompt, completion, total, cache_read, cache_write, messageCount }) =>
+  updateLiveUsage: ({ prompt, completion, total, cache_read, cache_write, cost, messageCount, scope }) =>
     set((s) => ({
-      usage: {
-        ...s.usage,
-        lastPrompt: inputTokens({ prompt, completion, total, cache_read, cache_write }),
-        messageCount: messageCount ?? s.usage.messageCount,
-      },
+      usage:
+        scope === "tool"
+          ? {
+              ...s.usage,
+              totalTokens: s.usage.totalTokens + (total ?? prompt + completion + (cache_read ?? 0) + (cache_write ?? 0)),
+              totalCost: s.usage.totalCost + (cost ?? 0),
+            }
+          : {
+              ...s.usage,
+              lastPrompt: inputTokens({ prompt, completion, total, cache_read, cache_write }),
+              messageCount: messageCount ?? s.usage.messageCount,
+            },
     })),
   hydrateUsageSnapshot: ({ lastPrompt, messageCount }) =>
     set((s) => ({

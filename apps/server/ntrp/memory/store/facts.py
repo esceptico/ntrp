@@ -664,11 +664,19 @@ class FactRepository:
         await self.conn.execute("""
             DELETE FROM temporal_checkpoints WHERE entity_id NOT IN (
                 SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
+                UNION
+                SELECT DISTINCT entity_id FROM obs_entity_refs WHERE entity_id IS NOT NULL
+                UNION
+                SELECT DISTINCT entity_id FROM knowledge_entity_refs WHERE entity_id IS NOT NULL
             )
         """)
         cursor = await self.conn.execute("""
             DELETE FROM entities WHERE id NOT IN (
                 SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
+                UNION
+                SELECT DISTINCT entity_id FROM obs_entity_refs WHERE entity_id IS NOT NULL
+                UNION
+                SELECT DISTINCT entity_id FROM knowledge_entity_refs WHERE entity_id IS NOT NULL
             )
         """)
         return cursor.rowcount

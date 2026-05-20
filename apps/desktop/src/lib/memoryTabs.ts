@@ -1,11 +1,17 @@
-export type MemoryTab = "search" | "facts" | "patterns" | "sent" | "cleanup" | "audit";
+export type MemoryTab = "overview" | "library" | "review" | "activation";
 
-const ADVANCED_TABS = new Set<MemoryTab>(["sent", "cleanup", "audit"]);
-
-export function isAdvancedMemoryTab(tab: MemoryTab): boolean {
-  return ADVANCED_TABS.has(tab);
+export interface MemoryTabConfig {
+  id: MemoryTab;
+  label: string;
 }
 
-export function advancedMemoryTabsVisible(activeTab: MemoryTab, expanded: boolean): boolean {
-  return expanded || isAdvancedMemoryTab(activeTab);
+export const MEMORY_TABS: MemoryTabConfig[] = [
+  { id: "overview", label: "Overview" },
+  { id: "library", label: "Library" },
+  { id: "review", label: "Review" },
+  { id: "activation", label: "Activation" },
+];
+
+export function memoryTabLabels(): MemoryTabConfig[] {
+  return MEMORY_TABS;
 }

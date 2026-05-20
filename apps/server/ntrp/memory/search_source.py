@@ -1,5 +1,8 @@
+from datetime import UTC, datetime
+
+from ntrp.knowledge.models import KnowledgeObjectStatus, KnowledgeObjectType
+from ntrp.knowledge.store import KnowledgeObjectRepository
 from ntrp.memory.store.base import GraphDatabase
-from ntrp.memory.store.facts import FactRepository
 from ntrp.search.types import RawItem
 
 
@@ -10,35 +13,46 @@ class MemorySearchSource:
         self.db = db
 
     async def scan(self) -> list[RawItem]:
-        repo = FactRepository(self.db.conn)
-        total = await repo.count()
-        if total == 0:
-            return []
-
-        facts = await repo.list_recent(limit=total)
-        fact_ids = [f.id for f in facts]
-        entity_map = await repo.get_entity_refs_batch(fact_ids)
-
+        repo = KnowledgeObjectRepository(self.db.conn)
+        objects = await repo.list_many(
+            object_types={
+                KnowledgeObjectType.FACT,
+                KnowledgeObjectType.PATTERN,
+                KnowledgeObjectType.LESSON,
+                KnowledgeObjectType.PROCEDURE,
+                KnowledgeObjectType.ARTIFACT,
+            },
+            statuses={KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.APPROVED},
+            limit=10_000,
+        )
         items = []
-        for fact in facts:
-            entity_names = [e.name for e in entity_map.get(fact.id, [])]
-
-            content = fact.text
-            if entity_names:
-                content = f"{content}\n\nEntities: {', '.join(entity_names)}"
-
-            title = entity_names[0] if entity_names else fact.text[:50]
-
+        for obj in objects:
+            content = obj.text
+            if obj.scope:
+                content = f"{content}\n\nScope: {obj.scope}"
+            created_at = _parse_dt(obj.created_at)
+            updated_at = _parse_dt(obj.updated_at)
             items.append(
                 RawItem(
                     source="memory",
-                    source_id=f"fact:{fact.id}",
-                    title=title,
+                    source_id=f"knowledge:{obj.id}",
+                    title=obj.title,
                     content=content,
-                    created_at=fact.created_at,
-                    updated_at=fact.created_at,
-                    metadata={},
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    metadata={
+                        "object_type": obj.object_type.value,
+                        "status": obj.status.value,
+                        "scope": obj.scope,
+                    },
                 )
             )
 
         return items
+
+
+def _parse_dt(raw: str) -> datetime:
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)

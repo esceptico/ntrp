@@ -28,6 +28,7 @@ export interface ChatStreamState extends TranscriptProjectionState {
   replayMutationActive: boolean;
   connectionPhase: ConnectionPhase;
   sessionId: string | null;
+  projectionSessionId: string | null;
 }
 
 interface EventCursorInput {
@@ -46,6 +47,7 @@ export function createInitialChatStreamState(): ChatStreamState {
     replayMutationActive: false,
     connectionPhase: "idle",
     sessionId: null,
+    projectionSessionId: null,
   };
 }
 
@@ -62,6 +64,7 @@ export function reduceStreamConnecting(
   return {
     ...clearTransientStreamState(state),
     sessionId,
+    projectionSessionId: sessionId,
     connectionPhase:
       state.connectionPhase === "connected"
         ? "reconnecting"
@@ -76,6 +79,7 @@ export function reduceStreamConnected(
   return {
     ...state,
     sessionId,
+    projectionSessionId: sessionId,
     connectionPhase: "connected",
   };
 }
@@ -87,6 +91,7 @@ export function reduceStreamDisconnected(
   return {
     ...clearTransientStreamState(state),
     sessionId,
+    projectionSessionId: sessionId,
     connectionPhase: "disconnected",
   };
 }
@@ -101,6 +106,7 @@ export function reduceReplayGap(
   return {
     ...clearTransientStreamState(state),
     sessionId,
+    projectionSessionId: sessionId,
     replayGapBlockedSessions,
   };
 }
@@ -323,6 +329,8 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
       clearReplayMutationDomMarker();
       return { type: "replay_gap", sessionId: resetSessionId };
     }
+    case "stream_keepalive":
+      return;
     case "approval_needed":
       s.addPendingApproval({
         toolId: event.tool_id,

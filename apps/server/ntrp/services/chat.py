@@ -24,10 +24,12 @@ from ntrp.events.sse import (
     ThinkingEvent,
     TokenUsageEvent,
 )
+from ntrp.knowledge.activation import KnowledgeActivationService
+from ntrp.knowledge.models import ActivationRequest
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.prefetch import build_memory_prompt_context
+from ntrp.memory.service import MemoryService
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -63,6 +65,7 @@ class ChatDeps:
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
     memory: FactMemory | None = None
+    memory_service: MemoryService | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: NotifierService | None = None
 
@@ -289,12 +292,18 @@ async def _prepare_messages(
     goal_context: dict | None = None,
 ) -> list[dict]:
     memory_context = None
-    if deps.memory:
-        memory_context = await build_memory_prompt_context(
-            deps.memory,
-            user_message,
-            source="chat_prompt",
+    if deps.memory_service:
+        bundle = await KnowledgeActivationService(deps.memory_service).inspect(
+            ActivationRequest(
+                query=user_message,
+                scope=f"session:{session_id}" if session_id else None,
+                task="chat_prompt",
+                budget_chars=1_500,
+                limit=8,
+                record_access=True,
+            )
         )
+        memory_context = bundle.prompt_context
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
@@ -518,8 +527,7 @@ def _first_user_client_id(run: RunState) -> str | None:
 
 def _has_tool_activity(run: RunState) -> bool:
     return any(
-        message.get("role") == Role.TOOL
-        or (message.get("role") == Role.ASSISTANT and bool(message.get("tool_calls")))
+        message.get("role") == Role.TOOL or (message.get("role") == Role.ASSISTANT and bool(message.get("tool_calls")))
         for message in run.messages
     )
 
@@ -867,6 +875,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             parent_tracker=tracker,
             initial_input_tokens=ctx.initial_input_tokens,
         )
+
         async def _track_response(response) -> None:
             await tracker.track(response)
             await bus.emit(

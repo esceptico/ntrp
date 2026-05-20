@@ -11,7 +11,8 @@ from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import TimeTrigger
+from ntrp.automation.triggers import KnowledgeEventTrigger, TimeTrigger
+from ntrp.events.triggers import KnowledgeObjectChanged
 
 
 @pytest_asyncio.fixture
@@ -87,6 +88,38 @@ def _make_post_scheduler(
     sched = Scheduler(store=store, build_deps=lambda: None)
     sched.set_post_dispatcher(post_dispatcher)
     return sched, dispatched, results
+
+
+def _knowledge_automation(
+    *,
+    task_id: str = "knowledge-reflect",
+    object_types: tuple[str, ...] = ("episode",),
+    actions: tuple[str, ...] = ("created",),
+    statuses: tuple[str, ...] = ("active",),
+) -> Automation:
+    now = datetime.now(UTC)
+    return Automation(
+        task_id=task_id,
+        name="Knowledge Reflection",
+        description="Reflect new episodes",
+        model=None,
+        triggers=[
+            KnowledgeEventTrigger(
+                object_types=object_types,
+                actions=actions,
+                statuses=statuses,
+            )
+        ],
+        enabled=True,
+        created_at=now,
+        next_run_at=None,
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        handler="knowledge_reflection",
+        builtin=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -205,6 +238,72 @@ async def test_create_loop_sets_next_run_at_to_now(store: AutomationStore):
     assert loop.next_run_at is not None
     # within a second of creation
     assert abs((loop.next_run_at - before).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_knowledge_event_trigger_runs_matching_handler(store: AutomationStore):
+    await store.save(_knowledge_automation())
+    ran: list[dict | None] = []
+
+    async def handler(context: dict | None) -> str:
+        ran.append(context)
+        return "reflected"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.register_handler("knowledge_reflection", handler)
+
+    await sched.fire_event(
+        KnowledgeObjectChanged(
+            action="created",
+            object_id=42,
+            object_type="episode",
+            status="active",
+            title="Run 42",
+            scope="session:s1",
+            source_ids=("run:42",),
+            updated_at="2026-05-19T00:00:00+00:00",
+        )
+    )
+    for t in list(sched._running):
+        await t
+
+    assert len(ran) == 1
+    assert ran[0] is not None
+    assert "Knowledge object created: episode#42" in str(ran[0].get("event_context"))
+    reloaded = await store.get("knowledge-reflect")
+    assert reloaded.last_result == "reflected"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_event_trigger_ignores_non_matching_object_type(store: AutomationStore):
+    await store.save(_knowledge_automation())
+    ran: list[dict | None] = []
+
+    async def handler(context: dict | None) -> str:
+        ran.append(context)
+        return "reflected"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.register_handler("knowledge_reflection", handler)
+
+    await sched.fire_event(
+        KnowledgeObjectChanged(
+            action="created",
+            object_id=43,
+            object_type="fact",
+            status="active",
+            title="Fact 43",
+            scope="session:s1",
+            source_ids=("run:43",),
+            updated_at="2026-05-19T00:00:00+00:00",
+        )
+    )
+    for t in list(sched._running):
+        await t
+
+    assert ran == []
+    reloaded = await store.get("knowledge-reflect")
+    assert reloaded.last_result is None
 
 
 @pytest.mark.asyncio

@@ -195,16 +195,30 @@ async def get_session_history(
     }
 
 
-@router.get("/session/episodes")
-async def get_session_episodes(
+@router.get("/session/turns")
+async def get_session_turns(
     svc: SessionService = Depends(require_session_service),
     session_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
 ):
     data = await svc.load(session_id)
     if not data:
-        return {"episodes": []}
-    return {"episodes": await svc.list_episodes(data.state.session_id, limit=limit)}
+        return {"turns": []}
+    return {"turns": await svc.list_turns(data.state.session_id, limit=limit)}
+
+
+@router.get("/session/episodes")
+async def get_session_episodes(
+    svc: SessionService = Depends(require_session_service),
+    session_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    # Deprecated compatibility endpoint. These are session turns, not true memory episodes.
+    data = await svc.load(session_id)
+    if not data:
+        return {"episodes": [], "turns": []}
+    turns = await svc.list_turns(data.state.session_id, limit=limit)
+    return {"episodes": [{**turn, "episode_id": turn["turn_id"]} for turn in turns], "turns": turns}
 
 
 @router.get("/session")

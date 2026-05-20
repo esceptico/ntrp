@@ -1,11 +1,4 @@
-export const MEMORY_TABS = [
-  "recall",
-  "context",
-  "facts",
-  "observations",
-  "prune",
-  "events",
-] as const;
+export const MEMORY_TABS = ["overview", "library", "review", "activation"] as const;
 
 export type MemoryTabType = (typeof MEMORY_TABS)[number];
 
@@ -18,41 +11,29 @@ export const MEMORY_TAB_COPY: Record<
     description: string;
   }
 > = {
-  recall: {
-    wide: "Search",
-    narrow: "Find",
-    title: "Search",
-    description: "test what memory retrieval returns for a query",
+  overview: {
+    wide: "Overview",
+    narrow: "View",
+    title: "Overview",
+    description: "counts, review queue, recent knowledge",
   },
-  context: {
-    wide: "Sent",
-    narrow: "Sent",
-    title: "Sent",
-    description: "memory bundles that reached prompts or tools",
+  library: {
+    wide: "Library",
+    narrow: "Types",
+    title: "Library",
+    description: "browse knowledge by object type",
   },
-  facts: {
-    wide: "Facts",
-    narrow: "Facts",
-    title: "Facts",
-    description: "source evidence, not the prompt-facing memory layer",
+  review: {
+    wide: "Review",
+    narrow: "Review",
+    title: "Review",
+    description: "draft procedures, actions, and artifacts",
   },
-  observations: {
-    wide: "Patterns",
-    narrow: "Pat",
-    title: "Patterns",
-    description: "contextual summaries backed by facts",
-  },
-  prune: {
-    wide: "Cleanup",
-    narrow: "Clean",
-    title: "Cleanup",
-    description: "bulk archive low-value derived patterns",
-  },
-  events: {
-    wide: "Audit",
-    narrow: "Audit",
-    title: "Audit",
-    description: "why memory changed and who changed it",
+  activation: {
+    wide: "Activation",
+    narrow: "Use",
+    title: "Activation",
+    description: "preview what enters the agent context",
   },
 };
 
