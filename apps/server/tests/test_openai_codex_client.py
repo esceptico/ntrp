@@ -265,7 +265,7 @@ async def test_completion_consumes_streaming_response(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_codex_stream_yields_live_responses_deltas(monkeypatch):
+async def test_codex_stream_buffers_responses_until_completion(monkeypatch):
     fake = _FakeOpenAI()
 
     async def fake_client(self):
@@ -284,7 +284,7 @@ async def test_codex_stream_yields_live_responses_deltas(monkeypatch):
     request = fake.responses.requests[0]
     assert request["model"] == "gpt-5.5"
     assert request["stream"] is True
-    assert events[0] == "he"
-    assert events[1] == "llo"
+    assert events[0].content == "thinking"
+    assert events[1] == "hello"
     assert events[-1].choices[0].message.content == "hello"
     assert fake.closed is True

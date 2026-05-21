@@ -5,6 +5,7 @@ from ntrp.llm.openai import OpenAIClient
 from ntrp.llm.openai_responses import (
     buffered_stream_responses_completion,
     complete_responses_completion,
+    stream_responses_completion,
 )
 
 
@@ -157,6 +158,51 @@ class _FakeOpenAI:
         self.chat = type("Chat", (), {"completions": _FakeChatCompletions()})()
 
 
+class _DisconnectingResponses:
+    async def create(self, **kwargs):
+        return _Stream(
+            [
+                _Event({"type": "response.output_text.delta", "delta": "partial"}),
+                httpx.RemoteProtocolError("peer closed connection without sending complete message body"),
+            ]
+        )
+
+
+class _DisconnectingResponsesOpenAI:
+    def __init__(self):
+        self.responses = _DisconnectingResponses()
+
+
+class _ChatDelta:
+    content = "partial"
+    tool_calls = None
+
+
+class _ChatChoice:
+    finish_reason = None
+    delta = _ChatDelta()
+
+
+class _ChatChunk:
+    usage = None
+    choices = [_ChatChoice()]
+
+
+class _DisconnectingChatCompletions:
+    async def create(self, **kwargs):
+        return _Stream(
+            [
+                _ChatChunk(),
+                httpx.RemoteProtocolError("peer closed connection without sending complete message body"),
+            ]
+        )
+
+
+class _DisconnectingChatOpenAI:
+    def __init__(self):
+        self.chat = type("Chat", (), {"completions": _DisconnectingChatCompletions()})()
+
+
 @pytest.mark.asyncio
 async def test_native_openai_tools_with_reasoning_use_responses_for_completion():
     client = OpenAIClient(api_key="test")
@@ -238,3 +284,31 @@ async def test_buffered_responses_stream_retries_disconnect_after_upstream_delta
     assert fake.responses.requests[0]["stream"] is True
     assert events[0] == "ok"
     assert events[-1].choices[0].message.content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_live_responses_stream_reports_remote_protocol_disconnect():
+    fake = _DisconnectingResponsesOpenAI()
+    stream = stream_responses_completion(
+        fake,
+        {"model": "gpt-5.5", "input": "hi"},
+        model="gpt-5.5",
+    )
+
+    assert await anext(stream) == "partial"
+    with pytest.raises(RuntimeError, match="OpenAI response stream disconnected before completion"):
+        await anext(stream)
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_stream_reports_remote_protocol_disconnect():
+    client = OpenAIClient(api_key="test")
+    client._client = _DisconnectingChatOpenAI()
+    stream = client._stream_completion(
+        messages=[{"role": "user", "content": "hi"}],
+        model="gpt-5.2",
+    )
+
+    assert await anext(stream) == "partial"
+    with pytest.raises(RuntimeError, match="OpenAI chat completion stream disconnected before completion"):
+        await anext(stream)

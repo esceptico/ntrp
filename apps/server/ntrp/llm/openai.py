@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+import httpx
 import openai
 from pydantic import BaseModel
 
@@ -216,7 +217,10 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         request["stream"] = True
         request["stream_options"] = {"include_usage": True}
 
-        stream = await self._client.chat.completions.create(**request)
+        try:
+            stream = await self._client.chat.completions.create(**request)
+        except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
+            raise RuntimeError("OpenAI chat completion stream disconnected before completion") from exc
 
         content_parts: list[str] = []
         tool_call_chunks: dict[int, dict] = {}
@@ -224,37 +228,40 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         usage_chunk = None
         reasoning_parts: list[str] = []
 
-        async for chunk in stream:
-            if chunk.usage:
-                usage_chunk = chunk.usage
-            if not chunk.choices:
-                continue
+        try:
+            async for chunk in stream:
+                if chunk.usage:
+                    usage_chunk = chunk.usage
+                if not chunk.choices:
+                    continue
 
-            choice = chunk.choices[0]
-            if choice.finish_reason:
-                finish_reason = _map_finish_reason(choice.finish_reason)
-            delta = choice.delta
+                choice = chunk.choices[0]
+                if choice.finish_reason:
+                    finish_reason = _map_finish_reason(choice.finish_reason)
+                delta = choice.delta
 
-            if delta.content:
-                yield delta.content
-                content_parts.append(delta.content)
+                if delta.content:
+                    yield delta.content
+                    content_parts.append(delta.content)
 
-            if rc := getattr(delta, "reasoning_content", None):
-                reasoning_parts.append(rc)
-                yield ReasoningContentDelta(rc)
+                if rc := getattr(delta, "reasoning_content", None):
+                    reasoning_parts.append(rc)
+                    yield ReasoningContentDelta(rc)
 
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    if tc.index not in tool_call_chunks:
-                        tool_call_chunks[tc.index] = {"id": "", "name": "", "arguments": ""}
-                    entry = tool_call_chunks[tc.index]
-                    if tc.id:
-                        entry["id"] = tc.id
-                    if tc.function:
-                        if tc.function.name:
-                            entry["name"] = tc.function.name
-                        if tc.function.arguments:
-                            entry["arguments"] += tc.function.arguments
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        if tc.index not in tool_call_chunks:
+                            tool_call_chunks[tc.index] = {"id": "", "name": "", "arguments": ""}
+                        entry = tool_call_chunks[tc.index]
+                        if tc.id:
+                            entry["id"] = tc.id
+                        if tc.function:
+                            if tc.function.name:
+                                entry["name"] = tc.function.name
+                            if tc.function.arguments:
+                                entry["arguments"] += tc.function.arguments
+        except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
+            raise RuntimeError("OpenAI chat completion stream disconnected before completion") from exc
 
         content = "".join(content_parts) or None
         tool_calls = None
