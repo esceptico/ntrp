@@ -200,6 +200,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+    await bus_registry.close_all()
     await runtime.close()
 
 

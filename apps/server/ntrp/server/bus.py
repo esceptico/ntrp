@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field
 
 from ntrp.events.sse import SSEEvent
+from ntrp.logging import get_logger
 
 SSE_QUEUE_MAXSIZE = 256
 # Sized for a single research turn that fans out to ~150 nested tool
@@ -14,6 +15,7 @@ SSE_QUEUE_MAXSIZE = 256
 # silently disappears from the activity panel. ~10k events × ~200B =
 # ~2MB per active session, which is fine for a single-user app.
 RECENT_BUFFER_MAX = 10000
+_logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +67,7 @@ class SessionBus:
     # so a fast reconnect after a step boundary stays in the buffered-
     # replay path instead of triggering a stream_reset + history reload.
     _recent: deque[StreamRecord] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
+    _record_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
 
     def __post_init__(self, initial_next_seq: int, initial_checkpoint_seq: int) -> None:
         self._next_seq = initial_next_seq
@@ -82,13 +85,49 @@ class SessionBus:
         record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
         self._next_seq += 1
         self._recent.append(record)
-        if self.record_event:
-            await self.record_event(record)
         for queue in tuple(self._subscribers):
             try:
                 queue.put_nowait(record)
             except asyncio.QueueFull:
                 self._close_slow_subscriber(queue)
+        self._schedule_record_event(record)
+
+    def _schedule_record_event(self, record: StreamRecord) -> None:
+        if not self.record_event:
+            return
+        try:
+            task = asyncio.create_task(self.record_event(record))
+        except Exception as exc:
+            _logger.warning(
+                "session_event_persist_schedule_failed",
+                session_id=record.session_id,
+                seq=record.seq,
+                error=str(exc),
+            )
+            return
+        self._record_tasks.add(task)
+
+        def finalize(done: asyncio.Task[None]) -> None:
+            self._record_tasks.discard(done)
+            if done.cancelled():
+                return
+            try:
+                exception = done.exception()
+            except asyncio.CancelledError:
+                return
+            if exception is not None:
+                _logger.warning(
+                    "session_event_persist_failed",
+                    session_id=record.session_id,
+                    seq=record.seq,
+                    error=str(exception),
+                )
+
+        task.add_done_callback(finalize)
+
+    async def drain_record_tasks(self) -> None:
+        while self._record_tasks:
+            await asyncio.gather(*tuple(self._record_tasks), return_exceptions=True)
 
     def mark_checkpoint(self) -> None:
         """Record that every event up to the latest emitted seq is now
@@ -209,6 +248,17 @@ class BusRegistry:
             self._next_seq_by_session[session_id] = bus.next_seq
             self._checkpoint_seq_by_session[session_id] = bus.checkpoint_seq
 
+    async def remove_if_idle(self, session_id: str, *, is_active: Callable[[], bool]) -> None:
+        bus = self._buses.get(session_id)
+        if bus is None:
+            return
+        await bus.drain_record_tasks()
+        if self._buses.get(session_id) is not bus:
+            return
+        if bus._subscribers or is_active():
+            return
+        self.remove(session_id)
+
     def close_all_sync(self) -> None:
         for bus in self._buses.values():
             self._next_seq_by_session[bus.session_id] = bus.next_seq
@@ -217,4 +267,8 @@ class BusRegistry:
 
     async def close_all(self) -> None:
         self.close_all_sync()
+        await asyncio.gather(
+            *(bus.drain_record_tasks() for bus in self._buses.values()),
+            return_exceptions=True,
+        )
         self._buses.clear()

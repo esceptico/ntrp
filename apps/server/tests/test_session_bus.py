@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from ntrp.events.sse import ThinkingEvent
@@ -81,11 +83,61 @@ async def test_bus_registry_records_emitted_events():
     registry = BusRegistry(record_event=record_event)
     bus = registry.get_or_create("sess-1")
     await bus.emit(ThinkingEvent(status="saved"))
+    await bus.drain_record_tasks()
 
     assert len(recorded) == 1
     assert recorded[0].seq == 1
     assert recorded[0].session_id == "sess-1"
     assert recorded[0].event.status == "saved"
+
+
+@pytest.mark.asyncio
+async def test_emit_delivers_live_event_before_slow_persistence_finishes():
+    release = asyncio.Event()
+    recorded = []
+
+    async def record_event(record):
+        await release.wait()
+        recorded.append(record)
+
+    bus = SessionBus(session_id="sess-1", record_event=record_event)
+    queue = bus.subscribe()
+
+    await asyncio.wait_for(bus.emit(ThinkingEvent(status="live")), timeout=0.1)
+
+    record = queue.get_nowait()
+    assert record.event.status == "live"
+    assert recorded == []
+
+    release.set()
+    await asyncio.wait_for(bus.drain_record_tasks(), timeout=1)
+    assert recorded[0].event.status == "live"
+
+
+@pytest.mark.asyncio
+async def test_registry_idle_remove_waits_for_event_persistence():
+    release = asyncio.Event()
+    recorded = []
+
+    async def record_event(record):
+        await release.wait()
+        recorded.append(record)
+
+    registry = BusRegistry(record_event=record_event)
+    bus = registry.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="persist-me"))
+
+    remove_task = asyncio.create_task(registry.remove_if_idle("sess-1", is_active=lambda: False))
+    await asyncio.sleep(0)
+
+    assert registry.get("sess-1") is bus
+    assert not remove_task.done()
+
+    release.set()
+    await asyncio.wait_for(remove_task, timeout=1)
+
+    assert recorded[0].event.status == "persist-me"
+    assert registry.get("sess-1") is None
 
 
 @pytest.mark.asyncio

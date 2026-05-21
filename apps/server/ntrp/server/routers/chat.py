@@ -125,7 +125,10 @@ async def _event_stream(
     finally:
         bus.unsubscribe(queue)
         if not bus._subscribers and not run_registry.get_active_run(session_id):
-            bus_registry.remove(session_id)
+            await bus_registry.remove_if_idle(
+                session_id,
+                is_active=lambda: run_registry.get_active_run(session_id) is not None,
+            )
 
 
 @router.get("/chat/events/{session_id}")
