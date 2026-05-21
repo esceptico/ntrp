@@ -1734,6 +1734,7 @@ class SessionStore:
                 (session_id, limit),
             )
             rows = list(reversed(desc_rows))
+            rows = await self._latest_rows_with_visible_user_anchor(session_id, rows)
 
         messages = [self._message_row_payload(row) for row in rows]
         first_seq = messages[0]["seq"] if messages else None
@@ -1762,6 +1763,43 @@ class SessionStore:
             "before": messages[0]["message_id"] if messages else None,
             "after": messages[-1]["message_id"] if messages else None,
         }
+
+    def _row_is_visible_user(self, row: Any) -> bool:
+        if row["role"] != "user":
+            return False
+        try:
+            message = json.loads(row["message_json"])
+        except Exception:
+            return True
+        return not bool(message.get("is_meta"))
+
+    async def _latest_rows_with_visible_user_anchor(self, session_id: str, rows: list[Any]) -> list[Any]:
+        if not rows or any(self._row_is_visible_user(row) for row in rows):
+            return rows
+        first_seq = rows[0]["seq"]
+        anchors = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq < ? AND role = 'user'
+            ORDER BY seq DESC
+            LIMIT 1
+            """,
+            (session_id, first_seq),
+        )
+        if not anchors:
+            return rows
+        anchor = anchors[0]
+        if not self._row_is_visible_user(anchor):
+            return rows
+        return await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq >= ?
+            ORDER BY seq ASC
+            LIMIT 250
+            """,
+            (session_id, anchor["seq"]),
+        )
 
     async def delete_session_messages_from(
         self,

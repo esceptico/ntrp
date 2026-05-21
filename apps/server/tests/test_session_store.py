@@ -793,6 +793,36 @@ async def test_session_message_pagination_before_and_around(store: SessionStore)
 
 
 @pytest.mark.asyncio
+async def test_latest_session_messages_include_visible_user_anchor_for_tool_heavy_tail(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": "implement the goal", "client_id": "u-1"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "call-1", "type": "function", "function": {"name": "search_text", "arguments": "{}"}}],
+        },
+        {"role": "tool", "tool_call_id": "call-1", "content": "result 1"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "call-2", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "call-2", "content": "result 2"},
+    ]
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=3)
+
+    assert [row["message"]["role"] for row in latest["messages"]] == [
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
+    ]
+    assert latest["messages"][0]["message"]["content"] == "implement the goal"
+    assert latest["has_more_before"] is False
+    assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
 async def test_delete_session_messages_from_trims_reverted_future(store: SessionStore):
     state = _make_state()
     messages = [

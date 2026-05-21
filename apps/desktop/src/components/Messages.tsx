@@ -210,10 +210,10 @@ export function Messages() {
             ? null
             : visibleOrder.length === 0
               ? <EmptyState />
-              : segments.map((seg) =>
+              : segments.map((seg, index) =>
                   seg.userId
                     ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
-                    : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
+                    : <div key={`preamble-${index}`} className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
                 )}
           <CompactionIndicator />
         </div>

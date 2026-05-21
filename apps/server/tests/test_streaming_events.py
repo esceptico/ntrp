@@ -799,7 +799,9 @@ async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkey
 
     assert len(dispatched) == 1
     assert dispatched[0][0] == "sess-1"
-    assert dispatched[0][1].startswith("Continue working toward the active session goal.")
+    assert dispatched[0][1].startswith("<goal_context>")
+    assert "Continue working toward the active session goal." in dispatched[0][1]
+    assert "<objective>\nKeep going\n</objective>" in dispatched[0][1]
     assert dispatched[0][2].startswith("goal:goal-1:")
     assert dispatched[0][3] is True
 
