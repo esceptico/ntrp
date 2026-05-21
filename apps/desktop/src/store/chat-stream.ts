@@ -24,6 +24,7 @@ export interface ChatStreamState extends TranscriptProjectionState {
   replayGapReloadingSessions: Map<string, Promise<boolean>>;
   replayGapBlockedSessions: Set<string>;
   lastEventSeqBySession: Map<string, number>;
+  transportDiagnosticsBySession: Map<string, TransportDiagnostics>;
   replayMutationTimer: ReturnType<typeof setTimeout> | null;
   replayMutationActive: boolean;
   connectionPhase: ConnectionPhase;
@@ -35,6 +36,17 @@ interface EventCursorInput {
   session_id?: string | null;
   seq?: number;
   type?: string;
+  latest_seq?: number;
+}
+
+export interface TransportDiagnostics {
+  connectionPhase: ConnectionPhase;
+  lastSeq?: number;
+  lastKeepaliveSeq?: number;
+  connectAfterSeq?: number | null;
+  lastClosedReason?: string | null;
+  lastError?: string | null;
+  updatedAt: number;
 }
 
 export function createInitialChatStreamState(): ChatStreamState {
@@ -43,6 +55,7 @@ export function createInitialChatStreamState(): ChatStreamState {
     replayGapReloadingSessions: new Map(),
     replayGapBlockedSessions: new Set(),
     lastEventSeqBySession: new Map(),
+    transportDiagnosticsBySession: new Map(),
     replayMutationTimer: null,
     replayMutationActive: false,
     connectionPhase: "idle",
@@ -60,40 +73,58 @@ export function getChatStreamState(): ChatStreamState {
 export function reduceStreamConnecting(
   state: ChatStreamState,
   sessionId: string,
+  afterSeq?: number,
 ): ChatStreamState {
-  return {
+  const connectionPhase =
+    state.connectionPhase === "connected"
+      ? "reconnecting"
+      : "connecting";
+  return updateTransportDiagnostics(
+    {
     ...clearTransientStreamState(state),
     sessionId,
     projectionSessionId: sessionId,
-    connectionPhase:
-      state.connectionPhase === "connected"
-        ? "reconnecting"
-        : "connecting",
-  };
+      connectionPhase,
+    },
+    sessionId,
+    { connectionPhase, connectAfterSeq: afterSeq ?? null },
+  );
 }
 
 export function reduceStreamConnected(
   state: ChatStreamState,
   sessionId: string,
 ): ChatStreamState {
-  return {
-    ...state,
+  return updateTransportDiagnostics(
+    {
+      ...state,
+      sessionId,
+      projectionSessionId: sessionId,
+      connectionPhase: "connected",
+    },
     sessionId,
-    projectionSessionId: sessionId,
-    connectionPhase: "connected",
-  };
+    { connectionPhase: "connected" },
+  );
 }
 
 export function reduceStreamDisconnected(
   state: ChatStreamState,
   sessionId: string | null = state.sessionId,
+  reason?: string | null,
+  error?: string | null,
 ): ChatStreamState {
-  return {
+  const next: ChatStreamState = {
     ...clearTransientStreamState(state),
     sessionId,
     projectionSessionId: sessionId,
     connectionPhase: "disconnected",
   };
+  if (!sessionId) return next;
+  return updateTransportDiagnostics(next, sessionId, {
+    connectionPhase: "disconnected",
+    ...(reason !== undefined ? { lastClosedReason: reason } : {}),
+    ...(error !== undefined ? { lastError: error } : {}),
+  });
 }
 
 export function reduceReplayGap(
@@ -121,7 +152,10 @@ export function reduceEventCursor(
   if (event.type === "stream_reset") {
     const lastEventSeqBySession = new Map(state.lastEventSeqBySession);
     lastEventSeqBySession.set(event.session_id, event.seq);
-    return { state: { ...state, lastEventSeqBySession }, accepted: true };
+    return {
+      state: recordTransportEventDiagnostics({ ...state, lastEventSeqBySession }, event),
+      accepted: true,
+    };
   }
   if (state.replayGapBlockedSessions.has(event.session_id)) {
     return { state, accepted: false };
@@ -134,7 +168,39 @@ export function reduceEventCursor(
 
   const lastEventSeqBySession = new Map(state.lastEventSeqBySession);
   lastEventSeqBySession.set(event.session_id, event.seq);
-  return { state: { ...state, lastEventSeqBySession }, accepted: true };
+  return {
+    state: recordTransportEventDiagnostics({ ...state, lastEventSeqBySession }, event),
+    accepted: true,
+  };
+}
+
+function updateTransportDiagnostics(
+  state: ChatStreamState,
+  sessionId: string,
+  patch: Partial<TransportDiagnostics>,
+): ChatStreamState {
+  const transportDiagnosticsBySession = new Map(state.transportDiagnosticsBySession);
+  const current = transportDiagnosticsBySession.get(sessionId);
+  const diagnostics = {
+    connectionPhase: state.connectionPhase,
+    lastClosedReason: null,
+    lastError: null,
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  transportDiagnosticsBySession.set(sessionId, diagnostics);
+  return { ...state, transportDiagnosticsBySession };
+}
+
+function recordTransportEventDiagnostics(state: ChatStreamState, event: EventCursorInput): ChatStreamState {
+  if (!event.session_id || typeof event.seq !== "number") return state;
+  return updateTransportDiagnostics(state, event.session_id, {
+    lastSeq: event.seq,
+    ...(event.type === "stream_keepalive"
+      ? { lastKeepaliveSeq: event.latest_seq ?? event.seq }
+      : {}),
+  });
 }
 
 export function clearReplayBlock(
@@ -177,20 +243,31 @@ function rewindCursorForTransientProjection(state: ChatStreamState): Map<string,
 
 function updateChatStreamState(next: ChatStreamState): ChatStreamState {
   chatStreamState = next;
+  setState({
+    transportDiagnostics: Object.fromEntries(chatStreamState.transportDiagnosticsBySession),
+  });
   return chatStreamState;
 }
 
-export function markStreamConnecting(sessionId: string): void {
-  updateChatStreamState(reduceStreamConnecting(chatStreamState, sessionId));
+export function markStreamConnecting(sessionId: string, afterSeq?: number): void {
+  updateChatStreamState(reduceStreamConnecting(chatStreamState, sessionId, afterSeq));
 }
 
 export function markStreamConnected(sessionId: string): void {
   updateChatStreamState(reduceStreamConnected(chatStreamState, sessionId));
 }
 
-export function markStreamDisconnected(sessionId: string | null = chatStreamState.sessionId): void {
-  updateChatStreamState(reduceStreamDisconnected(chatStreamState, sessionId));
+export function markStreamDisconnected(
+  sessionId: string | null = chatStreamState.sessionId,
+  reason?: string | null,
+  error?: string | null,
+): void {
+  updateChatStreamState(reduceStreamDisconnected(chatStreamState, sessionId, reason, error));
   clearReplayMutationDomMarker();
+}
+
+export function recordTransportEventForDiagnostics(event: EventCursorInput): void {
+  updateChatStreamState(recordTransportEventDiagnostics(chatStreamState, event));
 }
 
 function acceptEventCursor(event: ServerEvent): boolean {
@@ -201,6 +278,10 @@ function acceptEventCursor(event: ServerEvent): boolean {
 
 export function lastEventSeqForSession(sessionId: string): number | undefined {
   return chatStreamState.lastEventSeqBySession.get(sessionId);
+}
+
+export function transportDiagnosticsForSession(sessionId: string): TransportDiagnostics | undefined {
+  return chatStreamState.transportDiagnosticsBySession.get(sessionId);
 }
 
 export function forgetEventSeqForSession(sessionId: string): void {

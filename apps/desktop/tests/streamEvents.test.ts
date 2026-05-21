@@ -801,7 +801,7 @@ test("stopRun clears running state after successful cancel request", async () =>
     await stopRun();
 
     expect(requests).toEqual([
-      { path: "/cancel", method: "POST", body: JSON.stringify({ run_id: "run-1" }) },
+      { path: "/cancel", method: "POST", body: JSON.stringify({ run_id: "run-1" }), timeout: 60_000 },
     ]);
     expect(getState().running).toBe(false);
     expect(getState().currentRunId).toBeNull();

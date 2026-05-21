@@ -149,6 +149,7 @@ export const useStore = create<State & Actions>((set) => ({
   pendingResume: null,
   stoppingRunId: null,
   terminalRunIds: new Set(),
+  transportDiagnostics: {},
   modalOrigin: null,
   loops: [],
   backgroundAgents: createBackgroundAgentsDomainState(),

@@ -6,6 +6,7 @@ import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
 import { ICON } from "../lib/icons";
+import { formatTransportDiagnostics } from "../lib/transportDiagnostics";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -29,7 +30,9 @@ function ChatHeader() {
   const sessions = useStore((s) => s.sessions);
   const automations = useStore((s) => s.automations);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const diagnostics = useStore((s) => sessionId ? s.transportDiagnostics[sessionId] : undefined);
   const session = sessions.find((s) => s.session_id === sessionId);
+  const formattedDiagnostics = diagnostics ? formatTransportDiagnostics(diagnostics) : null;
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
   const isChannel = session?.session_type === "channel";
@@ -65,6 +68,14 @@ function ChatHeader() {
         {isChannel && originLabel && (
           <span className="shrink-0 text-xs text-faint truncate" title={originId ?? undefined}>
             from {originLabel}
+          </span>
+        )}
+        {formattedDiagnostics && (
+          <span
+            className="shrink-0 text-[10px] font-mono text-faint truncate"
+            title={formattedDiagnostics.title}
+          >
+            {formattedDiagnostics.label}
           </span>
         )}
       </div>

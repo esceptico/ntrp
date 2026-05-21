@@ -213,6 +213,7 @@ function eventStreamUrl(config, sessionId, afterSeq) {
 
 async function streamEvents(connectionId, webContents, configInput, sessionId, afterSeq, signal) {
   const config = normalizeConfig(configInput);
+  let terminalSent = false;
   try {
     const response = await fetch(eventStreamUrl(config, sessionId, afterSeq), {
       headers: apiHeaders(config),
@@ -246,12 +247,20 @@ async function streamEvents(connectionId, webContents, configInput, sessionId, a
     }
   } catch (error) {
     if (!signal.aborted && !webContents.isDestroyed()) {
+      terminalSent = true;
       webContents.send("events:data", {
         connectionId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   } finally {
+    if (!terminalSent && !signal.aborted && !webContents.isDestroyed()) {
+      webContents.send("events:data", {
+        connectionId,
+        closed: true,
+        reason: "eof",
+      });
+    }
     eventStreams.delete(connectionId);
   }
 }
@@ -517,7 +526,11 @@ app.whenReady().then(() => {
     const connectionId = crypto.randomUUID();
     const controller = new AbortController();
     eventStreams.set(connectionId, controller);
-    void streamEvents(connectionId, event.sender, config, sessionId, afterSeq, controller.signal);
+    setImmediate(() => {
+      if (!controller.signal.aborted) {
+        void streamEvents(connectionId, event.sender, config, sessionId, afterSeq, controller.signal);
+      }
+    });
     return connectionId;
   });
   ipcMain.handle("events:disconnect", (event, connectionId) => {

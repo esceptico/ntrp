@@ -44,6 +44,8 @@ interface Window {
           connectionId: string;
           event?: unknown;
           error?: string;
+          closed?: boolean;
+          reason?: string;
         }) => void,
       ) => () => void;
     };

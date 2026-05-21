@@ -74,6 +74,25 @@ test("reconnect keeps cursor but does not replay visual animations", () => {
   expect(state.connectionPhase).toBe("connecting");
 });
 
+test("transport diagnostics track reconnect cursor and keepalive seq", () => {
+  let state = createInitialChatStreamState();
+
+  state = reduceStreamConnecting(state, "session-1", 41);
+  state = reduceEventCursor(state, {
+    session_id: "session-1",
+    type: "stream_keepalive",
+    seq: 42,
+    latest_seq: 99,
+  }).state;
+
+  expect(state.transportDiagnosticsBySession.get("session-1")).toMatchObject({
+    connectionPhase: "connecting",
+    connectAfterSeq: 41,
+    lastSeq: 42,
+    lastKeepaliveSeq: 99,
+  });
+});
+
 test("stream connection binds transient projection state to the target session", () => {
   let state = createInitialChatStreamState();
 

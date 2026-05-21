@@ -8,6 +8,7 @@ import type {
   SessionListItem,
   SkillDescriptor,
 } from "../api";
+import type { TransportDiagnosticsSnapshot } from "../lib/transportDiagnostics";
 import type { MessageSourceFocus } from "../lib/messageSourceFocus";
 import type { AutomationStreamDomainState } from "./automation-domain";
 import type { BackgroundAgentsDomainState } from "./background-agent-domain";
@@ -334,6 +335,7 @@ export interface State {
   /** Terminal run ids seen locally. Prevents stale status polls from
    *  re-adding a run that the live stream already finished. */
   terminalRunIds: Set<string>;
+  transportDiagnostics: Record<string, TransportDiagnosticsSnapshot>;
   /** Center point of the element that triggered the currently-open modal.
    *  Null when the modal opens via keyboard / palette / non-positional path. */
   modalOrigin: { x: number; y: number } | null;
