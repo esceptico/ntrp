@@ -7,15 +7,28 @@ from typing import Any
 from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger
-from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
+from ntrp.constants import (
+    DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
+    NTRP_TMP_BASE,
+    OFFLOAD_PREVIEW_LINES,
+    OFFLOAD_THRESHOLD,
+)
 from ntrp.tools.core.context import ToolContext, ToolExecution
-from ntrp.tools.core.types import ToolAction
+from ntrp.tools.core.types import ToolAction, ToolScope
 from ntrp.tools.deferred import is_deferred_tool
 from ntrp.tools.executor import ToolExecutor
 
 LIVE_READ_TOOLS = frozenset({"list_background_tasks"})
 AUDIT_PREVIEW_MAX_CHARS = 500
 _logger = logging.get_logger(__name__)
+
+
+def _effective_timeout_seconds(tool: Any) -> int | float | None:
+    if tool.policy.timeout_seconds is not None:
+        return tool.policy.timeout_seconds
+    if tool.policy.scope == ToolScope.EXTERNAL:
+        return DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS
+    return None
 
 
 class NtrpToolExecutor:
@@ -61,11 +74,12 @@ class NtrpToolExecutor:
         execution = ToolExecution(tool_id=tool_call_id, tool_name=name, ctx=self._ctx)
         try:
             execute = self._executor.registry.execute(name, execution, args)
-            if tool.policy.timeout_seconds is None:
+            timeout_seconds = _effective_timeout_seconds(tool)
+            if timeout_seconds is None:
                 result = await execute
             else:
                 try:
-                    result = await asyncio.wait_for(execute, timeout=tool.policy.timeout_seconds)
+                    result = await asyncio.wait_for(execute, timeout=timeout_seconds)
                 except TimeoutError:
                     result = ToolResult(content="Tool call timed out.", preview="Timed out", is_error=True)
                     if store:

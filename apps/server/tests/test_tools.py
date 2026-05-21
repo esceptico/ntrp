@@ -735,6 +735,32 @@ async def test_ntrp_tool_executor_policy_timeout_seconds_returns_error_result():
 
 
 @pytest.mark.asyncio
+async def test_ntrp_tool_executor_defaults_external_tool_timeout(monkeypatch):
+    import ntrp.core.tool_executor as core_tool_executor_module
+
+    monkeypatch.setattr(core_tool_executor_module, "DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS", 0.001)
+
+    async def slow(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+        await asyncio.sleep(1)
+        return ToolResult(content="late", preview="late")
+
+    registry = ToolRegistry()
+    registry.register(
+        "slow_external",
+        tool(
+            description="Return too slowly.",
+            execute=slow,
+            policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL),
+        ),
+    )
+    executor = NtrpToolExecutor(ToolExecutor().with_registry(registry), _make_tool_context(registry))
+
+    result = await executor.execute("slow_external", {}, "call-1")
+
+    assert result == ToolResult(content="Tool call timed out.", preview="Timed out", is_error=True)
+
+
+@pytest.mark.asyncio
 async def test_ntrp_tool_executor_audits_policy_enabled_calls(session_store: SessionStore):
     async def echo(execution: ToolExecution, args: EchoInput) -> ToolResult:
         return ToolResult(content=f"echo: {args.text}", preview="ok")

@@ -1,3 +1,4 @@
+import ntrp.constants as constants
 from ntrp.agent import Role
 from ntrp.constants import SESSION_HANDOFF_MARKER
 from ntrp.core.compactor import (
@@ -86,3 +87,8 @@ def test_compact_needed_does_not_compact_small_history_from_estimate():
     ]
 
     assert not compact_needed(messages, "gpt-5.2", actual_input_tokens=None)
+
+
+def test_compaction_timeout_is_finite():
+    assert constants.COMPACTION_TIMEOUT is not None
+    assert constants.COMPACTION_TIMEOUT > 0

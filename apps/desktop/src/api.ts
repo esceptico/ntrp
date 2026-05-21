@@ -173,6 +173,7 @@ export type ServerEvent = CommonServerEventFields & (
 );
 
 export const STORAGE_KEY = "ntrp.desktop.config";
+export const DEFAULT_API_TIMEOUT_MS = 60_000;
 
 export const DEFAULT_CONFIG: AppConfig = {
   serverUrl: "http://localhost:6877",
@@ -215,6 +216,7 @@ function errorMessageFromResponse(response: { status: number; data?: unknown; te
 
 export async function apiWithConfig<T>(config: AppConfig, path: string, init: RequestInit = {}): Promise<T> {
   const { timeout, ...requestInit } = init as RequestInit & { timeout?: number };
+  const effectiveTimeout = timeout ?? DEFAULT_API_TIMEOUT_MS;
   const body = typeof requestInit.body === "string" ? requestInit.body : undefined;
   const desktopApi = window.ntrpDesktop?.api;
 
@@ -223,14 +225,14 @@ export async function apiWithConfig<T>(config: AppConfig, path: string, init: Re
       path,
       method: requestInit.method ?? "GET",
       body,
-      timeout,
+      timeout: effectiveTimeout,
     });
     if (!response.ok) throw new Error(errorMessageFromResponse(response));
     return response.contentType.includes("application/json") ? (response.data as T) : (undefined as T);
   }
 
   const controller = new AbortController();
-  const timeoutId = timeout && timeout > 0 ? window.setTimeout(() => controller.abort(), timeout) : null;
+  const timeoutId = effectiveTimeout > 0 ? window.setTimeout(() => controller.abort(), effectiveTimeout) : null;
   const signal = requestInit.signal ? AbortSignal.any([controller.signal, requestInit.signal]) : controller.signal;
 
   try {
