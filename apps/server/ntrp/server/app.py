@@ -125,12 +125,9 @@ async def lifespan(app: FastAPI):
         #
         # The whole body runs under a per-session write lock so concurrent
         # post-mode dispatches against the same target session serialize
-        # their load→save windows. The fire gate already blocks new user
-        # runs while a post-mode loop is firing; the lock closes the
-        # post-vs-post race.
-        # TODO: extend lock acquisition into `submit_chat_message` to
-        # fully serialize all session-message writes (covers the residual
-        # post-vs-chat race during the agent run).
+        # their load→save windows. SessionStore also serializes chat save /
+        # progress writes per session, so post-vs-chat history writes share
+        # the same one-writer-at-a-time model.
         if not runtime.session_service:
             return None
         target_id = _loop_target_id(automation)

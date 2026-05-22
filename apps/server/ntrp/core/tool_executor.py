@@ -104,6 +104,7 @@ class NtrpToolExecutor:
                 preview=result.preview,
                 is_error=result.is_error,
                 data=result.data,
+                model_content=result.model_content,
             )
 
         if store:
@@ -186,6 +187,7 @@ class NtrpToolExecutor:
             preview=result.preview,
             is_error=result.is_error,
             data=result.data,
+            model_content=result.model_content,
         )
 
     def get_meta(self, name: str) -> ToolMeta | None:
@@ -222,4 +224,10 @@ class NtrpToolExecutor:
             f"Use bash(grep -n 'pattern' '{offload_path}') to find specific content, "
             f"or read_file(path='{offload_path}', offset=N, limit=M) to read a specific section."
         )
-        return ToolResult(content=compact, preview=result.preview, is_error=result.is_error, data=result.data)
+        return ToolResult(
+            content=compact,
+            preview=result.preview,
+            is_error=result.is_error,
+            data=result.data,
+            model_content=result.model_content,
+        )

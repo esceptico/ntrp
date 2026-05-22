@@ -89,6 +89,17 @@ export {
   SIDEBAR_SNAP_THRESHOLD_PX,
 } from "./prefs";
 
+
+function activeRunsFromSessions(sessions: import("../api").SessionListItem[]) {
+  return sessions
+    .filter((session) => session.active_run_id && ["pending", "running", "backgrounded"].includes(session.run_status ?? ""))
+    .map((session) => ({
+      runId: session.active_run_id,
+      sessionId: session.session_id,
+      status: session.run_status,
+    }));
+}
+
 function inputTokens(usage: {
   prompt: number;
   completion: number;
@@ -158,8 +169,19 @@ export const useStore = create<State & Actions>((set) => ({
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
-  setSessions: (sessions) => set({ sessions }),
-  prependSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
+  setSessions: (sessions) =>
+    set((s) => ({
+      sessions,
+      ...reduceRunStatus(s, { activeRuns: activeRunsFromSessions(sessions) }),
+    })),
+  prependSession: (session) =>
+    set((s) => {
+      const sessions = [session, ...s.sessions];
+      return {
+        sessions,
+        ...reduceRunStatus(s, { activeRuns: activeRunsFromSessions(sessions) }),
+      };
+    }),
   syncActiveRuns: (runs) => set((s) => reduceRunStatus(s, { activeRuns: runs })),
   markRunStarted: (runId, sessionId) =>
     set((s) => reduceRunStarted(s, { runId, sessionId })),

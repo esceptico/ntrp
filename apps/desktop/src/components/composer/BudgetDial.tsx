@@ -7,8 +7,9 @@ import { DURATION_POPOVER, EASE_DECELERATE } from "../../lib/tokens/motion";
 
 /** Compact "two scales on one ring" budget meter. Outer arc = token
  *  pressure (parent context only — subagent internals don't count, per
- *  the compactor logic). Inner arc = message pressure. Either hitting
- *  100% triggers auto-compaction on the server. Hover or click for the
+ *  the compactor logic). Inner arc = message pressure. Token pressure
+ *  near the configured limit or message pressure at the cap triggers
+ *  auto-compaction on the server. Hover or click for the
  *  breakdown. */
 
 const SIZE = 18;
@@ -57,9 +58,9 @@ export function BudgetDial() {
     ? Math.round(serverConfig.compression_threshold * 100)
     : 80;
   const tokenLimit =
-    modelCeiling > 0
-      ? Math.floor(modelCeiling * (serverConfig?.compression_threshold ?? 0.8))
-      : 0;
+    serverConfig?.compaction_token_limit
+      ?? (modelCeiling > 0 ? Math.floor(modelCeiling * 0.8) : 0);
+  const tokenTrigger = serverConfig?.compaction_token_trigger ?? 0;
   const messageLimit = serverConfig?.max_messages ?? 0;
   const tokenRatio = tokenLimit > 0 ? Math.min(1, usage.lastPrompt / tokenLimit) : 0;
   const messageRatio = messageLimit > 0 ? Math.min(1, usage.messageCount / messageLimit) : 0;
@@ -245,7 +246,7 @@ export function BudgetDial() {
                 color={ratioColor(tokenRatio)}
                 detail={
                   modelCeiling > 0
-                    ? `${formatTokens(modelCeiling)} ceiling · compacts at ${compressionPct}%`
+                    ? `${formatTokens(modelCeiling)} ceiling · budget ${compressionPct}%`
                     : undefined
                 }
               />
@@ -286,7 +287,7 @@ export function BudgetDial() {
                 )}
               </div>
               <div className="mt-2 text-[11px] text-faint leading-snug">
-                Auto-compacts when either scale hits 100%. Tool-agent tokens count toward session totals, not context pressure.
+                Auto-compacts at {formatTokens(tokenTrigger)} tokens or when messages hit 100%. Tool-agent tokens count toward session totals, not context pressure.
               </div>
             </motion.div>
           )}

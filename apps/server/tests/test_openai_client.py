@@ -45,6 +45,62 @@ def test_openai_compatible_request_omits_prompt_cache_key():
     assert "prompt_cache_key" not in request
 
 
+def test_chat_completions_request_formats_image_blocks_as_data_urls():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare(
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "inspect"},
+                    {"type": "image", "media_type": "image/png", "data": "iVBORw0KGgo="},
+                ],
+            }
+        ],
+        model="gpt-5.2",
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort=None,
+        response_format=None,
+    )
+
+    assert request["messages"][0]["content"] == [
+        {"type": "text", "text": "inspect"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+    ]
+
+
+def test_responses_request_formats_image_blocks_as_input_images():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "inspect"},
+                    {"type": "image", "media_type": "image/jpeg", "data": "/9j/4A=="},
+                ],
+            }
+        ],
+        model="gpt-5.5",
+        tools=[{"type": "function", "function": {"name": "Search", "parameters": {"type": "object"}}}],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    assert request["input"][0]["content"] == [
+        {"type": "input_text", "text": "inspect"},
+        {"type": "input_image", "detail": "auto", "image_url": "data:image/jpeg;base64,/9j/4A=="},
+    ]
+
+
 class _FakeItem:
     def __init__(self, data: dict):
         self._data = data

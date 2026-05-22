@@ -134,6 +134,13 @@ async def stream_responses_completion(
                     yield delta
                 continue
 
+            if event_type in ("response.output_text.done", "response.content_part.done"):
+                delta = _missing_done_text_delta(data, text_parts)
+                if delta:
+                    text_parts.append(delta)
+                    yield delta
+                continue
+
             if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
                 delta = data.get("delta")
                 if isinstance(delta, str) and delta:
@@ -208,6 +215,12 @@ async def _collect_streamed_responses_completion(
                 text_parts.append(delta)
             continue
 
+        if event_type in ("response.output_text.done", "response.content_part.done"):
+            delta = _missing_done_text_delta(data, text_parts)
+            if delta:
+                text_parts.append(delta)
+            continue
+
         if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
             delta = data.get("delta")
             if isinstance(delta, str) and delta:
@@ -241,6 +254,25 @@ async def _collect_streamed_responses_completion(
 
     parsed = parse_responses_response(final_response, model, completed_items or None)
     return _with_streamed_fallbacks(parsed, text_parts=text_parts, reasoning_parts=reasoning_parts)
+
+
+def _missing_done_text_delta(data: dict[str, Any], text_parts: list[str]) -> str | None:
+    if data.get("type") == "response.output_text.done":
+        text = data.get("text")
+    else:
+        part = data.get("part")
+        text = part.get("text") if isinstance(part, dict) and part.get("type") in ("output_text", "text") else None
+    if not isinstance(text, str) or not text:
+        return None
+
+    current = "".join(text_parts)
+    if text == current:
+        return None
+    if text.startswith(current):
+        return text[len(current) :]
+    if not current:
+        return text
+    return None
 
 
 def _with_streamed_fallbacks(

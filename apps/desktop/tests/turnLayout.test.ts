@@ -104,3 +104,36 @@ test("does not move a pre-tool assistant message when no final assistant exists"
     finalAssistantId: null,
   });
 });
+
+test("keeps the final assistant visible when replay appends trailing activity", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "activity-1", role: "activity" },
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-2", role: "activity" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["activity-1", "activity-2"],
+    afterWorkIds: ["assistant-1"],
+    finalAssistantId: "assistant-1",
+  });
+});
+
+test("does not treat pre-work assistant text as final just because it is the only assistant", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["assistant-1", "activity-1"],
+    afterWorkIds: [],
+    finalAssistantId: null,
+  });
+});

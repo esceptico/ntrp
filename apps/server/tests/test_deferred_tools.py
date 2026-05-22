@@ -3,17 +3,20 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel
 
-from ntrp.agent import Result, StopReason, Usage
-from ntrp.agent.model_request import ModelRequest
+from ntrp.agent import Agent, Result, StopReason, Usage
+from ntrp.agent.model_request import ModelRequest, apply_model_request_middlewares
 from ntrp.agent.types.tool_choice import ToolChoiceMode
 from ntrp.context.models import SessionState
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
+from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.spawner import create_spawn_fn
+from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.deferred import build_deferred_tools_prompt, build_deferred_tools_prompt_for_schemas, load_tools_tool
+from tests.helpers import MockCompletionClient, MockLLMClient, make_text_response, make_tool_response
 
 READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
 WRITE_INTERNAL_POLICY = ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True)
@@ -123,6 +126,18 @@ def _request(registry: ToolRegistry) -> ModelRequest:
 
 async def _identity(req: ModelRequest) -> ModelRequest:
     return req
+
+
+class _Executor:
+    def __init__(self, registry: ToolRegistry):
+        self.registry = registry
+
+    @property
+    def tool_services(self):
+        return {}
+
+    def get_tools(self, **kwargs):
+        return self.registry.get_schemas(**kwargs)
 
 
 class AlwaysCompacts:
@@ -257,7 +272,78 @@ async def test_deferred_middleware_hides_then_reveals_loaded_tools():
 
 
 @pytest.mark.asyncio
-async def test_compaction_unloads_deferred_tools_but_rehydrates_control_state():
+async def test_agent_load_tools_reveals_slack_on_next_model_step():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    executor = _Executor(registry)
+    llm = MockCompletionClient(
+        [
+            make_tool_response("load_tools", {"group": "slack"}, call_id="call_load"),
+            make_tool_response("slack_search", {"query": "hello"}, call_id="call_slack"),
+            make_text_response("done"),
+        ]
+    )
+    agent = Agent(
+        tools=registry.get_schemas(),
+        client=MockLLMClient(llm),
+        executor=NtrpToolExecutor(executor, ctx),
+        model="test-model",
+        model_request_middlewares=(
+            DeferredToolsModelRequestMiddleware(
+                registry=registry,
+                run=run,
+                get_services=lambda: ctx.services,
+            ),
+        ),
+    )
+
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}])
+
+    assert result.text == "done"
+    assert "slack_search" in run.loaded_tools
+    first_tools = {t["function"]["name"] for t in llm.calls[0]["tools"]}
+    second_tools = {t["function"]["name"] for t in llm.calls[1]["tools"]}
+    assert "load_tools" in first_tools
+    assert "slack_search" not in first_tools
+    assert "load_tools" in second_tools
+    assert "slack_search" in second_tools
+
+
+@pytest.mark.asyncio
+async def test_load_tools_can_be_called_again_after_group_is_loaded():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    first = await registry.execute(
+        "load_tools",
+        ToolExecution(tool_id="call_load_1", tool_name="load_tools", ctx=ctx),
+        {"group": "slack"},
+    )
+    second = await registry.execute(
+        "load_tools",
+        ToolExecution(tool_id="call_load_2", tool_name="load_tools", ctx=ctx),
+        {"group": "slack"},
+    )
+
+    assert not first.is_error
+    assert not second.is_error
+    assert "Already loaded: slack_search" in second.content
+    assert "slack_search" in run.loaded_tools
+
+
+@pytest.mark.asyncio
+async def test_compaction_unloads_deferred_tools_and_refreshes_schema():
     registry = _registry()
     run = RunContext(
         run_id="run",
@@ -273,19 +359,41 @@ async def test_compaction_unloads_deferred_tools_but_rehydrates_control_state():
         apply_rehydration_state=run.apply_rehydration_state,
     )
 
-    async def compacting_next(req: ModelRequest) -> ModelRequest:
-        return await compaction(req, _identity)
-
-    prepared = await deferred(_request(registry), compacting_next)
+    prepared = await apply_model_request_middlewares(_request(registry), (deferred, compaction))
     names = {t["function"]["name"] for t in prepared.tools}
-    assert "slack_search" in names
+    assert "load_tools" in names
+    assert "slack_search" not in names
     assert prepared.messages == [{"role": "system", "content": "compacted"}]
     assert run.loaded_tools == set()
     assert run.active_plan_ref == "plan:abc"
 
     next_prepared = await deferred(_request(registry), _identity)
     next_names = {t["function"]["name"] for t in next_prepared.tools}
+    assert "load_tools" in next_names
     assert "slack_search" not in next_names
+
+
+@pytest.mark.asyncio
+async def test_create_agent_compaction_refreshes_deferred_schema():
+    registry = _registry()
+    loaded = {"slack_search"}
+    agent = create_agent(
+        executor=_Executor(registry),
+        config=AgentConfig(model="test-model", research_model=None, max_depth=3, compactor=AlwaysCompacts()),
+        tools=registry.get_schemas(),
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        run_id="run",
+        loaded_tools=loaded,
+    )
+    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}]
+
+    _, tools, _, _ = await agent._prepare(0, messages)
+
+    names = {t["function"]["name"] for t in tools}
+    assert messages == [{"role": "system", "content": "compacted"}]
+    assert loaded == set()
+    assert "load_tools" in names
+    assert "slack_search" not in names
 
 
 @pytest.mark.asyncio
@@ -336,6 +444,8 @@ def test_deferred_prompt_lists_groups_and_tools():
     assert "write_file" in prompt
     assert "edit_file" in prompt
     assert "load_tools" in prompt
+    assert 'load_tools(group="slack")' in prompt
+    assert "Do not use filesystem/time/no-op tool calls" in prompt
 
 
 def test_deferred_prompt_respects_allowed_tool_schemas():
@@ -470,4 +580,66 @@ async def test_spawned_agents_inherit_deferred_loading(monkeypatch):
     names = {t["function"]["name"] for t in prepared.tools}
     assert "load_tools" in names
     assert "echo" in names
+    assert "slack_search" not in names
+
+
+@pytest.mark.asyncio
+async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
+    registry = _registry()
+    captured = {}
+
+    class FakeExecutor:
+        def __init__(self, registry: ToolRegistry):
+            self.registry = registry
+
+        @property
+        def tool_services(self):
+            return {}
+
+        def get_tools(self, **kwargs):
+            return self.registry.get_schemas(**kwargs)
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    parent_ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(
+            run_id="run",
+            max_depth=3,
+            deferred_tools_enabled=True,
+            loaded_tools={"slack_search"},
+        ),
+        io=IOBridge(),
+    )
+    parent_ctx.spawn_fn = create_spawn_fn(
+        executor=FakeExecutor(registry),
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        compactor=AlwaysCompacts(),
+    )
+
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search slack",
+        system_prompt="child prompt",
+        tools=registry.get_schemas(),
+    )
+
+    assert result.text == "done"
+    prepared = await apply_model_request_middlewares(
+        _request(registry),
+        captured["model_request_middlewares"],
+    )
+    names = {t["function"]["name"] for t in prepared.tools}
+    assert prepared.messages == [{"role": "system", "content": "compacted"}]
+    assert "load_tools" in names
     assert "slack_search" not in names

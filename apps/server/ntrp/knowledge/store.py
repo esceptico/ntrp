@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from re import findall
+from re import findall, fullmatch
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -42,6 +42,15 @@ def _query_terms(query: str) -> set[str]:
 def _candidate_entity_names(query: str) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
+    raw = query.strip()
+    # Preserve explicitly supplied entity names even when they are lowercase
+    # project/product names or topic-like labels. Broader natural-language
+    # questions still fall through to phrase/term extraction.
+    if 1 <= len(raw.split()) <= 6 and fullmatch(r"[A-Za-z0-9_.+-]+(?:\s+[A-Za-z0-9_.+-]+)*", raw):
+        key = raw.casefold()
+        if len(raw) > 2:
+            names.append(raw)
+            seen.add(key)
     # Preserve explicit capitalized phrases like "Prime Intellect" and "Trigger.dev"-ish terms.
     for match in findall(r"(?:[A-Z][\w.-]+)(?:\s+[A-Z][\w.-]+)*", query):
         value = match.strip()
@@ -79,7 +88,7 @@ def _fts_query(query: str) -> str | None:
         return None
     # Quote terms to avoid FTS syntax surprises from user text; OR keeps recall high
     # and the activation reranker handles precision.
-    return " OR ".join(f'"{term}"' for term in terms[:16])
+    return " OR ".join(f'"{term}"' for term in terms[:32])
 
 
 _SQL_SEARCH_KNOWLEDGE_OBJECTS_VEC = """
@@ -426,6 +435,52 @@ class KnowledgeObjectRepository:
     async def get_entity_names(self, object_id: int) -> list[str]:
         rows = await self.read_conn.execute_fetchall(_SQL_GET_KNOWLEDGE_ENTITY_NAMES, (object_id,))
         return [str(row[0]) for row in rows]
+
+    async def list_profile_entity_names(self, *, limit: int = 100) -> list[str]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            WITH evidence AS (
+                SELECT ker.name AS name, COUNT(*) AS evidence_count, MAX(ko.updated_at) AS last_seen
+                FROM knowledge_entity_refs ker
+                JOIN knowledge_objects ko ON ko.id = ker.knowledge_object_id
+                WHERE ko.status IN ('active', 'approved')
+                  AND ko.object_type IN ('fact', 'pattern', 'lesson', 'procedure')
+                  AND ker.name IS NOT NULL
+                  AND TRIM(ker.name) != ''
+                GROUP BY ker.name COLLATE NOCASE
+            ), active_profiles AS (
+                SELECT json_extract(metadata, '$.profile_entity') AS name,
+                       MAX(COALESCE(json_extract(metadata, '$.valid_as_of'), updated_at)) AS valid_as_of
+                FROM knowledge_objects
+                WHERE object_type = 'entity_profile'
+                  AND status IN ('active', 'approved')
+                  AND json_extract(metadata, '$.profile_entity') IS NOT NULL
+                GROUP BY json_extract(metadata, '$.profile_entity') COLLATE NOCASE
+            )
+            SELECT evidence.name AS name, evidence.evidence_count AS evidence_count, evidence.last_seen AS last_seen
+            FROM evidence
+            LEFT JOIN active_profiles ON active_profiles.name = evidence.name COLLATE NOCASE
+            WHERE active_profiles.name IS NULL OR evidence.last_seen > active_profiles.valid_as_of
+            ORDER BY evidence_count DESC, last_seen DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [str(row["name"]) for row in rows]
+
+    async def get_entity_profile(self, entity_name: str) -> KnowledgeObject | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM knowledge_objects
+            WHERE object_type = 'entity_profile'
+              AND json_extract(metadata, '$.profile_entity') = ? COLLATE NOCASE
+              AND status NOT IN ('archived', 'rejected', 'superseded')
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (entity_name,),
+        )
+        return _object_from_row(rows[0]) if rows else None
 
     async def _get_or_create_entity(self, entity: ResolvedEntity) -> int:
         now = datetime.now(UTC).isoformat()

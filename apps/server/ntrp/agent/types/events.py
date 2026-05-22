@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.usage import Usage
+from ntrp.core.content import ContentBlock
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,6 +75,7 @@ class ToolCompleted(AgentEventBase):
     data: dict | None
     display_name: str
     kind: str = "tool"
+    model_content: tuple[ContentBlock, ...] = ()
 
 
 @dataclass(frozen=True)

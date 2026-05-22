@@ -7,8 +7,6 @@ import {
   reduceRunStarted,
 } from "./run-lifecycle";
 
-type EventApplicationMode = "live" | "replay";
-
 export type TranscriptProjectionEffect =
   | { type: "resend_queued_messages"; messages: QueuedMessage[] };
 
@@ -48,9 +46,6 @@ interface ProjectionContext {
   latest: () => TranscriptProjectionState;
   commit: (next: TranscriptProjectionState) => TranscriptProjectionState;
 }
-
-const ITEM_STAGGER_MS = 40;
-const MAX_STAGGER_LAG_MS = 120;
 
 export function createInitialTranscriptProjectionState(): TranscriptProjectionState {
   return {
@@ -98,7 +93,6 @@ export function applyChatEventToTranscript(
 
   const s = getState();
   const ts = event.timestamp ?? Date.now();
-  const mode: EventApplicationMode = event.replay ? "replay" : "live";
   let effect: TranscriptProjectionEffect | undefined;
 
   switch (event.type) {
@@ -237,8 +231,7 @@ export function applyChatEventToTranscript(
     }
 
     case "TOOL_CALL_START": {
-      const pendingToolCalls = new Map(context.state.pendingToolCalls);
-      pendingToolCalls.set(event.tool_call_id, {
+      const pending: PendingToolCall = {
         name: event.tool_call_name,
         description: event.description ?? "",
         argsBuffer: "",
@@ -246,20 +239,28 @@ export function applyChatEventToTranscript(
         parentId: event.parent_id ?? null,
         semanticKind: event.kind ?? "tool",
         startSeq: typeof event.seq === "number" ? event.seq : undefined,
-      });
+      };
+      const pendingToolCalls = new Map(context.state.pendingToolCalls);
+      pendingToolCalls.set(event.tool_call_id, pending);
       context.update({ ...context.state, pendingToolCalls });
+      appendActivityItemImmediately(context, activityItemFromPending(event.tool_call_id, pending));
       break;
     }
 
     case "TOOL_CALL_ARGS": {
       const pending = context.state.pendingToolCalls.get(event.tool_call_id);
       if (!pending) break;
+      const argsBuffer = pending.argsBuffer + event.delta;
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.set(event.tool_call_id, {
         ...pending,
-        argsBuffer: pending.argsBuffer + event.delta,
+        argsBuffer,
       });
       context.update({ ...context.state, pendingToolCalls });
+      s.mergeActivityItem(event.tool_call_id, {
+        args: argsBuffer,
+        target: pending.description || formatCallTarget(pending.name, argsBuffer || "{}"),
+      });
       break;
     }
 
@@ -267,49 +268,16 @@ export function applyChatEventToTranscript(
       const pending = context.state.pendingToolCalls.get(event.tool_call_id);
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.delete(event.tool_call_id);
-      let pendingActivityReplaySeqs = context.state.pendingActivityReplaySeqs;
-      if (typeof pending?.startSeq === "number") {
-        pendingActivityReplaySeqs = new Map(pendingActivityReplaySeqs);
-        pendingActivityReplaySeqs.set(event.tool_call_id, pending.startSeq);
-      }
-      context.update({ ...context.state, pendingToolCalls, pendingActivityReplaySeqs });
+      context.update({ ...context.state, pendingToolCalls });
       if (!pending) break;
 
-      const target = pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}");
-      const item: ActivityItem = {
-        id: event.tool_call_id,
-        kind: pending.name,
-        semanticKind:
-          pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
-        target,
-        args: pending.argsBuffer,
-        depth: pending.depth || undefined,
-        parentToolId: pending.parentId ?? undefined,
-      };
+      const item = activityItemFromPending(event.tool_call_id, pending);
       const pendingPatch = takePendingResultPatch(context, item.id);
-      if (pendingPatch) Object.assign(item, pendingPatch);
-      const activityId = s.activeActivityId;
-      if (!activityId) {
-        const newId = crypto.randomUUID();
-        s.insertMessageBefore(
-          {
-            id: newId,
-            role: "activity",
-            content: "",
-            activity: { items: [item], label: "Calling", done: false },
-          },
-          activityInsertAnchor(context),
-        );
-        s.setActiveActivityId(newId);
-        const nextPendingActivityReplaySeqs = new Map(context.state.pendingActivityReplaySeqs);
-        nextPendingActivityReplaySeqs.delete(item.id);
-        context.update({
-          ...context.state,
-          pendingActivityReplaySeqs: nextPendingActivityReplaySeqs,
-          nextItemRenderAt: Date.now(),
-        });
-      } else {
-        enqueueActivityItem(context, activityId, item, mode);
+      const patch = pendingPatch
+        ? { ...activityPatchFromPending(pending), ...pendingPatch }
+        : activityPatchFromPending(pending);
+      if (!s.mergeActivityItem(item.id, patch)) {
+        appendActivityItemImmediately(context, pendingPatch ? { ...item, ...pendingPatch } : item);
       }
       break;
     }
@@ -612,6 +580,64 @@ function activityInsertAnchor(context: ProjectionContext): string | null {
   return assistantId;
 }
 
+function activityItemFromPending(id: string, pending: PendingToolCall): ActivityItem {
+  return {
+    id,
+    kind: pending.name,
+    semanticKind: pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
+    target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
+    args: pending.argsBuffer,
+    depth: pending.depth || undefined,
+    parentToolId: pending.parentId ?? undefined,
+  };
+}
+
+function activityPatchFromPending(pending: PendingToolCall): Partial<ActivityItem> {
+  return {
+    target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
+    args: pending.argsBuffer,
+    depth: pending.depth || undefined,
+    parentToolId: pending.parentId ?? undefined,
+  };
+}
+
+function activityPatchFromItem(item: ActivityItem): Partial<ActivityItem> {
+  return {
+    target: item.target,
+    args: item.args,
+    depth: item.depth,
+    parentToolId: item.parentToolId,
+    semanticKind: item.semanticKind,
+  };
+}
+
+function appendActivityItemImmediately(context: ProjectionContext, item: ActivityItem): void {
+  const state = getState();
+  if (state.mergeActivityItem(item.id, activityPatchFromItem(item))) {
+    return;
+  }
+
+  const activityId = state.activeActivityId;
+  if (!activityId) {
+    const newId = crypto.randomUUID();
+    state.insertMessageBefore(
+      {
+        id: newId,
+        role: "activity",
+        content: "",
+        activity: { items: [item], label: "Calling", done: false },
+      },
+      activityInsertAnchor(context),
+    );
+    state.setActiveActivityId(newId);
+    context.update({ ...context.state, nextItemRenderAt: Date.now() });
+    return;
+  }
+
+  state.appendActivityItem(activityId, item);
+  context.update({ ...context.state, nextItemRenderAt: Date.now() });
+}
+
 function bufferActivityPatch(
   context: ProjectionContext,
   itemId: string,
@@ -635,79 +661,6 @@ function takePendingResultPatch(
   pendingResultPatches.delete(itemId);
   context.update({ ...context.state, pendingResultPatches });
   return pendingPatch;
-}
-
-function takePendingResultPatchFromState(
-  state: TranscriptProjectionState,
-  itemId: string,
-): { state: TranscriptProjectionState; patch?: Partial<ActivityItem> } {
-  const patch = state.pendingResultPatches.get(itemId);
-  if (!patch) return { state };
-  const pendingResultPatches = new Map(state.pendingResultPatches);
-  pendingResultPatches.delete(itemId);
-  return { state: { ...state, pendingResultPatches }, patch };
-}
-
-function enqueueActivityItem(
-  context: ProjectionContext,
-  activityId: string,
-  item: ActivityItem,
-  mode: EventApplicationMode,
-) {
-  const clearReplaySeq = () => {
-    if (!context.state.pendingActivityReplaySeqs.has(item.id)) return;
-    const pendingActivityReplaySeqs = new Map(context.state.pendingActivityReplaySeqs);
-    pendingActivityReplaySeqs.delete(item.id);
-    context.update({ ...context.state, pendingActivityReplaySeqs });
-  };
-
-  if (mode === "replay") {
-    const state = getState();
-    if (!state.messages.get(activityId)?.activity) {
-      clearReplaySeq();
-      return;
-    }
-    const pendingPatch = takePendingResultPatch(context, item.id);
-    state.appendActivityItem(activityId, pendingPatch ? { ...item, ...pendingPatch } : item);
-    clearReplaySeq();
-    return;
-  }
-
-  const now = Date.now();
-  const queued = context.state.nextItemRenderAt + ITEM_STAGGER_MS;
-  const ceiling = now + MAX_STAGGER_LAG_MS;
-  const renderAt = Math.max(now, Math.min(queued, ceiling));
-  context.update({ ...context.state, nextItemRenderAt: renderAt });
-  const delay = renderAt - now;
-  const apply = () => {
-    const state = getState();
-    if (!state.messages.get(activityId)?.activity) {
-      clearReplaySeq();
-      return;
-    }
-    const { state: withoutPatch, patch } = takePendingResultPatchFromState(
-      context.latest(),
-      item.id,
-    );
-    context.commit(withoutPatch);
-    const pendingPatch = patch;
-    state.appendActivityItem(activityId, pendingPatch ? { ...item, ...pendingPatch } : item);
-    clearReplaySeq();
-  };
-  if (delay === 0) apply();
-  else {
-    let timer: ReturnType<typeof setTimeout>;
-    timer = setTimeout(() => {
-      const latest = context.latest();
-      const delayedActivityTimers = new Set(latest.delayedActivityTimers);
-      delayedActivityTimers.delete(timer);
-      context.commit({ ...latest, delayedActivityTimers });
-      apply();
-    }, delay);
-    const delayedActivityTimers = new Set(context.state.delayedActivityTimers);
-    delayedActivityTimers.add(timer);
-    context.update({ ...context.state, delayedActivityTimers });
-  }
 }
 
 /** End the active activity (if any) and clear the marker. */

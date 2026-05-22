@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from ntrp.events.sse import ThinkingEvent
+from ntrp.events.sse import StreamResetEvent, ThinkingEvent
 from ntrp.server.bus import BusRegistry, SessionBus
 
 
@@ -33,8 +33,43 @@ async def test_session_bus_closes_slow_subscriber_without_blocking_fast_one():
     await bus.emit(third)
 
     assert slow not in bus._subscribers
+    slow_reset = slow.get_nowait()
+    assert slow_reset.event.reason == "slow_consumer"
     assert slow.get_nowait() is None
     assert fast.get_nowait().event == third
+
+
+@pytest.mark.asyncio
+async def test_slow_subscriber_reset_uses_checkpoint_cursor():
+    bus = SessionBus(session_id="sess-1", subscriber_queue_size=2)
+    slow = bus.subscribe()
+
+    await bus.emit(ThinkingEvent(status="persisted"))
+    bus.mark_checkpoint()
+    await bus.emit(ThinkingEvent(status="tail-one"))
+    await bus.emit(ThinkingEvent(status="tail-two"))
+
+    assert slow not in bus._subscribers
+    slow_reset = slow.get_nowait()
+    assert slow_reset.event.reason == "slow_consumer"
+    assert slow_reset.seq == bus.checkpoint_seq
+    assert slow.get_nowait() is None
+
+
+@pytest.mark.asyncio
+async def test_stream_reset_preempts_full_subscriber_queue():
+    bus = SessionBus(session_id="sess-1", subscriber_queue_size=2)
+    queue = bus.subscribe()
+
+    await bus.emit(ThinkingEvent(status="stale-one"))
+    await bus.emit(ThinkingEvent(status="stale-two"))
+    await bus.emit(StreamResetEvent(reason="manual_reset"))
+
+    assert queue not in bus._subscribers
+    reset = queue.get_nowait()
+    assert reset.event.reason == "manual_reset"
+    assert reset.seq == 3
+    assert queue.get_nowait() is None
 
 
 def test_bus_registry_close_all_handles_full_subscriber_queues():
@@ -92,7 +127,36 @@ async def test_bus_registry_records_emitted_events():
 
 
 @pytest.mark.asyncio
-async def test_emit_delivers_live_event_before_slow_persistence_finishes():
+async def test_event_persistence_uses_one_bounded_writer_queue():
+    release = asyncio.Event()
+    recorded = []
+
+    async def record_event(record):
+        recorded.append(record)
+        await release.wait()
+
+    bus = SessionBus(session_id="sess-1", record_event=record_event, record_queue_size=2)
+
+    await bus.emit(ThinkingEvent(status="one"))
+    await asyncio.sleep(0)
+    writer = bus._record_writer
+    assert writer is not None
+    first_worker = writer._worker
+
+    await bus.emit(ThinkingEvent(status="two"))
+    await bus.emit(ThinkingEvent(status="three"))
+
+    assert writer._worker is first_worker
+    assert writer.queue_depth == 2
+
+    release.set()
+    await bus.drain_record_tasks()
+
+    assert [record.event.status for record in recorded] == ["one", "two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_emit_does_not_wait_for_persistence_before_live_delivery():
     release = asyncio.Event()
     recorded = []
 
@@ -103,14 +167,16 @@ async def test_emit_delivers_live_event_before_slow_persistence_finishes():
     bus = SessionBus(session_id="sess-1", record_event=record_event)
     queue = bus.subscribe()
 
-    await asyncio.wait_for(bus.emit(ThinkingEvent(status="live")), timeout=0.1)
+    emit_task = asyncio.create_task(bus.emit(ThinkingEvent(status="live")))
+    try:
+        record = await asyncio.wait_for(queue.get(), timeout=0.05)
+        assert record.event.status == "live"
+        assert recorded == []
+        await asyncio.wait_for(emit_task, timeout=1)
+    finally:
+        release.set()
+        await asyncio.wait_for(bus.drain_record_tasks(), timeout=1)
 
-    record = queue.get_nowait()
-    assert record.event.status == "live"
-    assert recorded == []
-
-    release.set()
-    await asyncio.wait_for(bus.drain_record_tasks(), timeout=1)
     assert recorded[0].event.status == "live"
 
 
@@ -125,15 +191,18 @@ async def test_registry_idle_remove_waits_for_event_persistence():
 
     registry = BusRegistry(record_event=record_event)
     bus = registry.get_or_create("sess-1")
-    await bus.emit(ThinkingEvent(status="persist-me"))
+    emit_task = asyncio.create_task(bus.emit(ThinkingEvent(status="persist-me")))
+    await asyncio.sleep(0)
 
     remove_task = asyncio.create_task(registry.remove_if_idle("sess-1", is_active=lambda: False))
     await asyncio.sleep(0)
 
     assert registry.get("sess-1") is bus
+    assert emit_task.done()
     assert not remove_task.done()
 
     release.set()
+    await asyncio.wait_for(emit_task, timeout=1)
     await asyncio.wait_for(remove_task, timeout=1)
 
     assert recorded[0].event.status == "persist-me"

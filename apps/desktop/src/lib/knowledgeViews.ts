@@ -12,6 +12,7 @@ export const KNOWLEDGE_LIBRARY_TYPES: KnowledgeLibraryView[] = [
   { type: "pattern", label: "Patterns", description: "derived context" },
   { type: "lesson", label: "Lessons", description: "reusable conclusions" },
   { type: "procedure", label: "Procedures", description: "approved behavior" },
+  { type: "entity_profile", label: "Profiles", description: "source-backed entity context" },
   { type: "action_candidate", label: "Actions", description: "proactive drafts" },
   { type: "artifact", label: "Artifacts", description: "reusable outputs" },
   { type: "outcome_feedback", label: "Activation", description: "sent context and feedback" },

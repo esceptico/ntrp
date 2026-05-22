@@ -324,6 +324,7 @@ function isTerminalStatus(status: string | null | undefined): boolean {
     status === "completed" ||
     status === "cancelled" ||
     status === "error" ||
-    status === "failed"
+    status === "failed" ||
+    status === "interrupted"
   );
 }

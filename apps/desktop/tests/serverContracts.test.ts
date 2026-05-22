@@ -14,6 +14,8 @@ const config = {
   reasoning_efforts: ["low", "medium"],
   model_reasoning_efforts: {},
   compression_threshold: 0.8,
+  compaction_token_limit: 218000,
+  compaction_token_trigger: 207100,
   max_messages: 20,
   compression_keep_ratio: 0.5,
   summary_max_tokens: 2500,
@@ -27,6 +29,13 @@ test("rejects stale config responses before they enter state", () => {
   Reflect.deleteProperty(stale, "model_reasoning_efforts");
 
   expect(() => parseServerConfig(stale)).toThrow("model_reasoning_efforts");
+});
+
+test("rejects config responses without server-owned compaction token triggers", () => {
+  const stale = { ...config };
+  Reflect.deleteProperty(stale, "compaction_token_trigger");
+
+  expect(() => parseServerConfig(stale)).toThrow("compaction_token_trigger");
 });
 
 test("rejects stale model metadata before it enters state", () => {

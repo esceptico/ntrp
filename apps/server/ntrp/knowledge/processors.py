@@ -9,12 +9,15 @@ from ntrp.knowledge.models import (
     KnowledgeObjectStatus,
     KnowledgeObjectType,
     KnowledgeObjectUpdate,
+    KnowledgeProfileSynthesisRequest,
+    KnowledgeProfileSynthesisResult,
     KnowledgePruneRequest,
     KnowledgePruneResult,
     KnowledgePublishRequest,
     KnowledgeReflectRequest,
     KnowledgeReflectResult,
 )
+from ntrp.knowledge.profiles import PROFILE_POLICY_VERSION, profile_entity_name, unique
 from ntrp.knowledge.sinks import publish_artifact
 from ntrp.memory.service import MemoryService
 
@@ -22,8 +25,6 @@ _ACTION_HINTS = ("note", "artifact", "reminder", "task", "todo", "verify", "obsi
 _PROCEDURE_HINTS = ("failed", "error", "correction", "corrected", "should", "prefer", "always", "never")
 _NEGATIVE_SIGNALS = {"not_helpful", "harmful", "corrected", "wrong", "failed"}
 _POSITIVE_SIGNALS = {"helpful", "success", "used"}
-
-
 def _first_line(text: str, limit: int = 100) -> str:
     line = text.strip().splitlines()[0] if text.strip() else "Untitled"
     return line[:limit]
@@ -55,6 +56,30 @@ class KnowledgeProcessorService:
             else:
                 skipped += 1
         return KnowledgeReflectResult(created=created, skipped=skipped)
+
+    async def synthesize_profiles(self, request: KnowledgeProfileSynthesisRequest) -> KnowledgeProfileSynthesisResult:
+        list_names = getattr(self.memory.knowledge_objects, "list_profile_entity_names", None)
+        entity_names = unique(
+            [name for raw in request.entity_names if (name := profile_entity_name(raw, explicit=True)) is not None]
+        )
+        if not entity_names and list_names is not None:
+            listed = await list_names(limit=max(request.limit_entities * 4, request.limit_entities))
+            entity_names = unique([name for raw in listed if (name := profile_entity_name(raw, explicit=False)) is not None])
+        entity_names = entity_names[: request.limit_entities]
+
+        refresh_profile = getattr(self.memory.knowledge_objects, "refresh_entity_profile", None)
+        if refresh_profile is None or not request.apply:
+            return KnowledgeProfileSynthesisResult(skipped=len(entity_names), policy_version=PROFILE_POLICY_VERSION)
+
+        profiles: list[KnowledgeObject] = []
+        skipped = 0
+        for entity_name in entity_names:
+            profile = await refresh_profile(entity_name, evidence_limit=request.evidence_limit, explicit_refresh=True)
+            if profile is None:
+                skipped += 1
+            else:
+                profiles.append(profile)
+        return KnowledgeProfileSynthesisResult(profiles=profiles, skipped=skipped, policy_version=PROFILE_POLICY_VERSION)
 
     async def render_artifact(self, request: KnowledgeArtifactRenderRequest) -> KnowledgeObject:
         objects = await self.memory.knowledge_objects.get_batch(request.object_ids)

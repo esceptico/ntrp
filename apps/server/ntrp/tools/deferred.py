@@ -52,7 +52,7 @@ GROUP_ALIASES: dict[str, str] = {
 GROUP_DESCRIPTIONS: dict[str, str] = {
     "gmail": "Search/list/read/send Gmail messages. Use for inbox, emails, Gmail, sending/replying, or communication history.",
     "calendar": "Search/create/edit/delete calendar events. Use for meetings, schedule, availability, appointments, reminders, or rescheduling.",
-    "slack": "Search Slack and read channels, DMs, threads, and user profiles. Use for Slack messages, workspace history, coworkers, channels, DMs, or threads.",
+    "slack": "Search Slack and read channels, DMs, threads, image files, and user profiles. Use for Slack messages, workspace history, coworkers, channels, DMs, threads, screenshots, images, or file IDs.",
     "_automation": "Create/list/update/delete/run autonomous scheduled or event-triggered tasks. Use for reminders, recurring checks, notifications, scheduled agents, or automation management.",
     "_background": "Spawn, inspect, cancel, or read background agents. Use for long-running research/work that should continue while the main chat moves on.",
     "_notifications": "Send a user-facing notification. Use when the user explicitly asks to be notified or an automation/background flow needs to alert them.",
@@ -83,12 +83,13 @@ DEFERRED_GROUP_LABELS = {
 
 _env = Environment(trim_blocks=True, lstrip_blocks=True)
 
-_DEFERRED_TOOLS_TEMPLATE = _env.from_string("""Some integration/action tools are deferred to reduce prompt noise. Use `load_tools` before calling tools from these groups. Load tools proactively when the user's request needs the capability; do not ask whether to load them.
+_DEFERRED_TOOLS_TEMPLATE = _env.from_string("""Some integration/action tools are deferred to reduce prompt noise. Use `load_tools` before calling tools from these groups. Load tools proactively when the user's request needs the capability; do not ask whether to load them. Do not use filesystem/time/no-op tool calls to discover or unlock deferred tools.
 
 {% for group in groups %}
 <deferred_tool_group name="{{ group.label }}" load_group="{{ group.label }}">
 {{ group.description }}
 Tools: {{ group.tool_names | join(", ") }}.
+Load with `load_tools(group="{{ group.label }}")`; the listed tools become callable on the next model step.
 {% if group.requires_approval %}
 Write/action tools require approval after loading.
 {% endif %}
@@ -298,7 +299,7 @@ class LoadToolsInput(BaseModel):
     )
     names: list[str] | None = Field(
         default=None,
-        description="Exact deferred tool names to load, e.g. ['slack_search', 'slack_thread'].",
+        description="Exact deferred tool names to load, e.g. ['slack_search', 'slack_thread', 'slack_file'].",
     )
 
     @model_validator(mode="after")
@@ -438,7 +439,7 @@ load_tools_tool = tool(
         "Loading tools does not execute them; it only makes them callable on the next model step. "
         "Examples: group='slack', group='email', group='calendar', group='automations', group='background', "
         "group='notifications', group='directives', group='files', group='mcp:obsidian', "
-        "or names=['slack_search','slack_thread']."
+        "or names=['slack_search','slack_thread','slack_file']."
     ),
     input_model=LoadToolsInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),

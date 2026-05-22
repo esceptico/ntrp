@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from ntrp.core.content import ContentBlock
+
 
 @dataclass(frozen=True)
 class ToolResult:
@@ -7,6 +9,7 @@ class ToolResult:
     preview: str
     is_error: bool = False
     data: dict | None = None
+    model_content: tuple[ContentBlock, ...] = ()
 
     @staticmethod
     def error(message: str) -> "ToolResult":

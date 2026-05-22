@@ -1,8 +1,12 @@
 import asyncio
+import hashlib
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape as escape_xml
+from inspect import Parameter, signature
+from uuid import uuid4
 
 from ntrp.agent import Agent, Role
 from ntrp.agent.types.events import Result
@@ -46,6 +50,71 @@ from ntrp.tools.executor import ToolExecutor
 _logger = get_logger(__name__)
 
 INIT_AUTO_APPROVE = {"remember", "forget"}
+
+
+class ChatIdempotencyConflict(Exception):
+    def __init__(self, client_id: str):
+        super().__init__("idempotency_conflict")
+        self.client_id = client_id
+        self.code = "idempotency_conflict"
+        self.message = "A different chat request already used this client_id."
+
+
+def _chat_request_hash(
+    *,
+    session_id: str,
+    message: str,
+    skip_approvals: bool | None,
+    images: list[dict] | None,
+    context: list[dict] | None,
+) -> str:
+    payload = {
+        "session_id": session_id,
+        "message": message,
+        "skip_approvals": bool(skip_approvals),
+        "images": images or [],
+        "context": context or [],
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _safe_error(exc: BaseException | None = None, message: str = "Chat run failed.") -> tuple[str, str, str]:
+    debug_id = f"err_{uuid4().hex[:12]}"
+    if exc is None:
+        return "internal_error", message, debug_id
+
+    body = getattr(exc, "body", None)
+    provider_error = body.get("error") if isinstance(body, dict) and isinstance(body.get("error"), dict) else body
+    payload = provider_error if isinstance(provider_error, dict) else {}
+    provider_code = str(getattr(exc, "code", None) or payload.get("code") or "").strip()
+    provider_message = str(payload.get("message") or getattr(exc, "message", None) or str(exc) or "").strip()
+    provider_type = str(payload.get("type") or getattr(exc, "type", None) or "").strip()
+    lower_message = provider_message.lower()
+    class_names = " ".join(cls.__name__.lower() for cls in type(exc).__mro__)
+    class_says_context_exceeded = (
+        ("contextwindow" in class_names or "context_window" in class_names or "contextlength" in class_names)
+        and "exceed" in class_names
+    )
+
+    if (
+        provider_code == "context_length_exceeded"
+        or class_says_context_exceeded
+        or "exceeds the context window" in lower_message
+        or "context_length_exceeded" in lower_message
+    ):
+        return (
+            "context_length_exceeded",
+            "Your input exceeds the context window of this model. Please shorten the conversation/context "
+            "or switch to a larger-context model and try again.",
+            debug_id,
+        )
+
+    if provider_type == "invalid_request_error" and provider_message:
+        return "provider_invalid_request", provider_message, debug_id
+
+    return "internal_error", message, debug_id
+
 
 def _goal_continuation_prompt(goal: dict) -> str:
     objective = escape_xml(str(goal.get("objective") or ""))
@@ -109,10 +178,17 @@ class ChatContext:
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
 
-async def _record_run_started(service: object, run_id: str, session_id: str) -> None:
+async def _record_run_started(
+    service: object,
+    run_id: str,
+    session_id: str,
+    *,
+    client_id: str | None = None,
+) -> None:
     fn = getattr(service, "record_chat_run_started", None)
     if fn:
-        await fn(run_id, session_id)
+        metadata = {"client_id": client_id} if client_id else None
+        await fn(run_id, session_id, metadata=metadata)
 
 
 def _background_event_recorder(session_service: SessionService):
@@ -158,10 +234,25 @@ async def _record_run_status(
     *,
     stop_reason: str | None = None,
     last_seq: int | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     fn = getattr(service, "record_chat_run_status", None)
     if fn:
-        await fn(run_id, status, stop_reason=stop_reason, last_seq=last_seq)
+        kwargs = {
+            "stop_reason": stop_reason,
+            "last_seq": last_seq,
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+        try:
+            sig = signature(fn)
+            accepts_kwargs = any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values())
+            if not accepts_kwargs:
+                kwargs = {key: value for key, value in kwargs.items() if key in sig.parameters}
+        except (TypeError, ValueError):
+            pass
+        await fn(run_id, status, **kwargs)
 
 
 async def _record_queued_message(
@@ -546,6 +637,25 @@ def _first_user_client_id(run: RunState) -> str | None:
     return None
 
 
+async def _update_run_client_idempotency(
+    session_service: SessionService | None,
+    run: RunState,
+    status: str,
+) -> None:
+    client_id = _first_user_client_id(run)
+    if not client_id or session_service is None:
+        return
+    try:
+        await session_service.update_chat_idempotency_key(
+            session_id=run.session_id,
+            client_id=client_id,
+            status=status,
+            run_id=run.run_id,
+        )
+    except Exception:
+        _logger.warning("Failed to update chat idempotency status", exc_info=True)
+
+
 def _has_tool_activity(run: RunState) -> bool:
     return any(
         message.get("role") == Role.TOOL or (message.get("role") == Role.ASSISTANT and bool(message.get("tool_calls")))
@@ -598,11 +708,35 @@ async def submit_chat_message(
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
     is_meta_client = _is_meta_client_id(client_id)
+    request_hash = _chat_request_hash(
+        session_id=session_id,
+        message=message,
+        skip_approvals=skip_approvals,
+        images=images,
+        context=context,
+    )
+    durable_idempotency = None
 
-    # Idempotent retry: a POST with a client_id we already accepted within
-    # the dedup window returns the same run_id instead of starting a
-    # second run or re-queueing the message.
-    if client_id:
+    # Durable idempotent retry: a POST with a client_id we already accepted
+    # returns the same run_id instead of starting a second run or re-queueing
+    # the message. The in-memory RunRegistry mapping remains only a hot cache.
+    if client_id and session_service:
+        claimed, durable_idempotency = await session_service.claim_chat_idempotency_key(
+            session_id=session_id,
+            client_id=client_id,
+            request_hash=request_hash,
+        )
+        if not claimed:
+            if durable_idempotency["request_hash"] != request_hash:
+                raise ChatIdempotencyConflict(client_id)
+            if durable_idempotency.get("run_id"):
+                run_registry.register_otid(session_id, client_id, durable_idempotency["run_id"])
+                return {
+                    "run_id": durable_idempotency["run_id"],
+                    "session_id": session_id,
+                    "status": durable_idempotency.get("status") or "accepted",
+                }
+    elif client_id:
         existing = run_registry.lookup_otid(session_id, client_id)
         if existing:
             return {"run_id": existing.run_id, "session_id": session_id}
@@ -629,8 +763,15 @@ async def submit_chat_message(
         if loop_task_id and not active_run.loop_task_id:
             active_run.loop_task_id = loop_task_id
         if client_id:
+            if session_service:
+                await session_service.update_chat_idempotency_key(
+                    session_id=session_id,
+                    client_id=client_id,
+                    status="queued",
+                    run_id=active_run.run_id,
+                )
             run_registry.register_otid(session_id, client_id, active_run.run_id)
-        return {"run_id": active_run.run_id, "session_id": session_id}
+        return {"run_id": active_run.run_id, "session_id": session_id, "status": "queued"}
 
     deps = build_deps()
     bus = buses.get_or_create(session_id)
@@ -645,7 +786,14 @@ async def submit_chat_message(
         loop_task_id=loop_task_id,
         emit=bus.emit,
     )
-    await _record_run_started(deps.session_service, ctx.run.run_id, ctx.session_state.session_id)
+    await _record_run_started(deps.session_service, ctx.run.run_id, ctx.session_state.session_id, client_id=client_id)
+    if client_id and session_service:
+        await session_service.update_chat_idempotency_key(
+            session_id=session_id,
+            client_id=client_id,
+            status="running",
+            run_id=ctx.run.run_id,
+        )
     if loop_task_id:
         ctx.run.loop_task_id = loop_task_id
     if is_meta_client:
@@ -751,6 +899,7 @@ async def _drain_backgrounded(
                 stop_reason=ctx.run.stop_reason,
                 last_seq=None,
             )
+            await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
     except Exception:
         _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
@@ -882,20 +1031,22 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             resolve_approval=resolve_approval,
             approval_timeout_seconds=ctx.config.approval_timeout_seconds,
         )
-        agent = create_agent(
-            executor=ctx.executor,
-            config=ctx.config,
-            tools=ctx.tools,
-            session_state=session_state,
-            run_id=run.run_id,
-            io=io,
-            extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
-            background_tasks=bg_registry,
-            loaded_tools=run.loaded_tools,
-            loop_task_id=run.loop_task_id,
-            parent_tracker=tracker,
-            initial_input_tokens=ctx.initial_input_tokens,
-        )
+
+        def _new_agent() -> Agent:
+            return create_agent(
+                executor=ctx.executor,
+                config=ctx.config,
+                tools=ctx.tools,
+                session_state=session_state,
+                run_id=run.run_id,
+                io=io,
+                extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
+                background_tasks=bg_registry,
+                loaded_tools=run.loaded_tools,
+                loop_task_id=run.loop_task_id,
+                parent_tracker=tracker,
+                initial_input_tokens=ctx.initial_input_tokens,
+            )
 
         async def _track_response(response) -> None:
             await tracker.track(response)
@@ -907,8 +1058,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     message_count=len(_persistable_messages(run)),
                 )
             )
-
-        agent.hooks.on_response = _track_response
 
         async def _checkpoint(_step: int, _response, messages: list[dict]) -> None:
             # Persist after each agent step so a client navigating back to
@@ -934,13 +1083,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 last_seq=bus.checkpoint_seq,
             )
 
-        agent.hooks.on_step_finish = _checkpoint
-
-        run.status = RunStatus.RUNNING
-        await _record_run_status(ctx.session_service, run.run_id, RunStatus.RUNNING.value)
-
-        agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
-
         async def _on_bg_result(messages: list[dict]) -> None:
             await _handle_background_result(
                 run=run,
@@ -952,12 +1094,91 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
         bg_registry.on_result = _on_bg_result
 
-        result, bg_gen = await run_agent_loop(ctx, agent, bus)
+        def _configure_agent(next_agent: Agent) -> Agent:
+            next_agent.hooks.on_response = _track_response
+            next_agent.hooks.on_step_finish = _checkpoint
+            next_agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
+            return next_agent
+
+        async def _force_context_compaction() -> bool:
+            compactor = getattr(ctx.config, "compactor", None)
+            if compactor is None:
+                return False
+            before_count = len(run.messages)
+            await bus.emit(CompactionStartedEvent(run_id=run.run_id))
+            try:
+                force_compact = getattr(compactor, "force_compact", None)
+                model = getattr(ctx.config, "model", "")
+                if force_compact:
+                    compacted = await force_compact(run.messages, model)
+                else:
+                    forced_input_tokens = get_model(model).max_context_tokens
+                    compacted = await compactor.maybe_compact(
+                        run.messages,
+                        model,
+                        forced_input_tokens,
+                    )
+            except Exception:
+                await bus.emit(
+                    CompactionFinishedEvent(
+                        run_id=run.run_id,
+                        messages_before=before_count,
+                        messages_after=before_count,
+                    )
+                )
+                raise
+            if compacted is None:
+                await bus.emit(
+                    CompactionFinishedEvent(
+                        run_id=run.run_id,
+                        messages_before=before_count,
+                        messages_after=before_count,
+                    )
+                )
+                return False
+
+            run.messages.clear()
+            run.messages.extend(compacted)
+            await ctx.session_service.save(
+                session_state,
+                _persistable_messages(run),
+                metadata={"last_input_tokens": None, "last_message_count": len(_persistable_messages(run))},
+            )
+            bus.mark_checkpoint()
+            await bus.emit(
+                CompactionFinishedEvent(
+                    run_id=run.run_id,
+                    messages_before=before_count,
+                    messages_after=len(run.messages),
+                )
+            )
+            return True
+
+        async def _run_agent_with_context_retry():
+            nonlocal agent
+            try:
+                return await run_agent_loop(ctx, agent, bus)
+            except Exception as exc:
+                if _safe_error(exc)[0] != "context_length_exceeded":
+                    raise
+                if not await _force_context_compaction():
+                    raise
+                agent = _configure_agent(_new_agent())
+                return await run_agent_loop(ctx, agent, bus)
+
+        agent = _configure_agent(_new_agent())
+
+        run.status = RunStatus.RUNNING
+        await _record_run_status(ctx.session_service, run.run_id, RunStatus.RUNNING.value)
+        await _update_run_client_idempotency(ctx.session_service, run, RunStatus.RUNNING.value)
+
+        result, bg_gen = await _run_agent_with_context_retry()
 
         if bg_gen is not None:
             io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             await _record_run_status(ctx.session_service, run.run_id, "backgrounded", last_seq=bus.next_seq - 1)
+            await _update_run_client_idempotency(ctx.session_service, run, "backgrounded")
             ctx.run_registry.complete_run(run.run_id)
             run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, tracker))
             return
@@ -995,20 +1216,48 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             stop_reason="cancelled",
             last_seq=bus.next_seq - 1,
         )
+        await _update_run_client_idempotency(ctx.session_service, run, RunStatus.CANCELLED.value)
         return
 
     except Exception as e:
         run_failed = True
-        _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
-        await bus.emit(RunErrorEvent(run_id=run.run_id, message=str(e), recoverable=False))
+        error_code, safe_message, debug_id = _safe_error(e)
+        if error_code in {"context_length_exceeded", "provider_invalid_request"}:
+            _logger.warning(
+                "Chat provider rejected request (run_id=%s, session_id=%s, code=%s, debug_id=%s): %s",
+                run.run_id,
+                session_state.session_id,
+                error_code,
+                debug_id,
+                safe_message,
+            )
+        else:
+            _logger.exception(
+                "Chat failed (run_id=%s, session_id=%s, debug_id=%s)",
+                run.run_id,
+                session_state.session_id,
+                debug_id,
+            )
+        await bus.emit(
+            RunErrorEvent(
+                run_id=run.run_id,
+                message=safe_message,
+                recoverable=False,
+                code=error_code,
+                debug_id=debug_id,
+            )
+        )
         ctx.run_registry.error_run(run.run_id)
         await _record_run_status(
             ctx.session_service,
             run.run_id,
             RunStatus.ERROR.value,
-            stop_reason=str(e),
+            stop_reason=str(e) or error_code,
             last_seq=bus.next_seq - 1,
+            error_code=error_code,
+            error_message=safe_message,
         )
+        await _update_run_client_idempotency(ctx.session_service, run, RunStatus.ERROR.value)
 
     finally:
         if not run.backgrounded:
@@ -1060,6 +1309,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                     stop_reason=run.stop_reason,
                     last_seq=bus.next_seq - 1,
                 )
+                await _update_run_client_idempotency(ctx.session_service, run, RunStatus.COMPLETED.value)
                 ctx.run_registry.complete_run(run.run_id)
                 event = RunCompleted(
                     run_id=run.run_id,

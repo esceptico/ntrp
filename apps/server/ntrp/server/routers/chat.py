@@ -1,13 +1,12 @@
 import asyncio
-import json
 import time
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ntrp.events.sse import KeepaliveEvent, StreamResetEvent, TextDeltaEvent
-from ntrp.server.bus import BusRegistry, StreamRecord, stream_record_to_sse_string
+from ntrp.events.sse import TextDeltaEvent
+from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
@@ -19,8 +18,10 @@ from ntrp.server.schemas import (
     ChatRunsStatusResponse,
     ToolResultRequest,
 )
+from ntrp.server.sse_stream import keepalive_chunk, live_records, reset_chunk
+from ntrp.server.sse_stream import replay_records as iter_replay_records
 from ntrp.server.state import RunRegistry, RunStatus
-from ntrp.services.chat import submit_chat_message
+from ntrp.services.chat import ChatIdempotencyConflict, submit_chat_message
 
 router = APIRouter(tags=["chat"])
 
@@ -28,19 +29,28 @@ KEEPALIVE_INTERVAL = 5
 
 
 def _keepalive(session_id: str, latest_seq: int) -> str:
-    """Typed data frame carrying the bus's latest emitted seq.
+    return keepalive_chunk(session_id, latest_seq)
 
-    The frame does not allocate a new bus seq; it repeats the latest durable
-    cursor so quiet subscribers can advance/confirm their client cursor.
-    """
-    event = KeepaliveEvent(session_id=session_id, latest_seq=latest_seq)
-    sse = event.to_sse()
-    payload = {
-        **json.loads(sse["data"]),
-        "seq": latest_seq,
-        "session_id": session_id,
-    }
-    return f"id: {latest_seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
+
+def _parse_last_event_id(value: str | None) -> int | None:
+    if value is None or value.strip() == "":
+        return None
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Last-Event-ID") from None
+    if parsed < 0:
+        raise HTTPException(status_code=400, detail="Invalid Last-Event-ID")
+    return parsed
+
+
+def _effective_after_seq(query_after_seq: int | None, last_event_id: str | None) -> int | None:
+    header_after_seq = _parse_last_event_id(last_event_id)
+    if query_after_seq is None:
+        return header_after_seq
+    if header_after_seq is None:
+        return query_after_seq
+    return max(query_after_seq, header_after_seq)
 
 
 async def _bus_for_event_stream(session_id: str, bus_registry: BusRegistry, event_store=None):
@@ -74,52 +84,63 @@ async def _event_stream(
     bus = await _bus_for_event_stream(session_id, bus_registry, event_store)
     subscription = bus.subscribe_with_replay(after_seq=after_seq)
     snapshot, queue = subscription
-    last_event_at = time.monotonic()
+    # Boundary for durable replay. Because subscribe_with_replay() has no
+    # await, no live emit can interleave between subscription and this read.
+    # Events emitted after this point arrive on the live queue; replay only
+    # serves records <= replay_upper_seq to avoid DB/live duplicates.
+    replay_upper_seq = bus.next_seq - 1
 
     def should_emit(event) -> bool:
         return stream or not isinstance(event, TextDeltaEvent)
 
+    async def durable_replay_records() -> list[StreamRecord] | None:
+        if event_store is None or after_seq is None:
+            return None
+        if after_seq >= replay_upper_seq:
+            return []
+        records = await event_store.list_session_events(session_id, after_seq=after_seq, limit=10000)
+        records = [record for record in records if record.seq <= replay_upper_seq]
+        expected = after_seq + 1
+        for record in records:
+            if record.seq != expected:
+                return None
+            expected += 1
+        if expected <= replay_upper_seq:
+            return None
+        return records
+
     try:
-        if subscription.replay_gap and after_seq is not None:
-            newest_seq = bus.next_seq - 1
-            reset_seq = min(max(after_seq + 1, bus.checkpoint_seq), newest_seq)
-            reset_record = StreamRecord(
-                seq=reset_seq,
-                session_id=session_id,
-                event=StreamResetEvent(reason="replay_gap"),
-            )
-            yield stream_record_to_sse_string(session_id, reset_record)
-            last_event_at = time.monotonic()
+        if after_seq is not None and after_seq > replay_upper_seq:
+            yield reset_chunk(session_id, "future_cursor", replay_upper_seq)
             await asyncio.sleep(0)
-
-        for record in snapshot:
-            event = record.event
-            if not should_emit(event):
-                last_event_at = time.monotonic()
-                continue
-            yield stream_record_to_sse_string(session_id, record, replay=True)
+        elif after_seq is not None and after_seq < bus.checkpoint_seq:
+            yield reset_chunk(session_id, "replay_gap", bus.checkpoint_seq)
             await asyncio.sleep(0)
+            async for chunk in iter_replay_records(session_id, snapshot, should_emit=should_emit):
+                yield chunk
+        else:
+            durable_records = await durable_replay_records()
+            if durable_records is None:
+                if subscription.replay_gap and after_seq is not None:
+                    reset_seq = min(max(after_seq + 1, bus.checkpoint_seq), replay_upper_seq)
+                    yield reset_chunk(session_id, "replay_gap", reset_seq)
+                    await asyncio.sleep(0)
+                records_to_replay = snapshot
+            else:
+                records_to_replay = durable_records
 
-        while True:
-            try:
-                record = await asyncio.wait_for(queue.get(), timeout=0.5)
-            except TimeoutError:
-                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
-                    last_event_at = time.monotonic()
-                    yield _keepalive(session_id, bus.next_seq - 1)
-                continue
+            async for chunk in iter_replay_records(session_id, records_to_replay, should_emit=should_emit):
+                yield chunk
 
-            if record is None:
-                break
-
-            event = record.event
-            if not should_emit(event):
-                last_event_at = time.monotonic()
-                continue
-
-            last_event_at = time.monotonic()
-            yield stream_record_to_sse_string(session_id, record)
-            await asyncio.sleep(0)
+        async for chunk in live_records(
+            bus=bus,
+            queue=queue,
+            session_id=session_id,
+            should_emit=should_emit,
+            keepalive_interval=KEEPALIVE_INTERVAL,
+            replay_upper_seq=replay_upper_seq,
+        ):
+            yield chunk
     except asyncio.CancelledError:
         pass
     finally:
@@ -143,8 +164,16 @@ async def chat_events(
     runtime = getattr(request.app.state, "runtime", None)
     session_service = getattr(runtime, "session_service", None)
     event_store = session_service.store if session_service else None
+    effective_after_seq = _effective_after_seq(after_seq, request.headers.get("last-event-id"))
     return SSEStreamingResponse(
-        _event_stream(session_id, buses, run_registry, stream=stream, after_seq=after_seq, event_store=event_store),
+        _event_stream(
+            session_id,
+            buses,
+            run_registry,
+            stream=stream,
+            after_seq=effective_after_seq,
+            event_store=event_store,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -185,8 +214,17 @@ async def chat_message(
             client_id=request.client_id,
             session_service=getattr(runtime, "session_service", None),
         )
+    except ChatIdempotencyConflict as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": e.code, "message": e.message, "client_id": e.client_id},
+        ) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        debug_id = f"err_{int(time.time() * 1000)}"
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Chat request failed.", "debug_id": debug_id},
+        ) from e
 
 
 @router.delete("/chat/inject/{client_id}")

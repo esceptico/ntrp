@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -72,7 +72,10 @@ CREATE TABLE IF NOT EXISTS chat_runs (
     updated_at TEXT NOT NULL,
     ended_at TEXT,
     last_seq INTEGER,
-    metadata_json TEXT NOT NULL DEFAULT '{}'
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    error_code TEXT,
+    error_message TEXT,
+    client_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_runs_session_status
@@ -95,6 +98,24 @@ CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_session_status
     ON chat_queued_messages(session_id, status);
 CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_run_status
     ON chat_queued_messages(run_id, status);
+
+CREATE TABLE IF NOT EXISTS chat_idempotency_keys (
+    session_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    run_id TEXT,
+    message_id TEXT,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    expires_at TEXT,
+    PRIMARY KEY (session_id, client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_idempotency_run
+    ON chat_idempotency_keys(run_id);
+CREATE INDEX IF NOT EXISTS idx_chat_idempotency_expires
+    ON chat_idempotency_keys(expires_at);
 
 CREATE TABLE IF NOT EXISTS tool_calls (
     run_id TEXT NOT NULL,
@@ -279,6 +300,8 @@ SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at
 
 SQL_LOAD_SESSION_MESSAGES_COUNT = "SELECT 1 FROM session_messages WHERE session_id = ? LIMIT 1"
 SQL_LOAD_SESSION_MESSAGES_JSON = "SELECT messages FROM sessions WHERE session_id = ?"
+CHAT_IDEMPOTENCY_TTL_DAYS = 30
+CHAT_IDEMPOTENCY_TERMINAL_STATUSES = ("completed", "cancelled", "error", "failed", "interrupted")
 
 
 class SessionStore:
@@ -303,6 +326,7 @@ class SessionStore:
         return cursor.rowcount > 0
 
     def _chat_run_payload(self, row: aiosqlite.Row) -> dict:
+        columns = set(row.keys())
         return {
             "run_id": row["run_id"],
             "session_id": row["session_id"],
@@ -313,6 +337,9 @@ class SessionStore:
             "ended_at": row["ended_at"],
             "last_seq": row["last_seq"],
             "metadata": json.loads(row["metadata_json"] or "{}"),
+            "error_code": row["error_code"] if "error_code" in columns else None,
+            "error_message": row["error_message"] if "error_message" in columns else None,
+            "client_id": row["client_id"] if "client_id" in columns else None,
         }
 
     def _chat_queued_message_payload(self, row: aiosqlite.Row) -> dict:
@@ -327,6 +354,19 @@ class SessionStore:
             "ingested_at": row["ingested_at"],
             "enqueued_seq": row["enqueued_seq"],
             "ingested_seq": row["ingested_seq"],
+        }
+
+    def _chat_idempotency_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "session_id": row["session_id"],
+            "client_id": row["client_id"],
+            "request_hash": row["request_hash"],
+            "run_id": row["run_id"],
+            "message_id": row["message_id"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "expires_at": row["expires_at"],
         }
 
     def _background_agent_payload(self, row: aiosqlite.Row) -> dict:
@@ -422,6 +462,11 @@ class SessionStore:
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
         await self._migrate_chat_compactions_schema()
+        await self._migrate_chat_runs_schema()
+        await self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_idempotency_expires ON chat_idempotency_keys(expires_at)"
+        )
+        await self.conn.commit()
 
     async def _migrate_session_turns_schema(self) -> None:
         # Older builds named per-user-turn transcript slices "session_episodes".
@@ -593,6 +638,25 @@ class SessionStore:
             return
         await self.conn.execute("ALTER TABLE chat_compactions ADD COLUMN rehydration_state TEXT")
         await self.conn.commit()
+
+    async def _migrate_chat_runs_schema(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(chat_runs)")
+        if not rows:
+            return
+        columns = {row["name"] for row in rows}
+        changed = False
+        for column in (
+            "error_code TEXT",
+            "error_message TEXT",
+            "client_id TEXT",
+        ):
+            name = column.split()[0]
+            if name in columns:
+                continue
+            await self.conn.execute(f"ALTER TABLE chat_runs ADD COLUMN {column}")
+            changed = True
+        if changed:
+            await self.conn.commit()
 
     async def _migrate_tool_calls_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(tool_calls)")
@@ -896,24 +960,109 @@ class SessionStore:
         metadata: dict | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        metadata_json = await asyncio.to_thread(lambda: json.dumps(metadata or {}))
+        metadata = dict(metadata or {})
+        client_id = metadata.get("client_id") if isinstance(metadata.get("client_id"), str) else None
+        metadata_json = await asyncio.to_thread(lambda: json.dumps(metadata))
         await self.conn.execute(
             """
             INSERT INTO chat_runs (
-                run_id, session_id, status, started_at, updated_at, metadata_json
+                run_id, session_id, status, started_at, updated_at, metadata_json, client_id
             )
-            VALUES (?, ?, 'pending', ?, ?, ?)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 session_id = excluded.session_id,
                 status = excluded.status,
                 updated_at = excluded.updated_at,
                 ended_at = NULL,
                 stop_reason = NULL,
-                metadata_json = excluded.metadata_json
+                metadata_json = excluded.metadata_json,
+                client_id = excluded.client_id,
+                error_code = NULL,
+                error_message = NULL
             """,
-            (run_id, session_id, now, now, metadata_json),
+            (run_id, session_id, now, now, metadata_json, client_id),
         )
         await self.conn.commit()
+
+    async def prune_expired_chat_idempotency_keys(self, now: datetime | None = None) -> int:
+        now_iso = (now or datetime.now(UTC)).isoformat()
+        cursor = await self.conn.execute(
+            f"""
+            DELETE FROM chat_idempotency_keys
+            WHERE expires_at IS NOT NULL
+              AND expires_at <= ?
+              AND status IN ({", ".join("?" for _ in CHAT_IDEMPOTENCY_TERMINAL_STATUSES)})
+            """,
+            (now_iso, *CHAT_IDEMPOTENCY_TERMINAL_STATUSES),
+        )
+        await self.conn.commit()
+        return cursor.rowcount
+
+    async def claim_chat_idempotency_key(
+        self,
+        *,
+        session_id: str,
+        client_id: str,
+        request_hash: str,
+        status: str = "accepted",
+        expires_at: str | None = None,
+    ) -> tuple[bool, dict]:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        expires_at = expires_at or (now_dt + timedelta(days=CHAT_IDEMPOTENCY_TTL_DAYS)).isoformat()
+        await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO chat_idempotency_keys (
+                session_id, client_id, request_hash, status, created_at, updated_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, client_id, request_hash, status, now, now, expires_at),
+        )
+        await self.conn.commit()
+        row = await self.get_chat_idempotency_key(session_id, client_id)
+        if row is None:
+            raise RuntimeError("chat idempotency claim insert failed")
+        return row["request_hash"] == request_hash and row["created_at"] == now, row
+
+    async def get_chat_idempotency_key(self, session_id: str, client_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM chat_idempotency_keys
+            WHERE session_id = ? AND client_id = ?
+            """,
+            (session_id, client_id),
+        )
+        if not rows:
+            return None
+        return self._chat_idempotency_payload(rows[0])
+
+    async def update_chat_idempotency_key(
+        self,
+        *,
+        session_id: str,
+        client_id: str,
+        status: str,
+        run_id: str | None = None,
+        message_id: str | None = None,
+    ) -> dict | None:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        expires_at = (now_dt + timedelta(days=CHAT_IDEMPOTENCY_TTL_DAYS)).isoformat() if status in CHAT_IDEMPOTENCY_TERMINAL_STATUSES else None
+        await self.conn.execute(
+            """
+            UPDATE chat_idempotency_keys
+            SET status = ?,
+                run_id = COALESCE(?, run_id),
+                message_id = COALESCE(?, message_id),
+                updated_at = ?,
+                expires_at = COALESCE(?, expires_at)
+            WHERE session_id = ? AND client_id = ?
+            """,
+            (status, run_id, message_id, now, expires_at, session_id, client_id),
+        )
+        await self.conn.commit()
+        return await self.get_chat_idempotency_key(session_id, client_id)
 
     async def record_chat_run_status(
         self,
@@ -922,16 +1071,24 @@ class SessionStore:
         *,
         stop_reason: str | None = None,
         last_seq: int | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        ended_at = now if status in {"completed", "cancelled", "error"} else None
+        ended_at = now if status in {"completed", "cancelled", "error", "failed", "interrupted"} else None
         await self.conn.execute(
             """
             UPDATE chat_runs
-            SET status = ?, stop_reason = ?, updated_at = ?, ended_at = COALESCE(?, ended_at), last_seq = COALESCE(?, last_seq)
+            SET status = ?,
+                stop_reason = ?,
+                updated_at = ?,
+                ended_at = COALESCE(?, ended_at),
+                last_seq = COALESCE(?, last_seq),
+                error_code = COALESCE(?, error_code),
+                error_message = COALESCE(?, error_message)
             WHERE run_id = ?
             """,
-            (status, stop_reason, now, ended_at, last_seq, run_id),
+            (status, stop_reason, now, ended_at, last_seq, error_code, error_message, run_id),
         )
         await self.conn.commit()
 
@@ -940,6 +1097,42 @@ class SessionStore:
         if not rows:
             return None
         return self._chat_run_payload(rows[0])
+
+
+    async def get_latest_chat_run_for_session(self, session_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM chat_runs
+            WHERE session_id = ?
+            ORDER BY updated_at DESC, started_at DESC
+            LIMIT 1
+            """,
+            (session_id,),
+        )
+        if not rows:
+            return None
+        return self._chat_run_payload(rows[0])
+
+    async def list_pending_tool_approvals(self, session_id: str, *, run_id: str | None = None) -> list[dict]:
+        if run_id is not None:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM tool_approvals
+                WHERE session_id = ? AND run_id = ? AND status = 'pending'
+                ORDER BY requested_at ASC
+                """,
+                (session_id, run_id),
+            )
+        else:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM tool_approvals
+                WHERE session_id = ? AND status = 'pending'
+                ORDER BY requested_at ASC
+                """,
+                (session_id,),
+            )
+        return [self._tool_approval_payload(row) for row in rows]
 
     async def record_tool_call_started(
         self,
@@ -1093,6 +1286,8 @@ class SessionStore:
             UPDATE chat_runs
             SET status = 'interrupted',
                 stop_reason = 'server_restart',
+                error_code = 'run_interrupted',
+                error_message = 'Run was interrupted by server restart.',
                 updated_at = ?,
                 ended_at = ?
             WHERE status IN ('pending', 'running', 'backgrounded')
@@ -1328,6 +1523,23 @@ class SessionStore:
         await self.conn.commit()
         return len(rows)
 
+    async def mark_interrupted_chat_queued_messages_retryable(self) -> int:
+        now = datetime.now(UTC).isoformat()
+        cursor = await self.conn.execute(
+            """
+            UPDATE chat_queued_messages
+            SET status = 'failed_retryable',
+                updated_at = ?
+            WHERE status = 'queued'
+              AND run_id IN (
+                SELECT run_id FROM chat_runs WHERE status = 'interrupted'
+              )
+            """,
+            (now,),
+        )
+        await self.conn.commit()
+        return cursor.rowcount
+
     async def record_chat_queued_message(
         self,
         *,
@@ -1411,7 +1623,7 @@ class SessionStore:
         run_id = payload.get("run_id") if isinstance(payload.get("run_id"), str) else None
         await self.conn.execute(
             """
-            INSERT OR IGNORE INTO session_events (
+            INSERT INTO session_events (
                 session_id, seq, event_type, event_json, run_id, created_at
             )
             VALUES (?, ?, ?, ?, ?, ?)

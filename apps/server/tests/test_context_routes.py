@@ -21,6 +21,10 @@ def test_context_routes_are_registered():
 
 class _Config:
     chat_model = "claude-sonnet-4-6"
+    compression_threshold = 0.8
+    max_messages = 250
+    compression_keep_ratio = 0.2
+    summary_max_tokens = 1500
 
 
 class _Runtime:
@@ -32,6 +36,7 @@ class _Runtime:
 
 class _SessionService:
     saved = False
+    recorded_compactions = 0
 
     async def load(self, session_id: str | None = None):
         state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
@@ -39,6 +44,9 @@ class _SessionService:
 
     async def save(self, *args, **kwargs):
         self.saved = True
+
+    async def record_chat_compaction(self, **_kwargs):
+        self.recorded_compactions += 1
 
     async def list_turns(self, session_id: str, limit: int = 100):
         return [
@@ -58,6 +66,14 @@ class _SessionService:
 
     async def list_episodes(self, session_id: str, limit: int = 100):
         return [{**turn, "episode_id": turn["turn_id"]} for turn in await self.list_turns(session_id, limit=limit)]
+
+
+class _SmallSessionService(_SessionService):
+    async def load(self, session_id: str | None = None):
+        state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+        messages = [{"role": "system", "content": "s"}]
+        messages.extend({"role": "user", "content": f"small-{i}"} for i in range(6))
+        return SessionData(state=state, messages=messages, last_input_tokens=58_517)
 
 
 def test_context_usage_reports_loaded_deferred_tool_counts():
@@ -122,6 +138,61 @@ def test_compact_rejects_active_run_to_avoid_overwriting_stream_state():
 
     assert response.status_code == 409
     assert session_service.saved is False
+
+
+def test_manual_compact_bypasses_auto_threshold(monkeypatch):
+    runtime = _Runtime()
+    session_service = _SmallSessionService()
+    runtime.session_service = session_service
+    buses = BusRegistry()
+
+    async def fake_compact_session(*_args, **_kwargs):
+        return {
+            "status": "compacted",
+            "message": "Compacted 7 -> 5 messages (2 summarized)",
+            "before_tokens": 58_517,
+            "before_messages": 7,
+            "after_messages": 5,
+            "messages_compressed": 2,
+        }
+
+    monkeypatch.setattr("ntrp.server.routers.context.compact_session", fake_compact_session)
+
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.dependency_overrides[require_session_service] = lambda: session_service
+    app.dependency_overrides[get_bus_registry] = lambda: buses
+    try:
+        response = TestClient(app).post("/compact", json={"session_id": "sess-1"})
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+        app.dependency_overrides.pop(require_session_service, None)
+        app.dependency_overrides.pop(get_bus_registry, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "compacted"
+    assert session_service.recorded_compactions == 1
+
+
+def test_manual_compact_noops_when_nothing_compactable_without_spinner_event():
+    runtime = _Runtime()
+    session_service = _SessionService()
+    runtime.session_service = session_service
+    buses = BusRegistry()
+
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.dependency_overrides[require_session_service] = lambda: session_service
+    app.dependency_overrides[get_bus_registry] = lambda: buses
+    try:
+        response = TestClient(app).post("/compact", json={"session_id": "sess-1"})
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+        app.dependency_overrides.pop(require_session_service, None)
+        app.dependency_overrides.pop(get_bus_registry, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "nothing_to_compact"
+    assert session_service.saved is False
+    assert buses._buses == {}
 
 
 def test_session_turns_route_returns_durable_turn_ranges():

@@ -198,9 +198,9 @@ function SkillInlineToken({ skill }: { skill: SkillDescriptor }) {
       type="button"
       onClick={() => void viewSkill(skill.name)}
       title={skill.path ?? skill.name}
-      className="inline-flex max-w-full items-center gap-1.5 align-baseline text-info hover:text-accent-strong transition-colors cursor-pointer"
+      className="inline-flex max-w-full items-baseline gap-1.5 align-baseline text-info hover:text-accent-strong transition-colors cursor-pointer"
     >
-      <Box size={ICON.SM} strokeWidth={2} className="shrink-0" />
+      <Box size={ICON.SM} strokeWidth={2} className="relative top-[1px] shrink-0" />
       <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
     </button>
   );

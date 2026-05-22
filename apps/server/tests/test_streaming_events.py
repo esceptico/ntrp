@@ -32,7 +32,7 @@ from ntrp.events.sse import (
     ThinkingEvent,
     agent_events_to_sse,
 )
-from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import RECENT_BUFFER_MAX, BusRegistry, SessionBus
 from ntrp.server.routers.automation import _automation_event_stream
 from ntrp.server.routers.chat import _event_stream, _keepalive
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -259,9 +259,73 @@ async def test_event_stream_emits_stream_reset_on_future_cursor():
 
     assert "event: stream_reset" in reset_chunk
     assert reset_payload["type"] == "stream_reset"
-    assert reset_payload["reason"] == "replay_gap"
+    assert reset_payload["reason"] == "future_cursor"
     assert reset_payload["session_id"] == "sess-1"
     assert reset_payload["seq"] == 1
+
+
+@pytest.mark.asyncio
+async def test_event_stream_delivers_slow_consumer_reset_even_at_checkpoint_cursor():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    bus.subscriber_queue_size = 2
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
+    try:
+        first_chunk_task = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+
+        await bus.emit(ThinkingEvent(status="one"))
+        first_chunk = await first_chunk_task
+
+        await bus.emit(ThinkingEvent(status="two"))
+        await bus.emit(ThinkingEvent(status="three"))
+        await bus.emit(ThinkingEvent(status="four"))
+
+        reset_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    first_payload = json.loads(first_chunk.split("data: ", 1)[1].strip())
+    reset_payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+
+    assert first_payload["status"] == "one"
+    assert "event: stream_reset" in reset_chunk
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "slow_consumer"
+    assert reset_payload["session_id"] == "sess-1"
+    assert reset_payload["seq"] == 0
+
+
+@pytest.mark.asyncio
+async def test_event_stream_delivers_slow_consumer_reset_with_size_one_queue():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    bus.subscriber_queue_size = 1
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
+    try:
+        first_chunk_task = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+
+        await bus.emit(ThinkingEvent(status="one"))
+        first_chunk = await first_chunk_task
+
+        await bus.emit(ThinkingEvent(status="two"))
+        await bus.emit(ThinkingEvent(status="three"))
+
+        reset_chunk = await anext(stream)
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+
+    first_payload = json.loads(first_chunk.split("data: ", 1)[1].strip())
+    reset_payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+
+    assert first_payload["status"] == "one"
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "slow_consumer"
 
 
 @pytest.mark.asyncio
@@ -304,6 +368,102 @@ async def test_automation_event_stream_without_cursor_does_not_replay_old_events
 
     assert payload["type"] == "stream_keepalive"
     assert payload["latest_seq"] == 1
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_closes_after_slow_consumer_reset_with_size_one_queue():
+    buses = BusRegistry()
+    bus = buses.get_or_create("automation:events")
+    bus.subscriber_queue_size = 1
+
+    stream = _automation_event_stream(buses)
+    try:
+        first_chunk_task = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+
+        await bus.emit(AutomationProgressEvent(task_id="loop-a", status="one"))
+        first_chunk = await first_chunk_task
+
+        await bus.emit(AutomationProgressEvent(task_id="loop-a", status="two"))
+        await bus.emit(AutomationProgressEvent(task_id="loop-a", status="three"))
+
+        reset_chunk = await anext(stream)
+        next_chunk_task = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0.05)
+        assert next_chunk_task.done()
+        with pytest.raises(StopAsyncIteration):
+            await next_chunk_task
+    finally:
+        await stream.aclose()
+
+    first_payload = json.loads(first_chunk.split("data: ", 1)[1].strip())
+    reset_payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+
+    assert first_payload["status"] == "one"
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "slow_consumer"
+
+
+@pytest.mark.asyncio
+async def test_chat_event_stream_replays_tail_after_10k_event_reconnect():
+    buses = BusRegistry()
+    bus = buses.get_or_create("stress-session")
+    total = RECENT_BUFFER_MAX + 25
+
+    for i in range(total):
+        await bus.emit(ThinkingEvent(status=f"event-{i}"))
+
+    after_seq = total - 5
+    stream = _event_stream("stress-session", buses, RunRegistry(), stream=True, after_seq=after_seq)
+    try:
+        chunks = [await anext(stream) for _ in range(5)]
+    finally:
+        await stream.aclose()
+
+    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    assert [payload["seq"] for payload in payloads] == list(range(after_seq + 1, total + 1))
+    assert [payload["status"] for payload in payloads] == [f"event-{i}" for i in range(after_seq, total)]
+
+
+@pytest.mark.asyncio
+async def test_chat_event_stream_resets_when_10k_event_reconnect_cursor_is_evicted():
+    buses = BusRegistry()
+    bus = buses.get_or_create("stress-gap-session")
+    total = RECENT_BUFFER_MAX + 25
+
+    for i in range(total):
+        await bus.emit(ThinkingEvent(status=f"event-{i}"))
+
+    stream = _event_stream("stress-gap-session", buses, RunRegistry(), stream=True, after_seq=1)
+    try:
+        reset_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+    assert payload["type"] == "stream_reset"
+    assert payload["reason"] == "replay_gap"
+
+
+@pytest.mark.asyncio
+async def test_automation_event_stream_replays_tail_after_10k_event_reconnect():
+    buses = BusRegistry()
+    bus = buses.get_or_create("automation:events")
+    total = RECENT_BUFFER_MAX + 25
+
+    for i in range(total):
+        await bus.emit(AutomationProgressEvent(task_id="loop-a", status=f"event-{i}"))
+
+    after_seq = total - 5
+    stream = _automation_event_stream(buses, after_seq=after_seq)
+    try:
+        chunks = [await anext(stream) for _ in range(5)]
+    finally:
+        await stream.aclose()
+
+    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    assert [payload["seq"] for payload in payloads] == list(range(after_seq + 1, total + 1))
+    assert [payload["status"] for payload in payloads] == [f"event-{i}" for i in range(after_seq, total)]
 
 
 @pytest.mark.asyncio
@@ -914,6 +1074,214 @@ async def test_run_chat_does_not_overwrite_error_status(monkeypatch):
 
     assert service.statuses[-1] == (RunStatus.ERROR.value, "boom")
     assert all(status != RunStatus.COMPLETED.value for status, _ in service.statuses)
+
+
+@pytest.mark.asyncio
+async def test_run_chat_surfaces_context_length_provider_error(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class ProviderError(Exception):
+        body = {
+            "error": {
+                "type": "invalid_request_error",
+                "code": "context_length_exceeded",
+                "message": "Your input exceeds the context window of this model. Please adjust your input and try again.",
+            }
+        }
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+            self.statuses = []
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def record_chat_run_status(
+            self,
+            run_id,
+            status,
+            *,
+            stop_reason=None,
+            last_seq=None,
+            error_code=None,
+            error_message=None,
+        ):
+            self.statuses.append(
+                {
+                    "status": status,
+                    "stop_reason": stop_reason,
+                    "last_seq": last_seq,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                }
+            )
+
+    async def failing_agent_loop(ctx, agent, bus):
+        raise ProviderError()
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: SimpleNamespace(hooks=SimpleNamespace(), tools=[]))
+    monkeypatch.setattr(chat_service, "run_agent_loop", failing_agent_loop)
+    service = RecordingSessionService()
+    bus = SessionBus(session_id="sess-1")
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, bus)
+
+    run_error = next(record.event for record in bus._recent if record.event.type.value == "RUN_ERROR")
+    assert run_error.code == "context_length_exceeded"
+    assert "context window" in run_error.message
+    assert registry.get_active_run("sess-1") is None
+    assert registry.get_run(run.run_id).status == RunStatus.ERROR
+    assert service.statuses[-1]["status"] == RunStatus.ERROR.value
+    assert service.statuses[-1]["error_code"] == "context_length_exceeded"
+    assert "context window" in service.statuses[-1]["error_message"]
+    assert all(entry["status"] != RunStatus.COMPLETED.value for entry in service.statuses)
+
+
+def test_safe_error_classifies_context_window_exception_class():
+    from ntrp.services import chat as chat_service
+
+    class ContextWindowExceededError(Exception):
+        pass
+
+    code, message, debug_id = chat_service._safe_error(ContextWindowExceededError())
+
+    assert code == "context_length_exceeded"
+    assert "context window" in message
+    assert debug_id.startswith("err_")
+
+
+@pytest.mark.asyncio
+async def test_run_chat_compacts_and_retries_context_length_provider_error(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.messages = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "old"},
+        {"role": "assistant", "content": "reply"},
+        {"role": "user", "content": "latest"},
+    ]
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class ProviderError(Exception):
+        body = {
+            "error": {
+                "type": "invalid_request_error",
+                "code": "context_length_exceeded",
+                "message": "Your input exceeds the context window of this model.",
+            }
+        }
+
+    class RetryCompactor:
+        def __init__(self):
+            self.calls = []
+
+        def should_compact(self, messages, model, last_input_tokens):
+            return False
+
+        async def maybe_compact(self, messages, model, last_input_tokens, *, rehydration_state=None):
+            self.calls.append((list(messages), model, last_input_tokens))
+            return [
+                {"role": "system", "content": "system"},
+                {"role": "assistant", "content": "<session_handoff>\nsummary"},
+                {"role": "user", "content": "latest"},
+            ]
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.store = Store()
+            self.statuses = []
+            self.saved = []
+
+        async def save(self, session_state, messages, metadata=None):
+            self.saved.append((list(messages), metadata))
+
+        async def record_chat_run_status(
+            self,
+            run_id,
+            status,
+            *,
+            stop_reason=None,
+            last_seq=None,
+            error_code=None,
+            error_message=None,
+        ):
+            self.statuses.append(
+                {
+                    "status": status,
+                    "stop_reason": stop_reason,
+                    "last_seq": last_seq,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                }
+            )
+
+    attempts = 0
+
+    async def flaky_agent_loop(ctx, agent, bus):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise ProviderError()
+        ctx.run.messages.append({"role": "assistant", "content": "ok"})
+        return "ok", None
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: SimpleNamespace(hooks=SimpleNamespace(), tools=[]))
+    monkeypatch.setattr(chat_service, "run_agent_loop", flaky_agent_loop)
+    compactor = RetryCompactor()
+    service = RecordingSessionService()
+    bus = SessionBus(session_id="sess-1")
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(
+            approval_timeout_seconds=300,
+            compactor=compactor,
+            model="gpt-5.2",
+        ),
+        available_integrations=[],
+        integration_errors={},
+        session_service=service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, bus)
+
+    assert attempts == 2
+    assert compactor.calls
+    assert run.messages[-1]["content"] == "ok"
+    assert not any(record.event.type.value == "RUN_ERROR" for record in bus._recent)
+    assert any(record.event.type.value == "RUN_FINISHED" for record in bus._recent)
+    assert service.statuses[-1]["status"] == RunStatus.COMPLETED.value
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ class KnowledgeObjectType(StrEnum):
     PATTERN = "pattern"
     LESSON = "lesson"
     PROCEDURE = "procedure"
+    ENTITY_PROFILE = "entity_profile"
     PROCEDURE_CANDIDATE = "procedure_candidate"
     ARTIFACT = "artifact"
     ACTION_CANDIDATE = "action_candidate"
@@ -149,6 +150,19 @@ class KnowledgeReflectResult(BaseModel):
     created: list[KnowledgeObject] = Field(default_factory=list)
     skipped: int = 0
     policy_version: str = "knowledge.reflect.v1"
+
+
+class KnowledgeProfileSynthesisRequest(BaseModel):
+    entity_names: list[str] = Field(default_factory=list, max_length=100)
+    limit_entities: int = Field(default=25, ge=1, le=200)
+    evidence_limit: int = Field(default=20, ge=1, le=100)
+    apply: bool = True
+
+
+class KnowledgeProfileSynthesisResult(BaseModel):
+    profiles: list[KnowledgeObject] = Field(default_factory=list)
+    skipped: int = 0
+    policy_version: str = "knowledge.profiles.trimem.v1"
 
 
 class KnowledgeArtifactRenderRequest(BaseModel):

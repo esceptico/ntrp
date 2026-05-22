@@ -145,6 +145,88 @@ async def run_memory_eval_suite(
     )
 
 
+def benchmark_memory_suite(object_ids: dict[str, str]) -> MemoryEvalSuite:
+    """Top-tier-inspired deterministic memory benchmark suite.
+
+    The suite mirrors the failure modes covered by LOCOMO/LongMemEval/BEAM/
+    STATE-Bench-style evaluations without requiring external datasets: temporal
+    updates, profile-vs-fact routing, procedural recall, source/evidence lookup,
+    contradiction suppression, and stale-memory guards.
+    """
+
+    def oid(name: str) -> str:
+        if name not in object_ids:
+            raise KeyError(f"missing benchmark object id: {name}")
+        return object_ids[name]
+
+    return MemoryEvalSuite(
+        name="ntrp-memory-benchmark-v1",
+        description=(
+            "Deterministic benchmark for long-term-memory retrieval: LoCoMo-style profile continuity, "
+            "LongMemEval-style temporal updates/abstention guards, and STATE-Bench-style procedure recall."
+        ),
+        cases=[
+            MemoryEvalCase(
+                name="current-fact-beats-stale-fact",
+                query="canary smoke checks deploy channel policy",
+                expected_object_ids={oid("current_policy")},
+                forbidden_object_ids={oid("stale_policy")},
+                tags={"longmemeval", "temporal_update", "stale_guard"},
+            ),
+            MemoryEvalCase(
+                name="profile-used-for-holistic-state-query",
+                query="what do we know about Dex",
+                expected_object_ids={oid("dex_profile")},
+                tags={"locomo", "profile", "holistic"},
+            ),
+            MemoryEvalCase(
+                name="procedure-retrieved-for-action-query",
+                query="how should Prime pod cleanup be done",
+                expected_object_ids={oid("prime_procedure")},
+                tags={"state_bench", "procedure", "action"},
+            ),
+            MemoryEvalCase(
+                name="source-evidence-query-can-retrieve-episode",
+                query="source evidence for Dex profile continuity",
+                expected_object_ids={oid("dex_episode")},
+                tags={"source_grounding", "evidence", "beam"},
+            ),
+            MemoryEvalCase(
+                name="current-preference-beats-stale-preference",
+                query="what editor do I currently prefer",
+                expected_object_ids={oid("current_preference")},
+                forbidden_object_ids={oid("stale_preference")},
+                tags={"preference", "temporal_update", "stale_guard"},
+            ),
+            MemoryEvalCase(
+                name="assistant-recommendation-recall",
+                query="what did you recommend for Trigger deploy checks",
+                expected_object_ids={oid("assistant_recommendation")},
+                tags={"assistant_recommendation", "conversational_recall"},
+            ),
+            MemoryEvalCase(
+                name="decision-recall",
+                query="what did we decide about Dex Slack sync",
+                expected_object_ids={oid("dex_slack_decision")},
+                tags={"decision", "conversational_recall", "multi_session"},
+            ),
+            MemoryEvalCase(
+                name="generic-advice-does-not-inject-project-memory",
+                query="how do I cook pasta",
+                forbidden_object_ids={
+                    oid("current_policy"),
+                    oid("dex_profile"),
+                    oid("prime_procedure"),
+                    oid("assistant_recommendation"),
+                    oid("dex_slack_decision"),
+                },
+                tags={"negative", "memory_abstention"},
+            ),
+        ],
+    )
+
+
+
 def default_memory_retrieval_suite() -> MemoryEvalSuite:
     """Reusable smoke benchmark for retrieval regressions.
 

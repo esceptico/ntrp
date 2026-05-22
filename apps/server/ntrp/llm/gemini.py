@@ -27,6 +27,7 @@ _THINKING_LEVELS = {
     "medium": types.ThinkingLevel.MEDIUM,
     "high": types.ThinkingLevel.HIGH,
 }
+_SUPPORTED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"})
 
 
 class GeminiClient(CompletionClient, EmbeddingClient):
@@ -131,6 +132,8 @@ class GeminiClient(CompletionClient, EmbeddingClient):
                 case "text":
                     parts.append(types.Part(text=block["text"]))
                 case "image":
+                    if block["media_type"] not in _SUPPORTED_IMAGE_MIME_TYPES:
+                        continue
                     parts.append(
                         types.Part.from_bytes(
                             data=base64.b64decode(block["data"]),

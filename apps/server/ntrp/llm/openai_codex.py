@@ -14,6 +14,7 @@ from ntrp.llm.openai_responses import (
     buffered_stream_responses_completion,
     parse_responses_response,
     prepare_responses_request,
+    stream_responses_completion,
 )
 
 _MODEL_PREFIX = "openai-codex/"
@@ -36,23 +37,28 @@ class OpenAICodexClient(CompletionClient):
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
-        final_response: CompletionResponse | None = None
-        async for event in self._stream_completion(
-            messages=messages,
-            model=model,
-            tools=tools,
-            tool_choice=tool_choice,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            reasoning_effort=reasoning_effort,
-            response_format=response_format,
-            **kwargs,
-        ):
-            if isinstance(event, CompletionResponse):
-                final_response = event
-        if final_response is None:
-            raise RuntimeError("OpenAI Codex stream ended without a final response")
-        return final_response
+        client = await self._client()
+        try:
+            request = self._prepare(
+                messages=messages,
+                model=model,
+                tools=tools,
+                tool_choice=tool_choice,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+                response_format=response_format,
+                **kwargs,
+            )
+            final_response: CompletionResponse | None = None
+            async for item in buffered_stream_responses_completion(client, request, model=model):
+                if isinstance(item, CompletionResponse):
+                    final_response = item
+            if final_response is None:
+                raise RuntimeError("OpenAI Codex stream ended without a final response")
+            return final_response
+        finally:
+            await client.close()
 
     async def _stream_completion(
         self,
@@ -79,7 +85,7 @@ class OpenAICodexClient(CompletionClient):
                 response_format=response_format,
                 **kwargs,
             )
-            async for item in buffered_stream_responses_completion(client, request, model=model):
+            async for item in stream_responses_completion(client, request, model=model):
                 yield item
         finally:
             await client.close()

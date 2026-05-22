@@ -32,7 +32,11 @@ function ChatHeader() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const diagnostics = useStore((s) => sessionId ? s.transportDiagnostics[sessionId] : undefined);
   const session = sessions.find((s) => s.session_id === sessionId);
-  const formattedDiagnostics = diagnostics ? formatTransportDiagnostics(diagnostics) : null;
+  const formattedDiagnostics = diagnostics?.connectionPhase === "disconnected"
+    ? null
+    : diagnostics
+      ? formatTransportDiagnostics(diagnostics)
+      : null;
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
   const isChannel = session?.session_type === "channel";

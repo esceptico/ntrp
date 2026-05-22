@@ -1,3 +1,9 @@
+import asyncio
+import time
+from types import SimpleNamespace
+
+import pytest
+
 import ntrp.constants as constants
 from ntrp.agent import Role
 from ntrp.constants import SESSION_HANDOFF_MARKER
@@ -5,7 +11,7 @@ from ntrp.core.compactor import (
     SummaryCompactor,
     _build_compacted_messages,
     compact_needed,
-    estimate_message_tokens,
+    compact_summarize,
     is_handoff_message,
 )
 
@@ -59,36 +65,72 @@ def _large_history(message_count: int = 10, chars_per_message: int = 45_000) -> 
     ]
 
 
-def test_compact_needed_uses_local_estimate_when_usage_missing():
+def test_compact_needed_requires_usage_or_message_ceiling():
     messages = _large_history()
 
-    assert estimate_message_tokens(messages) > 100_000
-    assert compact_needed(messages, "gpt-5.2", actual_input_tokens=None, threshold=0.01)
+    assert not compact_needed(messages, "gpt-5.2", actual_input_tokens=None, threshold=0.01, max_messages=999)
 
 
-def test_compact_needed_uses_estimate_when_saved_usage_is_stale_low():
+def test_compact_needed_trusts_saved_usage_when_present():
     messages = _large_history()
 
-    assert compact_needed(messages, "gpt-5.2", actual_input_tokens=1_000, threshold=0.01)
+    assert not compact_needed(messages, "gpt-5.2", actual_input_tokens=1_000, threshold=0.01)
 
 
-def test_summary_compactor_triggers_with_missing_usage_for_oversized_history():
+def test_compact_needed_uses_headroom_before_configured_threshold(monkeypatch):
+    monkeypatch.setattr(
+        "ntrp.core.compactor.get_model",
+        lambda _model: type("Model", (), {"max_context_tokens": 1000})(),
+    )
+    messages = [{"role": "system", "content": "system"}]
+
+    assert compact_needed(messages, "test-model", actual_input_tokens=760, threshold=0.8)
+    assert not compact_needed(messages, "test-model", actual_input_tokens=759, threshold=0.8)
+
+
+def test_compact_needed_triggers_at_message_ceiling():
+    messages = [{"role": "user", "content": str(i)} for i in range(5)]
+
+    assert compact_needed(messages, "gpt-5.2", actual_input_tokens=0, max_messages=5)
+
+
+def test_summary_compactor_waits_for_usage_or_message_ceiling():
     messages = _large_history()
-    compactor = SummaryCompactor(threshold=0.01)
+    compactor = SummaryCompactor(threshold=0.01, max_messages=999)
 
-    assert compactor.should_compact(messages, "gpt-5.2", last_input_tokens=None)
-
-
-def test_compact_needed_does_not_compact_small_history_from_estimate():
-    messages = [
-        {"role": "system", "content": "system"},
-        {"role": "user", "content": "small"},
-        {"role": "assistant", "content": "ok"},
-    ]
-
-    assert not compact_needed(messages, "gpt-5.2", actual_input_tokens=None)
+    assert not compactor.should_compact(messages, "gpt-5.2", last_input_tokens=None)
 
 
 def test_compaction_timeout_is_finite():
     assert constants.COMPACTION_TIMEOUT is not None
     assert constants.COMPACTION_TIMEOUT > 0
+
+
+@pytest.mark.asyncio
+async def test_compact_summarize_keeps_server_event_loop_responsive(monkeypatch):
+    class BlockingClient:
+        async def completion(self, **_kwargs):
+            time.sleep(0.1)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="summary"))],
+            )
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("ntrp.core.compactor.create_completion_client", lambda _model: BlockingClient())
+
+    messages = [
+        {"role": Role.SYSTEM, "content": "system"},
+        {"role": Role.USER, "content": "old"},
+        {"role": Role.ASSISTANT, "content": "reply"},
+        {"role": Role.USER, "content": "tail"},
+        {"role": Role.ASSISTANT, "content": "tail reply"},
+    ]
+
+    started = time.perf_counter()
+    task = asyncio.create_task(compact_summarize(messages, 1, 3, "gpt-5.2"))
+    await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.05)
+
+    assert time.perf_counter() - started < 0.05
+    assert await task == "summary"

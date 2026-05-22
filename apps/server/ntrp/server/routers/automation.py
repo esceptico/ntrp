@@ -1,17 +1,14 @@
 import asyncio
-import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
-from ntrp.events.sse import StreamResetEvent
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.bus import BusRegistry, StreamRecord, stream_record_to_sse_string
+from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_automation_service, require_notifier_service
 from ntrp.server.middleware import SSEStreamingResponse
-from ntrp.server.routers.chat import _keepalive
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
@@ -19,6 +16,8 @@ from ntrp.server.schemas import (
     UpdateAutomationRequest,
     UpdateNotifierRequest,
 )
+from ntrp.server.sse_stream import live_records, reset_chunk
+from ntrp.server.sse_stream import replay_records as iter_replay_records
 
 router = APIRouter(tags=["automations"])
 
@@ -91,40 +90,29 @@ async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | N
     bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
     subscription = bus.subscribe_with_replay(after_seq=after_seq) if after_seq is not None else None
     queue = subscription.queue if subscription is not None else bus.subscribe()
-    last_event_at = time.monotonic()
+
+    def should_emit(_event) -> bool:
+        return True
+
     try:
         if subscription is not None and subscription.replay_gap:
             newest_seq = bus.next_seq - 1
             reset_seq = min(max(after_seq + 1, bus.checkpoint_seq), newest_seq)
-            reset_record = StreamRecord(
-                seq=reset_seq,
-                session_id=bus.session_id,
-                event=StreamResetEvent(reason="replay_gap"),
-            )
-            yield stream_record_to_sse_string(bus.session_id, reset_record)
-            last_event_at = time.monotonic()
+            yield reset_chunk(bus.session_id, "replay_gap", reset_seq)
             await asyncio.sleep(0)
 
         if subscription is not None:
-            for record in subscription.snapshot:
-                yield stream_record_to_sse_string(bus.session_id, record, replay=True)
-                await asyncio.sleep(0)
+            async for chunk in iter_replay_records(bus.session_id, subscription.snapshot, should_emit=should_emit):
+                yield chunk
 
-        while True:
-            try:
-                record = await asyncio.wait_for(queue.get(), timeout=0.5)
-            except TimeoutError:
-                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
-                    last_event_at = time.monotonic()
-                    yield _keepalive(AUTOMATION_BUS_KEY, bus.next_seq - 1)
-                continue
-
-            if record is None:
-                break
-
-            last_event_at = time.monotonic()
-            yield stream_record_to_sse_string(bus.session_id, record)
-            await asyncio.sleep(0)
+        async for chunk in live_records(
+            bus=bus,
+            queue=queue,
+            session_id=AUTOMATION_BUS_KEY,
+            should_emit=should_emit,
+            keepalive_interval=KEEPALIVE_INTERVAL,
+        ):
+            yield chunk
     except asyncio.CancelledError:
         pass
     finally:

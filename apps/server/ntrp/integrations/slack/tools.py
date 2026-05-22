@@ -86,11 +86,11 @@ SLACK_THREAD_DESCRIPTION = (
 
 async def slack_thread(execution: ToolExecution, args: SlackThreadInput) -> ToolResult:
     source = execution.ctx.get_client("slack", SlackClient)
-    content = await source.read_thread(args.message_id)
-    if not content:
+    result = await source.read_thread(args.message_id)
+    if not result:
         return ToolResult(content=f"Message not found: {args.message_id}", preview="Not found")
-    lines = content.count("\n") + 1
-    return ToolResult(content=content, preview=f"Read {lines} lines")
+    lines = result.text.count("\n") + 1
+    return ToolResult(content=result.text, preview=f"Read {lines} lines", model_content=result.model_content)
 
 
 class SlackChannelsInput(BaseModel):
@@ -142,6 +142,24 @@ async def slack_user(execution: ToolExecution, args: SlackUserInput) -> ToolResu
         return ToolResult(content=f"User not found: {args.user_id}", preview="Not found")
     lines = [f"{key}: {value}" for key, value in profile.items() if value]
     return ToolResult(content="\n".join(lines), preview=profile.get("name", args.user_id))
+
+
+class SlackFileInput(BaseModel):
+    file_id: str = Field(description="Slack file ID (e.g. F0123456789) from a message attachment/file result")
+
+
+SLACK_FILE_DESCRIPTION = (
+    "Fetch and inspect a Slack image file by file ID. Use when Slack results expose an attached file ID (F*) "
+    "and the user asks about screenshot/image contents."
+)
+
+
+async def slack_file(execution: ToolExecution, args: SlackFileInput) -> ToolResult:
+    source = execution.ctx.get_client("slack", SlackClient)
+    result = await source.read_file_image(args.file_id)
+    if not result:
+        return ToolResult(content=f"Slack image file not found or not readable: {args.file_id}", preview="Not readable")
+    return ToolResult(content=result.text, preview=f"Read image {args.file_id}", model_content=result.model_content)
 
 
 class SlackDmsInput(BaseModel):
@@ -243,4 +261,12 @@ slack_user_tool = tool(
     input_model=SlackUserInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_user,
+)
+
+slack_file_tool = tool(
+    display_name="SlackFile",
+    description=SLACK_FILE_DESCRIPTION,
+    input_model=SlackFileInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
+    execute=slack_file,
 )

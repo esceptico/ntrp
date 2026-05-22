@@ -141,6 +141,8 @@ class RunErrorEvent(SSEEvent):
     run_id: str = ""
     message: str = ""
     recoverable: bool = False
+    code: str = "internal_error"
+    debug_id: str | None = None
 
 
 # ─── Text messages (AG-UI Start / Content / End) ─────────────────────

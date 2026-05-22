@@ -11,6 +11,7 @@ from ntrp.knowledge import (
     KnowledgeObjectStatus,
     KnowledgeObjectType,
     KnowledgeObjectUpdate,
+    KnowledgeProfileSynthesisRequest,
     KnowledgePruneRequest,
     KnowledgePublishRequest,
     KnowledgeReflectRequest,
@@ -19,6 +20,22 @@ from ntrp.knowledge.processors import KnowledgeProcessorService
 from ntrp.knowledge.store import KnowledgeObjectRepository
 from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.store.base import GraphDatabase
+
+
+def test_builtin_memory_automations_use_current_constructs():
+    from ntrp.automation.builtins import BUILTINS
+    from ntrp.automation.triggers import KnowledgeEventTrigger
+    from ntrp.constants import BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID, BUILTIN_KNOWLEDGE_REFLECTION_ID
+
+    by_id = {spec.task_id: spec for spec in BUILTINS}
+    reflection = by_id[BUILTIN_KNOWLEDGE_REFLECTION_ID]
+    event_triggers = [trigger for trigger in reflection.triggers if isinstance(trigger, KnowledgeEventTrigger)]
+    assert event_triggers
+    assert event_triggers[0].object_types == (KnowledgeObjectType.MEMORY_EPISODE.value,)
+
+    profile_refresh = by_id[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID]
+    assert profile_refresh.handler == "knowledge_profile_refresh"
+    assert profile_refresh.writable is True
 
 
 class _FakeMemoryService:
@@ -62,6 +79,7 @@ class _FakeKnowledgeObjects:
             KnowledgeObjectType.PATTERN.value: 1,
             KnowledgeObjectType.LESSON.value: 1,
             KnowledgeObjectType.PROCEDURE.value: 1,
+            KnowledgeObjectType.ENTITY_PROFILE.value: 1,
             KnowledgeObjectType.PROCEDURE_CANDIDATE.value: 1,
             KnowledgeObjectType.ACTION_CANDIDATE.value: 1,
             KnowledgeObjectType.ARTIFACT.value: 1,
@@ -147,6 +165,21 @@ class _FakeKnowledgeObjects:
                 created_at="2020-01-01T00:00:00+00:00",
                 updated_at="2020-01-01T00:00:00+00:00",
             ),
+            KnowledgeObject(
+                id=6,
+                object_type=KnowledgeObjectType.ENTITY_PROFILE,
+                title="Profile: Dex automation alerts",
+                text="Dex automation alert profile: user cares about reliable, inspectable alert routing.",
+                status=KnowledgeObjectStatus.ACTIVE,
+                scope="dex",
+                activation="prompt",
+                proactiveness_level="L0",
+                score=0.55,
+                source_ids=["knowledge:1", "source:pattern-1"],
+                metadata={"profile_entity": "Dex automation alerts", "memory_tier": "profile"},
+                created_at="2026-05-19T00:00:00+00:00",
+                updated_at="2026-05-19T00:00:00+00:00",
+            ),
         ]
         if object_types:
             objects = [obj for obj in objects if obj.object_type in object_types]
@@ -176,6 +209,268 @@ async def test_activation_projects_current_memory_into_typed_candidates():
     assert KnowledgeObjectType.EVIDENCE_REF not in {candidate.object_type for candidate in bundle.candidates}
     assert all(candidate.object_id != "5" for candidate in bundle.candidates)
     assert any(signal.name == "temporal_validity" for candidate in bundle.candidates for signal in candidate.signals)
+    assert KnowledgeObjectType.ENTITY_PROFILE not in {candidate.object_type for candidate in bundle.candidates}
+
+
+@pytest.mark.asyncio
+async def test_activation_uses_profile_tier_for_state_queries_only():
+    service = KnowledgeActivationService(_FakeMemoryService())  # type: ignore[arg-type]
+
+    direct = await service.inspect(ActivationRequest(query="dex automation alerts", budget_chars=2_000))
+    state = await service.inspect(ActivationRequest(query="what do we know about dex automation alerts", budget_chars=2_000))
+
+    assert KnowledgeObjectType.ENTITY_PROFILE not in {candidate.object_type for candidate in direct.candidates}
+    profile = next(candidate for candidate in state.candidates if candidate.object_type == KnowledgeObjectType.ENTITY_PROFILE)
+    assert "profile_tier_match" in profile.reasons
+    assert "query_reformulation:profile" in profile.reasons
+    assert profile.source_ids
+
+
+@pytest.mark.asyncio
+async def test_direct_personal_memory_question_uses_episode_fallback():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            objects = [
+                KnowledgeObject(
+                    id=20,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Graduation session",
+                    text="user: I graduated with a degree in Business Administration before moving cities.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_degree"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                )
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(ActivationRequest(query="What degree did I graduate with?", scope="personal"))
+
+    assert bundle.candidates
+    assert bundle.candidates[0].object_type == KnowledgeObjectType.MEMORY_EPISODE
+    assert "query_reformulation:personal_memory" in bundle.candidates[0].reasons
+
+
+@pytest.mark.asyncio
+async def test_conversational_recall_query_uses_episode_fallback():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            objects = [
+                KnowledgeObject(
+                    id=21,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Restaurant recommendation session",
+                    text="assistant: The romantic Italian restaurant in Rome I recommended for dinner was Roscioli.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_restaurant"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                )
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(
+        ActivationRequest(
+            query="Can you remind me of the name of the romantic Italian restaurant in Rome you recommended?",
+            scope="personal",
+        )
+    )
+
+    assert bundle.candidates
+    assert bundle.candidates[0].object_type == KnowledgeObjectType.MEMORY_EPISODE
+    assert "query_reformulation:personal_memory" in bundle.candidates[0].reasons
+
+
+@pytest.mark.asyncio
+async def test_personalized_recommendation_query_uses_memory_fallback():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            objects = [
+                KnowledgeObject(
+                    id=22,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Photography setup session",
+                    text="user: My current photography setup is a Sony mirrorless camera with a 35mm prime lens.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_photography"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                )
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(
+        ActivationRequest(
+            query="Can you suggest some accessories that would complement my current photography setup?",
+            scope="personal",
+        )
+    )
+
+    assert bundle.candidates
+    assert bundle.candidates[0].object_type == KnowledgeObjectType.MEMORY_EPISODE
+    assert "query_reformulation:personal_memory" in bundle.candidates[0].reasons
+
+
+@pytest.mark.asyncio
+async def test_temporal_sequence_query_uses_episode_fallback():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            objects = [
+                KnowledgeObject(
+                    id=23,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Garden sequence session",
+                    text="user: The tomatoes were started before the marigolds in the seed trays.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_garden"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                )
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(
+        ActivationRequest(query="Which seeds were started first, the tomatoes or the marigolds?", scope="personal")
+    )
+
+    assert bundle.candidates
+    assert bundle.candidates[0].object_type == KnowledgeObjectType.MEMORY_EPISODE
+    assert "query_reformulation:temporal_memory" in bundle.candidates[0].reasons
+
+
+@pytest.mark.asyncio
+async def test_personal_yes_no_question_uses_episode_fallback():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            objects = [
+                KnowledgeObject(
+                    id=24,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Family grocery method session",
+                    text="user: My mom is using the same grocery list method as me now.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_grocery"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                )
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(ActivationRequest(query="Is my mom using the same grocery list method as me?", scope="personal"))
+
+    assert bundle.candidates
+    assert bundle.candidates[0].object_type == KnowledgeObjectType.MEMORY_EPISODE
+    assert "query_reformulation:personal_memory" in bundle.candidates[0].reasons
 
 
 @pytest.mark.asyncio
@@ -385,6 +680,7 @@ async def test_summary_exposes_draft_ui_surfaces_and_next_actions():
         "Patterns",
         "Lessons",
         "Procedures",
+        "Profiles",
         "Improve",
         "Actions",
         "Artifacts",
@@ -394,6 +690,7 @@ async def test_summary_exposes_draft_ui_surfaces_and_next_actions():
     assert counts[KnowledgeObjectType.EPISODE] == 2
     assert counts[KnowledgeObjectType.FACT] == 1
     assert counts[KnowledgeObjectType.PROCEDURE] == 1
+    assert counts[KnowledgeObjectType.ENTITY_PROFILE] == 1
     assert counts[KnowledgeObjectType.OUTCOME_FEEDBACK] == 1
     assert {surface.name: surface.count for surface in summary.surfaces}["Lessons"] == 1
     assert {surface.name: surface.count for surface in summary.surfaces}["Actions"] == 1
@@ -877,6 +1174,9 @@ async def test_run_completion_captures_run_provenance_not_memory_episode(db: Gra
     assert obj.metadata["memory_role"] == "run_provenance"
     assert obj.activation == "audit"
     assert obj.scope == "session:sess-1"
+    assert obj.source_ids == ["run:run-1", "session:sess-1"]
+    objects = await service.list_many(limit=10)
+    assert {item.object_type for item in objects} == {KnowledgeObjectType.RUN_PROVENANCE}
 
 @pytest.mark.asyncio
 async def test_model_backed_episode_boundary_classifier_uses_structured_model(monkeypatch):
@@ -1100,6 +1400,273 @@ async def test_activation_uses_durable_memory_by_default_and_evidence_on_source_
 
     assert [candidate.object_id for candidate in default.candidates] == ["501"]
     assert "502" in [candidate.object_id for candidate in evidence.candidates]
+
+
+@pytest.mark.asyncio
+async def test_profile_synthesis_creates_source_backed_derived_entity_profile(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = type("_Service", (), {})()
+    service.knowledge_objects = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+    processors = KnowledgeProcessorService(service)  # type: ignore[arg-type]
+
+    fact = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Dex profile fact",
+            text="Dex is the user's memory-backed browser copilot project.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-1"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+    pattern = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PATTERN,
+            title="Dex profile pattern",
+            text="Dex work repeatedly focuses on source-backed memory and inspectable activation.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-2"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+
+    result = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(entity_names=["Dex"], apply=True))
+
+    assert len(result.profiles) == 1
+    profile = result.profiles[0]
+    assert profile.object_type == KnowledgeObjectType.ENTITY_PROFILE
+    assert profile.metadata["memory_tier"] == "profile"
+    assert profile.metadata["entities"] == ["Dex"]
+    assert profile.metadata["source_anchored"] is True
+    assert profile.metadata["valid_as_of"]
+    assert profile.metadata["stale_after_days"] == 30
+    assert profile.metadata["caveats"]
+    assert {fact.id, pattern.id} <= set(profile.metadata["source_object_ids"])
+    assert f"knowledge:{fact.id}" in profile.source_ids
+    assert "episode:dex-1" in profile.source_ids
+    assert all(section["source_ids"] for section in profile.metadata["profile_sections"])
+    assert "Derived profile" in profile.text
+
+    bundle = await KnowledgeActivationService(service).inspect(
+        ActivationRequest(query="what do we know about Dex", budget_chars=4_000)
+    )
+    assert any(
+        candidate.object_type == KnowledgeObjectType.ENTITY_PROFILE and candidate.object_id == str(profile.id)
+        for candidate in bundle.candidates
+    )
+
+
+@pytest.mark.asyncio
+async def test_profile_synthesis_auto_candidates_skip_junk_entity_names(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = type("_Service", (), {})()
+    service.knowledge_objects = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+    processors = KnowledgeProcessorService(service)  # type: ignore[arg-type]
+
+    for name, title in (
+        ("Dex", "real project evidence"),
+        ("Regina Lin", "real person evidence"),
+        ("Trigger.dev", "real product evidence"),
+        ("audit", "generic artifact label"),
+        ("automation audit", "borderline topic label"),
+        ("quota user-limit cases", "borderline context label"),
+        ("AO curriculum", "borderline context label with acronym"),
+        ("Stage 1 hard-negative v2", "experiment-stage topic label"),
+        ("dex-automations-audit-12-05-25.md", "filename artifact label"),
+        ("User", "generic user label"),
+    ):
+        await service.knowledge_objects.create(
+            KnowledgeObjectCreate(
+                object_type=KnowledgeObjectType.FACT,
+                title=title,
+                text=f"Source-backed detail for {name}.",
+                status=KnowledgeObjectStatus.ACTIVE,
+                source_ids=[f"episode:{name}"],
+                metadata={"entities": [name]},
+            )
+        )
+
+    result = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
+
+    profile_entities = {profile.metadata["profile_entity"] for profile in result.profiles}
+    assert {"Dex", "Regina Lin", "Trigger.dev"} <= profile_entities
+    assert "audit" not in profile_entities
+    assert "automation audit" not in profile_entities
+    assert "quota user-limit cases" not in profile_entities
+    assert "AO curriculum" not in profile_entities
+    assert "Stage 1 hard-negative v2" not in profile_entities
+    assert "dex-automations-audit-12-05-25.md" not in profile_entities
+    assert "User" not in profile_entities
+
+
+@pytest.mark.asyncio
+async def test_profile_synthesis_explicit_entity_names_can_be_lowercase_or_topic_like(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = type("_Service", (), {})()
+    service.knowledge_objects = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+    processors = KnowledgeProcessorService(service)  # type: ignore[arg-type]
+
+    await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Explicit lowercase profile target",
+            text="automation audit is a user-requested profile target in this test.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:explicit-topic"],
+            metadata={"entities": ["automation audit"]},
+        )
+    )
+
+    result = await processors.synthesize_profiles(
+        KnowledgeProfileSynthesisRequest(entity_names=["automation audit"], limit_entities=10, apply=True)
+    )
+
+    profile_entities = {profile.metadata["profile_entity"] for profile in result.profiles}
+    assert "automation audit" in profile_entities
+    profile = result.profiles[0]
+    assert profile.metadata["entities"] == ["automation audit"]
+    assert profile.source_ids
+
+
+@pytest.mark.asyncio
+async def test_profiles_refresh_progressively_from_scheduled_or_manual_batch(db: GraphDatabase):
+    from ntrp.knowledge.profiles import ProfileSynthesisOutput
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    class _ProfileSynthesizer:
+        def __init__(self):
+            self.calls = []
+
+        async def synthesize(self, *, entity_name, evidence, existing_profile=None):
+            self.calls.append((entity_name, [obj.id for obj in evidence], existing_profile.id if existing_profile else None))
+            if existing_profile is None:
+                text = "# Entity profile: Dex\n\nDerived profile.\n\n## Summary\nDex is the memory-backed browser copilot project."
+            else:
+                assert "memory-backed browser copilot" in existing_profile.text
+                text = (
+                    "# Entity profile: Dex\n\n"
+                    "Derived profile.\n\n"
+                    "## Summary\nDex is the memory-backed browser copilot project with recurring work on inspectable activation."
+                )
+            return ProfileSynthesisOutput(
+                text=text,
+                sections=[{"name": "summary", "summary": "progressive", "source_object_ids": [obj.id for obj in evidence]}],
+                synthesis_mode="llm",
+            )
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    synthesizer = _ProfileSynthesizer()
+    knowledge_objects = KnowledgeObjectService(memory, profile_synthesizer=synthesizer)  # type: ignore[arg-type]
+    service = type("_Service", (), {"knowledge_objects": knowledge_objects})()
+    processors = KnowledgeProcessorService(service)  # type: ignore[arg-type]
+
+    fact = await knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Dex identity",
+            text="Dex is the user's memory-backed browser copilot project.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-fact"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+
+    assert await knowledge_objects.get_entity_profile("Dex") is None
+    assert synthesizer.calls == []
+
+    first = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
+    assert len(first.profiles) == 1
+    created_profile = first.profiles[0]
+    assert created_profile.metadata["profile_update_count"] == 1
+    assert created_profile.metadata["synthesis_mode"] == "llm"
+    assert "[fact]" not in created_profile.text
+    assert "Dex identity: Dex identity" not in created_profile.text
+
+    pattern = await knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PATTERN,
+            title="Dex activation pattern",
+            text="Dex work repeatedly focuses on inspectable activation.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-pattern"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+    unchanged_profile = await knowledge_objects.get_entity_profile("Dex")
+    assert unchanged_profile is not None
+    assert unchanged_profile.metadata["profile_update_count"] == 1
+
+    second = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
+    assert len(second.profiles) == 1
+    updated_profile = second.profiles[0]
+    assert updated_profile.id == created_profile.id
+    assert updated_profile.metadata["profile_update_count"] == 2
+    assert updated_profile.metadata["updated_progressively"] is True
+    assert {fact.id, pattern.id} <= set(updated_profile.metadata["source_object_ids"])
+    assert f"knowledge:{fact.id}" in updated_profile.source_ids
+    assert f"knowledge:{pattern.id}" in updated_profile.source_ids
+    assert "inspectable activation" in updated_profile.text
+    assert synthesizer.calls[0][2] is None
+    assert synthesizer.calls[1][2] == created_profile.id
+
+
+@pytest.mark.asyncio
+async def test_generated_profile_objects_do_not_trigger_recursive_profile_updates(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    profile = await service.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.ENTITY_PROFILE,
+            title="Profile: Dex",
+            text="# Entity profile: Dex\n\n## Summary\nDex profile text.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["knowledge:123", "episode:dex"],
+            metadata={"entities": ["Dex"], "profile_entity": "Dex", "profile_schema_version": "trimem.profile.v1"},
+        )
+    )
+
+    listed = await service.list_many(object_types={KnowledgeObjectType.ENTITY_PROFILE}, limit=10)
+    assert [obj.id for obj in listed] == [profile.id]
+    assert profile.metadata["entities"] == ["Dex"]
 
 
 class _FakeEventWriter:
@@ -1439,6 +2006,131 @@ async def test_memory_search_source_indexes_only_active_durable_objects(db: Grap
 
 
 @pytest.mark.asyncio
+async def test_benchmark_memory_suite_runs_against_seeded_long_term_memory(db: GraphDatabase):
+    from ntrp.knowledge.evals import benchmark_memory_suite, run_memory_eval_suite
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = type("_Service", (), {})()
+    service.knowledge_objects = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    current_policy = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Current Dex deploy channel policy",
+            text="Current Dex deploy channel policy: Dex currently deploys through the canary channel after smoke checks.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-current"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+    stale_policy = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Stale Dex deploy channel policy",
+            text="Stale Dex deploy channel policy: Dex previously deployed directly to stable without smoke checks.",
+            status=KnowledgeObjectStatus.SUPERSEDED,
+            source_ids=["episode:dex-stale"],
+            metadata={"entities": ["Dex"]},
+        )
+    )
+    dex_profile = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.ENTITY_PROFILE,
+            title="Profile: Dex",
+            text="# Entity profile: Dex\n\n## Summary\nDex is the memory-backed browser copilot project.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=[f"knowledge:{current_policy.id}"],
+            metadata={"entities": ["Dex"], "profile_entity": "Dex", "profile_schema_version": "trimem.profile.v1"},
+        )
+    )
+    prime_procedure = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PROCEDURE,
+            title="Prime pod cleanup procedure",
+            text="For Prime pod cleanup, terminate idle pods after evals finish and verify disk snapshots first.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:prime-procedure"],
+            metadata={"entities": ["Prime"]},
+        )
+    )
+
+    current_preference = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Current editor preference",
+            text="User currently prefers Neovim for focused coding sessions.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:editor-current"],
+            metadata={"entities": ["User", "Neovim"]},
+        )
+    )
+    stale_preference = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Stale editor preference",
+            text="User previously preferred VS Code as the default editor.",
+            status=KnowledgeObjectStatus.SUPERSEDED,
+            source_ids=["episode:editor-stale"],
+            metadata={"entities": ["User", "VS Code"]},
+        )
+    )
+    assistant_recommendation = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Assistant recommended Trigger deploy check",
+            text="Assistant recommended checking recent Trigger.dev task runs before changing release automation.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:trigger-recommendation"],
+            metadata={"entities": ["Trigger.dev", "Dex"]},
+        )
+    )
+    dex_slack_decision = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.FACT,
+            title="Dex Slack sync retry decision",
+            text="We decided Dex Slack sync should retry Slack 429 responses with jitter before surfacing an alert.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:dex-slack-decision"],
+            metadata={"entities": ["Dex", "Slack"]},
+        )
+    )
+
+    dex_episode = await service.knowledge_objects.create_memory_episode(
+        session_id="bench-session",
+        title="Dex profile continuity evidence",
+        summary="Source episode showing Dex profile continuity and deploy policy updates.",
+        source_ids=["session:bench-session"],
+        episode_status="closed",
+    )
+
+    suite = benchmark_memory_suite(
+        {
+            "current_policy": str(current_policy.id),
+            "stale_policy": str(stale_policy.id),
+            "dex_profile": str(dex_profile.id),
+            "prime_procedure": str(prime_procedure.id),
+            "dex_episode": str(dex_episode.id),
+            "current_preference": str(current_preference.id),
+            "stale_preference": str(stale_preference.id),
+            "assistant_recommendation": str(assistant_recommendation.id),
+            "dex_slack_decision": str(dex_slack_decision.id),
+        }
+    )
+    result = await run_memory_eval_suite(KnowledgeActivationService(service), suite, budget_chars=6_000, limit=10)
+
+    assert result.passed
+    assert result.case_count == 8
+    assert result.recall == 1.0
+
+
+@pytest.mark.asyncio
 async def test_memory_eval_harness_flags_stale_or_poisoned_retrieval():
     from ntrp.knowledge.evals import MemoryEvalCase, run_memory_eval_cases
 
@@ -1511,3 +2203,145 @@ async def test_reflect_ignores_legacy_run_episode_rows(db: GraphDatabase):
 
     assert reflected.created == []
     assert reflected.skipped == 0
+
+
+@pytest.mark.asyncio
+async def test_long_episode_snippets_keep_multiple_sources_within_budget():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            filler = " generic filler text" * 700
+            objects = [
+                KnowledgeObject(
+                    id=31,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Tomato seed session",
+                    text=(
+                        "LongMemEval session answer_tomatoes\n"
+                        "Date: 2023/03/01\n"
+                        "user: I started the tomatoes in seed trays on March 1."
+                        f"{filler}"
+                    ),
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_tomatoes"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                ),
+                KnowledgeObject(
+                    id=32,
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    title="Marigold seed session",
+                    text=(
+                        "LongMemEval session answer_marigolds\n"
+                        "Date: 2023/03/03\n"
+                        "user: I started the marigolds in seed trays on March 3."
+                        f"{filler}"
+                    ),
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="personal",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.0,
+                    source_ids=["answer_marigolds"],
+                    metadata={"episode_status": "closed"},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                ),
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    service = KnowledgeActivationService(_Memory())  # type: ignore[arg-type]
+
+    bundle = await service.inspect(
+        ActivationRequest(
+            query="Which seeds were started first, the tomatoes or the marigolds?",
+            scope="personal",
+            budget_chars=5_000,
+            limit=10,
+        )
+    )
+
+    assert {source_id for candidate in bundle.candidates for source_id in candidate.source_ids} == {
+        "answer_tomatoes",
+        "answer_marigolds",
+    }
+    assert all("focused_evidence_snippet" in candidate.reasons for candidate in bundle.candidates)
+    assert all(len(candidate.text) < 2_500 for candidate in bundle.candidates)
+
+
+@pytest.mark.asyncio
+async def test_long_episode_snippets_keep_adjacent_answer_context():
+    class _Objects:
+        async def search_text(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            filler = " unrelated grocery planning filler" * 500
+            obj = KnowledgeObject(
+                id=33,
+                object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                title="Coupon redemption session",
+                text=(
+                    "LongMemEval session answer_coupon\n"
+                    "Date: 2023/03/07\n"
+                    "user: I redeemed a $5 coupon on coffee creamer last Sunday.\n"
+                    "user: I used that coffee creamer coupon at Target before buying snacks.\n"
+                    f"{filler}"
+                ),
+                status=KnowledgeObjectStatus.ACTIVE,
+                scope="personal",
+                activation="prompt",
+                proactiveness_level="L0",
+                score=0.0,
+                source_ids=["answer_coupon"],
+                metadata={"episode_status": "closed"},
+                created_at="2026-05-19T00:00:00+00:00",
+                updated_at="2026-05-19T00:00:00+00:00",
+            )
+            objects = [obj]
+            if object_types:
+                objects = [item for item in objects if item.object_type in object_types]
+            if statuses:
+                objects = [item for item in objects if item.status in statuses]
+            return objects[:limit]
+
+        async def search_entities(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+        async def search_temporal(self, query, *, object_types=None, statuses=None, limit: int = 100):
+            return []
+
+    class _Memory(_FakeMemoryService):
+        def __init__(self):
+            super().__init__()
+            self.knowledge_objects = _Objects()
+
+    bundle = await KnowledgeActivationService(_Memory()).inspect(  # type: ignore[arg-type]
+        ActivationRequest(
+            query="Where did I redeem a $5 coupon on coffee creamer?",
+            scope="personal",
+            budget_chars=2_500,
+            limit=5,
+        )
+    )
+
+    assert len(bundle.candidates) == 1
+    assert "redeemed a $5 coupon on coffee creamer" in bundle.candidates[0].text
+    assert "Target" in bundle.candidates[0].text
+    assert len(bundle.candidates[0].text) < 2_500

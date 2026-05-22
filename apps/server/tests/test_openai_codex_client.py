@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
-from ntrp.agent import Choice, CompletionResponse, FinishReason, Message, Role, Usage
+from ntrp.agent import FinishReason, Role
 from ntrp.llm.openai_codex import OpenAICodexClient
 
 
@@ -89,6 +89,26 @@ class _FakeOpenAI:
 
     async def close(self):
         self.closed = True
+
+
+class _DoneOnlyResponses:
+    def __init__(self):
+        self.requests: list[dict] = []
+
+    async def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return _Stream(
+            [
+                _Event({"type": "response.output_text.done", "text": "hello"}),
+                _Event({"type": "response.completed"}, response=_EmptyResponse()),
+            ]
+        )
+
+
+class _DoneOnlyOpenAI(_FakeOpenAI):
+    def __init__(self):
+        self.responses = _DoneOnlyResponses()
+        self.closed = False
 
 
 class _Event:
@@ -234,38 +254,30 @@ def test_parse_response_accepts_stream_completed_items():
 
 
 @pytest.mark.asyncio
-async def test_completion_consumes_streaming_response(monkeypatch):
-    async def fake_stream(self, **kwargs):
-        yield "ignored"
-        yield CompletionResponse(
-            choices=[
-                Choice(
-                    message=Message(
-                        role=Role.ASSISTANT,
-                        content="ok",
-                        tool_calls=None,
-                        reasoning_content=None,
-                    ),
-                    finish_reason=FinishReason.STOP,
-                )
-            ],
-            usage=Usage(),
-            model=kwargs["model"],
-        )
+async def test_completion_buffers_required_streaming_response(monkeypatch):
+    fake = _FakeOpenAI()
 
-    monkeypatch.setattr(OpenAICodexClient, "_stream_completion", fake_stream)
+    async def fake_client(self):
+        return fake
+
+    monkeypatch.setattr(OpenAICodexClient, "_client", fake_client)
 
     parsed = await OpenAICodexClient()._completion(
         messages=[{"role": Role.USER, "content": "hi"}],
         model="openai-codex/gpt-5.5",
     )
 
+    request = fake.responses.requests[0]
+    assert request["model"] == "gpt-5.5"
+    assert request["stream"] is True
     assert parsed.model == "openai-codex/gpt-5.5"
-    assert parsed.choices[0].message.content == "ok"
+    assert parsed.choices[0].message.content == "hello"
+    assert parsed.choices[0].message.reasoning_content == "thinking"
+    assert fake.closed is True
 
 
 @pytest.mark.asyncio
-async def test_codex_stream_buffers_responses_until_completion(monkeypatch):
+async def test_codex_stream_yields_live_text_deltas_until_completion(monkeypatch):
     fake = _FakeOpenAI()
 
     async def fake_client(self):
@@ -284,7 +296,30 @@ async def test_codex_stream_buffers_responses_until_completion(monkeypatch):
     request = fake.responses.requests[0]
     assert request["model"] == "gpt-5.5"
     assert request["stream"] is True
-    assert events[0].content == "thinking"
-    assert events[1] == "hello"
+    assert events[0] == "he"
+    assert events[1] == "llo"
+    assert events[-1].choices[0].message.content == "hello"
+    assert events[-1].choices[0].message.reasoning_content == "thinking"
+    assert fake.closed is True
+
+
+@pytest.mark.asyncio
+async def test_codex_stream_yields_done_text_when_delta_events_are_absent(monkeypatch):
+    fake = _DoneOnlyOpenAI()
+
+    async def fake_client(self):
+        return fake
+
+    monkeypatch.setattr(OpenAICodexClient, "_client", fake_client)
+
+    events = [
+        event
+        async for event in OpenAICodexClient()._stream_completion(
+            messages=[{"role": Role.USER, "content": "hi"}],
+            model="openai-codex/gpt-5.5",
+        )
+    ]
+
+    assert events[0] == "hello"
     assert events[-1].choices[0].message.content == "hello"
     assert fake.closed is True

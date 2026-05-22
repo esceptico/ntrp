@@ -75,6 +75,38 @@ class SessionService:
         except Exception as e:
             _logger.warning("Failed to record chat run start: %s", e)
 
+    async def claim_chat_idempotency_key(
+        self,
+        *,
+        session_id: str,
+        client_id: str,
+        request_hash: str,
+        status: str = "accepted",
+    ) -> tuple[bool, dict]:
+        return await self.store.claim_chat_idempotency_key(
+            session_id=session_id,
+            client_id=client_id,
+            request_hash=request_hash,
+            status=status,
+        )
+
+    async def update_chat_idempotency_key(
+        self,
+        *,
+        session_id: str,
+        client_id: str,
+        status: str,
+        run_id: str | None = None,
+        message_id: str | None = None,
+    ) -> dict | None:
+        return await self.store.update_chat_idempotency_key(
+            session_id=session_id,
+            client_id=client_id,
+            status=status,
+            run_id=run_id,
+            message_id=message_id,
+        )
+
     async def record_chat_run_status(
         self,
         run_id: str,
@@ -82,6 +114,8 @@ class SessionService:
         *,
         stop_reason: str | None = None,
         last_seq: int | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
     ) -> None:
         try:
             await self.store.record_chat_run_status(
@@ -89,6 +123,8 @@ class SessionService:
                 status,
                 stop_reason=stop_reason,
                 last_seq=last_seq,
+                error_code=error_code,
+                error_message=error_message,
             )
         except Exception as e:
             _logger.warning("Failed to record chat run status: %s", e)

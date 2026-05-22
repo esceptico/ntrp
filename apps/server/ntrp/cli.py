@@ -1,5 +1,7 @@
 import asyncio
+import json
 import socket
+from pathlib import Path
 
 import click
 import uvicorn
@@ -7,6 +9,7 @@ from coolname import generate_slug
 from rich.console import Console
 
 from ntrp.agent import Role
+from ntrp.benchmarks.longmemeval import LongMemEvalRunnerConfig, run_longmemeval_sync
 from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
@@ -95,6 +98,93 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
         log_config=UVICORN_LOG_CONFIG,
         timeout_graceful_shutdown=3,
     )
+
+
+
+
+@main.group()
+def benchmark():
+    """Run repeatable memory benchmarks."""
+
+
+@benchmark.command("longmemeval")
+@click.option("--dataset", "dataset_path", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("benchmark-results"), show_default=True)
+@click.option("--limit", type=int, default=None, help="Maximum number of cases to run.")
+@click.option("--per-type-limit", type=int, default=None, help="Maximum cases per question type, useful for stratified smokes.")
+@click.option("--top-k", type=click.IntRange(1, 50), default=10, show_default=True)
+@click.option("--budget-chars", type=click.IntRange(200, 20_000), default=20_000, show_default=True)
+@click.option("--keep-dbs", is_flag=True, help="Keep per-case isolated SQLite DBs for debugging.")
+@click.option("--direct-query", is_flag=True, help="Use the benchmark question directly instead of prefixing it for raw evidence retrieval.")
+@click.option("--variant", type=click.Choice(["raw-episodes", "extracted", "raw-plus-extracted"]), default="raw-episodes", show_default=True)
+@click.option("--evaluate-answers", is_flag=True, help="Generate cited answers and judge correctness/grounding.")
+@click.option("--answer-model", type=str, default=None, help="Optional LLM model for answer generation. Deterministic local answerer is used by default.")
+@click.option("--judge-model", type=str, default=None, help="Optional LLM model for answer judging. Deterministic local judge is used by default.")
+@click.option("--extraction-model", type=str, default=None, help="Optional model for real episode-close extraction in extracted/raw-plus-extracted variants.")
+def benchmark_longmemeval(
+    dataset_path: Path,
+    output_dir: Path,
+    limit: int | None,
+    per_type_limit: int | None,
+    top_k: int,
+    budget_chars: int,
+    keep_dbs: bool,
+    direct_query: bool,
+    variant: str,
+    evaluate_answers: bool,
+    answer_model: str | None,
+    judge_model: str | None,
+    extraction_model: str | None,
+):
+    """Run LongMemEval retrieval benchmark with JSONL traces."""
+    result = run_longmemeval_sync(
+        LongMemEvalRunnerConfig(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            limit=limit,
+            per_type_limit=per_type_limit,
+            top_k=top_k,
+            budget_chars=budget_chars,
+            keep_dbs=keep_dbs,
+            raw_evidence_query=not direct_query,
+            variant=variant,
+            evaluate_answers=evaluate_answers,
+            answer_model=answer_model,
+            judge_model=judge_model,
+            extraction_model=extraction_model,
+        )
+    )
+    metrics = result["metrics"]
+    console.print("[bold]LongMemEval retrieval benchmark[/bold]")
+    console.print(f"cases: {metrics['cases']}  recall@{metrics['top_k']}: {metrics['recall_at_k']:.3f}  mrr@{metrics['top_k']}: {metrics['mrr_at_k']:.3f}")
+    for question_type, row in metrics["by_question_type"].items():
+        line = (
+            f"  {question_type}: n={row['cases']} recall@{metrics['top_k']}={row['recall_at_k']:.3f} "
+            f"mrr@{metrics['top_k']}={row['mrr_at_k']:.3f} "
+            f"gold_cov={row.get('gold_session_coverage_at_k', 0.0):.3f} "
+            f"all_gold={row.get('all_gold_retrieved_rate', 0.0):.3f}"
+        )
+        if "answer_accuracy" in row:
+            line += f" answer_acc={row['answer_accuracy']:.3f} grounded_correct={row['grounded_correct_rate']:.3f}"
+        console.print(line)
+    if "gold_session_coverage_at_k" in metrics:
+        console.print(
+            f"gold coverage: avg={metrics['gold_session_coverage_at_k']:.3f} "
+            f"all_gold={metrics['all_gold_retrieved_rate']:.3f}"
+        )
+    if metrics.get("answer_eval"):
+        answer_eval = metrics["answer_eval"]
+        console.print(
+            f"answers: acc={answer_eval['answer_accuracy']:.3f} "
+            f"grounding={answer_eval['source_grounding_rate']:.3f} "
+            f"grounded_correct={answer_eval['grounded_correct_rate']:.3f}"
+        )
+    console.print(f"metrics: [cyan]{result['paths']['metrics_json']}[/cyan]")
+    console.print(f"traces:  [cyan]{result['paths']['traces_jsonl']}[/cyan]")
+    console.print(f"failures:[cyan]{result['paths']['failures_jsonl']}[/cyan]")
+    if keep_dbs and result["paths"].get("db_dir"):
+        console.print(f"dbs:     [cyan]{result['paths']['db_dir']}[/cyan]")
+    console.print_json(json.dumps(metrics))
 
 
 @main.command()

@@ -584,9 +584,9 @@ class Scheduler:
         error_message: str,
     ) -> None:
         if attempt_count + 1 >= SCHEDULER_EVENT_MAX_RETRIES:
-            await self.store.complete_event(queue_id)
+            await self.store.dead_letter_event(queue_id, error_message, datetime.now(UTC))
             _logger.error(
-                "Dropping queued event %s for automation %s after %d attempts",
+                "Dead-lettering queued event %s for automation %s after %d attempts",
                 queue_id,
                 task_id,
                 attempt_count + 1,

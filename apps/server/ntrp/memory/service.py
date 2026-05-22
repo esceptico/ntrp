@@ -34,6 +34,11 @@ from ntrp.knowledge.models import (
     KnowledgeSupersessionCommitResult,
     KnowledgeSupersessionProposal,
 )
+from ntrp.knowledge.profiles import (
+    KnowledgeProfileService,
+    KnowledgeProfileSynthesizer,
+    profile_entity_resolution,
+)
 from ntrp.knowledge.store import KnowledgeObjectRepository
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
@@ -115,7 +120,13 @@ class MemoryEventService:
 
 
 class KnowledgeObjectService:
-    def __init__(self, memory: FactMemory, *, entity_pipeline: EntityExtractionPipeline | None = None):
+    def __init__(
+        self,
+        memory: FactMemory,
+        *,
+        entity_pipeline: EntityExtractionPipeline | None = None,
+        profile_synthesizer: KnowledgeProfileSynthesizer | None = None,
+    ):
         self._memory = memory
         self._repo = KnowledgeObjectRepository(memory.db.conn, memory.facts.read_conn)
         model = getattr(memory, "model", None)
@@ -126,13 +137,27 @@ class KnowledgeObjectService:
             ModelBackedEpisodeBoundaryClassifier(model=model) if isinstance(model, str) and model else EpisodeBoundaryClassifier()
         )
         self._event_dispatcher: Callable[[KnowledgeObjectChanged], Awaitable[None]] | None = None
+        self._profiles = KnowledgeProfileService(
+            repo=self._repo,
+            memory=self._memory,
+            synthesizer=profile_synthesizer or KnowledgeProfileSynthesizer(model=self._model),
+            sync_entity_resolution=self._sync_entity_resolution,
+            embed_object=self._embed_object,
+            emit_event=self._emit_event,
+        )
 
     def set_event_dispatcher(self, dispatcher: Callable[[KnowledgeObjectChanged], Awaitable[None]] | None) -> None:
         self._event_dispatcher = dispatcher
 
+    def _derived_profile_entity_result(self, object_type: KnowledgeObjectType, metadata: dict[str, Any]) -> EntityResolutionResult | None:
+        return profile_entity_resolution(object_type, metadata)
+
     async def _with_extracted_entities(
         self, payload: KnowledgeObjectCreate
     ) -> tuple[KnowledgeObjectCreate, EntityResolutionResult]:
+        derived_result = self._derived_profile_entity_result(payload.object_type, payload.metadata)
+        if derived_result is not None:
+            return payload, derived_result
         result = await self._entity_pipeline.extract(payload.title, payload.text, source_ids=payload.source_ids)
         metadata = merge_resolved_entity_metadata(payload.metadata, result)
         updated = payload if metadata == payload.metadata else payload.model_copy(update={"metadata": metadata})
@@ -298,6 +323,15 @@ class KnowledgeObjectService:
         except Exception:
             _logger.warning("Failed to embed knowledge object %s", obj.id, exc_info=True)
 
+    async def refresh_entity_profile(
+        self,
+        entity_name: str,
+        *,
+        evidence_limit: int = 12,
+        explicit_refresh: bool = True,
+    ) -> KnowledgeObject | None:
+        return await self._profiles.refresh(entity_name, evidence_limit=evidence_limit, explicit_refresh=explicit_refresh)
+
     async def create(self, payload: KnowledgeObjectCreate) -> KnowledgeObject:
         payload, entity_result = await self._with_extracted_entities(payload)
         obj = await self._repo.create(payload)
@@ -344,32 +378,6 @@ class KnowledgeObjectService:
         if not event.result and not event.messages:
             return None
 
-        source = await self.create(
-            KnowledgeObjectCreate(
-                object_type=KnowledgeObjectType.SOURCE,
-                title=f"Run source {event.run_id}",
-                text=f"Run {event.run_id} in session {event.session_id}.",
-                status=KnowledgeObjectStatus.ACTIVE,
-                scope=f"session:{event.session_id}",
-                activation="audit",
-                proactiveness_level="L0",
-                source_ids=[source_id],
-                metadata={"run_id": event.run_id, "session_id": event.session_id},
-            )
-        )
-        evidence = await self.create(
-            KnowledgeObjectCreate(
-                object_type=KnowledgeObjectType.EVIDENCE_REF,
-                title=f"Evidence for run {event.run_id}",
-                text=f"Messages and result for run {event.run_id}.",
-                status=KnowledgeObjectStatus.ACTIVE,
-                scope=f"session:{event.session_id}",
-                activation="audit",
-                proactiveness_level="L0",
-                source_ids=[source_id, f"knowledge:{source.id}"],
-                metadata={"run_id": event.run_id, "session_id": event.session_id},
-            )
-        )
         message_count = len(event.messages)
         result = event.result or "Run completed without a final result."
         title = f"Run {event.run_id}"
@@ -384,12 +392,7 @@ class KnowledgeObjectService:
                 activation="audit",
                 proactiveness_level="L0",
                 score=0.0,
-                source_ids=[
-                    source_id,
-                    f"session:{event.session_id}",
-                    f"knowledge:{source.id}",
-                    f"knowledge:{evidence.id}",
-                ],
+                source_ids=[source_id, f"session:{event.session_id}"],
                 metadata={
                     "run_id": event.run_id,
                     "session_id": event.session_id,
@@ -1023,6 +1026,12 @@ class KnowledgeObjectService:
     ) -> list[KnowledgeObject]:
         return await self._repo.search_temporal(query, object_types=object_types, statuses=statuses, limit=limit)
 
+    async def list_profile_entity_names(self, *, limit: int = 100) -> list[str]:
+        return await self._repo.list_profile_entity_names(limit=limit)
+
+    async def get_entity_profile(self, entity_name: str) -> KnowledgeObject | None:
+        return await self._repo.get_entity_profile(entity_name)
+
     async def update_embedding(self, object_id: int) -> None:
         obj = await self.get(object_id)
         if obj is not None:
@@ -1105,16 +1114,29 @@ class KnowledgeObjectService:
     async def prune_retention(self, request: KnowledgePruneRequest) -> KnowledgePruneResult:
         cutoff = datetime.now(UTC).timestamp() - (request.older_than_days * 24 * 60 * 60)
         candidates: list[KnowledgeObject] = []
+        age_prunable_types = {
+            KnowledgeObjectType.RUN_PROVENANCE,
+            KnowledgeObjectType.EPISODE,
+            KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            KnowledgeObjectType.ACTION_CANDIDATE,
+            KnowledgeObjectType.ARTIFACT,
+            KnowledgeObjectType.SINK_RECEIPT,
+            KnowledgeObjectType.OUTCOME_FEEDBACK,
+        }
+        durable_types = {
+            KnowledgeObjectType.FACT,
+            KnowledgeObjectType.PATTERN,
+            KnowledgeObjectType.LESSON,
+            KnowledgeObjectType.PROCEDURE,
+            KnowledgeObjectType.ENTITY_PROFILE,
+            KnowledgeObjectType.MEMORY_EPISODE,
+        }
         for obj in await self.list(limit=request.limit):
             if obj.status in {
                 KnowledgeObjectStatus.ARCHIVED,
                 KnowledgeObjectStatus.REJECTED,
                 KnowledgeObjectStatus.SUPERSEDED,
             }:
-                continue
-            if obj.object_type in {KnowledgeObjectType.SOURCE, KnowledgeObjectType.EVIDENCE_REF}:
-                continue
-            if obj.object_type == KnowledgeObjectType.PROCEDURE and obj.status == KnowledgeObjectStatus.ACTIVE:
                 continue
             expires_at = obj.metadata.get("expires_at")
             if isinstance(expires_at, str):
@@ -1124,6 +1146,10 @@ class KnowledgeObjectService:
                         continue
                 except ValueError:
                     pass
+            if obj.object_type in durable_types:
+                continue
+            if obj.object_type not in age_prunable_types:
+                continue
             updated = datetime.fromisoformat(obj.updated_at).timestamp()
             if updated <= cutoff:
                 candidates.append(obj)
@@ -1140,10 +1166,12 @@ class KnowledgeObjectService:
     async def update(self, object_id: int, payload: KnowledgeObjectUpdate) -> KnowledgeObject:
         obj = await self._repo.update(object_id, payload)
         if payload.model_fields_set & {"title", "text", "source_ids", "metadata"}:
-            entity_result = await self._entity_pipeline.extract(obj.title, obj.text, source_ids=obj.source_ids)
-            metadata = merge_resolved_entity_metadata(obj.metadata, entity_result)
-            if metadata != obj.metadata:
-                obj = await self._repo.update(obj.id, KnowledgeObjectUpdate(metadata=metadata))
+            entity_result = self._derived_profile_entity_result(obj.object_type, obj.metadata)
+            if entity_result is None:
+                entity_result = await self._entity_pipeline.extract(obj.title, obj.text, source_ids=obj.source_ids)
+                metadata = merge_resolved_entity_metadata(obj.metadata, entity_result)
+                if metadata != obj.metadata:
+                    obj = await self._repo.update(obj.id, KnowledgeObjectUpdate(metadata=metadata))
             await self._sync_entity_resolution(obj, entity_result)
             obj = await self._annotate_semantic_conflicts(obj)
         if payload.model_fields_set & {"title", "text", "status"}:

@@ -5,6 +5,7 @@ import {
   getKnowledgeObjectSourcesApi,
   getKnowledgeSummaryApi,
   listKnowledgeObjectsApi,
+  synthesizeKnowledgeProfilesApi,
 } from "../../api";
 import { useStore } from "../../store";
 import { formatRelativePast } from "../../lib/format";
@@ -20,6 +21,11 @@ export function KnowledgeLibraryPane() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sources, setSources] = useState<KnowledgeSourceTraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profileNames, setProfileNames] = useState("");
+  const [profileLimit, setProfileLimit] = useState(20);
+  const [profileEvidenceLimit, setProfileEvidenceLimit] = useState(12);
+  const [generatingProfiles, setGeneratingProfiles] = useState(false);
+  const [profileGenerationMessage, setProfileGenerationMessage] = useState<string | null>(null);
 
   const selected = useMemo(
     () => items?.find((item) => item.id === selectedId) ?? items?.[0] ?? null,
@@ -46,6 +52,31 @@ export function KnowledgeLibraryPane() {
     setSelectedType(type);
     setItems(null);
     await load(type);
+  }
+
+  async function generateProfiles() {
+    const entityNames = profileNames
+      .split(/[\n,]/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+    setGeneratingProfiles(true);
+    setError(null);
+    setProfileGenerationMessage(null);
+    try {
+      const result = await synthesizeKnowledgeProfilesApi(config, {
+        apply: true,
+        limit_entities: Math.max(1, Math.min(100, Math.trunc(profileLimit) || 20)),
+        evidence_limit: Math.max(1, Math.min(50, Math.trunc(profileEvidenceLimit) || 12)),
+        ...(entityNames.length > 0 ? { entity_names: entityNames } : {}),
+      });
+      setProfileGenerationMessage(`Generated/refreshed ${result.profiles.length} profile${result.profiles.length === 1 ? "" : "s"}; skipped ${result.skipped}.`);
+      setSelectedType("entity_profile");
+      await load("entity_profile");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGeneratingProfiles(false);
+    }
   }
 
   useEffect(() => {
@@ -75,6 +106,19 @@ export function KnowledgeLibraryPane() {
           <h3 className="m-0 text-sm font-semibold text-ink">Library</h3>
           <GhostBtn onClick={() => void load()}>Refresh</GhostBtn>
         </div>
+        {selectedType === "entity_profile" && (
+          <ProfileGeneratorPanel
+            names={profileNames}
+            limit={profileLimit}
+            evidenceLimit={profileEvidenceLimit}
+            generating={generatingProfiles}
+            message={profileGenerationMessage}
+            onNamesChange={setProfileNames}
+            onLimitChange={setProfileLimit}
+            onEvidenceLimitChange={setProfileEvidenceLimit}
+            onGenerate={() => void generateProfiles()}
+          />
+        )}
         <ul className="m-0 grid list-none gap-1 p-0">
           {KNOWLEDGE_LIBRARY_TYPES.map((view) => {
             const active = selectedType === view.type;
@@ -195,6 +239,80 @@ export function KnowledgeLibraryPane() {
         )}
       </section>
     </div>
+  );
+}
+
+function ProfileGeneratorPanel({
+  names,
+  limit,
+  evidenceLimit,
+  generating,
+  message,
+  onNamesChange,
+  onLimitChange,
+  onEvidenceLimitChange,
+  onGenerate,
+}: {
+  names: string;
+  limit: number;
+  evidenceLimit: number;
+  generating: boolean;
+  message: string | null;
+  onNamesChange: (value: string) => void;
+  onLimitChange: (value: number) => void;
+  onEvidenceLimitChange: (value: number) => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <section className="mb-3 rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-3">
+      <div className="text-sm font-semibold text-ink-soft">Generate/Refresh profiles</div>
+      <p className="m-0 mt-1 text-xs leading-snug text-faint">
+        Refreshes source-backed profiles from current facts/patterns. Leave names empty for auto candidates.
+      </p>
+      <textarea
+        value={names}
+        onChange={(e) => onNamesChange(e.target.value)}
+        rows={3}
+        placeholder="Dex, Regina Lin"
+        className="mt-2 w-full resize-none rounded-[7px] border border-line-soft bg-bg-main px-2 py-1.5 text-xs text-ink outline-none placeholder:text-faint focus:border-accent/60"
+      />
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="grid gap-1 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">
+          Limit
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={limit}
+            onChange={(e) => onLimitChange(Number(e.target.value))}
+            className="rounded-[7px] border border-line-soft bg-bg-main px-2 py-1.5 font-mono text-xs normal-case tracking-normal text-ink outline-none focus:border-accent/60"
+          />
+        </label>
+        <label className="grid gap-1 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">
+          Evidence
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={evidenceLimit}
+            onChange={(e) => onEvidenceLimitChange(Number(e.target.value))}
+            className="rounded-[7px] border border-line-soft bg-bg-main px-2 py-1.5 font-mono text-xs normal-case tracking-normal text-ink outline-none focus:border-accent/60"
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        disabled={generating}
+        onClick={onGenerate}
+        className={clsx(
+          "mt-2 w-full rounded-[7px] border border-line-soft px-3 py-1.5 text-sm font-semibold transition-colors",
+          generating ? "cursor-not-allowed text-faint" : "bg-surface-soft text-ink-soft hover:bg-bg-main",
+        )}
+      >
+        {generating ? "Refreshing" : "Generate/Refresh now"}
+      </button>
+      {message && <p className="m-0 mt-2 text-xs leading-snug text-muted">{message}</p>}
+    </section>
   );
 }
 

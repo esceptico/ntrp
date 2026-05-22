@@ -83,6 +83,128 @@ async def test_chat_run_and_queued_message_ledger(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_chat_idempotency_key_round_trip(store: SessionStore):
+    claimed, row = await store.claim_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-1",
+        request_hash="hash-a",
+    )
+    assert claimed is True
+    assert row["status"] == "accepted"
+    assert row["run_id"] is None
+
+    updated = await store.update_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-1",
+        status="running",
+        run_id="run-1",
+    )
+    assert updated is not None
+    assert updated["run_id"] == "run-1"
+    assert updated["status"] == "running"
+
+    claimed_again, duplicate = await store.claim_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-1",
+        request_hash="hash-a",
+    )
+    assert claimed_again is False
+    assert duplicate["run_id"] == "run-1"
+    assert duplicate["request_hash"] == "hash-a"
+
+    claimed_conflict, conflict = await store.claim_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-1",
+        request_hash="hash-b",
+    )
+    assert claimed_conflict is False
+    assert conflict["request_hash"] == "hash-a"
+
+
+@pytest.mark.asyncio
+async def test_chat_run_status_preserves_structured_error(store: SessionStore):
+    await store.record_chat_run_started("run-err", "sess-1", metadata={"client_id": "cid-err"})
+    await store.record_chat_run_status(
+        "run-err",
+        "failed",
+        error_code="tool_crash",
+        error_message="boom",
+    )
+
+    row = await store.get_chat_run("run-err")
+    assert row is not None
+    assert row["status"] == "failed"
+    assert row["client_id"] == "cid-err"
+    assert row["error_code"] == "tool_crash"
+    assert row["error_message"] == "boom"
+    assert row["ended_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_idempotency_prunes_only_expired_terminal_rows(store: SessionStore):
+    now = datetime.now(UTC)
+    old = (now.replace(year=now.year - 1)).isoformat()
+
+    await store.claim_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-terminal",
+        request_hash="hash-a",
+        expires_at=old,
+    )
+    await store.update_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-terminal",
+        status="completed",
+        run_id="run-1",
+    )
+    await store.conn.execute(
+        "UPDATE chat_idempotency_keys SET expires_at = ? WHERE session_id = ? AND client_id = ?",
+        (old, "sess-1", "cid-terminal"),
+    )
+
+    await store.claim_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-running",
+        request_hash="hash-b",
+        expires_at=old,
+    )
+    await store.update_chat_idempotency_key(
+        session_id="sess-1",
+        client_id="cid-running",
+        status="running",
+        run_id="run-2",
+    )
+    await store.conn.execute(
+        "UPDATE chat_idempotency_keys SET expires_at = ? WHERE session_id = ? AND client_id = ?",
+        (old, "sess-1", "cid-running"),
+    )
+    await store.conn.commit()
+
+    pruned = await store.prune_expired_chat_idempotency_keys(now)
+
+    assert pruned == 1
+    assert await store.get_chat_idempotency_key("sess-1", "cid-terminal") is None
+    assert await store.get_chat_idempotency_key("sess-1", "cid-running") is not None
+
+
+@pytest.mark.asyncio
+async def test_interrupted_chat_queued_messages_become_retryable(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_queued_message(
+        client_id="cid-queued",
+        session_id="sess-1",
+        run_id="run-1",
+        message={"role": "user", "content": "queued", "client_id": "cid-queued"},
+    )
+    await store.mark_interrupted_chat_runs()
+    changed = await store.mark_interrupted_chat_queued_messages_retryable()
+
+    assert changed == 1
+    queued = await store.list_chat_queued_messages("sess-1")
+    assert queued[0]["status"] == "failed_retryable"
+
+
+@pytest.mark.asyncio
 async def test_tool_call_round_trip(store: SessionStore):
     await store.record_tool_call_started(
         run_id="run-1",
@@ -955,3 +1077,30 @@ async def test_session_turns_preserve_raw_transcript_without_handoff_rows(store:
     turns = await store.list_session_turns("test-session")
 
     assert [(turn["message_start_id"], turn["message_end_id"]) for turn in turns] == [("u-1", "a-1"), ("u-2", "a-2")]
+
+
+@pytest.mark.asyncio
+async def test_session_runtime_run_and_pending_approvals(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-runtime")
+    await store.record_chat_run_status("run-1", "running", last_seq=7)
+    await store.record_tool_approval_requested(
+        run_id="run-1",
+        session_id="sess-runtime",
+        tool_call_id="tool-1",
+        tool_name="write_file",
+        action="write",
+        scope="internal",
+        preview="preview text",
+        diff="diff text",
+    )
+
+    latest = await store.get_latest_chat_run_for_session("sess-runtime")
+    approvals = await store.list_pending_tool_approvals("sess-runtime", run_id="run-1")
+
+    assert latest is not None
+    assert latest["run_id"] == "run-1"
+    assert latest["status"] == "running"
+    assert latest["last_seq"] == 7
+    assert len(approvals) == 1
+    assert approvals[0]["tool_call_id"] == "tool-1"
+    assert approvals[0]["preview"] == "preview text"

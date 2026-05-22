@@ -10,6 +10,7 @@ import {
   markStreamConnected,
   markStreamConnecting,
   markStreamDisconnected,
+  markStreamReconnecting,
   recordTransportEventForDiagnostics,
 } from "../store/chat-stream";
 
@@ -25,6 +26,7 @@ export {
   resetEventSeqStateForTest,
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
+  setEventCursorForSession,
   transportDiagnosticsForSession,
 } from "../store/chat-stream";
 
@@ -70,35 +72,51 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+export function reconnectDelayMs(
+  attempt: number,
+  {
+    baseMs = 500,
+    maxMs = 15_000,
+    jitterRatio = 0.2,
+    random = Math.random,
+  }: { baseMs?: number; maxMs?: number; jitterRatio?: number; random?: () => number } = {},
+): number {
+  const exponential = Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt));
+  const jitter = exponential * jitterRatio * (random() * 2 - 1);
+  return Math.max(0, Math.round(exponential + jitter));
+}
+
 export async function runDesktopEventStreamLoop({
   desktopEvents,
   config,
   sessionId,
   signal,
-  retryDelayMs = 1500,
+  retryDelayMs = 500,
   getAfterSeq,
   onEvent,
   onError,
 }: DesktopEventStreamLoopOptions): Promise<void> {
   let connectionId: string | null = null;
   let resolveTerminal: ((reason: string) => void) | null = null;
+  let reconnectAttempt = 0;
 
   const dispose = desktopEvents.onData((payload: DesktopEventPayload) => {
     if (!connectionId || payload.connectionId !== connectionId) return;
     if (payload.event) {
+      reconnectAttempt = 0;
       const event = payload.event as ServerEvent;
       recordTransportEventForDiagnostics(event);
       void onEvent(event);
       return;
     }
     if (payload.error) {
-      markStreamDisconnected(sessionId, payload.error, payload.error);
+      markStreamReconnecting(sessionId, payload.error, payload.error);
       onError(payload.error);
       resolveTerminal?.(payload.error);
       return;
     }
     if (payload.closed) {
-      markStreamDisconnected(sessionId, payload.reason ?? "closed");
+      markStreamReconnecting(sessionId, payload.reason ?? "closed");
       resolveTerminal?.(payload.reason ?? "closed");
     }
   });
@@ -124,7 +142,7 @@ export async function runDesktopEventStreamLoop({
       } catch (error) {
         if (!signal.aborted) {
           const message = errorMessage(error);
-          markStreamDisconnected(sessionId, message, message);
+          markStreamReconnecting(sessionId, message, message);
           onError(message);
         }
       } finally {
@@ -139,7 +157,8 @@ export async function runDesktopEventStreamLoop({
           }
         }
       }
-      await sleep(retryDelayMs, signal);
+      const delayMs = reconnectDelayMs(reconnectAttempt++, { baseMs: retryDelayMs });
+      await sleep(delayMs, signal);
     }
   } finally {
     dispose();
@@ -193,6 +212,7 @@ export function useEvents(sessionId: string | null) {
 
     const controller = new AbortController();
     void (async () => {
+      let reconnectAttempt = 0;
       while (!disposed && !controller.signal.aborted) {
         try {
           markStreamConnecting(sessionId, lastEventSeqForSession(sessionId));
@@ -212,8 +232,9 @@ export function useEvents(sessionId: string | null) {
           while (!disposed && !controller.signal.aborted) {
             const { done, value } = await reader.read();
             if (done) {
-              markStreamDisconnected(sessionId, "eof");
-              await new Promise((resolve) => setTimeout(resolve, 1500));
+              markStreamReconnecting(sessionId, "eof");
+              const delayMs = reconnectDelayMs(reconnectAttempt++);
+              await sleep(delayMs, controller.signal);
               break;
             }
             buffer += decoder.decode(value, { stream: true });
@@ -222,6 +243,7 @@ export function useEvents(sessionId: string | null) {
             for (const line of lines) {
               if (!line.startsWith("data: ")) continue;
               try {
+                reconnectAttempt = 0;
                 void handleIncomingServerEvent(JSON.parse(line.slice(6)) as ServerEvent, reloadHistory, {
                   resendQueuedMessage: (text, images) => enqueueMessage(text, images ?? []),
                 });
@@ -233,9 +255,10 @@ export function useEvents(sessionId: string | null) {
         } catch (error) {
           if (controller.signal.aborted) return;
           const message = errorMessage(error);
-          markStreamDisconnected(sessionId, message, message);
+          markStreamReconnecting(sessionId, message, message);
           setState({ error: message });
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const delayMs = reconnectDelayMs(reconnectAttempt++);
+          await sleep(delayMs, controller.signal);
         }
       }
     })();

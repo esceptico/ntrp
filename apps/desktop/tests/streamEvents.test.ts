@@ -590,6 +590,42 @@ test("stream_reset clears transient buffers and schedules one history reload", a
   expect(reloads).toEqual(["reset-session"]);
 });
 
+test("slow-consumer stream_reset schedules history reload", async () => {
+  setState({ currentSessionId: "slow-reset-session" });
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-slow-reset",
+    session_id: "slow-reset-session",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-slow-reset",
+    tool_call_name: "ReadFile",
+    session_id: "slow-reset-session",
+    seq: 2,
+  });
+
+  const reloads: string[] = [];
+  const resetReload = handleIncomingServerEvent(
+    {
+      type: "stream_reset",
+      reason: "slow_consumer",
+      session_id: "slow-reset-session",
+      seq: 9,
+    },
+    async (sessionId) => {
+      reloads.push(sessionId);
+    },
+  );
+  await resetReload;
+
+  expect(lastEventSeqForSession("slow-reset-session")).toBe(9);
+  expect(getState().activeActivityId).toBeNull();
+  expect(getState().order).toEqual([]);
+  expect(reloads).toEqual(["slow-reset-session"]);
+});
+
 test("stream_reset can rewind an impossible future cursor", async () => {
   setState({ currentSessionId: "reset-future-session" });
   handleServerEvent({
@@ -613,7 +649,7 @@ test("stream_reset can rewind an impossible future cursor", async () => {
   expect(lastEventSeqForSession("reset-future-session")).toBe(1);
 });
 
-test("stream_reset cancels delayed activity items from the old projection", async () => {
+test("stream_reset clears visible transient activity from the old projection", async () => {
   setState({ currentSessionId: "reset-delayed-session" });
   handleServerEvent({
     type: "RUN_STARTED",
@@ -664,7 +700,7 @@ test("stream_reset cancels delayed activity items from the old projection", asyn
   await new Promise((resolve) => setTimeout(resolve, 80));
 
   const items = getState().messages.get(activityId!)?.activity?.items ?? [];
-  expect(items.map((item) => item.id)).toEqual(["tool-immediate"]);
+  expect(items.map((item) => item.id)).toEqual([]);
 });
 
 test("stream_reset drops queued tail events after session navigation", async () => {

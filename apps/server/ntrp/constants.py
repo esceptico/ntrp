@@ -63,6 +63,7 @@ LOOP_ITERATION_HISTORY_WINDOW = 50
 # --- Context Compaction ---
 
 COMPRESSION_THRESHOLD = 0.8  # % of model token limit to trigger compaction
+COMPRESSION_TOKEN_HEADROOM = 0.95  # compact before the next prompt can push past threshold
 MAX_MESSAGES = 120  # message count ceiling — compress regardless of tokens
 COMPRESSION_KEEP_RATIO = 0.2  # the most recent % of messages to keep uncompressed
 SESSION_HANDOFF_MARKER = "[Session State Handoff]"
@@ -120,11 +121,14 @@ SCHEDULER_EVENT_RETRY_MAX_SECONDS = 1800
 # Builtin knowledge automations
 BUILTIN_KNOWLEDGE_REFLECTION_ID = "builtin:knowledge-reflection"
 BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID = "builtin:knowledge-reflection-sweep"
+BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID = "builtin:knowledge-profile-refresh"
 BUILTIN_KNOWLEDGE_RETENTION_ID = "builtin:knowledge-retention"
 BUILTIN_KNOWLEDGE_HEALTH_ID = "builtin:knowledge-health"
 DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES = 5
 DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES = 5
 DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES = 30
+DEFAULT_KNOWLEDGE_PROFILE_REFRESH_IDLE_MINUTES = 15
+DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES = 2 * 60
 DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES = 24 * 60
 DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES = 24 * 60
 

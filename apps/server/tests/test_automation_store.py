@@ -12,10 +12,12 @@ from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import KnowledgeEventTrigger, TimeTrigger
 from ntrp.constants import (
     BUILTIN_KNOWLEDGE_HEALTH_ID,
+    BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
     BUILTIN_KNOWLEDGE_REFLECTION_ID,
     BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
     BUILTIN_KNOWLEDGE_RETENTION_ID,
 )
+from ntrp.knowledge import KnowledgeObjectType
 
 
 @pytest_asyncio.fixture
@@ -86,6 +88,9 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
     await automation_store.claim_next_event("event-task", now)
 
     await automation_store.increment_count("count-task", "session-1", now - timedelta(minutes=20))
+    await automation_store.enqueue_event("event-task", "event-dead", "{}", now - timedelta(minutes=1))
+    dead_claim = await automation_store.claim_next_event("event-task", now)
+    await automation_store.dead_letter_event(dead_claim[0], "gave up", now)
 
     status = await automation_store.get_status(now)
 
@@ -101,6 +106,26 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
     assert status["event_queue"]["scheduled"] == 1
     assert status["event_queue"]["claimed"] == 1
     assert status["count_state"]["total"] == 1
+    assert status["dead_letters"]["total"] == 1
+    assert status["dead_letters"]["newest_failed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_event_dead_letter_preserves_failed_payload_and_removes_from_queue(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    await automation_store.enqueue_event("event-task", "event-dead", '{"ok": true}', now)
+    claimed = await automation_store.claim_next_event("event-task", now)
+
+    await automation_store.dead_letter_event(claimed[0], "too many failures", now + timedelta(seconds=1))
+
+    assert await automation_store.claim_next_event("event-task", now + timedelta(seconds=2)) is None
+    rows = await automation_store.conn.execute_fetchall("SELECT * FROM automation_event_dead_letter")
+    assert len(rows) == 1
+    assert rows[0]["task_id"] == "event-task"
+    assert rows[0]["event_key"] == "event-dead"
+    assert rows[0]["context"] == '{"ok": true}'
+    assert rows[0]["last_error"] == "too many failures"
+    assert rows[0]["attempt_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -112,14 +137,17 @@ async def test_seed_builtins_uses_knowledge_handlers(automation_store: Automatio
     assert {
         BUILTIN_KNOWLEDGE_REFLECTION_ID,
         BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+        BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
         BUILTIN_KNOWLEDGE_RETENTION_ID,
         BUILTIN_KNOWLEDGE_HEALTH_ID,
     } <= set(automations)
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].handler == "knowledge_reflection"
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].enabled is True
+    assert automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID].handler == "knowledge_profile_refresh"
+    assert automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID].writable is True
     assert any(
         isinstance(trigger, KnowledgeEventTrigger)
-        and trigger.object_types == ("episode",)
+        and trigger.object_types == (KnowledgeObjectType.MEMORY_EPISODE.value,)
         and trigger.actions == ("created",)
         for trigger in automations[BUILTIN_KNOWLEDGE_REFLECTION_ID].triggers
     )
@@ -155,6 +183,7 @@ async def test_seed_builtins_removes_stale_knowledge_builtins(automation_store: 
     assert {
         BUILTIN_KNOWLEDGE_REFLECTION_ID,
         BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
+        BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
         BUILTIN_KNOWLEDGE_RETENTION_ID,
         BUILTIN_KNOWLEDGE_HEALTH_ID,
     } <= set(automations)

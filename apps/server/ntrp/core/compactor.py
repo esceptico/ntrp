@@ -1,19 +1,20 @@
 import asyncio
-import math
+import threading
 from typing import Protocol
 
-from ntrp.agent import Role
+from ntrp.agent import CompletionResponse, Role
 from ntrp.constants import (
     COMPACTION_TIMEOUT,
     COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
+    COMPRESSION_TOKEN_HEADROOM,
     MAX_MESSAGES,
     SESSION_HANDOFF_MARKER,
     SUMMARY_MAX_TOKENS,
 )
 from ntrp.context.prompts import MERGE_SUMMARY_PROMPT_TEMPLATE, SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
-from ntrp.llm.router import get_completion_client
+from ntrp.llm.router import create_completion_client
 from ntrp.llm.utils import blocks_to_text
 
 
@@ -45,42 +46,15 @@ def compact_needed(
     actual_input_tokens: int | None = None,
     *,
     threshold: float = COMPRESSION_THRESHOLD,
+    token_headroom: float = COMPRESSION_TOKEN_HEADROOM,
     max_messages: int = MAX_MESSAGES,
 ) -> bool:
-    if len(messages) > max_messages:
+    if len(messages) >= max_messages:
         return True
-    estimated_input_tokens = estimate_message_tokens(messages)
-    input_tokens = max(
-        actual_input_tokens or 0,
-        estimated_input_tokens,
-    )
-    if input_tokens:
-        limit = get_model(model).max_context_tokens
-        return input_tokens > int(limit * threshold)
-    return False
-
-
-def estimate_message_tokens(messages: list[dict]) -> int:
-    """Conservative local estimate for preflight compaction decisions.
-
-    API usage is authoritative after a successful call, but context-window
-    failures return no usage. Estimate from the persisted transcript so a
-    failed oversized run does not keep retrying with stale/empty token
-    metadata.
-    """
-    chars = 0
-    for msg in messages:
-        chars += 16
-        chars += len(str(msg.get("role", "")))
-        chars += len(blocks_to_text(msg.get("content", "")))
-        for tc in msg.get("tool_calls") or []:
-            function = tc.get("function") if isinstance(tc, dict) else None
-            if isinstance(function, dict):
-                chars += len(str(function.get("name", "")))
-                chars += len(str(function.get("arguments", "")))
-        if tool_call_id := msg.get("tool_call_id"):
-            chars += len(str(tool_call_id))
-    return math.ceil(chars / 3)
+    if actual_input_tokens is None:
+        return False
+    limit = get_model(model).max_context_tokens
+    return actual_input_tokens >= int(limit * threshold * token_headroom)
 
 
 def compactable_range(
@@ -191,15 +165,51 @@ async def compact_summarize(
         conversation_text = _build_conversation_text(messages, start, end)
         request = _build_summarize_request(conversation_text, model, summary_max_tokens)
 
-    client = get_completion_client(model)
-    response = await asyncio.wait_for(
-        client.completion(**request),
-        timeout=COMPACTION_TIMEOUT,
-    )
+    response = await _complete_compaction_request(model, request)
     content = response.choices[0].message.content
     if not content:
         return "Unable to summarize."
     return content.strip()
+
+
+async def _complete_compaction_request(model: str, request: dict) -> CompletionResponse:
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[CompletionResponse] = loop.create_future()
+
+    def finish(response: CompletionResponse | None = None, error: BaseException | None = None) -> None:
+        if future.done():
+            return
+        if error is not None:
+            future.set_exception(error)
+            return
+        if response is None:
+            future.set_exception(RuntimeError("Compaction model returned no response"))
+            return
+        future.set_result(response)
+
+    async def complete() -> CompletionResponse:
+        client = create_completion_client(model)
+        try:
+            return await client.completion(**request)
+        finally:
+            await client.close()
+
+    def run() -> None:
+        try:
+            response = asyncio.run(complete())
+        except BaseException as exc:
+            try:
+                loop.call_soon_threadsafe(finish, None, exc)
+            except RuntimeError:
+                pass
+        else:
+            try:
+                loop.call_soon_threadsafe(finish, response, None)
+            except RuntimeError:
+                pass
+
+    threading.Thread(target=run, name="ntrp-compaction-llm", daemon=True).start()
+    return await asyncio.wait_for(future, timeout=COMPACTION_TIMEOUT)
 
 
 def _message_ref_id(msg: dict) -> str | None:

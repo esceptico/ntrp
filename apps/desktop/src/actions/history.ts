@@ -1,6 +1,11 @@
-import { apiWithConfig, type HistoryMessage, type HistoryPage } from "../api";
+import {
+  apiWithConfig,
+  type HistoryMessage,
+  type HistoryPage,
+  type SessionRuntimeSnapshot,
+} from "../api";
 import { getState, setState, type UiMessage } from "../store";
-import { clearReplayGapBlockForSession } from "../store/chat-stream";
+import { clearReplayGapBlockForSession, setEventCursorForSession } from "../store/chat-stream";
 import {
   isCurrentHistoryReplaceRequestVersion,
   nextHistoryReplaceRequestVersion,
@@ -63,6 +68,36 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
   return items;
 }
 
+
+function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot | undefined): void {
+  if (!runtime) return;
+  setEventCursorForSession(sessionId, runtime.checkpoint_seq);
+  const activeRun = runtime.active_run;
+  setState((state) => {
+    const lifecycle =
+      activeRun && ["pending", "running", "backgrounded"].includes(activeRun.status)
+        ? reduceRunStarted(state, { runId: activeRun.run_id, sessionId })
+        : reduceRunCompleted(state, { runId: state.currentRunId, sessionId });
+    return {
+      ...lifecycle,
+      pendingApprovals: runtime.pending_approvals.map((approval) => ({
+        toolId: approval.tool_id,
+        toolName: approval.tool_name,
+        preview: approval.preview ?? undefined,
+        diff: approval.diff ?? undefined,
+        status: "pending" as const,
+      })),
+      queuedMessages: runtime.queued_messages.map((message) => ({
+        clientId: message.client_id,
+        text: message.text,
+        images: message.images,
+        status: message.status,
+        enqueuedAt: message.enqueued_at ? Date.parse(message.enqueued_at) : Date.now(),
+      })),
+    };
+  });
+}
+
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
   const mode = options.mode ?? "replace";
@@ -76,6 +111,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   let history: {
     messages: HistoryMessage[];
     active_run_id: string | null;
+    runtime?: SessionRuntimeSnapshot;
     page?: HistoryPage;
     usage?: { last_input_tokens: number; message_count: number };
   };
@@ -102,7 +138,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     clearReplayGapBlockForSession(sessionId);
   }
 
-  const { messages, active_run_id, page, usage } = history;
+  const { messages, active_run_id, runtime, page, usage } = history;
   const items = historyMessagesToUi(messages, active_run_id);
   if (mode === "prepend") {
     s.prependHistory(items, page);
@@ -121,11 +157,15 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     }
   }
   if (mode === "replace") {
-    setState((state) =>
-      active_run_id
-        ? reduceRunStarted(state, { runId: active_run_id, sessionId })
-        : reduceRunCompleted(state, { runId: state.currentRunId, sessionId }),
-    );
+    if (runtime) {
+      applyRuntimeSnapshot(sessionId, runtime);
+    } else {
+      setState((state) =>
+        active_run_id
+          ? reduceRunStarted(state, { runId: active_run_id, sessionId })
+          : reduceRunCompleted(state, { runId: state.currentRunId, sessionId }),
+      );
+    }
   } else if (active_run_id) {
     setState((state) => reduceRunStarted(state, { runId: active_run_id, sessionId }));
   }

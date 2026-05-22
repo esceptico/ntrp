@@ -93,9 +93,13 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
     case "compact": {
       if (!s.currentSessionId) return;
       try {
-        await compactSessionApi(s.config, s.currentSessionId);
-        await loadHistory(s.currentSessionId);
-        appendStatus("Context compacted.");
+        const result = await compactSessionApi(s.config, s.currentSessionId);
+        if (result.status === "compacted") {
+          await loadHistory(s.currentSessionId);
+          appendStatus(result.message ?? "Context compacted.");
+        } else {
+          appendStatus(result.message ?? "Context below compaction threshold.");
+        }
       } catch (error) {
         appendError(error instanceof Error ? error.message : String(error));
       }

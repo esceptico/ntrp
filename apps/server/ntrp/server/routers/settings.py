@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
+from ntrp.constants import COMPRESSION_TOKEN_HEADROOM
 from ntrp.llm.models import (
     get_embedding_models as get_embedding_models_fn,
 )
@@ -91,11 +92,17 @@ def _config_response(rt: Runtime) -> dict:
         chat_model_max_context = get_model(config.chat_model).max_context_tokens
     except Exception:
         chat_model_max_context = 0
+    compaction_token_limit = (
+        int(chat_model_max_context * config.compression_threshold) if chat_model_max_context else 0
+    )
+    compaction_token_trigger = int(compaction_token_limit * COMPRESSION_TOKEN_HEADROOM) if compaction_token_limit else 0
 
     return {
         **rt.config_status(),
         "chat_model": config.chat_model,
         "chat_model_max_context": chat_model_max_context,
+        "compaction_token_limit": compaction_token_limit,
+        "compaction_token_trigger": compaction_token_trigger,
         "research_model": config.research_model,
         "memory_model": config.memory_model,
         "embedding_model": config.embedding_model,

@@ -1,6 +1,8 @@
 import json
+import re
+from pathlib import Path
 
-from ntrp.events.sse import RunCancelledEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ntrp.events.sse import EventType, RunCancelledEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ntrp.server.bus import StreamRecord, stream_record_to_sse_string
 
 
@@ -31,3 +33,17 @@ def test_stream_record_uses_sse_id_as_cursor():
 
     assert frame.startswith("id: 44\n")
     assert "event: RUN_FINISHED\n" in frame
+
+
+def test_desktop_event_unions_cover_backend_event_types():
+    repo_root = Path(__file__).resolve().parents[3]
+    desktop_sources = [
+        repo_root / "apps/desktop/src/api.ts",
+        repo_root / "apps/desktop/src/hooks/useAutomationEvents.ts",
+    ]
+    desktop_literals = set()
+    for source in desktop_sources:
+        desktop_literals.update(re.findall(r'type: "([^"]+)"', source.read_text()))
+
+    backend_literals = {event_type.value for event_type in EventType}
+    assert backend_literals <= desktop_literals

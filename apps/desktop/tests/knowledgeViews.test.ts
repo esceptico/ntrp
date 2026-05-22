@@ -34,6 +34,7 @@ test("memory library exposes typed knowledge views, not automation state", () =>
     "pattern",
     "lesson",
     "procedure",
+    "entity_profile",
     "action_candidate",
     "artifact",
     "outcome_feedback",

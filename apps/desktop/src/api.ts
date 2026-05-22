@@ -1,3 +1,57 @@
+export type RuntimeRunStatus =
+  | "pending"
+  | "running"
+  | "backgrounded"
+  | "interrupted"
+  | "error"
+  | "failed"
+  | "cancelled"
+  | "completed";
+
+export interface RuntimeApprovalSnapshot {
+  tool_id: string;
+  tool_name: string;
+  preview?: string | null;
+  diff?: string | null;
+  status: "pending";
+  requested_at?: string | null;
+  run_id?: string | null;
+}
+
+export interface RuntimeQueuedMessageSnapshot {
+  client_id: string;
+  text: string;
+  images?: HistoryImage[];
+  status: "pending" | "failed";
+  server_status?: string | null;
+  enqueued_at?: string | null;
+  run_id?: string | null;
+}
+
+export interface ActiveRunSnapshot {
+  run_id: string;
+  status: RuntimeRunStatus;
+  started_at?: string | null;
+  updated_at?: string | null;
+  ended_at?: string | null;
+  stop_reason?: string | null;
+  checkpoint_seq: number;
+  latest_event_seq: number;
+  error_code?: string | null;
+  error_message?: string | null;
+  pending_approvals: RuntimeApprovalSnapshot[];
+  queued_messages: RuntimeQueuedMessageSnapshot[];
+}
+
+export interface SessionRuntimeSnapshot {
+  session_id: string;
+  latest_event_seq: number;
+  checkpoint_seq: number;
+  active_run: ActiveRunSnapshot | null;
+  pending_approvals: RuntimeApprovalSnapshot[];
+  queued_messages: RuntimeQueuedMessageSnapshot[];
+}
+
 export interface AppConfig {
   serverUrl: string;
   apiKey: string;
@@ -16,6 +70,15 @@ export interface SessionListItem {
   session_type?: SessionType;
   /** When set, the channel session was spawned by this automation. */
   origin_automation_id?: string | null;
+  active_run_id?: string | null;
+  run_status?: RuntimeRunStatus | null;
+  checkpoint_seq?: number;
+  latest_event_seq?: number;
+  is_active?: boolean;
+  pending_approvals_count?: number;
+  queued_messages_count?: number;
+  run_error_code?: string | null;
+  run_stop_reason?: string | null;
 }
 
 export interface SessionGoal {
@@ -122,7 +185,8 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean; meta_client_id?: string | null }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number; cost: number }; context_input_tokens?: number | null; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
-  | { type: "RUN_ERROR"; run_id: string; message: string }
+  | { type: "run_backgrounded"; run_id: string }
+  | { type: "RUN_ERROR"; run_id: string; message: string; code?: string; debug_id?: string | null; recoverable?: boolean }
   | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool" }
   | { type: "thinking"; status: string }
 
@@ -146,6 +210,7 @@ export type ServerEvent = CommonServerEventFields & (
 
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
+  | { type: "question"; question: string; tool_id: string }
   | {
       type: "background_task";
       event_id?: string | null;
@@ -451,6 +516,7 @@ export type KnowledgeObjectType =
   | "pattern"
   | "lesson"
   | "procedure"
+  | "entity_profile"
   | "procedure_candidate"
   | "artifact"
   | "action_candidate"
@@ -544,6 +610,19 @@ export interface KnowledgePruneResult {
   policy_version: string;
 }
 
+export interface KnowledgeProfileSynthesisRequest {
+  entity_names?: string[];
+  limit_entities?: number;
+  evidence_limit?: number;
+  apply?: boolean;
+}
+
+export interface KnowledgeProfileSynthesisResult {
+  profiles: KnowledgeObject[];
+  skipped: number;
+  policy_version: string;
+}
+
 export async function inspectKnowledgeActivationApi(
   config: AppConfig,
   query: string,
@@ -601,6 +680,16 @@ export async function pruneKnowledgeApi(
   return apiWithConfig(config, "/knowledge/processors/prune", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function synthesizeKnowledgeProfilesApi(
+  config: AppConfig,
+  payload: KnowledgeProfileSynthesisRequest = {},
+): Promise<KnowledgeProfileSynthesisResult> {
+  return apiWithConfig(config, "/knowledge/processors/profiles", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, apply: true }),
   });
 }
 
@@ -931,11 +1020,11 @@ export async function deleteCustomModelApi(
 
 export interface ServerConfig {
   chat_model: string;
-  /** Hard token ceiling of the active chat model. Combined with
-   *  `compression_threshold` (a fraction in 0-1) it gives the exact token
-   *  count at which auto-compaction fires — that's what the budget dial
-   *  shows its outer arc against. 0 when the model isn't recognized. */
+  /** Hard token ceiling of the active chat model. */
   chat_model_max_context: number;
+  /** Configured compaction ceiling and actual trigger after server headroom. */
+  compaction_token_limit: number;
+  compaction_token_trigger: number;
   research_model: string;
   memory_model: string;
   embedding_model: string;
@@ -1031,6 +1120,14 @@ export function parseServerConfig(data: unknown): ServerConfig {
   assertServerContract(
     isStringRecord(data.model_reasoning_efforts),
     "Invalid /config response: missing model_reasoning_efforts",
+  );
+  assertServerContract(
+    typeof data.compaction_token_limit === "number",
+    "Invalid /config response: missing compaction_token_limit",
+  );
+  assertServerContract(
+    typeof data.compaction_token_trigger === "number",
+    "Invalid /config response: missing compaction_token_trigger",
   );
   assertServerContract(
     data.tool_overrides === undefined || isToolOverrideRecord(data.tool_overrides),

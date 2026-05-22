@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.core.compactor import compactable_range
 from ntrp.events.sse import CompactionFinishedEvent, CompactionStartedEvent
 from ntrp.llm.models import get_model
 from ntrp.server.bus import BusRegistry
@@ -82,6 +83,18 @@ async def compact_context(
             status_code=409,
             detail="Cannot compact while a chat run is active",
         )
+
+    if not data:
+        return {"status": "no_session", "message": "No active session to compact"}
+
+    if compactable_range(data.messages, keep_ratio=runtime.config.compression_keep_ratio) is None:
+        return {
+            "status": "nothing_to_compact",
+            "message": f"Nothing to compact ({len(data.messages)} messages)",
+            "message_count": len(data.messages),
+            "before_tokens": data.last_input_tokens,
+        }
+
     bus = buses.get_or_create(resolved_session_id) if resolved_session_id else None
 
     if bus:

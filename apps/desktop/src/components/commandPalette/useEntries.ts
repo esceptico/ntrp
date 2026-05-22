@@ -27,6 +27,7 @@ import {
   archiveSession,
   branchAtMessage,
   createSession,
+  loadHistory,
   renameSession,
   runBuiltinCommand,
   stopRun,
@@ -89,7 +90,10 @@ export function useEntries(): CommandEntry[] {
       run: async () => {
         if (!currentSessionId) return;
         try {
-          await compactSessionApi(config, currentSessionId);
+          const result = await compactSessionApi(config, currentSessionId);
+          if (result.status === "compacted" && useStore.getState().currentSessionId === currentSessionId) {
+            await loadHistory(currentSessionId);
+          }
         } catch {
           /* surfaced via the global error path */
         }

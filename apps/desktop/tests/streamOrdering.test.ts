@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
+import { eventStreamUrl, handleServerEvent, resetStreamStateForTest, setEventCursorForSession } from "../src/hooks/useEvents.js";
 import { getState, setState } from "../src/store/index.js";
 
 beforeEach(() => {
@@ -224,4 +224,52 @@ test("keeps one activity group across top-level reasoning events", async () => {
     "tool-1",
     "tool-2",
   ]);
+});
+
+test("renders parallel tool calls in start order even when results finish out of order", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "SlowTool",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "FastTool",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 5,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  expect(activityId).toBeTruthy();
+  expect(state.messages.get(activityId!)?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("event stream URL uses explicit checkpoint cursor from runtime snapshot", () => {
+  setEventCursorForSession("session-1", 42);
+  expect(eventStreamUrl({ serverUrl: "http://localhost:3000", apiKey: "" }, "session-1")).toBe(
+    "http://localhost:3000/chat/events/session-1?stream=true&after_seq=42",
+  );
 });

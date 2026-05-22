@@ -22,7 +22,7 @@ from ntrp.events.sse import (
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
-from ntrp.server.routers.chat import _event_stream, submit_tool_result
+from ntrp.server.routers.chat import _effective_after_seq, _event_stream, submit_tool_result
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -369,7 +369,7 @@ async def test_event_stream_replay_honors_after_seq_without_old_duplicates():
 
 
 @pytest.mark.asyncio
-async def test_event_stream_resets_instead_of_replaying_persisted_events_after_bus_recreation(tmp_path):
+async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_path):
     import ntrp.database as database
 
     conn = await database.connect(tmp_path / "sessions.db")
@@ -396,18 +396,21 @@ async def test_event_stream_resets_instead_of_replaying_persisted_events_after_b
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=0, event_store=store)
     try:
-        chunk = await anext(stream)
+        chunks = [await anext(stream), await anext(stream), await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
         await read_conn.close()
         await conn.close()
 
-    seq, _event_name, payload = _parse_sse_chunk(chunk)
-    assert seq == 1
-    assert _event_name == "stream_reset"
-    assert payload["type"] == "stream_reset"
-    assert payload["reason"] == "replay_gap"
-    assert "replay" not in payload
+    parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
+    assert [seq for seq, _event_name, _payload in parsed] == [1, 2, 3, 4]
+    assert [event_name for _seq, event_name, _payload in parsed] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "TOOL_CALL_START",
+    ]
+    assert all(payload["replay"] is True for _seq, _event_name, payload in parsed)
     assert buses.get_or_create("sess-1").next_seq == 5
     assert buses.get_or_create("sess-1").checkpoint_seq == 0
 
@@ -537,7 +540,7 @@ async def test_event_stream_seeds_persisted_cursor_without_client_cursor(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_event_stream_does_not_promote_raw_events_to_checkpoint(tmp_path):
+async def test_event_stream_replays_persisted_raw_events_above_checkpoint(tmp_path):
     import ntrp.database as database
 
     conn = await database.connect(tmp_path / "sessions.db")
@@ -556,19 +559,17 @@ async def test_event_stream_does_not_promote_raw_events_to_checkpoint(tmp_path):
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=2, event_store=store)
     try:
-        chunk = await anext(stream)
+        chunks = [await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
         await read_conn.close()
         await conn.close()
 
-    seq, event_name, payload = _parse_sse_chunk(chunk)
+    parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
     bus = buses.get_or_create("sess-1")
-    assert seq == 3
-    assert event_name == "stream_reset"
-    assert payload["type"] == "stream_reset"
-    assert payload["reason"] == "replay_gap"
-    assert "replay" not in payload
+    assert [seq for seq, _event_name, _payload in parsed] == [3, 4]
+    assert [payload["status"] for _seq, _event_name, payload in parsed] == ["noncanonical-1", "noncanonical-2"]
+    assert all(payload["replay"] is True for _seq, _event_name, payload in parsed)
     assert bus.next_seq == 5
     assert bus.checkpoint_seq == 2
 
@@ -646,6 +647,18 @@ def test_chat_events_rejects_negative_after_seq():
         app.dependency_overrides.pop(require_run_registry, None)
 
     assert response.status_code == 422
+
+
+def test_effective_after_seq_uses_last_event_id_header():
+    assert _effective_after_seq(None, "4") == 4
+    assert _effective_after_seq(2, "4") == 4
+    assert _effective_after_seq(7, "4") == 7
+
+
+def test_effective_after_seq_rejects_invalid_last_event_id():
+    with pytest.raises(HTTPException) as exc:
+        _effective_after_seq(None, "wat")
+    assert exc.value.status_code == 400
 
 
 def test_expand_skill_command_injects_skill_path(tmp_path):
@@ -1000,6 +1013,12 @@ async def test_active_run_records_queued_message_in_ledger():
     class FakeSessionService:
         def __init__(self):
             self.queued = []
+
+        async def claim_chat_idempotency_key(self, **kwargs):
+            return True, {"status": "accepted", "run_id": None, **kwargs}
+
+        async def update_chat_idempotency_key(self, **kwargs):
+            return {"status": kwargs.get("status"), "run_id": kwargs.get("run_id")}
 
         async def record_chat_queued_message(self, **kwargs):
             self.queued.append(kwargs)

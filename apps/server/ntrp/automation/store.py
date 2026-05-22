@@ -180,6 +180,21 @@ CREATE TABLE IF NOT EXISTS automation_event_queue (
 CREATE INDEX IF NOT EXISTS idx_automation_event_queue_task_claimed_id
 ON automation_event_queue(task_id, claimed_at, id);
 
+CREATE TABLE IF NOT EXISTS automation_event_dead_letter (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_queue_id INTEGER NOT NULL,
+    task_id TEXT NOT NULL,
+    event_key TEXT NOT NULL,
+    context TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    failed_at TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL,
+    last_error TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_event_dead_letter_task_failed
+ON automation_event_dead_letter(task_id, failed_at);
+
 CREATE TABLE IF NOT EXISTS automation_count_state (
     task_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
@@ -384,6 +399,15 @@ WHERE id = ? AND claimed_at IS NULL
 
 _SQL_COMPLETE_EVENT = "DELETE FROM automation_event_queue WHERE id = ?"
 
+_SQL_DEAD_LETTER_EVENT = """
+INSERT INTO automation_event_dead_letter (
+    original_queue_id, task_id, event_key, context, created_at, failed_at, attempt_count, last_error
+)
+SELECT id, task_id, event_key, context, created_at, ?, attempt_count + 1, ?
+FROM automation_event_queue
+WHERE id = ?
+"""
+
 _SQL_FAIL_EVENT = """
 UPDATE automation_event_queue
 SET claimed_at = NULL,
@@ -471,6 +495,14 @@ SELECT
 FROM automation_count_state
 """
 
+_SQL_STATUS_DEAD_LETTER = """
+SELECT
+    COUNT(*) AS total,
+    MIN(failed_at) AS oldest_failed_at,
+    MAX(failed_at) AS newest_failed_at
+FROM automation_event_dead_letter
+"""
+
 # --- Migration ---
 
 _MIGRATION_V1 = """
@@ -516,7 +548,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -740,6 +772,29 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await _set_schema_version(conn, 6)
         await conn.commit()
         _logger.info("Migrated automation store to v6 (idempotency claim table)")
+
+    if version < 7:
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS automation_event_dead_letter (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_queue_id INTEGER NOT NULL,
+                task_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                context TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                failed_at TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL,
+                last_error TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_automation_event_dead_letter_task_failed
+            ON automation_event_dead_letter(task_id, failed_at);
+            """
+        )
+        await _set_schema_version(conn, 7)
+        await conn.commit()
+        _logger.info("Migrated automation store to v7 (event dead-letter table)")
 
 
 class AutomationStore:
@@ -1118,6 +1173,14 @@ class AutomationStore:
         )
         await self.conn.commit()
 
+    async def dead_letter_event(self, queue_id: int, error: str, failed_at: datetime) -> None:
+        await self.conn.execute(
+            _SQL_DEAD_LETTER_EVENT,
+            (failed_at.isoformat(), error, queue_id),
+        )
+        await self.conn.execute(_SQL_COMPLETE_EVENT, (queue_id,))
+        await self.conn.commit()
+
     async def release_all_claimed_events(self) -> int:
         cursor = await self.conn.execute(_SQL_RELEASE_ALL_CLAIMED_EVENTS)
         await self.conn.commit()
@@ -1138,6 +1201,7 @@ class AutomationStore:
         task_row = (await self.conn.execute_fetchall(_SQL_STATUS_TASKS, (now_iso,)))[0]
         queue_row = (await self.conn.execute_fetchall(_SQL_STATUS_EVENT_QUEUE, (now_iso, now_iso, now_iso)))[0]
         count_row = (await self.conn.execute_fetchall(_SQL_STATUS_COUNT_STATE))[0]
+        dead_letter_row = (await self.conn.execute_fetchall(_SQL_STATUS_DEAD_LETTER))[0]
 
         return {
             "observed_at": now_iso,
@@ -1162,5 +1226,10 @@ class AutomationStore:
             "count_state": {
                 "total": int(count_row["total"] or 0),
                 "oldest_updated_at": count_row["oldest_updated_at"],
+            },
+            "dead_letters": {
+                "total": int(dead_letter_row["total"] or 0),
+                "oldest_failed_at": dead_letter_row["oldest_failed_at"],
+                "newest_failed_at": dead_letter_row["newest_failed_at"],
             },
         }

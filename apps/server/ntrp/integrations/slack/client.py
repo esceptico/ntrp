@@ -1,13 +1,26 @@
+import base64
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
 
+from ntrp.core.content import ImageContent
 from ntrp.logging import get_logger
 from ntrp.search.types import RawItem
 
 _logger = get_logger(__name__)
 _API = "https://slack.com/api"
+_SLACK_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"})
+_MODEL_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
+_MAX_THREAD_IMAGES = 4
+_MAX_SLACK_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class SlackThreadResult:
+    text: str
+    model_content: tuple[ImageContent, ...] = ()
 
 
 def _ts_to_datetime(ts: str) -> datetime:
@@ -340,7 +353,7 @@ class SlackClient:
                 )
             return items
 
-    async def read_thread(self, source_id: str) -> str | None:
+    async def read_thread(self, source_id: str) -> SlackThreadResult | None:
         """Read a message + thread replies. source_id is 'channel_id:ts'."""
         if ":" not in source_id:
             return None
@@ -356,11 +369,109 @@ class SlackClient:
                 return None
             _, cname = await self._resolve_channel_id(session, cid)
             lines: list[str] = []
+            model_content: list[ImageContent] = []
             for m in messages:
                 user_id = m.get("user", "")
                 user_name = await self._resolve_user(session, user_id) if user_id else (m.get("username") or "bot")
-                lines.append(_format_message(user_name, m.get("text", ""), m.get("ts", ""), cname))
-            return "\n\n".join(lines)
+                text = m.get("text", "")
+                remaining = _MAX_THREAD_IMAGES - len(model_content)
+                file_notes, image_blocks = await self._extract_thread_images(session, m.get("files"), remaining)
+                if file_notes:
+                    text = "\n".join(part for part in [text, *file_notes] if part)
+                model_content.extend(image_blocks)
+                lines.append(_format_message(user_name, text, m.get("ts", ""), cname))
+            return SlackThreadResult(text="\n\n".join(lines), model_content=tuple(model_content))
+
+    async def read_file_image(self, file_id: str) -> SlackThreadResult | None:
+        async with aiohttp.ClientSession() as session:
+            data = await self._get(session, "files.info", file=file_id)
+            file_obj = data.get("file")
+            if not isinstance(file_obj, dict) or not self._is_image_file(file_obj):
+                return None
+            block = await self._download_slack_image(session, file_obj)
+            if not block:
+                return None
+            title = file_obj.get("title") or file_obj.get("name") or file_obj.get("id") or file_id
+            return SlackThreadResult(
+                text=f"Slack image: {title}\n{self._format_image_note(file_obj)}",
+                model_content=(block,),
+            )
+
+    async def _extract_thread_images(
+        self,
+        session: aiohttp.ClientSession,
+        files: Any,
+        remaining: int,
+    ) -> tuple[list[str], list[ImageContent]]:
+        if not isinstance(files, list):
+            return [], []
+
+        notes: list[str] = []
+        image_blocks: list[ImageContent] = []
+        for file_obj in files:
+            if not isinstance(file_obj, dict) or not self._is_image_file(file_obj):
+                continue
+            notes.append(self._format_image_note(file_obj))
+            if len(image_blocks) >= remaining:
+                continue
+            block = await self._download_slack_image(session, file_obj)
+            if block:
+                image_blocks.append(block)
+        return notes, image_blocks
+
+    def _is_image_file(self, file_obj: dict[str, Any]) -> bool:
+        return self._normalized_image_mime(file_obj) is not None
+
+    def _normalized_image_mime(self, file_obj: dict[str, Any]) -> str | None:
+        mime = str(file_obj.get("mimetype") or "").lower()
+        if mime == "image/jpg":
+            return "image/jpeg"
+        if mime in _SLACK_IMAGE_MIME_TYPES:
+            return mime
+        return None
+
+    def _format_image_note(self, file_obj: dict[str, Any]) -> str:
+        title = file_obj.get("title") or file_obj.get("name") or file_obj.get("id") or "image"
+        details = [self._normalized_image_mime(file_obj) or "image"]
+        if size := file_obj.get("size"):
+            details.append(f"{size} bytes")
+        if file_id := file_obj.get("id"):
+            details.append(f"id: {file_id}")
+        return f"Attached image: {title} ({', '.join(details)})"
+
+    async def _download_slack_image(
+        self,
+        session: aiohttp.ClientSession,
+        file_obj: dict[str, Any],
+    ) -> ImageContent | None:
+        mime = self._normalized_image_mime(file_obj)
+        if not mime:
+            return None
+        if mime not in _MODEL_IMAGE_MIME_TYPES:
+            return None
+        size = _int_or_none(file_obj.get("size"))
+        if size and size > _MAX_SLACK_IMAGE_BYTES:
+            return None
+        url = file_obj.get("url_private_download") or file_obj.get("url_private")
+        if not isinstance(url, str) or not url:
+            return None
+        headers = {"Authorization": f"Bearer {self._token_for('files.info')}"}
+        try:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status >= 400:
+                    _logger.warning("Slack image download failed with status %s", resp.status)
+                    return None
+                body = await resp.read()
+        except Exception:
+            _logger.warning("Slack image download failed", exc_info=True)
+            return None
+        if len(body) > _MAX_SLACK_IMAGE_BYTES:
+            return None
+        detected_mime = _detect_supported_image_mime(body)
+        if not detected_mime:
+            _logger.warning("Slack image download did not contain supported image bytes")
+            return None
+        return ImageContent(media_type=detected_mime, data=base64.b64encode(body).decode("ascii"))
 
     async def read_user(self, user_id: str) -> dict[str, Any] | None:
         async with aiohttp.ClientSession() as session:
@@ -383,3 +494,69 @@ class SlackClient:
                 "status_emoji": profile.get("status_emoji", ""),
                 "tz": user.get("tz", ""),
             }
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _detect_supported_image_mime(body: bytes) -> str | None:
+    if body.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if body.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(body) >= 12 and body.startswith(b"RIFF") and body[8:12] == b"WEBP":
+        return "image/webp"
+    if _is_static_gif(body):
+        return "image/gif"
+    return None
+
+
+def _skip_gif_sub_blocks(body: bytes, offset: int) -> int | None:
+    while offset < len(body):
+        size = body[offset]
+        offset += 1
+        if size == 0:
+            return offset
+        offset += size
+    return None
+
+
+def _is_static_gif(body: bytes) -> bool:
+    if not (body.startswith(b"GIF87a") or body.startswith(b"GIF89a")) or len(body) < 13:
+        return False
+    offset = 13
+    packed = body[10]
+    if packed & 0x80:
+        offset += 3 * (2 ** ((packed & 0x07) + 1))
+
+    frames = 0
+    while offset < len(body):
+        marker = body[offset]
+        if marker == 0x3B:
+            return frames == 1
+        if marker == 0x21:
+            offset = _skip_gif_sub_blocks(body, offset + 2)
+            if offset is None:
+                return False
+            continue
+        if marker != 0x2C or offset + 10 > len(body):
+            return False
+
+        frames += 1
+        if frames > 1:
+            return False
+        image_packed = body[offset + 9]
+        offset += 10
+        if image_packed & 0x80:
+            offset += 3 * (2 ** ((image_packed & 0x07) + 1))
+        if offset >= len(body):
+            return False
+        offset += 1
+        offset = _skip_gif_sub_blocks(body, offset)
+        if offset is None:
+            return False
+    return False

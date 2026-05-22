@@ -6,8 +6,10 @@ import {
   getChatStreamState,
   reduceEventCursor,
   reduceReplayGap,
+  reduceStreamConnected,
   reduceStreamConnecting,
   reduceStreamDisconnected,
+  reduceStreamReconnecting,
   runCancelledEffect,
 } from "../src/store/chat-stream.ts";
 import { setState } from "../src/store/index.ts";
@@ -90,6 +92,19 @@ test("transport diagnostics track reconnect cursor and keepalive seq", () => {
     connectAfterSeq: 41,
     lastSeq: 42,
     lastKeepaliveSeq: 99,
+  });
+});
+
+test("transient stream closures show reconnecting during backoff instead of disconnected", () => {
+  let state = createInitialChatStreamState();
+  state = reduceStreamConnected(state, "session-1");
+
+  state = reduceStreamReconnecting(state, "session-1", "eof");
+
+  expect(state.connectionPhase).toBe("reconnecting");
+  expect(state.transportDiagnosticsBySession.get("session-1")).toMatchObject({
+    connectionPhase: "reconnecting",
+    lastClosedReason: "eof",
   });
 });
 

@@ -4,10 +4,11 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field
 
-from ntrp.events.sse import SSEEvent
+from ntrp.events.sse import SSEEvent, StreamResetEvent
 from ntrp.logging import get_logger
 
 SSE_QUEUE_MAXSIZE = 256
+SESSION_EVENT_RECORD_QUEUE_MAXSIZE = 10000
 # Sized for a single research turn that fans out to ~150 nested tool
 # calls (each emits START + ARGS + END + RESULT = 4 events, plus text
 # deltas). Below this, an overflowing run loses early TOOL_CALL_START
@@ -46,12 +47,79 @@ def stream_record_to_sse_string(session_id: str, record: StreamRecord, *, replay
     return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
 
 
+class SessionEventWriter:
+    def __init__(
+        self,
+        record_event: Callable[[StreamRecord], Awaitable[None]],
+        *,
+        maxsize: int = SESSION_EVENT_RECORD_QUEUE_MAXSIZE,
+    ):
+        self._record_event = record_event
+        self._queue: asyncio.Queue[StreamRecord | None] = asyncio.Queue(maxsize=maxsize)
+        self._worker: asyncio.Task[None] | None = None
+
+    @property
+    def queue_depth(self) -> int:
+        return self._queue.qsize()
+
+    def submit(self, record: StreamRecord) -> None:
+        self._ensure_worker()
+        try:
+            self._queue.put_nowait(record)
+        except asyncio.QueueFull:
+            _logger.warning(
+                "session_event_persist_queue_full",
+                session_id=record.session_id,
+                seq=record.seq,
+                queue_size=self._queue.maxsize,
+            )
+
+    async def drain(self) -> None:
+        if self._worker is None:
+            return
+        await self._queue.join()
+
+    async def close(self) -> None:
+        if self._worker is None:
+            return
+        await self.drain()
+        await self._queue.put(None)
+        await self._worker
+        self._worker = None
+
+    def _ensure_worker(self) -> None:
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        while True:
+            record = await self._queue.get()
+            try:
+                if record is None:
+                    return
+                try:
+                    await self._record_event(record)
+                except Exception as exc:
+                    _logger.warning(
+                        "session_event_persist_failed",
+                        session_id=record.session_id,
+                        seq=record.seq,
+                        error=str(exc),
+                    )
+            finally:
+                self._queue.task_done()
+
+
 @dataclass
 class SessionBus:
+    # Live subscriber fanout is intentionally process-local. The supported
+    # server mode is a single uvicorn worker; cross-process correctness comes
+    # from durable replay after reconnect, not shared live pub/sub.
     session_id: str
     subscriber_queue_size: int = SSE_QUEUE_MAXSIZE
     initial_next_seq: InitVar[int] = 1
     initial_checkpoint_seq: InitVar[int] = 0
+    record_queue_size: InitVar[int] = SESSION_EVENT_RECORD_QUEUE_MAXSIZE
     record_event: Callable[[StreamRecord], Awaitable[None]] | None = None
     _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
     _next_seq: int = field(default=1, init=False)
@@ -67,11 +135,14 @@ class SessionBus:
     # so a fast reconnect after a step boundary stays in the buffered-
     # replay path instead of triggering a stream_reset + history reload.
     _recent: deque[StreamRecord] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
-    _record_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
+    _record_writer: SessionEventWriter | None = field(default=None, init=False)
+    _emit_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
-    def __post_init__(self, initial_next_seq: int, initial_checkpoint_seq: int) -> None:
+    def __post_init__(self, initial_next_seq: int, initial_checkpoint_seq: int, record_queue_size: int) -> None:
         self._next_seq = initial_next_seq
         self._checkpoint_seq = initial_checkpoint_seq
+        if self.record_event:
+            self._record_writer = SessionEventWriter(self.record_event, maxsize=record_queue_size)
 
     @property
     def next_seq(self) -> int:
@@ -82,52 +153,31 @@ class SessionBus:
         return self._checkpoint_seq
 
     async def emit(self, event: SSEEvent) -> None:
-        record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
-        self._next_seq += 1
-        self._recent.append(record)
-        for queue in tuple(self._subscribers):
-            try:
-                queue.put_nowait(record)
-            except asyncio.QueueFull:
-                self._close_slow_subscriber(queue)
-        self._schedule_record_event(record)
+        async with self._emit_lock:
+            record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
+            self._next_seq += 1
+            self._recent.append(record)
+            self._schedule_record_event(record)
+            for queue in tuple(self._subscribers):
+                try:
+                    queue.put_nowait(record)
+                except asyncio.QueueFull:
+                    if isinstance(record.event, StreamResetEvent):
+                        self._close_reset_subscriber(queue, record)
+                    else:
+                        self._close_slow_subscriber(queue)
 
     def _schedule_record_event(self, record: StreamRecord) -> None:
-        if not self.record_event:
-            return
-        try:
-            task = asyncio.create_task(self.record_event(record))
-        except Exception as exc:
-            _logger.warning(
-                "session_event_persist_schedule_failed",
-                session_id=record.session_id,
-                seq=record.seq,
-                error=str(exc),
-            )
-            return
-        self._record_tasks.add(task)
-
-        def finalize(done: asyncio.Task[None]) -> None:
-            self._record_tasks.discard(done)
-            if done.cancelled():
-                return
-            try:
-                exception = done.exception()
-            except asyncio.CancelledError:
-                return
-            if exception is not None:
-                _logger.warning(
-                    "session_event_persist_failed",
-                    session_id=record.session_id,
-                    seq=record.seq,
-                    error=str(exception),
-                )
-
-        task.add_done_callback(finalize)
+        if self._record_writer:
+            self._record_writer.submit(record)
 
     async def drain_record_tasks(self) -> None:
-        while self._record_tasks:
-            await asyncio.gather(*tuple(self._record_tasks), return_exceptions=True)
+        if self._record_writer:
+            await self._record_writer.drain()
+
+    async def close_record_writer(self) -> None:
+        if self._record_writer:
+            await self._record_writer.close()
 
     def mark_checkpoint(self) -> None:
         """Record that every event up to the latest emitted seq is now
@@ -190,16 +240,48 @@ class SessionBus:
 
     def _close_slow_subscriber(self, queue: asyncio.Queue[StreamRecord | None]) -> None:
         self.unsubscribe(queue)
-        self._close_queue(queue)
+        _logger.warning(
+            "sse_slow_subscriber_closed",
+            session_id=self.session_id,
+            latest_seq=self._next_seq - 1,
+            checkpoint_seq=self._checkpoint_seq,
+        )
+        reset_record = StreamRecord(
+            seq=max(0, self._checkpoint_seq),
+            session_id=self.session_id,
+            event=StreamResetEvent(reason="slow_consumer"),
+        )
+        self._close_queue(queue, terminal=reset_record)
+
+    def _close_reset_subscriber(
+        self,
+        queue: asyncio.Queue[StreamRecord | None],
+        reset_record: StreamRecord,
+    ) -> None:
+        self.unsubscribe(queue)
+        _logger.warning(
+            "sse_reset_subscriber_preempted",
+            session_id=self.session_id,
+            reset_seq=reset_record.seq,
+            reason=getattr(reset_record.event, "reason", ""),
+        )
+        self._close_queue(queue, terminal=reset_record)
 
     @staticmethod
-    def _close_queue(queue: asyncio.Queue[StreamRecord | None]) -> None:
+    def _close_queue(
+        queue: asyncio.Queue[StreamRecord | None],
+        *,
+        terminal: StreamRecord | None = None,
+    ) -> None:
         while True:
             try:
                 queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
-        queue.put_nowait(None)
+        if terminal is not None:
+            queue.put_nowait(terminal)
+        if not queue.full():
+            queue.put_nowait(None)
 
 
 class BusRegistry:
@@ -253,10 +335,14 @@ class BusRegistry:
         if bus is None:
             return
         await bus.drain_record_tasks()
+        if bus._emit_lock.locked():
+            async with bus._emit_lock:
+                pass
         if self._buses.get(session_id) is not bus:
             return
         if bus._subscribers or is_active():
             return
+        await bus.close_record_writer()
         self.remove(session_id)
 
     def close_all_sync(self) -> None:
@@ -268,7 +354,7 @@ class BusRegistry:
     async def close_all(self) -> None:
         self.close_all_sync()
         await asyncio.gather(
-            *(bus.drain_record_tasks() for bus in self._buses.values()),
+            *(bus.close_record_writer() for bus in self._buses.values()),
             return_exceptions=True,
         )
         self._buses.clear()

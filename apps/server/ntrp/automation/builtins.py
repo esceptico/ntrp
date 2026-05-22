@@ -7,10 +7,13 @@ from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import CountTrigger, IdleTrigger, KnowledgeEventTrigger, TimeTrigger, Trigger
 from ntrp.constants import (
     BUILTIN_KNOWLEDGE_HEALTH_ID,
+    BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
     BUILTIN_KNOWLEDGE_REFLECTION_ID,
     BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
     BUILTIN_KNOWLEDGE_RETENTION_ID,
     DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
+    DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
+    DEFAULT_KNOWLEDGE_PROFILE_REFRESH_IDLE_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES,
@@ -42,7 +45,7 @@ BUILTINS = [
         triggers=[
             KnowledgeEventTrigger(
                 actions=("created",),
-                object_types=("episode",),
+                object_types=("memory_episode",),
                 statuses=("active",),
             ),
             CountTrigger(every_n=KNOWLEDGE_REFLECTION_EVERY_N_TURNS),
@@ -62,6 +65,18 @@ BUILTINS = [
         ],
         handler="knowledge_reflection",
         cooldown_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
+        writable=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
+        name="Knowledge Profile Refresh",
+        description="Refresh source-backed entity profiles from due facts, patterns, lessons, and procedures",
+        triggers=[
+            TimeTrigger(every="2h"),
+            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_PROFILE_REFRESH_IDLE_MINUTES),
+        ],
+        handler="knowledge_profile_refresh",
+        cooldown_minutes=DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
         writable=True,
     ),
     BuiltinSpec(

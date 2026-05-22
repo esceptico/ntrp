@@ -76,7 +76,7 @@ export function reduceStreamConnecting(
   afterSeq?: number,
 ): ChatStreamState {
   const connectionPhase =
-    state.connectionPhase === "connected"
+    state.connectionPhase === "connected" || state.connectionPhase === "reconnecting"
       ? "reconnecting"
       : "connecting";
   return updateTransportDiagnostics(
@@ -104,6 +104,28 @@ export function reduceStreamConnected(
     },
     sessionId,
     { connectionPhase: "connected" },
+  );
+}
+
+export function reduceStreamReconnecting(
+  state: ChatStreamState,
+  sessionId: string,
+  reason?: string | null,
+  error?: string | null,
+): ChatStreamState {
+  return updateTransportDiagnostics(
+    {
+      ...clearTransientStreamState(state),
+      sessionId,
+      projectionSessionId: sessionId,
+      connectionPhase: "reconnecting",
+    },
+    sessionId,
+    {
+      connectionPhase: "reconnecting",
+      ...(reason !== undefined ? { lastClosedReason: reason } : {}),
+      ...(error !== undefined ? { lastError: error } : {}),
+    },
   );
 }
 
@@ -257,6 +279,15 @@ export function markStreamConnected(sessionId: string): void {
   updateChatStreamState(reduceStreamConnected(chatStreamState, sessionId));
 }
 
+export function markStreamReconnecting(
+  sessionId: string,
+  reason?: string | null,
+  error?: string | null,
+): void {
+  updateChatStreamState(reduceStreamReconnecting(chatStreamState, sessionId, reason, error));
+  clearReplayMutationDomMarker();
+}
+
 export function markStreamDisconnected(
   sessionId: string | null = chatStreamState.sessionId,
   reason?: string | null,
@@ -274,6 +305,17 @@ function acceptEventCursor(event: ServerEvent): boolean {
   const result = reduceEventCursor(chatStreamState, event);
   updateChatStreamState(result.state);
   return result.accepted;
+}
+
+
+export function setEventCursorForSession(sessionId: string, seq: number): void {
+  updateChatStreamState({
+    ...chatStreamState,
+    lastEventSeqBySession: new Map(chatStreamState.lastEventSeqBySession).set(
+      sessionId,
+      Math.max(0, seq),
+    ),
+  });
 }
 
 export function lastEventSeqForSession(sessionId: string): number | undefined {
@@ -402,7 +444,9 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
 
   switch (event.type) {
     case "stream_reset": {
-      if (event.reason !== "replay_gap") return;
+      if (s.activeActivityId) {
+        s.truncateFrom(s.activeActivityId);
+      }
       s.setActiveActivityId(null);
       const resetSessionId = event.session_id ?? s.currentSessionId;
       if (!resetSessionId) return;

@@ -371,9 +371,9 @@ export function Composer() {
               type="button"
               onClick={() => void viewSkill(selectedSkill.name)}
               title={`${selectedSkill.path ?? selectedSkill.name} - Backspace on empty input detaches`}
-              className="mt-[1px] inline-flex max-w-[240px] shrink-0 items-center gap-1.5 truncate text-md leading-[1.5] text-info hover:text-accent-strong transition-colors"
+              className="mt-[1px] inline-flex max-w-[240px] shrink-0 items-baseline gap-1.5 truncate text-md leading-[1.5] text-info hover:text-accent-strong transition-colors"
             >
-              <Box size={ICON.MD} strokeWidth={2} className="shrink-0" />
+              <Box size={ICON.MD} strokeWidth={2} className="relative top-[1px] shrink-0" />
               <span className="truncate capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
             </button>
           )}

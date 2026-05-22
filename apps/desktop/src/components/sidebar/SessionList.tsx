@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/motion";
 import { useStore } from "../../store";
 import { compactSessionApi } from "../../api";
-import { archiveSession } from "../../actions";
+import { archiveSession, loadHistory } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
 import { SessionRow } from "./SessionRow";
@@ -222,10 +222,14 @@ export function SessionList() {
             closeMenu();
           }}
           onCompact={async () => {
+            const sessionId = menu.sessionId;
             closeMenu();
             const cfg = useStore.getState().config;
             try {
-              await compactSessionApi(cfg, menu.sessionId);
+              const result = await compactSessionApi(cfg, sessionId);
+              if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
+                await loadHistory(sessionId);
+              }
             } catch {
               /* ignore */
             }

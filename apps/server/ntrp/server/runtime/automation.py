@@ -5,7 +5,7 @@ from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.integrations.calendar.client import MultiCalendarSource
-from ntrp.knowledge.models import KnowledgePruneRequest, KnowledgeReflectRequest
+from ntrp.knowledge.models import KnowledgeProfileSynthesisRequest, KnowledgePruneRequest, KnowledgeReflectRequest
 from ntrp.knowledge.processors import KnowledgeProcessorService
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
@@ -68,6 +68,10 @@ class AutomationRuntime:
                 self._build_knowledge_retention_handler(),
             )
             self.scheduler.register_handler(
+                "knowledge_profile_refresh",
+                self._build_knowledge_profile_refresh_handler(),
+            )
+            self.scheduler.register_handler(
                 "knowledge_health",
                 self._build_knowledge_health_handler(),
             )
@@ -100,6 +104,18 @@ class AutomationRuntime:
                 KnowledgePruneRequest(older_than_days=30, limit=200, apply=True)
             )
             return f"archived {len(result.archived)} stale knowledge object(s)"
+
+        return handler
+
+    def _build_knowledge_profile_refresh_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            memory = self.get_memory_service()
+            if not memory:
+                return None
+            result = await KnowledgeProcessorService(memory).synthesize_profiles(
+                KnowledgeProfileSynthesisRequest(limit_entities=25, evidence_limit=20, apply=True)
+            )
+            return f"refreshed {len(result.profiles)} profile(s), skipped {result.skipped}"
 
         return handler
 

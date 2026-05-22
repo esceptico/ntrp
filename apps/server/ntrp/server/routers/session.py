@@ -28,12 +28,151 @@ from ntrp.services.session import SessionService
 router = APIRouter(tags=["session"])
 
 GOAL_PROPOSAL_SYSTEM_PROMPT = (
-    "Draft the durable active goal for this session from the recent conversation. "
-    "Use the latest unresolved user intent, not a broad summary. "
-    "Make it concrete, action-oriented, and verifiable, with enough specifics for a later continuation. "
-    "Do not invent scope. If the user already stated the goal, preserve that intent. "
-    "Prefer one sentence under 30 words. Return only the objective text: no labels, bullets, quotes, or markdown."
+    "Write the text the user would put after `/goal` for this conversation. "
+    "Reduce their manual typing: infer the current task they want done from the latest user messages. "
+    "Keep the user's wording and scope when possible. "
+    "Use enough detail for the actual task; simple tasks can be short, complex tasks may need more context. "
+    "Include the success definition when the conversation makes it clear. "
+    "Do not turn it into a step-by-step checklist or project plan. "
+    "Return only the goal text: no labels, bullets, quotes, markdown, or explanation."
 )
+
+ACTIVE_RUN_STATUSES = {"pending", "running", "backgrounded"}
+SURFACED_TERMINAL_RUN_STATUSES = {"interrupted", "error", "failed"}
+SNAPSHOT_RUN_STATUSES = ACTIVE_RUN_STATUSES | SURFACED_TERMINAL_RUN_STATUSES
+OPENING_CHECKPOINT_RUN_STATUSES = ACTIVE_RUN_STATUSES | SURFACED_TERMINAL_RUN_STATUSES | {"cancelled", "completed"}
+
+
+def _runtime_run_from_live(active_run) -> dict | None:
+    if active_run is None:
+        return None
+    return {
+        "run_id": active_run.run_id,
+        "session_id": active_run.session_id,
+        "status": active_run.status.value,
+        "started_at": active_run.created_at.isoformat(),
+        "updated_at": active_run.updated_at.isoformat(),
+        "ended_at": None,
+        "last_seq": None,
+        "stop_reason": active_run.stop_reason,
+        "error_code": None,
+        "error_message": None,
+        "client_id": None,
+    }
+
+
+def _approval_snapshot(row: dict) -> dict:
+    return {
+        "tool_id": row["tool_call_id"],
+        "tool_name": row["tool_name"],
+        "preview": row.get("preview"),
+        "diff": row.get("diff"),
+        "status": "pending",
+        "requested_at": row.get("requested_at"),
+        "run_id": row.get("run_id"),
+    }
+
+
+def _queued_message_snapshot(row: dict) -> dict:
+    message = row.get("message") or {}
+    raw_content = message.get("content", "") or ""
+    text = blocks_to_text(raw_content) if not isinstance(raw_content, str) else raw_content
+    images = []
+    if isinstance(raw_content, list):
+        images = [
+            {"media_type": b["media_type"], "data": b["data"]}
+            for b in raw_content
+            if isinstance(b, dict) and b.get("type") == "image" and b.get("media_type") and b.get("data")
+        ]
+    status = "pending" if row.get("status") == "queued" else "failed"
+    return {
+        "client_id": row["client_id"],
+        "text": text,
+        "images": images,
+        "status": status,
+        "server_status": row.get("status"),
+        "enqueued_at": row.get("enqueued_at"),
+        "run_id": row.get("run_id"),
+    }
+
+
+async def _session_runtime_snapshot(
+    svc: SessionService,
+    runtime: Runtime,
+    buses: BusRegistry,
+    session_id: str,
+) -> dict:
+    latest_event_seq = await svc.store.get_latest_session_event_seq(session_id)
+    durable_checkpoint_seq = await svc.store.get_latest_session_checkpoint_seq(session_id)
+    bus = buses.get(session_id)
+    if bus is not None:
+        latest_event_seq = max(latest_event_seq, bus.next_seq - 1)
+        durable_checkpoint_seq = max(durable_checkpoint_seq, bus.checkpoint_seq)
+
+    run_registry = getattr(runtime, "run_registry", None)
+    live_run = run_registry.get_active_run(session_id) if run_registry else None
+    durable_run = await svc.store.get_latest_chat_run_for_session(session_id)
+    run = _runtime_run_from_live(live_run) or durable_run
+    run_status = run.get("status") if run else None
+    surfaced_run = run if run_status in SNAPSHOT_RUN_STATUSES else None
+
+    run_checkpoint_seq = 0
+    if run and run_status in OPENING_CHECKPOINT_RUN_STATUSES:
+        run_checkpoint_seq = int(run.get("last_seq") or 0)
+    checkpoint_seq = max(durable_checkpoint_seq, run_checkpoint_seq)
+
+    approval_rows = (
+        await svc.store.list_pending_tool_approvals(session_id, run_id=surfaced_run["run_id"])
+        if surfaced_run
+        else []
+    )
+    queued_rows = []
+    for queued_status in ("queued", "failed_retryable"):
+        queued_rows.extend(await svc.store.list_chat_queued_messages(session_id, status=queued_status))
+
+    pending_approvals = [_approval_snapshot(row) for row in approval_rows]
+    queued_messages = [_queued_message_snapshot(row) for row in queued_rows]
+
+    active_run = None
+    if surfaced_run is not None:
+        active_run = {
+            "run_id": surfaced_run["run_id"],
+            "status": surfaced_run["status"],
+            "started_at": surfaced_run.get("started_at"),
+            "updated_at": surfaced_run.get("updated_at"),
+            "ended_at": surfaced_run.get("ended_at"),
+            "stop_reason": surfaced_run.get("stop_reason"),
+            "checkpoint_seq": checkpoint_seq,
+            "latest_event_seq": latest_event_seq,
+            "error_code": surfaced_run.get("error_code"),
+            "error_message": surfaced_run.get("error_message"),
+            "pending_approvals": pending_approvals,
+            "queued_messages": queued_messages,
+        }
+
+    return {
+        "session_id": session_id,
+        "latest_event_seq": latest_event_seq,
+        "checkpoint_seq": checkpoint_seq,
+        "active_run": active_run,
+        "pending_approvals": pending_approvals,
+        "queued_messages": queued_messages,
+    }
+
+
+def _session_list_runtime_fields(snapshot: dict) -> dict:
+    active_run = snapshot.get("active_run")
+    return {
+        "active_run_id": active_run.get("run_id") if active_run else None,
+        "run_status": active_run.get("status") if active_run else None,
+        "checkpoint_seq": snapshot["checkpoint_seq"],
+        "latest_event_seq": snapshot["latest_event_seq"],
+        "is_active": bool(active_run and active_run.get("status") in ACTIVE_RUN_STATUSES),
+        "pending_approvals_count": len(snapshot["pending_approvals"]),
+        "queued_messages_count": len(snapshot["queued_messages"]),
+        "run_error_code": active_run.get("error_code") if active_run else None,
+        "run_stop_reason": active_run.get("stop_reason") if active_run else None,
+    }
 
 
 def _goal_proposal_context(messages: list[dict], limit: int = 12) -> str:
@@ -75,6 +214,7 @@ async def _emit_goal_event(buses: BusRegistry, session_id: str, goal: dict | Non
 async def get_session_history(
     svc: SessionService = Depends(require_session_service),
     runtime: Runtime = Depends(get_runtime),
+    buses: BusRegistry = Depends(get_bus_registry),
     session_id: str | None = None,
     limit: int = Query(default=HISTORY_MESSAGE_LIMIT, ge=1, le=250),
     before: str | None = None,
@@ -84,21 +224,36 @@ async def get_session_history(
 ):
     data = await svc.load(session_id)
     if not data:
-        return {"messages": [], "active_run_id": None, "page": {"has_more_before": False, "has_more_after": False}}
+        return {
+            "messages": [],
+            "active_run_id": None,
+            "runtime": {
+                "session_id": session_id,
+                "latest_event_seq": 0,
+                "checkpoint_seq": 0,
+                "active_run": None,
+                "pending_approvals": [],
+                "queued_messages": [],
+            },
+            "page": {"has_more_before": False, "has_more_after": False},
+        }
 
-    # Active-run id: when present, the desktop client knows the latest
-    # user turn is still in-flight and shouldn't render as "Worked for X".
+    # Runtime snapshot: durable run state + event cursor. The desktop renders
+    # this first, then opens the SSE stream with after_seq=checkpoint_seq so
+    # replay is a delta rather than the whole active-session reconstruction.
     sid = data.state.session_id
-    active_run = runtime.run_registry.get_active_run(sid) if runtime.run_registry else None
-    active_run_id = active_run.run_id if active_run else None
+    runtime_snapshot = await _session_runtime_snapshot(svc, runtime, buses, sid)
+    active_run = runtime_snapshot["active_run"]
+    active_run_id = active_run["run_id"] if active_run and active_run["status"] in ACTIVE_RUN_STATUSES else None
 
     # Tools carry a `kind` ("tool" | "agent") that the desktop renderer uses
     # to pick a row surface. We thread it into the history payload so a
     # reloaded session keeps the same UI as the live stream.
     def _kind_for(name: str) -> str:
-        if not runtime.executor:
+        executor = getattr(runtime, "executor", None)
+        if not executor:
             return "tool"
-        tool = runtime.executor.registry.get(name)
+        tool = executor.registry.get(name)
         return getattr(tool, "kind", "tool") if tool else "tool"
 
     page = await svc.list_messages(
@@ -180,6 +335,7 @@ async def get_session_history(
     return {
         "messages": history,
         "active_run_id": active_run_id,
+        "runtime": runtime_snapshot,
         "page": {
             "has_more_before": page["has_more_before"],
             "has_more_after": page["has_more_after"],
@@ -409,9 +565,30 @@ async def create_session(
 
 
 @router.get("/sessions")
-async def list_sessions(svc: SessionService = Depends(require_session_service)):
+async def list_sessions(
+    svc: SessionService = Depends(require_session_service),
+    runtime: Runtime = Depends(get_runtime),
+    buses: BusRegistry = Depends(get_bus_registry),
+):
     sessions = await svc.list_sessions(limit=20)
-    return {"sessions": sessions}
+    enriched = []
+    for session in sessions:
+        snapshot = await _session_runtime_snapshot(svc, runtime, buses, session["session_id"])
+        enriched.append({**session, **_session_list_runtime_fields(snapshot)})
+    return {"sessions": enriched}
+
+
+@router.get("/sessions/{session_id}/state")
+async def get_session_state_snapshot(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+    runtime: Runtime = Depends(get_runtime),
+    buses: BusRegistry = Depends(get_bus_registry),
+):
+    data = await svc.load(session_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return await _session_runtime_snapshot(svc, runtime, buses, data.state.session_id)
 
 
 @router.patch("/sessions/{session_id}")

@@ -43,8 +43,18 @@ export function turnLayout({
     };
   }
 
-  const lastIndex = children.length - 1;
-  const finalAssistantIndex = children[lastIndex]?.role === "assistant" ? lastIndex : -1;
+  // The final answer is the last assistant message that appears after work
+  // has started, even if a late/replayed activity row lands after it.
+  // Otherwise a completed historic turn can hide the user's actual answer
+  // inside the collapsed "Worked" block just because a tool/activity event
+  // was appended after the text during history/replay reconstruction.
+  let finalAssistantIndex = -1;
+  for (let i = children.length - 1; i > firstActivityIndex; i--) {
+    if (children[i].role === "assistant") {
+      finalAssistantIndex = i;
+      break;
+    }
+  }
 
   if (finalAssistantIndex < 0) {
     return {

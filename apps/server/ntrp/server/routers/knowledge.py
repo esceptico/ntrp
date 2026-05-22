@@ -9,6 +9,7 @@ from ntrp.knowledge import (
     KnowledgeObjectStatus,
     KnowledgeObjectType,
     KnowledgeObjectUpdate,
+    KnowledgeProfileSynthesisRequest,
     KnowledgePruneRequest,
     KnowledgePublishRequest,
     KnowledgeReflectRequest,
@@ -81,6 +82,14 @@ async def prune_knowledge(
     svc: MemoryService = Depends(require_memory),
 ):
     return (await KnowledgeProcessorService(svc).prune_retention(request)).model_dump()
+
+
+@router.post("/processors/profiles")
+async def synthesize_knowledge_profiles(
+    request: KnowledgeProfileSynthesisRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    return (await KnowledgeProcessorService(svc).synthesize_profiles(request)).model_dump()
 
 
 @router.get("/processors/health")
