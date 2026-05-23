@@ -121,6 +121,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
             model_override=ctx.run.research_model,
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
+            kind="research",
         )
     finally:
         if ctx.ledger:

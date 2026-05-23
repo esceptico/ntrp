@@ -13,6 +13,7 @@ export type TranscriptProjectionEffect =
 
 export interface PendingToolCall {
   name: string;
+  displayName?: string;
   description: string;
   argsBuffer: string;
   depth: number;
@@ -252,6 +253,7 @@ export function applyChatEventToTranscript(
       if (isTodoToolName(event.tool_call_name)) break;
       const pending: PendingToolCall = {
         name: event.tool_call_name,
+        displayName: event.display_name,
         description: event.description ?? "",
         argsBuffer: "",
         depth: event.depth ?? 0,
@@ -352,6 +354,7 @@ export function applyChatEventToTranscript(
         taskStatus: "running",
         progress: event.summary ?? "running",
       };
+      if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
@@ -365,6 +368,7 @@ export function applyChatEventToTranscript(
         taskStatus,
         progress: event.summary ?? event.status ?? "running",
       };
+      if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
@@ -377,6 +381,7 @@ export function applyChatEventToTranscript(
         progress: event.summary ?? event.status,
         cancelRequested: false,
       };
+      if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
@@ -728,6 +733,7 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
     id,
     kind: pending.name,
     semanticKind: pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
+    displayName: pending.displayName,
     target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
     args: pending.argsBuffer,
     status: "ongoing",
@@ -737,22 +743,26 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
 }
 
 function activityPatchFromPending(pending: PendingToolCall): Partial<ActivityItem> {
-  return {
+  const patch: Partial<ActivityItem> = {
     target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
     args: pending.argsBuffer,
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
   };
+  if (pending.displayName) patch.displayName = pending.displayName;
+  return patch;
 }
 
 function activityPatchFromItem(item: ActivityItem): Partial<ActivityItem> {
-  return {
+  const patch: Partial<ActivityItem> = {
     target: item.target,
     args: item.args,
     depth: item.depth,
     parentToolId: item.parentToolId,
     semanticKind: item.semanticKind,
   };
+  if (item.displayName) patch.displayName = item.displayName;
+  return patch;
 }
 
 function appendActivityItemImmediately(

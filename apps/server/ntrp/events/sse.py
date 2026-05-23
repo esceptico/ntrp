@@ -340,6 +340,7 @@ class TaskProgressEvent(SSEEvent):
     task_id: str = ""
     parent_task_id: str | None = None
     parent_tool_call_id: str | None = None
+    name: str = ""
     status: str = "running"
     summary: str = ""
     depth: int = 0
@@ -352,6 +353,7 @@ class TaskFinishedEvent(SSEEvent):
     task_id: str = ""
     parent_task_id: str | None = None
     parent_tool_call_id: str | None = None
+    name: str = ""
     status: str = "completed"
     summary: str = ""
     depth: int = 0

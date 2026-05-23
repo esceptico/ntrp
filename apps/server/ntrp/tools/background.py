@@ -45,6 +45,7 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
         timeout=BACKGROUND_AGENT_TIMEOUT,
         parent_id=execution.tool_id,
         background=True,
+        kind="background",
     )
 
     return ToolResult(content=spawn.text, preview=spawn.text[:80])

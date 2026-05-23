@@ -14,3 +14,4 @@
 - Task 3: foreground subagents register run-local handles; cancelling a child task salvages the child messages into a partial summary and marks only that agent row cancelled.
 - Task 3: desktop exposes stop controls on running agent rows and the agent inspector; the action optimistically marks the row as cancelling and calls the new subagent cancel route.
 - Task 3 review fixes: register the cancel handle before emitting `task_started`, gate stop controls on lifecycle-owned `taskStatus="running"` plus row-owned `runId`, make duplicate cancel calls idempotent, and use cancellation-specific fallback wording.
+- Task 4: added deterministic naming helpers for session and agent labels; conversation names drop request filler, image-only chats become "Image Conversation", and subagent lifecycle events now carry generated names for desktop projection.

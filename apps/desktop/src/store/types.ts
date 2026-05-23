@@ -148,6 +148,7 @@ export interface ActivityItem {
    *  that internally spawn a sub-agent. The renderer picks a different row
    *  surface for agents. */
   semanticKind?: string;
+  displayName?: string;
   target: string;
   args?: string;
   result?: string;

@@ -14,6 +14,7 @@ from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WI
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
+from ntrp.core.naming import conversation_name
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.internal import RunCompleted
@@ -579,9 +580,15 @@ async def prepare_chat(
     elif deps.skill_registry:
         user_message, _ = expand_skill_command(user_message, deps.skill_registry)
 
-    name_candidate = message.strip() or ("[image]" if images else "")
-    if not session_state.name and not is_init and name_candidate and not name_candidate.startswith("/"):
-        session_state.name = name_candidate[:50]
+    stripped_message = message.strip()
+    should_name_session = (
+        not session_state.name
+        and not is_init
+        and (stripped_message or images)
+        and not stripped_message.startswith("/")
+    )
+    if should_name_session:
+        session_state.name = conversation_name(message, has_images=bool(images))
 
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)

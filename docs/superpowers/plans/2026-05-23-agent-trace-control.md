@@ -435,7 +435,7 @@ Expected: pass.
 - Test: `apps/server/tests/test_naming.py`
 - Test: `apps/desktop/tests/streamEvents.test.ts`
 
-- [ ] **Step 1: Write naming tests**
+- [x] **Step 1: Write naming tests**
 
 Create `apps/server/tests/test_naming.py`:
 
@@ -455,7 +455,7 @@ def test_agent_name_prefixes_role_without_prompt_dump():
     assert agent_name("research", "inspect current eval/test harness opportunities") == "Research Eval Test Harness"
 ```
 
-- [ ] **Step 2: Run naming tests and verify red**
+- [x] **Step 2: Run naming tests and verify red**
 
 Run:
 
@@ -465,7 +465,7 @@ uv run pytest apps/server/tests/test_naming.py -q
 
 Expected: fails because `ntrp.core.naming` does not exist.
 
-- [ ] **Step 3: Implement deterministic naming helper**
+- [x] **Step 3: Implement deterministic naming helper**
 
 Create `apps/server/ntrp/core/naming.py`:
 
@@ -504,7 +504,7 @@ def agent_name(kind: str, task: str) -> str:
     return f"{role} {topic}"
 ```
 
-- [ ] **Step 4: Use helper for chat session names**
+- [x] **Step 4: Use helper for chat session names**
 
 In `apps/server/ntrp/services/chat.py`, replace:
 
@@ -521,7 +521,7 @@ if not session_state.name and not is_init and not message.strip().startswith("/"
     session_state.name = conversation_name(message, has_images=bool(images))
 ```
 
-- [ ] **Step 5: Use helper for agents**
+- [x] **Step 5: Use helper for agents**
 
 In `apps/server/ntrp/core/spawner.py`:
 
@@ -538,7 +538,7 @@ agent_label = agent_name(tool_kind or "sub-agent", task)
 
 Use `agent_label` in `TaskStartedEvent.name` and background `label`.
 
-- [ ] **Step 6: Preserve display name on desktop**
+- [x] **Step 6: Preserve display name on desktop**
 
 In `apps/desktop/src/store/transcript-projection.ts`, set `displayName` from `event.display_name` on tool start and from `event.name` on task lifecycle patches.
 
@@ -550,7 +550,7 @@ displayName: event.name ?? undefined,
 
 in `task_started`, `task_progress`, and `task_finished` patches when present.
 
-- [ ] **Step 7: Run naming tests**
+- [x] **Step 7: Run naming tests**
 
 Run:
 

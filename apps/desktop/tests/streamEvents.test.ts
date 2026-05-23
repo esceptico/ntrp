@@ -1957,7 +1957,7 @@ test("updates an agent activity item from task lifecycle events", () => {
     run_id: "run-1",
     task_id: "call-research",
     parent_tool_call_id: "call-research",
-    name: "Research",
+    name: "Research Event Systems",
     summary: "event systems",
     depth: 1,
     timestamp: 4,
@@ -1977,6 +1977,7 @@ test("updates an agent activity item from task lifecycle events", () => {
   const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
   const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
   expect(item?.taskStatus).toBe("completed");
+  expect(item?.displayName).toBe("Research Event Systems");
   expect(item?.progress).toBe("done");
 });
 

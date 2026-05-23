@@ -157,6 +157,7 @@ def test_task_lifecycle_events_include_parent_tool_call():
         run_id="run-1",
         task_id="call-research",
         parent_tool_call_id="call-research",
+        name="Research Event Systems",
         status="completed",
         summary="done",
         depth=1,
@@ -169,6 +170,7 @@ def test_task_lifecycle_events_include_parent_tool_call():
     assert start_payload["task_id"] == "call-research"
     assert start_payload["parent_tool_call_id"] == "call-research"
     assert done_payload["type"] == "task_finished"
+    assert done_payload["name"] == "Research Event Systems"
     assert done_payload["status"] == "completed"
 
 

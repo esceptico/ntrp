@@ -25,6 +25,7 @@ from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddlew
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.model_context_budget import ToolResultContextBudgetMiddleware
+from ntrp.core.naming import agent_name
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
@@ -210,6 +211,7 @@ def create_spawn_fn(
         isolation: IsolationLevel = IsolationLevel.FULL,
         silent: bool = False,
         background: bool = False,
+        kind: str = "sub-agent",
     ) -> str:
         filtered_tools = tools or executor.get_tools()
         allowed_tool_names = tool_schema_names(filtered_tools)
@@ -280,6 +282,7 @@ def create_spawn_fn(
 
         parent_emit = calling_ctx.io.emit if not silent else None
         lifecycle_task_id = parent_id or f"task-{uuid4().hex[:10]}"
+        agent_label = agent_name(kind, task)
         task_summary = task[:120]
         task_depth = current_depth + 1
 
@@ -433,7 +436,7 @@ def create_spawn_fn(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
-                            name="Sub-agent",
+                            name=agent_label,
                             summary=task_summary,
                             depth=task_depth,
                         )
@@ -445,6 +448,7 @@ def create_spawn_fn(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            name=agent_label,
                             status="failed" if stream_failed else "completed",
                             summary="failed" if stream_failed else "completed",
                             depth=task_depth,
@@ -476,6 +480,7 @@ def create_spawn_fn(
                                 run_id=calling_ctx.run.run_id,
                                 task_id=lifecycle_task_id,
                                 parent_tool_call_id=parent_id,
+                                name=agent_label,
                                 status="cancelled",
                                 summary="cancelled",
                                 depth=task_depth,
@@ -488,6 +493,7 @@ def create_spawn_fn(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            name=agent_label,
                             status="cancelled",
                             summary="cancelled",
                             depth=task_depth,
@@ -502,6 +508,7 @@ def create_spawn_fn(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            name=agent_label,
                             status="failed",
                             summary=f"timed out after {timeout}s",
                             depth=task_depth,
@@ -528,7 +535,7 @@ def create_spawn_fn(
 
         registry = calling_ctx.background_tasks
         task_id = registry.generate_id()
-        label = task[:80]
+        label = agent_label
 
         async def _to_bg_events(event):
             if isinstance(event, ToolStarted):
