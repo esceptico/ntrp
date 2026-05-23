@@ -21,6 +21,7 @@ from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.deferred import build_deferred_tools_prompt, build_deferred_tools_prompt_for_schemas, load_tools_tool
+from ntrp.tools.executor import ToolExecutor
 from tests.helpers import MockCompletionClient, MockLLMClient, make_text_response, make_tool_response
 
 READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
@@ -158,6 +159,17 @@ class AlwaysCompacts:
         rehydration_state: dict | None = None,
     ) -> list[dict] | None:
         return [{"role": "system", "content": "compacted"}]
+
+
+class PromptAwareCompactor(AlwaysCompacts):
+    def __init__(self):
+        self.prompt_context = None
+        self.include_tool_messages = None
+
+    def with_prompt_context(self, prompt_context: str, *, include_tool_messages: bool = False):
+        self.prompt_context = prompt_context
+        self.include_tool_messages = include_tool_messages
+        return self
 
 
 class RecordingCompactor:
@@ -759,16 +771,154 @@ async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spawned_agent_compaction_uses_research_handoff_prompt_only_for_research(monkeypatch):
+    registry = _registry()
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    generic_compactor = PromptAwareCompactor()
+    parent_ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run", max_depth=3, deferred_tools_enabled=True),
+        io=IOBridge(),
+    )
+    parent_ctx.spawn_fn = create_spawn_fn(
+        executor=_Executor(registry),
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        compactor=generic_compactor,
+    )
+
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search files",
+        system_prompt="child prompt",
+        tools=registry.get_schemas(),
+    )
+
+    assert result.text == "done"
+    assert generic_compactor.prompt_context is None
+    assert generic_compactor.include_tool_messages is None
+
+    research_compactor = PromptAwareCompactor()
+    parent_ctx.spawn_fn = create_spawn_fn(
+        executor=_Executor(registry),
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        compactor=research_compactor,
+    )
+
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search files",
+        system_prompt="child prompt",
+        tools=registry.get_schemas(),
+        kind="research",
+        compaction_prompt_context="research",
+        include_tool_messages_in_compaction=True,
+    )
+
+    assert result.text == "done"
+    assert "Research Agent Handoff" in research_compactor.prompt_context
+    assert research_compactor.include_tool_messages is True
+
+
+@pytest.mark.asyncio
+async def test_spawned_agent_extra_tools_are_child_only(monkeypatch):
+    registry = _registry()
+    captured = {}
+
+    class ExtraInput(BaseModel):
+        value: str = ""
+
+    async def extra_tool(execution: ToolExecution, args: ExtraInput) -> ToolResult:
+        return ToolResult(content=args.value, preview="extra")
+
+    research_note_tool = tool(
+        description="Child-only helper.",
+        input_model=ExtraInput,
+        policy=READ_INTERNAL_POLICY,
+        execute=extra_tool,
+    )
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    executor = ToolExecutor().with_registry(registry)
+    parent_ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run", max_depth=3, deferred_tools_enabled=True),
+        io=IOBridge(),
+    )
+    parent_ctx.spawn_fn = create_spawn_fn(
+        executor=executor,
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+    )
+
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search files",
+        system_prompt="child prompt",
+        extra_tools={"research_note": research_note_tool},
+    )
+
+    tool_names = {schema["function"]["name"] for schema in captured["tools"]}
+    assert result.text == "done"
+    assert registry.get("research_note") is None
+    assert "research_note" in tool_names
+    assert captured["executor"]._executor.registry.get("research_note") is research_note_tool
+
+    prepared = await apply_model_request_middlewares(
+        ModelRequest(
+            step=0,
+            messages=[],
+            model="test",
+            tools=captured["tools"],
+            tool_choice=ToolChoiceMode.AUTO,
+            reasoning_effort=None,
+            previous_response=None,
+        ),
+        captured["model_request_middlewares"],
+    )
+    prepared_names = {schema["function"]["name"] for schema in prepared.tools}
+    assert "research_note" in prepared_names
+
+
+@pytest.mark.asyncio
 async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
     registry = _registry()
     captured = {}
     huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
 
     class CompactsToHugeToolTail:
+        def __init__(self):
+            self.seen_messages = None
+
         def should_compact(self, messages, model, last_input_tokens):
             return True
 
         async def maybe_compact(self, messages, model, last_input_tokens, *, rehydration_state=None):
+            self.seen_messages = messages
             return [
                 {"role": "system", "content": "system"},
                 {
@@ -800,12 +950,13 @@ async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
         run=RunContext(run_id="run", max_depth=3, deferred_tools_enabled=True),
         io=IOBridge(),
     )
+    compactor = CompactsToHugeToolTail()
     parent_ctx.spawn_fn = create_spawn_fn(
         executor=_Executor(registry),
         model="test-model",
         max_depth=3,
         current_depth=0,
-        compactor=CompactsToHugeToolTail(),
+        compactor=compactor,
     )
 
     result = await parent_ctx.spawn_fn(
@@ -817,10 +968,20 @@ async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
 
     assert result.text == "done"
     prepared = await apply_model_request_middlewares(
-        _request(registry),
+        ModelRequest(
+            step=0,
+            messages=[{"role": "tool", "tool_call_id": "call-input", "content": huge_result}],
+            model="test",
+            tools=registry.get_schemas(),
+            tool_choice=ToolChoiceMode.AUTO,
+            reasoning_effort=None,
+            previous_response=None,
+        ),
         captured["model_request_middlewares"],
     )
     tool_content = prepared.messages[-1]["content"]
     assert len(tool_content) < len(huge_result)
     assert "Tool result compacted for model context" in tool_content
     assert huge_result not in tool_content
+    assert compactor.seen_messages is not None
+    assert huge_result not in str(compactor.seen_messages)

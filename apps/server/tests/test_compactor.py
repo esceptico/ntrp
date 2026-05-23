@@ -138,6 +138,47 @@ async def test_compact_summarize_keeps_server_event_loop_responsive(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_research_compaction_prompt_includes_research_context_and_tool_messages(monkeypatch):
+    captured = {}
+
+    class CapturingClient:
+        async def completion(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="summary"))],
+            )
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("ntrp.core.compactor.create_completion_client", lambda _model: CapturingClient())
+
+    messages = [
+        {"role": Role.SYSTEM, "content": "research system"},
+        {"role": Role.USER, "content": "research task"},
+        {"role": Role.ASSISTANT, "content": "I will search", "tool_calls": []},
+        {"role": Role.TOOL, "content": "source result with key evidence", "tool_call_id": "call-1", "name": "search"},
+        {"role": Role.ASSISTANT, "content": "tail"},
+    ]
+
+    await compact_summarize(
+        messages,
+        1,
+        4,
+        "gpt-5.2",
+        prompt_context="## Research Agent Handoff\n- Preserve research_outline state.",
+        include_tool_messages=True,
+    )
+
+    system_prompt = captured["messages"][0]["content"]
+    user_prompt = captured["messages"][1]["content"]
+    assert "Research Agent Handoff" in system_prompt
+    assert "research_outline" in system_prompt
+    assert "tool search:" in user_prompt
+    assert "source result with key evidence" in user_prompt
+
+
+@pytest.mark.asyncio
 async def test_compaction_timeouts_do_not_spawn_unbounded_threads(monkeypatch):
     class BlockingClient:
         async def completion(self, **_kwargs):

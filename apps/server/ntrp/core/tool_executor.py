@@ -6,7 +6,7 @@ from typing import Any
 
 from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
-from ntrp.agent.ledger import SharedLedger
+from ntrp.agent.ledger import SharedLedger, access_key, format_arguments
 from ntrp.constants import (
     DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
     NTRP_TMP_BASE,
@@ -19,7 +19,7 @@ from ntrp.tools.core.types import ToolAction, ToolScope
 from ntrp.tools.deferred import is_deferred_tool
 from ntrp.tools.executor import ToolExecutor
 
-LIVE_READ_TOOLS = frozenset({"list_background_tasks"})
+LIVE_READ_TOOLS = frozenset({"list_background_tasks", "research_note", "research_outline", "research_cover"})
 AUDIT_PREVIEW_MAX_CHARS = 500
 _logger = logging.get_logger(__name__)
 
@@ -33,10 +33,18 @@ def _effective_timeout_seconds(tool: Any) -> int | float | None:
 
 
 class NtrpToolExecutor:
-    def __init__(self, executor: ToolExecutor, ctx: ToolContext, ledger: SharedLedger | None = None):
+    def __init__(
+        self,
+        executor: ToolExecutor,
+        ctx: ToolContext,
+        ledger: SharedLedger | None = None,
+        *,
+        skip_duplicate_reads: bool = False,
+    ):
         self._executor = executor
         self._ctx = ctx
         self._ledger = ledger
+        self._skip_duplicate_reads = skip_duplicate_reads
         self._offload_counter = 0
         self._meta_cache: dict[str, ToolMeta | None] = {}
 
@@ -62,17 +70,28 @@ class NtrpToolExecutor:
                 is_error=True,
             )
 
-        if self._ledger and tool.policy.action == ToolAction.READ and name not in LIVE_READ_TOOLS:
-            identity = f"{name}:{json.dumps(args, sort_keys=True)}"
-            already_read = await self._ledger.mark_accessed(identity)
-        else:
-            already_read = False
-
         store = self._audit_store() if tool.policy.audit else None
         if store:
             await self._record_tool_call_started(store, name, args, tool_call_id, tool.policy.action, tool.policy.scope)
 
+        read_key: str | None = None
+        if self._ledger and tool.policy.action == ToolAction.READ and name not in LIVE_READ_TOOLS:
+            if self._skip_duplicate_reads:
+                read_key = await self._ledger.claim_read(name, args)
+                if read_key is None:
+                    content = f"[Already read by another agent in this run: {name} {format_arguments(args)}]"
+                    result = ToolResult(content=content, preview="Already read")
+                    if store:
+                        await self._record_tool_call_finished(store, tool_call_id, "success", result.preview)
+                    return result
+            else:
+                await self._ledger.mark_accessed(access_key(name, args))
+
         execution = ToolExecution(tool_id=tool_call_id, tool_name=name, ctx=self._ctx)
+        result: ToolResult | None = None
+        read_succeeded = False
+        finish_status: str | None = None
+        finish_preview: str | None = None
         try:
             execute = self._executor.registry.execute(name, execution, args)
             timeout_seconds = _effective_timeout_seconds(tool)
@@ -83,40 +102,29 @@ class NtrpToolExecutor:
                     result = await asyncio.wait_for(execute, timeout=timeout_seconds)
                 except TimeoutError:
                     result = ToolResult(content="Tool call timed out.", preview="Timed out", is_error=True)
-                    if store:
-                        await self._record_tool_call_finished(store, tool_call_id, "timeout", result.preview)
+                    finish_status = "timeout"
+                    finish_preview = result.preview
                     return result
+
+            result = self._truncate_result(result, tool.policy.max_result_chars)
+            if tool.policy.offload:
+                result = self._maybe_offload(name, result)
+
+            finish_status = self._audit_status(result)
+            finish_preview = result.preview
+            read_succeeded = not result.is_error
+            return result
         except asyncio.CancelledError:
-            if store:
-                await self._record_tool_call_finished(store, tool_call_id, "cancelled", None)
+            finish_status = "cancelled"
             raise
         except Exception:
-            if store:
-                await self._record_tool_call_finished(store, tool_call_id, "error", None)
+            finish_status = "error"
             raise
-
-        result = self._truncate_result(result, tool.policy.max_result_chars)
-        if tool.policy.offload:
-            result = self._maybe_offload(name, result)
-
-        if already_read:
-            result = ToolResult(
-                content=f"[Already read by another agent in this run]\n{result.content}",
-                preview=result.preview,
-                is_error=result.is_error,
-                data=result.data,
-                model_content=result.model_content,
-            )
-
-        if store:
-            await self._record_tool_call_finished(
-                store,
-                tool_call_id,
-                self._audit_status(result),
-                result.preview,
-            )
-
-        return result
+        finally:
+            if read_key is not None:
+                self._ledger.finish_read(read_key, succeeded=read_succeeded)
+            if store and finish_status is not None:
+                await self._record_tool_call_finished(store, tool_call_id, finish_status, finish_preview)
 
     def _audit_store(self) -> Any | None:
         store = self._ctx.services.get("store")

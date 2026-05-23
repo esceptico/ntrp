@@ -50,3 +50,17 @@ Update each section by merging new information into the existing summary:
 - If a fact cannot be traced to a source, mark (unverified).
 - Focus on CONTINUING work, not documenting history.
 - Be terse. State, not story.""")
+
+RESEARCH_AGENT_COMPACTION_CONTEXT = """## Research Agent Handoff
+This handoff is for a spawned research agent, not the top-level chat.
+Preserve:
+- research task and current answer shape
+- research_outline sections, covered sections, uncovered gaps
+- source-backed facts with source pointers or short quotes
+- contradictions and dead ends with what was tried
+- tool result pointers, file paths, URLs, message IDs, and query strings needed for retrieval
+
+Rules:
+- Do not turn weak evidence into a firm fact.
+- Keep unresolved gaps explicit.
+- Prefer compact evidence bullets over narrative."""

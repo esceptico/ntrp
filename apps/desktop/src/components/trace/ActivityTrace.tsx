@@ -64,9 +64,9 @@ export function ActivityHeader({
         <RollingToken value={word} motionDisabled={streamReplaying} />
       </span>
       {activeCount > 0 && (
-        <span>
+        <span className="inline-flex items-center gap-1 leading-none">
           <RollingToken value={String(activeCount)} mono motionDisabled={streamReplaying} />
-          {" active"}
+          <span>active</span>
         </span>
       )}
       {interactive && (
@@ -317,18 +317,43 @@ function AgentButton({
       {depth > 0 && (
         <span className="text-whisper select-none self-center" aria-hidden="true">↳</span>
       )}
+      <span className="relative grid place-items-center w-[18px] h-[18px] shrink-0 self-center">
+        <span
+          aria-hidden
+          className={clsx(
+            "grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong transition-opacity",
+            canStop && "group-hover/agent:opacity-0",
+          )}
+        >
+          <Bot size={ICON.XS} strokeWidth={2} />
+        </span>
+        {canStop && (
+          <button
+            type="button"
+            aria-label="Stop subagent"
+            title="Stop subagent"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (item.runId) void cancelSubagent(item.runId, item.id);
+            }}
+            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Square size={ICON.XS} strokeWidth={2} />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-[11px] font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
+            >
+              Stop subagent
+            </span>
+          </button>
+        )}
+      </span>
       <button
         type="button"
         onClick={() => onOpen(item)}
         title={`${item.kind} — click to inspect`}
         className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
       >
-        <span
-          aria-hidden
-          className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
-        >
-          <Bot size={ICON.XS} strokeWidth={2} />
-        </span>
         <span
           className={clsx(
             "font-medium shrink-0 group-hover/agent:text-ink transition-colors",
@@ -346,24 +371,6 @@ function AgentButton({
           {statusText}
         </span>
       </button>
-      {canStop && (
-        <button
-          type="button"
-          aria-label="Stop subagent"
-          title="Stop subagent"
-          disabled={!canStop}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (item.runId) void cancelSubagent(item.runId, item.id);
-          }}
-          className={clsx(
-            "grid place-items-center w-[18px] h-[18px] rounded-md border-0 p-0 m-0 bg-transparent text-faint shrink-0 self-center",
-            canStop ? "cursor-pointer hover:text-ink-soft" : "cursor-default opacity-50",
-          )}
-        >
-          <Square size={ICON.XS} strokeWidth={2} />
-        </button>
-      )}
       {item.usage && traceStatus === "executed" && (
         <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
       )}

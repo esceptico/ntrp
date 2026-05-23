@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from ntrp.agent import (
 )
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
+from ntrp.context.prompts import RESEARCH_AGENT_COMPACTION_CONTEXT
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
 from ntrp.core.compactor import Compactor
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
@@ -38,6 +40,7 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import get_model
 from ntrp.logging import get_logger
+from ntrp.tools.core.base import Tool
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
 from ntrp.tools.executor import ToolExecutor
@@ -71,6 +74,25 @@ _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, Reasoning
 _SALVAGE_TOOL_CHAR_LIMIT = 4000
 _SALVAGE_MAX_TOKENS = 2000
 _SALVAGE_TAIL_RESULTS = 20
+
+
+def _compactor_with_prompt_context(
+    compactor: Compactor | None,
+    prompt_context: str | None,
+    *,
+    include_tool_messages: bool = False,
+) -> Compactor | None:
+    if prompt_context != "research":
+        return compactor
+    if compactor is None:
+        return None
+    with_prompt_context = getattr(compactor, "with_prompt_context", None)
+    if callable(with_prompt_context):
+        return with_prompt_context(
+            RESEARCH_AGENT_COMPACTION_CONTEXT,
+            include_tool_messages=include_tool_messages,
+        )
+    return compactor
 
 
 def get_response_cost(response) -> float:
@@ -212,8 +234,18 @@ def create_spawn_fn(
         silent: bool = False,
         background: bool = False,
         kind: str = "sub-agent",
+        extra_tools: Mapping[str, Tool] | None = None,
+        compaction_prompt_context: str | None = None,
+        include_tool_messages_in_compaction: bool = False,
+        research_scope_id: str | None = None,
     ) -> str:
-        filtered_tools = tools or executor.get_tools()
+        child_executor_source = executor
+        child_registry = executor.registry
+        if extra_tools:
+            child_registry = executor.registry.copy_with(dict(extra_tools))
+            child_executor_source = executor.with_registry(child_registry)
+
+        filtered_tools = tools or child_executor_source.get_tools()
         allowed_tool_names = tool_schema_names(filtered_tools)
         child_state = _create_session_state(calling_ctx, isolation)
         child_model = model_override or model
@@ -238,6 +270,7 @@ def create_spawn_fn(
             deferred_tools_enabled=calling_ctx.run.deferred_tools_enabled,
             loaded_tools=set(calling_ctx.run.loaded_tools),
             allowed_tool_names=allowed_tool_names,
+            research_scope_id=research_scope_id or calling_ctx.run.research_scope_id,
         )
 
         if background or silent:
@@ -247,7 +280,7 @@ def create_spawn_fn(
 
         child_ctx = ToolContext(
             session_state=child_state,
-            registry=executor.registry,
+            registry=child_registry,
             run=child_run,
             io=bg_io,
             services=calling_ctx.services,
@@ -256,7 +289,7 @@ def create_spawn_fn(
             run_registry=calling_ctx.run_registry,
         )
         child_ctx.spawn_fn = create_spawn_fn(
-            executor=executor,
+            executor=child_executor_source,
             model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
@@ -271,10 +304,15 @@ def create_spawn_fn(
             budget=child_run.budget,
         )
 
-        child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
+        child_executor = NtrpToolExecutor(
+            child_executor_source,
+            child_ctx,
+            ledger=calling_ctx.ledger,
+            skip_duplicate_reads=True,
+        )
         child_system_prompt = append_deferred_tools_prompt(
             system_prompt,
-            executor.registry,
+            child_registry,
             frozenset(child_ctx.services),
             filtered_tools,
             enabled=child_run.deferred_tools_enabled,
@@ -292,7 +330,7 @@ def create_spawn_fn(
         # underlying failure in the first place.
         middlewares: tuple = (
             DeferredToolsModelRequestMiddleware(
-                registry=executor.registry,
+                registry=child_registry,
                 run=child_run,
                 get_services=lambda: child_ctx.services,
             ),
@@ -300,11 +338,16 @@ def create_spawn_fn(
         )
         compaction_emit = parent_emit if parent_id and not background else None
         compaction_scope = "agent" if compaction_emit else "run"
-        if compactor is not None:
+        agent_compactor = _compactor_with_prompt_context(
+            compactor,
+            compaction_prompt_context,
+            include_tool_messages=include_tool_messages_in_compaction,
+        )
+        if agent_compactor is not None:
             middlewares = (
                 *middlewares,
                 CompactionModelRequestMiddleware(
-                    compactor=compactor,
+                    compactor=agent_compactor,
                     on_compact=child_run.loaded_tools.clear,
                     get_rehydration_state=child_ctx.to_rehydration_state,
                     apply_rehydration_state=child_run.apply_rehydration_state,
@@ -313,6 +356,7 @@ def create_spawn_fn(
                     scope=compaction_scope,
                     parent_tool_call_id=parent_id if compaction_emit else None,
                 ),
+                ToolResultContextBudgetMiddleware(),
             )
 
         sub_tracker = UsageTracker()

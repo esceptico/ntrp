@@ -59,6 +59,7 @@ class RunContext:
     allowed_tool_names: set[str] | None = None
     loop_task_id: str | None = None
     active_plan_ref: str | None = None
+    research_scope_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.budget is None:

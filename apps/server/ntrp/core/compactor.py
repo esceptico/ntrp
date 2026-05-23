@@ -100,10 +100,22 @@ def _extract_prior_summary(messages: list, start: int, end: int) -> str | None:
     return None
 
 
-def _build_conversation_text(messages: list, start: int, end: int, *, skip_handoff: bool = False) -> str:
+def _build_conversation_text(
+    messages: list,
+    start: int,
+    end: int,
+    *,
+    skip_handoff: bool = False,
+    include_tool_messages: bool = False,
+) -> str:
     text_parts = []
     for msg in messages[start:end]:
         if (role := msg["role"]) == Role.TOOL:
+            if include_tool_messages:
+                tool_name = msg.get("name") or msg.get("tool_name") or "tool"
+                content = blocks_to_text(msg.get("content", ""))
+                if content:
+                    text_parts.append(f"tool {tool_name}: {content}")
             continue
         content = blocks_to_text(msg["content"])
         if not content:
@@ -117,9 +129,17 @@ def _build_conversation_text(messages: list, start: int, end: int, *, skip_hando
     return "\n\n".join(text_parts)
 
 
-def _build_summarize_request(conversation_text: str, model: str, summary_max_tokens: int = SUMMARY_MAX_TOKENS) -> dict:
+def _build_summarize_request(
+    conversation_text: str,
+    model: str,
+    summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+    *,
+    prompt_context: str | None = None,
+) -> dict:
     word_budget = int(summary_max_tokens * 0.75)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.render(budget=word_budget)
+    if prompt_context:
+        prompt = f"{prompt}\n\n{prompt_context}"
     return {
         "model": model,
         "messages": [
@@ -136,9 +156,13 @@ def _build_merge_request(
     new_conversation: str,
     model: str,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+    *,
+    prompt_context: str | None = None,
 ) -> dict:
     word_budget = int(summary_max_tokens * 0.75)
     prompt = MERGE_SUMMARY_PROMPT_TEMPLATE.render(budget=word_budget)
+    if prompt_context:
+        prompt = f"{prompt}\n\n{prompt_context}"
     user_content = f"## Existing Summary:\n{existing_summary}\n\n## New Conversation:\n{new_conversation}"
     return {
         "model": model,
@@ -157,16 +181,41 @@ async def compact_summarize(
     end: int,
     model: str,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+    *,
+    prompt_context: str | None = None,
+    include_tool_messages: bool = False,
 ) -> str:
     prior_summary = _extract_prior_summary(messages, start, end)
 
     if prior_summary:
         new_start = start + 1
-        new_conversation = _build_conversation_text(messages, new_start, end, skip_handoff=True)
-        request = _build_merge_request(prior_summary, new_conversation, model, summary_max_tokens)
+        new_conversation = _build_conversation_text(
+            messages,
+            new_start,
+            end,
+            skip_handoff=True,
+            include_tool_messages=include_tool_messages,
+        )
+        request = _build_merge_request(
+            prior_summary,
+            new_conversation,
+            model,
+            summary_max_tokens,
+            prompt_context=prompt_context,
+        )
     else:
-        conversation_text = _build_conversation_text(messages, start, end)
-        request = _build_summarize_request(conversation_text, model, summary_max_tokens)
+        conversation_text = _build_conversation_text(
+            messages,
+            start,
+            end,
+            include_tool_messages=include_tool_messages,
+        )
+        request = _build_summarize_request(
+            conversation_text,
+            model,
+            summary_max_tokens,
+            prompt_context=prompt_context,
+        )
 
     response = await _complete_compaction_request(model, request)
     content = response.choices[0].message.content
@@ -267,13 +316,23 @@ async def compact_messages(
     keep_ratio: float = COMPRESSION_KEEP_RATIO,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
     rehydration_state: dict | None = None,
+    prompt_context: str | None = None,
+    include_tool_messages: bool = False,
 ) -> list[dict] | None:
     """Compact messages by summarizing old ones. Returns new messages or None if nothing to compact."""
     r = compactable_range(messages, keep_ratio=keep_ratio)
     if r is None:
         return None
     start, end = r
-    summary = await compact_summarize(messages, start, end, model, summary_max_tokens)
+    summary = await compact_summarize(
+        messages,
+        start,
+        end,
+        model,
+        summary_max_tokens,
+        prompt_context=prompt_context,
+        include_tool_messages=include_tool_messages,
+    )
     return _build_compacted_messages(messages, start, end, summary, rehydration_state=rehydration_state)
 
 
@@ -284,11 +343,30 @@ class SummaryCompactor:
         max_messages: int = MAX_MESSAGES,
         keep_ratio: float = COMPRESSION_KEEP_RATIO,
         summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+        prompt_context: str | None = None,
+        include_tool_messages: bool = False,
     ):
         self.threshold = threshold
         self.max_messages = max_messages
         self.keep_ratio = keep_ratio
         self.summary_max_tokens = summary_max_tokens
+        self.prompt_context = prompt_context
+        self.include_tool_messages = include_tool_messages
+
+    def with_prompt_context(
+        self,
+        prompt_context: str,
+        *,
+        include_tool_messages: bool = False,
+    ) -> "SummaryCompactor":
+        return SummaryCompactor(
+            threshold=self.threshold,
+            max_messages=self.max_messages,
+            keep_ratio=self.keep_ratio,
+            summary_max_tokens=self.summary_max_tokens,
+            prompt_context=prompt_context,
+            include_tool_messages=include_tool_messages,
+        )
 
     def should_compact(
         self,
@@ -323,4 +401,6 @@ class SummaryCompactor:
             keep_ratio=self.keep_ratio,
             summary_max_tokens=self.summary_max_tokens,
             rehydration_state=rehydration_state,
+            prompt_context=self.prompt_context,
+            include_tool_messages=self.include_tool_messages,
         )

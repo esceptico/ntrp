@@ -42,6 +42,7 @@ test("activity header shows active calls separately from total calls", () => {
   expect(html).toContain("calls");
   expect(html).toContain("1");
   expect(html).toContain("active");
+  expect(html).toContain("inline-flex items-center gap-1 leading-none");
 });
 
 test("running agent row renders a stop control", () => {
@@ -64,6 +65,9 @@ test("running agent row renders a stop control", () => {
   );
 
   expect(html).toContain("Stop subagent");
+  expect(html).toContain("group-hover/agent:opacity-0");
+  expect(html).toContain("group-hover/agent:opacity-100");
+  expect(html).toContain("group-hover/stop:opacity-100");
 });
 
 test("generic ongoing agent row waits for lifecycle ownership before stop control", () => {
