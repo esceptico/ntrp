@@ -411,7 +411,10 @@ export function applyChatEventToTranscript(
   return { state: context.state, effect };
 }
 
-export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMessage[] {
+export function rebuildTranscriptFromHistory(
+  messages: HistoryMessage[],
+  options: { activeRunId?: string | null; isNewestPage?: boolean } = {},
+): UiMessage[] {
   const resultsById = new Map<string, string>();
   for (const msg of messages) {
     if (msg.role === "tool" && msg.tool_call_id) {
@@ -548,7 +551,39 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
     }
   });
 
+  if (options.activeRunId && (options.isNewestPage ?? true)) {
+    reopenNewestHistoryActivity(items);
+  }
+
   return items;
+}
+
+function reopenNewestHistoryActivity(items: UiMessage[]): void {
+  const item = newestHistoryActivity(items);
+  if (!item?.activity) return;
+  item.activity = {
+    ...item.activity,
+    done: false,
+    label: "Calling",
+    items: item.activity.items.map((activityItem) =>
+      activityItem.result == null
+        ? { ...activityItem, status: "ongoing" as const }
+        : activityItem,
+    ),
+  };
+}
+
+export function newestHistoryActivityId(items: UiMessage[]): string | null {
+  return newestHistoryActivity(items)?.id ?? null;
+}
+
+function newestHistoryActivity(items: UiMessage[]): UiMessage | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (isActivityContinuationMessage(item)) continue;
+    return item.role === "activity" && item.activity ? item : null;
+  }
+  return null;
 }
 
 function todoStateFromArgs(argsJson: string): TodoListState | null {

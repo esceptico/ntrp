@@ -475,7 +475,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
   if (!message?.activity || message.activity.items.length === 0) return null;
-  const { items, label, done } = message.activity;
+  const { items, done } = message.activity;
 
   // While the run is producing tools, show the rolling tail (last 3).
   // After it's done, switch to a static list with all items and let collapse
@@ -499,7 +499,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
     >
       <ActivityTrace>
         <ActivityHeader
-          label={label}
+          done={done}
           count={totalCount}
           activeCount={activeCount}
           onToggle={done ? () => setExpanded((v) => !v) : undefined}

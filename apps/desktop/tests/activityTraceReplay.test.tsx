@@ -34,7 +34,7 @@ test("replayed rolling activity rows keep the motion row path disabled", () => {
 
 test("activity header shows active calls separately from total calls", () => {
   const html = renderToStaticMarkup(
-    <ActivityHeader label="Calling" count={816} activeCount={1} />,
+    <ActivityHeader done={false} count={816} activeCount={1} />,
   );
 
   expect(html).toContain("Running");
@@ -42,7 +42,15 @@ test("activity header shows active calls separately from total calls", () => {
   expect(html).toContain("calls");
   expect(html).toContain("1");
   expect(html).toContain("active");
-  expect(html).toContain("inline-flex items-center gap-1 leading-none");
+});
+
+test("activity header keeps calling state while active run waits between tools", () => {
+  const html = renderToStaticMarkup(
+    <ActivityHeader done={false} count={3} activeCount={0} />,
+  );
+
+  expect(html).toContain("Calling");
+  expect(html).not.toContain("Executed");
 });
 
 test("running agent row renders a stop control", () => {

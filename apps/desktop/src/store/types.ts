@@ -186,9 +186,11 @@ export interface ActivityItem {
   cost?: number;
 }
 
+export type ActivityLabel = "Calling" | "Called";
+
 export interface ActivityState {
   items: ActivityItem[];
-  label: string;
+  label: ActivityLabel;
   done: boolean;
 }
 
@@ -420,7 +422,7 @@ export interface Actions {
   setActiveActivityId: (id: string | null) => void;
   appendActivityItem: (activityId: string, item: ActivityItem) => void;
   mergeActivityItem: (itemId: string, patch: Partial<ActivityItem>) => boolean;
-  finalizeActivity: (activityId: string, label?: string) => void;
+  finalizeActivity: (activityId: string, label?: ActivityLabel) => void;
   setSkipApprovals: (skip: boolean) => void;
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
   addPendingApproval: (approval: ApprovalState) => void;

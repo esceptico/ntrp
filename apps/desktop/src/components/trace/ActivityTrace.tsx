@@ -23,20 +23,20 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
 }
 
 export function ActivityHeader({
-  label,
+  done,
   count,
   activeCount = 0,
   onToggle,
   expanded,
 }: {
-  label: string;
+  done: boolean;
   count: number;
   activeCount?: number;
   onToggle?: () => void;
   expanded?: boolean;
 }) {
   const word = count === 1 ? "call" : "calls";
-  const heading = activeCount > 0 ? "Running" : label === "Called" ? "Executed" : "Executed";
+  const heading = activeCount > 0 ? "Running" : done ? "Executed" : "Calling";
   const interactive = !!onToggle;
   const streamReplaying = useStore((s) => s.streamReplaying);
 
@@ -55,16 +55,15 @@ export function ActivityHeader({
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate
           independently instead of the whole string snapping. */}
-      <span className="mr-1.5">
+      <span className="mr-1.5 inline-flex h-full items-center leading-none">
         <RollingToken value={heading} motionDisabled={streamReplaying} />
       </span>
-      <span>
+      <span className="inline-flex h-full items-center gap-1 leading-none">
         <RollingToken value={String(count)} mono motionDisabled={streamReplaying} />
-        {" "}
         <RollingToken value={word} motionDisabled={streamReplaying} />
       </span>
       {activeCount > 0 && (
-        <span className="inline-flex items-center gap-1 leading-none">
+        <span className="inline-flex h-full items-center gap-1.5 leading-none">
           <RollingToken value={String(activeCount)} mono motionDisabled={streamReplaying} />
           <span>active</span>
         </span>

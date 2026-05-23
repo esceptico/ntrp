@@ -210,7 +210,7 @@ test("preserves persisted switch-back order when assistant text is between tool 
   expect(layout.afterWorkIds).toEqual(["progress-assistant", "progress-assistant-activity"]);
 });
 
-test("keeps completed trailing history activity called for active runs", () => {
+test("reopens newest trailing history activity for active runs", () => {
   const messages: HistoryMessage[] = [
     { role: "user", content: "keep checking", id: "user-1" },
     {
@@ -231,7 +231,7 @@ test("keeps completed trailing history activity called for active runs", () => {
   const items = historyMessagesToUi(messages, "run-active");
   const activity = items.find((item) => item.role === "activity");
 
-  expect(activity?.activity).toMatchObject({ done: true, label: "Called" });
+  expect(activity?.activity).toMatchObject({ done: false, label: "Calling" });
 });
 
 test("does not reopen non-newest history page activity for active runs", () => {
@@ -255,7 +255,29 @@ test("does not reopen non-newest history page activity for active runs", () => {
   });
 });
 
-test("keeps completed trailing history activity called across hidden meta user messages", () => {
+test("does not reopen active history activity before visible final assistant", () => {
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "older work", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tool-1",
+      tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"date"}' }],
+    },
+    { role: "tool", content: "ok", id: "tool-result-1", tool_call_id: "tool-1" },
+    { role: "assistant", content: "done", id: "assistant-final" },
+  ];
+
+  const items = historyMessagesToUi(messages, "run-active");
+  const activity = items.find((item) => item.role === "activity");
+
+  expect(activity?.activity).toMatchObject({
+    done: true,
+    label: "Called",
+  });
+});
+
+test("reopens newest trailing history activity across hidden meta user messages", () => {
   const messages: HistoryMessage[] = [
     { role: "user", content: "keep checking", id: "user-1" },
     {
@@ -271,5 +293,5 @@ test("keeps completed trailing history activity called across hidden meta user m
   const items = historyMessagesToUi(messages, "run-active");
   const activity = items.find((item) => item.role === "activity");
 
-  expect(activity?.activity).toMatchObject({ done: true, label: "Called" });
+  expect(activity?.activity).toMatchObject({ done: false, label: "Calling" });
 });

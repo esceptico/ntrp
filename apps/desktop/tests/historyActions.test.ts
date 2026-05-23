@@ -99,3 +99,64 @@ test("loadHistory reapplies local Auto to active runtime and hides stale approva
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
 });
+
+test("loadHistory keeps active run tail activity open while a tool is being called", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              { role: "user", content: "inspect", id: "user-1" },
+              {
+                role: "assistant",
+                content: "",
+                id: "assistant-tool-1",
+                tool_calls: [{ id: "tool-1", name: "ReadFile", arguments: '{"path":"a"}' }],
+              },
+            ],
+            active_run_id: "run-active",
+            runtime: {
+              session_id: "tool-active-session",
+              latest_event_seq: 4,
+              checkpoint_seq: 4,
+              active_run: { run_id: "run-active", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "tool-active-session",
+    });
+
+    await loadHistory("tool-active-session");
+
+    const state = getState();
+    const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+    expect(state.sessionView.historyLoadedFor).toBe("tool-active-session");
+    expect(state.activeActivityId).toBe(activityId);
+    expect(state.messages.get(activityId!)?.activity).toMatchObject({
+      done: false,
+      label: "Calling",
+      items: [{ id: "tool-1", status: "ongoing" }],
+    });
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});

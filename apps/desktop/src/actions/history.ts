@@ -5,7 +5,6 @@ import {
   type SessionRuntimeSnapshot,
 } from "../api";
 import { getState, setState, type UiMessage } from "../store";
-import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { clearReplayGapBlockForSession, setEventCursorForSession } from "../store/chat-stream";
 import {
   isCurrentHistoryReplaceRequestVersion,
@@ -14,7 +13,11 @@ import {
   reduceHistoryLoadStarted,
 } from "../store/session-view";
 import { reduceRunCompleted, reduceRunStarted } from "../store/run-lifecycle";
-import { isTodoToolName, rebuildTranscriptFromHistory } from "../store/transcript-projection";
+import {
+  isTodoToolName,
+  newestHistoryActivityId,
+  rebuildTranscriptFromHistory,
+} from "../store/transcript-projection";
 import { normalizeActivityGroups } from "../store/session-cache";
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
@@ -58,8 +61,8 @@ export function historyMessagesToUi(
   activeRunId: string | null,
   options: { isNewestPage?: boolean } = {},
 ): UiMessage[] {
-  const items = rebuildTranscriptFromHistory(messages);
   const isNewestPage = options.isNewestPage ?? true;
+  const items = rebuildTranscriptFromHistory(messages, { activeRunId, isNewestPage });
 
   // If the server has an active run for this session, the latest user
   // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
@@ -76,15 +79,6 @@ export function historyMessagesToUi(
   }
 
   return items;
-}
-
-function activeHistoryActivityId(items: UiMessage[]): string | null {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (isActivityContinuationMessage(item)) continue;
-    return item.role === "activity" && item.activity ? item.id : null;
-  }
-  return null;
 }
 
 function normalizeHistoryItems(
@@ -233,7 +227,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   const { messages, active_run_id, runtime, page, usage } = history;
   const isNewestPage = mode !== "prepend" && page?.has_more_after !== true;
   const rawItems = historyMessagesToUi(messages, active_run_id, { isNewestPage });
-  const rawActiveActivityId = active_run_id ? activeHistoryActivityId(rawItems) : null;
+  const rawActiveActivityId = active_run_id ? newestHistoryActivityId(rawItems) : null;
   const { items, activeActivityId } = normalizeHistoryItems(rawItems, rawActiveActivityId);
   if (mode === "prepend") {
     s.prependHistory(items, page);

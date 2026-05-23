@@ -536,6 +536,8 @@ test("active history hydrates old calls as executed and new tail as ongoing", as
                   { id: "old-tool-2", name: "SearchText", arguments: "{}" },
                 ],
               },
+              { role: "tool", content: "ok", id: "old-tool-result-1", tool_call_id: "old-tool-1" },
+              { role: "tool", content: "ok", id: "old-tool-result-2", tool_call_id: "old-tool-2" },
             ],
             active_run_id: "run-active",
             runtime: {
@@ -564,6 +566,10 @@ test("active history hydrates old calls as executed and new tail as ongoing", as
 
     await loadHistory("active-trace-status-session");
     const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+    expect(getState().messages.get(activityId!)?.activity).toMatchObject({
+      done: false,
+      label: "Calling",
+    });
     expect(getState().messages.get(activityId!)?.activity?.items.map((item) => item.status)).toEqual([
       "executed",
       "executed",
@@ -1786,8 +1792,8 @@ test("loadHistory lets replayed tools continue the active trailing history group
     await loadHistory("active-history-session");
     const loadedActivityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
     expect(getState().messages.get(loadedActivityId!)?.activity).toMatchObject({
-      done: true,
-      label: "Called",
+      done: false,
+      label: "Calling",
     });
     handleServerEvent({
       type: "TOOL_CALL_START",
@@ -1865,8 +1871,8 @@ test("loadHistory lets replayed tools continue across trailing hidden meta user 
     await loadHistory("active-hidden-meta-session");
     const loadedActivityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
     expect(getState().messages.get(loadedActivityId!)?.activity).toMatchObject({
-      done: true,
-      label: "Called",
+      done: false,
+      label: "Calling",
     });
     handleServerEvent({
       type: "TOOL_CALL_START",
