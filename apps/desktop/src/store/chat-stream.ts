@@ -448,6 +448,16 @@ function clearReplayMutationDomMarker(): void {
 function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
   const s = getState();
   const ts = event.timestamp ?? Date.now();
+  const applyTranscriptEvent = (transcriptEvent: ServerEvent): ServerEventEffect | undefined => {
+    const result = applyChatEventToTranscript(chatStreamState, transcriptEvent, {
+      getProjectionState: () => chatStreamState,
+      setProjectionState: (projection) => {
+        updateChatStreamState({ ...chatStreamState, ...projection });
+      },
+    });
+    updateChatStreamState({ ...chatStreamState, ...result.state });
+    return result.effect;
+  };
 
   switch (event.type) {
     case "stream_reset": {
@@ -490,9 +500,11 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
       });
       return;
     case "compaction_started":
+      if (event.scope === "agent") return applyTranscriptEvent(event);
       s.setCompacting(true);
       return;
     case "compaction_finished":
+      if (event.scope === "agent") return applyTranscriptEvent(event);
       s.setCompacting(false);
       s.setLastCompaction({
         before: event.messages_before,
@@ -506,16 +518,8 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
     case "goal_cleared":
       s.setGoal(event.session_id, null);
       return;
-    default: {
-      const result = applyChatEventToTranscript(chatStreamState, event, {
-        getProjectionState: () => chatStreamState,
-        setProjectionState: (projection) => {
-          updateChatStreamState({ ...chatStreamState, ...projection });
-        },
-      });
-      updateChatStreamState({ ...chatStreamState, ...result.state });
-      return result.effect;
-    }
+    default:
+      return applyTranscriptEvent(event);
   }
 }
 

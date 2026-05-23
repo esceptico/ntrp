@@ -377,6 +377,24 @@ export function applyChatEventToTranscript(
       break;
     }
 
+    case "compaction_started": {
+      if (!event.parent_tool_call_id) break;
+      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id], {
+        status: "ongoing",
+        taskStatus: "running",
+        progress: "compacting",
+      });
+      break;
+    }
+
+    case "compaction_finished": {
+      if (!event.parent_tool_call_id) break;
+      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id], {
+        progress: `compacted ${event.messages_before} -> ${event.messages_after} messages`,
+      });
+      break;
+    }
+
     default:
       break;
   }
@@ -739,7 +757,12 @@ function appendActivityItemImmediately(
   suppressEntryMotion?: boolean,
 ): void {
   const state = getState();
-  if (state.mergeActivityItem(item.id, activityPatchFromItem(item))) {
+  const pendingPatch = takePendingResultPatch(context, item.id);
+  const nextItem = pendingPatch ? { ...item, ...pendingPatch } : item;
+  const mergePatch = pendingPatch
+    ? { ...activityPatchFromItem(nextItem), ...pendingPatch }
+    : activityPatchFromItem(nextItem);
+  if (state.mergeActivityItem(nextItem.id, mergePatch)) {
     return;
   }
 
@@ -751,7 +774,7 @@ function appendActivityItemImmediately(
         id: newId,
         role: "activity",
         content: "",
-        activity: { items: [item], label: "Calling", done: false },
+        activity: { items: [nextItem], label: "Calling", done: false },
         suppressEntryMotion,
       },
       activityInsertAnchor(context),
@@ -762,7 +785,7 @@ function appendActivityItemImmediately(
   }
 
   if (activityId !== state.activeActivityId) state.setActiveActivityId(activityId);
-  state.appendActivityItem(activityId, item);
+  state.appendActivityItem(activityId, nextItem);
   context.update({ ...context.state, nextItemRenderAt: Date.now() });
 }
 

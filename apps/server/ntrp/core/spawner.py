@@ -277,6 +277,8 @@ def create_spawn_fn(
             ),
             ToolResultContextBudgetMiddleware(),
         )
+        compaction_emit = parent_emit if parent_id and not background else None
+        compaction_scope = "agent" if compaction_emit else "run"
         if compactor is not None:
             middlewares = (
                 *middlewares,
@@ -285,8 +287,10 @@ def create_spawn_fn(
                     on_compact=child_run.loaded_tools.clear,
                     get_rehydration_state=child_ctx.to_rehydration_state,
                     apply_rehydration_state=child_run.apply_rehydration_state,
-                    emit=None,
+                    emit=compaction_emit,
                     run_id=calling_ctx.run.run_id,
+                    scope=compaction_scope,
+                    parent_tool_call_id=parent_id if compaction_emit else None,
                 ),
             )
 

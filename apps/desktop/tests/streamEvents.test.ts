@@ -588,6 +588,67 @@ test("active history hydrates old calls as executed and new tail as ongoing", as
   }
 });
 
+test("subagent compaction updates the agent row without global compaction UI", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+    description: "research(task='trace replay')",
+  });
+
+  handleServerEvent({
+    type: "compaction_started",
+    run_id: "run-1",
+    scope: "agent",
+    parent_tool_call_id: "call-research",
+  });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  const item = getState().messages.get(activityId!)?.activity?.items[0];
+  expect(getState().compacting).toBe(false);
+  expect(item?.progress).toBe("compacting");
+  expect(item?.status).toBe("ongoing");
+
+  handleServerEvent({
+    type: "compaction_finished",
+    run_id: "run-1",
+    scope: "agent",
+    parent_tool_call_id: "call-research",
+    messages_before: 42,
+    messages_after: 9,
+  });
+
+  const updated = getState().messages.get(activityId!)?.activity?.items[0];
+  expect(getState().compacting).toBe(false);
+  expect(updated?.progress).toBe("compacted 42 -> 9 messages");
+});
+
+test("subagent compaction buffers until the agent row exists", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({
+    type: "compaction_started",
+    run_id: "run-1",
+    scope: "agent",
+    parent_tool_call_id: "call-research",
+  });
+
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+    description: "research(task='trace replay')",
+  });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  const item = getState().messages.get(activityId!)?.activity?.items[0];
+  expect(getState().compacting).toBe(false);
+  expect(item?.progress).toBe("compacting");
+  expect(item?.status).toBe("ongoing");
+});
+
 test("live deltas render during active stream", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-live", session_id: "session-live", timestamp: 1 });
   handleServerEvent({

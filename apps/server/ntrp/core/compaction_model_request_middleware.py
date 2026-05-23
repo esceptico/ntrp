@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from typing import Any
+from typing import Any, Literal
 
 from ntrp.agent.model_request import ModelRequest, ModelRequestNext
 from ntrp.core.compactor import Compactor
@@ -17,6 +17,8 @@ class CompactionModelRequestMiddleware:
         emit: Callable[[Any], Awaitable[None]] | None = None,
         run_id: str = "",
         initial_input_tokens: int | None = None,
+        scope: Literal["run", "agent"] = "run",
+        parent_tool_call_id: str | None = None,
     ):
         self.compactor = compactor
         self.on_compact = on_compact
@@ -25,6 +27,24 @@ class CompactionModelRequestMiddleware:
         self.emit = emit
         self.run_id = run_id
         self.initial_input_tokens = initial_input_tokens
+        self.scope = scope
+        self.parent_tool_call_id = parent_tool_call_id
+
+    def _started_event(self) -> CompactionStartedEvent:
+        return CompactionStartedEvent(
+            run_id=self.run_id,
+            scope=self.scope,
+            parent_tool_call_id=self.parent_tool_call_id,
+        )
+
+    def _finished_event(self, before: int, after: int) -> CompactionFinishedEvent:
+        return CompactionFinishedEvent(
+            run_id=self.run_id,
+            messages_before=before,
+            messages_after=after,
+            scope=self.scope,
+            parent_tool_call_id=self.parent_tool_call_id,
+        )
 
     async def __call__(self, request: ModelRequest, next_request: ModelRequestNext) -> ModelRequest:
         prepared = await next_request(request)
@@ -42,7 +62,7 @@ class CompactionModelRequestMiddleware:
 
         emitted_started = False
         if should and self.emit:
-            await self.emit(CompactionStartedEvent(run_id=self.run_id))
+            await self.emit(self._started_event())
             emitted_started = True
 
         rehydration_state = self.get_rehydration_state() if self.get_rehydration_state else None
@@ -60,35 +80,17 @@ class CompactionModelRequestMiddleware:
         except Exception:
             if emitted_started and self.emit:
                 same = len(prepared.messages)
-                await self.emit(
-                    CompactionFinishedEvent(
-                        run_id=self.run_id,
-                        messages_before=same,
-                        messages_after=same,
-                    )
-                )
+                await self.emit(self._finished_event(same, same))
             raise
 
         if compacted is None:
             if emitted_started and self.emit:
                 same = len(prepared.messages)
-                await self.emit(
-                    CompactionFinishedEvent(
-                        run_id=self.run_id,
-                        messages_before=same,
-                        messages_after=same,
-                    )
-                )
+                await self.emit(self._finished_event(same, same))
             return prepared
 
         if self.emit:
-            await self.emit(
-                CompactionFinishedEvent(
-                    run_id=self.run_id,
-                    messages_before=len(prepared.messages),
-                    messages_after=len(compacted),
-                )
-            )
+            await self.emit(self._finished_event(len(prepared.messages), len(compacted)))
 
         if self.on_compact:
             self.on_compact()

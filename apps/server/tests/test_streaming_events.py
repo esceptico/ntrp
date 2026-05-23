@@ -21,6 +21,8 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
     AutomationProgressEvent,
+    CompactionFinishedEvent,
+    CompactionStartedEvent,
     KeepaliveEvent,
     ReasoningMessageContentEvent,
     TaskFinishedEvent,
@@ -97,6 +99,49 @@ def test_keepalive_is_typed_data_event_with_latest_seq():
 
     event = KeepaliveEvent(session_id="sess-1", latest_seq=42)
     assert json.loads(event.to_sse()["data"])["latest_seq"] == 42
+
+
+def test_compaction_events_can_target_subagent_trace():
+    start = CompactionStartedEvent(
+        run_id="run-1",
+        scope="agent",
+        parent_tool_call_id="call-research",
+    )
+    done = CompactionFinishedEvent(
+        run_id="run-1",
+        messages_before=42,
+        messages_after=9,
+        scope="agent",
+        parent_tool_call_id="call-research",
+    )
+
+    start_payload = json.loads(start.to_sse()["data"])
+    done_payload = json.loads(done.to_sse()["data"])
+
+    assert start_payload["type"] == "compaction_started"
+    assert start_payload["scope"] == "agent"
+    assert start_payload["parent_tool_call_id"] == "call-research"
+    assert done_payload["type"] == "compaction_finished"
+    assert done_payload["scope"] == "agent"
+    assert done_payload["parent_tool_call_id"] == "call-research"
+    assert done_payload["messages_before"] == 42
+    assert done_payload["messages_after"] == 9
+
+
+def test_compaction_agent_scope_requires_parent_tool_call():
+    with pytest.raises(ValueError, match="agent compaction requires parent_tool_call_id"):
+        CompactionStartedEvent(run_id="run-1", scope="agent")
+
+
+def test_compaction_run_scope_rejects_parent_tool_call():
+    with pytest.raises(ValueError, match="run compaction cannot include parent_tool_call_id"):
+        CompactionFinishedEvent(
+            run_id="run-1",
+            messages_before=42,
+            messages_after=9,
+            scope="run",
+            parent_tool_call_id="call-research",
+        )
 
 
 def test_task_lifecycle_events_include_parent_tool_call():

@@ -23,6 +23,7 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from typing import Literal
 from uuid import uuid4
 
 from ntrp.agent import (
@@ -406,6 +407,11 @@ class AutomationFinishedEvent(SSEEvent):
 class CompactionStartedEvent(SSEEvent):
     type: EventType = field(default=EventType.COMPACTION_STARTED, init=False)
     run_id: str = ""
+    scope: Literal["run", "agent"] = "run"
+    parent_tool_call_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _validate_compaction_owner(self.scope, self.parent_tool_call_id)
 
 
 @dataclass(frozen=True)
@@ -414,6 +420,20 @@ class CompactionFinishedEvent(SSEEvent):
     run_id: str = ""
     messages_before: int = 0
     messages_after: int = 0
+    scope: Literal["run", "agent"] = "run"
+    parent_tool_call_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _validate_compaction_owner(self.scope, self.parent_tool_call_id)
+
+
+def _validate_compaction_owner(scope: str, parent_tool_call_id: str | None) -> None:
+    if scope not in {"run", "agent"}:
+        raise ValueError("compaction scope must be 'run' or 'agent'")
+    if scope == "agent" and not parent_tool_call_id:
+        raise ValueError("agent compaction requires parent_tool_call_id")
+    if scope == "run" and parent_tool_call_id is not None:
+        raise ValueError("run compaction cannot include parent_tool_call_id")
 
 
 @dataclass(frozen=True)

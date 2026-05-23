@@ -186,6 +186,9 @@ export interface ApiBridgeResponse {
 
 /** AG-UI-shaped event protocol. Every event carries a `timestamp` (Unix ms). */
 type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: string; replay?: boolean };
+type CompactionOwner =
+  | { scope?: "run"; parent_tool_call_id?: null }
+  | { scope: "agent"; parent_tool_call_id: string };
 
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
@@ -237,8 +240,8 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
   | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status?: string; summary?: string; depth?: number }
   | { type: "task_finished"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
-  | { type: "compaction_started"; run_id: string }
-  | { type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number }
+  | ({ type: "compaction_started"; run_id: string } & CompactionOwner)
+  | ({ type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number } & CompactionOwner)
   | { type: "message_ingested"; client_id: string; run_id: string }
   | { type: "goal_updated"; session_id: string; goal: SessionGoal }
   | { type: "goal_cleared"; session_id: string }

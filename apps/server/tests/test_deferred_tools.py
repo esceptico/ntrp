@@ -728,6 +728,35 @@ async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
     assert "slack_search" not in names
     assert [event.type.value for event in emitted] == ["task_started", "task_finished"]
 
+    emitted.clear()
+    captured.clear()
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search slack",
+        system_prompt="child prompt",
+        tools=registry.get_schemas(),
+        parent_id="call-research",
+    )
+
+    assert result.text == "done"
+    prepared = await apply_model_request_middlewares(
+        _request(registry),
+        captured["model_request_middlewares"],
+    )
+    names = {t["function"]["name"] for t in prepared.tools}
+    assert prepared.messages == [{"role": "system", "content": "compacted"}]
+    assert "load_tools" in names
+    assert "slack_search" not in names
+    compaction_events = [event for event in emitted if event.type.value.startswith("compaction_")]
+    assert [event.type.value for event in compaction_events] == [
+        "compaction_started",
+        "compaction_finished",
+    ]
+    assert [event.parent_tool_call_id for event in compaction_events] == [
+        "call-research",
+        "call-research",
+    ]
+
 
 @pytest.mark.asyncio
 async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
