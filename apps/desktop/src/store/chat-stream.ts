@@ -501,10 +501,12 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
       return;
     case "compaction_started":
       if (event.scope === "agent") return applyTranscriptEvent(event);
+      if (event.replay) return;
       s.setCompacting(true);
       return;
     case "compaction_finished":
       if (event.scope === "agent") return applyTranscriptEvent(event);
+      if (event.replay) return;
       s.setCompacting(false);
       return;
     case "goal_updated":

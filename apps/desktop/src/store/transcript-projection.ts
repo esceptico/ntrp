@@ -355,7 +355,7 @@ export function applyChatEventToTranscript(
         progress: event.summary ?? "running",
       };
       if (event.name) patch.displayName = event.name;
-      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
+      mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
     }
 
@@ -369,7 +369,7 @@ export function applyChatEventToTranscript(
         progress: event.summary ?? event.status ?? "running",
       };
       if (event.name) patch.displayName = event.name;
-      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
+      mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
     }
 
@@ -382,7 +382,7 @@ export function applyChatEventToTranscript(
         cancelRequested: false,
       };
       if (event.name) patch.displayName = event.name;
-      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
+      mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
     }
 
@@ -846,6 +846,13 @@ function mergeOrBufferActivityPatch(
     if (state.mergeActivityItem(itemId, patch)) return;
   }
   for (const itemId of uniqueIds) bufferActivityPatch(context, itemId, patch);
+}
+
+function taskActivityItemId(event: {
+  parent_tool_call_id?: string | null;
+  task_id: string;
+}): string {
+  return event.parent_tool_call_id || event.task_id;
 }
 
 function takePendingResultPatch(

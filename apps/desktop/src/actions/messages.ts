@@ -293,19 +293,55 @@ function findActivityItem(itemId: string): ActivityItem | null {
   return null;
 }
 
+function mergeActivityItemForSession(
+  sessionId: string | null,
+  itemId: string,
+  patch: Partial<ActivityItem>,
+): void {
+  setState((state) => {
+    if (state.currentSessionId === sessionId) {
+      return {};
+    }
+    if (!sessionId) return {};
+    const cached = state.sessionCache.get(sessionId);
+    if (!cached) return {};
+    const messages = new Map(cached.messages);
+    let touched = false;
+    for (const [messageId, message] of messages) {
+      if (!message.activity) continue;
+      const itemIndex = message.activity.items.findIndex((item) => item.id === itemId);
+      if (itemIndex < 0) continue;
+      const items = message.activity.items.slice();
+      items[itemIndex] = { ...items[itemIndex], ...patch };
+      messages.set(messageId, { ...message, activity: { ...message.activity, items } });
+      touched = true;
+      break;
+    }
+    if (!touched) return {};
+    const sessionCache = new Map(state.sessionCache);
+    sessionCache.set(sessionId, { ...cached, messages });
+    return { sessionCache };
+  });
+  if (getState().currentSessionId === sessionId) {
+    getState().mergeActivityItem(itemId, patch);
+  }
+}
+
 export async function cancelSubagent(runId: string, toolCallId: string): Promise<void> {
   const s = getState();
+  const sessionId = s.currentSessionId;
   if (!runId) return;
   const previous = findActivityItem(toolCallId);
   s.mergeActivityItem(toolCallId, { cancelRequested: true, progress: "cancelling" });
   try {
     await cancelSubagentApi(s.config, runId, toolCallId);
   } catch (error) {
-    s.mergeActivityItem(toolCallId, {
+    mergeActivityItemForSession(sessionId, toolCallId, {
       cancelRequested: false,
       progress: previous?.progress,
     });
-    s.appendMessage({
+    if (getState().currentSessionId !== sessionId) return;
+    getState().appendMessage({
       id: crypto.randomUUID(),
       role: "error",
       content: error instanceof Error ? error.message : String(error),

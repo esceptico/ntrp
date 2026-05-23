@@ -17,3 +17,5 @@
 - Task 4: added deterministic naming helpers for session and agent labels; conversation names drop request filler, image-only chats become "Image Conversation", and subagent lifecycle events now carry generated names for desktop projection.
 - Task 5: trace rows and agent child lists now render generated agent names without prompt text; the agent inspector still shows the prompt in the Task section.
 - Task 6 verification: focused desktop/server suites, desktop typecheck, desktop build, and `git diff --check` passed. Vite still reports the existing large chunk warning.
+- Final review fixes: replayed run-owned compaction no longer toggles the global compaction spinner, subagent cancel failures no longer mutate the wrong session after navigation, task lifecycle patches buffer only the canonical activity row id, and subagent cancel handling moved behind `SubagentHandle.request_cancel()`.
+- Final review decision: kept deterministic conversation naming because it was an explicit user requirement, despite the thermo review's concern that it broadens chat behavior.

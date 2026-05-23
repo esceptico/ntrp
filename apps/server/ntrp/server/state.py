@@ -27,6 +27,13 @@ class SubagentHandle:
     task: asyncio.Task
     cancel_requested: bool = False
 
+    def request_cancel(self) -> bool:
+        if self.cancel_requested or self.task.done():
+            return False
+        self.cancel_requested = True
+        self.task.cancel()
+        return True
+
 
 @dataclass
 class RunState:
@@ -234,9 +241,7 @@ class RunRegistry:
             run.drain_task.cancel()
             cancel_requested = True
         for handle in run.subagents.values():
-            handle.cancel_requested = True
-            if not handle.task.done():
-                handle.task.cancel()
+            if handle.request_cancel():
                 cancel_requested = True
 
         if is_current:
@@ -247,15 +252,17 @@ class RunRegistry:
 
         return {"found": True, "cancel_requested": cancel_requested}
 
-    def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task) -> None:
+    def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task) -> SubagentHandle | None:
         run = self._runs.get(run_id)
         if not run:
-            return
-        run.subagents[tool_call_id] = SubagentHandle(
+            return None
+        handle = SubagentHandle(
             tool_call_id=tool_call_id,
             task=task,
         )
+        run.subagents[tool_call_id] = handle
         run.updated_at = datetime.now(UTC)
+        return handle
 
     def finish_subagent(self, run_id: str, tool_call_id: str) -> None:
         run = self._runs.get(run_id)
@@ -270,12 +277,10 @@ class RunRegistry:
         handle = run.subagents.get(tool_call_id)
         if not handle:
             return {"found": False, "cancel_requested": False}
-        if handle.cancel_requested or handle.task.done():
-            return {"found": True, "cancel_requested": False}
-        handle.cancel_requested = True
-        handle.task.cancel()
-        run.updated_at = datetime.now(UTC)
-        return {"found": True, "cancel_requested": True}
+        cancel_requested = handle.request_cancel()
+        if cancel_requested:
+            run.updated_at = datetime.now(UTC)
+        return {"found": True, "cancel_requested": cancel_requested}
 
     def finish_cancelled(self, run_id: str) -> bool:
         run = self._runs.get(run_id)
@@ -303,9 +308,7 @@ class RunRegistry:
                 run.drain_task.cancel()
                 tasks.append(run.drain_task)
             for handle in run.subagents.values():
-                handle.cancel_requested = True
-                if not handle.task.done():
-                    handle.task.cancel()
+                if handle.request_cancel():
                     tasks.append(handle.task)
         background_cancelled = 0
         for registry in self._bg_registries.values():

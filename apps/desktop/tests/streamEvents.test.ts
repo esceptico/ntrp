@@ -10,7 +10,7 @@ import {
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.ts";
-import { loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
+import { cancelSubagent, loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
 import {
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
@@ -665,6 +665,26 @@ test("run compaction finish clears spinner without storing replayable toast stat
   expect(getState().compacting).toBe(false);
 });
 
+test("replayed run compaction does not toggle global compaction UI", () => {
+  setState({ currentSessionId: "session-1", compacting: false });
+  handleReplayServerEvent({
+    type: "compaction_started",
+    run_id: "run-1",
+    session_id: "session-1",
+  });
+  expect(getState().compacting).toBe(false);
+
+  setState({ compacting: true });
+  handleReplayServerEvent({
+    type: "compaction_finished",
+    run_id: "run-1",
+    session_id: "session-1",
+    messages_before: 42,
+    messages_after: 9,
+  });
+  expect(getState().compacting).toBe(true);
+});
+
 test("cancelled subagent lifecycle marks row executed", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
   handleServerEvent({
@@ -688,6 +708,42 @@ test("cancelled subagent lifecycle marks row executed", () => {
   expect(item?.taskStatus).toBe("cancelled");
   expect(item?.runId).toBe("run-1");
   expect(item?.progress).toBe("partial summary ready");
+});
+
+test("task lifecycle buffers only the canonical activity row id", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({
+    type: "task_started",
+    run_id: "run-1",
+    task_id: "task-internal",
+    parent_tool_call_id: "call-research",
+    name: "Research Event Systems",
+    summary: "event systems",
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "task-internal",
+    tool_call_name: "ReadFile",
+    description: "ReadFile(path=\"a\")",
+  });
+
+  let activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  let items = getState().messages.get(activityId!)?.activity?.items ?? [];
+  expect(items.find((item) => item.id === "task-internal")?.taskStatus).toBeUndefined();
+
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+    description: "research(task='event systems')",
+  });
+
+  activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  items = getState().messages.get(activityId!)?.activity?.items ?? [];
+  const agent = items.find((item) => item.id === "call-research");
+  expect(agent?.taskStatus).toBe("running");
+  expect(agent?.displayName).toBe("Research Event Systems");
 });
 
 test("live deltas render during active stream", () => {
@@ -1244,6 +1300,83 @@ test("stopRun clears stopped session after switching sessions during cancel", as
     expect(getState().activeRunSessionIds.has("session-1")).toBe(false);
     expect(getState().activeRunSessionIds.has("session-2")).toBe(true);
     expect(getState().terminalRunIds.has("run-1")).toBe(true);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("cancelSubagent failure after session switch does not mutate current session", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let rejectCancel!: () => void;
+  const cancelFailed = new Promise<never>((_resolve, reject) => {
+    rejectCancel = () => reject(new Error("cancel failed"));
+  });
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => cancelFailed,
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: null,
+      sessionCache: new Map(),
+      messages: new Map(),
+      order: [],
+    });
+    const s = getState();
+    s.setCurrentSession("session-old");
+    setState({
+      messages: new Map([
+        [
+          "activity-old",
+          {
+            id: "activity-old",
+            role: "activity",
+            content: "",
+            activity: {
+              label: "Calling",
+              done: false,
+              items: [
+                {
+                  id: "call-research",
+                  kind: "research",
+                  semanticKind: "agent",
+                  target: "research",
+                  runId: "run-1",
+                  taskStatus: "running",
+                  status: "ongoing",
+                  progress: "running",
+                },
+              ],
+            },
+          },
+        ],
+      ]),
+      order: ["activity-old"],
+    });
+
+    const cancelPromise = cancelSubagent("run-1", "call-research");
+    expect(getState().messages.get("activity-old")?.activity?.items[0]?.progress).toBe("cancelling");
+    s.setCurrentSession("session-new");
+    getState().appendMessage({ id: "new-message", role: "assistant", content: "new" });
+    rejectCancel();
+    await cancelPromise;
+
+    expect(getState().currentSessionId).toBe("session-new");
+    expect(getState().order).toEqual(["new-message"]);
+    expect([...getState().messages.values()].some((message) => message.role === "error")).toBe(false);
+    const cachedItem = getState()
+      .sessionCache.get("session-old")
+      ?.messages.get("activity-old")
+      ?.activity?.items[0];
+    expect(cachedItem?.progress).toBe("running");
+    expect(cachedItem?.cancelRequested).toBe(false);
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }

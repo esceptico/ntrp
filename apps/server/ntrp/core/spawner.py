@@ -423,8 +423,9 @@ def create_spawn_fn(
 
         if not background:
             stream_task = asyncio.create_task(_stream_to(_foreground_child_events))
+            subagent_handle = None
             if calling_ctx.run_registry is not None:
-                calling_ctx.run_registry.register_subagent(
+                subagent_handle = calling_ctx.run_registry.register_subagent(
                     calling_ctx.run.run_id,
                     lifecycle_task_id,
                     stream_task,
@@ -461,8 +462,7 @@ def create_spawn_fn(
                     if calling_ctx.run_registry is not None
                     else None
                 )
-                handle = run_state.subagents.get(lifecycle_task_id) if run_state else None
-                if run_state and not run_state.cancelled and handle and handle.cancel_requested:
+                if run_state and not run_state.cancelled and subagent_handle and subagent_handle.cancel_requested:
                     summary = await _salvage_summary(
                         child_model,
                         child_messages,
@@ -482,7 +482,7 @@ def create_spawn_fn(
                                 parent_tool_call_id=parent_id,
                                 name=agent_label,
                                 status="cancelled",
-                                summary="cancelled",
+                                summary="cancelled; partial summary returned",
                                 depth=task_depth,
                             )
                         )
