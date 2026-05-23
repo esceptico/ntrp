@@ -642,7 +642,7 @@ Expected: pass.
 **Files:**
 - No new implementation files.
 
-- [ ] **Step 1: Run focused desktop suites**
+- [x] **Step 1: Run focused desktop suites**
 
 Run:
 
@@ -652,7 +652,7 @@ bun test apps/desktop/tests/activityTraceReplay.test.tsx apps/desktop/tests/stre
 
 Expected: all pass.
 
-- [ ] **Step 2: Run focused server suites**
+- [x] **Step 2: Run focused server suites**
 
 Run:
 
@@ -662,7 +662,7 @@ uv run pytest apps/server/tests/test_streaming_events.py apps/server/tests/test_
 
 Expected: all pass.
 
-- [ ] **Step 3: Run typecheck and build**
+- [x] **Step 3: Run typecheck and build**
 
 Run:
 
@@ -674,7 +674,7 @@ git diff --check
 
 Expected: typecheck passes, build exits 0, diff check is clean. Existing Vite chunk-size warnings are acceptable if unchanged.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Run:
 
