@@ -4,14 +4,24 @@ import { useStore } from "../store";
 
 const POLL_INTERVAL_MS = 2000;
 
-interface ActiveRun {
+export interface ActiveRun {
   run_id?: string | null;
   session_id: string;
   status?: string | null;
+  backgrounded?: boolean;
 }
 
 interface RunsStatus {
   active_runs: ActiveRun[];
+}
+
+export function runStatusSnapshots(runs: ActiveRun[]) {
+  return runs.map((run) => ({
+    runId: run.run_id,
+    sessionId: run.session_id,
+    status: run.status,
+    backgrounded: run.backgrounded,
+  }));
 }
 
 /** Polls /chat/runs/status so the sidebar can show a streaming indicator
@@ -30,13 +40,7 @@ export function useActiveRuns(): void {
       try {
         const data = await apiWithConfig<RunsStatus>(config, "/chat/runs/status");
         if (disposed) return;
-        syncActiveRuns(
-          data.active_runs.map((run) => ({
-            runId: run.run_id,
-            sessionId: run.session_id,
-            status: run.status,
-          })),
-        );
+        syncActiveRuns(runStatusSnapshots(data.active_runs));
       } catch {
         /* transient — next tick will retry */
       }

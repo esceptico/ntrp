@@ -836,12 +836,25 @@ def _install_cancel_fallback(
     task.add_done_callback(_on_done)
 
 
+async def _record_completed_run(ctx: ChatContext, *, last_seq: int | None) -> None:
+    await _record_run_status(
+        ctx.session_service,
+        ctx.run.run_id,
+        RunStatus.COMPLETED.value,
+        stop_reason=ctx.run.stop_reason,
+        last_seq=last_seq,
+    )
+    await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
+    ctx.run_registry.complete_run(ctx.run.run_id)
+
+
 async def _drain_backgrounded(
     gen,
     agent: Agent,
     ctx: ChatContext,
     bg_registry,
     tracker: UsageTracker,
+    bus: SessionBus,
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
     read_only = set()
@@ -853,9 +866,11 @@ async def _drain_backgrounded(
     agent.tools = [t for t in agent.tools if t["function"]["name"] in read_only]
     messages = ctx.run.messages
     drain_error: Exception | None = None
+    drain_result: Result | None = None
     try:
         async for item in gen:
             if isinstance(item, Result):
+                drain_result = item
                 ctx.run.stop_reason = item.stop_reason.value
     except asyncio.CancelledError:
         if ctx.run.cancelled:
@@ -868,6 +883,7 @@ async def _drain_backgrounded(
                     last_seq=None,
                 )
                 await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.CANCELLED.value)
+                ctx.run_registry.finish_cancelled(ctx.run.run_id)
             except Exception:
                 _logger.warning("Failed to persist backgrounded cancellation status", exc_info=True)
         return
@@ -904,6 +920,7 @@ async def _drain_backgrounded(
     try:
         async with save_lock:
             await _save_snapshot()
+            bus.mark_checkpoint()
             if drain_error is not None:
                 ctx.run_registry.error_run(ctx.run.run_id)
                 error_code = "background_drain_failed"
@@ -919,14 +936,27 @@ async def _drain_backgrounded(
                 )
                 await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.ERROR.value)
                 return
-            await _record_run_status(
-                ctx.session_service,
-                ctx.run.run_id,
-                RunStatus.COMPLETED.value,
-                stop_reason=ctx.run.stop_reason,
-                last_seq=None,
-            )
-            await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
+            if ctx.run.usage.total_tokens:
+                await ctx.session_service.update_goal(
+                    ctx.session_state.session_id,
+                    goal_id=ctx.goal_id,
+                    tokens_used_delta=ctx.run.usage.total_tokens,
+                    time_used_seconds_delta=max(0, int((datetime.now(UTC) - ctx.run.created_at).total_seconds())),
+                )
+            await _record_completed_run(ctx, last_seq=None)
+            if ctx.enqueue_run_completed:
+                try:
+                    await ctx.enqueue_run_completed(
+                        RunCompleted(
+                            run_id=ctx.run.run_id,
+                            session_id=ctx.session_state.session_id,
+                            messages=tuple(ctx.run.messages),
+                            usage=ctx.run.usage,
+                            result=drain_result,
+                        )
+                    )
+                except Exception:
+                    _logger.warning("Failed to enqueue backgrounded run-completed side effect", exc_info=True)
     except Exception as exc:
         _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
         ctx.run_registry.error_run(ctx.run.run_id)
@@ -1228,11 +1258,10 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
         if bg_gen is not None:
             io.emit = None
-            await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
+            await bus.emit(RunBackgroundedEvent(run_id=run.run_id, session_id=session_state.session_id))
             await _record_run_status(ctx.session_service, run.run_id, "backgrounded", last_seq=bus.next_seq - 1)
             await _update_run_client_idempotency(ctx.session_service, run, "backgrounded")
-            ctx.run_registry.complete_run(run.run_id)
-            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, tracker))
+            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, tracker, bus))
             return
 
         if result is None:
@@ -1366,16 +1395,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                                 f"Failed to record terminal error status for run {run.run_id}"
                             ) from terminal_status_error
                         return
-                    await _record_run_status(
-                        ctx.session_service,
-                        run.run_id,
-                        RunStatus.COMPLETED.value,
-                        stop_reason=run.stop_reason,
-                        last_seq=bus.next_seq - 1,
-                    )
+                    await _record_completed_run(ctx, last_seq=bus.next_seq - 1)
                     terminal_status_recorded = True
-                    await _update_run_client_idempotency(ctx.session_service, run, RunStatus.COMPLETED.value)
-                    ctx.run_registry.complete_run(run.run_id)
                     event = RunCompleted(
                         run_id=run.run_id,
                         session_id=session_state.session_id,

@@ -2,7 +2,14 @@ import json
 import re
 from pathlib import Path
 
-from ntrp.events.sse import EventType, RunCancelledEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ntrp.events.sse import (
+    EventType,
+    RunBackgroundedEvent,
+    RunCancelledEvent,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
+)
 from ntrp.server.bus import StreamRecord, stream_record_to_sse_string
 
 
@@ -17,6 +24,7 @@ def test_terminal_events_identify_run_session_and_sequence():
         RunStartedEvent(session_id="sess-1", run_id="run-1"),
         RunFinishedEvent(run_id="run-1"),
         RunCancelledEvent(run_id="run-1"),
+        RunBackgroundedEvent(session_id="sess-1", run_id="run-1"),
         RunErrorEvent(run_id="run-1", message="failed"),
     ]
 

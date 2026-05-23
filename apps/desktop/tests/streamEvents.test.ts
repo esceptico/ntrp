@@ -87,6 +87,87 @@ test("non-goal meta run stays visually hidden", () => {
   expect(state.order).toEqual(["meta-user-loop-run-1"]);
 });
 
+test("run backgrounded clears foreground run state", () => {
+  setState({
+    currentSessionId: "session-1",
+    running: true,
+    currentRunId: "run-1",
+    activeRunSessionIds: new Set(["session-1"]),
+    activeActivityId: "activity-1",
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: {
+            done: false,
+            label: "Calling",
+            items: [{ id: "tool-1", target: "bash", status: "ongoing" }],
+          },
+        },
+      ],
+    ]),
+    order: ["activity-1"],
+    pendingApprovals: [{ toolId: "tool-1", toolName: "Bash", status: "pending" }],
+    reviewingApprovalToolId: "tool-1",
+    queuedMessages: [
+      { clientId: "queued-1", text: "follow up", status: "pending", enqueuedAt: 1 },
+    ],
+  });
+  handleServerEvent({ type: "run_backgrounded", run_id: "run-1", session_id: "session-1" });
+
+  const state = getState();
+  expect(state.running).toBe(false);
+  expect(state.currentRunId).toBeNull();
+  expect(state.activeRunSessionIds.has("session-1")).toBe(false);
+  expect(state.backgroundedRunSessionIds.has("session-1")).toBe(true);
+  expect(state.pendingApprovals).toEqual([]);
+  expect(state.reviewingApprovalToolId).toBeNull();
+  expect(state.queuedMessages).toEqual([]);
+  expect(state.activeActivityId).toBeNull();
+  expect(state.messages.get("activity-1")?.activity?.label).toBe("Backgrounded");
+  expect(state.messages.get("activity-1")?.activity?.items[0]?.status).toBe("backgrounded");
+  expect(state.terminalRunIds.has("run-1")).toBe(false);
+});
+
+test("run backgrounded without session id does not clear optimistic current run", () => {
+  setState({
+    currentSessionId: "session-2",
+    running: true,
+    currentRunId: null,
+    activeRunSessionIds: new Set(["session-1", "session-2"]),
+  });
+  handleServerEvent({ type: "run_backgrounded", run_id: "run-1" });
+
+  const state = getState();
+  expect(state.running).toBe(true);
+  expect(state.currentRunId).toBeNull();
+  expect(state.activeRunSessionIds.has("session-1")).toBe(true);
+  expect(state.activeRunSessionIds.has("session-2")).toBe(true);
+});
+
+test("old run backgrounded event does not clear new optimistic current run", () => {
+  setState({
+    currentSessionId: "session-1",
+    running: true,
+    currentRunId: null,
+    activeRunSessionIds: new Set(["session-1"]),
+    queuedMessages: [
+      { clientId: "queued-1", text: "new foreground", status: "pending", enqueuedAt: 1 },
+    ],
+  });
+  handleServerEvent({ type: "run_backgrounded", run_id: "run-bg", session_id: "session-1" });
+
+  const state = getState();
+  expect(state.running).toBe(true);
+  expect(state.currentRunId).toBeNull();
+  expect(state.activeRunSessionIds.has("session-1")).toBe(true);
+  expect(state.backgroundedRunSessionIds.has("session-1")).toBe(true);
+  expect(state.queuedMessages).toHaveLength(1);
+});
+
 test("live tool target matches persisted history formatting without description", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-live-target", session_id: "target-session" });
   handleServerEvent({

@@ -14,6 +14,7 @@ function lifecycleState(overrides: Partial<State> = {}): State {
     running: false,
     currentRunId: null,
     activeRunSessionIds: new Set(),
+    backgroundedRunSessionIds: new Set(),
     unreadDoneSessionIds: new Set(),
     pendingApprovals: [],
     reviewingApprovalToolId: null,
@@ -173,6 +174,105 @@ test("terminal current run clears queued composer messages", () => {
   expect(patch.queuedMessages).toEqual([]);
 });
 
+test("backgrounded status poll clears foreground UI without marking done", () => {
+  const activityId = "activity-1";
+  const running = lifecycleState({
+    currentSessionId: "session-2",
+    running: true,
+    currentRunId: "run-1",
+    activeRunSessionIds: new Set(["session-2"]),
+    activeActivityId: activityId,
+    unreadDoneSessionIds: new Set(),
+    pendingApprovals: [
+      {
+        toolId: "tool-1",
+        toolName: "Edit",
+        status: "pending",
+      },
+    ],
+    reviewingApprovalToolId: "tool-1",
+    messages: new Map([
+      [
+        activityId,
+        {
+          id: activityId,
+          role: "activity",
+          content: "",
+          activity: {
+            done: false,
+            label: "Calling",
+            items: [{ id: "item-1", title: "bash", status: "ongoing" }],
+          },
+        },
+      ],
+    ]),
+  });
+
+  const state = {
+    ...running,
+    ...reduceRunStatus(running, {
+      activeRuns: [{ runId: "run-1", sessionId: "session-2", status: "backgrounded" }],
+    }),
+  };
+
+  expect(state.running).toBe(false);
+  expect(state.currentRunId).toBeNull();
+  expect(state.activeRunSessionIds.has("session-2")).toBe(false);
+  expect(state.backgroundedRunSessionIds.has("session-2")).toBe(true);
+  expect(state.unreadDoneSessionIds.has("session-2")).toBe(false);
+  expect(state.pendingApprovals).toEqual([]);
+  expect(state.reviewingApprovalToolId).toBeNull();
+  expect(state.activeActivityId).toBeNull();
+  expect(state.messages.get(activityId)?.activity?.done).toBe(true);
+  expect(state.messages.get(activityId)?.activity?.label).toBe("Backgrounded");
+  expect(state.messages.get(activityId)?.activity?.backgrounded).toBe(true);
+  expect(state.messages.get(activityId)?.activity?.items[0]?.status).toBe("backgrounded");
+  expect(state.terminalRunIds.has("run-1")).toBe(false);
+});
+
+test("old backgrounded poll does not clear new optimistic foreground run", () => {
+  const optimistic = lifecycleState({
+    running: true,
+    currentRunId: null,
+    activeRunSessionIds: new Set(["session-1"]),
+  });
+
+  const state = {
+    ...optimistic,
+    ...reduceRunStatus(optimistic, {
+      activeRuns: [
+        { runId: "run-bg", sessionId: "session-1", status: "backgrounded" },
+        { runId: "run-new", sessionId: "session-1", status: "running" },
+      ],
+    }),
+  };
+
+  expect(state.running).toBe(true);
+  expect(state.currentRunId).toBe("run-new");
+  expect(state.activeRunSessionIds.has("session-1")).toBe(true);
+  expect(state.backgroundedRunSessionIds.has("session-1")).toBe(true);
+});
+
+test("stale backgrounded-only poll does not clear newer known foreground run", () => {
+  const foreground = lifecycleState({
+    running: true,
+    currentRunId: "run-new",
+    activeRunSessionIds: new Set(["session-1"]),
+  });
+
+  const state = {
+    ...foreground,
+    ...reduceRunStatus(foreground, {
+      activeRuns: [{ runId: "run-bg", sessionId: "session-1", status: "backgrounded" }],
+    }),
+  };
+
+  expect(state.running).toBe(true);
+  expect(state.currentRunId).toBe("run-new");
+  expect(state.activeRunSessionIds.has("session-1")).toBe(true);
+  expect(state.backgroundedRunSessionIds.has("session-1")).toBe(true);
+});
+
 test("stopping a stale run does not clear a newer active run", () => {
   const patch = reduceRunCompleted(
     lifecycleState({ running: true, currentRunId: "run-new" }),
@@ -193,6 +293,22 @@ test("failed optimistic send from another session does not clear current run", (
   });
 
   const patch = reduceRunFailed(state, { runId: null, sessionId: "session-1" });
+
+  expect(patch.running).toBeUndefined();
+  expect(patch.currentRunId).toBeUndefined();
+  expect(patch.activeRunSessionIds?.has("session-1")).toBe(false);
+  expect(patch.activeRunSessionIds?.has("session-2")).toBe(true);
+});
+
+test("terminal run id from another session does not clear optimistic current run", () => {
+  const state = lifecycleState({
+    currentSessionId: "session-2",
+    running: true,
+    currentRunId: null,
+    activeRunSessionIds: new Set(["session-1", "session-2"]),
+  });
+
+  const patch = reduceRunCompleted(state, { runId: "run-1", sessionId: "session-1" });
 
   expect(patch.running).toBeUndefined();
   expect(patch.currentRunId).toBeUndefined();

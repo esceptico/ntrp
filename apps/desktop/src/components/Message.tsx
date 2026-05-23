@@ -502,6 +502,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
           done={done}
           count={totalCount}
           activeCount={activeCount}
+          backgrounded={!!message.activity.backgrounded}
           onToggle={done ? () => setExpanded((v) => !v) : undefined}
           expanded={expanded}
         />

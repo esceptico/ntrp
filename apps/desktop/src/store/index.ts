@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { DEFAULT_CONFIG } from "../api";
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
+import { isLiveRunStatus } from "../lib/runStatus";
 import type { State, Actions, UiMessage } from "./types";
 import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from "./prefs";
 import {
@@ -42,6 +43,7 @@ import {
   reduceApprovalRequested,
   reduceApprovalResolved,
   reduceCancellingQueuedMessagesReset,
+  reduceForegroundRunCleared,
   reduceQueuedMessageAdded,
   reduceQueuedMessageRemoved,
   reduceQueuedMessagesCleared,
@@ -100,7 +102,7 @@ export {
 
 function activeRunsFromSessions(sessions: import("../api").SessionListItem[]) {
   return sessions
-    .filter((session) => session.active_run_id && ["pending", "running", "backgrounded"].includes(session.run_status ?? ""))
+    .filter((session) => session.active_run_id && isLiveRunStatus(session.run_status))
     .map((session) => ({
       runId: session.active_run_id,
       sessionId: session.session_id,
@@ -139,6 +141,7 @@ export const useStore = create<State & Actions>((set) => ({
   messages: new Map(),
   order: [],
   activeRunSessionIds: new Set(),
+  backgroundedRunSessionIds: new Set(),
   unreadDoneSessionIds: new Set(),
   sessionCache: new Map(),
   connected: false,
@@ -206,6 +209,15 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => reduceRunStarted(s, { runId, sessionId })),
   markRunCompleted: (runId, sessionId) =>
     set((s) => reduceRunCompleted(s, { runId, sessionId })),
+  clearForegroundRun: (runId, sessionId, options) =>
+    set((s) =>
+      reduceForegroundRunCleared(s, {
+        runId,
+        sessionId,
+        clearApprovals: options?.clearApprovals,
+        markBackgrounded: options?.markBackgrounded,
+      }),
+    ),
   setCurrentSession: (currentSessionId) =>
     set((s) => {
       let unread = s.unreadDoneSessionIds;

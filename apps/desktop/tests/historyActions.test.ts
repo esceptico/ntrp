@@ -160,3 +160,70 @@ test("loadHistory keeps active run tail activity open while a tool is being call
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
 });
+
+test("loadHistory treats backgrounded runtime as non-foreground", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              { role: "user", content: "inspect", id: "user-1" },
+              {
+                role: "assistant",
+                content: "",
+                id: "assistant-tool-1",
+                tool_calls: [{ id: "tool-1", name: "ReadFile", arguments: '{"path":"a"}' }],
+              },
+            ],
+            active_run_id: "run-bg",
+            runtime: {
+              session_id: "bg-session",
+              latest_event_seq: 4,
+              checkpoint_seq: 4,
+              active_run: { run_id: "run-bg", status: "backgrounded" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "bg-session",
+      running: true,
+      currentRunId: "run-bg",
+      activeRunSessionIds: new Set(["bg-session"]),
+    });
+
+    await loadHistory("bg-session");
+
+    const state = getState();
+    const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+    expect(state.running).toBe(false);
+    expect(state.currentRunId).toBeNull();
+    expect(state.activeRunSessionIds.has("bg-session")).toBe(false);
+    expect(state.backgroundedRunSessionIds.has("bg-session")).toBe(true);
+    expect(state.activeActivityId).toBeNull();
+    expect(state.messages.get(activityId!)?.activity).toMatchObject({
+      done: true,
+      label: "Called",
+      items: [{ id: "tool-1", status: "executed" }],
+    });
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});

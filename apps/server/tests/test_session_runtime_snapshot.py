@@ -12,7 +12,7 @@ from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS
 from ntrp.events.sse import ThinkingEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.routers.session import get_session_history, list_sessions
-from ntrp.server.state import RunRegistry
+from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.session import SessionService
 
 
@@ -64,6 +64,24 @@ async def test_history_includes_runtime_snapshot_for_active_session(session_serv
     assert result["runtime"]["active_run"]["status"] == "running"
     assert result["runtime"]["pending_approvals"][0]["tool_id"] == "tool-1"
     assert result["runtime"]["queued_messages"][0]["client_id"] == "queued-1"
+
+
+@pytest.mark.asyncio
+async def test_history_runtime_snapshot_reports_live_backgrounded_run(session_service: SessionService):
+    state = _state("sess-live-backgrounded")
+    await session_service.save(state, [{"role": "user", "content": "hi", "client_id": "msg-1"}])
+    registry = RunRegistry()
+    run = registry.create_run("sess-live-backgrounded")
+    run.status = RunStatus.RUNNING
+    run.backgrounded = True
+
+    runtime = SimpleNamespace(run_registry=registry, executor=None)
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-live-backgrounded", limit=100, around_seq=None
+    )
+
+    assert result["runtime"]["active_run"]["run_id"] == run.run_id
+    assert result["runtime"]["active_run"]["status"] == "backgrounded"
 
 
 @pytest.mark.asyncio

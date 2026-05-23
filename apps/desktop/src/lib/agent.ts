@@ -6,7 +6,7 @@ export function isAgent(item: ActivityItem): boolean {
   return item.semanticKind === SEMANTIC_KIND_AGENT;
 }
 
-export function activityItemStatus(item: ActivityItem): "ongoing" | "executed" {
+export function activityItemStatus(item: ActivityItem): "ongoing" | "executed" | "backgrounded" {
   if (item.status) return item.status;
   if (item.taskStatus === "running") return "ongoing";
   if (item.taskStatus === "completed" || item.taskStatus === "failed" || item.taskStatus === "cancelled") {

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from contextlib import suppress
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -713,6 +714,81 @@ async def test_run_agent_loop_closes_text_before_backgrounding():
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_chat_keeps_backgrounded_run_active_until_drain_finishes(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-bg")
+    session_state = SessionState(session_id="sess-bg", started_at=datetime.now(UTC))
+    blocker = asyncio.Future()
+
+    class Store:
+        async def get_background_agent_result(self, session_id, task_id):
+            return None
+
+    class RecordingSessionService:
+        store = Store()
+
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_status(self, *args, **kwargs):
+            return None
+
+        async def update_goal(self, *args, **kwargs):
+            return None
+
+        async def update_chat_idempotency_key(self, *args, **kwargs):
+            return None
+
+    class BackgroundingAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+            self._last_response = None
+
+        async def stream(self, messages):
+            yield TextStarted(message_id="text-1")
+            yield TextDelta(message_id="text-1", content="hello")
+            run.backgrounded = True
+            yield TextEnded(message_id="text-1", content="hello")
+            await blocker
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: BackgroundingAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(registry={}),
+        tools=[],
+        config=SimpleNamespace(approval_timeout_seconds=300, compactor=None, model=""),
+        available_integrations=[],
+        integration_errors={},
+        session_service=RecordingSessionService(),
+        run_registry=registry,
+    )
+    bus = SessionBus(session_id="sess-bg")
+
+    await run_chat(ctx, bus)
+
+    assert registry.get_active_run("sess-bg") is run
+    assert registry.get_accepting_run("sess-bg") is None
+    status = registry.get_status(datetime.now(UTC))
+    assert status["active_runs"][0]["status"] == "backgrounded"
+    event = next(record.event for record in bus._recent if record.event.type.value == "run_backgrounded")
+    assert event.session_id == "sess-bg"
+
+    if run.drain_task:
+        run.cancelled = True
+        run.drain_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await run.drain_task
 
 
 @pytest.mark.asyncio
@@ -2074,6 +2150,7 @@ async def test_backgrounded_drain_cancel_does_not_save_merged_output():
             ctx,
             BackgroundTaskRegistry(session_id="sess-1"),
             UsageTracker(),
+            SessionBus(session_id="sess-1"),
         )
     )
     await asyncio.wait_for(started.wait(), timeout=1)
@@ -2127,6 +2204,7 @@ async def test_backgrounded_drain_persists_budget_stop_reason():
         ctx,
         BackgroundTaskRegistry(session_id="sess-1"),
         UsageTracker(),
+        SessionBus(session_id="sess-1"),
     )
 
     assert service.statuses[-1] == (RunStatus.COMPLETED.value, StopReason.MAX_COST.value)
@@ -2193,6 +2271,7 @@ async def test_backgrounded_drain_stream_failure_records_error_not_completed():
         ctx,
         BackgroundTaskRegistry(session_id="sess-1"),
         UsageTracker(),
+        SessionBus(session_id="sess-1"),
     )
 
     assert service.saved == [[]]
@@ -2255,6 +2334,7 @@ async def test_backgrounded_drain_final_save_failure_records_error():
         ctx,
         BackgroundTaskRegistry(session_id="sess-1"),
         UsageTracker(),
+        SessionBus(session_id="sess-1"),
     )
 
     assert service.statuses[-1]["status"] == RunStatus.ERROR.value

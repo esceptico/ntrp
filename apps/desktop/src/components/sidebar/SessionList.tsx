@@ -51,6 +51,7 @@ export function SessionList() {
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
+  const backgroundedRunSessionIds = useStore((s) => s.backgroundedRunSessionIds);
   const unreadDoneSessionIds = useStore((s) => s.unreadDoneSessionIds);
   const connected = useStore((s) => s.connected);
   const openArchive = useStore((s) => s.openArchive);
@@ -190,7 +191,10 @@ export function SessionList() {
                             name={session.name ?? null}
                             lastActivity={session.last_activity}
                             active={session.session_id === currentSessionId}
-                            streaming={activeRunSessionIds.has(session.session_id)}
+                            streaming={
+                              activeRunSessionIds.has(session.session_id) ||
+                              backgroundedRunSessionIds.has(session.session_id)
+                            }
                             unread={unreadDoneSessionIds.has(session.session_id)}
                             isChannel={session.session_type === "channel"}
                             renaming={renamingId === session.session_id}

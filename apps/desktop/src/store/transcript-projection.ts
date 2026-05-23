@@ -3,6 +3,9 @@ import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
 import {
+  reduceActiveActivityBackgrounded,
+  reduceBackgroundedRunObserved,
+  reduceForegroundRunCleared,
   reduceRunCompleted,
   reduceRunFailed,
   reduceRunStarted,
@@ -173,6 +176,32 @@ export function applyChatEventToTranscript(
         }),
       );
       s.clearQueuedMessages();
+      break;
+
+    case "run_backgrounded":
+      if (s.currentRunId && s.currentRunId !== event.run_id) {
+        if (event.session_id) {
+          setState((state) => reduceBackgroundedRunObserved(state, { sessionId: event.session_id as string }));
+        }
+        break;
+      }
+      if (!s.currentRunId) {
+        if (event.session_id) {
+          setState((state) => reduceBackgroundedRunObserved(state, { sessionId: event.session_id as string }));
+        }
+        break;
+      }
+      setState((state) => reduceActiveActivityBackgrounded(state));
+      endTurn(s, ts);
+      setActiveAssistantMessageId(context, null);
+      setState((state) =>
+        reduceForegroundRunCleared(state, {
+          runId: event.run_id,
+          sessionId: event.session_id,
+          clearApprovals: true,
+          markBackgrounded: true,
+        }),
+      );
       break;
 
     case "RUN_ERROR":

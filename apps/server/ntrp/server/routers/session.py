@@ -49,10 +49,11 @@ OPENING_CHECKPOINT_RUN_STATUSES = ACTIVE_RUN_STATUSES | SURFACED_TERMINAL_RUN_ST
 def _runtime_run_from_live(active_run) -> dict | None:
     if active_run is None:
         return None
+    status = "backgrounded" if active_run.backgrounded else active_run.status.value
     return {
         "run_id": active_run.run_id,
         "session_id": active_run.session_id,
-        "status": active_run.status.value,
+        "status": status,
         "started_at": active_run.created_at.isoformat(),
         "updated_at": active_run.updated_at.isoformat(),
         "ended_at": None,

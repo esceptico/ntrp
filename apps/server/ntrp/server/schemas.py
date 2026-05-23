@@ -41,7 +41,7 @@ class BackgroundRequest(BaseModel):
 class ChatRunStatusResponse(BaseModel):
     run_id: str
     session_id: str
-    status: Literal["pending", "running", "completed", "cancelled", "error"]
+    status: Literal["pending", "running", "backgrounded", "completed", "cancelled", "error"]
     created_at: str
     updated_at: str
     age_seconds: int

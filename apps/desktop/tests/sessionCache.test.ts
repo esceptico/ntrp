@@ -16,6 +16,7 @@ function blank() {
     running: false,
     currentRunId: null,
     activeRunSessionIds: new Set(),
+    backgroundedRunSessionIds: new Set(),
     unreadDoneSessionIds: new Set(),
     terminalRunIds: new Set(),
     activeActivityId: null,
@@ -61,6 +62,27 @@ test("session cache does not replay compaction UI state", () => {
   const cached = snapshotSession(getState());
 
   expect(cached.compacting).toBe(false);
+});
+
+test("session list refresh does not treat backgrounded runs as foreground running", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.setSessions([
+    {
+      session_id: "A",
+      started_at: "",
+      last_activity: "",
+      name: "A",
+      message_count: 0,
+      active_run_id: "run-bg",
+      run_status: "backgrounded",
+    },
+  ]);
+
+  expect(getState().running).toBe(false);
+  expect(getState().currentRunId).toBeNull();
+  expect(getState().activeRunSessionIds.has("A")).toBe(false);
+  expect(getState().backgroundedRunSessionIds.has("A")).toBe(true);
 });
 
 test("switching back hydrates cached state", () => {

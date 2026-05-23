@@ -12,13 +12,18 @@ import {
   reduceHistoryLoadFailed,
   reduceHistoryLoadStarted,
 } from "../store/session-view";
-import { reduceRunCompleted, reduceRunStarted } from "../store/run-lifecycle";
+import {
+  reduceForegroundRunCleared,
+  reduceRunCompleted,
+  reduceRunStarted,
+} from "../store/run-lifecycle";
 import {
   isTodoToolName,
   newestHistoryActivityId,
   rebuildTranscriptFromHistory,
 } from "../store/transcript-projection";
 import { normalizeActivityGroups } from "../store/session-cache";
+import { isForegroundRunStatus } from "../lib/runStatus";
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
 const pendingHistoryToolResultsBySession = new Map<string, Map<string, string>>();
@@ -134,9 +139,12 @@ function applyPendingHistoryToolResults(sessionId: string): void {
   if (pending.size === 0) pendingHistoryToolResultsBySession.delete(sessionId);
 }
 
-function isLiveRun(runtime: SessionRuntimeSnapshot): boolean {
-  const status = runtime.active_run?.status;
-  return status === "pending" || status === "running" || status === "backgrounded";
+function foregroundActiveRunId(
+  activeRunId: string | null,
+  runtime: SessionRuntimeSnapshot | undefined,
+): string | null {
+  if (!runtime) return activeRunId;
+  return isForegroundRunStatus(runtime.active_run?.status) ? activeRunId : null;
 }
 
 function syncAutoForActiveRun(sessionId: string, value: boolean): void {
@@ -154,15 +162,20 @@ function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot
   if (!runtime) return;
   setEventCursorForSession(sessionId, runtime.checkpoint_seq);
   const activeRun = runtime.active_run;
-  if (getState().skipApprovals && isLiveRun(runtime)) {
+  const hasForegroundRun = isForegroundRunStatus(activeRun?.status);
+  if (getState().skipApprovals && hasForegroundRun) {
     syncAutoForActiveRun(sessionId, true);
   }
   setState((state) => {
-    const pendingApprovals = state.skipApprovals ? [] : runtime.pending_approvals;
-    const lifecycle =
-      activeRun && ["pending", "running", "backgrounded"].includes(activeRun.status)
-        ? reduceRunStarted(state, { runId: activeRun.run_id, sessionId })
-        : reduceRunCompleted(state, { runId: state.currentRunId, sessionId });
+    const pendingApprovals = state.skipApprovals || !hasForegroundRun ? [] : runtime.pending_approvals;
+      const lifecycle =
+        activeRun && hasForegroundRun
+          ? reduceRunStarted(state, { runId: activeRun.run_id, sessionId })
+        : reduceForegroundRunCleared(state, {
+            runId: activeRun?.run_id ?? state.currentRunId,
+            sessionId,
+            markBackgrounded: activeRun?.status === "backgrounded",
+          });
     return {
       ...lifecycle,
       pendingApprovals: pendingApprovals.map((approval) => ({
@@ -172,7 +185,7 @@ function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot
         diff: approval.diff ?? undefined,
         status: "pending" as const,
       })),
-      queuedMessages: runtime.queued_messages.map((message) => ({
+      queuedMessages: (hasForegroundRun ? runtime.queued_messages : []).map((message) => ({
         clientId: message.client_id,
         text: message.text,
         images: message.images,
@@ -225,9 +238,10 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   }
 
   const { messages, active_run_id, runtime, page, usage } = history;
+  const activeForegroundRunId = foregroundActiveRunId(active_run_id, runtime);
   const isNewestPage = mode !== "prepend" && page?.has_more_after !== true;
-  const rawItems = historyMessagesToUi(messages, active_run_id, { isNewestPage });
-  const rawActiveActivityId = active_run_id ? newestHistoryActivityId(rawItems) : null;
+  const rawItems = historyMessagesToUi(messages, activeForegroundRunId, { isNewestPage });
+  const rawActiveActivityId = activeForegroundRunId ? newestHistoryActivityId(rawItems) : null;
   const { items, activeActivityId } = normalizeHistoryItems(rawItems, rawActiveActivityId);
   if (mode === "prepend") {
     s.prependHistory(items, page);
@@ -254,13 +268,13 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
       applyRuntimeSnapshot(sessionId, runtime);
     } else {
       setState((state) =>
-        active_run_id
-          ? reduceRunStarted(state, { runId: active_run_id, sessionId })
+        activeForegroundRunId
+          ? reduceRunStarted(state, { runId: activeForegroundRunId, sessionId })
           : reduceRunCompleted(state, { runId: state.currentRunId, sessionId }),
       );
     }
-  } else if (active_run_id) {
-    setState((state) => reduceRunStarted(state, { runId: active_run_id, sessionId }));
+  } else if (activeForegroundRunId) {
+    setState((state) => reduceRunStarted(state, { runId: activeForegroundRunId, sessionId }));
   }
 }
 

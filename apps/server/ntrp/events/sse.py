@@ -377,6 +377,7 @@ class RunCancelledEvent(SSEEvent):
 class RunBackgroundedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_BACKGROUNDED, init=False)
     run_id: str = ""
+    session_id: str = ""
 
 
 @dataclass(frozen=True)

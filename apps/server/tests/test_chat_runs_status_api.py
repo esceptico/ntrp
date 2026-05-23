@@ -58,6 +58,26 @@ def test_chat_runs_status_endpoint_returns_content_free_run_state():
     assert "messages" not in data["active_runs"][0]
 
 
+def test_chat_runs_status_endpoint_reports_backgrounded_status():
+    class RuntimeWithBackgrounded(_Runtime):
+        def get_status(self):
+            status = super().get_status()
+            status["active_runs"][0]["status"] = "backgrounded"
+            status["active_runs"][0]["backgrounded"] = True
+            return status
+
+    app.dependency_overrides[get_runtime] = lambda: RuntimeWithBackgrounded()
+    try:
+        response = TestClient(app).get("/chat/runs/status")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    run = response.json()["active_runs"][0]
+    assert run["status"] == "backgrounded"
+    assert run["backgrounded"] is True
+
+
 def test_chat_runs_status_endpoint_has_response_model_in_openapi():
     schema = TestClient(app).get("/openapi.json").json()
 

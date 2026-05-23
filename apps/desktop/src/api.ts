@@ -196,7 +196,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "session_updated"; session_id: string; name?: string | null }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number; cost: number }; context_input_tokens?: number | null; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
-  | { type: "run_backgrounded"; run_id: string }
+  | { type: "run_backgrounded"; run_id: string; session_id?: string }
   | { type: "RUN_ERROR"; run_id: string; message: string; code?: string; debug_id?: string | null; recoverable?: boolean }
   | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool" }
   | { type: "thinking"; status: string }

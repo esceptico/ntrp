@@ -81,6 +81,43 @@ def test_run_registry_status_reports_active_runs_only():
     assert status["background_task_sessions"] == []
 
 
+def test_backgrounded_run_status_reports_backgrounded():
+    now = datetime(2026, 4, 28, 12, 0, tzinfo=UTC)
+    registry = RunRegistry()
+    run = registry.create_run("sess-bg")
+    run.status = RunStatus.RUNNING
+    run.backgrounded = True
+
+    status = registry.get_status(now)
+
+    assert status["active_runs"][0]["status"] == "backgrounded"
+    assert status["active_runs"][0]["backgrounded"] is True
+    assert registry.get_active_run("sess-bg") is run
+    assert registry.get_accepting_run("sess-bg") is None
+
+
+def test_backgrounded_run_remains_listed_after_new_foreground_run():
+    registry = RunRegistry()
+    backgrounded = registry.create_run("sess-1")
+    backgrounded.status = RunStatus.RUNNING
+    backgrounded.backgrounded = True
+
+    foreground = registry.create_run("sess-1")
+    foreground.status = RunStatus.RUNNING
+
+    assert registry.get_active_run("sess-1") is foreground
+    assert registry.get_accepting_run("sess-1") is foreground
+    assert {run.run_id for run in registry.list_active_runs()} == {
+        backgrounded.run_id,
+        foreground.run_id,
+    }
+
+    registry.complete_run(backgrounded.run_id)
+
+    assert registry.get_active_run("sess-1") is foreground
+    assert [run.run_id for run in registry.list_active_runs()] == [foreground.run_id]
+
+
 def test_cancel_run_keeps_run_active_until_terminal_cancel():
     registry = RunRegistry()
     run = registry.create_run("sess-1")
@@ -193,6 +230,31 @@ async def test_cancel_all_cancels_pending_run_task():
     cancelled = await registry.cancel_all(timeout=0.1)
 
     assert cancelled == 1
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_cancel_all_marks_backgrounded_drain_cancelled():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    run.backgrounded = True
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def drain_work():
+        started.set()
+        await release.wait()
+
+    task = asyncio.create_task(drain_work())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    run.drain_task = task
+
+    cancelled = await registry.cancel_all(timeout=0.1)
+
+    assert cancelled == 1
+    assert run.cancelled is True
     await asyncio.gather(task, return_exceptions=True)
     assert task.cancelled()
 

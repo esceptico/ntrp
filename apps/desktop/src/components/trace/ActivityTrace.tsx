@@ -26,17 +26,19 @@ export function ActivityHeader({
   done,
   count,
   activeCount = 0,
+  backgrounded = false,
   onToggle,
   expanded,
 }: {
   done: boolean;
   count: number;
   activeCount?: number;
+  backgrounded?: boolean;
   onToggle?: () => void;
   expanded?: boolean;
 }) {
   const word = count === 1 ? "call" : "calls";
-  const heading = activeCount > 0 ? "Running" : done ? "Executed" : "Calling";
+  const heading = backgrounded ? "Backgrounded" : activeCount > 0 ? "Running" : done ? "Executed" : "Calling";
   const interactive = !!onToggle;
   const streamReplaying = useStore((s) => s.streamReplaying);
 
@@ -305,7 +307,7 @@ function AgentButton({
   const label = item.displayName ?? friendlyAgentLabel(item.kind);
   const traceStatus = activityItemStatus(item);
   const running = traceStatus === "ongoing";
-  const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : "executed");
+  const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : traceStatus);
   const statusText = item.progress ?? status;
   const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
   return (

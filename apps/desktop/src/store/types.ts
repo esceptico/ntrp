@@ -152,7 +152,7 @@ export interface ActivityItem {
   target: string;
   args?: string;
   result?: string;
-  status?: "ongoing" | "executed";
+  status?: "ongoing" | "executed" | "backgrounded";
   cancelRequested?: boolean;
   runId?: string;
   /** Nesting depth: 0 = top-level (called by the user-facing agent),
@@ -186,12 +186,13 @@ export interface ActivityItem {
   cost?: number;
 }
 
-export type ActivityLabel = "Calling" | "Called";
+export type ActivityLabel = "Calling" | "Called" | "Backgrounded";
 
 export interface ActivityState {
   items: ActivityItem[];
   label: ActivityLabel;
   done: boolean;
+  backgrounded?: boolean;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -291,11 +292,11 @@ export interface State {
   currentSessionId: string | null;
   messages: Map<string, UiMessage>;
   order: string[];
-  /** Session ids with an active run on the server. Refreshed by a
-   *  poller hook so the sidebar can render a streaming indicator on
-   *  sessions that are still working — including the ones the user
-   *  isn't currently viewing. */
+  /** Session ids with a foreground run that should drive composer UI. */
   activeRunSessionIds: Set<string>;
+  /** Session ids with a live backgrounded drain. These are still live,
+   *  but must not drive composer/thinking/tool-counter state. */
+  backgroundedRunSessionIds: Set<string>;
   /** Sessions whose runs finished while the user wasn't looking at
    *  them. Cleared when the user opens the session. Renders as an
    *  "unread" dot in the sidebar. */
@@ -366,10 +367,15 @@ export interface Actions {
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
   syncActiveRuns: (
-    runs: { runId?: string | null; sessionId: string; status?: string | null }[],
+    runs: { runId?: string | null; sessionId: string; status?: string | null; backgrounded?: boolean }[],
   ) => void;
   markRunStarted: (runId: string | null, sessionId: string) => void;
   markRunCompleted: (runId: string | null, sessionId?: string | null) => void;
+  clearForegroundRun: (
+    runId: string | null,
+    sessionId?: string | null,
+    options?: { clearApprovals?: boolean; markBackgrounded?: boolean },
+  ) => void;
   setCurrentSession: (sessionId: string | null) => void;
   setHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
   prependHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;

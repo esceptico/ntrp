@@ -11,6 +11,7 @@ type RunLifecyclePatch = Partial<
     | "running"
     | "currentRunId"
     | "activeRunSessionIds"
+    | "backgroundedRunSessionIds"
     | "unreadDoneSessionIds"
     | "pendingApprovals"
     | "reviewingApprovalToolId"
@@ -18,6 +19,8 @@ type RunLifecyclePatch = Partial<
     | "pendingResume"
     | "stoppingRunId"
     | "terminalRunIds"
+    | "activeActivityId"
+    | "messages"
   >
 >;
 
@@ -25,6 +28,7 @@ export interface RunStatusSnapshot {
   runId?: string | null;
   sessionId: string;
   status?: string | null;
+  backgrounded?: boolean;
 }
 
 export function reduceRunStarted(
@@ -55,41 +59,59 @@ export function reduceRunStatus(
 ): RunLifecyclePatch {
   let terminalRunIds = state.terminalRunIds;
   const activeRuns: RunStatusSnapshot[] = [];
-  let terminalCurrentRun: RunStatusSnapshot | null = null;
+  const terminalRuns: RunStatusSnapshot[] = [];
+  const backgroundedRuns: RunStatusSnapshot[] = [];
 
   for (const run of input.activeRuns) {
     if (run.runId && isTerminalStatus(run.status)) {
       terminalRunIds = addTerminalRunId(terminalRunIds, run.runId);
-      const appliesToCurrentSession =
-        !state.currentSessionId || state.currentSessionId === run.sessionId;
-      const isOptimisticCurrentRun =
-        state.running &&
-        state.currentRunId === null &&
-        state.activeRunSessionIds.has(run.sessionId);
-      if (
-        appliesToCurrentSession &&
-        (state.currentRunId === run.runId || isOptimisticCurrentRun)
-      ) {
-        terminalCurrentRun = run;
-      }
+      terminalRuns.push(run);
       continue;
     }
+    if (isBackgroundedStatus(run)) {
+      backgroundedRuns.push(run);
+      continue;
+    }
+    if (!isForegroundStatus(run.status)) continue;
     if (run.runId && terminalRunIds.has(run.runId)) continue;
     activeRuns.push(run);
   }
 
   const activeRunSessionIds = new Set(activeRuns.map((run) => run.sessionId));
-  const unreadDoneSessionIds = unreadAfterActiveSetChange(
-    state,
-    activeRunSessionIds,
-  );
-  const current = state.currentSessionId
+  const backgroundedRunSessionIds = new Set(backgroundedRuns.map((run) => run.sessionId));
+  let current = state.currentSessionId
     ? activeRuns.find((run) => run.sessionId === state.currentSessionId)
     : undefined;
+  const terminalCurrentRun = current ? null : terminalRuns.find((run) => matchesCurrentRun(state, run)) ?? null;
+  const backgroundedCurrentRun = current
+    ? null
+    : backgroundedRuns.find((run) => matchesCurrentRun(state, run)) ?? null;
+  if (
+    !current &&
+    !terminalCurrentRun &&
+    !backgroundedCurrentRun &&
+    state.currentSessionId &&
+    state.running &&
+    state.currentRunId &&
+    input.activeRuns.length > 0
+  ) {
+    activeRunSessionIds.add(state.currentSessionId);
+    current = {
+      runId: state.currentRunId,
+      sessionId: state.currentSessionId,
+      status: "running",
+    };
+  }
+  const unreadDoneSessionIds = unreadAfterLiveSetChange(
+    state,
+    activeRunSessionIds,
+    backgroundedRunSessionIds,
+  );
 
   if (terminalCurrentRun) {
     return {
       activeRunSessionIds,
+      backgroundedRunSessionIds,
       unreadDoneSessionIds,
       running: false,
       currentRunId: null,
@@ -103,14 +125,36 @@ export function reduceRunStatus(
     };
   }
 
+  if (backgroundedCurrentRun) {
+    return {
+      activeRunSessionIds,
+      backgroundedRunSessionIds,
+      unreadDoneSessionIds,
+      running: false,
+      currentRunId: null,
+      pendingResume: null,
+      queuedMessages: [],
+      stoppingRunId:
+        backgroundedCurrentRun.runId && state.stoppingRunId === backgroundedCurrentRun.runId
+          ? null
+          : state.stoppingRunId,
+      pendingApprovals: [],
+      reviewingApprovalToolId: null,
+      ...backgroundActiveActivity(state),
+      ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),
+    };
+  }
+
   if (
     state.currentSessionId &&
     state.running &&
     state.currentRunId &&
-    !current
+    !current &&
+    input.activeRuns.length === 0
   ) {
     return {
       activeRunSessionIds,
+      backgroundedRunSessionIds,
       unreadDoneSessionIds,
       running: false,
       currentRunId: null,
@@ -124,6 +168,7 @@ export function reduceRunStatus(
 
   return {
     activeRunSessionIds,
+    backgroundedRunSessionIds,
     unreadDoneSessionIds,
     ...(current
       ? {
@@ -147,6 +192,31 @@ export function reduceRunFailed(
   input: { runId: string | null; sessionId?: string | null },
 ): RunLifecyclePatch {
   return reduceTerminalRun(state, input, "failed");
+}
+
+export function reduceForegroundRunCleared(
+  state: State,
+  input: {
+    runId: string | null;
+    sessionId?: string | null;
+    clearApprovals?: boolean;
+    markBackgrounded?: boolean;
+  },
+): RunLifecyclePatch {
+  return reduceForegroundInactiveRun(state, input, false);
+}
+
+export function reduceBackgroundedRunObserved(
+  state: State,
+  input: { sessionId: string },
+): RunLifecyclePatch {
+  const backgroundedRunSessionIds = new Set(state.backgroundedRunSessionIds);
+  backgroundedRunSessionIds.add(input.sessionId);
+  return { backgroundedRunSessionIds };
+}
+
+export function reduceActiveActivityBackgrounded(state: State): RunLifecyclePatch {
+  return backgroundActiveActivity(state);
 }
 
 export function reduceApprovalRequested(
@@ -243,41 +313,90 @@ function reduceTerminalRun(
   input: { runId: string | null; sessionId?: string | null; clearApprovals?: boolean },
   _phase: "completed" | "failed",
 ): RunLifecyclePatch {
+  return reduceForegroundInactiveRun(state, input, true);
+}
+
+function reduceForegroundInactiveRun(
+  state: State,
+  input: {
+    runId: string | null;
+    sessionId?: string | null;
+    clearApprovals?: boolean;
+    markBackgrounded?: boolean;
+  },
+  terminal: boolean,
+): RunLifecyclePatch {
   if (
     !input.runId &&
     input.sessionId &&
     state.currentSessionId &&
     input.sessionId !== state.currentSessionId
   ) {
-    const activeRunSessionIds = new Set(state.activeRunSessionIds);
-    activeRunSessionIds.delete(input.sessionId);
+    const { activeRunSessionIds, backgroundedRunSessionIds } = clearForegroundSession(state, input.sessionId, input.markBackgrounded);
     return {
       activeRunSessionIds,
-      unreadDoneSessionIds: unreadAfterActiveSetChange(state, activeRunSessionIds),
+      backgroundedRunSessionIds,
+      unreadDoneSessionIds: terminal
+        ? unreadAfterLiveSetChange(state, activeRunSessionIds, backgroundedRunSessionIds)
+        : state.unreadDoneSessionIds,
+    };
+  }
+
+  if (
+    input.runId &&
+    input.sessionId &&
+    state.currentSessionId &&
+    input.sessionId !== state.currentSessionId &&
+    state.currentRunId !== input.runId
+  ) {
+    const { activeRunSessionIds, backgroundedRunSessionIds } = clearForegroundSession(state, input.sessionId, input.markBackgrounded);
+    const terminalRunIds = terminal
+      ? addTerminalRunId(state.terminalRunIds, input.runId)
+      : state.terminalRunIds;
+    return {
+      activeRunSessionIds,
+      backgroundedRunSessionIds,
+      unreadDoneSessionIds: terminal
+        ? unreadAfterLiveSetChange(state, activeRunSessionIds, backgroundedRunSessionIds)
+        : state.unreadDoneSessionIds,
+      ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),
     };
   }
 
   if (input.runId && state.currentRunId && state.currentRunId !== input.runId) {
-    const terminalRunIds = addTerminalRunId(state.terminalRunIds, input.runId);
+    const terminalRunIds = terminal
+      ? addTerminalRunId(state.terminalRunIds, input.runId)
+      : state.terminalRunIds;
     if (!input.sessionId || input.sessionId === state.currentSessionId) {
-      return terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {};
+      if (!input.markBackgrounded || !input.sessionId) {
+        return terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {};
+      }
+      const backgroundedRunSessionIds = new Set(state.backgroundedRunSessionIds);
+      backgroundedRunSessionIds.add(input.sessionId);
+      return {
+        backgroundedRunSessionIds,
+        ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),
+      };
     }
 
-    const activeRunSessionIds = new Set(state.activeRunSessionIds);
-    activeRunSessionIds.delete(input.sessionId);
+    const { activeRunSessionIds, backgroundedRunSessionIds } = clearForegroundSession(state, input.sessionId, input.markBackgrounded);
     return {
       activeRunSessionIds,
-      unreadDoneSessionIds: unreadAfterActiveSetChange(state, activeRunSessionIds),
-      terminalRunIds,
+      backgroundedRunSessionIds,
+      unreadDoneSessionIds: terminal
+        ? unreadAfterLiveSetChange(state, activeRunSessionIds, backgroundedRunSessionIds)
+        : state.unreadDoneSessionIds,
+      ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),
     };
   }
 
   const sessionId = input.sessionId ?? state.currentSessionId;
-  const activeRunSessionIds = new Set(state.activeRunSessionIds);
-  if (sessionId) activeRunSessionIds.delete(sessionId);
+  const { activeRunSessionIds, backgroundedRunSessionIds } = clearForegroundSession(state, sessionId, input.markBackgrounded);
 
-  const unreadDoneSessionIds = unreadAfterActiveSetChange(state, activeRunSessionIds);
-  const terminalRunIds = input.runId
+  const unreadDoneSessionIds = terminal
+    ? unreadAfterLiveSetChange(state, activeRunSessionIds, backgroundedRunSessionIds)
+    : state.unreadDoneSessionIds;
+  const terminalRunIds = terminal && input.runId
     ? addTerminalRunId(state.terminalRunIds, input.runId)
     : state.terminalRunIds;
 
@@ -285,6 +404,7 @@ function reduceTerminalRun(
     running: false,
     currentRunId: null,
     activeRunSessionIds,
+    backgroundedRunSessionIds,
     unreadDoneSessionIds,
     pendingResume: null,
     queuedMessages: [],
@@ -297,18 +417,64 @@ function reduceTerminalRun(
   };
 }
 
-function unreadAfterActiveSetChange(
+function clearForegroundSession(
   state: State,
-  nextActive: Set<string>,
+  sessionId: string | null | undefined,
+  markBackgrounded?: boolean,
+): { activeRunSessionIds: Set<string>; backgroundedRunSessionIds: Set<string> } {
+  const activeRunSessionIds = new Set(state.activeRunSessionIds);
+  const backgroundedRunSessionIds = new Set(state.backgroundedRunSessionIds);
+  if (sessionId) {
+    activeRunSessionIds.delete(sessionId);
+    if (markBackgrounded) backgroundedRunSessionIds.add(sessionId);
+  }
+  return { activeRunSessionIds, backgroundedRunSessionIds };
+}
+
+function unreadAfterLiveSetChange(
+  state: State,
+  nextForeground: Set<string>,
+  nextBackgrounded: Set<string> = new Set(),
 ): Set<string> {
   let unread = state.unreadDoneSessionIds;
-  for (const prev of state.activeRunSessionIds) {
-    if (!nextActive.has(prev) && prev !== state.currentSessionId) {
+  const previousLive = unionSets(state.activeRunSessionIds, state.backgroundedRunSessionIds);
+  const nextLive = unionSets(nextForeground, nextBackgrounded);
+  for (const prev of previousLive) {
+    if (!nextLive.has(prev) && prev !== state.currentSessionId) {
       if (unread === state.unreadDoneSessionIds) unread = new Set(unread);
       unread.add(prev);
     }
   }
   return unread;
+}
+
+function unionSets(left: Set<string>, right: Set<string>): Set<string> {
+  if (right.size === 0) return left;
+  const next = new Set(left);
+  for (const item of right) next.add(item);
+  return next;
+}
+
+function backgroundActiveActivity(state: State): Pick<RunLifecyclePatch, "activeActivityId" | "messages"> {
+  if (!state.activeActivityId) return { activeActivityId: null };
+  const existing = state.messages.get(state.activeActivityId);
+  if (!existing?.activity) return { activeActivityId: null };
+  const messages = new Map(state.messages);
+  messages.set(state.activeActivityId, {
+    ...existing,
+    activity: {
+      ...existing.activity,
+      done: true,
+      label: "Backgrounded",
+      backgrounded: true,
+      items: existing.activity.items.map((item) =>
+        item.status === "ongoing" || item.result == null
+          ? { ...item, status: "backgrounded" as const }
+          : item,
+      ),
+    },
+  });
+  return { activeActivityId: null, messages };
 }
 
 function addTerminalRunId(previous: Set<string>, runId: string): Set<string> {
@@ -330,4 +496,18 @@ function isTerminalStatus(status: string | null | undefined): boolean {
     status === "failed" ||
     status === "interrupted"
   );
+}
+
+function matchesCurrentRun(state: State, run: RunStatusSnapshot): boolean {
+  if (state.currentSessionId && state.currentSessionId !== run.sessionId) return false;
+  if (state.currentRunId) return state.currentRunId === run.runId;
+  return state.running && state.activeRunSessionIds.has(run.sessionId);
+}
+
+function isBackgroundedStatus(run: RunStatusSnapshot): boolean {
+  return run.backgrounded === true || run.status === "backgrounded";
+}
+
+function isForegroundStatus(status: string | null | undefined): boolean {
+  return status === "pending" || status === "running";
 }

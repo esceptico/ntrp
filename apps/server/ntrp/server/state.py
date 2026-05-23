@@ -136,7 +136,7 @@ class RunState:
         return {
             "run_id": self.run_id,
             "session_id": self.session_id,
-            "status": self.status.value,
+            "status": "backgrounded" if self.backgrounded else self.status.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "age_seconds": age_seconds,
@@ -183,12 +183,11 @@ class RunRegistry:
         return len(self.list_active_runs())
 
     def list_active_runs(self) -> list[RunState]:
-        active = []
-        for session_id in list(self._active_by_session):
-            run = self.get_active_run(session_id)
-            if run:
-                active.append(run)
-        return active
+        return [
+            run
+            for run in self._runs.values()
+            if run.status in (RunStatus.PENDING, RunStatus.RUNNING)
+        ]
 
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
@@ -205,7 +204,7 @@ class RunRegistry:
 
     def get_accepting_run(self, session_id: str) -> RunState | None:
         run = self.get_active_run(session_id)
-        if run and not run.cancelled:
+        if run and not run.cancelled and not run.backgrounded:
             return run
         return None
 
@@ -324,6 +323,7 @@ class RunRegistry:
                 run.task.cancel()
                 tasks.append(run.task)
             if run.drain_task and not run.drain_task.done():
+                run.cancelled = True
                 run.drain_task.cancel()
                 tasks.append(run.drain_task)
             for handle in run.subagents.values():
