@@ -506,11 +506,6 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
     case "compaction_finished":
       if (event.scope === "agent") return applyTranscriptEvent(event);
       s.setCompacting(false);
-      s.setLastCompaction({
-        before: event.messages_before,
-        after: event.messages_after,
-        at: ts,
-      });
       return;
     case "goal_updated":
       s.setGoal(event.session_id, event.goal);

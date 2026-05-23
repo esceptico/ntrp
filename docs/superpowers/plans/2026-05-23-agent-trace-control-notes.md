@@ -9,3 +9,5 @@
 - Task 1 review fix: subagent compaction is projected through the transcript reducer and buffered until the agent row exists, instead of directly mutating activity state from the stream layer.
 - Task 1 second review fix: spawned-agent compaction only emits agent-owned events when there is a parent tool-call row to own them; no-row spawns compact silently instead of crashing.
 - Task 1 cleanup: removed unused compaction `name` metadata; naming will be handled by the later dedicated naming task.
+- Task 2: automatic run compaction now clears only the spinner; it no longer stores or renders a finished compaction artifact.
+- Task 2: removed stale `lastCompaction` state end-to-end; session cache snapshots force `compacting=false`, and manual `/compact` still reports through the explicit status-message path.

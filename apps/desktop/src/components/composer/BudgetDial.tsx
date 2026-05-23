@@ -43,7 +43,6 @@ function formatPct(n: number): string {
 export function BudgetDial() {
   const usage = useStore((s) => s.usage);
   const serverConfig = useStore((s) => s.serverConfig);
-  const lastCompaction = useStore((s) => s.lastCompaction);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -274,14 +273,6 @@ export function BudgetDial() {
                     <span className="text-faint">Total tokens</span>
                     <span className="tabular-nums text-ink-soft text-right">
                       {formatTokens(usage.totalTokens)}
-                    </span>
-                  </>
-                )}
-                {lastCompaction && (
-                  <>
-                    <span className="text-faint">Last compaction</span>
-                    <span className="tabular-nums text-ink-soft text-right">
-                      {lastCompaction.before} → {lastCompaction.after} msgs
                     </span>
                   </>
                 )}

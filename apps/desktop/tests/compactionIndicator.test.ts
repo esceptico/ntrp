@@ -1,15 +1,22 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
-  claimCompactionToastForTest,
-  resetCompactionToastClaimsForTest,
+  CompactionIndicator,
+  CompactionIndicatorContent,
 } from "../src/components/CompactionIndicator.tsx";
+import { setState } from "../src/store/index.ts";
 
-test("claims each compaction toast only once per session", () => {
-  resetCompactionToastClaimsForTest();
-  const compaction = { before: 120, after: 24, at: 12345 };
+test("compaction indicator does not render a finished compaction toast", () => {
+  setState({ compacting: false });
 
-  expect(claimCompactionToastForTest("session-1", compaction)).toBe(true);
-  expect(claimCompactionToastForTest("session-1", compaction)).toBe(false);
-  expect(claimCompactionToastForTest("session-2", compaction)).toBe(true);
-  expect(claimCompactionToastForTest("session-1", { ...compaction, at: 12346 })).toBe(true);
+  expect(renderToStaticMarkup(createElement(CompactionIndicator))).not.toContain(
+    "Conversation compacted",
+  );
+});
+
+test("compaction indicator renders the live spinner state", () => {
+  expect(
+    renderToStaticMarkup(createElement(CompactionIndicatorContent, { compacting: true })),
+  ).toContain("Compacting conversation");
 });

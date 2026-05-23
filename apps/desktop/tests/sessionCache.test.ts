@@ -4,6 +4,7 @@ import { switchSession } from "../src/actions/sessions.ts";
 import { getState, setState, useStore } from "../src/store/index.ts";
 import type { UiMessage } from "../src/store/index.ts";
 import { createInitialSessionViewState } from "../src/store/session-view.ts";
+import { snapshotSession } from "../src/store/session-cache.ts";
 
 function blank() {
   setState({
@@ -21,7 +22,6 @@ function blank() {
     pendingApprovals: [],
     reviewingApprovalToolId: null,
     compacting: false,
-    lastCompaction: null,
     sourceFocus: null,
     editingId: null,
     queuedMessages: [],
@@ -48,6 +48,17 @@ test("switching sessions snapshots outgoing state into cache", () => {
   expect(cached!.currentRunId).toBe("run-A");
   expect(cached!.running).toBe(true);
   expect(cached!.sessionView.historyLoadedFor).toBe("A");
+});
+
+test("session cache does not replay compaction UI state", () => {
+  setState({
+    currentSessionId: "session-1",
+    compacting: true,
+  });
+
+  const cached = snapshotSession(getState());
+
+  expect(cached.compacting).toBe(false);
 });
 
 test("switching back hydrates cached state", () => {

@@ -271,7 +271,6 @@ export interface CachedSessionState {
   editingId: string | null;
   activeActivityId: string | null;
   compacting: boolean;
-  lastCompaction: { before: number; after: number; at: number } | null;
   sourceFocus: MessageSourceFocus | null;
   pendingApprovals: ApprovalState[];
   reviewingApprovalToolId: string | null;
@@ -326,7 +325,6 @@ export interface State {
   archiveOpen: boolean;
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
-  lastCompaction: { before: number; after: number; at: number } | null;
   memoryOpen: boolean;
   sourceFocus: MessageSourceFocus | null;
   paletteOpen: boolean;
@@ -476,7 +474,6 @@ export interface Actions {
   openArchive: (origin?: { x: number; y: number } | null) => void;
   closeArchive: () => void;
   setCompacting: (compacting: boolean) => void;
-  setLastCompaction: (info: State["lastCompaction"]) => void;
   openMemory: (origin?: { x: number; y: number } | null) => void;
   closeMemory: () => void;
   setSourceFocus: (focus: MessageSourceFocus | null) => void;

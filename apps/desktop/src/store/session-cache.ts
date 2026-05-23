@@ -20,7 +20,6 @@ export function blankSessionView(): CachedSessionState {
     editingId: null,
     activeActivityId: null,
     compacting: false,
-    lastCompaction: null,
     sourceFocus: null,
     pendingApprovals: [],
     reviewingApprovalToolId: null,
@@ -41,8 +40,7 @@ export function snapshotSession(s: State): CachedSessionState {
     usage: s.usage,
     editingId: s.editingId,
     activeActivityId: transcript.activeActivityId,
-    compacting: s.compacting,
-    lastCompaction: s.lastCompaction,
+    compacting: false,
     sourceFocus: s.sourceFocus,
     pendingApprovals: s.pendingApprovals,
     reviewingApprovalToolId: s.reviewingApprovalToolId,
@@ -59,6 +57,7 @@ export function normalizeCachedSessionState(view: CachedSessionState): CachedSes
     messages: suppressEntryMotion(transcript.messages),
     order: transcript.order,
     activeActivityId: transcript.activeActivityId,
+    compacting: false,
   };
 }
 

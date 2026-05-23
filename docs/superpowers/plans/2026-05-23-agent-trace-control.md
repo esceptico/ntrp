@@ -102,7 +102,7 @@ Expected: all pass.
 - Test: `apps/desktop/tests/sessionCache.test.ts`
 - Test: `apps/desktop/tests/compactionIndicator.test.ts`
 
-- [ ] **Step 1: Write cache regression**
+- [x] **Step 1: Write cache regression**
 
 Add to `apps/desktop/tests/sessionCache.test.ts`:
 
@@ -111,32 +111,29 @@ test("session cache does not replay compaction UI state", () => {
   setState({
     currentSessionId: "session-1",
     compacting: true,
-    lastCompaction: { before: 50, after: 8, at: 123 },
   });
 
   const cached = snapshotSession(getState());
 
   expect(cached.compacting).toBe(false);
-  expect(cached.lastCompaction).toBeNull();
 });
 ```
 
-- [ ] **Step 2: Write indicator regression**
+- [x] **Step 2: Write indicator regression**
 
 Add to `apps/desktop/tests/compactionIndicator.test.ts`:
 
 ```ts
-test("auto compaction finish is not claimed as a repeated user toast", () => {
-  resetCompactionToastClaimsForTest();
-  const info = { before: 50, after: 8, at: 123 };
+test("compaction indicator does not render a finished compaction toast", () => {
+  setState({ compacting: false });
 
-  expect(claimCompactionToastForTest("session-1", info)).toBe(false);
+  expect(renderToStaticMarkup(createElement(CompactionIndicator))).not.toContain(
+    "Conversation compacted",
+  );
 });
 ```
 
-Then change the test if the implementation removes `claimCompactionToastForTest` entirely: assert that `CompactionIndicator` renders no finished toast when `compacting=false`.
-
-- [ ] **Step 3: Run tests and verify red**
+- [x] **Step 3: Run tests and verify red**
 
 Run:
 
@@ -144,15 +141,14 @@ Run:
 bun test apps/desktop/tests/sessionCache.test.ts apps/desktop/tests/compactionIndicator.test.ts
 ```
 
-Expected: fails because cache currently stores `compacting` and `lastCompaction`.
+Expected: fails because cache currently stores `compacting`.
 
-- [ ] **Step 4: Implement non-cached compaction state**
+- [x] **Step 4: Implement non-cached compaction state**
 
 In `apps/desktop/src/store/session-cache.ts`, change `blankSessionView`, `snapshotSession`, and `normalizeCachedSessionState` so cached views always carry:
 
 ```ts
 compacting: false,
-lastCompaction: null,
 ```
 
 In `apps/desktop/src/store/chat-stream.ts`, top-level `compaction_finished` should only call:
@@ -161,9 +157,9 @@ In `apps/desktop/src/store/chat-stream.ts`, top-level `compaction_finished` shou
 s.setCompacting(false);
 ```
 
-Do not call `setLastCompaction` from automatic SSE events.
+Delete stale `lastCompaction` state and setters end-to-end; auto compaction has no stored finish artifact.
 
-- [ ] **Step 5: Keep manual compact feedback explicit**
+- [x] **Step 5: Keep manual compact feedback explicit**
 
 Manual compact already appends status via `apps/desktop/src/actions/builtins.ts`. Keep that path as the user-visible confirmation:
 
@@ -173,7 +169,7 @@ appendStatus(result.message ?? "Context compacted.");
 
 Do not use `CompactionIndicator` as the manual result surface.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 

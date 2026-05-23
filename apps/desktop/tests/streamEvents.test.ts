@@ -649,6 +649,22 @@ test("subagent compaction buffers until the agent row exists", () => {
   expect(item?.status).toBe("ongoing");
 });
 
+test("run compaction finish clears spinner without storing replayable toast state", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({ type: "compaction_started", run_id: "run-1" });
+
+  expect(getState().compacting).toBe(true);
+
+  handleServerEvent({
+    type: "compaction_finished",
+    run_id: "run-1",
+    messages_before: 42,
+    messages_after: 9,
+  });
+
+  expect(getState().compacting).toBe(false);
+});
+
 test("live deltas render during active stream", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-live", session_id: "session-live", timestamp: 1 });
   handleServerEvent({
