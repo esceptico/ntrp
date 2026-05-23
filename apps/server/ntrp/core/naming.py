@@ -5,7 +5,6 @@ from ntrp.core.llm_client import llm_client
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
-_RESEARCH_PREFIXES = ("research ", "research:")
 
 SESSION_NAMING_PROMPT = """Generate a concise session name from the user's first message.
 
@@ -33,6 +32,7 @@ Rules:
 - 2-5 words.
 - Sentence case: capitalize only the first word and proper nouns/acronyms.
 - Name the task topic only. The UI already shows this row is an agent.
+- Do not prefix the name with Research, Agent, Subagent, or any role label.
 - Do not copy the full task text.
 - Return a JSON object matching the schema.
 
@@ -43,6 +43,7 @@ Good:
 
 Bad:
 {"name": "Agent"}
+{"name": "Research eval test harness"}
 {"name": "Agent: eval test harness"}
 {"name": "Inspect current eval/test harness opportunities"}
 {"name": "Eval Test Harness"}
@@ -55,20 +56,9 @@ class NameOutput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
-def _conversation_fallback(text: str, *, has_images: bool = False) -> str:
-    if not text.strip() and has_images:
-        return "Image Conversation"
-    return "New Conversation"
-
-
 def _response_name(response: CompletionResponse) -> str:
     content = response.choices[0].message.content if response.choices else None
     return NameOutput.model_validate_json(content or "{}").name
-
-
-def _reject_agent_role_prefix(name: str) -> None:
-    if name.casefold().startswith(_RESEARCH_PREFIXES):
-        raise ValueError("agent name must not include role prefix")
 
 
 async def _generate_name(
@@ -78,7 +68,6 @@ async def _generate_name(
     user_content: str,
     fallback: str,
     log_subject: str,
-    validate_name=None,
 ) -> str:
     try:
         response = await llm_client.complete(
@@ -91,24 +80,22 @@ async def _generate_name(
             max_tokens=80,
             response_format=NameOutput,
         )
-        name = _response_name(response)
-        if validate_name is not None:
-            validate_name(name)
-        return name
+        return _response_name(response)
     except Exception as exc:
         _logger.warning("%s name generation failed: %s", log_subject, exc)
         return fallback
 
 
 async def generate_conversation_name(model: str, text: str, *, has_images: bool = False) -> str:
-    fallback = _conversation_fallback(text, has_images=has_images)
-    if not text.strip():
+    fallback = "New Conversation"
+    if not text.strip() and not has_images:
         return fallback
+    first_message = text if text.strip() else "[no text]"
     image_note = "\nThe user also attached images." if has_images else ""
     return await _generate_name(
         model=model,
         system_prompt=SESSION_NAMING_PROMPT,
-        user_content=f"First user message:\n{text}{image_note}",
+        user_content=f"First user message:\n{first_message}{image_note}",
         fallback=fallback,
         log_subject="Session",
     )
@@ -123,5 +110,4 @@ async def generate_agent_name(model: str, task: str) -> str:
         user_content=f"Task:\n{task}",
         fallback="Agent",
         log_subject="Agent",
-        validate_name=_reject_agent_role_prefix,
     )

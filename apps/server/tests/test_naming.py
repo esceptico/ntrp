@@ -31,7 +31,7 @@ async def test_generate_conversation_name_uses_session_prompt(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_agent_name_does_not_send_role_prefix(monkeypatch):
+async def test_generate_agent_name_sends_task_only(monkeypatch):
     fake = FakeLLM('{"name": "Summarize recent projects"}')
     monkeypatch.setattr(naming, "llm_client", fake)
 
@@ -43,20 +43,19 @@ async def test_generate_agent_name_does_not_send_role_prefix(monkeypatch):
     assert result == "Summarize recent projects"
     assert fake.calls[0]["model"] == "test-model"
     assert fake.calls[0]["response_format"] is naming.NameOutput
-    prompt_text = "\n".join(message["content"] for message in fake.calls[0]["messages"])
-    assert "Research" not in prompt_text
-    assert "summarize recent projects" in prompt_text
+    assert fake.calls[0]["messages"][1]["content"] == "Task:\nsummarize recent projects"
+    assert "Do not prefix" in fake.calls[0]["messages"][0]["content"]
 
 
 @pytest.mark.asyncio
-async def test_generate_conversation_name_keeps_image_only_fallback(monkeypatch):
-    fake = FakeLLM('{"name": "Should not be used"}')
+async def test_generate_conversation_name_prompts_for_image_only_session(monkeypatch):
+    fake = FakeLLM('{"name": "Image review"}')
     monkeypatch.setattr(naming, "llm_client", fake)
 
     result = await naming.generate_conversation_name("test-model", "", has_images=True)
 
-    assert result == "Image Conversation"
-    assert fake.calls == []
+    assert result == "Image review"
+    assert fake.calls[0]["messages"][1]["content"] == "First user message:\n[no text]\nThe user also attached images."
 
 
 @pytest.mark.asyncio
@@ -73,10 +72,10 @@ async def test_generate_agent_name_falls_back_when_model_fails(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_agent_name_rejects_research_prefix(monkeypatch):
+async def test_generate_agent_name_does_not_postprocess_model_output(monkeypatch):
     fake = FakeLLM('{"name": "Research eval test harness"}')
     monkeypatch.setattr(naming, "llm_client", fake)
 
     result = await naming.generate_agent_name("test-model", "inspect eval harness")
 
-    assert result == "Agent"
+    assert result == "Research eval test harness"
