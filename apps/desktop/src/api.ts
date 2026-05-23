@@ -59,12 +59,24 @@ export interface AppConfig {
 
 export type SessionType = "chat" | "channel";
 
+export interface Project {
+  project_id: string;
+  name: string;
+  default_cwd: string | null;
+  instructions: string | null;
+  knowledge_scope: string;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
 export interface SessionListItem {
   session_id: string;
   started_at: string;
   last_activity: string;
   name: string | null;
   message_count: number;
+  project_id?: string | null;
   /** "chat" for normal user conversations; "channel" for agent-spawned
    *  feed sessions (post-mode loop output, push-style updates). */
   session_type?: SessionType;
@@ -496,6 +508,43 @@ export async function renameSessionApi(
   });
 }
 
+export async function listProjectsApi(config: AppConfig): Promise<Project[]> {
+  const response = await apiWithConfig<{ projects: Project[] }>(config, "/projects");
+  return response.projects;
+}
+
+export async function createProjectApi(
+  config: AppConfig,
+  payload: { name: string; default_cwd?: string | null; instructions?: string | null },
+): Promise<Project> {
+  return apiWithConfig<Project>(config, "/projects", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProjectApi(
+  config: AppConfig,
+  projectId: string,
+  patch: Partial<Pick<Project, "name" | "default_cwd" | "instructions" | "knowledge_scope">>,
+): Promise<Project> {
+  return apiWithConfig<Project>(config, `/projects/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function moveSessionToProjectApi(
+  config: AppConfig,
+  sessionId: string,
+  projectId: string | null,
+): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/project`, {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId }),
+  });
+}
+
 export async function archiveSessionApi(config: AppConfig, sessionId: string): Promise<void> {
   await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
@@ -509,6 +558,7 @@ export interface ArchivedSession {
   name: string | null;
   archived_at: string;
   message_count: number;
+  project_id?: string | null;
   session_type?: SessionType;
   origin_automation_id?: string | null;
 }
@@ -868,7 +918,7 @@ export async function branchSessionApi(
   config: AppConfig,
   sessionId: string,
   payload: { name?: string; up_to_message_id?: string; from_end_index?: number },
-): Promise<{ session_id: string; name: string | null; started_at: string; last_activity: string }> {
+): Promise<{ session_id: string; name: string | null; started_at: string; last_activity: string; project_id?: string | null }> {
   return apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/branch`, {
     method: "POST",
     body: JSON.stringify(payload),

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from ntrp.context.models import SessionData, SessionState
-from ntrp.context.store import SessionStore
+from ntrp.context.store import PROJECT_FILTER_UNSET, SessionStore
 from ntrp.core.compactor import compact_messages, compactable_range
 from ntrp.logging import get_logger
 
@@ -27,6 +27,7 @@ class SessionService:
         name: str | None = None,
         session_type: Literal["chat", "channel"] = "chat",
         origin_automation_id: str | None = None,
+        project_id: str | None = None,
     ) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
@@ -35,6 +36,7 @@ class SessionService:
             name=name,
             session_type=session_type,
             origin_automation_id=origin_automation_id,
+            project_id=project_id,
         )
 
     async def load(self, session_id: str | None = None) -> SessionData | None:
@@ -218,8 +220,8 @@ class SessionService:
             _logger.warning("Failed to clear goal: %s", e)
             return False
 
-    async def list_sessions(self, limit: int = 20) -> list[dict]:
-        return await self.store.list_sessions(limit=limit)
+    async def list_sessions(self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET) -> list[dict]:
+        return await self.store.list_sessions(limit=limit, project_id=project_id)
 
     async def list_messages(
         self,
@@ -251,6 +253,36 @@ class SessionService:
 
     async def rename_if_empty(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name_if_empty(session_id, name)
+
+    async def create_project(
+        self,
+        *,
+        name: str,
+        default_cwd: str | None = None,
+        instructions: str | None = None,
+        knowledge_scope: str | None = None,
+    ) -> dict:
+        return await self.store.create_project(
+            name=name,
+            default_cwd=default_cwd,
+            instructions=instructions,
+            knowledge_scope=knowledge_scope,
+        )
+
+    async def get_project(self, project_id: str | None) -> dict | None:
+        return await self.store.get_project(project_id)
+
+    async def list_projects(self) -> list[dict]:
+        return await self.store.list_projects()
+
+    async def update_project(self, project_id: str, **kwargs) -> dict | None:
+        return await self.store.update_project(project_id, **kwargs)
+
+    async def archive_project(self, project_id: str) -> bool:
+        return await self.store.archive_project(project_id)
+
+    async def move_session_to_project(self, session_id: str, project_id: str | None) -> bool:
+        return await self.store.update_session_project(session_id, project_id)
 
     async def archive(self, session_id: str) -> bool:
         return await self.store.archive_session(session_id)
@@ -357,7 +389,10 @@ class SessionService:
                 end += 1
             messages = messages[:end]
 
-        new_state = self.create(name=name or (f"{data.state.name} (branch)" if data.state.name else None))
+        new_state = self.create(
+            name=name or (f"{data.state.name} (branch)" if data.state.name else None),
+            project_id=data.state.project_id,
+        )
         new_state.auto_approve = set(data.state.auto_approve)
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
         await self.save(new_state, messages, metadata=metadata)

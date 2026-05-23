@@ -56,19 +56,22 @@ async def approve_remember(execution: ToolExecution, args: RememberInput) -> App
 
 async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
+    project = execution.ctx.project
+    scope = project.knowledge_scope if project and project.knowledge_scope else args.kind
     obj = await memory.knowledge_objects.create(
         KnowledgeObjectCreate(
             object_type=KnowledgeObjectType.FACT,
             title=args.fact[:100],
             text=args.fact,
             status=KnowledgeObjectStatus.ACTIVE,
-            scope=args.kind,
+            scope=scope,
             activation="prompt",
             proactiveness_level="L0",
             score=args.salience * 0.2,
             source_ids=[args.source] if args.source else [],
             metadata={
                 "kind": args.kind,
+                "project_id": project.project_id if project else None,
                 "lifetime": args.lifetime,
                 "salience": args.salience,
                 "confidence": args.confidence,
@@ -98,8 +101,15 @@ class RecallInput(BaseModel):
 
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
+    project = execution.ctx.project
     bundle = await KnowledgeActivationService(memory).inspect(
-        ActivationRequest(query=args.query, limit=args.limit, task="recall_tool", record_access=True)
+        ActivationRequest(
+            query=args.query,
+            scope=project.knowledge_scope if project else None,
+            limit=args.limit,
+            task="recall_tool",
+            record_access=True,
+        )
     )
     if bundle.prompt_context:
         return ToolResult(content=bundle.prompt_context, preview=f"{len(bundle.candidates)} knowledge objects")

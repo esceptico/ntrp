@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Pencil, Sparkles } from "lucide-react";
+import { Archive, FolderInput, Pencil, Sparkles } from "lucide-react";
+import type { Project } from "../../api";
 import { ICON } from "../../lib/icons";
 
 export interface ContextMenuState {
@@ -15,12 +16,16 @@ export function SessionContextMenu({
   onRename,
   onCompact,
   onArchive,
+  onMoveProject,
+  projects,
 }: {
   state: ContextMenuState;
   onClose: () => void;
   onRename: () => void;
   onCompact: () => void;
   onArchive: () => void;
+  onMoveProject: (projectId: string | null) => void;
+  projects: Project[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: state.x, top: state.y, ready: false });
@@ -61,13 +66,23 @@ export function SessionContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="glass-surface surface-popover fixed z-50 w-[160px] py-1"
+      className="glass-surface surface-popover fixed z-50 w-[220px] py-1"
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={2} />} label="Rename" onClick={onRename} />
       <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={2} />} label="Compact context" onClick={onCompact} />
       <ContextItem icon={<Archive size={ICON.MD} strokeWidth={2} />} label="Archive" onClick={onArchive} />
+      <div className="my-1 h-px bg-line-soft" />
+      <ContextItem icon={<FolderInput size={ICON.MD} strokeWidth={2} />} label="Move to Inbox" onClick={() => onMoveProject(null)} />
+      {projects.map((project) => (
+        <ContextItem
+          key={project.project_id}
+          icon={<FolderInput size={ICON.MD} strokeWidth={2} />}
+          label={project.name}
+          onClick={() => onMoveProject(project.project_id)}
+        />
+      ))}
     </div>,
     root,
   );
@@ -89,7 +104,7 @@ function ContextItem({
       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
     >
       <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
-      {label}
+      <span className="truncate">{label}</span>
     </button>
   );
 }

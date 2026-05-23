@@ -272,10 +272,37 @@ class SessionResponse(BaseModel):
     integrations: list[str]
     integration_errors: dict[str, str]
     name: str | None = None
+    project_id: str | None = None
+
+
+class ProjectResponse(BaseModel):
+    project_id: str
+    name: str
+    default_cwd: str | None = None
+    instructions: str | None = None
+    knowledge_scope: str
+    created_at: str
+    updated_at: str
+    archived_at: str | None = None
+
+
+class CreateProjectRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    default_cwd: str | None = Field(default=None, max_length=1_000)
+    instructions: str | None = Field(default=None, max_length=20_000)
+    knowledge_scope: str | None = Field(default=None, max_length=500)
+
+
+class UpdateProjectRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    default_cwd: str | None = Field(default=None, max_length=1_000)
+    instructions: str | None = Field(default=None, max_length=20_000)
+    knowledge_scope: str | None = Field(default=None, max_length=500)
 
 
 class CreateSessionRequest(BaseModel):
     name: str | None = None
+    project_id: str | None = None
 
 
 class BranchRequest(BaseModel):
@@ -295,6 +322,10 @@ class SetSessionAutoRequest(BaseModel):
 
 class RenameSessionRequest(BaseModel):
     name: str
+
+
+class MoveSessionProjectRequest(BaseModel):
+    project_id: str | None = None
 
 
 class CompactRequest(BaseModel):

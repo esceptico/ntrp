@@ -1,7 +1,7 @@
-import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
+import { Brain, FolderPlus, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
 import { originFromEvent } from "../../lib/motion";
 import { useStore } from "../../store";
-import { createSession, fetchAutomations } from "../../actions";
+import { createProject, createSession, fetchAutomations } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useVisibilityPoll } from "../../lib/hooks";
 import { NavRow } from "./NavRow";
@@ -23,6 +23,11 @@ export function Sidebar() {
           icon={<Pencil size={ICON.LG} strokeWidth={2} />}
           label="New session"
           onClick={() => void createSession()}
+        />
+        <NavRow
+          icon={<FolderPlus size={ICON.LG} strokeWidth={2} />}
+          label="New project"
+          onClick={() => void createProject()}
         />
         <NavRow
           icon={<Zap size={ICON.LG} strokeWidth={2} />}

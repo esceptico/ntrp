@@ -10,7 +10,7 @@ from uuid import uuid4
 from ntrp.agent import Agent, Role
 from ntrp.agent.types.events import Result
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW
-from ntrp.context.models import SessionData, SessionState
+from ntrp.context.models import ProjectContext, SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.naming import generate_conversation_name
@@ -148,6 +148,7 @@ class ChatContext:
     initial_input_tokens: int | None = None
     goal_id: str | None = None
     session_name_task: asyncio.Task[str] | None = None
+    project_context: ProjectContext | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
 
@@ -386,13 +387,15 @@ async def _prepare_messages(
     client_id: str | None = None,
     session_id: str | None = None,
     goal_context: dict | None = None,
+    project_context: ProjectContext | None = None,
 ) -> list[dict]:
     memory_context = None
     if deps.memory_service:
+        activation_scope = project_context.knowledge_scope if project_context else None
         bundle = await KnowledgeActivationService(deps.memory_service).inspect(
             ActivationRequest(
                 query=user_message,
-                scope=f"session:{session_id}" if session_id else None,
+                scope=activation_scope or (f"session:{session_id}" if session_id else None),
                 task="chat_prompt",
                 budget_chars=1_500,
                 limit=8,
@@ -418,6 +421,7 @@ async def _prepare_messages(
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,
         goal_context=goal_context,
+        project_context=project_context,
         use_cache_control=_is_anthropic(deps.chat_model),
     )
 
@@ -452,6 +456,18 @@ async def _prepare_messages(
     messages.append(user_msg)
 
     return messages
+
+
+def _project_context_from_record(project: dict | None) -> ProjectContext | None:
+    if not project:
+        return None
+    return ProjectContext(
+        project_id=project["project_id"],
+        name=project["name"],
+        default_cwd=project.get("default_cwd"),
+        instructions=project.get("instructions"),
+        knowledge_scope=project.get("knowledge_scope"),
+    )
 
 
 def _persistable_messages(run: RunState) -> list[dict]:
@@ -576,6 +592,8 @@ async def prepare_chat(
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
     goal_context = await get_goal(session_state.session_id) if get_goal else None
+    project_record = await deps.session_service.get_project(session_state.project_id) if session_state.project_id else None
+    project_context = _project_context_from_record(project_record)
     messages = await _prepare_messages(
         deps,
         messages,
@@ -587,6 +605,7 @@ async def prepare_chat(
         client_id=client_id,
         session_id=session_state.session_id,
         goal_context=goal_context,
+        project_context=project_context,
     )
 
     run = registry.create_run(session_state.session_id)
@@ -610,6 +629,7 @@ async def prepare_chat(
         initial_input_tokens=session_data.last_input_tokens,
         goal_id=goal_context["goal_id"] if goal_context else None,
         session_name_task=session_name_task,
+        project_context=project_context,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
     )
@@ -1126,6 +1146,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 parent_tracker=tracker,
                 initial_input_tokens=ctx.initial_input_tokens,
                 run_registry=ctx.run_registry,
+                project_context=ctx.project_context,
             )
 
         async def _track_response(response) -> None:

@@ -1,53 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, ChevronDown, Search, X } from "lucide-react";
+import { Archive, ChevronDown, Folder, Plus, Search, Settings, X } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/motion";
 import { useStore } from "../../store";
 import { compactSessionApi } from "../../api";
-import { archiveSession, loadHistory } from "../../actions";
+import { archiveSession, createSession, loadHistory, moveSessionToProject } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
+import { groupProjectSessions } from "../../lib/projects";
 import { SessionRow } from "./SessionRow";
 import { SessionContextMenu, type ContextMenuState } from "./SessionContextMenu";
-
-const DAY_MS = 86_400_000;
-
-function bucketByTime<T extends { last_activity: string }>(
-  items: T[],
-): { label: string; items: T[] }[] {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const todayStart = startOfToday.getTime();
-  const yesterdayStart = todayStart - DAY_MS;
-  const sevenDaysAgo = todayStart - 6 * DAY_MS;
-  const thirtyDaysAgo = todayStart - 29 * DAY_MS;
-
-  const today: T[] = [];
-  const yesterday: T[] = [];
-  const week: T[] = [];
-  const month: T[] = [];
-  const older: T[] = [];
-  for (const item of items) {
-    const t = new Date(item.last_activity).getTime();
-    if (t >= todayStart) today.push(item);
-    else if (t >= yesterdayStart) yesterday.push(item);
-    else if (t >= sevenDaysAgo) week.push(item);
-    else if (t >= thirtyDaysAgo) month.push(item);
-    else older.push(item);
-  }
-
-  const buckets: { label: string; items: T[] }[] = [];
-  if (today.length) buckets.push({ label: "Today", items: today });
-  if (yesterday.length) buckets.push({ label: "Yesterday", items: yesterday });
-  if (week.length) buckets.push({ label: "Previous 7 days", items: week });
-  if (month.length) buckets.push({ label: "Previous 30 days", items: month });
-  if (older.length) buckets.push({ label: "Older", items: older });
-  return buckets;
-}
+import { ProjectSettingsModal } from "./ProjectSettingsModal";
 
 export function SessionList() {
   useTimeTicker();
+  const projects = useStore((s) => s.projects);
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
@@ -59,10 +27,8 @@ export function SessionList() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
-  // Buckets that the user has explicitly collapsed. Local state — not
-  // persisted, since "what's open" tends to be answer-where-you-left-off
-  // and resetting on app launch is fine.
-  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const searchActive = searchOpen || query.length > 0;
   const closeSearch = () => {
@@ -84,8 +50,8 @@ export function SessionList() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const toggleBucket = (label: string) => {
-    setCollapsedBuckets((prev) => {
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(label)) next.delete(label);
       else next.add(label);
@@ -93,20 +59,14 @@ export function SessionList() {
     });
   };
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => (s.name ?? "untitled").toLowerCase().includes(q));
-  }, [sessions, query]);
+  const grouped = useMemo(() => groupProjectSessions(projects, sessions, query), [projects, sessions, query]);
+  const editingProject = projects.find((project) => project.project_id === editingProjectId) ?? null;
 
   const closeMenu = () => setMenu(null);
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      {/* No umbrella "Recents" label — the time buckets below are
-          themselves the section labels, so a redundant title would
-          just add chrome. Search expands inline at the top of the
-          list when triggered (button in bottom nav). */}
+      {/* Search expands inline at the top of the list when triggered. */}
       {searchActive && (
         <div className="px-2.5 pt-3 pb-1">
           <SessionSearch
@@ -119,27 +79,30 @@ export function SessionList() {
       )}
 
       <div className={clsx("flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-both pb-3", !searchActive && "pt-3")}>
-        {sessions.length === 0 ? (
+        {sessions.length === 0 && projects.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : grouped.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">No matches.</div>
         ) : (
-          bucketByTime(filtered).map((bucket, idx) => {
-            const isCollapsed = collapsedBuckets.has(bucket.label);
+          grouped.map((group, idx) => {
+            const groupKey = group.project?.project_id ?? "inbox";
+            const label = group.project?.name ?? "Inbox";
+            const isCollapsed = collapsedGroups.has(groupKey);
             const isFirst = idx === 0 && !searchActive;
             return (
-              <div key={bucket.label}>
+              <div key={groupKey}>
                 <div className="sticky top-0 z-10 flex items-center gap-1 pr-[18px]">
                   <button
                     type="button"
-                    onClick={() => toggleBucket(bucket.label)}
+                    onClick={() => toggleGroup(groupKey)}
                     aria-expanded={!isCollapsed}
                     className={clsx(
                       "flex-1 flex items-center gap-1 pl-[18px] pt-1.5 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint hover:text-muted transition-colors cursor-pointer select-none",
                     )}
                   >
+                    <Folder size={ICON.XS} strokeWidth={2.1} />
                     <ChevronDown
                       size={ICON.XS}
                       strokeWidth={2.2}
@@ -148,10 +111,31 @@ export function SessionList() {
                         isCollapsed && "-rotate-90",
                       )}
                     />
-                    <span>{bucket.label}</span>
+                    <span className="truncate">{label}</span>
                   </button>
-                  {isFirst && (
-                    <div className="flex items-center gap-0.5 shrink-0">
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {group.project && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingProjectId(group.project?.project_id ?? null)}
+                        aria-label={`Project settings for ${group.project.name}`}
+                        title="Project settings"
+                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                      >
+                        <Settings size={ICON.SM} strokeWidth={2} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void createSession(group.project?.project_id ?? null)}
+                      aria-label={`New session in ${label}`}
+                      title="New session"
+                      className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                    >
+                      <Plus size={ICON.SM} strokeWidth={2} />
+                    </button>
+                    {isFirst && (
+                      <>
                       <button
                         type="button"
                         onClick={() => setSearchOpen(true)}
@@ -170,8 +154,9 @@ export function SessionList() {
                       >
                         <Archive size={ICON.SM} strokeWidth={2} />
                       </button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
@@ -184,7 +169,7 @@ export function SessionList() {
                       style={{ display: "grid" }}
                     >
                       <div className="px-2.5 flex flex-col gap-0 overflow-hidden min-h-0">
-                        {bucket.items.map((session) => (
+                        {group.sessions.map((session) => (
                           <SessionRow
                             key={session.session_id}
                             sessionId={session.session_id}
@@ -246,8 +231,19 @@ export function SessionList() {
               /* ignore */
             }
           }}
+          onMoveProject={async (projectId) => {
+            const sessionId = menu.sessionId;
+            closeMenu();
+            try {
+              await moveSessionToProject(sessionId, projectId);
+            } catch {
+              /* ignore */
+            }
+          }}
+          projects={projects}
         />
       )}
+      <ProjectSettingsModal project={editingProject} onClose={() => setEditingProjectId(null)} />
     </div>
   );
 }

@@ -11,7 +11,7 @@ from ntrp.agent import Role, ToolResult
 from ntrp.agent.agent import RunBudget
 from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import NTRP_TMP_BASE
-from ntrp.context.models import SessionState
+from ntrp.context.models import ProjectContext, SessionState
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.types import ToolOverrideDecision
@@ -304,6 +304,7 @@ class ToolContext:
     run: RunContext
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
+    project: ProjectContext | None = None
     ledger: SharedLedger | None = None
     spawn_fn: Callable[..., Awaitable[Any]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)

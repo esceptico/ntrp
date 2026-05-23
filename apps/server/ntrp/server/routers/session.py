@@ -15,14 +15,18 @@ from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     BranchRequest,
     ClearSessionRequest,
+    CreateProjectRequest,
     CreateSessionRequest,
     GoalProposalResponse,
+    MoveSessionProjectRequest,
+    ProjectResponse,
     RenameSessionRequest,
     RevertRequest,
     SessionGoalResponse,
     SessionResponse,
     SetSessionAutoRequest,
     SetSessionGoalRequest,
+    UpdateProjectRequest,
     UpdateSessionGoalRequest,
 )
 from ntrp.server.state import RunRegistry
@@ -246,6 +250,15 @@ def _history_tool_calls(msg: dict, kind_for: Callable[[str], str]) -> list[dict]
     return tool_calls
 
 
+async def _require_project(svc: SessionService, project_id: str | None) -> dict | None:
+    if project_id is None:
+        return None
+    project = await svc.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.get("/session/history")
 async def get_session_history(
     svc: SessionService = Depends(require_session_service),
@@ -416,6 +429,51 @@ async def get_session_episodes(
     return {"episodes": [{**turn, "episode_id": turn["turn_id"]} for turn in turns], "turns": turns}
 
 
+@router.get("/projects", response_model=dict[str, list[ProjectResponse]])
+async def list_projects(svc: SessionService = Depends(require_session_service)):
+    return {"projects": await svc.list_projects()}
+
+
+@router.post("/projects", response_model=ProjectResponse)
+async def create_project(
+    req: CreateProjectRequest,
+    svc: SessionService = Depends(require_session_service),
+):
+    try:
+        return await svc.create_project(
+            name=req.name,
+            default_cwd=req.default_cwd,
+            instructions=req.instructions,
+            knowledge_scope=req.knowledge_scope,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: str,
+    req: UpdateProjectRequest,
+    svc: SessionService = Depends(require_session_service),
+):
+    patch = {key: getattr(req, key) for key in req.model_fields_set}
+    try:
+        project = await svc.update_project(project_id, **patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.delete("/projects/{project_id}")
+async def archive_project(project_id: str, svc: SessionService = Depends(require_session_service)):
+    archived = await svc.archive_project(project_id)
+    if not archived:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"status": "archived", "project_id": project_id}
+
+
 @router.get("/session")
 async def get_session(
     runtime: Runtime = Depends(get_runtime),
@@ -433,6 +491,7 @@ async def get_session(
         integrations=runtime.get_available_integrations(),
         integration_errors=runtime.get_integration_errors(),
         name=session_state.name,
+        project_id=session_state.project_id,
     )
 
 
@@ -578,6 +637,7 @@ async def branch_session(
         "name": state.name,
         "started_at": state.started_at.isoformat(),
         "last_activity": state.last_activity.isoformat(),
+        "project_id": state.project_id,
     }
 
 
@@ -586,7 +646,9 @@ async def create_session(
     svc: SessionService = Depends(require_session_service), req: CreateSessionRequest | None = None
 ):
     name = req.name if req else None
-    state = svc.create(name=name)
+    project_id = req.project_id if req else None
+    await _require_project(svc, project_id)
+    state = svc.create(name=name, project_id=project_id)
     await svc.save(state, [])
     return {
         "session_id": state.session_id,
@@ -594,6 +656,7 @@ async def create_session(
         "started_at": state.started_at.isoformat(),
         "last_activity": state.last_activity.isoformat(),
         "message_count": 0,
+        "project_id": state.project_id,
     }
 
 
@@ -602,8 +665,22 @@ async def list_sessions(
     svc: SessionService = Depends(require_session_service),
     runtime: Runtime = Depends(get_runtime),
     buses: BusRegistry = Depends(get_bus_registry),
+    project_id: str | None = Query(default=None),
+    inbox: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
 ):
-    sessions = await svc.list_sessions(limit=20)
+    # Tests call route functions directly, so FastAPI's Query defaults are
+    # not resolved before the function body runs.
+    project_id = project_id if isinstance(project_id, str) else None
+    inbox = inbox if isinstance(inbox, bool) else False
+    limit = limit if isinstance(limit, int) else 100
+    if inbox:
+        sessions = await svc.list_sessions(limit=limit, project_id=None)
+    elif project_id is not None:
+        await _require_project(svc, project_id)
+        sessions = await svc.list_sessions(limit=limit, project_id=project_id)
+    else:
+        sessions = await svc.list_sessions(limit=limit)
     enriched = []
     for session in sessions:
         snapshot = await _session_runtime_snapshot(svc, runtime, buses, session["session_id"])
@@ -632,6 +709,21 @@ async def rename_session(
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "name": req.name}
+
+
+@router.post("/sessions/{session_id}/project")
+async def move_session_to_project(
+    session_id: str,
+    req: MoveSessionProjectRequest,
+    svc: SessionService = Depends(require_session_service),
+):
+    if not await svc.load(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    await _require_project(svc, req.project_id)
+    moved = await svc.move_session_to_project(session_id, req.project_id)
+    if not moved:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "project_id": req.project_id}
 
 
 @router.post("/sessions/{session_id}/auto")

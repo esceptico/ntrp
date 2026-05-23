@@ -162,6 +162,16 @@ If a skill has already been loaded in this conversation (you see a `<skill>` tag
 DYNAMIC_BLOCK = env.from_string("""## CONTEXT
 Today is {{ date }} at {{ time }} (user's local time).""")
 
+PROJECT_BLOCK = env.from_string("""## PROJECT
+Name: {{ project.name }}
+{% if project.default_cwd %}Default cwd: {{ project.default_cwd }}
+{% endif %}
+Knowledge scope: {{ project.knowledge_scope }}
+{% if project.instructions %}
+Instructions:
+{{ project.instructions }}
+{% endif %}""")
+
 GOAL_BLOCK = env.from_string("""## ACTIVE GOAL
 Objective: {{ goal.objective }}
 Status: {{ goal.status }}
@@ -253,6 +263,7 @@ def build_system_blocks(
     notifiers: list[str] | None = None,
     deferred_tools_context: str | None = None,
     goal_context: dict | None = None,
+    project_context: object | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -283,6 +294,9 @@ def build_system_blocks(
     )
     blocks.append({"type": "text", "text": dynamic})
 
+    if project_context:
+        blocks.append({"type": "text", "text": PROJECT_BLOCK.render(project=project_context)})
+
     if memory_context:
         memory_block: dict = {
             "type": "text",
@@ -308,6 +322,7 @@ def build_system_prompt(
     notifiers: list[str] | None = None,
     deferred_tools_context: str | None = None,
     goal_context: dict | None = None,
+    project_context: object | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
     blocks = build_system_blocks(
@@ -318,5 +333,6 @@ def build_system_prompt(
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,
         goal_context=goal_context,
+        project_context=project_context,
     )
     return "\n\n".join(b["text"] for b in blocks)

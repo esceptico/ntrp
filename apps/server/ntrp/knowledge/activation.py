@@ -77,6 +77,16 @@ def _is_near_duplicate(candidate: ActivationCandidate, selected: list[Activation
     return False
 
 
+def _scope_allowed(obj_scope: str | None, request_scope: str | None) -> bool:
+    if obj_scope is None:
+        return True
+    if obj_scope.startswith("project:"):
+        return obj_scope == request_scope
+    if request_scope and request_scope.startswith("project:"):
+        return obj_scope == request_scope
+    return True
+
+
 def _action_candidate(query: str, score: float) -> ActivationCandidate:
     return ActivationCandidate(
         object_type=KnowledgeObjectType.ACTION_CANDIDATE,
@@ -408,6 +418,8 @@ class KnowledgeActivationService:
         now = datetime.now(UTC)
         candidates: list[ActivationCandidate] = []
         for obj in objects_by_id.values():
+            if not _scope_allowed(obj.scope, request.scope):
+                continue
             retrieval_score, retrieval_reasons = retrieval.get(obj.id, (0.0, []))
             candidate = object_candidate(
                 obj,

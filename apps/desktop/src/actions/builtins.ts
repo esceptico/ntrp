@@ -158,7 +158,7 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
         );
         const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(
           s.config,
-          "/sessions",
+          "/sessions?limit=500",
         );
         s.setSessions(sessions);
         await switchSession(branched.session_id);

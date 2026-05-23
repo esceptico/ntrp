@@ -1,4 +1,4 @@
-import { apiWithConfig, checkHealth, loadInitialConfig, type SessionListItem } from "../api";
+import { apiWithConfig, checkHealth, listProjectsApi, loadInitialConfig, type SessionListItem } from "../api";
 import { getState } from "../store";
 import { fetchGoal } from "./goals";
 import { loadHistory } from "./history";
@@ -15,10 +15,12 @@ export async function refresh(): Promise<void> {
     s.setConnected(true);
     s.setError(null);
 
-    const [{ sessions }, session] = await Promise.all([
-      apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions"),
+    const [projects, { sessions }, session] = await Promise.all([
+      listProjectsApi(s.config),
+      apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500"),
       apiWithConfig<{ session_id: string; name?: string | null }>(s.config, "/session"),
     ]);
+    s.setProjects(projects);
     s.setSessions(sessions);
     s.setCurrentSession(session.session_id);
     await loadHistory(session.session_id);

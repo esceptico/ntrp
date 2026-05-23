@@ -3,6 +3,7 @@ import type {
   ArchivedSession,
   Automation,
   ModelsResponse,
+  Project,
   ServerConfig,
   SessionGoal,
   SessionListItem,
@@ -287,6 +288,7 @@ export interface CachedSessionState {
 
 export interface State {
   config: AppConfig;
+  projects: Project[];
   sessions: SessionListItem[];
   sessionView: SessionViewState;
   currentSessionId: string | null;
@@ -364,6 +366,7 @@ export interface State {
 
 export interface Actions {
   setConfig: (config: AppConfig) => void;
+  setProjects: (projects: Project[]) => void;
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
   syncActiveRuns: (

@@ -13,6 +13,20 @@ from ntrp.events.sse import event_from_payload
 from ntrp.server.bus import StreamRecord
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS projects (
+    project_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    default_cwds TEXT NOT NULL DEFAULT '[]',
+    instructions TEXT,
+    knowledge_scope TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_archived_updated
+    ON projects(archived_at, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     started_at TEXT NOT NULL,
@@ -22,11 +36,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     name TEXT,
     archived_at TEXT,
     session_type TEXT NOT NULL DEFAULT 'chat',
-    origin_automation_id TEXT
+    origin_automation_id TEXT,
+    project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_project_activity ON sessions(project_id, last_activity DESC);
 
 CREATE TABLE IF NOT EXISTS session_messages (
     session_id TEXT NOT NULL,
@@ -241,16 +257,17 @@ CREATE TABLE IF NOT EXISTS session_goals (
 SQL_SAVE_SESSION = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id
+    session_type, origin_automation_id, project_id
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity,
     messages = excluded.messages,
     metadata = excluded.metadata,
     name = excluded.name,
     session_type = excluded.session_type,
-    origin_automation_id = excluded.origin_automation_id
+    origin_automation_id = excluded.origin_automation_id,
+    project_id = sessions.project_id
 """
 
 SQL_GET_LATEST = """
@@ -261,7 +278,7 @@ ORDER BY last_activity DESC LIMIT 1
 
 SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
-       session_type, origin_automation_id,
+       session_type, origin_automation_id, project_id,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL
@@ -271,7 +288,7 @@ LIMIT ?
 
 SQL_LIST_ARCHIVED = """
 SELECT session_id, started_at, last_activity, name, archived_at,
-       session_type, origin_automation_id,
+       session_type, origin_automation_id, project_id,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NOT NULL
@@ -286,15 +303,17 @@ SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
 SQL_UPSERT_PROGRESS = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id
+    session_type, origin_automation_id, project_id
 )
-VALUES (?, ?, ?, ?, '{}', ?, ?, ?)
+VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     messages = excluded.messages,
-    last_activity = excluded.last_activity
+    last_activity = excluded.last_activity,
+    project_id = sessions.project_id
 """
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_UPDATE_NAME_IF_EMPTY = "UPDATE sessions SET name = ? WHERE session_id = ? AND (name IS NULL OR name = '')"
+SQL_UPDATE_SESSION_PROJECT = "UPDATE sessions SET project_id = ? WHERE session_id = ?"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
 SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
 SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL"
@@ -303,6 +322,8 @@ SQL_LOAD_SESSION_MESSAGES_COUNT = "SELECT 1 FROM session_messages WHERE session_
 SQL_LOAD_SESSION_MESSAGES_JSON = "SELECT messages FROM sessions WHERE session_id = ?"
 CHAT_IDEMPOTENCY_TTL_DAYS = 30
 CHAT_IDEMPOTENCY_TERMINAL_STATUSES = ("completed", "cancelled", "error", "failed", "interrupted")
+PROJECT_FILTER_UNSET = object()
+_PROJECT_PATCH_UNSET = object()
 
 
 class SessionStore:
@@ -446,6 +467,24 @@ class SessionStore:
             "updated_at": row["updated_at"],
         }
 
+    @staticmethod
+    def _normalize_cwd(default_cwd: str | None) -> str | None:
+        cwd = default_cwd.strip() if default_cwd else ""
+        return cwd or None
+
+    @staticmethod
+    def _project_payload(row: aiosqlite.Row) -> dict:
+        return {
+            "project_id": row["project_id"],
+            "name": row["name"],
+            "default_cwd": (json.loads(row["default_cwds"] or "[]") or [None])[0],
+            "instructions": row["instructions"],
+            "knowledge_scope": row["knowledge_scope"] or f"project:{row['project_id']}",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "archived_at": row["archived_at"],
+        }
+
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         for col in (
@@ -453,12 +492,16 @@ class SessionStore:
             "archived_at TEXT",
             "session_type TEXT NOT NULL DEFAULT 'chat'",
             "origin_automation_id TEXT",
+            "project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL",
         ):
             try:
                 await self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
                 await self.conn.commit()
             except Exception:
                 pass
+        await self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_project_activity ON sessions(project_id, last_activity DESC)"
+        )
         await self._migrate_session_turns_schema()
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
@@ -468,6 +511,113 @@ class SessionStore:
             "CREATE INDEX IF NOT EXISTS idx_chat_idempotency_expires ON chat_idempotency_keys(expires_at)"
         )
         await self.conn.commit()
+
+    async def create_project(
+        self,
+        *,
+        name: str,
+        default_cwd: str | None = None,
+        instructions: str | None = None,
+        knowledge_scope: str | None = None,
+    ) -> dict:
+        trimmed_name = name.strip()
+        if not trimmed_name:
+            raise ValueError("Project name cannot be blank")
+        project_id = f"proj_{uuid4().hex[:12]}"
+        now = datetime.now(UTC).isoformat()
+        scope = (knowledge_scope or "").strip() or f"project:{project_id}"
+        await self.conn.execute(
+            """
+            INSERT INTO projects (
+                project_id, name, default_cwds, instructions, knowledge_scope,
+                created_at, updated_at, archived_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+            """,
+            (
+                project_id,
+                trimmed_name,
+                json.dumps([self._normalize_cwd(default_cwd)] if self._normalize_cwd(default_cwd) else []),
+                instructions.strip() if instructions and instructions.strip() else None,
+                scope,
+                now,
+                now,
+            ),
+        )
+        await self.conn.commit()
+        project = await self.get_project(project_id)
+        if project is None:
+            raise RuntimeError("project insert failed")
+        return project
+
+    async def get_project(self, project_id: str | None) -> dict | None:
+        if not project_id:
+            return None
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT * FROM projects WHERE project_id = ? AND archived_at IS NULL",
+            (project_id,),
+        )
+        return self._project_payload(rows[0]) if rows else None
+
+    async def list_projects(self) -> list[dict]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM projects
+            WHERE archived_at IS NULL
+            ORDER BY updated_at DESC, created_at DESC
+            """
+        )
+        return [self._project_payload(row) for row in rows]
+
+    async def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str | object = _PROJECT_PATCH_UNSET,
+        default_cwd: str | None | object = _PROJECT_PATCH_UNSET,
+        instructions: str | None | object = _PROJECT_PATCH_UNSET,
+        knowledge_scope: str | None | object = _PROJECT_PATCH_UNSET,
+    ) -> dict | None:
+        assignments = ["updated_at = ?"]
+        params: list[object] = [datetime.now(UTC).isoformat()]
+        if name is not _PROJECT_PATCH_UNSET:
+            trimmed_name = str(name).strip()
+            if not trimmed_name:
+                raise ValueError("Project name cannot be blank")
+            assignments.append("name = ?")
+            params.append(trimmed_name)
+        if default_cwd is not _PROJECT_PATCH_UNSET:
+            assignments.append("default_cwds = ?")
+            cwd = self._normalize_cwd(default_cwd if isinstance(default_cwd, str) else None)
+            params.append(json.dumps([cwd] if cwd else []))
+        if instructions is not _PROJECT_PATCH_UNSET:
+            assignments.append("instructions = ?")
+            text = instructions if isinstance(instructions, str) else None
+            params.append(text.strip() if text and text.strip() else None)
+        if knowledge_scope is not _PROJECT_PATCH_UNSET:
+            assignments.append("knowledge_scope = ?")
+            scope = knowledge_scope if isinstance(knowledge_scope, str) else None
+            params.append(scope.strip() if scope and scope.strip() else f"project:{project_id}")
+        params.append(project_id)
+        cursor = await self.conn.execute(
+            f"UPDATE projects SET {', '.join(assignments)} WHERE project_id = ? AND archived_at IS NULL",
+            tuple(params),
+        )
+        await self.conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return await self.get_project(project_id)
+
+    async def archive_project(self, project_id: str) -> bool:
+        now = datetime.now(UTC).isoformat()
+        cursor = await self.conn.execute(
+            "UPDATE projects SET archived_at = ?, updated_at = ? WHERE project_id = ? AND archived_at IS NULL",
+            (now, now, project_id),
+        )
+        if cursor.rowcount:
+            await self.conn.execute("UPDATE sessions SET project_id = NULL WHERE project_id = ?", (project_id,))
+        await self.conn.commit()
+        return cursor.rowcount > 0
 
     async def _migrate_session_turns_schema(self) -> None:
         # Older builds named per-user-turn transcript slices "session_episodes".
@@ -948,6 +1098,7 @@ class SessionStore:
                     state.name,
                     state.session_type,
                     state.origin_automation_id,
+                    state.project_id,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable)
@@ -1789,6 +1940,7 @@ class SessionStore:
                     state.name,
                     state.session_type,
                     state.origin_automation_id,
+                    state.project_id,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable_messages)
@@ -1817,6 +1969,7 @@ class SessionStore:
             name=name,
             session_type=row["session_type"] or "chat",
             origin_automation_id=row["origin_automation_id"],
+            project_id=row["project_id"],
         )
 
         raw_messages, raw_metadata = row["messages"], row["metadata"]
@@ -1839,8 +1992,35 @@ class SessionStore:
             return None
         return await self.load_session(session_id)
 
-    async def list_sessions(self, limit: int = 20) -> list[dict]:
-        rows = await self.read_conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
+    async def list_sessions(self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET) -> list[dict]:
+        if project_id is PROJECT_FILTER_UNSET:
+            rows = await self.read_conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
+        elif project_id is None:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT session_id, started_at, last_activity, name,
+                       session_type, origin_automation_id, project_id,
+                       json_array_length(COALESCE(messages, '[]')) AS message_count
+                FROM sessions
+                WHERE archived_at IS NULL AND project_id IS NULL
+                ORDER BY last_activity DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+        else:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT session_id, started_at, last_activity, name,
+                       session_type, origin_automation_id, project_id,
+                       json_array_length(COALESCE(messages, '[]')) AS message_count
+                FROM sessions
+                WHERE archived_at IS NULL AND project_id = ?
+                ORDER BY last_activity DESC
+                LIMIT ?
+                """,
+                (project_id, limit),
+            )
         return [
             {
                 "session_id": row["session_id"],
@@ -1850,12 +2030,16 @@ class SessionStore:
                 "message_count": row["message_count"],
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
+                "project_id": row["project_id"],
             }
             for row in rows
         ]
 
     async def update_session_name(self, session_id: str, name: str) -> bool:
         return await self._update(SQL_UPDATE_NAME, (name, session_id))
+
+    async def update_session_project(self, session_id: str, project_id: str | None) -> bool:
+        return await self._update(SQL_UPDATE_SESSION_PROJECT, (project_id, session_id))
 
     async def update_session_name_if_empty(self, session_id: str, name: str) -> bool:
         return await self._update(SQL_UPDATE_NAME_IF_EMPTY, (name, session_id))

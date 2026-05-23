@@ -135,6 +135,7 @@ function activeActivityIdFromMessages(messages: UiMessage[]): string | null {
 
 export const useStore = create<State & Actions>((set) => ({
   config: { ...DEFAULT_CONFIG },
+  projects: [],
   sessions: [],
   sessionView: createInitialSessionViewState(),
   currentSessionId: null,
@@ -191,6 +192,7 @@ export const useStore = create<State & Actions>((set) => ({
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
+  setProjects: (projects) => set({ projects }),
   setSessions: (sessions) =>
     set((s) => ({
       sessions,
@@ -242,7 +244,7 @@ export const useStore = create<State & Actions>((set) => ({
       const view = restored ? normalizeCachedSessionState(restored) : blankSessionView();
       let sessionView = reduceSessionSelected(s.sessionView, currentSessionId);
       if (currentSessionId && restored) {
-        sessionView = reduceCachePreviewRestored(sessionView, currentSessionId);
+        sessionView = reduceCachePreviewRestored(view.sessionView, currentSessionId);
       }
       return {
         sessionView,

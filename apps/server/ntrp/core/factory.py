@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Self
 
 from ntrp.agent import Agent, AgentHooks, RunBudget
 from ntrp.agent.ledger import SharedLedger
-from ntrp.context.models import SessionState
+from ntrp.context.models import ProjectContext, SessionState
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
 from ntrp.core.compactor import Compactor, SummaryCompactor
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
@@ -76,6 +76,7 @@ def create_agent(
     parent_tracker: UsageTracker | None = None,
     initial_input_tokens: int | None = None,
     run_registry: "RunRegistry | None" = None,
+    project_context: ProjectContext | None = None,
 ) -> Agent:
     started_at = monotonic()
     budget = RunBudget()
@@ -105,6 +106,7 @@ def create_agent(
         run=run_ctx,
         io=io or IOBridge(),
         services=executor.tool_services,
+        project=project_context,
         ledger=SharedLedger(),
         background_tasks=bg_tasks,
         run_registry=run_registry,

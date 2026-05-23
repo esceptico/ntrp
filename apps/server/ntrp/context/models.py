@@ -12,6 +12,16 @@ class SessionState:
     auto_approve: set[str] = field(default_factory=set)
     session_type: Literal["chat", "channel"] = "chat"
     origin_automation_id: str | None = None
+    project_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ProjectContext:
+    project_id: str
+    name: str
+    default_cwd: str | None = None
+    instructions: str | None = None
+    knowledge_scope: str | None = None
 
 
 @dataclass

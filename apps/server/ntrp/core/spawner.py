@@ -284,6 +284,7 @@ def create_spawn_fn(
             run=child_run,
             io=bg_io,
             services=calling_ctx.services,
+            project=calling_ctx.project,
             ledger=calling_ctx.ledger,
             background_tasks=calling_ctx.background_tasks,
             run_registry=calling_ctx.run_registry,

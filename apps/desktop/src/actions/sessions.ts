@@ -2,10 +2,15 @@ import {
   apiWithConfig,
   archiveSessionApi,
   branchSessionApi,
+  createProjectApi,
+  listProjectsApi,
   listArchivedSessionsApi,
+  moveSessionToProjectApi,
   permanentlyDeleteSessionApi,
   renameSessionApi,
   restoreSessionApi,
+  updateProjectApi,
+  type Project,
   type SessionListItem,
 } from "../api";
 import { getState } from "../store";
@@ -21,14 +26,53 @@ export async function switchSession(sessionId: string, historyOptions: LoadHisto
   await fetchGoal(sessionId);
 }
 
-export async function createSession(): Promise<void> {
+export async function createSession(projectId?: string | null): Promise<void> {
   const s = getState();
+  const targetProjectId =
+    projectId !== undefined
+      ? projectId
+      : s.currentSessionId
+        ? (s.sessions.find((session) => session.session_id === s.currentSessionId)?.project_id ?? null)
+        : null;
   const session = await apiWithConfig<SessionListItem>(s.config, "/sessions", {
     method: "POST",
-    body: "{}",
+    body: JSON.stringify({ project_id: targetProjectId }),
   });
   s.prependSession(session);
   await switchSession(session.session_id);
+}
+
+export async function createProject(): Promise<Project> {
+  const s = getState();
+  const project = await createProjectApi(s.config, { name: "New project" });
+  s.setProjects([project, ...s.projects]);
+  await createSession(project.project_id);
+  return project;
+}
+
+export async function saveProject(
+  projectId: string,
+  patch: { name?: string; default_cwd?: string | null; instructions?: string | null; knowledge_scope?: string },
+): Promise<Project> {
+  const s = getState();
+  const project = await updateProjectApi(s.config, projectId, patch);
+  s.setProjects(s.projects.map((item) => (item.project_id === project.project_id ? project : item)));
+  return project;
+}
+
+export async function moveSessionToProject(sessionId: string, projectId: string | null): Promise<void> {
+  const s = getState();
+  await moveSessionToProjectApi(s.config, sessionId, projectId);
+  s.setSessions(
+    s.sessions.map((session) =>
+      session.session_id === sessionId ? { ...session, project_id: projectId } : session,
+    ),
+  );
+}
+
+export async function refreshProjects(): Promise<void> {
+  const s = getState();
+  s.setProjects(await listProjectsApi(s.config));
 }
 
 export async function renameSession(sessionId: string, name: string): Promise<void> {
@@ -76,7 +120,7 @@ export async function restoreArchivedSession(sessionId: string): Promise<void> {
   // Move back into the live sessions list — easiest is a refresh of both.
   const archived = s.archivedSessions ?? [];
   s.setArchivedSessions(archived.filter((a) => a.session_id !== sessionId));
-  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions");
+  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
   s.setSessions(sessions);
 }
 
@@ -93,7 +137,7 @@ export async function branchAtMessage(messageId: string): Promise<void> {
   const branched = await branchSessionApi(s.config, s.currentSessionId, {
     up_to_message_id: messageId,
   });
-  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions");
+  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
   s.setSessions(sessions);
   await switchSession(branched.session_id);
 }

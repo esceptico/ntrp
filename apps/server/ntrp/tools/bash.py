@@ -1,6 +1,7 @@
 import asyncio
 import shlex
 import subprocess
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -77,7 +78,7 @@ BLOCKED_PATTERNS = frozenset(
 
 BASH_DESCRIPTION = """Execute a bash command in the user's shell.
 
-Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the server's working directory by default. Use the working_dir parameter to run in a different directory instead of 'cd'.
+Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the project's default cwd when set, otherwise in the server's working directory. Use the working_dir parameter to run in a different directory instead of 'cd'.
 
 PREFER OTHER TOOLS:
 - For listing/finding files: use list_files() or find_files()
@@ -152,9 +153,14 @@ class BashInput(BaseModel):
     working_dir: str | None = Field(default=None, description="Working directory (optional, defaults to current)")
 
 
+def _working_dir(execution: ToolExecution, args: BashInput) -> str | None:
+    return args.working_dir or (execution.ctx.project.default_cwd if execution.ctx.project else None)
+
+
 async def approve_bash(execution: ToolExecution, args: BashInput) -> ApprovalInfo | None:
     if not is_safe_command(args.command) and not is_blocked_command(args.command):
-        return ApprovalInfo(description=args.command, preview=None, diff=None)
+        cwd = _working_dir(execution, args) or str(Path.cwd())
+        return ApprovalInfo(description=f"{args.command}\n\ncwd: {cwd}", preview=None, diff=None)
     return None
 
 
@@ -162,7 +168,7 @@ async def run_bash(execution: ToolExecution, args: BashInput) -> ToolResult:
     if is_blocked_command(args.command):
         return ToolResult(content=f"Blocked: {args.command}", preview="Blocked", is_error=True)
 
-    output = await asyncio.to_thread(execute_bash, args.command, args.working_dir, BASH_TIMEOUT)
+    output = await asyncio.to_thread(execute_bash, args.command, _working_dir(execution, args), BASH_TIMEOUT)
     lines = output.count("\n") + 1
     return ToolResult(content=output, preview=f"{lines} lines")
 

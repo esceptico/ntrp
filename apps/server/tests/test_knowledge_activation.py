@@ -591,6 +591,60 @@ async def test_session_scoped_activation_allows_relevant_non_session_memory():
 
 
 @pytest.mark.asyncio
+async def test_project_scoped_activation_excludes_other_projects():
+    class _Objects(_FakeKnowledgeObjects):
+        async def list_many(self, *, object_types=None, statuses=None, limit: int = 100, offset: int = 0):
+            objects = [
+                KnowledgeObject(
+                    id=22,
+                    object_type=KnowledgeObjectType.FACT,
+                    title="Current project deploy",
+                    text="The deploy checklist uses the ntrp worker.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="project:ntrp",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.4,
+                    source_ids=["source:ntrp"],
+                    metadata={},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                ),
+                KnowledgeObject(
+                    id=23,
+                    object_type=KnowledgeObjectType.FACT,
+                    title="Other project deploy",
+                    text="The deploy checklist uses the dex worker.",
+                    status=KnowledgeObjectStatus.ACTIVE,
+                    scope="project:dex",
+                    activation="prompt",
+                    proactiveness_level="L0",
+                    score=0.9,
+                    source_ids=["source:dex"],
+                    metadata={},
+                    created_at="2026-05-19T00:00:00+00:00",
+                    updated_at="2026-05-19T00:00:00+00:00",
+                ),
+            ]
+            if object_types:
+                objects = [obj for obj in objects if obj.object_type in object_types]
+            if statuses:
+                objects = [obj for obj in objects if obj.status in statuses]
+            return objects[offset : offset + limit]
+
+    memory = _FakeMemoryService()
+    memory.knowledge_objects = _Objects()
+
+    bundle = await KnowledgeActivationService(memory).inspect(  # type: ignore[arg-type]
+        ActivationRequest(query="deploy checklist", scope="project:ntrp", budget_chars=2_000)
+    )
+
+    assert [candidate.object_id for candidate in bundle.candidates] == ["22"]
+    assert bundle.prompt_context
+    assert "dex worker" not in bundle.prompt_context
+
+
+@pytest.mark.asyncio
 async def test_activation_prefers_repository_search_text():
     class _Objects(_FakeKnowledgeObjects):
         async def search_text(self, query: str, *, object_types=None, statuses=None, limit: int = 100, offset: int = 0):

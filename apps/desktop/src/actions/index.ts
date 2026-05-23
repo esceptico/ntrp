@@ -19,11 +19,15 @@ export { fetchSkills, viewSkill } from "./skills";
 export {
   archiveSession,
   branchAtMessage,
+  createProject,
   createSession,
   fetchArchivedSessions,
+  moveSessionToProject,
   permanentlyDeleteSession,
+  refreshProjects,
   renameSession,
   restoreArchivedSession,
+  saveProject,
   switchSession,
 } from "./sessions";
 export {

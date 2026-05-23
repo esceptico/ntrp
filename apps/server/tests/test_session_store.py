@@ -33,6 +33,49 @@ def _make_state(session_id: str = "test-session", name: str | None = None) -> Se
 
 
 @pytest.mark.asyncio
+async def test_project_round_trip_and_session_scoping(store: SessionStore):
+    project = await store.create_project(
+        name="ntrp",
+        default_cwd=" /Users/me/src/ntrp ",
+        instructions="Prefer small focused changes.",
+    )
+
+    assert project["name"] == "ntrp"
+    assert project["default_cwd"] == "/Users/me/src/ntrp"
+    assert project["instructions"] == "Prefer small focused changes."
+    assert project["knowledge_scope"] == f"project:{project['project_id']}"
+
+    project_state = _make_state(session_id="project-session", name="Project chat")
+    project_state.project_id = project["project_id"]
+    inbox_state = _make_state(session_id="inbox-session", name="Inbox chat")
+    await store.save_session(project_state, [{"role": "user", "content": "project"}])
+    await store.save_session(inbox_state, [{"role": "user", "content": "inbox"}])
+
+    loaded = await store.load_session("project-session")
+    assert loaded is not None
+    assert loaded.state.project_id == project["project_id"]
+
+    project_sessions = await store.list_sessions(project_id=project["project_id"])
+    assert [row["session_id"] for row in project_sessions] == ["project-session"]
+    assert project_sessions[0]["project_id"] == project["project_id"]
+
+    inbox_sessions = await store.list_sessions(project_id=None)
+    assert [row["session_id"] for row in inbox_sessions] == ["inbox-session"]
+
+    stale_state = _make_state(session_id="project-session", name="Project chat")
+    stale_state.project_id = project["project_id"]
+    assert await store.update_session_project("project-session", None)
+    await store.update_progress(stale_state, [{"role": "user", "content": "still running"}])
+    loaded_after_move = await store.load_session("project-session")
+    assert loaded_after_move is not None
+    assert loaded_after_move.state.project_id is None
+    await store.save_session(stale_state, [{"role": "user", "content": "finished"}])
+    loaded_after_save = await store.load_session("project-session")
+    assert loaded_after_save is not None
+    assert loaded_after_save.state.project_id is None
+
+
+@pytest.mark.asyncio
 async def test_save_and_load_round_trip(store: SessionStore):
     state = _make_state(name="my chat")
     messages = [
