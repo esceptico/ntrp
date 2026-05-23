@@ -20,7 +20,14 @@ from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.integrations.base import Integration
 from ntrp.tools.bash import bash_tool, execute_bash, is_blocked_command, is_safe_command
 from ntrp.tools.core import EmptyInput, Tool, ToolCall, ToolNext, tool
-from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
+from ntrp.tools.core.context import (
+    ApprovalControls,
+    BackgroundTaskRegistry,
+    IOBridge,
+    RunContext,
+    ToolContext,
+    ToolExecution,
+)
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolOverrideDecision, ToolPolicy, ToolScope
 from ntrp.tools.discover import discover_user_tools
@@ -150,7 +157,7 @@ async def test_tool_override_deny_blocks_execution():
 
 
 @pytest.mark.asyncio
-async def test_tool_override_ask_bypasses_session_auto_approve():
+async def test_tool_override_ask_bypasses_run_auto_approve():
     async def handler(execution, args):
         return ToolResult(content="ok")
 
@@ -165,15 +172,11 @@ async def test_tool_override_ask_bypasses_session_auto_approve():
             )
         },
     )
-    session_state = SessionState(
-        session_id="test",
-        started_at=datetime.now(UTC),
-        skip_approvals=True,
-    )
+    session_state = SessionState(session_id="test", started_at=datetime.now(UTC))
     ctx = ToolContext(
         session_state=session_state,
         registry=registry,
-        run=RunContext(run_id="run-1"),
+        run=RunContext(run_id="run-1", approval_controls=ApprovalControls(skip_approvals=True)),
         io=IOBridge(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )

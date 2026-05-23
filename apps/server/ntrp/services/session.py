@@ -356,7 +356,6 @@ class SessionService:
 
         new_state = self.create(name=name or (f"{data.state.name} (branch)" if data.state.name else None))
         new_state.auto_approve = set(data.state.auto_approve)
-        new_state.skip_approvals = data.state.skip_approvals
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
         await self.save(new_state, messages, metadata=metadata)
         return new_state

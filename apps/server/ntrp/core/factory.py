@@ -14,7 +14,7 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.llm.models import get_model
-from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import ApprovalControls, BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import tool_schema_names
 from ntrp.tools.executor import ToolExecutor
 
@@ -68,6 +68,7 @@ def create_agent(
     session_state: SessionState,
     run_id: str,
     io: IOBridge | None = None,
+    approval_controls: ApprovalControls | None = None,
     extra_auto_approve: set[str] | None = None,
     background_tasks: BackgroundTaskRegistry | None = None,
     loaded_tools: set[str] | None = None,
@@ -87,6 +88,7 @@ def create_agent(
         max_cost=config.max_cost,
         started_at=started_at,
         extra_auto_approve=extra_auto_approve or set(),
+        approval_controls=approval_controls or ApprovalControls(),
         research_model=config.research_model,
         deferred_tools_enabled=config.deferred_tools,
         loaded_tools=loaded_tools if loaded_tools is not None else set(),

@@ -202,7 +202,6 @@ def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -
         session_id=child_session_id,
         started_at=datetime.now(UTC),
         auto_approve=calling_ctx.session_state.auto_approve,
-        skip_approvals=calling_ctx.session_state.skip_approvals,
     )
 
 
@@ -266,6 +265,7 @@ def create_spawn_fn(
             started_at=calling_ctx.run.started_at if calling_ctx.run.started_at is not None else started_at,
             budget=calling_ctx.run.budget or budget,
             extra_auto_approve=calling_ctx.run.extra_auto_approve,
+            approval_controls=calling_ctx.run.approval_controls,
             research_model=calling_ctx.run.research_model,
             deferred_tools_enabled=calling_ctx.run.deferred_tools_enabled,
             loaded_tools=set(calling_ctx.run.loaded_tools),

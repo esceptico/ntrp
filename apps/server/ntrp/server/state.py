@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from coolname import generate_slug
 
 from ntrp.agent import Usage
-from ntrp.tools.core.context import BackgroundTaskRegistry
+from ntrp.tools.core.context import ApprovalControls, BackgroundTaskRegistry
 
 if TYPE_CHECKING:
     from ntrp.context.models import SessionState
@@ -71,10 +71,12 @@ class RunState:
     # the tail. Empty for non-loop runs and for loop runs under the cap.
     history_prefix: list[dict] = field(default_factory=list)
     # Reference to the live SessionState driving this run. Set during
-    # prepare_chat so endpoints (e.g. POST /sessions/{id}/auto) can mutate
-    # session-level state (like skip_approvals) without going through a
-    # new chat turn. Same object reference shared with the ToolContext.
+    # prepare_chat so endpoints can resolve metadata against the active
+    # session without re-loading durable history.
     session_state: "SessionState | None" = None
+    # Mutable run-scoped approval switches. The desktop owns the Auto toggle;
+    # this object only mirrors the active run's execution mode.
+    approval_controls: ApprovalControls = field(default_factory=ApprovalControls)
     subagents: dict[str, SubagentHandle] = field(default_factory=dict)
 
     @property

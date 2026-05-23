@@ -24,27 +24,30 @@ def _client_with_run(run: RunState | None) -> TestClient:
     return TestClient(app)
 
 
-def test_set_auto_on_mutates_session_state():
+def test_set_auto_on_updates_run_only():
     run = _make_run()
-    assert run.session_state.skip_approvals is False
+    assert not hasattr(run.session_state, "skip_approvals")
+    assert run.approval_controls.skip_approvals is False
     client = _client_with_run(run)
     try:
         r = client.post("/sessions/sess-1/auto", json={"value": True})
         assert r.status_code == 200
         assert r.json() == {"status": "ok", "skip_approvals": True, "auto_resolved": 0}
-        assert run.session_state.skip_approvals is True
+        assert run.approval_controls.skip_approvals is True
+        assert not hasattr(run.session_state, "skip_approvals")
     finally:
         app.dependency_overrides.clear()
 
 
-def test_set_auto_off_mutates_session_state():
+def test_set_auto_off_updates_run_only():
     run = _make_run()
-    run.session_state.skip_approvals = True
+    run.approval_controls.skip_approvals = True
     client = _client_with_run(run)
     try:
         r = client.post("/sessions/sess-1/auto", json={"value": False})
         assert r.status_code == 200
-        assert run.session_state.skip_approvals is False
+        assert run.approval_controls.skip_approvals is False
+        assert not hasattr(run.session_state, "skip_approvals")
     finally:
         app.dependency_overrides.clear()
 

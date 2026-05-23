@@ -10,7 +10,6 @@ class SessionState:
     last_activity: datetime = field(default_factory=lambda: datetime.now(UTC))
     name: str | None = None
     auto_approve: set[str] = field(default_factory=set)
-    skip_approvals: bool = False
     session_type: Literal["chat", "channel"] = "chat"
     origin_automation_id: str | None = None
 

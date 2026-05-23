@@ -40,6 +40,13 @@ class Rejection:
 
 
 @dataclass
+class ApprovalControls:
+    """Mutable, run-scoped approval switches controlled by the active client."""
+
+    skip_approvals: bool = False
+
+
+@dataclass
 class RunContext:
     """Per-run identity and limits."""
 
@@ -53,6 +60,7 @@ class RunContext:
     started_at: float | None = None
     budget: RunBudget | None = None
     extra_auto_approve: set[str] = field(default_factory=set)
+    approval_controls: ApprovalControls = field(default_factory=ApprovalControls)
     research_model: str | None = None
     deferred_tools_enabled: bool = False
     loaded_tools: set[str] = field(default_factory=set)
@@ -312,7 +320,7 @@ class ToolContext:
 
     @property
     def skip_approvals(self) -> bool:
-        return self.session_state.skip_approvals
+        return self.run.approval_controls.skip_approvals
 
     @property
     def auto_approve(self) -> set[str]:

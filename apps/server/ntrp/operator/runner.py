@@ -15,6 +15,7 @@ from ntrp.knowledge.models import ActivationRequest
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
 from ntrp.server.bus import SessionBus
+from ntrp.tools.core.context import ApprovalControls
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
@@ -90,7 +91,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     system_prompt += request.prompt_suffix
 
     session_state = deps.create_session()
-    session_state.skip_approvals = request.skip_approvals
 
     agent = create_agent(
         executor=executor,
@@ -98,6 +98,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         tools=tools,
         session_state=session_state,
         run_id=run_id,
+        approval_controls=ApprovalControls(skip_approvals=request.skip_approvals),
     )
 
     messages = [

@@ -140,19 +140,38 @@ function applyPendingHistoryToolResults(sessionId: string): void {
   if (pending.size === 0) pendingHistoryToolResultsBySession.delete(sessionId);
 }
 
+function isLiveRun(runtime: SessionRuntimeSnapshot): boolean {
+  const status = runtime.active_run?.status;
+  return status === "pending" || status === "running" || status === "backgrounded";
+}
+
+function syncAutoForActiveRun(sessionId: string, value: boolean): void {
+  const { config } = getState();
+  void apiWithConfig(config, `/sessions/${sessionId}/auto`, {
+    method: "POST",
+    body: JSON.stringify({ value }),
+  }).catch(() => {
+    // Best-effort reconnect repair. The next user message still carries the
+    // client-owned Auto value, so a transient sync miss is not fatal.
+  });
+}
 
 function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot | undefined): void {
   if (!runtime) return;
   setEventCursorForSession(sessionId, runtime.checkpoint_seq);
   const activeRun = runtime.active_run;
+  if (isLiveRun(runtime)) {
+    syncAutoForActiveRun(sessionId, getState().skipApprovals);
+  }
   setState((state) => {
+    const pendingApprovals = state.skipApprovals ? [] : runtime.pending_approvals;
     const lifecycle =
       activeRun && ["pending", "running", "backgrounded"].includes(activeRun.status)
         ? reduceRunStarted(state, { runId: activeRun.run_id, sessionId })
         : reduceRunCompleted(state, { runId: state.currentRunId, sessionId });
     return {
       ...lifecycle,
-      pendingApprovals: runtime.pending_approvals.map((approval) => ({
+      pendingApprovals: pendingApprovals.map((approval) => ({
         toolId: approval.tool_id,
         toolName: approval.tool_name,
         preview: approval.preview ?? undefined,

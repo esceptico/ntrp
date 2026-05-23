@@ -615,7 +615,7 @@ async def set_session_auto(
     req: SetSessionAutoRequest,
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
-    """Apply an Auto-mode toggle to the live session.
+    """Apply an Auto-mode toggle to the live run.
 
     When `value=True`: future tool calls in the active run skip approval, and
     any approval Futures currently awaiting user input resolve as approved.
@@ -624,8 +624,7 @@ async def set_session_auto(
     active = run_registry.get_accepting_run(session_id)
     resolved = 0
     if active is not None:
-        if active.session_state is not None:
-            active.session_state.skip_approvals = req.value
+        active.approval_controls.skip_approvals = req.value
         if req.value:
             for tool_id, future in list(active.pending_approvals.items()):
                 if future.done():

@@ -33,12 +33,9 @@ export async function stopLoop(taskId: string): Promise<void> {
 
 /** Toggle Auto (skip approvals) for the current session.
  *
- *  Auto state lives in two places — the local store (drives the chip + the
- *  next message's request body) and the server's active-run session_state
- *  (drives whether in-flight tool calls auto-approve). This action keeps
- *  them in sync: flips local state immediately, pushes to the server, and
- *  optimistically clears any pending approval cards when turning Auto on
- *  (the server-side handler resolves their Futures as approved). */
+ *  Auto state is client-owned. The local store drives the chip and the next
+ *  request body; the server endpoint only mirrors it into the active run's
+ *  execution controls. */
 export async function toggleAuto(value: boolean): Promise<void> {
   const s = getState();
   s.setSkipApprovals(value);

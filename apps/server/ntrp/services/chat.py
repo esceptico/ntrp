@@ -556,10 +556,6 @@ async def prepare_chat(
     else:
         session_data = await _resolve_session(deps)
     session_state = session_data.state
-    # None = inherit current session state (used by the loop dispatcher so
-    # it doesn't stomp the user's Auto toggle). Explicit bool = set/override.
-    if skip_approvals is not None:
-        session_state.skip_approvals = skip_approvals
     if loop_task_id:
         session_data = await _maybe_precompact_loop_history(deps, session_data, emit=emit)
     messages = session_data.messages
@@ -609,6 +605,8 @@ async def prepare_chat(
     run = registry.create_run(session_state.session_id)
     run.messages = messages
     run.session_state = session_state
+    if skip_approvals is not None:
+        run.approval_controls.skip_approvals = skip_approvals
     run.history_prefix = history_prefix
 
     return ChatContext(
@@ -757,6 +755,8 @@ async def submit_chat_message(
 
     active_run = run_registry.get_accepting_run(session_id)
     if active_run:
+        if skip_approvals is not None:
+            active_run.approval_controls.skip_approvals = bool(skip_approvals)
         entry: dict = {
             "role": Role.USER,
             "content": build_user_content(message, images, context),
@@ -1093,7 +1093,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 run_id=run.run_id,
                 integrations=ctx.available_integrations,
                 integration_errors=ctx.integration_errors,
-                skip_approvals=session_state.skip_approvals,
+                skip_approvals=run.approval_controls.skip_approvals,
                 session_name=session_state.name or "",
                 is_meta_run=bool(run.loop_task_id) or run.is_meta_run,
                 meta_client_id=_first_user_client_id(run) if run.is_meta_run else None,
@@ -1135,6 +1135,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 session_state=session_state,
                 run_id=run.run_id,
                 io=io,
+                approval_controls=run.approval_controls,
                 extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
                 background_tasks=bg_registry,
                 loaded_tools=run.loaded_tools,
