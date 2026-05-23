@@ -82,6 +82,7 @@ class EventType(StrEnum):
     GOAL_UPDATED = "goal_updated"
     GOAL_CLEARED = "goal_cleared"
     TODO_UPDATED = "todo_updated"
+    SESSION_UPDATED = "session_updated"
 
 
 def _now_ms() -> int:
@@ -121,6 +122,13 @@ class RunStartedEvent(SSEEvent):
     # grouped under the user's previous "Worked" block.
     is_meta_run: bool = False
     meta_client_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionUpdatedEvent(SSEEvent):
+    type: EventType = field(default=EventType.SESSION_UPDATED, init=False)
+    session_id: str = ""
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -506,6 +514,7 @@ _EVENT_CLASSES = {
     EventType.GOAL_UPDATED.value: GoalUpdatedEvent,
     EventType.GOAL_CLEARED.value: GoalClearedEvent,
     EventType.TODO_UPDATED.value: TodoUpdatedEvent,
+    EventType.SESSION_UPDATED.value: SessionUpdatedEvent,
 }
 
 

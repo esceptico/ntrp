@@ -193,6 +193,7 @@ type CompactionOwner =
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean; meta_client_id?: string | null }
+  | { type: "session_updated"; session_id: string; name?: string | null }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number; cost: number }; context_input_tokens?: number | null; message_count?: number }
   | { type: "run_cancelled"; run_id: string }
   | { type: "run_backgrounded"; run_id: string }

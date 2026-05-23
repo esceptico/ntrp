@@ -1,5 +1,7 @@
 from collections.abc import AsyncGenerator
 
+from pydantic import BaseModel
+
 from ntrp.agent import CompletionResponse, ReasoningContentDelta, SpecificTool, ToolChoice, ToolChoiceMode
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
@@ -53,6 +55,7 @@ class NtrpLLMClient:
         messages: list[dict],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        response_format: type[BaseModel] | None = None,
     ) -> CompletionResponse:
         client = get_completion_client(model)
         kwargs: dict = {"model": model, "messages": messages}
@@ -60,6 +63,8 @@ class NtrpLLMClient:
             kwargs["temperature"] = temperature
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        if response_format is not None:
+            kwargs["response_format"] = response_format
         return await client.completion(**kwargs)
 
 

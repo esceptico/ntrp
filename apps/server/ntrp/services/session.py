@@ -249,6 +249,9 @@ class SessionService:
     async def rename(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name(session_id, name)
 
+    async def rename_if_empty(self, session_id: str, name: str) -> bool:
+        return await self.store.update_session_name_if_empty(session_id, name)
+
     async def archive(self, session_id: str) -> bool:
         return await self.store.archive_session(session_id)
 

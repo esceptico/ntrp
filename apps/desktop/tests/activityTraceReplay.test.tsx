@@ -108,7 +108,7 @@ test("agent trace row shows generated name but not prompt text", () => {
           semanticKind: "agent",
           target: "research",
           args: JSON.stringify({ task: "inspect current eval/test harness opportunities" }),
-          displayName: "Research Eval Test Harness",
+          displayName: "Eval test harness",
           status: "ongoing",
         },
       ]}
@@ -117,7 +117,7 @@ test("agent trace row shows generated name but not prompt text", () => {
     />,
   );
 
-  expect(html).toContain("Research Eval Test Harness");
+  expect(html).toContain("Eval test harness");
   expect(html).not.toContain("inspect current eval/test harness opportunities");
 });
 

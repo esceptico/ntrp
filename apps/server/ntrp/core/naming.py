@@ -1,95 +1,127 @@
-import re
+from pydantic import BaseModel, ConfigDict, Field
 
-_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "can",
-    "check",
-    "could",
-    "current",
-    "find",
-    "fix",
-    "for",
-    "help",
-    "in",
-    "inspect",
-    "into",
-    "it",
-    "look",
-    "me",
-    "of",
-    "on",
-    "opportunities",
-    "please",
-    "research",
-    "search",
-    "the",
-    "this",
-    "to",
-    "we",
-    "with",
-    "you",
-}
+from ntrp.agent import CompletionResponse, Role
+from ntrp.core.llm_client import llm_client
+from ntrp.logging import get_logger
 
-_ACRONYMS = {
-    "api",
-    "ci",
-    "css",
-    "db",
-    "html",
-    "json",
-    "llm",
-    "mcp",
-    "oauth",
-    "sse",
-    "sql",
-    "ui",
-    "ux",
-}
+_logger = get_logger(__name__)
+_RESEARCH_PREFIXES = ("research ", "research:")
+
+SESSION_NAMING_PROMPT = """Generate a concise session name from the user's first message.
+
+Rules:
+- 3-7 words.
+- Sentence case: capitalize only the first word and proper nouns/acronyms.
+- Name the actual topic or goal, not the request wrapper.
+- Keep enough detail to recognize the session later.
+- Return a JSON object matching the schema.
+
+Good:
+{"name": "Fix checkout retry bug"}
+{"name": "Research agent session naming"}
+{"name": "Debug SSE approval replay"}
+
+Bad:
+{"name": "Code changes"}
+{"name": "Research task"}
+{"name": "Please Review And Improve The Prompt For Naming Research Agents"}
+"""
+
+AGENT_NAMING_PROMPT = """Generate a short display label for a spawned agent.
+
+Rules:
+- 2-5 words.
+- Sentence case: capitalize only the first word and proper nouns/acronyms.
+- Name the task topic only. The UI already shows this row is an agent.
+- Do not copy the full task text.
+- Return a JSON object matching the schema.
+
+Good:
+{"name": "Eval test harness"}
+{"name": "Session naming prompts"}
+{"name": "Update docs"}
+
+Bad:
+{"name": "Agent"}
+{"name": "Agent: eval test harness"}
+{"name": "Inspect current eval/test harness opportunities"}
+{"name": "Eval Test Harness"}
+"""
 
 
-def _words(text: str) -> list[str]:
-    return [part.lower() for part in re.findall(r"[A-Za-z0-9]+", text)]
+class NameOutput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=80)
 
 
-def _display_word(word: str) -> str:
-    if word in _ACRONYMS:
-        return word.upper()
-    return word.capitalize()
-
-
-def _title(text: str, *, fallback: str, max_words: int) -> str:
-    words = [word for word in _words(text) if word not in _STOPWORDS]
-    selected = words[:max_words]
-    if not selected:
-        return fallback
-    return " ".join(_display_word(word) for word in selected)
-
-
-def _role_title(kind: str) -> str:
-    words = [
-        word
-        for word in _words(kind.replace("_agent", "").replace("-", " "))
-        if word not in {"agent", "sub"}
-    ]
-    if not words:
-        return "Agent"
-    return _display_word(words[0])
-
-
-def conversation_name(text: str, *, has_images: bool = False) -> str:
+def _conversation_fallback(text: str, *, has_images: bool = False) -> str:
     if not text.strip() and has_images:
         return "Image Conversation"
-    return _title(text, fallback="New Conversation", max_words=4)
+    return "New Conversation"
 
 
-def agent_name(kind: str, task: str) -> str:
-    role = _role_title(kind)
-    topic = _title(task, fallback="Task", max_words=3)
-    if topic == "Task":
-        return role
-    return f"{role} {topic}"
+def _response_name(response: CompletionResponse) -> str:
+    content = response.choices[0].message.content if response.choices else None
+    return NameOutput.model_validate_json(content or "{}").name
+
+
+def _reject_agent_role_prefix(name: str) -> None:
+    if name.casefold().startswith(_RESEARCH_PREFIXES):
+        raise ValueError("agent name must not include role prefix")
+
+
+async def _generate_name(
+    *,
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    fallback: str,
+    log_subject: str,
+    validate_name=None,
+) -> str:
+    try:
+        response = await llm_client.complete(
+            model=model,
+            messages=[
+                {"role": Role.SYSTEM, "content": system_prompt},
+                {"role": Role.USER, "content": user_content},
+            ],
+            temperature=0,
+            max_tokens=80,
+            response_format=NameOutput,
+        )
+        name = _response_name(response)
+        if validate_name is not None:
+            validate_name(name)
+        return name
+    except Exception as exc:
+        _logger.warning("%s name generation failed: %s", log_subject, exc)
+        return fallback
+
+
+async def generate_conversation_name(model: str, text: str, *, has_images: bool = False) -> str:
+    fallback = _conversation_fallback(text, has_images=has_images)
+    if not text.strip():
+        return fallback
+    image_note = "\nThe user also attached images." if has_images else ""
+    return await _generate_name(
+        model=model,
+        system_prompt=SESSION_NAMING_PROMPT,
+        user_content=f"First user message:\n{text}{image_note}",
+        fallback=fallback,
+        log_subject="Session",
+    )
+
+
+async def generate_agent_name(model: str, task: str) -> str:
+    if not task.strip():
+        return "Agent"
+    return await _generate_name(
+        model=model,
+        system_prompt=AGENT_NAMING_PROMPT,
+        user_content=f"Task:\n{task}",
+        fallback="Agent",
+        log_subject="Agent",
+        validate_name=_reject_agent_role_prefix,
+    )

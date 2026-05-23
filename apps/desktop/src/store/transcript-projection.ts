@@ -123,6 +123,14 @@ export function applyChatEventToTranscript(
       }
       break;
 
+    case "session_updated":
+      setState((state) => ({
+        sessions: state.sessions.map((session) =>
+          session.session_id === event.session_id ? { ...session, name: event.name ?? null } : session,
+        ),
+      }));
+      break;
+
     case "RUN_FINISHED":
       if (s.currentRunId && s.currentRunId !== event.run_id) break;
       if (event.usage) {

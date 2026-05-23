@@ -13,7 +13,7 @@ from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WI
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
-from ntrp.core.naming import conversation_name
+from ntrp.core.naming import generate_conversation_name
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.internal import RunCompleted
@@ -26,6 +26,7 @@ from ntrp.events.sse import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    SessionUpdatedEvent,
     ThinkingEvent,
     TokenUsageEvent,
 )
@@ -146,8 +147,23 @@ class ChatContext:
     run_registry: RunRegistry
     initial_input_tokens: int | None = None
     goal_id: str | None = None
+    session_name_task: asyncio.Task[str] | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
+
+
+async def _apply_generated_session_name(ctx: ChatContext, bus: SessionBus) -> None:
+    if ctx.session_name_task is None:
+        return
+    try:
+        name = await ctx.session_name_task
+        current = await ctx.session_service.load(ctx.session_state.session_id)
+        if current and not await ctx.session_service.rename_if_empty(ctx.session_state.session_id, name):
+            return
+        ctx.session_state.name = name
+        await bus.emit(SessionUpdatedEvent(session_id=ctx.session_state.session_id, name=name))
+    except Exception as exc:
+        _logger.warning("Session name update failed: %s", exc)
 
 
 async def _record_run_started(
@@ -551,8 +567,11 @@ async def prepare_chat(
         and (stripped_message or images)
         and not stripped_message.startswith("/")
     )
-    if should_name_session:
-        session_state.name = conversation_name(message, has_images=bool(images))
+    session_name_task = (
+        asyncio.create_task(generate_conversation_name(deps.chat_model, message, has_images=bool(images)))
+        if should_name_session
+        else None
+    )
 
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
@@ -590,6 +609,7 @@ async def prepare_chat(
         run_registry=deps.run_registry,
         initial_input_tokens=session_data.last_input_tokens,
         goal_id=goal_context["goal_id"] if goal_context else None,
+        session_name_task=session_name_task,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
     )
@@ -1030,6 +1050,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 meta_client_id=_first_user_client_id(run) if run.is_meta_run else None,
             )
         )
+        if ctx.session_name_task is not None:
+            asyncio.create_task(_apply_generated_session_name(ctx, bus))
 
         await bus.emit(ThinkingEvent(status="processing..."))
 

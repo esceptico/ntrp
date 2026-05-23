@@ -294,6 +294,7 @@ ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity
 """
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
+SQL_UPDATE_NAME_IF_EMPTY = "UPDATE sessions SET name = ? WHERE session_id = ? AND (name IS NULL OR name = '')"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
 SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
 SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL"
@@ -1855,6 +1856,9 @@ class SessionStore:
 
     async def update_session_name(self, session_id: str, name: str) -> bool:
         return await self._update(SQL_UPDATE_NAME, (name, session_id))
+
+    async def update_session_name_if_empty(self, session_id: str, name: str) -> bool:
+        return await self._update(SQL_UPDATE_NAME_IF_EMPTY, (name, session_id))
 
     async def archive_session(self, session_id: str) -> bool:
         return await self._update(SQL_ARCHIVE, (datetime.now(UTC).isoformat(), session_id))
