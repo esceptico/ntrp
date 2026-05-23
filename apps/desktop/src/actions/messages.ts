@@ -2,8 +2,9 @@ import {
   apiWithConfig,
   cancelQueuedMessageApi,
   cancelRun,
+  cancelSubagentApi,
 } from "../api";
-import { getState, setState, type ImageBlock } from "../store";
+import { getState, setState, type ActivityItem, type ImageBlock } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
 import {
   reduceRunCompleted,
@@ -281,5 +282,33 @@ export async function stopRun(): Promise<void> {
         content: message,
       });
     }
+  }
+}
+
+function findActivityItem(itemId: string): ActivityItem | null {
+  for (const message of getState().messages.values()) {
+    const item = message.activity?.items.find((candidate) => candidate.id === itemId);
+    if (item) return item;
+  }
+  return null;
+}
+
+export async function cancelSubagent(runId: string, toolCallId: string): Promise<void> {
+  const s = getState();
+  if (!runId) return;
+  const previous = findActivityItem(toolCallId);
+  s.mergeActivityItem(toolCallId, { cancelRequested: true, progress: "cancelling" });
+  try {
+    await cancelSubagentApi(s.config, runId, toolCallId);
+  } catch (error) {
+    s.mergeActivityItem(toolCallId, {
+      cancelRequested: false,
+      progress: previous?.progress,
+    });
+    s.appendMessage({
+      id: crypto.randomUUID(),
+      role: "error",
+      content: error instanceof Error ? error.message : String(error),
+    });
   }
 }

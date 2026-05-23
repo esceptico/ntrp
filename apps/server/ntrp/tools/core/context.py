@@ -19,6 +19,7 @@ from ntrp.tools.core.types import ToolOverrideDecision
 _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from ntrp.server.state import RunRegistry
     from ntrp.tools.core.registry import ToolRegistry
 
 
@@ -297,6 +298,7 @@ class ToolContext:
     ledger: SharedLedger | None = None
     spawn_fn: Callable[..., Awaitable[Any]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
+    run_registry: "RunRegistry | None" = None
     # UsageTracker of the caller. Spawned subagents create their own tracker
     # for their internal LLM calls and, on completion, roll the resulting
     # `cost` (not the token usage — see SpawnResult docstring) into this

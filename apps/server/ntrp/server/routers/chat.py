@@ -337,6 +337,18 @@ async def cancel_run(request: CancelRequest, run_registry: RunRegistry = Depends
     return {"status": "cancelling", **result}
 
 
+@router.post("/chat/subagents/{tool_call_id}/cancel", status_code=202)
+async def cancel_subagent(
+    tool_call_id: str,
+    run_id: str,
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    result = run_registry.cancel_subagent(run_id, tool_call_id)
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="Subagent not found or already done")
+    return {"status": "cancelling", **result}
+
+
 @router.post("/chat/background")
 async def background_run(request: BackgroundRequest, run_registry: RunRegistry = Depends(require_run_registry)):
     run = run_registry.get_run(request.run_id)

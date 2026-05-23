@@ -2,7 +2,10 @@
 errors mid-run, we summarize the tool results gathered so far instead of
 returning a bare error string."""
 
+import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -18,6 +21,7 @@ from ntrp.core.spawner import (
     create_spawn_fn,
 )
 from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent, TokenUsageEvent
+from ntrp.server.state import RunRegistry
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
 
@@ -161,6 +165,56 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
     assert task_events[0].parent_tool_call_id == "call-research"
     assert task_events[0].depth == 1
     assert task_events[1].status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_foreground_subagent_cancel_returns_partial_summary(monkeypatch):
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    class SlowAgent:
+        hooks = SimpleNamespace(on_response=None)
+
+        async def stream(self, messages):
+            messages.append({"role": "assistant", "content": "Found useful evidence."})
+            await asyncio.sleep(60)
+
+    monkeypatch.setattr(spawner_module, "Agent", lambda **kwargs: SlowAgent())
+    monkeypatch.setattr(spawner_module, "_salvage_summary", AsyncMock(return_value="Partial summary."))
+
+    executor = make_executor()
+    registry = RunRegistry()
+    parent_run = registry.create_run("test")
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id=parent_run.run_id, current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+        run_registry=registry,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    task = asyncio.create_task(
+        spawn(
+            ctx,
+            "research trace replay",
+            system_prompt="sys",
+            tools=[],
+            parent_id="call-research",
+        )
+    )
+    await asyncio.sleep(0)
+
+    result = registry.cancel_subagent(parent_run.run_id, "call-research")
+    assert result == {"found": True, "cancel_requested": True}
+
+    spawn_result = await task
+    assert "partial" in spawn_result.text.lower()
+    assert "Partial summary." in spawn_result.text
+    assert any(getattr(event, "status", None) == "cancelled" for event in emitted)
 
 
 @pytest.mark.asyncio

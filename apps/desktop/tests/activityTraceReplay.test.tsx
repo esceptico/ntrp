@@ -44,6 +44,48 @@ test("activity header shows active calls separately from total calls", () => {
   expect(html).toContain("active");
 });
 
+test("running agent row renders a stop control", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "call-research",
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          status: "ongoing",
+          taskStatus: "running",
+          runId: "run-1",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain("Stop subagent");
+});
+
+test("generic ongoing agent row waits for lifecycle ownership before stop control", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "call-research",
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          status: "ongoing",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).not.toContain("Stop subagent");
+});
+
 test("activity stats include subagent rows and their child tools", () => {
   expect(activityTraceStats([
     {

@@ -22,6 +22,13 @@ class RunStatus(StrEnum):
 
 
 @dataclass
+class SubagentHandle:
+    tool_call_id: str
+    task: asyncio.Task
+    cancel_requested: bool = False
+
+
+@dataclass
 class RunState:
     run_id: str
     session_id: str
@@ -61,6 +68,7 @@ class RunState:
     # session-level state (like skip_approvals) without going through a
     # new chat turn. Same object reference shared with the ToolContext.
     session_state: "SessionState | None" = None
+    subagents: dict[str, SubagentHandle] = field(default_factory=dict)
 
     @property
     def pending_injection_count(self) -> int:
@@ -225,6 +233,11 @@ class RunRegistry:
         if run.drain_task and not run.drain_task.done():
             run.drain_task.cancel()
             cancel_requested = True
+        for handle in run.subagents.values():
+            handle.cancel_requested = True
+            if not handle.task.done():
+                handle.task.cancel()
+                cancel_requested = True
 
         if is_current:
             registry = self._bg_registries.get(run.session_id)
@@ -233,6 +246,36 @@ class RunRegistry:
                     cancel_requested = True
 
         return {"found": True, "cancel_requested": cancel_requested}
+
+    def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task) -> None:
+        run = self._runs.get(run_id)
+        if not run:
+            return
+        run.subagents[tool_call_id] = SubagentHandle(
+            tool_call_id=tool_call_id,
+            task=task,
+        )
+        run.updated_at = datetime.now(UTC)
+
+    def finish_subagent(self, run_id: str, tool_call_id: str) -> None:
+        run = self._runs.get(run_id)
+        if run:
+            run.subagents.pop(tool_call_id, None)
+            run.updated_at = datetime.now(UTC)
+
+    def cancel_subagent(self, run_id: str, tool_call_id: str) -> dict[str, bool]:
+        run = self._runs.get(run_id)
+        if not run:
+            return {"found": False, "cancel_requested": False}
+        handle = run.subagents.get(tool_call_id)
+        if not handle:
+            return {"found": False, "cancel_requested": False}
+        if handle.cancel_requested or handle.task.done():
+            return {"found": True, "cancel_requested": False}
+        handle.cancel_requested = True
+        handle.task.cancel()
+        run.updated_at = datetime.now(UTC)
+        return {"found": True, "cancel_requested": True}
 
     def finish_cancelled(self, run_id: str) -> bool:
         run = self._runs.get(run_id)
@@ -259,6 +302,11 @@ class RunRegistry:
             if run.drain_task and not run.drain_task.done():
                 run.drain_task.cancel()
                 tasks.append(run.drain_task)
+            for handle in run.subagents.values():
+                handle.cancel_requested = True
+                if not handle.task.done():
+                    handle.task.cancel()
+                    tasks.append(handle.task)
         background_cancelled = 0
         for registry in self._bg_registries.values():
             for _task_id, _command in registry.cancel_all():

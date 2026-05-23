@@ -152,6 +152,8 @@ export interface ActivityItem {
   args?: string;
   result?: string;
   status?: "ongoing" | "executed";
+  cancelRequested?: boolean;
+  runId?: string;
   /** Nesting depth: 0 = top-level (called by the user-facing agent),
    *  1 = inside a sub-agent (research → research, etc.). Used purely for
    *  visualization (indent + chip). */

@@ -1,9 +1,10 @@
 import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
+import { Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
+import { cancelSubagent } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
@@ -308,53 +309,76 @@ function AgentButton({
   const running = traceStatus === "ongoing";
   const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : "executed");
   const statusText = item.progress ?? status;
+  const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(item)}
-      title={`${item.kind} — click to inspect`}
+    <div
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
-      className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer group/agent"
+      className="flex items-baseline gap-2 min-w-0 group/agent"
     >
       {depth > 0 && (
         <span className="text-whisper select-none self-center" aria-hidden="true">↳</span>
       )}
-      <span
-        aria-hidden
-        className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
+      <button
+        type="button"
+        onClick={() => onOpen(item)}
+        title={`${item.kind} — click to inspect`}
+        className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
       >
-        <Bot size={ICON.XS} strokeWidth={2} />
-      </span>
-      <span
-        className={clsx(
-          "font-medium shrink-0 group-hover/agent:text-ink transition-colors",
-          running ? "text-ink-soft" : "text-faint",
-        )}
-      >
-        {label}
-      </span>
-      {task && (
+        <span
+          aria-hidden
+          className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
+        >
+          <Bot size={ICON.XS} strokeWidth={2} />
+        </span>
         <span
           className={clsx(
-            "truncate group-hover/agent:text-ink-soft transition-colors",
-            running ? "text-muted" : "text-faint",
+            "font-medium shrink-0 group-hover/agent:text-ink transition-colors",
+            running ? "text-ink-soft" : "text-faint",
           )}
         >
-          {task}
+          {label}
         </span>
-      )}
-      <span
-        className={clsx(
-          "text-faint shrink-0 max-w-[9rem] truncate",
-          (status === "failed" || status === "cancelled") && "text-bad",
+        {task && (
+          <span
+            className={clsx(
+              "truncate group-hover/agent:text-ink-soft transition-colors",
+              running ? "text-muted" : "text-faint",
+            )}
+          >
+            {task}
+          </span>
         )}
-      >
-        {statusText}
-      </span>
+        <span
+          className={clsx(
+            "text-faint shrink-0 max-w-[9rem] truncate",
+            (status === "failed" || status === "cancelled") && "text-bad",
+          )}
+        >
+          {statusText}
+        </span>
+      </button>
+      {canStop && (
+        <button
+          type="button"
+          aria-label="Stop subagent"
+          title="Stop subagent"
+          disabled={!canStop}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (item.runId) void cancelSubagent(item.runId, item.id);
+          }}
+          className={clsx(
+            "grid place-items-center w-[18px] h-[18px] rounded-md border-0 p-0 m-0 bg-transparent text-faint shrink-0 self-center",
+            canStop ? "cursor-pointer hover:text-ink-soft" : "cursor-default opacity-50",
+          )}
+        >
+          <Square size={ICON.XS} strokeWidth={2} />
+        </button>
+      )}
       {item.usage && traceStatus === "executed" && (
         <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
       )}
-    </button>
+    </div>
   );
 }
 

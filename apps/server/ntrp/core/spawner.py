@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from inspect import isawaitable
@@ -153,6 +154,22 @@ def _deterministic_salvage(child_messages: list[dict], error: str) -> str:
     )
 
 
+def _deterministic_cancel_salvage(child_messages: list[dict]) -> str:
+    tool_results: list[str] = []
+    for msg in child_messages:
+        if msg.get("role") not in ("tool", "assistant"):
+            continue
+        content = (msg.get("content") or "")[:300]
+        if content:
+            tool_results.append(f"- {content}")
+    body = "\n".join(tool_results[-_SALVAGE_TAIL_RESULTS:])
+    return (
+        "[partial - sub-agent cancelled]\n"
+        f"Last {min(len(tool_results), _SALVAGE_TAIL_RESULTS)} findings before "
+        f"cancellation:\n{body or '(none)'}"
+    )
+
+
 def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
     if isolation == IsolationLevel.SHARED:
         return calling_ctx.session_state
@@ -234,6 +251,7 @@ def create_spawn_fn(
             services=calling_ctx.services,
             ledger=calling_ctx.ledger,
             background_tasks=calling_ctx.background_tasks,
+            run_registry=calling_ctx.run_registry,
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,
@@ -401,19 +419,26 @@ def create_spawn_fn(
             )
 
         if not background:
-            if parent_emit:
-                await parent_emit(
-                    TaskStartedEvent(
-                        run_id=calling_ctx.run.run_id,
-                        task_id=lifecycle_task_id,
-                        parent_tool_call_id=parent_id,
-                        name="Sub-agent",
-                        summary=task_summary,
-                        depth=task_depth,
-                    )
+            stream_task = asyncio.create_task(_stream_to(_foreground_child_events))
+            if calling_ctx.run_registry is not None:
+                calling_ctx.run_registry.register_subagent(
+                    calling_ctx.run.run_id,
+                    lifecycle_task_id,
+                    stream_task,
                 )
             try:
-                text = await asyncio.wait_for(_stream_to(_foreground_child_events), timeout=timeout)
+                if parent_emit:
+                    await parent_emit(
+                        TaskStartedEvent(
+                            run_id=calling_ctx.run.run_id,
+                            task_id=lifecycle_task_id,
+                            parent_tool_call_id=parent_id,
+                            name="Sub-agent",
+                            summary=task_summary,
+                            depth=task_depth,
+                        )
+                    )
+                text = await asyncio.wait_for(stream_task, timeout=timeout)
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
@@ -427,6 +452,36 @@ def create_spawn_fn(
                     )
                 return _settle_with(text)
             except asyncio.CancelledError:
+                run_state = (
+                    calling_ctx.run_registry.get_run(calling_ctx.run.run_id)
+                    if calling_ctx.run_registry is not None
+                    else None
+                )
+                handle = run_state.subagents.get(lifecycle_task_id) if run_state else None
+                if run_state and not run_state.cancelled and handle and handle.cancel_requested:
+                    summary = await _salvage_summary(
+                        child_model,
+                        child_messages,
+                        "cancelled by user",
+                        task,
+                    )
+                    text = (
+                        f"[partial - sub-agent cancelled]\n\n{summary}"
+                        if summary
+                        else _deterministic_cancel_salvage(child_messages)
+                    )
+                    if parent_emit:
+                        await parent_emit(
+                            TaskFinishedEvent(
+                                run_id=calling_ctx.run.run_id,
+                                task_id=lifecycle_task_id,
+                                parent_tool_call_id=parent_id,
+                                status="cancelled",
+                                summary="cancelled",
+                                depth=task_depth,
+                            )
+                        )
+                    return _settle_with(text)
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
@@ -463,6 +518,13 @@ def create_spawn_fn(
                 return _settle_with(
                     _deterministic_salvage(child_messages, f"timed out after {timeout}s")
                 )
+            finally:
+                if calling_ctx.run_registry is not None:
+                    calling_ctx.run_registry.finish_subagent(calling_ctx.run.run_id, lifecycle_task_id)
+                if not stream_task.done():
+                    stream_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await stream_task
 
         registry = calling_ctx.background_tasks
         task_id = registry.generate_id()

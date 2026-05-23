@@ -197,7 +197,7 @@ Expected: pass.
 - Test: `apps/desktop/tests/activityTraceReplay.test.tsx`
 - Test: `apps/desktop/tests/streamEvents.test.ts`
 
-- [ ] **Step 1: Write server cancellation unit test**
+- [x] **Step 1: Write server cancellation unit test**
 
 Add to `apps/server/tests/test_spawn_salvage.py`:
 
@@ -241,7 +241,7 @@ async def test_foreground_subagent_cancel_returns_partial_summary(monkeypatch):
     assert any(getattr(event, "status", None) == "cancelled" for event in emitted)
 ```
 
-- [ ] **Step 2: Run server test and verify red**
+- [x] **Step 2: Run server test and verify red**
 
 Run:
 
@@ -251,7 +251,7 @@ uv run pytest apps/server/tests/test_spawn_salvage.py::test_foreground_subagent_
 
 Expected: fails because foreground subagents are not registered or cancellable.
 
-- [ ] **Step 3: Implement subagent handles**
+- [x] **Step 3: Implement subagent handles**
 
 In `apps/server/ntrp/server/state.py`, add:
 
@@ -260,7 +260,6 @@ In `apps/server/ntrp/server/state.py`, add:
 class SubagentHandle:
     tool_call_id: str
     task: asyncio.Task
-    prompt: str
     cancel_requested: bool = False
 ```
 
@@ -273,11 +272,11 @@ subagents: dict[str, SubagentHandle] = field(default_factory=dict)
 Add to `RunRegistry`:
 
 ```python
-def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task, prompt: str) -> None:
+def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task) -> None:
     run = self._runs.get(run_id)
     if not run:
         return
-    run.subagents[tool_call_id] = SubagentHandle(tool_call_id=tool_call_id, task=task, prompt=prompt)
+    run.subagents[tool_call_id] = SubagentHandle(tool_call_id=tool_call_id, task=task)
 
 def finish_subagent(self, run_id: str, tool_call_id: str) -> None:
     run = self._runs.get(run_id)
@@ -289,28 +288,31 @@ def cancel_subagent(self, run_id: str, tool_call_id: str) -> dict[str, bool]:
     if not run:
         return {"found": False, "cancel_requested": False}
     handle = run.subagents.get(tool_call_id)
-    if not handle or handle.task.done():
+    if not handle:
         return {"found": False, "cancel_requested": False}
+    if handle.cancel_requested or handle.task.done():
+        return {"found": True, "cancel_requested": False}
     handle.cancel_requested = True
     handle.task.cancel()
     return {"found": True, "cancel_requested": True}
 ```
 
-- [ ] **Step 4: Wrap foreground subagent execution**
+- [x] **Step 4: Wrap foreground subagent execution**
 
 In `apps/server/ntrp/core/spawner.py`, run foreground `_stream_to` in a child task, register it, and distinguish parent cancellation from subagent cancellation:
 
 ```python
 stream_task = asyncio.create_task(_stream_to(_foreground_child_events))
-calling_ctx.run_registry.register_subagent(calling_ctx.run.run_id, lifecycle_task_id, stream_task, task)
+calling_ctx.run_registry.register_subagent(calling_ctx.run.run_id, lifecycle_task_id, stream_task)
 try:
     text = await asyncio.wait_for(stream_task, timeout=timeout)
 except asyncio.CancelledError:
-    handle = calling_ctx.run.subagents.get(lifecycle_task_id)
-    if not handle or not handle.cancel_requested:
+    run_state = calling_ctx.run_registry.get_run(calling_ctx.run.run_id)
+    handle = run_state.subagents.get(lifecycle_task_id) if run_state else None
+    if not run_state or run_state.cancelled or not handle or not handle.cancel_requested:
         raise
     summary = await _salvage_summary(child_model, child_messages, "cancelled by user", task)
-    text = f"[partial - sub-agent cancelled]\n\n{summary or _deterministic_salvage(child_messages, 'cancelled by user')}"
+    text = f"[partial - sub-agent cancelled]\n\n{summary}" if summary else _deterministic_cancel_salvage(child_messages)
     stream_failed = True
 finally:
     calling_ctx.run_registry.finish_subagent(calling_ctx.run.run_id, lifecycle_task_id)
@@ -318,7 +320,7 @@ finally:
 
 Return a `SpawnResult` whose `text` is the partial summary so the parent receives that summary as the tool result.
 
-- [ ] **Step 5: Add API route**
+- [x] **Step 5: Add API route**
 
 In `apps/server/ntrp/server/routers/chat.py`:
 
@@ -335,7 +337,7 @@ async def cancel_subagent(
     return {"status": "cancelling", **result}
 ```
 
-- [ ] **Step 6: Add desktop API and UI**
+- [x] **Step 6: Add desktop API and UI**
 
 In `apps/desktop/src/api.ts`:
 
@@ -357,7 +359,7 @@ In `ActivityTrace.tsx`, show a small stop icon button for running agent rows onl
 
 In `ToolViewer.tsx`, show the same stop action in the agent header when the agent is running.
 
-- [ ] **Step 7: Add desktop cancellation tests**
+- [x] **Step 7: Add desktop cancellation tests**
 
 Add to `apps/desktop/tests/activityTraceReplay.test.tsx`:
 
@@ -365,7 +367,15 @@ Add to `apps/desktop/tests/activityTraceReplay.test.tsx`:
 test("running agent row renders a stop control", () => {
   const html = renderToStaticMarkup(
     <ActivityTail
-      items={[{ id: "call-research", kind: "research", semanticKind: "agent", target: "research", status: "ongoing" }]}
+      items={[{
+        id: "call-research",
+        kind: "research",
+        semanticKind: "agent",
+        target: "research",
+        status: "ongoing",
+        taskStatus: "running",
+        runId: "run-1",
+      }]}
       max={3}
       motionDisabled
     />,
@@ -374,6 +384,8 @@ test("running agent row renders a stop control", () => {
   expect(html).toContain("Stop subagent");
 });
 ```
+
+Also add the inverse test: a generic `status: "ongoing"` agent row without lifecycle `taskStatus: "running"` and row-owned `runId` must not render the stop control.
 
 Add to `apps/desktop/tests/streamEvents.test.ts`:
 
@@ -398,7 +410,7 @@ test("cancelled subagent lifecycle marks row executed", () => {
 });
 ```
 
-- [ ] **Step 8: Run cancellation checks**
+- [x] **Step 8: Run cancellation checks**
 
 Run:
 

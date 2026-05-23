@@ -665,6 +665,31 @@ test("run compaction finish clears spinner without storing replayable toast stat
   expect(getState().compacting).toBe(false);
 });
 
+test("cancelled subagent lifecycle marks row executed", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+  });
+  handleServerEvent({
+    type: "task_finished",
+    run_id: "run-1",
+    task_id: "call-research",
+    parent_tool_call_id: "call-research",
+    status: "cancelled",
+    summary: "partial summary ready",
+  });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  const item = getState().messages.get(activityId!)?.activity?.items[0];
+  expect(item?.status).toBe("executed");
+  expect(item?.taskStatus).toBe("cancelled");
+  expect(item?.runId).toBe("run-1");
+  expect(item?.progress).toBe("partial summary ready");
+});
+
 test("live deltas render during active stream", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-live", session_id: "session-live", timestamp: 1 });
   handleServerEvent({

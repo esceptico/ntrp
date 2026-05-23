@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from time import monotonic
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from ntrp.agent import Agent, AgentHooks, RunBudget
 from ntrp.agent.ledger import SharedLedger
@@ -17,6 +17,9 @@ from ntrp.llm.models import get_model
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import tool_schema_names
 from ntrp.tools.executor import ToolExecutor
+
+if TYPE_CHECKING:
+    from ntrp.server.state import RunRegistry
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ def create_agent(
     loop_task_id: str | None = None,
     parent_tracker: UsageTracker | None = None,
     initial_input_tokens: int | None = None,
+    run_registry: "RunRegistry | None" = None,
 ) -> Agent:
     started_at = monotonic()
     budget = RunBudget()
@@ -101,6 +105,7 @@ def create_agent(
         services=executor.tool_services,
         ledger=SharedLedger(),
         background_tasks=bg_tasks,
+        run_registry=run_registry,
         parent_tracker=parent_tracker,
     )
     tool_ctx.spawn_fn = create_spawn_fn(

@@ -22,7 +22,7 @@ from ntrp.events.sse import (
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
-from ntrp.server.routers.chat import _effective_after_seq, _event_stream, submit_tool_result
+from ntrp.server.routers.chat import _effective_after_seq, _event_stream, cancel_subagent, submit_tool_result
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -82,6 +82,35 @@ async def test_tools_result_resolves_durable_approval(tmp_path):
     finally:
         await read_conn.close()
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_subagent_route_cancels_registered_child_task():
+    registry = RunRegistry()
+    run = registry.create_run("s-1")
+    child = asyncio.create_task(asyncio.sleep(60))
+    registry.register_subagent(run.run_id, "call-research", child)
+
+    try:
+        response = await cancel_subagent("call-research", run.run_id, registry)
+
+        assert response == {
+            "status": "cancelling",
+            "found": True,
+            "cancel_requested": True,
+        }
+        assert registry.get_run(run.run_id).subagents["call-research"].cancel_requested is True
+        assert child.cancelled() or child.cancelling()
+        retry = await cancel_subagent("call-research", run.run_id, registry)
+        assert retry == {
+            "status": "cancelling",
+            "found": True,
+            "cancel_requested": False,
+        }
+    finally:
+        child.cancel()
+        with suppress(asyncio.CancelledError):
+            await child
 
 
 @pytest.mark.asyncio

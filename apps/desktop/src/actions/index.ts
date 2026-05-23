@@ -27,6 +27,7 @@ export {
   switchSession,
 } from "./sessions";
 export {
+  cancelSubagent,
   cancelQueuedMessage,
   enqueueMessage,
   sendMessage,

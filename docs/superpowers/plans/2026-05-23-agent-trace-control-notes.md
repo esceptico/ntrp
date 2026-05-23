@@ -11,3 +11,6 @@
 - Task 1 cleanup: removed unused compaction `name` metadata; naming will be handled by the later dedicated naming task.
 - Task 2: automatic run compaction now clears only the spinner; it no longer stores or renders a finished compaction artifact.
 - Task 2: removed stale `lastCompaction` state end-to-end; session cache snapshots force `compacting=false`, and manual `/compact` still reports through the explicit status-message path.
+- Task 3: foreground subagents register run-local handles; cancelling a child task salvages the child messages into a partial summary and marks only that agent row cancelled.
+- Task 3: desktop exposes stop controls on running agent rows and the agent inspector; the action optimistically marks the row as cancelling and calls the new subagent cancel route.
+- Task 3 review fixes: register the cancel handle before emitting `task_started`, gate stop controls on lifecycle-owned `taskStatus="running"` plus row-owned `runId`, make duplicate cancel calls idempotent, and use cancellation-specific fallback wording.

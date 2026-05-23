@@ -347,6 +347,7 @@ export function applyChatEventToTranscript(
 
     case "task_started": {
       const patch: Partial<ActivityItem> = {
+        runId: event.run_id,
         status: "ongoing",
         taskStatus: "running",
         progress: event.summary ?? "running",
@@ -359,6 +360,7 @@ export function applyChatEventToTranscript(
       const taskStatus =
         event.status === "failed" || event.status === "cancelled" ? event.status : "running";
       const patch: Partial<ActivityItem> = {
+        runId: event.run_id,
         status: taskStatus === "running" ? "ongoing" : "executed",
         taskStatus,
         progress: event.summary ?? event.status ?? "running",
@@ -369,9 +371,11 @@ export function applyChatEventToTranscript(
 
     case "task_finished": {
       const patch: Partial<ActivityItem> = {
+        runId: event.run_id,
         status: "executed",
         taskStatus: event.status,
         progress: event.summary ?? event.status,
+        cancelRequested: false,
       };
       mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;

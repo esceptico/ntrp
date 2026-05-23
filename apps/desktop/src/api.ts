@@ -422,6 +422,18 @@ export async function cancelRun(config: AppConfig, runId: string): Promise<void>
   });
 }
 
+export async function cancelSubagentApi(
+  config: AppConfig,
+  runId: string,
+  toolCallId: string,
+): Promise<void> {
+  await apiWithConfig(
+    config,
+    `/chat/subagents/${encodeURIComponent(toolCallId)}/cancel?run_id=${encodeURIComponent(runId)}`,
+    { method: "POST" },
+  );
+}
+
 const COMPACT_TIMEOUT_MS = 180_000;
 
 export interface CompactResponse {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Bot, Check, Copy, X } from "lucide-react";
+import { ArrowRight, Bot, Check, Copy, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
@@ -17,6 +17,7 @@ import {
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
+import { cancelSubagent } from "../actions";
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
  *  `lang` field is set to "json" when we successfully reformatted, so the
@@ -112,6 +113,8 @@ export function ToolViewer() {
   const root = document.querySelector("#app");
   if (!root) return null;
   const open = !!(item && live);
+  const canStopSubagent =
+    !!live && isAgent(live) && live.taskStatus === "running" && !!live.runId && !live.cancelRequested;
 
   return createPortal(
     <AnimatePresence>
@@ -154,6 +157,18 @@ export function ToolViewer() {
                   )}
                 </div>
               </div>
+              {canStopSubagent && live && (
+                <IconButton
+                  onClick={() => {
+                    if (live.runId) void cancelSubagent(live.runId, live.id);
+                  }}
+                  aria-label="Stop subagent"
+                  title="Stop subagent"
+                  className="shrink-0"
+                >
+                  <Square size={ICON.SM} strokeWidth={2} />
+                </IconButton>
+              )}
               <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
                 <X size={ICON.SM} strokeWidth={2} />
               </IconButton>

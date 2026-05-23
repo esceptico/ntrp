@@ -1134,6 +1134,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 loop_task_id=run.loop_task_id,
                 parent_tracker=tracker,
                 initial_input_tokens=ctx.initial_input_tokens,
+                run_registry=ctx.run_registry,
             )
 
         async def _track_response(response) -> None:
