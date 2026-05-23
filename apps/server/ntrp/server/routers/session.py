@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.agent import Role
@@ -215,6 +217,34 @@ async def _emit_goal_event(buses: BusRegistry, session_id: str, goal: dict | Non
         await bus.emit(GoalUpdatedEvent(session_id=session_id, goal=goal))
 
 
+def _history_tool_calls(msg: dict, kind_for: Callable[[str], str]) -> list[dict]:
+    raw_tool_calls = msg.get("tool_calls") or []
+    if not isinstance(raw_tool_calls, list):
+        return []
+
+    tool_calls = []
+    for tc in raw_tool_calls:
+        if not isinstance(tc, dict):
+            continue
+        function = tc.get("function")
+        if not isinstance(function, dict):
+            continue
+        call_id = tc.get("id")
+        name = function.get("name")
+        if not isinstance(call_id, str) or not isinstance(name, str):
+            continue
+        arguments = function.get("arguments", "{}")
+        tool_calls.append(
+            {
+                "id": call_id,
+                "name": name,
+                "arguments": arguments if isinstance(arguments, str) else "{}",
+                "kind": kind_for(name),
+            }
+        )
+    return tool_calls
+
+
 @router.get("/session/history")
 async def get_session_history(
     svc: SessionService = Depends(require_session_service),
@@ -303,16 +333,10 @@ async def get_session_history(
                 content = compact_tool_result_text(content, surface="history display")
             entry = {"role": role, "content": content}
 
-        if role == Role.ASSISTANT and "tool_calls" in msg:
-            entry["tool_calls"] = [
-                {
-                    "id": tc["id"],
-                    "name": tc["function"]["name"],
-                    "arguments": tc["function"].get("arguments", "{}"),
-                    "kind": _kind_for(tc["function"]["name"]),
-                }
-                for tc in msg["tool_calls"]
-            ]
+        if role == Role.ASSISTANT:
+            tool_calls = _history_tool_calls(msg, _kind_for)
+            if tool_calls:
+                entry["tool_calls"] = tool_calls
         if role == Role.ASSISTANT and msg.get("reasoning_content"):
             entry["reasoning_content"] = msg["reasoning_content"]
 

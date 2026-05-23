@@ -160,6 +160,62 @@ async def test_history_clamps_huge_persisted_tool_content(session_service: Sessi
 
 
 @pytest.mark.asyncio
+async def test_history_ignores_legacy_null_tool_calls(session_service: SessionService):
+    state = _state("sess-null-tool-calls")
+    await session_service.save(
+        state,
+        [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello", "tool_calls": None},
+        ],
+    )
+
+    runtime = SimpleNamespace(run_registry=RunRegistry(), executor=None)
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-null-tool-calls", limit=100, around_seq=None
+    )
+
+    assistant = result["messages"][-1]
+    assert assistant["role"] == "assistant"
+    assert assistant["content"] == "hello"
+    assert "tool_calls" not in assistant
+
+
+@pytest.mark.asyncio
+async def test_history_skips_malformed_tool_calls_but_keeps_valid_calls(session_service: SessionService):
+    state = _state("sess-malformed-tool-calls")
+    await session_service.save(
+        state,
+        [
+            {"role": "user", "content": "run tools"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    None,
+                    {"id": "missing-function"},
+                    {"id": 123, "function": {"name": "bash", "arguments": "{}"}},
+                    {"id": "missing-name", "function": {"arguments": "{}"}},
+                    {"id": "call-1", "function": {"name": "bash", "arguments": {"cmd": "date"}}},
+                    {"id": "call-2", "function": {"name": "read_file", "arguments": '{"path":"a"}'}},
+                ],
+            },
+        ],
+    )
+
+    runtime = SimpleNamespace(run_registry=RunRegistry(), executor=None)
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-malformed-tool-calls", limit=100, around_seq=None
+    )
+
+    assistant = result["messages"][-1]
+    assert assistant["tool_calls"] == [
+        {"id": "call-1", "name": "bash", "arguments": "{}", "kind": "tool"},
+        {"id": "call-2", "name": "read_file", "arguments": '{"path":"a"}', "kind": "tool"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_history_runtime_snapshot_keeps_live_tail_after_checkpoint(session_service: SessionService):
     state = _state("sess-live-tail")
     await session_service.save(state, [{"role": "user", "content": "hi", "client_id": "msg-1"}])
