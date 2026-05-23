@@ -624,18 +624,7 @@ async def set_session_auto(
     active = run_registry.get_accepting_run(session_id)
     resolved = 0
     if active is not None:
-        active.approval_controls.skip_approvals = req.value
-        if req.value:
-            for tool_id, future in list(active.pending_approvals.items()):
-                if future.done():
-                    continue
-                future.set_result({
-                    "type": "tool_response",
-                    "tool_id": tool_id,
-                    "result": "",
-                    "approved": True,
-                })
-                resolved += 1
+        resolved = active.set_skip_approvals(req.value)
     return {"status": "ok", "skip_approvals": req.value, "auto_resolved": resolved}
 
 

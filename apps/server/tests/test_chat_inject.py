@@ -772,6 +772,36 @@ def test_duplicate_post_returns_existing_run_without_requeueing(client_with_acti
     assert len(run.inject_queue) == 1
 
 
+@pytest.mark.asyncio
+async def test_active_run_auto_message_resolves_pending_approval():
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    future = asyncio.get_running_loop().create_future()
+    run.pending_approvals["tool-x"] = future
+
+    result = await chat_service.submit_chat_message(
+        registry,
+        lambda: None,
+        BusRegistry(),
+        message="follow-up",
+        session_id="sess-1",
+        skip_approvals=True,
+        client_id="cid-auto",
+    )
+
+    assert result["run_id"] == run.run_id
+    assert run.approval_controls.skip_approvals is True
+    assert future.result() == {
+        "type": "tool_response",
+        "tool_id": "tool-x",
+        "result": "",
+        "approved": True,
+    }
+
+
 def _drain_factory(bus: SessionBus, run: RunState):
     """Mirror the closure built inside services.chat.run_chat for testing."""
     from ntrp.services.chat import _build_get_pending

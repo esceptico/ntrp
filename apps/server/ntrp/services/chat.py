@@ -606,7 +606,7 @@ async def prepare_chat(
     run.messages = messages
     run.session_state = session_state
     if skip_approvals is not None:
-        run.approval_controls.skip_approvals = skip_approvals
+        run.set_skip_approvals(skip_approvals)
     run.history_prefix = history_prefix
 
     return ChatContext(
@@ -756,7 +756,7 @@ async def submit_chat_message(
     active_run = run_registry.get_accepting_run(session_id)
     if active_run:
         if skip_approvals is not None:
-            active_run.approval_controls.skip_approvals = bool(skip_approvals)
+            active_run.set_skip_approvals(bool(skip_approvals))
         entry: dict = {
             "role": Role.USER,
             "content": build_user_content(message, images, context),

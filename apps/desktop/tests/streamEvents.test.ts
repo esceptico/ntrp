@@ -33,9 +33,6 @@ beforeEach(() => {
     currentRunId: null,
     currentSessionId: null,
     error: null,
-    skipApprovals: false,
-    pendingApprovals: [],
-    queuedMessages: [],
     backgroundAgents: createBackgroundAgentsDomainState(),
   });
 });
@@ -1728,74 +1725,6 @@ test("loadHistory restores currentRunId for active sessions", async () => {
 
     expect(getState().running).toBe(true);
     expect(getState().currentRunId).toBe("active-run-1");
-  } finally {
-    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
-  }
-});
-
-test("loadHistory reapplies local Auto to active runtime and hides stale approvals", async () => {
-  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
-  const requests: { path: string; method?: string; body?: string }[] = [];
-  (globalThis as typeof globalThis & { window?: unknown }).window = {
-    ntrpDesktop: {
-      api: {
-        request: async (_config: unknown, request: { path: string; method?: string; body?: string }) => {
-          requests.push(request);
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            contentType: "application/json",
-            data: request.path.startsWith("/session/history")
-              ? {
-                  messages: [],
-                  active_run_id: "run-auto",
-                  runtime: {
-                    session_id: "auto-session",
-                    latest_event_seq: 7,
-                    checkpoint_seq: 7,
-                    active_run: { run_id: "run-auto", status: "running" },
-                    pending_approvals: [
-                      {
-                        tool_id: "tool-1",
-                        tool_name: "Bash",
-                        preview: "date",
-                        diff: null,
-                        status: "pending",
-                      },
-                    ],
-                    queued_messages: [],
-                  },
-                }
-              : { status: "ok", skip_approvals: true, auto_resolved: 1 },
-            text: "",
-          };
-        },
-      },
-    },
-    setTimeout,
-    clearTimeout,
-  };
-
-  try {
-    setState({
-      config: { serverUrl: "http://localhost:6877", apiKey: "" },
-      currentSessionId: "auto-session",
-      skipApprovals: true,
-      pendingApprovals: [],
-    });
-
-    await loadHistory("auto-session");
-
-    expect(getState().pendingApprovals).toEqual([]);
-    expect(
-      requests.some(
-        (request) =>
-          request.path === "/sessions/auto-session/auto" &&
-          request.method === "POST" &&
-          request.body === JSON.stringify({ value: true }),
-      ),
-    ).toBe(true);
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }

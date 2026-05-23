@@ -113,6 +113,23 @@ class RunState:
         self.updated_at = datetime.now(UTC)
         return batch
 
+    def set_skip_approvals(self, value: bool) -> int:
+        self.approval_controls.skip_approvals = value
+        if not value:
+            return 0
+        resolved = 0
+        for tool_id, future in list(self.pending_approvals.items()):
+            if future.done():
+                continue
+            future.set_result({
+                "type": "tool_response",
+                "tool_id": tool_id,
+                "result": "",
+                "approved": True,
+            })
+            resolved += 1
+        return resolved
+
     def get_status(self, now: datetime) -> dict:
         age_seconds = max(0, int((now - self.created_at).total_seconds()))
         idle_seconds = max(0, int((now - self.updated_at).total_seconds()))

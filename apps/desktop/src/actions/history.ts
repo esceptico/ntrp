@@ -160,8 +160,8 @@ function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot
   if (!runtime) return;
   setEventCursorForSession(sessionId, runtime.checkpoint_seq);
   const activeRun = runtime.active_run;
-  if (isLiveRun(runtime)) {
-    syncAutoForActiveRun(sessionId, getState().skipApprovals);
+  if (getState().skipApprovals && isLiveRun(runtime)) {
+    syncAutoForActiveRun(sessionId, true);
   }
   setState((state) => {
     const pendingApprovals = state.skipApprovals ? [] : runtime.pending_approvals;
