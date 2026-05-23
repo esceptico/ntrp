@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
-import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
+import { activityItemStatus, friendlyAgentLabel, isAgent } from "../../lib/agent";
 import { cancelSubagent } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
@@ -303,8 +303,7 @@ function AgentButton({
   depth: number;
   onOpen: (item: ActivityItem) => void;
 }) {
-  const task = useMemo(() => extractTask(item.args), [item.args]);
-  const label = friendlyAgentLabel(item.kind);
+  const label = item.displayName ?? friendlyAgentLabel(item.kind);
   const traceStatus = activityItemStatus(item);
   const running = traceStatus === "ongoing";
   const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : "executed");
@@ -338,16 +337,6 @@ function AgentButton({
         >
           {label}
         </span>
-        {task && (
-          <span
-            className={clsx(
-              "truncate group-hover/agent:text-ink-soft transition-colors",
-              running ? "text-muted" : "text-faint",
-            )}
-          >
-            {task}
-          </span>
-        )}
         <span
           className={clsx(
             "text-faint shrink-0 max-w-[9rem] truncate",

@@ -86,6 +86,29 @@ test("generic ongoing agent row waits for lifecycle ownership before stop contro
   expect(html).not.toContain("Stop subagent");
 });
 
+test("agent trace row shows generated name but not prompt text", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "call-research",
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          args: JSON.stringify({ task: "inspect current eval/test harness opportunities" }),
+          displayName: "Research Eval Test Harness",
+          status: "ongoing",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain("Research Eval Test Harness");
+  expect(html).not.toContain("inspect current eval/test harness opportunities");
+});
+
 test("activity stats include subagent rows and their child tools", () => {
   expect(activityTraceStats([
     {

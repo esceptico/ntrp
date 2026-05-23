@@ -148,7 +148,9 @@ export function ToolViewer() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
-                    {live && isAgent(live) ? friendlyAgentLabel(live.kind) : live?.kind}
+                    {live && isAgent(live)
+                      ? live.displayName ?? friendlyAgentLabel(live.kind)
+                      : live?.kind}
                   </div>
                   {live && !isAgent(live) && live.target && live.target !== live.kind && (
                     <div className="mt-0.5 text-xs text-faint font-mono truncate">
@@ -366,8 +368,8 @@ function ActivityTreeNode({
 }) {
   const indent = ((item.depth ?? baseDepth) - baseDepth) * 16 + 12;
   const agent = isAgent(item);
-  const label = agent ? friendlyAgentLabel(item.kind) : item.kind;
-  const detail = agent ? extractTask(item.args) ?? item.target : item.target;
+  const label = agent ? item.displayName ?? friendlyAgentLabel(item.kind) : item.kind;
+  const detail = agent ? null : item.target;
   const running = activityItemStatus(item) === "ongoing";
   return (
     <li className="m-0 p-0">

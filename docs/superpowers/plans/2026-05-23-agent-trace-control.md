@@ -570,7 +570,7 @@ Expected: pass.
 - Modify: `apps/desktop/src/components/ToolViewer.tsx`
 - Test: `apps/desktop/tests/activityTraceReplay.test.tsx`
 
-- [ ] **Step 1: Write trace rendering test**
+- [x] **Step 1: Write trace rendering test**
 
 Add to `apps/desktop/tests/activityTraceReplay.test.tsx`:
 
@@ -597,7 +597,7 @@ test("agent trace row shows generated name but not prompt text", () => {
 });
 ```
 
-- [ ] **Step 2: Run test and verify red**
+- [x] **Step 2: Run test and verify red**
 
 Run:
 
@@ -607,7 +607,7 @@ bun test apps/desktop/tests/activityTraceReplay.test.tsx --test-name-pattern "ge
 
 Expected: fails because `AgentButton` currently renders `extractTask(item.args)`.
 
-- [ ] **Step 3: Implement trace-only hiding**
+- [x] **Step 3: Implement trace-only hiding**
 
 In `AgentButton` in `apps/desktop/src/components/trace/ActivityTrace.tsx`:
 
@@ -625,7 +625,7 @@ const task = useMemo(() => extractTask(item.args) ?? item.target, [item.args, it
 
 This preserves the prompt in drill-down only.
 
-- [ ] **Step 4: Run trace tests**
+- [x] **Step 4: Run trace tests**
 
 Run:
 
