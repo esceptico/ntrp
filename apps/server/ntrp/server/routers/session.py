@@ -5,6 +5,7 @@ from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
 from ntrp.core.llm_client import llm_client
+from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS, compact_tool_result_text
 from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
@@ -127,8 +128,12 @@ async def _session_runtime_snapshot(
         else []
     )
     queued_rows = []
-    for queued_status in ("queued", "failed_retryable"):
-        queued_rows.extend(await svc.store.list_chat_queued_messages(session_id, status=queued_status))
+    if surfaced_run and run_status in ACTIVE_RUN_STATUSES:
+        queued_rows = [
+            row
+            for row in await svc.store.list_chat_queued_messages(session_id, status="queued")
+            if row.get("run_id") == surfaced_run["run_id"]
+        ]
 
     pending_approvals = [_approval_snapshot(row) for row in approval_rows]
     queued_messages = [_queued_message_snapshot(row) for row in queued_rows]
@@ -293,7 +298,10 @@ async def get_session_history(
             if context:
                 entry["context"] = context
         else:
-            entry = {"role": role, "content": blocks_to_text(raw_content)}
+            content = blocks_to_text(raw_content)
+            if role == Role.TOOL and len(content) > HISTORY_TOOL_RESULT_PREVIEW_CHARS:
+                content = compact_tool_result_text(content, surface="history display")
+            entry = {"role": role, "content": content}
 
         if role == Role.ASSISTANT and "tool_calls" in msg:
             entry["tool_calls"] = [

@@ -33,6 +33,9 @@ export function TurnGroup({
   onManualResize?: () => void;
 }) {
   const turn = useStore((s) => s.messages.get(userId)?.turn);
+  const motionDisabled = useStore((s) =>
+    Boolean(s.messages.get(userId)?.suppressEntryMotion || s.streamReplaying),
+  );
 
   const childRoles = useStore(
     useShallow((s) => childIds.map((id) => s.messages.get(id)?.role ?? null)),
@@ -85,13 +88,11 @@ export function TurnGroup({
   //
   // Streaming arrivals (workIds added one-by-one over time) don't get
   // motion stagger — parent is already at "visible" so new children
-  // inherit the steady state directly. Their existing per-article CSS
-  // `animate-roll-in` keyframe still fires, so they keep their entry
-  // animation as before. We intentionally do NOT suppress that CSS,
-  // because it's the only entry animation for streaming arrivals.
+  // inherit the steady state directly. Hydrated/replayed turns disable
+  // this initial stagger; live rows keep their per-article entry motion.
   const interimList = (
     <motion.div
-      initial="hidden"
+      initial={motionDisabled ? false : "hidden"}
       animate={showInterim ? "visible" : "hidden"}
       variants={{
         hidden: {},
@@ -102,11 +103,15 @@ export function TurnGroup({
       {layout.workIds.map((id) => (
         <motion.div
           key={id}
-          variants={{
-            hidden: { opacity: 0, y: 4 },
-            visible: { opacity: 1, y: 0 },
-          }}
-          transition={SPRING_ROW_ENTRY}
+          variants={
+            motionDisabled
+              ? undefined
+              : {
+                  hidden: { opacity: 0, y: 4 },
+                  visible: { opacity: 1, y: 0 },
+                }
+          }
+          transition={motionDisabled ? { duration: 0 } : SPRING_ROW_ENTRY}
         >
           <Message id={id} isFinal={false} />
         </motion.div>

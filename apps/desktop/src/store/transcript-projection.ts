@@ -1,6 +1,7 @@
 import { type HistoryMessage, type ServerEvent } from "../api";
 import { SEMANTIC_KIND_AGENT } from "../lib/agent";
-import { getState, setState, type ActivityItem, type QueuedMessage, type UiMessage } from "./index";
+import { isActivityContinuationMessage } from "../lib/messageVisibility";
+import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
 import {
   reduceRunCompleted,
   reduceRunFailed,
@@ -37,6 +38,12 @@ export interface TranscriptProjectionResult {
 export interface TranscriptProjectionRuntime {
   getProjectionState: () => TranscriptProjectionState;
   setProjectionState: (state: TranscriptProjectionState) => void;
+}
+
+const TODO_TOOL_NAME = "update_todos";
+
+export function isTodoToolName(name: string | null | undefined): boolean {
+  return name === TODO_TOOL_NAME;
 }
 
 interface ProjectionContext {
@@ -93,6 +100,7 @@ export function applyChatEventToTranscript(
 
   const s = getState();
   const ts = event.timestamp ?? Date.now();
+  const suppressEntryMotion = event.replay === true;
   let effect: TranscriptProjectionEffect | undefined;
 
   switch (event.type) {
@@ -109,6 +117,7 @@ export function applyChatEventToTranscript(
             id: `goal-nudge-${event.run_id}`,
             role: "status",
             content: "Goal nudge",
+            suppressEntryMotion,
           });
         }
         s.appendMessage({
@@ -116,6 +125,7 @@ export function applyChatEventToTranscript(
           role: "user",
           content: "",
           isMeta: true,
+          suppressEntryMotion,
         });
       }
       break;
@@ -186,21 +196,22 @@ export function applyChatEventToTranscript(
         content: queued.text,
         turn: { startedAt: ts, endedAt: null, durationMs: null },
         images: queued.images,
+        suppressEntryMotion,
       });
       break;
     }
 
     case "TEXT_MESSAGE_START":
-      if (!event.depth) ensureAssistantMessage(context, assistantIdFrom(event), ts);
+      if (!event.depth) ensureAssistantMessage(context, assistantIdFrom(event), ts, suppressEntryMotion);
       break;
 
     case "TEXT_MESSAGE_CONTENT":
-      if (!event.depth) appendAssistantDelta(context, assistantIdFrom(event), event.delta, ts);
+      if (!event.depth) appendAssistantDelta(context, assistantIdFrom(event), event.delta, ts, suppressEntryMotion);
       break;
 
     case "TEXT_MESSAGE_END":
       if (!event.depth && event.content !== undefined) {
-        reconcileAssistantContent(context, assistantIdFrom(event), event.content, ts);
+        reconcileAssistantContent(context, assistantIdFrom(event), event.content, ts, suppressEntryMotion);
       }
       break;
     case "REASONING_START":
@@ -210,7 +221,13 @@ export function applyChatEventToTranscript(
 
     case "REASONING_MESSAGE_START":
       if (!event.depth) {
-        s.appendMessage({ id: event.message_id, role: "reasoning", title: "Reasoning", content: "" });
+        s.appendMessage({
+          id: event.message_id,
+          role: "reasoning",
+          title: "Reasoning",
+          content: "",
+          suppressEntryMotion,
+        });
       }
       break;
 
@@ -225,12 +242,14 @@ export function applyChatEventToTranscript(
           role: "reasoning",
           title: "Reasoning",
           content: event.delta,
+          suppressEntryMotion,
         });
       }
       break;
     }
 
     case "TOOL_CALL_START": {
+      if (isTodoToolName(event.tool_call_name)) break;
       const pending: PendingToolCall = {
         name: event.tool_call_name,
         description: event.description ?? "",
@@ -243,13 +262,14 @@ export function applyChatEventToTranscript(
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.set(event.tool_call_id, pending);
       context.update({ ...context.state, pendingToolCalls });
-      appendActivityItemImmediately(context, activityItemFromPending(event.tool_call_id, pending));
+      appendActivityItemImmediately(context, activityItemFromPending(event.tool_call_id, pending), suppressEntryMotion);
       break;
     }
 
     case "TOOL_CALL_ARGS": {
       const pending = context.state.pendingToolCalls.get(event.tool_call_id);
       if (!pending) break;
+      if (isTodoToolName(pending.name)) break;
       const argsBuffer = pending.argsBuffer + event.delta;
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.set(event.tool_call_id, {
@@ -266,6 +286,12 @@ export function applyChatEventToTranscript(
 
     case "TOOL_CALL_END": {
       const pending = context.state.pendingToolCalls.get(event.tool_call_id);
+      if (isTodoToolName(pending?.name)) {
+        const pendingToolCalls = new Map(context.state.pendingToolCalls);
+        pendingToolCalls.delete(event.tool_call_id);
+        context.update({ ...context.state, pendingToolCalls });
+        break;
+      }
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.delete(event.tool_call_id);
       context.update({ ...context.state, pendingToolCalls });
@@ -277,14 +303,15 @@ export function applyChatEventToTranscript(
         ? { ...activityPatchFromPending(pending), ...pendingPatch }
         : activityPatchFromPending(pending);
       if (!s.mergeActivityItem(item.id, patch)) {
-        appendActivityItemImmediately(context, pendingPatch ? { ...item, ...pendingPatch } : item);
+        appendActivityItemImmediately(context, pendingPatch ? { ...item, ...pendingPatch } : item, suppressEntryMotion);
       }
       break;
     }
 
     case "TOOL_CALL_RESULT": {
+      if (isTodoToolName(event.name)) break;
       const result = event.content ?? event.preview ?? "";
-      const patch: Partial<ActivityItem> = { result };
+      const patch: Partial<ActivityItem> = { result, status: "executed" };
       if (event.parent_id) patch.parentToolId = event.parent_id;
       if (event.depth != null) patch.depth = event.depth || undefined;
       if (event.is_error) patch.error = true;
@@ -300,14 +327,31 @@ export function applyChatEventToTranscript(
       break;
     }
 
+    case "todo_updated": {
+      if (s.currentRunId && s.currentRunId !== event.run_id) break;
+      s.upsertTodoList(
+        {
+          id: `todo-${event.run_id}`,
+          role: "todo",
+          content: "",
+          todo: {
+            items: normalizeTodoItems(event.items),
+            explanation: event.explanation ?? null,
+          },
+          suppressEntryMotion,
+        },
+        activityInsertAnchor(context),
+      );
+      break;
+    }
+
     case "task_started": {
       const patch: Partial<ActivityItem> = {
+        status: "ongoing",
         taskStatus: "running",
         progress: event.summary ?? "running",
       };
-      if (!s.mergeActivityItem(event.task_id, patch)) {
-        bufferActivityPatch(context, event.task_id, patch);
-      }
+      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
 
@@ -315,23 +359,21 @@ export function applyChatEventToTranscript(
       const taskStatus =
         event.status === "failed" || event.status === "cancelled" ? event.status : "running";
       const patch: Partial<ActivityItem> = {
+        status: taskStatus === "running" ? "ongoing" : "executed",
         taskStatus,
         progress: event.summary ?? event.status ?? "running",
       };
-      if (!s.mergeActivityItem(event.task_id, patch)) {
-        bufferActivityPatch(context, event.task_id, patch);
-      }
+      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
 
     case "task_finished": {
       const patch: Partial<ActivityItem> = {
+        status: "executed",
         taskStatus: event.status,
         progress: event.summary ?? event.status,
       };
-      if (!s.mergeActivityItem(event.task_id, patch)) {
-        bufferActivityPatch(context, event.task_id, patch);
-      }
+      mergeOrBufferActivityPatch(context, [event.parent_tool_call_id, event.task_id], patch);
       break;
     }
 
@@ -352,6 +394,7 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
 
   const items: UiMessage[] = [];
   let activeActivityId: string | null = null;
+  let activeTodoId: string | null = null;
 
   const findActivity = (id: string) =>
     items.find((it) => it.id === id && it.role === "activity")?.activity;
@@ -363,13 +406,18 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
     const stampedAt = msg.created_at ? Date.parse(msg.created_at) : 0;
 
     if (msg.role === "user") {
-      activeActivityId = null;
-      if (msg.is_meta && stableId.startsWith("goal:")) {
+      const hasVisibleMetaMarker = Boolean(msg.is_meta && stableId.startsWith("goal:"));
+      if (!msg.is_meta || hasVisibleMetaMarker) {
+        activeActivityId = null;
+        activeTodoId = null;
+      }
+      if (hasVisibleMetaMarker) {
         items.push({
           id: `${stableId}-nudge`,
           role: "status",
           sourceIndex,
           sourceMessageId,
+          suppressEntryMotion: true,
           content: "Goal nudge",
         });
       }
@@ -378,6 +426,7 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
         role: "user",
         sourceIndex,
         sourceMessageId,
+        suppressEntryMotion: true,
         content: msg.content,
         turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
         images: msg.images,
@@ -394,6 +443,7 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
         role: "reasoning",
         sourceIndex,
         sourceMessageId,
+        suppressEntryMotion: true,
         title: "Reasoning",
         content: msg.reasoning_content,
       });
@@ -406,6 +456,7 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
         role: "assistant",
         sourceIndex,
         sourceMessageId,
+        suppressEntryMotion: true,
         content: msg.content,
         turn: stampedAt
           ? { startedAt: stampedAt, endedAt: stampedAt, durationMs: null }
@@ -414,6 +465,31 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
     }
 
     if (msg.tool_calls && msg.tool_calls.length > 0) {
+      const todoCalls = msg.tool_calls.filter((toolCall) => isTodoToolName(toolCall.name));
+      const activityCalls = msg.tool_calls.filter((toolCall) => !isTodoToolName(toolCall.name));
+
+      for (const toolCall of todoCalls) {
+        const todo = todoStateFromArgs(toolCall.arguments || "");
+        if (!todo) continue;
+        if (!activeTodoId) {
+          activeTodoId = `${stableId}-todo`;
+          items.push({
+            id: activeTodoId,
+            role: "todo",
+            sourceIndex,
+            sourceMessageId,
+            suppressEntryMotion: true,
+            content: "",
+            todo,
+          });
+        } else {
+          const existing = items.find((it) => it.id === activeTodoId);
+          if (existing) existing.todo = todo;
+        }
+      }
+
+      if (activityCalls.length === 0) return;
+
       if (!activeActivityId) {
         activeActivityId = `${stableId}-activity`;
         items.push({
@@ -421,13 +497,14 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
           role: "activity",
           sourceIndex,
           sourceMessageId,
+          suppressEntryMotion: true,
           content: "",
           activity: { items: [], label: "Called", done: true },
         });
       }
       const activity = findActivity(activeActivityId);
       if (activity) {
-        for (const toolCall of msg.tool_calls) {
+        for (const toolCall of activityCalls) {
           const args = toolCall.arguments || "";
           activity.items.push({
             id: toolCall.id,
@@ -437,6 +514,7 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
             target: formatCallTarget(toolCall.name, args || "{}"),
             args,
             result: resultsById.get(toolCall.id),
+            status: "executed",
           });
         }
       }
@@ -444,6 +522,34 @@ export function rebuildTranscriptFromHistory(messages: HistoryMessage[]): UiMess
   });
 
   return items;
+}
+
+function todoStateFromArgs(argsJson: string): TodoListState | null {
+  try {
+    const parsed = JSON.parse(argsJson || "{}");
+    if (!parsed || typeof parsed !== "object") return null;
+    const items = normalizeTodoItems((parsed as { items?: unknown }).items);
+    if (items.length === 0) return null;
+    const explanation = (parsed as { explanation?: unknown }).explanation;
+    return {
+      items,
+      explanation: typeof explanation === "string" ? explanation : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTodoItems(rawItems: unknown): TodoListState["items"] {
+  if (!Array.isArray(rawItems)) return [];
+  return rawItems.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const content = (item as { content?: unknown }).content;
+    const status = (item as { status?: unknown }).status;
+    if (typeof content !== "string" || content.trim().length === 0) return [];
+    if (status !== "pending" && status !== "in_progress" && status !== "completed") return [];
+    return [{ content, status }];
+  });
 }
 
 export function runCancelledEffect(queuedMessages: QueuedMessage[]): TranscriptProjectionEffect | undefined {
@@ -497,18 +603,23 @@ function setActiveAssistantMessageId(
   context.update({ ...context.state, activeAssistantMessageId });
 }
 
-function ensureAssistantMessage(context: ProjectionContext, id: string, startedAt: number): void {
+function ensureAssistantMessage(
+  context: ProjectionContext,
+  id: string,
+  startedAt: number,
+  suppressEntryMotion?: boolean,
+): void {
   const state = getState();
   setActiveAssistantMessageId(context, id);
   const existing = state.messages.get(id);
   if (existing?.role === "assistant") return;
 
-  endActivity(state);
   state.appendMessage({
     id,
     role: "assistant",
     content: "",
     turn: { startedAt, endedAt: null, durationMs: null },
+    suppressEntryMotion,
   });
 }
 
@@ -517,11 +628,15 @@ function appendAssistantDelta(
   id: string,
   delta: string,
   startedAt: number,
+  suppressEntryMotion?: boolean,
 ): void {
   const state = getState();
   setActiveAssistantMessageId(context, id);
   const existing = state.messages.get(id);
   if (existing?.role === "assistant") {
+    if (existing.content.trim().length === 0 && delta.trim().length > 0) {
+      endActivity(state);
+    }
     state.mutateMessage(id, { content: existing.content + delta });
     return;
   }
@@ -532,6 +647,7 @@ function appendAssistantDelta(
     role: "assistant",
     content: delta,
     turn: { startedAt, endedAt: null, durationMs: null },
+    suppressEntryMotion,
   });
 }
 
@@ -540,11 +656,15 @@ function reconcileAssistantContent(
   id: string,
   content: string,
   startedAt: number,
+  suppressEntryMotion?: boolean,
 ): void {
   const state = getState();
   setActiveAssistantMessageId(context, id);
   const existing = state.messages.get(id);
   if (existing?.role === "assistant") {
+    if (existing.content.trim().length === 0 && content.trim().length > 0) {
+      endActivity(state);
+    }
     if (existing.content !== content) state.mutateMessage(id, { content });
     return;
   }
@@ -556,6 +676,7 @@ function reconcileAssistantContent(
     role: "assistant",
     content,
     turn: { startedAt, endedAt: null, durationMs: null },
+    suppressEntryMotion,
   });
 }
 
@@ -587,6 +708,7 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
     semanticKind: pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
     target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
     args: pending.argsBuffer,
+    status: "ongoing",
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
   };
@@ -611,13 +733,17 @@ function activityPatchFromItem(item: ActivityItem): Partial<ActivityItem> {
   };
 }
 
-function appendActivityItemImmediately(context: ProjectionContext, item: ActivityItem): void {
+function appendActivityItemImmediately(
+  context: ProjectionContext,
+  item: ActivityItem,
+  suppressEntryMotion?: boolean,
+): void {
   const state = getState();
   if (state.mergeActivityItem(item.id, activityPatchFromItem(item))) {
     return;
   }
 
-  const activityId = state.activeActivityId;
+  const activityId = activeActivityIdForToolAppend(state.activeActivityId);
   if (!activityId) {
     const newId = crypto.randomUUID();
     state.insertMessageBefore(
@@ -626,6 +752,7 @@ function appendActivityItemImmediately(context: ProjectionContext, item: Activit
         role: "activity",
         content: "",
         activity: { items: [item], label: "Calling", done: false },
+        suppressEntryMotion,
       },
       activityInsertAnchor(context),
     );
@@ -634,8 +761,28 @@ function appendActivityItemImmediately(context: ProjectionContext, item: Activit
     return;
   }
 
+  if (activityId !== state.activeActivityId) state.setActiveActivityId(activityId);
   state.appendActivityItem(activityId, item);
   context.update({ ...context.state, nextItemRenderAt: Date.now() });
+}
+
+function activeActivityIdForToolAppend(activeActivityId: string | null): string | null {
+  const state = getState();
+  const active = activeActivityId ? state.messages.get(activeActivityId) : null;
+  if (active?.role === "activity" && active.activity) {
+    return activeActivityId;
+  }
+
+  for (let i = state.order.length - 1; i >= 0; i -= 1) {
+    const message = state.messages.get(state.order[i]);
+    if (!message) continue;
+    if (message.role === "activity" && message.activity) {
+      return message.id;
+    }
+    if (isActivityContinuationMessage(message)) continue;
+    return null;
+  }
+  return null;
 }
 
 function bufferActivityPatch(
@@ -649,6 +796,19 @@ function bufferActivityPatch(
     ...patch,
   });
   context.update({ ...context.state, pendingResultPatches });
+}
+
+function mergeOrBufferActivityPatch(
+  context: ProjectionContext,
+  itemIds: Array<string | null | undefined>,
+  patch: Partial<ActivityItem>,
+) {
+  const uniqueIds = Array.from(new Set(itemIds.filter((id): id is string => !!id)));
+  const state = getState();
+  for (const itemId of uniqueIds) {
+    if (state.mergeActivityItem(itemId, patch)) return;
+  }
+  for (const itemId of uniqueIds) bufferActivityPatch(context, itemId, patch);
 }
 
 function takePendingResultPatch(

@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { PanelRightClose, PanelRightOpen, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  CircleDot,
+  ListChecks,
+  PanelRightClose,
+  PanelRightOpen,
+  X,
+} from "lucide-react";
 import clsx from "clsx";
-import { cancelBackgroundTaskApi, listBackgroundTasksApi } from "../api";
+import { cancelBackgroundTaskApi, listBackgroundTasksApi, type TodoStatus } from "../api";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import { EASE_EMPHASIZED, MOTION, originFromEvent } from "../lib/motion";
 import { ICON } from "../lib/icons";
-import { useStore, type BackgroundAgent } from "../store";
+import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import { ScrollBlurTop } from "./ScrollBlur";
 
 // Compact relative-time formatter. Codex's Cloud Tasks TUI uses
@@ -63,6 +71,20 @@ export function StatusDot({
     />
   );
 }
+
+export function latestTodoListFromMessages(
+  order: string[],
+  messages: Map<string, UiMessage>,
+): TodoListState | null {
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    const message = messages.get(order[i]);
+    if (message?.role === "todo" && message.todo?.items.length) return message.todo;
+  }
+  return null;
+}
+
+export const RIGHT_PANEL_WIDTH = 320;
+export const RIGHT_PANEL_BODY_WIDTH = 304;
 
 function useBackgroundTasksPoll(sessionId: string | null): void {
   const config = useStore((s) => s.config);
@@ -236,6 +258,54 @@ function AutomationRow({
   );
 }
 
+function todoStatusIcon(status: TodoStatus) {
+  if (status === "completed") {
+    return <CheckCircle2 size={ICON.XS} strokeWidth={2.2} className="mt-[2px] shrink-0 text-ok" />;
+  }
+  if (status === "in_progress") {
+    return <CircleDot size={ICON.XS} strokeWidth={2.2} className="mt-[2px] shrink-0 text-info" />;
+  }
+  return <Circle size={ICON.XS} strokeWidth={2} className="mt-[2px] shrink-0 text-faint" />;
+}
+
+function TodoSidebarSection({ todo }: { todo: TodoListState }) {
+  const completed = todo.items.filter((item) => item.status === "completed").length;
+
+  return (
+    <section>
+      <SectionHeader label="Tasks" count={todo.items.length} />
+      <div className="rounded-[8px] border border-line-soft bg-surface-soft/45 px-2.5 py-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="inline-flex min-w-0 items-center gap-1.5">
+            <ListChecks size={ICON.XS} strokeWidth={2} className="shrink-0 text-muted" />
+            <span className="truncate text-xs font-medium text-ink-soft">Todo</span>
+          </div>
+          <span className="shrink-0 text-2xs tabular-nums text-faint">
+            {completed}/{todo.items.length}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {todo.items.map((item, index) => (
+            <div key={`${item.status}-${index}-${item.content}`} className="flex min-w-0 items-start gap-1.5">
+              {todoStatusIcon(item.status)}
+              <span
+                className={clsx(
+                  "min-w-0 flex-1 break-words text-xs leading-[1.35]",
+                  item.status === "completed" && "text-faint line-through",
+                  item.status === "in_progress" && "font-medium text-ink-soft",
+                  item.status === "pending" && "text-muted",
+                )}
+              >
+                {item.content}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SectionHeader({ label, count }: { label: string; count?: number }) {
   return (
     <div className="flex items-baseline justify-between px-0.5 pt-0.5 pb-1">
@@ -255,6 +325,7 @@ export function AgentRightSidebar() {
   const automationStatuses = useStore((s) => s.automationStream.statuses);
   const backgroundAgentRows = useStore((s) => s.backgroundAgents.rows);
   const openAutomations = useStore((s) => s.openAutomations);
+  const todo = useStore((s) => latestTodoListFromMessages(s.order, s.messages));
   const [collapsed, setCollapsed] = useState(true);
 
   useBackgroundTasksPoll(currentSessionId);
@@ -280,19 +351,21 @@ export function AgentRightSidebar() {
     [automations],
   );
 
+  const hasTodo = todo != null;
   const hasAgents = agents.length > 0;
   const hasAutomations = runningAutomations.length > 0;
-  const both = hasAgents && hasAutomations;
-  const visible = hasAgents || hasAutomations;
+  const sectionCount = [hasTodo, hasAgents, hasAutomations].filter(Boolean).length;
+  const visible = hasTodo || hasAgents || hasAutomations;
 
-  const totalCount = agents.length + runningAutomations.length;
+  const todoOpenCount = todo?.items.filter((item) => item.status !== "completed").length ?? 0;
+  const totalCount = agents.length + runningAutomations.length + (todo?.items.length ?? 0);
+  const activeCount = agents.length + runningAutomations.length + todoOpenCount;
 
   // Right panel runs at a fixed width — it used to share the
   // `--sidebar-width` CSS var with the left rail, so dragging the left
   // resize-handle would visibly stretch this one too. Hard-coded so the
   // two are independent. Bump alongside RIGHT_PANEL_WIDTH below if you
   // want to make it adjustable later.
-  const RIGHT_PANEL_WIDTH = 272;
   const panelTranslateWidth = RIGHT_PANEL_WIDTH;
 
   return (
@@ -308,7 +381,7 @@ export function AgentRightSidebar() {
         aria-label={collapsed ? `Show active${totalCount > 0 ? ` (${totalCount})` : ""}` : "Hide active"}
         className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
       >
-        {collapsed && totalCount > 0 && <StatusDot status="running" pulse />}
+        {collapsed && activeCount > 0 && <StatusDot status="running" pulse />}
         {collapsed && totalCount > 0 && (
           <span className="text-xs tabular-nums text-faint">{totalCount}</span>
         )}
@@ -326,7 +399,8 @@ export function AgentRightSidebar() {
         initial={false}
         animate={{ x: collapsed ? panelTranslateWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-        className="glass-surface glass-radius-md absolute top-2 right-2 z-40 flex w-[256px] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
+        style={{ width: RIGHT_PANEL_BODY_WIDTH }}
+        className="glass-surface glass-radius-md absolute top-2 right-2 z-40 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
       >
         {/* Drag region height tuned so the "Active" label's vertical
             center sits at viewport y=25 — same eye-line as the toggle
@@ -340,9 +414,11 @@ export function AgentRightSidebar() {
         <div className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollBlurTop />
+            {todo && <TodoSidebarSection todo={todo} />}
+
             {hasAgents && (
-              <section>
-                {both && <SectionHeader label="Agents" count={agents.length} />}
+              <section className={hasTodo ? "mt-3" : undefined}>
+                {sectionCount > 1 && <SectionHeader label="Agents" count={agents.length} />}
                 <div>
                   {agents.map((agent) => (
                     <BackgroundAgentRow
@@ -355,8 +431,8 @@ export function AgentRightSidebar() {
             )}
 
             {hasAutomations && (
-              <section className={both ? "mt-3" : undefined}>
-                {both ? (
+              <section className={hasTodo || hasAgents ? "mt-3" : undefined}>
+                {sectionCount > 1 ? (
                   <button
                     type="button"
                     onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}

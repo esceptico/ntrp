@@ -19,14 +19,20 @@ const EASE = EASE_EMPHASIZED;
 export const RollingToken = memo(function RollingToken({
   value,
   mono = false,
+  motionDisabled = false,
 }: {
   value: string;
   mono?: boolean;
+  motionDisabled?: boolean;
 }) {
   return (
     <motion.span
-      layout="size"
-      transition={{ layout: { duration: MOTION.trace, ease: EASE } }}
+      layout={motionDisabled ? false : "size"}
+      transition={
+        motionDisabled
+          ? { layout: { duration: 0 } }
+          : { layout: { duration: MOTION.trace, ease: EASE } }
+      }
       className={clsx(
         "relative inline-block overflow-hidden align-text-bottom",
         mono && "tabular-nums",
@@ -35,10 +41,14 @@ export const RollingToken = memo(function RollingToken({
       <AnimatePresence mode="popLayout" initial={false}>
         <motion.span
           key={value}
-          initial={{ y: "100%" }}
+          initial={motionDisabled ? false : { y: "100%" }}
           animate={{ y: 0 }}
-          exit={{ y: "-100%" }}
-          transition={{ duration: MOTION.palette, ease: EASE }}
+          exit={motionDisabled ? { y: 0 } : { y: "-100%" }}
+          transition={
+            motionDisabled
+              ? { duration: 0 }
+              : { duration: MOTION.palette, ease: EASE }
+          }
           className="inline-block"
         >
           {value}

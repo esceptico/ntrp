@@ -1,6 +1,8 @@
 import pytest
 
 from ntrp.mcp.models import HttpTransport, parse_server_config
+from ntrp.server.routers import mcp as mcp_router
+from ntrp.server.routers.mcp import prepare_mcp_server_config
 from ntrp.tools.core.types import ToolAction, ToolScope
 
 
@@ -23,6 +25,120 @@ def test_http_url_preserves_authorization_headers():
 
     assert isinstance(config.transport, HttpTransport)
     assert config.transport.headers == {"Authorization": "Bearer <token>"}
+
+
+def test_http_oauth_config_parses_public_options():
+    config = parse_server_config(
+        "figma",
+        {
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "auth": "oauth",
+            "client_id": "client-123",
+            "client_secret": "secret-123",
+            "redirect_port": 8765,
+            "scope": "mcp:connect",
+            "client_name": "ntrp-test",
+        },
+    )
+
+    assert isinstance(config.transport, HttpTransport)
+    assert config.transport.auth == "oauth"
+    assert config.transport.client_id == "client-123"
+    assert config.transport.client_secret == "secret-123"
+    assert config.transport.redirect_port == 8765
+    assert config.transport.scope == "mcp:connect"
+    assert config.transport.client_name == "ntrp-test"
+
+
+def test_http_auth_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="http auth must be 'oauth'"):
+        parse_server_config("figma", {"transport": "http", "url": "https://mcp.example.com/mcp", "auth": "basic"})
+
+
+def test_prepare_mcp_server_config_preserves_hidden_http_secrets():
+    config = prepare_mcp_server_config(
+        "figma",
+        {
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "auth": "oauth",
+            "client_id": "updated-client",
+        },
+        existing={
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "auth": "oauth",
+            "headers": {"X-Api-Key": "hidden"},
+            "client_secret": "hidden-secret",
+        },
+    )
+
+    assert config["client_id"] == "updated-client"
+    assert config["client_secret"] == "hidden-secret"
+    assert "headers" not in config
+
+
+def test_prepare_mcp_server_config_preserves_hidden_headers_for_header_auth():
+    config = prepare_mcp_server_config(
+        "figma",
+        {
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+        },
+        existing={
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"X-Api-Key": "hidden"},
+        },
+    )
+
+    assert config["headers"] == {"X-Api-Key": "hidden"}
+
+
+def test_oauth_discovery_paths_include_resource_path():
+    assert mcp_router._oauth_discovery_paths("/mcp") == [
+        "/.well-known/oauth-authorization-server/mcp",
+        "/mcp/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-authorization-server",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_mcp_server_config_for_save_auto_marks_discovered_oauth(monkeypatch):
+    async def discover(url: str) -> bool:
+        assert url == "https://mcp.linear.app/mcp"
+        return True
+
+    monkeypatch.setattr(mcp_router, "discover_mcp_oauth", discover)
+
+    config = await mcp_router.prepare_mcp_server_config_for_save(
+        "linear",
+        {"transport": "http", "url": "https://mcp.linear.app/mcp"},
+    )
+
+    assert config["auth"] == "oauth"
+    assert "headers" not in config
+
+
+@pytest.mark.asyncio
+async def test_prepare_mcp_server_config_for_save_skips_discovery_for_headers(monkeypatch):
+    async def discover(url: str) -> bool:
+        raise AssertionError("discovery should not run when explicit headers are configured")
+
+    monkeypatch.setattr(mcp_router, "discover_mcp_oauth", discover)
+
+    config = await mcp_router.prepare_mcp_server_config_for_save(
+        "linear",
+        {
+            "transport": "http",
+            "url": "https://mcp.linear.app/mcp",
+            "headers": {"Authorization": "Bearer token"},
+        },
+    )
+
+    assert "auth" not in config
+    assert config["headers"] == {"Authorization": "Bearer token"}
 
 
 def test_http_url_rejects_non_http_scheme():

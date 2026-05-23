@@ -57,7 +57,7 @@ export function ServerList({
         ) : servers.length === 0 ? (
           <Empty>No MCP servers yet.</Empty>
         ) : (
-          <ul className="rounded-[10px] border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
+          <ul className="min-w-0 overflow-hidden rounded-[10px] border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
             {servers.map((s) => (
               <ServerRow key={s.name} server={s} onEdit={() => onEdit(s.name)} onChanged={onChanged} />
             ))}

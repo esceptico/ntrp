@@ -129,6 +129,76 @@ async def test_event_dead_letter_preserves_failed_payload_and_removes_from_queue
 
 
 @pytest.mark.asyncio
+async def test_dead_letter_event_rolls_back_copy_when_queue_delete_fails(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    await automation_store.enqueue_event("event-task", "event-dead", '{"ok": true}', now)
+    claimed = await automation_store.claim_next_event("event-task", now)
+    await automation_store.conn.execute(
+        """
+        CREATE TRIGGER fail_event_queue_delete
+        BEFORE DELETE ON automation_event_queue
+        BEGIN
+            SELECT RAISE(ABORT, 'queue delete failed');
+        END
+        """
+    )
+    await automation_store.conn.commit()
+
+    with pytest.raises(Exception, match="queue delete failed"):
+        await automation_store.dead_letter_event(claimed[0], "too many failures", now)
+    await automation_store.conn.commit()
+
+    dead_rows = await automation_store.conn.execute_fetchall("SELECT * FROM automation_event_dead_letter")
+    queue_rows = await automation_store.conn.execute_fetchall("SELECT * FROM automation_event_queue")
+
+    assert dead_rows == []
+    assert len(queue_rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_claim_and_enqueue_event_dedupes_in_one_store_call(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+
+    assert await automation_store.claim_and_enqueue_event("event-task", "event-1", '{"ok": true}', now) is True
+    assert await automation_store.claim_and_enqueue_event("event-task", "event-1", '{"ok": false}', now) is False
+
+    queue_rows = await automation_store.conn.execute_fetchall(
+        "SELECT task_id, event_key, context FROM automation_event_queue"
+    )
+    dedupe_rows = await automation_store.conn.execute_fetchall("SELECT task_id, event_key FROM automation_event_dedupe")
+
+    assert [dict(row) for row in queue_rows] == [
+        {"task_id": "event-task", "event_key": "event-1", "context": '{"ok": true}'}
+    ]
+    assert [dict(row) for row in dedupe_rows] == [{"task_id": "event-task", "event_key": "event-1"}]
+
+
+@pytest.mark.asyncio
+async def test_claim_and_enqueue_event_rolls_back_dedupe_when_enqueue_fails(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    await automation_store.conn.execute(
+        """
+        CREATE TRIGGER fail_event_queue_insert
+        BEFORE INSERT ON automation_event_queue
+        BEGIN
+            SELECT RAISE(ABORT, 'queue insert failed');
+        END
+        """
+    )
+    await automation_store.conn.commit()
+
+    with pytest.raises(Exception, match="queue insert failed"):
+        await automation_store.claim_and_enqueue_event("event-task", "event-1", "{}", now)
+
+    rows = await automation_store.conn.execute_fetchall(
+        "SELECT * FROM automation_event_dedupe WHERE task_id = ?",
+        ("event-task",),
+    )
+
+    assert rows == []
+
+
+@pytest.mark.asyncio
 async def test_seed_builtins_uses_knowledge_handlers(automation_store: AutomationStore):
     await seed_builtins(automation_store)
 

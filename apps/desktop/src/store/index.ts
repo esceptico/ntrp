@@ -1,8 +1,15 @@
 import { create } from "zustand";
 import { DEFAULT_CONFIG } from "../api";
+import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import type { State, Actions, UiMessage } from "./types";
 import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from "./prefs";
-import { blankSessionView, initialUsage, snapshotSession } from "./session-cache";
+import {
+  blankSessionView,
+  initialUsage,
+  normalizeActivityGroups,
+  normalizeCachedSessionState,
+  snapshotSession,
+} from "./session-cache";
 import {
   createInitialSessionViewState,
   reduceCachePreviewRestored,
@@ -72,6 +79,7 @@ export type {
   ThemeChoice,
   ThinkingAnimation,
   ThinkingIntensity,
+  TodoListState,
   TurnMeta,
   UiMessage,
 } from "./types";
@@ -110,6 +118,17 @@ function inputTokens(usage: {
   return usage.total !== undefined
     ? Math.max(0, usage.total - usage.completion)
     : usage.prompt + (usage.cache_read ?? 0) + (usage.cache_write ?? 0);
+}
+
+function activeActivityIdFromMessages(messages: UiMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (isActivityContinuationMessage(message)) continue;
+    return message.role === "activity" && message.activity && !message.activity.done
+      ? message.id
+      : null;
+  }
+  return null;
 }
 
 export const useStore = create<State & Actions>((set) => ({
@@ -161,6 +180,7 @@ export const useStore = create<State & Actions>((set) => ({
   stoppingRunId: null,
   terminalRunIds: new Set(),
   transportDiagnostics: {},
+  streamReplaying: false,
   modalOrigin: null,
   loops: [],
   backgroundAgents: createBackgroundAgentsDomainState(),
@@ -208,7 +228,7 @@ export const useStore = create<State & Actions>((set) => ({
         cache.set(s.currentSessionId, snapshotSession(s));
       }
       const restored = currentSessionId ? cache.get(currentSessionId) : undefined;
-      const view = restored ?? blankSessionView();
+      const view = restored ? normalizeCachedSessionState(restored) : blankSessionView();
       let sessionView = reduceSessionSelected(s.sessionView, currentSessionId);
       if (currentSessionId && restored) {
         sessionView = reduceCachePreviewRestored(sessionView, currentSessionId);
@@ -244,14 +264,16 @@ export const useStore = create<State & Actions>((set) => ({
         map.set(m.id, m);
         order.push(m.id);
       }
+      const normalized = normalizeActivityGroups(map, order, activeActivityIdFromMessages(messages));
       const persistedIds = new Set(order);
       const sessionView = s.currentSessionId
         ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page)
         : s.sessionView;
       return {
         sessionView,
-        messages: map,
-        order,
+        messages: normalized.messages,
+        order: normalized.order,
+        activeActivityId: normalized.activeActivityId,
         ...reduceQueuedMessagesPersisted(s, persistedIds),
       };
     }),
@@ -268,14 +290,17 @@ export const useStore = create<State & Actions>((set) => ({
       const sessionView = s.currentSessionId
         ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page, "prepend")
         : s.sessionView;
+      const order = [...ids, ...s.order];
+      const normalized = normalizeActivityGroups(map, order, s.activeActivityId);
       return {
         sessionView,
-        messages: map,
-        order: [...ids, ...s.order],
+        messages: normalized.messages,
+        order: normalized.order,
+        activeActivityId: normalized.activeActivityId,
       };
     }),
 
-  appendHistoryPage: (messages, page) =>
+  appendHistoryPage: (messages, page, activeActivityId) =>
     set((s) => {
       const map = new Map(s.messages);
       const ids: string[] = [];
@@ -287,10 +312,13 @@ export const useStore = create<State & Actions>((set) => ({
       const sessionView = s.currentSessionId
         ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page, "append")
         : s.sessionView;
+      const order = [...s.order, ...ids];
+      const normalized = normalizeActivityGroups(map, order, activeActivityId ?? s.activeActivityId);
       return {
         sessionView,
-        messages: map,
-        order: [...s.order, ...ids],
+        messages: normalized.messages,
+        order: normalized.order,
+        activeActivityId: normalized.activeActivityId,
       };
     }),
 
@@ -329,6 +357,21 @@ export const useStore = create<State & Actions>((set) => ({
       const messages = new Map(s.messages);
       messages.set(id, { ...existing, ...patch });
       return { messages };
+    }),
+
+  upsertTodoList: (message, beforeId = null) =>
+    set((s) => {
+      const existing = s.messages.get(message.id);
+      const messages = new Map(s.messages);
+      messages.set(message.id, existing ? { ...existing, ...message } : message);
+      if (existing) return { messages };
+
+      const beforeIndex = beforeId ? s.order.indexOf(beforeId) : -1;
+      if (beforeIndex < 0) return { messages, order: [...s.order, message.id] };
+
+      const order = s.order.slice();
+      order.splice(beforeIndex, 0, message.id);
+      return { messages, order };
     }),
 
   truncateFrom: (id) =>
@@ -406,9 +449,10 @@ export const useStore = create<State & Actions>((set) => ({
       if (!existing || !existing.activity) return s;
       const messages = new Map(s.messages);
       const activity = existing.activity;
+      const nextItem = item.status ? item : { ...item, status: "ongoing" as const };
       messages.set(activityId, {
         ...existing,
-        activity: { ...activity, items: [...activity.items, item] },
+        activity: { ...activity, done: false, label: "Calling", items: [...activity.items, nextItem] },
       });
       return { messages };
     }),
@@ -441,7 +485,12 @@ export const useStore = create<State & Actions>((set) => ({
       const messages = new Map(s.messages);
       messages.set(activityId, {
         ...existing,
-        activity: { ...existing.activity, done: true, label },
+        activity: {
+          ...existing.activity,
+          done: true,
+          label,
+          items: existing.activity.items.map((item) => ({ ...item, status: "executed" as const })),
+        },
       });
       return { messages };
     }),

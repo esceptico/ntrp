@@ -17,6 +17,9 @@ from ntrp.llm.models import get_model
 from ntrp.llm.router import create_completion_client
 from ntrp.llm.utils import blocks_to_text
 
+_COMPACTION_MAX_THREADS = 2
+_COMPACTION_SLOTS = threading.BoundedSemaphore(_COMPACTION_MAX_THREADS)
+
 
 class Compactor(Protocol):
     def should_compact(
@@ -174,6 +177,8 @@ async def compact_summarize(
 
 async def _complete_compaction_request(model: str, request: dict) -> CompletionResponse:
     loop = asyncio.get_running_loop()
+    if not _COMPACTION_SLOTS.acquire(blocking=False):
+        raise TimeoutError("Compaction model worker pool is saturated")
     future: asyncio.Future[CompletionResponse] = loop.create_future()
 
     def finish(response: CompletionResponse | None = None, error: BaseException | None = None) -> None:
@@ -207,8 +212,15 @@ async def _complete_compaction_request(model: str, request: dict) -> CompletionR
                 loop.call_soon_threadsafe(finish, response, None)
             except RuntimeError:
                 pass
+        finally:
+            _COMPACTION_SLOTS.release()
 
-    threading.Thread(target=run, name="ntrp-compaction-llm", daemon=True).start()
+    thread = threading.Thread(target=run, name="ntrp-compaction-llm", daemon=True)
+    try:
+        thread.start()
+    except BaseException:
+        _COMPACTION_SLOTS.release()
+        raise
     return await asyncio.wait_for(future, timeout=COMPACTION_TIMEOUT)
 
 

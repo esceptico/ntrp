@@ -56,6 +56,30 @@ test("appends a new activity group after assistant text that already streamed", 
   expect(state.messages.get(state.order[1])?.role).toBe("activity");
 });
 
+test("shows calling activity immediately on live tool start", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "Bash",
+    timestamp: 2,
+  });
+
+  const state = getState();
+  const activity = state.messages.get(state.order[0]);
+  expect(activity?.role).toBe("activity");
+  expect(activity?.activity).toMatchObject({
+    label: "Calling",
+    done: false,
+  });
+  expect(activity?.activity?.items.map((item) => item.id)).toEqual(["tool-1"]);
+});
+
 test("anchors a new activity group before an empty assistant placeholder", () => {
   handleServerEvent({
     type: "RUN_STARTED",
@@ -222,6 +246,205 @@ test("keeps one activity group across top-level reasoning events", async () => {
   expect(activityIds).toHaveLength(1);
   expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
     "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("keeps one activity group across empty assistant placeholders", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "empty-assistant-1",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 6,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toHaveLength(1);
+  expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("recovers the trailing activity group when the active pointer was lost", async () => {
+  setState({
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: {
+            label: "Calling",
+            done: false,
+            items: [{ id: "tool-1", kind: "Bash", target: "Bash(command=\"date\")" }],
+          },
+        },
+      ],
+      ["reasoning-1", { id: "reasoning-1", role: "reasoning", title: "Reasoning", content: "hidden" }],
+      ["assistant-empty", { id: "assistant-empty", role: "assistant", content: "" }],
+    ]),
+    order: ["activity-1", "reasoning-1", "assistant-empty"],
+    activeActivityId: null,
+  });
+
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 8,
+  });
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toEqual(["activity-1"]);
+  expect(state.activeActivityId).toBe("activity-1");
+  expect(state.messages.get("activity-1")?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("splits activity when an assistant placeholder receives visible text", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-progress",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-progress",
+    delta: "visible progress",
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 6,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 7,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toHaveLength(2);
+  expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+  ]);
+  expect(state.messages.get(activityIds[1])?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-2",
+  ]);
+});
+
+test("splits activity when assistant text arrives only at message end", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-progress",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_END",
+    message_id: "assistant-progress",
+    content: "visible progress",
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 6,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 7,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(state.order.map((id) => state.messages.get(id)?.role)).toEqual([
+    "activity",
+    "assistant",
+    "activity",
+  ]);
+  expect(activityIds).toHaveLength(2);
+  expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+  ]);
+  expect(state.messages.get(activityIds[1])?.activity?.items.map((item) => item.id)).toEqual([
     "tool-2",
   ]);
 });

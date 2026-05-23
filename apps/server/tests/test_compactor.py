@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from types import SimpleNamespace
 
@@ -134,3 +135,39 @@ async def test_compact_summarize_keeps_server_event_loop_responsive(monkeypatch)
 
     assert time.perf_counter() - started < 0.05
     assert await task == "summary"
+
+
+@pytest.mark.asyncio
+async def test_compaction_timeouts_do_not_spawn_unbounded_threads(monkeypatch):
+    class BlockingClient:
+        async def completion(self, **_kwargs):
+            time.sleep(0.2)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="summary"))],
+            )
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("ntrp.core.compactor.COMPACTION_TIMEOUT", 0.01)
+    monkeypatch.setattr("ntrp.core.compactor.create_completion_client", lambda _model: BlockingClient())
+
+    messages = [
+        {"role": Role.SYSTEM, "content": "system"},
+        {"role": Role.USER, "content": "old"},
+        {"role": Role.ASSISTANT, "content": "reply"},
+        {"role": Role.USER, "content": "tail"},
+        {"role": Role.ASSISTANT, "content": "tail reply"},
+    ]
+
+    for _ in range(3):
+        with pytest.raises(asyncio.TimeoutError):
+            await compact_summarize(messages, 1, 3, "gpt-5.2")
+
+    live = [thread for thread in threading.enumerate() if thread.name.startswith("ntrp-compaction-llm")]
+    assert len(live) <= 2
+    deadline = time.perf_counter() + 1
+    while time.perf_counter() < deadline:
+        if not [thread for thread in threading.enumerate() if thread.name.startswith("ntrp-compaction-llm")]:
+            break
+        await asyncio.sleep(0.01)

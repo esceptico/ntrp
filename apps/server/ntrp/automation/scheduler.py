@@ -63,6 +63,8 @@ class Scheduler:
         self._wake_deadline: datetime | None = None
         self._wake_event = asyncio.Event()
         self._running: set[asyncio.Task] = set()
+        self._running_task_ids: dict[asyncio.Task, str] = {}
+        self._pending_running_task_ids: set[str] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._iteration_dispatcher: IterationDispatcher | None = None
         self._post_dispatcher: PostDispatcher | None = None
@@ -129,21 +131,54 @@ class Scheduler:
                 task.cancel()
             await asyncio.gather(*self._running, return_exceptions=True)
             self._running.clear()
+            self._running_task_ids.clear()
+            self._pending_running_task_ids.clear()
 
         _logger.info("Scheduler stopped")
 
-    def _track(self, task: asyncio.Task) -> None:
+    def _track(self, task: asyncio.Task, task_id: str | None = None) -> None:
         self._running.add(task)
-        task.add_done_callback(self._running.discard)
+        if task_id is not None:
+            self._running_task_ids[task] = task_id
+        task.add_done_callback(self._task_done)
+
+    def _task_done(self, task: asyncio.Task) -> None:
+        self._running.discard(task)
+        self._running_task_ids.pop(task, None)
+        if task.cancelled():
+            return
+        try:
+            task.result()
+        except Exception as exc:
+            self._last_tick_at = datetime.now(UTC)
+            self._last_tick_error = f"{type(exc).__name__}: {exc}"
+            _logger.exception("Scheduler task failed")
+
+    async def _release_untracked_running(self) -> None:
+        tracked_ids = set(self._running_task_ids.values()) | self._pending_running_task_ids
+        for automation in await self.store.list_running():
+            if automation.task_id in tracked_ids:
+                continue
+            _logger.warning("Clearing untracked running flag for automation %s", automation.task_id)
+            await self.store.clear_running(automation.task_id)
 
     async def _startup_and_loop(self) -> None:
-        try:
-            await self._reconcile()
-        except Exception:
-            _logger.exception("Scheduler reconciliation failed")
+        while True:
+            try:
+                await self._reconcile()
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._last_tick_at = datetime.now(UTC)
+                self._last_tick_error = f"{type(exc).__name__}: {exc}"
+                _logger.exception("Scheduler reconciliation failed")
+                await self._wait_for_wake_or_poll()
         await self._loop()
 
     async def _reconcile(self) -> None:
+        stale_running = await self.store.list_running()
+        stale_running_ids = {automation.task_id for automation in stale_running}
         cleared = await self.store.clear_all_running()
         if cleared:
             _logger.info("Cleared %d stale running flags", cleared)
@@ -152,7 +187,22 @@ class Scheduler:
             _logger.info("Released %d stale claimed event rows", released)
 
         now = datetime.now(UTC)
+        for automation in stale_running:
+            if not automation.enabled:
+                continue
+            if automation.next_run_at and automation.next_run_at > now:
+                await self.store.set_next_run(automation.task_id, automation.running_since or now)
+                _logger.warning(
+                    "Recovered interrupted automation %s; restored due time after stale running flag",
+                    automation.task_id,
+                )
+
         for automation in await self.store.list_due(now):
+            if automation.task_id in stale_running_ids:
+                _logger.warning(
+                    "Recovered interrupted automation %s; leaving due for immediate retry", automation.task_id
+                )
+                continue
             missed_at = automation.next_run_at
             next_run = self._advance_to_future(automation, now)
             if not next_run:
@@ -221,6 +271,7 @@ class Scheduler:
                 self._wake_deadline = None
 
     async def _tick(self) -> None:
+        await self._release_untracked_running()
         now = datetime.now(UTC)
         due = await self.store.list_due(now)
         for automation in due:
@@ -284,6 +335,8 @@ class Scheduler:
         for auto in await self.store.list_session_bound_by_session(event.session_id):
             if not auto.enabled or auto.next_run_at is None or auto.next_run_at > now:
                 continue
+            if not self._loop_can_fire(auto):
+                continue
             await self._start_run(auto)
 
         for auto in await self.store.list_by_trigger_type("count"):
@@ -311,6 +364,7 @@ class Scheduler:
         if not claimed:
             _logger.debug("Automation %s already claimed or disabled", automation.task_id)
             return
+        self._pending_running_task_ids.add(automation.task_id)
         # Reschedule next_run_at *now*, before the task body executes, so
         # the UI countdown ticks from full interval during task execution
         # instead of pinning at 0s until the task finishes. Matches Claude
@@ -323,14 +377,20 @@ class Scheduler:
         # outran the interval). Mutating the snapshot here would cause the
         # finally block to advance *again*, shifting the schedule forward
         # by one extra interval every fire.
-        if automation.enabled:
-            now = datetime.now(UTC)
-            next_run = self._advance_to_future(automation, now)
-            if next_run is not None:
-                await self.store.set_next_run(automation.task_id, next_run)
-                self._schedule_wake(next_run)
-        execution = asyncio.create_task(self._run_and_finalize(automation, context))
-        self._track(execution)
+        try:
+            if automation.enabled:
+                now = datetime.now(UTC)
+                next_run = self._advance_to_future(automation, now)
+                if next_run is not None:
+                    await self.store.set_next_run(automation.task_id, next_run)
+                    self._schedule_wake(next_run)
+            execution = asyncio.create_task(self._run_and_finalize(automation, context))
+            self._track(execution, automation.task_id)
+            self._pending_running_task_ids.discard(automation.task_id)
+        except BaseException:
+            self._pending_running_task_ids.discard(automation.task_id)
+            await self.store.clear_running(automation.task_id)
+            raise
 
     async def _emit_automation_event(self, event: SSEEvent) -> None:
         if self._bus_registry:
@@ -373,23 +433,59 @@ class Scheduler:
             # the snapshot's enabled was mutated to False — don't write a
             # future next_run_at for a disabled loop or the UI shows a
             # countdown for something that will never fire.
-            next_run = self._advance_to_future(automation, now) if automation.enabled else None
-            await self.store.update_last_run(automation.task_id, now, next_run, result=result)
-            if any(t.one_shot for t in automation.triggers):
-                await self.store.set_enabled(automation.task_id, False)
+            event_settlement_error: Exception | None = None
+            try:
+                next_run = self._advance_to_future(automation, now) if automation.enabled else None
+                await self.store.update_last_run(automation.task_id, now, next_run, result=result)
+                if any(t.one_shot for t in automation.triggers):
+                    await self.store.set_enabled(automation.task_id, False)
+            except Exception:
+                _logger.exception("Failed to update automation run result %s", automation.task_id)
             if event_queue_id is not None:
-                if success:
-                    await self.store.complete_event(event_queue_id)
-                else:
-                    await self._handle_failed_event(
-                        automation.task_id,
-                        event_queue_id,
-                        event_attempt_count,
-                        error_message,
-                    )
-            await self.store.clear_running(automation.task_id)
-            if event_queue_id is not None:
-                await self._start_next_queued_event_if_idle(automation.task_id)
+                try:
+                    if success:
+                        await self.store.complete_event(event_queue_id)
+                    else:
+                        await self._handle_failed_event(
+                            automation.task_id,
+                            event_queue_id,
+                            event_attempt_count,
+                            error_message,
+                        )
+                except Exception as exc:
+                    event_settlement_error = exc
+                    _logger.exception("Failed to settle queued automation event %s", event_queue_id)
+                    if success:
+                        try:
+                            await self.store.dead_letter_event(
+                                event_queue_id,
+                                f"settlement failed after successful execution: {type(exc).__name__}: {exc}",
+                                datetime.now(UTC),
+                            )
+                        except Exception:
+                            _logger.exception(
+                                "Failed to dead-letter queued automation event after settlement uncertainty %s",
+                                event_queue_id,
+                            )
+                    else:
+                        try:
+                            await self.store.release_event_claim(event_queue_id)
+                        except Exception:
+                            _logger.exception("Failed to release queued automation event %s", event_queue_id)
+            try:
+                await self.store.clear_running(automation.task_id)
+            except Exception as exc:
+                _logger.exception("Failed to clear running flag for automation %s", automation.task_id)
+                raise RuntimeError(f"Failed to clear running flag for automation {automation.task_id}") from exc
+            if event_queue_id is not None and event_settlement_error is None:
+                try:
+                    await self._start_next_queued_event_if_idle(automation.task_id)
+                except Exception:
+                    _logger.exception("Failed to start next queued event for automation %s", automation.task_id)
+            if event_settlement_error is not None:
+                raise RuntimeError(
+                    f"Failed to settle queued automation event {event_queue_id}"
+                ) from event_settlement_error
             _logger.info("Completed automation %s", automation.task_id)
 
     async def _run_handler(self, automation: Automation, context: str | dict | None = None) -> str | None:
@@ -461,9 +557,7 @@ class Scheduler:
             # `service.create(thread_id=X, read_history=True)` only carry
             # thread_id — accept either.
             if not (automation.thread_id or automation.target_session_id):
-                raise RuntimeError(
-                    f"Iteration loop {automation.task_id} missing thread_id"
-                )
+                raise RuntimeError(f"Iteration loop {automation.task_id} missing thread_id")
         else:
             dispatcher = self._post_dispatcher
             mode = "post"
@@ -471,9 +565,7 @@ class Scheduler:
             # from v4 have thread_id = target_session_id, so either field
             # works as a target; we just need *something*.
             if not (automation.thread_id or automation.target_session_id):
-                raise RuntimeError(
-                    f"Post loop {automation.task_id} missing thread_id"
-                )
+                raise RuntimeError(f"Post loop {automation.task_id} missing thread_id")
         if dispatcher is None:
             raise RuntimeError(f"{mode} dispatcher not wired")
         await self.store.increment_iteration(automation.task_id)
@@ -513,10 +605,9 @@ class Scheduler:
                     if trigger.lead_minutes is not None and event.minutes_until > int(trigger.lead_minutes):
                         continue
 
-            claimed = await self.store.claim_event(automation.task_id, event_key, now)
+            claimed = await self.store.claim_and_enqueue_event(automation.task_id, event_key, context, now)
             if not claimed:
                 continue
-            await self.store.enqueue_event(automation.task_id, event_key, context, now)
             _logger.info("Event %s matched automation %s (%s)", event_type, automation.task_id, event_key)
             await self._start_next_queued_event_if_idle(automation.task_id)
 
@@ -559,22 +650,30 @@ class Scheduler:
         claimed_running = await self.store.try_mark_running(task_id, now)
         if not claimed_running:
             return
+        self._pending_running_task_ids.add(task_id)
 
-        next_event = await self.store.claim_next_event(task_id, now)
-        if next_event is None:
-            await self.store.clear_running(task_id)
-            return
+        try:
+            next_event = await self.store.claim_next_event(task_id, now)
+            if next_event is None:
+                await self.store.clear_running(task_id)
+                self._pending_running_task_ids.discard(task_id)
+                return
 
-        queue_id, context, attempt_count = next_event
-        execution = asyncio.create_task(
-            self._run_and_finalize(
-                automation,
-                context,
-                event_queue_id=queue_id,
-                event_attempt_count=attempt_count,
+            queue_id, context, attempt_count = next_event
+            execution = asyncio.create_task(
+                self._run_and_finalize(
+                    automation,
+                    context,
+                    event_queue_id=queue_id,
+                    event_attempt_count=attempt_count,
+                )
             )
-        )
-        self._track(execution)
+            self._track(execution, automation.task_id)
+            self._pending_running_task_ids.discard(task_id)
+        except BaseException:
+            self._pending_running_task_ids.discard(task_id)
+            await self.store.clear_running(task_id)
+            raise
 
     async def _handle_failed_event(
         self,

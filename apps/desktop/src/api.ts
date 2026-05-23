@@ -132,6 +132,13 @@ export interface HistoryMessage {
   is_meta?: boolean;
 }
 
+export type TodoStatus = "pending" | "in_progress" | "completed";
+
+export interface TodoListItem {
+  content: string;
+  status: TodoStatus;
+}
+
 export interface HistoryPage {
   has_more_before: boolean;
   has_more_after: boolean;
@@ -235,6 +242,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "message_ingested"; client_id: string; run_id: string }
   | { type: "goal_updated"; session_id: string; goal: SessionGoal }
   | { type: "goal_cleared"; session_id: string }
+  | { type: "todo_updated"; run_id: string; tool_call_id?: string | null; explanation?: string | null; items: TodoListItem[] }
 );
 
 export const STORAGE_KEY = "ntrp.desktop.config";
@@ -748,7 +756,13 @@ export interface MCPServer {
   tools: MCPTool[];
   enabled: boolean;
   auth: string | null;
+  has_headers?: boolean;
   has_client_credentials: boolean;
+  client_id?: string | null;
+  redirect_port?: number | null;
+  scope?: string | null;
+  client_name?: string | null;
+  has_client_secret?: boolean;
 }
 
 /** Raw payload shape persisted on the server. The desktop reads/writes this

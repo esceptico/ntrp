@@ -153,6 +153,26 @@ test("terminal status poll clears optimistic current run and cannot be resurrect
   expect(staleStarted.terminalRunIds.has("run-1")).toBe(true);
 });
 
+test("terminal current run clears queued composer messages", () => {
+  const running = lifecycleState({
+    running: true,
+    currentRunId: "run-1",
+    activeRunSessionIds: new Set(["session-1"]),
+    queuedMessages: [
+      {
+        clientId: "queued-1",
+        text: "use mcp",
+        status: "pending",
+        enqueuedAt: 1,
+      },
+    ],
+  });
+
+  const patch = reduceRunFailed(running, { runId: "run-1", sessionId: "session-1" });
+
+  expect(patch.queuedMessages).toEqual([]);
+});
+
 test("stopping a stale run does not clear a newer active run", () => {
   const patch = reduceRunCompleted(
     lifecycleState({ running: true, currentRunId: "run-new" }),

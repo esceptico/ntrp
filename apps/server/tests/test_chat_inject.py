@@ -1050,6 +1050,139 @@ async def test_active_run_records_queued_message_in_ledger():
 
 
 @pytest.mark.asyncio
+async def test_active_run_does_not_queue_message_when_ledger_write_fails():
+    from ntrp.services import chat as chat_service
+
+    class FakeSessionService:
+        async def claim_chat_idempotency_key(self, **kwargs):
+            return True, {"status": "accepted", "run_id": None, **kwargs}
+
+        async def record_chat_queued_message(self, **kwargs):
+            raise RuntimeError("ledger down")
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+
+    with pytest.raises(RuntimeError, match="ledger down"):
+        await chat_service.submit_chat_message(
+            registry,
+            lambda: None,
+            BusRegistry(),
+            message="follow-up",
+            session_id="sess-1",
+            client_id="cid-ledger",
+            session_service=FakeSessionService(),
+        )
+
+    assert run.pending_injection_count == 0
+
+
+@pytest.mark.asyncio
+async def test_active_run_does_not_queue_message_when_idempotency_update_fails():
+    from ntrp.services import chat as chat_service
+
+    class FakeSessionService:
+        def __init__(self):
+            self.queued = []
+            self.cancelled = []
+
+        async def claim_chat_idempotency_key(self, **kwargs):
+            return True, {"status": "accepted", "run_id": None, **kwargs}
+
+        async def record_chat_queued_message(self, **kwargs):
+            self.queued.append(kwargs)
+
+        async def update_chat_idempotency_key(self, **kwargs):
+            raise RuntimeError("idempotency down")
+
+        async def mark_chat_queued_message_cancelled(self, client_id):
+            self.cancelled.append(client_id)
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    session_service = FakeSessionService()
+
+    with pytest.raises(RuntimeError, match="idempotency down"):
+        await chat_service.submit_chat_message(
+            registry,
+            lambda: None,
+            BusRegistry(),
+            message="follow-up",
+            session_id="sess-1",
+            client_id="cid-ledger",
+            session_service=session_service,
+        )
+
+    assert run.pending_injection_count == 0
+    assert session_service.cancelled == ["cid-ledger"]
+
+
+@pytest.mark.asyncio
+async def test_pre_task_setup_failure_clears_prepared_run(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+
+    class FakeSessionService:
+        def __init__(self):
+            self.statuses = []
+
+        async def load(self, session_id=None):
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            return SessionData(state=state, messages=[])
+
+        async def record_chat_run_started(self, run_id, session_id, metadata=None):
+            return None
+
+        async def record_chat_run_status(
+            self,
+            run_id,
+            status,
+            *,
+            stop_reason=None,
+            last_seq=None,
+            error_code=None,
+            error_message=None,
+        ):
+            self.statuses.append({"status": status, "error_code": error_code})
+
+        async def save_progress(self, session_state, messages):
+            raise RuntimeError("progress down")
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    session_service = FakeSessionService()
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=session_service,
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+
+    with pytest.raises(RuntimeError, match="progress down"):
+        await chat_service.submit_chat_message(
+            registry,
+            lambda: deps,
+            BusRegistry(),
+            message="hello",
+            session_id="sess-1",
+        )
+
+    assert registry.get_active_run("sess-1") is None
+    assert session_service.statuses[-1] == {
+        "status": RunStatus.ERROR.value,
+        "error_code": "run_preparation_failed",
+    }
+
+
+@pytest.mark.asyncio
 async def test_pre_start_cancelled_task_emits_terminal_fallback():
     from ntrp.services import chat as chat_service
 

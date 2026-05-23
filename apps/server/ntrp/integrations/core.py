@@ -41,6 +41,7 @@ from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
 from ntrp.tools.sessions import create_session_tool, list_recent_sessions_tool, read_session_tool
 from ntrp.tools.time import current_time_tool
+from ntrp.tools.todos import update_todos_tool
 
 SYSTEM = Integration(
     id="_system",
@@ -111,6 +112,12 @@ DIRECTIVES = Integration(
     tools={"set_directives": set_directives_tool},
 )
 
+TASK_TRACKING = Integration(
+    id="_task_tracking",
+    label="Task tracking",
+    tools={"update_todos": update_todos_tool},
+)
+
 SKILLS = Integration(
     id="_skills",
     label="Skills",
@@ -130,4 +137,14 @@ SESSIONS = Integration(
     },
 )
 
-CORE_INTEGRATIONS = [SYSTEM, MEMORY_TOOLS, AUTOMATION, BACKGROUND, NOTIFICATIONS, DIRECTIVES, SKILLS, SESSIONS]
+CORE_INTEGRATIONS = [
+    SYSTEM,
+    MEMORY_TOOLS,
+    AUTOMATION,
+    BACKGROUND,
+    NOTIFICATIONS,
+    DIRECTIVES,
+    TASK_TRACKING,
+    SKILLS,
+    SESSIONS,
+]

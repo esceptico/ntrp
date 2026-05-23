@@ -965,6 +965,21 @@ class SessionStore:
         metadata_json = await asyncio.to_thread(lambda: json.dumps(metadata))
         await self.conn.execute(
             """
+            UPDATE chat_runs
+            SET status = 'interrupted',
+                stop_reason = 'superseded',
+                error_code = 'run_superseded',
+                error_message = 'Run was superseded by a newer run in the same session.',
+                updated_at = ?,
+                ended_at = ?
+            WHERE session_id = ?
+              AND run_id != ?
+              AND status IN ('pending', 'running')
+            """,
+            (now, now, session_id, run_id),
+        )
+        await self.conn.execute(
+            """
             INSERT INTO chat_runs (
                 run_id, session_id, status, started_at, updated_at, metadata_json, client_id
             )
@@ -1048,7 +1063,11 @@ class SessionStore:
     ) -> dict | None:
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
-        expires_at = (now_dt + timedelta(days=CHAT_IDEMPOTENCY_TTL_DAYS)).isoformat() if status in CHAT_IDEMPOTENCY_TERMINAL_STATUSES else None
+        expires_at = (
+            (now_dt + timedelta(days=CHAT_IDEMPOTENCY_TTL_DAYS)).isoformat()
+            if status in CHAT_IDEMPOTENCY_TERMINAL_STATUSES
+            else None
+        )
         await self.conn.execute(
             """
             UPDATE chat_idempotency_keys
@@ -1097,7 +1116,6 @@ class SessionStore:
         if not rows:
             return None
         return self._chat_run_payload(rows[0])
-
 
     async def get_latest_chat_run_for_session(self, session_id: str) -> dict | None:
         rows = await self.read_conn.execute_fetchall(
@@ -2003,15 +2021,87 @@ class SessionStore:
         anchor = anchors[0]
         if not self._row_is_visible_user(anchor):
             return rows
-        return await self.read_conn.execute_fetchall(
+        count_rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT COUNT(*) AS count FROM session_messages
+            WHERE session_id = ? AND seq >= ? AND seq <= ?
+            """,
+            (session_id, anchor["seq"], rows[-1]["seq"]),
+        )
+        if count_rows and int(count_rows[0]["count"]) <= 250:
+            return await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM session_messages
+                WHERE session_id = ? AND seq >= ? AND seq <= ?
+                ORDER BY seq ASC
+                """,
+                (session_id, anchor["seq"], rows[-1]["seq"]),
+            )
+        context_rows = await self._missing_leading_tool_context_rows(session_id, anchor["seq"], rows)
+        out = [anchor]
+        seen = {anchor["message_id"]}
+        for row in [*context_rows, *rows]:
+            if row["message_id"] in seen:
+                continue
+            out.append(row)
+            seen.add(row["message_id"])
+        return out
+
+    async def _missing_leading_tool_context_rows(self, session_id: str, anchor_seq: int, rows: list[Any]) -> list[Any]:
+        if not rows:
+            return []
+        present_call_ids = set()
+        needed_call_ids = []
+        for row in rows:
+            payload = self._row_message_json(row)
+            if row["role"] == "assistant":
+                present_call_ids.update(self._assistant_tool_call_ids(payload))
+            if row["role"] == "tool" and (call_id := payload.get("tool_call_id")):
+                if call_id not in present_call_ids:
+                    needed_call_ids.append(call_id)
+                continue
+            break
+        if not needed_call_ids:
+            return []
+
+        previous_rows = await self.read_conn.execute_fetchall(
             """
             SELECT * FROM session_messages
-            WHERE session_id = ? AND seq >= ?
-            ORDER BY seq ASC
-            LIMIT 250
+            WHERE session_id = ? AND seq > ? AND seq < ?
+            ORDER BY seq DESC
+            LIMIT 50
             """,
-            (session_id, anchor["seq"]),
+            (session_id, anchor_seq, rows[0]["seq"]),
         )
+        found: list[Any] = []
+        missing = set(needed_call_ids)
+        for row in previous_rows:
+            if row["role"] != "assistant":
+                continue
+            ids = self._assistant_tool_call_ids(self._row_message_json(row))
+            if not ids.intersection(missing):
+                continue
+            found.append(row)
+            missing.difference_update(ids)
+            if not missing:
+                break
+        return list(reversed(found))
+
+    @staticmethod
+    def _row_message_json(row: Any) -> dict:
+        try:
+            payload = json.loads(row["message_json"])
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _assistant_tool_call_ids(message: dict) -> set[str]:
+        ids: set[str] = set()
+        for tool_call in message.get("tool_calls") or []:
+            if isinstance(tool_call, dict) and isinstance(tool_call.get("id"), str):
+                ids.add(tool_call["id"])
+        return ids
 
     async def delete_session_messages_from(
         self,

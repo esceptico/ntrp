@@ -23,6 +23,7 @@ from ntrp.core.compactor import Compactor
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
+from ntrp.core.model_context_budget import ToolResultContextBudgetMiddleware
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
@@ -274,6 +275,7 @@ def create_spawn_fn(
                 run=child_run,
                 get_services=lambda: child_ctx.services,
             ),
+            ToolResultContextBudgetMiddleware(),
         )
         if compactor is not None:
             middlewares = (
@@ -283,7 +285,7 @@ def create_spawn_fn(
                     on_compact=child_run.loaded_tools.clear,
                     get_rehydration_state=child_ctx.to_rehydration_state,
                     apply_rehydration_state=child_run.apply_rehydration_state,
-                    emit=parent_emit,
+                    emit=None,
                     run_id=calling_ctx.run.run_id,
                 ),
             )

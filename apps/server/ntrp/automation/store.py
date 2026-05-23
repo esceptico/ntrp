@@ -243,6 +243,12 @@ _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
 
 _SQL_LIST_ALL = f"SELECT {_COLUMNS} FROM scheduled_tasks ORDER BY created_at"
 
+_SQL_LIST_RUNNING = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE running_since IS NOT NULL
+ORDER BY running_since
+"""
+
 _SQL_LIST_DUE = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
 WHERE enabled = 1 AND next_run_at <= ? AND running_since IS NULL
@@ -862,6 +868,10 @@ class AutomationStore:
         rows = await self.conn.execute_fetchall(_SQL_LIST_DUE, (now.isoformat(),))
         return [_row_to_automation(row) for row in rows]
 
+    async def list_running(self) -> list[Automation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_RUNNING)
+        return [_row_to_automation(row) for row in rows]
+
     async def list_event_triggered(self, event_type: str) -> list[Automation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_EVENT_TRIGGERED, (event_type,))
         return [_row_to_automation(row) for row in rows]
@@ -977,6 +987,29 @@ class AutomationStore:
         cursor = await self.conn.execute(_SQL_CLAIM_EVENT, (task_id, event_key, seen_at.isoformat()))
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    async def claim_and_enqueue_event(
+        self,
+        task_id: str,
+        event_key: str,
+        context: str,
+        created_at: datetime,
+    ) -> bool:
+        await self.conn.execute("BEGIN")
+        try:
+            cursor = await self.conn.execute(_SQL_CLAIM_EVENT, (task_id, event_key, created_at.isoformat()))
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                return False
+            await self.conn.execute(
+                _SQL_ENQUEUE_EVENT,
+                (task_id, event_key, context, created_at.isoformat()),
+            )
+            await self.conn.commit()
+            return True
+        except BaseException:
+            await self.conn.rollback()
+            raise
 
     async def try_claim_idempotency(
         self,
@@ -1173,13 +1206,25 @@ class AutomationStore:
         )
         await self.conn.commit()
 
-    async def dead_letter_event(self, queue_id: int, error: str, failed_at: datetime) -> None:
+    async def release_event_claim(self, queue_id: int) -> None:
         await self.conn.execute(
-            _SQL_DEAD_LETTER_EVENT,
-            (failed_at.isoformat(), error, queue_id),
+            "UPDATE automation_event_queue SET claimed_at = NULL WHERE id = ?",
+            (queue_id,),
         )
-        await self.conn.execute(_SQL_COMPLETE_EVENT, (queue_id,))
         await self.conn.commit()
+
+    async def dead_letter_event(self, queue_id: int, error: str, failed_at: datetime) -> None:
+        await self.conn.execute("BEGIN")
+        try:
+            await self.conn.execute(
+                _SQL_DEAD_LETTER_EVENT,
+                (failed_at.isoformat(), error, queue_id),
+            )
+            await self.conn.execute(_SQL_COMPLETE_EVENT, (queue_id,))
+            await self.conn.commit()
+        except BaseException:
+            await self.conn.rollback()
+            raise
 
     async def release_all_claimed_events(self) -> int:
         cursor = await self.conn.execute(_SQL_RELEASE_ALL_CLAIMED_EVENTS)

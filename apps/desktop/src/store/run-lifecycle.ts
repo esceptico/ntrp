@@ -94,6 +94,7 @@ export function reduceRunStatus(
       running: false,
       currentRunId: null,
       pendingResume: null,
+      queuedMessages: [],
       stoppingRunId:
         terminalCurrentRun.runId && state.stoppingRunId === terminalCurrentRun.runId
           ? null
@@ -114,6 +115,7 @@ export function reduceRunStatus(
       running: false,
       currentRunId: null,
       pendingResume: null,
+      queuedMessages: [],
       stoppingRunId:
         state.stoppingRunId === state.currentRunId ? null : state.stoppingRunId,
       ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),
@@ -285,6 +287,7 @@ function reduceTerminalRun(
     activeRunSessionIds,
     unreadDoneSessionIds,
     pendingResume: null,
+    queuedMessages: [],
     stoppingRunId:
       input.runId && state.stoppingRunId === input.runId ? null : state.stoppingRunId,
     ...(terminalRunIds !== state.terminalRunIds ? { terminalRunIds } : {}),

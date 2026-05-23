@@ -86,8 +86,25 @@ KEEPALIVE_INTERVAL = 5
 AUTOMATION_BUS_KEY = "automation:events"
 
 
-async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | None = None):
-    bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+async def _bus_for_automation_event_stream(bus_registry: BusRegistry, event_store=None):
+    bus = bus_registry.get(AUTOMATION_BUS_KEY)
+    if event_store is None:
+        return bus or bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+
+    latest_seq = await event_store.get_latest_session_event_seq(AUTOMATION_BUS_KEY)
+    if latest_seq:
+        bus_registry.remember_session_cursor(
+            AUTOMATION_BUS_KEY,
+            next_seq=latest_seq + 1,
+            checkpoint_seq=0,
+        )
+        return bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+
+    return bus or bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+
+
+async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | None = None, event_store=None):
+    bus = await _bus_for_automation_event_stream(bus_registry, event_store)
     subscription = bus.subscribe_with_replay(after_seq=after_seq) if after_seq is not None else None
     queue = subscription.queue if subscription is not None else bus.subscribe()
 
@@ -121,11 +138,14 @@ async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | N
 
 @router.get("/automations/events")
 async def automation_events(
+    runtime: Runtime = Depends(get_runtime),
     bus_registry: BusRegistry = Depends(get_bus_registry),
     after_seq: Annotated[int | None, Query(ge=0)] = None,
 ):
+    session_service = getattr(runtime, "session_service", None)
+    event_store = session_service.store if session_service else None
     return SSEStreamingResponse(
-        _automation_event_stream(bus_registry, after_seq=after_seq),
+        _automation_event_stream(bus_registry, after_seq=after_seq, event_store=event_store),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

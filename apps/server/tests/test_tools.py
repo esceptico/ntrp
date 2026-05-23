@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 import ntrp.database as database
 import ntrp.tools.executor as tool_executor_module
 from ntrp.agent import ToolResult
-from ntrp.constants import OFFLOAD_THRESHOLD
+from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.core.tool_executor import NtrpToolExecutor
@@ -25,6 +25,7 @@ from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolOverrideDecision, ToolPolicy, ToolScope
 from ntrp.tools.discover import discover_user_tools
 from ntrp.tools.executor import ToolExecutor
+from ntrp.tools.todos import update_todos_tool
 
 READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
 WRITE_INTERNAL_APPROVAL_POLICY = ToolPolicy(
@@ -287,6 +288,66 @@ async def test_bash_tool_working_dir(tmp_path):
     execution = _make_execution("bash")
     result = await bash_tool.execute(execution, command="pwd", working_dir=str(tmp_path))
     assert str(tmp_path) in result.content
+
+
+@pytest.mark.asyncio
+async def test_update_todos_tool_emits_todo_event():
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="run-1"),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+    execution = ToolExecution(tool_id="call-todos", tool_name="update_todos", ctx=ctx)
+
+    result = await update_todos_tool.execute(
+        execution,
+        explanation="Track the rollout.",
+        items=[
+            {"content": "Research prior art", "status": "completed"},
+            {"content": "Implement server tool", "status": "in_progress"},
+            {"content": "Polish desktop UI", "status": "pending"},
+        ],
+    )
+
+    assert result.preview == "1/3 done"
+    assert result.data == {
+        "items": [
+            {"content": "Research prior art", "status": "completed"},
+            {"content": "Implement server tool", "status": "in_progress"},
+            {"content": "Polish desktop UI", "status": "pending"},
+        ],
+        "explanation": "Track the rollout.",
+    }
+    assert [event.type.value for event in emitted] == ["todo_updated"]
+    assert emitted[0].run_id == "run-1"
+    assert emitted[0].tool_call_id == "call-todos"
+
+
+@pytest.mark.asyncio
+async def test_update_todos_rejects_multiple_in_progress_items():
+    registry = ToolRegistry()
+    _register_tools(registry, {"update_todos": update_todos_tool})
+
+    result = await registry.execute(
+        "update_todos",
+        _make_execution("update_todos"),
+        {
+            "items": [
+                {"content": "First", "status": "in_progress"},
+                {"content": "Second", "status": "in_progress"},
+            ],
+        },
+    )
+
+    assert result.is_error
+    assert result.preview == "Validation error"
 
 
 # --- Function tools ---
@@ -682,6 +743,32 @@ async def test_ntrp_tool_executor_policy_offload_false_keeps_large_result_inline
     assert result.content == large_content
     assert result.preview == "large"
     assert not result.is_error
+
+
+@pytest.mark.asyncio
+async def test_ntrp_tool_executor_offload_clamps_single_long_line_preview():
+    large_content = "x" * (OFFLOAD_THRESHOLD + 1)
+
+    async def large_result(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+        return ToolResult(content=large_content, preview="large")
+
+    registry = ToolRegistry()
+    registry.register(
+        "large_result",
+        tool(
+            description="Return a large result.",
+            execute=large_result,
+            policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+        ),
+    )
+    executor = NtrpToolExecutor(ToolExecutor().with_registry(registry), _make_tool_context(registry))
+
+    result = await executor.execute("large_result", {}, "call-1")
+
+    assert len(result.content) < OFFLOAD_PREVIEW_CHARS + 500
+    assert "preview truncated" in result.content
+    assert "Full result offloaded" in result.content
+    assert "read_file" in result.content
 
 
 @pytest.mark.asyncio

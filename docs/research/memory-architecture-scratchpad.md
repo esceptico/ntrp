@@ -19,6 +19,17 @@ Do **not** treat every turn or run as an episode. A 300-turn chat should become 
 
 Raw evidence is stored liberally. Durable memories are extracted conservatively and always point back to episodes/raw evidence.
 
+## 2026-05-21 cleanup decisions
+
+Latest paper review (TriMem, EMem, TSM, LangMem, Mem0/Zep, STATE-Bench/MemoryArena) and repo audit pushed the implementation toward a smaller construct set:
+
+- Canonical runtime memory is `knowledge_objects`; legacy `facts`/`observations` should stay compatibility/migration-only.
+- Runs are provenance/observability, not memory. A completed run may have one audit `run_provenance` object, but must not fan out into active `source` + `evidence_ref` objects.
+- Durable memories are source-backed facts/patterns/lessons/procedures plus derived profiles. Retention must not archive durable memories just because they are old; only explicit expiry or generated/audit/candidate cleanup should remove them.
+- Profiles are TriMem/LangMem-style derived state, not canonical truth. They refresh via explicit refresh or builtin profile-refresh automation; hot-path writes should not LLM-synthesize profiles on every fact update.
+- Automations should own consolidation: reflection on closed `memory_episode`, profile refresh on due source-backed entities, retention for non-durable generated objects, and health audits.
+- Benchmarks must cover retrieval behavior locally before external datasets: stale-vs-current, profile/state query, procedure/action query, and source/evidence query.
+
 ## Target architecture
 
 ```txt
@@ -282,6 +293,42 @@ semantic vector
 
 Use episodes mostly as provenance/context. Inject durable memories by default; pull episode evidence when needed.
 
+## TriMem reuse: profiles as a derived reasoning tier
+
+Source: TriMem, “Rethinking How to Remember: Beyond Atomic Facts in Lifelong LLM Agent Memory” (arXiv: https://arxiv.org/abs/2605.19952, project: https://tmlr-trimem.github.io/, code: https://github.com/tmlr-group/TriMem).
+
+TriMem's reusable lesson for ntrp is not “replace facts with summaries.” It is: **facts are an index, not the whole memory**. ntrp should keep three explicit tiers:
+
+| Tier | ntrp object(s) | Purpose | Default injection |
+|---|---|---|---|
+| Raw/source fidelity | `run_provenance`, `memory_episode`, source refs | exact evidence, replay, quote/source hydration | only source/evidence/context queries |
+| Atomic durable retrieval | `fact`, `pattern`, `lesson`, `procedure` | precise activation and ranking | yes |
+| Synthesized reasoning | `entity_profile` | compact state/preferences/relationships/project context derived from cited durable objects | only profile/inference/state queries |
+
+`entity_profile` is derived and inspectable, not canonical truth. A profile must include:
+
+- `profile_entity` / entity name;
+- `source_object_ids` and `source_ids` including `knowledge:<id>` refs plus raw episode/source refs;
+- `profile_sections[]`, each with its own source refs;
+- `valid_as_of`, `generated_at`, `stale_after_days`, and caveats;
+- text that explicitly says source objects/raw episodes remain canonical.
+
+Non-goals:
+
+- no creepy hidden dossiers;
+- no profile claims without source refs;
+- no silent overwrite of facts/patterns/lessons;
+- no automatic prompt mutation from eval failures.
+
+Retrieval/query planning should be tier-aware:
+
+- direct factual query → facts/patterns/procedures first; profiles are suppressed;
+- “what do we know about X”, “current state of X”, “tell me about X”, profile/preference/relationship questions → include profile tier;
+- source/evidence/why/where/when questions → include raw/source tier and hydrate evidence;
+- temporal/current/latest questions → add recency/supersession/staleness signals.
+
+Implementation status: `KnowledgeObjectType.ENTITY_PROFILE` exists; `KnowledgeProcessorService.synthesize_profiles()` creates/updates source-backed profiles; activation performs cheap query reformulation and includes the profile tier only for inference/state/profile-style questions.
+
 ## Code naming and implementation status
 
 Phase 1 implementation landed the non-destructive naming cleanup:
@@ -396,6 +443,10 @@ procedural_memories
 - LoCoMo / LongMemEval: long conversation memory evaluation  
   https://arxiv.org/abs/2402.17753  
   https://arxiv.org/abs/2410.10813
+- TriMem: raw dialogue + atomic facts + synthesized profiles for lifelong agent memory
+  https://arxiv.org/abs/2605.19952
+  https://tmlr-trimem.github.io/
+  https://github.com/tmlr-group/TriMem
 - Slack conversations.replies/history/permalinks  
   https://docs.slack.dev/reference/methods/conversations.replies/  
   https://docs.slack.dev/reference/methods/conversations.history/  

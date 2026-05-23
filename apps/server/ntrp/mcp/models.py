@@ -60,10 +60,13 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
             env=raw.get("env"),
         )
     elif transport_type == "http":
+        auth = raw.get("auth")
+        if auth is not None and auth != "oauth":
+            raise ValueError(f"MCP server {name!r}: http auth must be 'oauth' when set")
         transport = HttpTransport(
             url=_normalize_http_url(name, raw.get("url")),
             headers=raw.get("headers", {}),
-            auth=raw.get("auth"),
+            auth=auth,
             client_id=raw.get("client_id"),
             client_secret=raw.get("client_secret"),
             redirect_port=raw.get("redirect_port"),

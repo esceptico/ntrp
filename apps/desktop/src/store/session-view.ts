@@ -10,6 +10,8 @@ export interface SessionViewState {
   historyReloadingFor: string | null;
   historyHasMoreBefore: boolean;
   historyHasMoreAfter: boolean;
+  historyBeforeCursor: string | null;
+  historyAfterCursor: string | null;
   historyLoadingBefore: boolean;
   historyLoadingAfter: boolean;
 }
@@ -28,6 +30,8 @@ export function createInitialSessionViewState(): SessionViewState {
     historyReloadingFor: null,
     historyHasMoreBefore: false,
     historyHasMoreAfter: false,
+    historyBeforeCursor: null,
+    historyAfterCursor: null,
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };
@@ -74,6 +78,8 @@ export function reduceCachePreviewRestored(
     historyReloadingFor: null,
     historyHasMoreBefore: false,
     historyHasMoreAfter: false,
+    historyBeforeCursor: null,
+    historyAfterCursor: null,
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };
@@ -110,6 +116,8 @@ export function reduceHistoryLoadSucceeded(
     historyReloadingFor: null,
     historyHasMoreBefore: historyHasMoreBeforeAfterSuccess(state, page, mode),
     historyHasMoreAfter: historyHasMoreAfterAfterSuccess(state, page, mode),
+    historyBeforeCursor: historyBeforeCursorAfterSuccess(state, page, mode),
+    historyAfterCursor: historyAfterCursorAfterSuccess(state, page, mode),
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };
@@ -148,6 +156,8 @@ export function reduceReplayGapDetected(
     historyReloadingFor: null,
     historyHasMoreBefore: false,
     historyHasMoreAfter: false,
+    historyBeforeCursor: null,
+    historyAfterCursor: null,
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };
@@ -179,4 +189,22 @@ function historyHasMoreAfterAfterSuccess(
 ): boolean {
   if (mode === "prepend") return state.historyHasMoreAfter || Boolean(page?.has_more_after);
   return page?.has_more_after ?? false;
+}
+
+function historyBeforeCursorAfterSuccess(
+  state: SessionViewState,
+  page: HistoryPage | undefined,
+  mode: HistoryPageMergeMode,
+): string | null {
+  if (mode === "append") return state.historyBeforeCursor ?? page?.before ?? null;
+  return page?.before ?? state.historyBeforeCursor ?? null;
+}
+
+function historyAfterCursorAfterSuccess(
+  state: SessionViewState,
+  page: HistoryPage | undefined,
+  mode: HistoryPageMergeMode,
+): string | null {
+  if (mode === "prepend") return state.historyAfterCursor ?? page?.after ?? null;
+  return page?.after ?? state.historyAfterCursor ?? null;
 }

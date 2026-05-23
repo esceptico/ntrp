@@ -1,5 +1,7 @@
 import { LabeledField } from "../Field";
 import { KeyValueEditor, ListEditor, type KeyVal } from "./editors";
+import { GlassToggle } from "../../GlassToggle";
+import type { MCPAuthMode } from "./payload";
 
 export function StdioFields({
   command,
@@ -51,11 +53,15 @@ export function HttpFields({
   onUrl,
   headerEntries,
   onHeaders,
+  auth,
+  onAuth,
 }: {
   url: string;
   onUrl: (v: string) => void;
   headerEntries: KeyVal[];
   onHeaders: (v: KeyVal[]) => void;
+  auth: MCPAuthMode;
+  onAuth: (v: MCPAuthMode) => void;
 }) {
   return (
     <>
@@ -70,9 +76,24 @@ export function HttpFields({
         />
       </LabeledField>
 
-      <LabeledField label="Headers">
-        <KeyValueEditor entries={headerEntries} onChange={onHeaders} addLabel="Add header" />
+      <LabeledField label="Auth">
+        <GlassToggle
+          className="justify-self-start"
+          size="sm"
+          value={auth}
+          onChange={(v) => onAuth(v as MCPAuthMode)}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "headers", label: "Headers" },
+          ]}
+        />
       </LabeledField>
+
+      {auth === "headers" ? (
+        <LabeledField label="Headers">
+          <KeyValueEditor entries={headerEntries} onChange={onHeaders} addLabel="Add header" />
+        </LabeledField>
+      ) : null}
     </>
   );
 }

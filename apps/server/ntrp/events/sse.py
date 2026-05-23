@@ -80,6 +80,7 @@ class EventType(StrEnum):
     TOKEN_USAGE = "token_usage"
     GOAL_UPDATED = "goal_updated"
     GOAL_CLEARED = "goal_cleared"
+    TODO_UPDATED = "todo_updated"
 
 
 def _now_ms() -> int:
@@ -438,6 +439,15 @@ class GoalClearedEvent(SSEEvent):
     session_id: str = ""
 
 
+@dataclass(frozen=True)
+class TodoUpdatedEvent(SSEEvent):
+    type: EventType = field(default=EventType.TODO_UPDATED, init=False)
+    run_id: str = ""
+    tool_call_id: str = ""
+    explanation: str | None = None
+    items: list[dict] = field(default_factory=list)
+
+
 _EVENT_CLASSES = {
     EventType.RUN_STARTED.value: RunStartedEvent,
     EventType.RUN_FINISHED.value: RunFinishedEvent,
@@ -473,6 +483,7 @@ _EVENT_CLASSES = {
     EventType.TOKEN_USAGE.value: TokenUsageEvent,
     EventType.GOAL_UPDATED.value: GoalUpdatedEvent,
     EventType.GOAL_CLEARED.value: GoalClearedEvent,
+    EventType.TODO_UPDATED.value: TodoUpdatedEvent,
 }
 
 

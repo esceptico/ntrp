@@ -11,7 +11,12 @@ import {
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.ts";
 import { loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
-import { isActiveBackgroundAgent } from "../src/components/AgentRightSidebar.tsx";
+import {
+  isActiveBackgroundAgent,
+  latestTodoListFromMessages,
+  RIGHT_PANEL_BODY_WIDTH,
+} from "../src/components/AgentRightSidebar.tsx";
+import { visibleMessageIds } from "../src/lib/messageVisibility.ts";
 import { getState, setState } from "../src/store/index.ts";
 import { createBackgroundAgentsDomainState } from "../src/store/background-agent-domain.ts";
 import type { HistoryMessage } from "../src/api.ts";
@@ -100,6 +105,87 @@ test("live tool target matches persisted history formatting without description"
 
   const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
   expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe('ReadFile(path="a")');
+});
+
+test("todo update stays hidden in chat but available to sidebar", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-todos", session_id: "todo-session" });
+  handleServerEvent({
+    type: "todo_updated",
+    run_id: "run-todos",
+    tool_call_id: "call-todos",
+    explanation: "Track rollout",
+    items: [
+      { content: "Research prior art", status: "completed" },
+      { content: "Implement server tool", status: "in_progress" },
+      { content: "Polish desktop UI", status: "pending" },
+    ],
+  });
+
+  const state = getState();
+  const message = state.messages.get("todo-run-todos");
+  const visibleIds = visibleMessageIds({
+    ids: state.order,
+    roles: state.order.map((id) => state.messages.get(id)?.role ?? null),
+    contents: state.order.map((id) => state.messages.get(id)?.content ?? ""),
+  });
+  const sidebarTodo = latestTodoListFromMessages(state.order, state.messages);
+
+  expect(state.order).toEqual(["todo-run-todos"]);
+  expect(visibleIds).toEqual([]);
+  expect(message?.role).toBe("todo");
+  expect(message?.todo?.explanation).toBe("Track rollout");
+  expect(sidebarTodo?.items.map((item) => item.status)).toEqual([
+    "completed",
+    "in_progress",
+    "pending",
+  ]);
+});
+
+test("right sidebar derives the latest todo list from transcript state", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-todos-1", session_id: "todo-session" });
+  handleServerEvent({
+    type: "todo_updated",
+    run_id: "run-todos-1",
+    items: [{ content: "Old task", status: "completed" }],
+  });
+  handleServerEvent({ type: "RUN_FINISHED", run_id: "run-todos-1" });
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-todos-2", session_id: "todo-session" });
+  handleServerEvent({
+    type: "todo_updated",
+    run_id: "run-todos-2",
+    items: [{ content: "Current task", status: "in_progress" }],
+  });
+
+  const state = getState();
+  const todo = latestTodoListFromMessages(state.order, state.messages);
+
+  expect(todo?.items).toEqual([{ content: "Current task", status: "in_progress" }]);
+});
+
+test("right sidebar body is wider than the old 256px panel", () => {
+  expect(RIGHT_PANEL_BODY_WIDTH).toBe(304);
+});
+
+test("update_todos tool stream stays out of activity trace", () => {
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-todos",
+    tool_call_name: "update_todos",
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_ARGS",
+    tool_call_id: "call-todos",
+    delta: "{\"items\":[]}",
+  });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "call-todos" });
+  handleServerEvent({
+    type: "TOOL_CALL_RESULT",
+    tool_call_id: "call-todos",
+    name: "update_todos",
+    content: "Todo list updated.",
+  });
+
+  expect(getState().order).toEqual([]);
 });
 
 test("ignores duplicate same-session replay events without duplicating text or tools", () => {
@@ -371,11 +457,134 @@ test("rebuilds persisted transcript without replay animation marker", async () =
 
     expect(documentElement.dataset.streamReplaying).toBeUndefined();
     expect(getState().order).toEqual(["user-1", "assistant-1", "assistant-1-activity"]);
+    expect([...getState().messages.values()].every((message) => message.suppressEntryMotion)).toBe(true);
     expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].result).toBe("ok");
     expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe('ReadFile(path="a")');
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
     (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
+  }
+});
+
+test("replay-created transcript messages suppress entry motion structurally", () => {
+  setState({ currentSessionId: "session-1" });
+
+  handleReplayServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-replay",
+    delta: "replayed",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleReplayServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-replay",
+    tool_call_name: "ReadFile",
+    description: "ReadFile(path=\"a\")",
+    session_id: "session-1",
+    timestamp: 2,
+  });
+
+  const state = getState();
+  expect(state.messages.get("assistant-replay")?.suppressEntryMotion).toBe(true);
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  expect(state.messages.get(activityId!)?.suppressEntryMotion).toBe(true);
+});
+
+test("live tool calls move from ongoing to executed on result", () => {
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-running",
+    tool_call_name: "ReadFile",
+    description: "ReadFile(path=\"a\")",
+    timestamp: 1,
+  });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  expect(getState().messages.get(activityId!)?.activity?.items[0]?.status).toBe("ongoing");
+
+  handleServerEvent({
+    type: "TOOL_CALL_RESULT",
+    tool_call_id: "tool-running",
+    name: "ReadFile",
+    content: "ok",
+    timestamp: 2,
+  });
+
+  expect(getState().messages.get(activityId!)?.activity?.items[0]?.status).toBe("executed");
+});
+
+test("active history hydrates old calls as executed and new tail as ongoing", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              { role: "user", content: "research", id: "user-1" },
+              {
+                role: "assistant",
+                content: "",
+                id: "assistant-old-tools",
+                tool_calls: [
+                  { id: "old-tool-1", name: "SlackSearch", arguments: "{}" },
+                  { id: "old-tool-2", name: "SearchText", arguments: "{}" },
+                ],
+              },
+            ],
+            active_run_id: "run-active",
+            runtime: {
+              session_id: "active-trace-status-session",
+              latest_event_seq: 10,
+              checkpoint_seq: 10,
+              active_run: { run_id: "run-active", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-trace-status-session",
+    });
+
+    await loadHistory("active-trace-status-session");
+    const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+    expect(getState().messages.get(activityId!)?.activity?.items.map((item) => item.status)).toEqual([
+      "executed",
+      "executed",
+    ]);
+
+    handleServerEvent({
+      type: "TOOL_CALL_START",
+      session_id: "active-trace-status-session",
+      seq: 11,
+      tool_call_id: "live-tool",
+      tool_call_name: "ReadFile",
+      description: "ReadFile(path=\"b\")",
+    });
+
+    expect(getState().messages.get(activityId!)?.activity?.items.map((item) => item.status)).toEqual([
+      "executed",
+      "executed",
+      "ongoing",
+    ]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
 });
 
@@ -802,6 +1011,44 @@ test("stream_reset keeps tail blocked when history reload fails", async () => {
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
+});
+
+test("stream_reset keeps persisted history activity when history reload fails", async () => {
+  setState({ currentSessionId: "reset-history-session" });
+  const s = getState();
+  s.setHistory([
+    {
+      id: "assistant-history-activity",
+      role: "activity",
+      sourceMessageId: "assistant-history",
+      content: "",
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [{ id: "history-tool", kind: "Bash", target: "Bash(command='date')" }],
+      },
+    },
+  ]);
+  s.setActiveActivityId("assistant-history-activity");
+
+  const resetReload = handleIncomingServerEvent(
+    {
+      type: "stream_reset",
+      reason: "replay_gap",
+      session_id: "reset-history-session",
+      seq: 3,
+    },
+    async () => {
+      throw new Error("reload failed");
+    },
+  );
+  await resetReload;
+
+  expect(getState().order).toEqual(["assistant-history-activity"]);
+  expect(getState().messages.get("assistant-history-activity")?.activity?.items).toMatchObject([
+    { id: "history-tool" },
+  ]);
+  expect(getState().activeActivityId).toBeNull();
 });
 
 test("stopRun clears running state after successful cancel request", async () => {
@@ -1248,6 +1495,256 @@ test("loadHistory restores currentRunId for active sessions", async () => {
   }
 });
 
+test("loadHistory lets replayed tools continue the active trailing history group", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "watch it", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tool-1",
+      tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"date"}' }],
+    },
+    { role: "tool", content: "ok", id: "tool-result-1", tool_call_id: "tool-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-reasoning-1",
+      reasoning_content: "thinking",
+    },
+  ];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages,
+            active_run_id: "run-active",
+            runtime: {
+              session_id: "active-history-session",
+              latest_event_seq: 10,
+              checkpoint_seq: 10,
+              active_run: { run_id: "run-active", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-history-session",
+    });
+
+    await loadHistory("active-history-session");
+    const loadedActivityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+    expect(getState().messages.get(loadedActivityId!)?.activity).toMatchObject({
+      done: true,
+      label: "Called",
+    });
+    handleServerEvent({
+      type: "TOOL_CALL_START",
+      session_id: "active-history-session",
+      seq: 11,
+      tool_call_id: "tool-2",
+      tool_call_name: "Bash",
+      description: "Bash(command='sleep 120')",
+    });
+
+    const state = getState();
+    const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+    expect(activityIds).toHaveLength(1);
+    expect(state.messages.get(activityIds[0])?.activity).toMatchObject({
+      done: false,
+      label: "Calling",
+    });
+    expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+      "tool-1",
+      "tool-2",
+    ]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("loadHistory lets replayed tools continue across trailing hidden meta user messages", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "watch it", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tool-1",
+      tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"date"}' }],
+    },
+    { role: "tool", content: "ok", id: "tool-result-1", tool_call_id: "tool-1" },
+    { role: "user", content: "hidden wakeup", id: "meta-user-1", is_meta: true },
+  ];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages,
+            active_run_id: "run-active",
+            runtime: {
+              session_id: "active-hidden-meta-session",
+              latest_event_seq: 10,
+              checkpoint_seq: 10,
+              active_run: { run_id: "run-active", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-hidden-meta-session",
+    });
+
+    await loadHistory("active-hidden-meta-session");
+    const loadedActivityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+    expect(getState().messages.get(loadedActivityId!)?.activity).toMatchObject({
+      done: true,
+      label: "Called",
+    });
+    handleServerEvent({
+      type: "TOOL_CALL_START",
+      session_id: "active-hidden-meta-session",
+      seq: 11,
+      tool_call_id: "tool-2",
+      tool_call_name: "Bash",
+      description: "Bash(command='sleep 120')",
+    });
+
+    const state = getState();
+    const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+    expect(activityIds).toHaveLength(1);
+    expect(state.messages.get(activityIds[0])?.activity).toMatchObject({
+      done: false,
+      label: "Calling",
+    });
+    expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+      "tool-1",
+      "tool-2",
+    ]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("live tools keep appending after canonical reload merged hidden-split activity groups", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "watch it", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tool-1",
+      tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"sleep 90"}' }],
+    },
+    { role: "tool", content: "ok", id: "tool-result-1", tool_call_id: "tool-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-reasoning-1",
+      reasoning_content: "thinking",
+    },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tool-2",
+      tool_calls: [{ id: "tool-2", name: "Bash", arguments: '{"command":"sleep 120"}' }],
+    },
+  ];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages,
+            active_run_id: "run-active",
+            runtime: {
+              session_id: "active-reload-session",
+              latest_event_seq: 20,
+              checkpoint_seq: 20,
+              active_run: { run_id: "run-active", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-reload-session",
+    });
+
+    await loadHistory("active-reload-session");
+    handleServerEvent({
+      type: "TOOL_CALL_START",
+      session_id: "active-reload-session",
+      seq: 21,
+      tool_call_id: "tool-3",
+      tool_call_name: "Bash",
+      description: "Bash(command='sleep 60')",
+    });
+
+    const state = getState();
+    const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+    expect(activityIds).toHaveLength(1);
+    expect(state.activeActivityId).toBe(activityIds[0]);
+    expect(state.messages.get(activityIds[0])?.activity).toMatchObject({
+      label: "Calling",
+      done: false,
+    });
+    expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+      "tool-1",
+      "tool-2",
+      "tool-3",
+    ]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
 test("keeps tool results when result arrives before delayed burst item renders", async () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });
@@ -1330,8 +1827,13 @@ test("replay mode marks transcript mutations as non-live motion", async () => {
     handleReplayServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
 
     expect(documentElement.dataset.streamReplaying).toBe("true");
+    expect(getState().streamReplaying).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(documentElement.dataset.streamReplaying).toBe("true");
+    expect(getState().streamReplaying).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(documentElement.dataset.streamReplaying).toBeUndefined();
+    expect(getState().streamReplaying).toBe(false);
   } finally {
     (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
   }
@@ -1374,6 +1876,49 @@ test("updates an agent activity item from task lifecycle events", () => {
   const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
   expect(item?.taskStatus).toBe("completed");
   expect(item?.progress).toBe("done");
+});
+
+test("task lifecycle updates subagent row by parent tool call id", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+    description: "research(task='event systems')",
+    timestamp: 2,
+  });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "call-research", timestamp: 3 });
+  handleServerEvent({
+    type: "task_started",
+    run_id: "run-1",
+    task_id: "task-internal",
+    parent_tool_call_id: "call-research",
+    name: "Research",
+    summary: "event systems",
+    depth: 1,
+    timestamp: 4,
+  });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  let item = getState().messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
+  expect(item?.status).toBe("ongoing");
+  expect(item?.taskStatus).toBe("running");
+
+  handleServerEvent({
+    type: "task_finished",
+    run_id: "run-1",
+    task_id: "task-internal",
+    parent_tool_call_id: "call-research",
+    status: "completed",
+    summary: "done",
+    depth: 1,
+    timestamp: 5,
+  });
+
+  item = getState().messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
+  expect(item?.status).toBe("executed");
+  expect(item?.taskStatus).toBe("completed");
 });
 
 test("background task event updates background agents without transcript noise", () => {

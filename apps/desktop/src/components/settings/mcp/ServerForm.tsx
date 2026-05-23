@@ -14,7 +14,8 @@ import { SettingsInlineError } from "../SettingsNotice";
 import { ICON } from "../../../lib/icons";
 import { GlassToggle } from "../../GlassToggle";
 import { LabeledField } from "../Field";
-import { type KeyVal, kvToRecord } from "./editors";
+import { type KeyVal } from "./editors";
+import { buildMCPServerPayload, type MCPAuthMode } from "./payload";
 import { HttpFields, StdioFields } from "./transportFields";
 import { ToolsSection } from "./ToolsSection";
 
@@ -49,23 +50,18 @@ export function ServerForm({
   // http fields
   const [url, setUrl] = useState(server?.url ?? "");
   const [headerEntries, setHeaderEntries] = useState<KeyVal[]>([{ key: "", value: "" }]);
+  const [auth, setAuth] = useState<MCPAuthMode>(server?.has_headers ? "headers" : "auto");
 
   function buildPayload(): MCPServerConfigPayload {
-    if (transport === "stdio") {
-      const env = kvToRecord(envEntries);
-      return {
-        transport: "stdio",
-        command: command.trim(),
-        args: argsList.map((a) => a.trim()).filter(Boolean),
-        ...(env ? { env } : {}),
-      };
-    }
-    const headers = kvToRecord(headerEntries);
-    return {
-      transport: "http",
-      url: url.trim(),
-      ...(headers ? { headers } : {}),
-    };
+    return buildMCPServerPayload({
+      transport,
+      command,
+      argsList,
+      envEntries,
+      url,
+      headerEntries,
+      auth,
+    });
   }
 
   const valid =
@@ -172,6 +168,8 @@ export function ServerForm({
             onUrl={setUrl}
             headerEntries={headerEntries}
             onHeaders={setHeaderEntries}
+            auth={auth}
+            onAuth={setAuth}
           />
         )}
       </div>

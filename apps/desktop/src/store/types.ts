@@ -7,6 +7,7 @@ import type {
   SessionGoal,
   SessionListItem,
   SkillDescriptor,
+  TodoListItem,
 } from "../api";
 import type { TransportDiagnosticsSnapshot } from "../lib/transportDiagnostics";
 import type { MessageSourceFocus } from "../lib/messageSourceFocus";
@@ -24,7 +25,8 @@ export type Role =
   | "status"
   | "error"
   | "activity"
-  | "approval";
+  | "approval"
+  | "todo";
 
 export interface PendingGoalProposal {
   sessionId: string;
@@ -149,6 +151,7 @@ export interface ActivityItem {
   target: string;
   args?: string;
   result?: string;
+  status?: "ongoing" | "executed";
   /** Nesting depth: 0 = top-level (called by the user-facing agent),
    *  1 = inside a sub-agent (research → research, etc.). Used purely for
    *  visualization (indent + chip). */
@@ -197,6 +200,11 @@ export interface ApprovalState {
   status: ApprovalStatus;
 }
 
+export interface TodoListState {
+  items: TodoListItem[];
+  explanation?: string | null;
+}
+
 export interface TurnMeta {
   startedAt: number;
   endedAt: number | null;
@@ -215,11 +223,14 @@ export interface UiMessage {
   role: Role;
   sourceIndex?: number;
   sourceMessageId?: string;
+  /** Hydrated/replayed rows should render directly, without entry CSS motion. */
+  suppressEntryMotion?: boolean;
   title?: string;
   subtitle?: string;
   content: string;
   activity?: ActivityState;
   approval?: ApprovalState;
+  todo?: TodoListState;
   turn?: TurnMeta;
   images?: ImageBlock[];
   /** True for system-generated user messages that should be hidden from
@@ -336,6 +347,7 @@ export interface State {
    *  re-adding a run that the live stream already finished. */
   terminalRunIds: Set<string>;
   transportDiagnostics: Record<string, TransportDiagnosticsSnapshot>;
+  streamReplaying: boolean;
   /** Center point of the element that triggered the currently-open modal.
    *  Null when the modal opens via keyboard / palette / non-positional path. */
   modalOrigin: { x: number; y: number } | null;
@@ -358,11 +370,16 @@ export interface Actions {
   setCurrentSession: (sessionId: string | null) => void;
   setHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
   prependHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
-  appendHistoryPage: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
+  appendHistoryPage: (
+    messages: UiMessage[],
+    page?: import("../api").HistoryPage,
+    activeActivityId?: string | null,
+  ) => void;
   setHistoryLoading: (direction: "before" | "after", loading: boolean) => void;
   appendMessage: (message: UiMessage) => void;
   insertMessageBefore: (message: UiMessage, beforeId: string | null) => void;
   mutateMessage: (id: string, patch: Partial<UiMessage>) => void;
+  upsertTodoList: (message: UiMessage, beforeId?: string | null) => void;
   truncateFrom: (id: string) => void;
   setConnected: (connected: boolean) => void;
   setError: (error: string | null) => void;

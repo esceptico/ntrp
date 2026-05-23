@@ -229,6 +229,31 @@ class _DisconnectingResponsesOpenAI:
         self.responses = _DisconnectingResponses()
 
 
+class _FailingResponses:
+    async def create(self, **kwargs):
+        return _Stream(
+            [
+                _Event(
+                    {
+                        "type": "response.failed",
+                        "response": {
+                            "error": {
+                                "type": "invalid_request_error",
+                                "code": "context_length_exceeded",
+                                "message": "Your input exceeds the context window of this model.",
+                            }
+                        },
+                    }
+                ),
+            ]
+        )
+
+
+class _FailingResponsesOpenAI:
+    def __init__(self):
+        self.responses = _FailingResponses()
+
+
 class _ChatDelta:
     content = "partial"
     tool_calls = None
@@ -354,6 +379,24 @@ async def test_live_responses_stream_reports_remote_protocol_disconnect():
     assert await anext(stream) == "partial"
     with pytest.raises(RuntimeError, match="OpenAI response stream disconnected before completion"):
         await anext(stream)
+
+
+@pytest.mark.asyncio
+async def test_live_responses_stream_preserves_provider_error_code():
+    from ntrp.services.chat import _safe_error
+
+    stream = stream_responses_completion(
+        _FailingResponsesOpenAI(),
+        {"model": "gpt-5.5", "input": "hi"},
+        model="gpt-5.5",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await anext(stream)
+
+    code, message, _debug_id = _safe_error(exc_info.value)
+    assert code == "context_length_exceeded"
+    assert "context window" in message
 
 
 @pytest.mark.asyncio

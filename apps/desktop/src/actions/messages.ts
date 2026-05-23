@@ -18,6 +18,12 @@ interface SendMessageOptions {
   meta?: boolean;
 }
 
+interface ChatMessageResponse {
+  run_id: string;
+  session_id?: string;
+  status?: "queued" | string;
+}
+
 export async function sendMessage(
   text: string,
   images: ImageBlock[] = [],
@@ -115,6 +121,7 @@ export async function enqueueMessage(
 ): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
+  const sendSessionId = s.currentSessionId;
   const trimmed = text.trim();
   if (!trimmed && images.length === 0) return;
 
@@ -130,19 +137,91 @@ export async function enqueueMessage(
   }
 
   try {
-    await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
+    const response = await apiWithConfig<ChatMessageResponse>(s.config, "/chat/message", {
       method: "POST",
       body: JSON.stringify({
         message: trimmed,
-        session_id: s.currentSessionId,
+        session_id: sendSessionId,
         skip_approvals: s.skipApprovals,
         images: images.length > 0 ? images : undefined,
         client_id: clientId,
       }),
     });
-  } catch {
-    if (!options.meta) s.setQueuedMessageStatus(clientId, "failed");
+    setState((state) =>
+      reduceRunStarted(state, { runId: response.run_id, sessionId: sendSessionId }),
+    );
+    if (response.status !== "queued") {
+      promoteQueuedSubmitToStartedRun(sendSessionId, clientId, trimmed, images, options.meta);
+    }
+  } catch (error) {
+    if (!options.meta) failQueuedSubmit(sendSessionId, clientId, error);
   }
+}
+
+function promoteQueuedSubmitToStartedRun(
+  sessionId: string,
+  clientId: string,
+  text: string,
+  images: ImageBlock[],
+  isMeta = false,
+): void {
+  setState((state) => {
+    if (state.currentSessionId !== sessionId) {
+      const cached = state.sessionCache.get(sessionId);
+      if (!cached) return {};
+      const sessionCache = new Map(state.sessionCache);
+      sessionCache.set(sessionId, {
+        ...cached,
+        queuedMessages: cached.queuedMessages.filter((message) => message.clientId !== clientId),
+      });
+      return { sessionCache };
+    }
+
+    const queuedMessages = state.queuedMessages.filter((message) => message.clientId !== clientId);
+    if (isMeta) return { queuedMessages };
+
+    const messages = new Map(state.messages);
+    const alreadyPresent = messages.has(clientId);
+    if (!alreadyPresent) {
+      messages.set(clientId, {
+        id: clientId,
+        role: "user",
+        content: text,
+        turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
+        images: images.length > 0 ? images : undefined,
+      });
+    }
+    return {
+      queuedMessages,
+      messages,
+      order: alreadyPresent ? state.order : [...state.order, clientId],
+    };
+  });
+}
+
+function failQueuedSubmit(sessionId: string, clientId: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  setState((state) => {
+    if (state.currentSessionId !== sessionId) {
+      const cached = state.sessionCache.get(sessionId);
+      if (!cached) return {};
+      const sessionCache = new Map(state.sessionCache);
+      sessionCache.set(sessionId, {
+        ...cached,
+        queuedMessages: cached.queuedMessages.filter((item) => item.clientId !== clientId),
+      });
+      return { sessionCache };
+    }
+
+    const id = crypto.randomUUID();
+    const messages = new Map(state.messages);
+    messages.set(id, { id, role: "error", content: message });
+    return {
+      queuedMessages: state.queuedMessages.filter((item) => item.clientId !== clientId),
+      messages,
+      order: [...state.order, id],
+    };
+  });
 }
 
 /** Cancel a queued (not yet ingested) message. The server returns:

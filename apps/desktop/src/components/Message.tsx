@@ -1,11 +1,26 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Box, Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Target, Terminal } from "lucide-react";
+import {
+  Box,
+  Brain,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  CircleDot,
+  Copy,
+  GitBranch,
+  ListChecks,
+  Pencil,
+  Target,
+  Terminal,
+} from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
-import type { SkillDescriptor } from "../api";
+import type { SkillDescriptor, TodoStatus } from "../api";
+import { activityTraceStats } from "../lib/agent";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
@@ -28,6 +43,7 @@ export function Message({ id, isFinal = true }: { id: string; isFinal?: boolean 
     case "reasoning": return <ReasoningMessage id={id} />;
     case "tool": return <ToolMessage id={id} />;
     case "activity": return <ActivityMessage id={id} />;
+    case "todo": return <TodoMessage id={id} />;
     case "error": return <ErrorMessage id={id} />;
     case "status": return <StatusMessage id={id} />;
   }
@@ -43,6 +59,10 @@ function useIsLast(id: string): boolean {
 
 function useSourceFocused(id: string): boolean {
   return useStore((s) => messageInSourceFocus(s.messages.get(id), s.sourceFocus, s.currentSessionId));
+}
+
+function entryAnimation(message: UiMessage, className: string): string | undefined {
+  return message.suppressEntryMotion ? undefined : className;
 }
 
 function formatMessageTime(ms: number): string {
@@ -241,7 +261,11 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("group flex flex-col items-end animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "group flex flex-col items-end transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-fade-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -291,7 +315,11 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   if (!isFinal && !isStreaming && !message.content.trim()) return null;
   return (
     <article
-      className={clsx("assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-fade-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-streaming={isStreaming ? "true" : undefined}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
@@ -320,7 +348,11 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] min-w-0 transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-roll-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -369,7 +401,11 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-xs leading-[1.45] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-xs leading-[1.45] transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-roll-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -396,7 +432,11 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
   const text = message.title ? `${message.title} · ${message.content}` : message.content;
   return (
     <article
-      className={clsx("self-center grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "self-center grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-fade-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -414,7 +454,11 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
   if (!message) return null;
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-fade-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -440,10 +484,15 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   // producing a visible flicker.
   const collapsed = done && !expanded;
   const max = done ? undefined : 3;
+  const { totalCount, activeCount } = activityTraceStats(items);
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-roll-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -451,7 +500,8 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
       <ActivityTrace>
         <ActivityHeader
           label={label}
-          count={items.length}
+          count={totalCount}
+          activeCount={activeCount}
           onToggle={done ? () => setExpanded((v) => !v) : undefined}
           expanded={expanded}
         />
@@ -460,3 +510,67 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
     </article>
   );
 });
+
+const TodoMessage = memo(function TodoMessage({ id }: { id: string }) {
+  const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
+  if (!message?.todo || message.todo.items.length === 0) return null;
+
+  const items = message.todo.items;
+  const completed = items.filter((item) => item.status === "completed").length;
+
+  return (
+    <article
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        entryAnimation(message, "animate-roll-in"),
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
+      <div className="glass-surface glass-radius-lg max-w-[560px] px-3.5 py-3 border border-line-soft">
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 min-w-0">
+            <ListChecks size={ICON.SM} strokeWidth={2} className="text-muted shrink-0" />
+            <span className="text-sm font-medium leading-[1.35] text-ink">Tasks</span>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-muted">{completed}/{items.length}</span>
+        </div>
+        {message.todo.explanation && (
+          <div className="mt-1.5 text-xs leading-[1.4] text-muted break-words">
+            {message.todo.explanation}
+          </div>
+        )}
+        <ul className="mt-2.5 flex flex-col gap-1.5">
+          {items.map((item, index) => (
+            <li key={`${item.status}-${index}-${item.content}`} className="flex items-start gap-2 min-w-0">
+              <TodoIcon status={item.status} />
+              <span
+                className={clsx(
+                  "min-w-0 flex-1 text-sm leading-[1.4] break-words",
+                  item.status === "completed" && "text-faint line-through",
+                  item.status === "in_progress" && "text-ink font-medium",
+                  item.status === "pending" && "text-muted",
+                )}
+              >
+                {item.content}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </article>
+  );
+});
+
+function TodoIcon({ status }: { status: TodoStatus }) {
+  if (status === "completed") {
+    return <CheckCircle2 size={ICON.SM} strokeWidth={2.2} className="mt-[1px] shrink-0 text-ok" />;
+  }
+  if (status === "in_progress") {
+    return <CircleDot size={ICON.SM} strokeWidth={2.2} className="mt-[1px] shrink-0 text-info" />;
+  }
+  return <Circle size={ICON.SM} strokeWidth={2} className="mt-[1px] shrink-0 text-faint" />;
+}

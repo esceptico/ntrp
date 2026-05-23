@@ -79,6 +79,7 @@ SESSION_HANDOFF_MARKER = "[Session State Handoff]"
 NTRP_TMP_BASE = "/tmp/ntrp"
 OFFLOAD_THRESHOLD = 50000  # chars — results above this are offloaded to temp files
 OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summary, not raw chars)
+OFFLOAD_PREVIEW_CHARS = 12000  # hard cap for compact references; full content remains in the offload file
 
 
 # --- Display Truncation ---

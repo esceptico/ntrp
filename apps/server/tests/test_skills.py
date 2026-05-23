@@ -14,14 +14,11 @@ def _write_skill(root: Path, name: str, frontmatter: str, body: str = "# Body\n"
     (skill_dir / "SKILL.md").write_text(f"---\n{frontmatter}---\n\n{body}")
 
 
-def test_builtin_obsidian_skill_is_registered():
+def test_builtin_obsidian_skill_is_not_registered():
     registry = SkillRegistry()
     registry.load(get_skills_dirs())
 
-    skill = registry.get("obsidian")
-
-    assert skill is not None
-    assert skill.location == "builtin"
+    assert registry.get("obsidian") is None
 
 
 def test_registry_rejects_invalid_skill_metadata(tmp_path):

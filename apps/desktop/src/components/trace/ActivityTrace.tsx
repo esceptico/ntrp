@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
-import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
+import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
@@ -24,16 +24,20 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
 export function ActivityHeader({
   label,
   count,
+  activeCount = 0,
   onToggle,
   expanded,
 }: {
   label: string;
   count: number;
+  activeCount?: number;
   onToggle?: () => void;
   expanded?: boolean;
 }) {
-  const word = count === 1 ? "tool" : "tools";
+  const word = count === 1 ? "call" : "calls";
+  const heading = activeCount > 0 ? "Running" : label === "Called" ? "Executed" : "Executed";
   const interactive = !!onToggle;
+  const streamReplaying = useStore((s) => s.streamReplaying);
 
   return (
     <button
@@ -51,13 +55,19 @@ export function ActivityHeader({
           singular/plural switch ("tool" / "tools") each animate
           independently instead of the whole string snapping. */}
       <span className="mr-1.5">
-        <RollingToken value={label} />
+        <RollingToken value={heading} motionDisabled={streamReplaying} />
       </span>
       <span>
-        <RollingToken value={String(count)} mono />
+        <RollingToken value={String(count)} mono motionDisabled={streamReplaying} />
         {" "}
-        <RollingToken value={word} />
+        <RollingToken value={word} motionDisabled={streamReplaying} />
       </span>
+      {activeCount > 0 && (
+        <span>
+          <RollingToken value={String(activeCount)} mono motionDisabled={streamReplaying} />
+          {" active"}
+        </span>
+      )}
       {interactive && (
         <ChevronDown
           size={ICON.SM}
@@ -76,10 +86,12 @@ export function ActivityTail({
   items,
   max,
   collapsed = false,
+  motionDisabled,
 }: {
   items: ActivityItem[];
   max?: number;
   collapsed?: boolean;
+  motionDisabled?: boolean;
 }) {
   // Two render modes:
   //   - "rolling" (max set): used live during a run. Each level (top, plus
@@ -89,6 +101,8 @@ export function ActivityTail({
   //     children are reachable via the inspector.
   const rolling = max != null;
   const setViewingTool = useStore((s) => s.setViewingTool);
+  const streamReplaying = useStore((s) => s.streamReplaying);
+  const suppressMotion = motionDisabled ?? streamReplaying;
 
   const visible = useMemo(
     () => (rolling ? buildRollingList(items, max as number) : buildStaticTree(items)),
@@ -113,11 +127,17 @@ export function ActivityTail({
           {visible.map((item) => (
             <motion.div
               key={item.id}
-              layout="position"
-              initial={{ opacity: 0, y: 8 }}
+              data-activity-motion-row="true"
+              data-motion-suppressed={suppressMotion ? "true" : "false"}
+              layout={suppressMotion ? false : "position"}
+              initial={suppressMotion ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ type: "spring", stiffness: 350, damping: 40, mass: 0.8 }}
+              exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+              transition={
+                suppressMotion
+                  ? { duration: 0 }
+                  : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
+              }
               style={{ height: `${ROW_HEIGHT_EM}em` }}
               className="flex items-baseline min-w-0"
             >
@@ -139,7 +159,7 @@ export function ActivityTail({
         opacity: collapsed ? 0 : 1,
         height: collapsed ? 0 : targetHeight,
       }}
-      transition={SPRING_LAYOUT}
+      transition={suppressMotion ? { duration: 0 } : SPRING_LAYOUT}
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
@@ -220,7 +240,7 @@ function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
     if (seen.has(item.id)) return;
     seen.add(item.id);
     out.push(item);
-    if (item.result == null) {
+    if (activityItemStatus(item) === "ongoing") {
       const kids = childrenByParent.get(item.id);
       if (kids) for (const k of kids.slice(-max)) include(k);
     }
@@ -242,7 +262,7 @@ function ItemButton({
   if (isAgent(item)) {
     return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
   }
-  const running = item.result == null;
+  const running = activityItemStatus(item) === "ongoing";
   const errored = !!item.error;
   return (
     <button
@@ -284,7 +304,9 @@ function AgentButton({
 }) {
   const task = useMemo(() => extractTask(item.args), [item.args]);
   const label = friendlyAgentLabel(item.kind);
-  const status = item.taskStatus ?? (item.result == null ? "running" : "completed");
+  const traceStatus = activityItemStatus(item);
+  const running = traceStatus === "ongoing";
+  const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : "executed");
   const statusText = item.progress ?? status;
   return (
     <button
@@ -303,11 +325,21 @@ function AgentButton({
       >
         <Bot size={ICON.XS} strokeWidth={2} />
       </span>
-      <span className="font-medium text-ink-soft shrink-0 group-hover/agent:text-ink transition-colors">
+      <span
+        className={clsx(
+          "font-medium shrink-0 group-hover/agent:text-ink transition-colors",
+          running ? "text-ink-soft" : "text-faint",
+        )}
+      >
         {label}
       </span>
       {task && (
-        <span className="text-faint truncate group-hover/agent:text-ink-soft transition-colors">
+        <span
+          className={clsx(
+            "truncate group-hover/agent:text-ink-soft transition-colors",
+            running ? "text-muted" : "text-faint",
+          )}
+        >
           {task}
         </span>
       )}
@@ -319,7 +351,7 @@ function AgentButton({
       >
         {statusText}
       </span>
-      {item.usage && status !== "running" && (
+      {item.usage && traceStatus === "executed" && (
         <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
       )}
     </button>

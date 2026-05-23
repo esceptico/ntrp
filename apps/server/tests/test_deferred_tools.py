@@ -10,6 +10,11 @@ from ntrp.context.models import SessionState
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.factory import AgentConfig, create_agent
+from ntrp.core.model_context_budget import (
+    MODEL_TOOL_RESULT_PREVIEW_CHARS,
+    MODEL_TOOL_RESULT_TOTAL_PREVIEW_CHARS,
+    ToolResultContextBudgetMiddleware,
+)
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
@@ -233,6 +238,80 @@ async def test_compaction_uses_persisted_input_tokens_on_first_request():
     await middleware(_request(registry), _identity)
 
     assert compactor.seen == [314_000]
+
+
+@pytest.mark.asyncio
+async def test_model_context_budget_clamps_huge_tool_tail_after_compaction():
+    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+
+    class CompactsToHugeToolTail:
+        def should_compact(self, messages, model, last_input_tokens):
+            return True
+
+        async def maybe_compact(self, messages, model, last_input_tokens, *, rehydration_state=None):
+            return [
+                {"role": "system", "content": "system"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "search_text", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": huge_result},
+            ]
+
+    prepared = await apply_model_request_middlewares(
+        _request(_registry()),
+        (
+            ToolResultContextBudgetMiddleware(),
+            CompactionModelRequestMiddleware(compactor=CompactsToHugeToolTail()),
+        ),
+    )
+
+    tool_content = prepared.messages[-1]["content"]
+    assert len(tool_content) < len(huge_result)
+    assert len(tool_content) <= MODEL_TOOL_RESULT_PREVIEW_CHARS + 500
+    assert "Tool result compacted for model context" in tool_content
+    assert huge_result not in tool_content
+
+
+@pytest.mark.asyncio
+async def test_model_context_budget_uses_small_aggregate_tool_budget():
+    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+    messages = [{"role": "system", "content": "system"}]
+    for i in range(12):
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": f"call-{i}",
+                "content": huge_result,
+            }
+        )
+
+    async def next_request(req: ModelRequest) -> ModelRequest:
+        return ModelRequest(
+            step=req.step,
+            messages=messages,
+            model=req.model,
+            tools=req.tools,
+            tool_choice=req.tool_choice,
+            reasoning_effort=req.reasoning_effort,
+            previous_response=req.previous_response,
+        )
+
+    prepared = await ToolResultContextBudgetMiddleware()(_request(_registry()), next_request)
+    tool_contents = [msg["content"] for msg in prepared.messages if msg.get("role") == "tool"]
+
+    assert all("Tool result compacted for model context" in content for content in tool_contents)
+    assert all(len(content) <= MODEL_TOOL_RESULT_PREVIEW_CHARS for content in tool_contents[:8])
+    assert any("Preview omitted" in content for content in tool_contents)
+    assert sum(len(content) for content in tool_contents[:8]) <= MODEL_TOOL_RESULT_TOTAL_PREVIEW_CHARS
+    assert huge_result not in "\n".join(tool_contents)
 
 
 @pytest.mark.asyncio
@@ -587,6 +666,10 @@ async def test_spawned_agents_inherit_deferred_loading(monkeypatch):
 async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
     registry = _registry()
     captured = {}
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
 
     class FakeExecutor:
         def __init__(self, registry: ToolRegistry):
@@ -617,7 +700,7 @@ async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
             deferred_tools_enabled=True,
             loaded_tools={"slack_search"},
         ),
-        io=IOBridge(),
+        io=IOBridge(emit=emit),
     )
     parent_ctx.spawn_fn = create_spawn_fn(
         executor=FakeExecutor(registry),
@@ -643,3 +726,72 @@ async def test_spawned_agent_compaction_refreshes_deferred_schema(monkeypatch):
     assert prepared.messages == [{"role": "system", "content": "compacted"}]
     assert "load_tools" in names
     assert "slack_search" not in names
+    assert [event.type.value for event in emitted] == ["task_started", "task_finished"]
+
+
+@pytest.mark.asyncio
+async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
+    registry = _registry()
+    captured = {}
+    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+
+    class CompactsToHugeToolTail:
+        def should_compact(self, messages, model, last_input_tokens):
+            return True
+
+        async def maybe_compact(self, messages, model, last_input_tokens, *, rehydration_state=None):
+            return [
+                {"role": "system", "content": "system"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "search_text", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": huge_result},
+            ]
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    parent_ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run", max_depth=3, deferred_tools_enabled=True),
+        io=IOBridge(),
+    )
+    parent_ctx.spawn_fn = create_spawn_fn(
+        executor=_Executor(registry),
+        model="test-model",
+        max_depth=3,
+        current_depth=0,
+        compactor=CompactsToHugeToolTail(),
+    )
+
+    result = await parent_ctx.spawn_fn(
+        parent_ctx,
+        task="search files",
+        system_prompt="child prompt",
+        tools=registry.get_schemas(),
+    )
+
+    assert result.text == "done"
+    prepared = await apply_model_request_middlewares(
+        _request(registry),
+        captured["model_request_middlewares"],
+    )
+    tool_content = prepared.messages[-1]["content"]
+    assert len(tool_content) < len(huge_result)
+    assert "Tool result compacted for model context" in tool_content
+    assert huge_result not in tool_content

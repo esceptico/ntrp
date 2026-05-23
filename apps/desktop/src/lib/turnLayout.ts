@@ -34,8 +34,8 @@ export function turnLayout({
     };
   }
 
-  const firstActivityIndex = children.findIndex((child) => child.role === "activity");
-  if (firstActivityIndex < 0) {
+  const firstWorkIndex = children.findIndex((child) => isWorkRole(child.role));
+  if (firstWorkIndex < 0) {
     return {
       workIds: [],
       afterWorkIds: childIds,
@@ -44,12 +44,10 @@ export function turnLayout({
   }
 
   // The final answer is the last assistant message that appears after work
-  // has started, even if a late/replayed activity row lands after it.
-  // Otherwise a completed historic turn can hide the user's actual answer
-  // inside the collapsed "Worked" block just because a tool/activity event
-  // was appended after the text during history/replay reconstruction.
+  // has started. If activity follows it, keep that trailing slice inline so
+  // replayed history preserves the original order.
   let finalAssistantIndex = -1;
-  for (let i = children.length - 1; i > firstActivityIndex; i--) {
+  for (let i = children.length - 1; i > firstWorkIndex; i--) {
     if (children[i].role === "assistant") {
       finalAssistantIndex = i;
       break;
@@ -64,9 +62,21 @@ export function turnLayout({
     };
   }
 
+  if (finalAssistantIndex < children.length - 1) {
+    return {
+      workIds: childIds.slice(0, finalAssistantIndex),
+      afterWorkIds: childIds.slice(finalAssistantIndex),
+      finalAssistantId: children[finalAssistantIndex].id,
+    };
+  }
+
   return {
     workIds: childIds.filter((_, index) => index !== finalAssistantIndex),
     afterWorkIds: [children[finalAssistantIndex].id],
     finalAssistantId: children[finalAssistantIndex].id,
   };
+}
+
+function isWorkRole(role: string | null): boolean {
+  return role === "activity";
 }

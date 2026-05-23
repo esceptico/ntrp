@@ -28,3 +28,6 @@ experiments/
 # Electron build output
 apps/desktop/release/
 apps/desktop/dist/
+
+# Local benchmark outputs
+benchmark-results/

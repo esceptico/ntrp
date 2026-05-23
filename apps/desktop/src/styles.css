@@ -430,6 +430,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-app-region: drag;
 }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
+.sidebar button,
+.sidebar input,
+.sidebar [role="button"] {
+  -webkit-app-region: no-drag;
+}
 
 .settings-sidebar-card {
   --glass-radius: 10px;
@@ -1732,9 +1737,10 @@ main[data-has-approval="false"] .scroll-messages {
 :root[data-stream-replaying="true"] .messages-inner *,
 :root[data-stream-replaying="true"] .messages-inner *::before,
 :root[data-stream-replaying="true"] .messages-inner *::after {
-  animation-duration: 1ms !important;
+  animation: none !important;
+  animation-duration: 0s !important;
   animation-delay: 0ms !important;
-  transition-duration: 1ms !important;
+  transition-duration: 0s !important;
   transition-delay: 0ms !important;
 }
 

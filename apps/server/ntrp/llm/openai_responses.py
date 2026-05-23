@@ -22,6 +22,15 @@ from ntrp.llm.utils import blocks_to_text
 REASONING_INCLUDE = ["reasoning.encrypted_content"]
 
 
+class OpenAIResponseStreamError(RuntimeError):
+    def __init__(self, message: str, *, error: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.message = message
+        self.body = {"error": error} if isinstance(error, dict) else None
+        self.code = error.get("code") if isinstance(error, dict) else None
+        self.type = error.get("type") if isinstance(error, dict) else None
+
+
 def prepare_responses_request(
     *,
     messages: list[dict],
@@ -117,66 +126,18 @@ async def stream_responses_completion(
         stream = await client.responses.create(**request)
     except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
         raise RuntimeError("OpenAI response stream disconnected before completion") from exc
-    text_parts: list[str] = []
-    reasoning_parts: list[str] = []
-    completed_items: list[dict[str, Any]] = []
-    final_response = None
+    collector = _ResponsesStreamCollector()
 
     try:
         async for event in stream:
-            data = event.model_dump(exclude_none=True)
-            event_type = data.get("type")
-
-            if event_type == "response.output_text.delta":
-                delta = data.get("delta")
-                if isinstance(delta, str) and delta:
-                    text_parts.append(delta)
-                    yield delta
-                continue
-
-            if event_type in ("response.output_text.done", "response.content_part.done"):
-                delta = _missing_done_text_delta(data, text_parts)
-                if delta:
-                    text_parts.append(delta)
-                    yield delta
-                continue
-
-            if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
-                delta = data.get("delta")
-                if isinstance(delta, str) and delta:
-                    reasoning_parts.append(delta)
-                    yield ReasoningContentDelta(delta)
-                continue
-
-            if event_type == "response.completed":
-                final_response = event.response
+            for item in collector.consume(event, emit_deltas=True):
+                yield item
+            if collector.done:
                 break
-
-            if event_type == "response.output_item.done":
-                item = data.get("item")
-                if isinstance(item, dict):
-                    completed_items.append(item)
-                continue
-
-            if event_type in ("response.failed", "response.incomplete"):
-                response = data.get("response")
-                error = response.get("error") if isinstance(response, dict) else None
-                message = error.get("message") if isinstance(error, dict) else None
-                raise RuntimeError(message or f"OpenAI response failed: {event_type}")
-
-            if event_type == "error":
-                error = data.get("error")
-                if isinstance(error, dict) and isinstance(error.get("message"), str):
-                    raise RuntimeError(error["message"])
-                raise RuntimeError("OpenAI response stream returned an error")
     except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
         raise RuntimeError("OpenAI response stream disconnected before completion") from exc
 
-    if final_response is None:
-        raise RuntimeError("OpenAI response stream ended before completion")
-
-    parsed = parse_responses_response(final_response, model, completed_items or None)
-    yield _with_streamed_fallbacks(parsed, text_parts=text_parts, reasoning_parts=reasoning_parts)
+    yield collector.to_completion(model)
 
 
 def _completion_response_items(
@@ -200,60 +161,83 @@ async def _collect_streamed_responses_completion(
     model: str,
 ) -> CompletionResponse:
     stream = await client.responses.create(**request)
-    text_parts: list[str] = []
-    reasoning_parts: list[str] = []
-    completed_items: list[dict[str, Any]] = []
-    final_response = None
+    collector = _ResponsesStreamCollector()
 
     async for event in stream:
+        collector.consume(event, emit_deltas=False)
+        if collector.done:
+            break
+
+    return collector.to_completion(model)
+
+
+class _ResponsesStreamCollector:
+    def __init__(self) -> None:
+        self.text_parts: list[str] = []
+        self.reasoning_parts: list[str] = []
+        self.completed_items: list[dict[str, Any]] = []
+        self.final_response = None
+        self.done = False
+
+    def consume(self, event, *, emit_deltas: bool) -> list[str | ReasoningContentDelta]:
         data = event.model_dump(exclude_none=True)
         event_type = data.get("type")
 
         if event_type == "response.output_text.delta":
-            delta = data.get("delta")
-            if isinstance(delta, str) and delta:
-                text_parts.append(delta)
-            continue
+            return self._consume_text_delta(data.get("delta"), emit_deltas=emit_deltas)
 
         if event_type in ("response.output_text.done", "response.content_part.done"):
-            delta = _missing_done_text_delta(data, text_parts)
-            if delta:
-                text_parts.append(delta)
-            continue
+            return self._consume_text_delta(_missing_done_text_delta(data, self.text_parts), emit_deltas=emit_deltas)
 
         if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
-            delta = data.get("delta")
-            if isinstance(delta, str) and delta:
-                reasoning_parts.append(delta)
-            continue
+            return self._consume_reasoning_delta(data.get("delta"), emit_deltas=emit_deltas)
 
         if event_type == "response.completed":
-            final_response = event.response
-            break
+            self.final_response = event.response
+            self.done = True
+            return []
 
         if event_type == "response.output_item.done":
             item = data.get("item")
             if isinstance(item, dict):
-                completed_items.append(item)
-            continue
+                self.completed_items.append(item)
+            return []
 
         if event_type in ("response.failed", "response.incomplete"):
             response = data.get("response")
             error = response.get("error") if isinstance(response, dict) else None
             message = error.get("message") if isinstance(error, dict) else None
-            raise RuntimeError(message or f"OpenAI response failed: {event_type}")
+            raise OpenAIResponseStreamError(
+                message or f"OpenAI response failed: {event_type}",
+                error=error if isinstance(error, dict) else None,
+            )
 
         if event_type == "error":
             error = data.get("error")
             if isinstance(error, dict) and isinstance(error.get("message"), str):
-                raise RuntimeError(error["message"])
-            raise RuntimeError("OpenAI response stream returned an error")
+                raise OpenAIResponseStreamError(error["message"], error=error)
+            raise OpenAIResponseStreamError("OpenAI response stream returned an error")
 
-    if final_response is None:
-        raise RuntimeError("OpenAI response stream ended before completion")
+        return []
 
-    parsed = parse_responses_response(final_response, model, completed_items or None)
-    return _with_streamed_fallbacks(parsed, text_parts=text_parts, reasoning_parts=reasoning_parts)
+    def to_completion(self, model: str) -> CompletionResponse:
+        if self.final_response is None:
+            raise RuntimeError("OpenAI response stream ended before completion")
+
+        parsed = parse_responses_response(self.final_response, model, self.completed_items or None)
+        return _with_streamed_fallbacks(parsed, text_parts=self.text_parts, reasoning_parts=self.reasoning_parts)
+
+    def _consume_text_delta(self, delta: Any, *, emit_deltas: bool) -> list[str]:
+        if not isinstance(delta, str) or not delta:
+            return []
+        self.text_parts.append(delta)
+        return [delta] if emit_deltas else []
+
+    def _consume_reasoning_delta(self, delta: Any, *, emit_deltas: bool) -> list[ReasoningContentDelta]:
+        if not isinstance(delta, str) or not delta:
+            return []
+        self.reasoning_parts.append(delta)
+        return [ReasoningContentDelta(delta)] if emit_deltas else []
 
 
 def _missing_done_text_delta(data: dict[str, Any], text_parts: list[str]) -> str | None:

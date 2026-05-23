@@ -9,6 +9,7 @@ from ntrp.core.compaction_model_request_middleware import CompactionModelRequest
 from ntrp.core.compactor import Compactor, SummaryCompactor
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.llm_client import llm_client
+from ntrp.core.model_context_budget import ToolResultContextBudgetMiddleware
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
@@ -139,6 +140,7 @@ def create_agent(
                 run=run_ctx,
                 get_services=lambda: executor.tool_services,
             ),
+            ToolResultContextBudgetMiddleware(),
             CompactionModelRequestMiddleware(
                 compactor=config.compactor,
                 on_compact=run_ctx.loaded_tools.clear,

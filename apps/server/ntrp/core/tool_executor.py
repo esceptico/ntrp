@@ -10,6 +10,7 @@ from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import (
     DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
     NTRP_TMP_BASE,
+    OFFLOAD_PREVIEW_CHARS,
     OFFLOAD_PREVIEW_LINES,
     OFFLOAD_THRESHOLD,
 )
@@ -217,10 +218,11 @@ class NtrpToolExecutor:
 
         lines = content.split("\n")
         total = len(lines)
-        preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
+        preview, preview_lines = _bounded_offload_preview(lines)
+        hidden_lines = max(0, total - preview_lines)
         compact = (
             f"{preview}\n\n"
-            f"[{total} lines total, {total - OFFLOAD_PREVIEW_LINES} more offloaded → {offload_path}]\n"
+            f"[Full result offloaded → {offload_path}; {total} lines total, {hidden_lines} not shown here.]\n"
             f"Use bash(grep -n 'pattern' '{offload_path}') to find specific content, "
             f"or read_file(path='{offload_path}', offset=N, limit=M) to read a specific section."
         )
@@ -231,3 +233,18 @@ class NtrpToolExecutor:
             data=result.data,
             model_content=result.model_content,
         )
+
+
+def _bounded_offload_preview(lines: list[str]) -> tuple[str, int]:
+    preview: list[str] = []
+    used = 0
+    for line in lines[:OFFLOAD_PREVIEW_LINES]:
+        remaining = OFFLOAD_PREVIEW_CHARS - used
+        if remaining <= 0:
+            break
+        if len(line) > remaining:
+            preview.append(f"{line[:remaining]}... [preview truncated]")
+            return "\n".join(preview), len(preview)
+        preview.append(line)
+        used += len(line) + 1
+    return "\n".join(preview), len(preview)

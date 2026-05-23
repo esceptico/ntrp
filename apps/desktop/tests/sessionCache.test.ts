@@ -69,6 +69,126 @@ test("switching back hydrates cached state", () => {
   expect(getState().sessionView.canonicalHistoryRequired).toBe(true);
 });
 
+test("switching back suppresses cached preview entry motion", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.appendMessage(userMessage("a-1", "live A"));
+  s.setCurrentSession("B");
+
+  s.setCurrentSession("A");
+
+  expect(getState().messages.get("a-1")?.suppressEntryMotion).toBe(true);
+});
+
+test("switching back merges cached activity groups split only by hidden rows", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.appendMessage(userMessage("a-1", "run"));
+  s.appendMessage({
+    id: "activity-1",
+    role: "activity",
+    content: "",
+    activity: {
+      label: "Calling",
+      done: false,
+      items: [{ id: "tool-1", kind: "Bash", target: "Bash(command='sleep 90')" }],
+    },
+  });
+  s.appendMessage({ id: "reasoning-1", role: "reasoning", title: "Reasoning", content: "thinking" });
+  s.appendMessage({ id: "assistant-empty", role: "assistant", content: "" });
+  s.appendMessage({
+    id: "activity-2",
+    role: "activity",
+    content: "",
+    activity: {
+      label: "Calling",
+      done: false,
+      items: [{ id: "tool-2", kind: "Bash", target: "Bash(command='sleep 120')" }],
+    },
+  });
+  s.setActiveActivityId("activity-2");
+
+  s.setCurrentSession("B");
+  s.setCurrentSession("A");
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toEqual(["activity-1"]);
+  expect(state.activeActivityId).toBe("activity-1");
+  expect(state.messages.get("activity-1")?.activity).toMatchObject({
+    label: "Calling",
+    done: false,
+  });
+  expect(state.messages.get("activity-1")?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("canonical history reload merges activity groups split only by hidden rows", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.setHistory([
+    userMessage("a-1", "run"),
+    {
+      id: "activity-1",
+      role: "activity",
+      content: "",
+      activity: {
+        label: "Called",
+        done: true,
+        items: [{ id: "tool-1", kind: "Bash", target: "Bash(command='sleep 90')" }],
+      },
+    },
+    { id: "reasoning-1", role: "reasoning", title: "Reasoning", content: "thinking" },
+    { id: "assistant-empty", role: "assistant", content: "" },
+    {
+      id: "activity-2",
+      role: "activity",
+      content: "",
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [{ id: "tool-2", kind: "Bash", target: "Bash(command='sleep 120')" }],
+      },
+    },
+  ]);
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toEqual(["activity-1"]);
+  expect(state.activeActivityId).toBe("activity-1");
+  expect(state.messages.get("activity-1")?.activity).toMatchObject({
+    label: "Calling",
+    done: false,
+  });
+  expect(state.messages.get("activity-1")?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
+
+test("canonical reload keeps active activity before trailing empty assistant placeholder", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.setHistory([
+    userMessage("a-1", "run"),
+    {
+      id: "activity-1",
+      role: "activity",
+      content: "",
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [{ id: "tool-1", kind: "Bash", target: "Bash(command='sleep 90')" }],
+      },
+    },
+    { id: "assistant-empty", role: "assistant", content: "" },
+  ]);
+
+  expect(getState().activeActivityId).toBe("activity-1");
+});
+
 test("switchSession preserves cached preview until canonical history replaces it", async () => {
   const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
   const requests: string[] = [];
@@ -228,6 +348,326 @@ test("older replace history response cannot override newer response", async () =
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
+});
+
+test("newer history tool-only page updates result and advances cursor", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const requests: string[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => {
+          requests.push(request.path);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: {
+              messages: [
+                {
+                  id: "tool-result-1",
+                  message_id: "tool-result-1",
+                  role: "tool",
+                  content: "done",
+                  tool_call_id: "tool-1",
+                  seq: 2,
+                },
+              ],
+              active_run_id: null,
+              page: {
+                has_more_before: true,
+                has_more_after: true,
+                before: "tool-result-1",
+                after: "tool-result-1",
+              },
+            },
+            text: "",
+          };
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+    s.setHistory(
+      [
+        {
+          id: "assistant-activity",
+          role: "activity",
+          sourceMessageId: "assistant-1",
+          content: "",
+          activity: {
+            label: "Called",
+            done: true,
+            items: [{ id: "tool-1", kind: "ReadFile", target: "ReadFile()" }],
+          },
+        },
+      ],
+      {
+        has_more_before: false,
+        has_more_after: true,
+        before: "assistant-1",
+        after: "assistant-1",
+      },
+    );
+
+    await loadHistory("A", { mode: "append", after: getState().sessionView.historyAfterCursor ?? undefined });
+
+    expect(requests).toEqual(["/session/history?session_id=A&after=assistant-1"]);
+    expect(getState().messages.get("assistant-activity")?.activity?.items[0]?.result).toBe("done");
+    expect(getState().sessionView.historyAfterCursor).toBe("tool-result-1");
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("history tool result page can load before the tool call page", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: request.path.includes("after=")
+            ? {
+                messages: [
+                  {
+                    id: "tool-result-1",
+                    message_id: "tool-result-1",
+                    role: "tool",
+                    content: "done",
+                    tool_call_id: "tool-1",
+                    seq: 3,
+                  },
+                ],
+                active_run_id: null,
+                page: {
+                  has_more_before: true,
+                  has_more_after: false,
+                  before: "tool-result-1",
+                  after: "tool-result-1",
+                },
+              }
+            : {
+                messages: [
+                  {
+                    id: "assistant-tool-1",
+                    message_id: "assistant-tool-1",
+                    role: "assistant",
+                    content: "",
+                    seq: 2,
+                    tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"date"}' }],
+                  },
+                ],
+                active_run_id: null,
+                page: {
+                  has_more_before: true,
+                  has_more_after: true,
+                  before: "assistant-tool-1",
+                  after: "assistant-tool-1",
+                },
+              },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+
+    await loadHistory("A", { mode: "append", after: "assistant-tool-1" });
+    expect([...getState().messages.values()].find((message) => message.role === "activity")).toBeUndefined();
+
+    await loadHistory("A", { mode: "prepend", before: "tool-result-1" });
+
+    const activity = [...getState().messages.values()].find((message) => message.role === "activity");
+    expect(activity?.activity?.items).toMatchObject([{ id: "tool-1", result: "done" }]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("canonical history replace drops stale pending tool result patches", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: request.path.includes("after=")
+            ? {
+                messages: [
+                  {
+                    id: "stale-tool-result",
+                    message_id: "stale-tool-result",
+                    role: "tool",
+                    content: "stale done",
+                    tool_call_id: "tool-1",
+                    seq: 3,
+                  },
+                ],
+                active_run_id: null,
+                page: {
+                  has_more_before: true,
+                  has_more_after: false,
+                  before: "stale-tool-result",
+                  after: "stale-tool-result",
+                },
+              }
+            : {
+                messages: [
+                  {
+                    id: "assistant-tool-1",
+                    message_id: "assistant-tool-1",
+                    role: "assistant",
+                    content: "",
+                    seq: 10,
+                    tool_calls: [{ id: "tool-1", name: "Bash", arguments: '{"command":"date"}' }],
+                  },
+                ],
+                active_run_id: null,
+                page: {
+                  has_more_before: false,
+                  has_more_after: false,
+                  before: "assistant-tool-1",
+                  after: "assistant-tool-1",
+                },
+              },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+
+    await loadHistory("A", { mode: "append", after: "cursor" });
+    await loadHistory("A");
+
+    const activity = [...getState().messages.values()].find((message) => message.role === "activity");
+    expect(activity?.activity?.items).toMatchObject([{ id: "tool-1" }]);
+    expect(activity?.activity?.items[0]?.result).toBeUndefined();
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("newer non-tail active history page does not steal live activity target", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              {
+                id: "assistant-older",
+                role: "assistant",
+                content: "",
+                tool_calls: [{ id: "old-tool", name: "Bash", arguments: "{}" }],
+              },
+            ],
+            active_run_id: "run-active",
+            page: {
+              has_more_before: true,
+              has_more_after: true,
+              before: "assistant-older",
+              after: "assistant-older",
+            },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+
+    await loadHistory("A", { mode: "append", after: "cursor" });
+
+    const activity = [...getState().messages.values()].find((message) => message.role === "activity");
+    expect(activity?.activity).toMatchObject({ done: true, label: "Called" });
+    expect(getState().activeActivityId).toBeNull();
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("paged history merges activity groups split by hidden rows across page boundary", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.setHistory([
+    { id: "reasoning-1", role: "reasoning", title: "Reasoning", content: "thinking" },
+    { id: "assistant-empty", role: "assistant", content: "" },
+    {
+      id: "activity-2",
+      role: "activity",
+      content: "",
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [{ id: "tool-2", kind: "Bash", target: "Bash(command='sleep 120')" }],
+      },
+    },
+  ]);
+  s.setActiveActivityId("activity-2");
+
+  s.prependHistory([
+    {
+      id: "activity-1",
+      role: "activity",
+      content: "",
+      activity: {
+        label: "Called",
+        done: true,
+        items: [{ id: "tool-1", kind: "Bash", target: "Bash(command='sleep 90')" }],
+      },
+    },
+  ]);
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toEqual(["activity-1"]);
+  expect(state.activeActivityId).toBe("activity-1");
+  expect(state.messages.get("activity-1")?.activity).toMatchObject({
+    label: "Calling",
+    done: false,
+  });
+  expect(state.messages.get("activity-1")?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
 });
 
 test("re-selecting current session is a no-op for view state", () => {

@@ -5,6 +5,7 @@ import {
   type SessionRuntimeSnapshot,
 } from "../api";
 import { getState, setState, type UiMessage } from "../store";
+import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { clearReplayGapBlockForSession, setEventCursorForSession } from "../store/chat-stream";
 import {
   isCurrentHistoryReplaceRequestVersion,
@@ -13,9 +14,11 @@ import {
   reduceHistoryLoadStarted,
 } from "../store/session-view";
 import { reduceRunCompleted, reduceRunStarted } from "../store/run-lifecycle";
-import { rebuildTranscriptFromHistory } from "../store/transcript-projection";
+import { isTodoToolName, rebuildTranscriptFromHistory } from "../store/transcript-projection";
+import { normalizeActivityGroups } from "../store/session-cache";
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
+const pendingHistoryToolResultsBySession = new Map<string, Map<string, string>>();
 
 export interface LoadHistoryOptions {
   mode?: HistoryLoadMode;
@@ -40,6 +43,8 @@ function historyBoundaryId(
   s: ReturnType<typeof getState>,
   edge: "first" | "last",
 ): string | null {
+  const cursor = edge === "first" ? s.sessionView.historyBeforeCursor : s.sessionView.historyAfterCursor;
+  if (cursor) return cursor;
   const order = edge === "first" ? s.order : [...s.order].reverse();
   for (const id of order) {
     const msg = s.messages.get(id);
@@ -48,14 +53,19 @@ function historyBoundaryId(
   return null;
 }
 
-export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
+export function historyMessagesToUi(
+  messages: HistoryMessage[],
+  activeRunId: string | null,
+  options: { isNewestPage?: boolean } = {},
+): UiMessage[] {
   const items = rebuildTranscriptFromHistory(messages);
+  const isNewestPage = options.isNewestPage ?? true;
 
   // If the server has an active run for this session, the latest user
   // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
   // collapse it under "Worked for Xs" — the SSE replay + live events
   // build the in-flight UI on top of the history.
-  if (activeRunId) {
+  if (activeRunId && isNewestPage) {
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       if (it.role === "user" && it.turn) {
@@ -66,6 +76,68 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
   }
 
   return items;
+}
+
+function activeHistoryActivityId(items: UiMessage[]): string | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (isActivityContinuationMessage(item)) continue;
+    return item.role === "activity" && item.activity ? item.id : null;
+  }
+  return null;
+}
+
+function normalizeHistoryItems(
+  items: UiMessage[],
+  activeActivityId: string | null,
+): { items: UiMessage[]; activeActivityId: string | null } {
+  const map = new Map<string, UiMessage>();
+  const order: string[] = [];
+  for (const item of items) {
+    map.set(item.id, item);
+    order.push(item.id);
+  }
+  const normalized = normalizeActivityGroups(map, order, activeActivityId);
+  return {
+    items: normalized.order.flatMap((id) => {
+      const item = normalized.messages.get(id);
+      return item ? [item] : [];
+    }),
+    activeActivityId: normalized.activeActivityId,
+  };
+}
+
+function applyHistoryToolResults(sessionId: string, messages: HistoryMessage[]): void {
+  const state = getState();
+  const todoToolCallIds = new Set<string>();
+  for (const msg of messages) {
+    for (const toolCall of msg.tool_calls ?? []) {
+      if (isTodoToolName(toolCall.name)) todoToolCallIds.add(toolCall.id);
+    }
+  }
+  for (const msg of messages) {
+    if (msg.role !== "tool" || !msg.tool_call_id) continue;
+    if (todoToolCallIds.has(msg.tool_call_id)) continue;
+    if (state.mergeActivityItem(msg.tool_call_id, { result: msg.content, status: "executed" })) continue;
+    let pending = pendingHistoryToolResultsBySession.get(sessionId);
+    if (!pending) {
+      pending = new Map();
+      pendingHistoryToolResultsBySession.set(sessionId, pending);
+    }
+    pending.set(msg.tool_call_id, msg.content);
+  }
+}
+
+function applyPendingHistoryToolResults(sessionId: string): void {
+  const pending = pendingHistoryToolResultsBySession.get(sessionId);
+  if (!pending) return;
+  const state = getState();
+  for (const [toolCallId, result] of pending) {
+    if (state.mergeActivityItem(toolCallId, { result, status: "executed" })) {
+      pending.delete(toolCallId);
+    }
+  }
+  if (pending.size === 0) pendingHistoryToolResultsBySession.delete(sessionId);
 }
 
 
@@ -136,16 +208,23 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   }
   if (mode === "replace") {
     clearReplayGapBlockForSession(sessionId);
+    pendingHistoryToolResultsBySession.delete(sessionId);
   }
 
   const { messages, active_run_id, runtime, page, usage } = history;
-  const items = historyMessagesToUi(messages, active_run_id);
+  const isNewestPage = mode !== "prepend" && page?.has_more_after !== true;
+  const rawItems = historyMessagesToUi(messages, active_run_id, { isNewestPage });
+  const rawActiveActivityId = active_run_id ? activeHistoryActivityId(rawItems) : null;
+  const { items, activeActivityId } = normalizeHistoryItems(rawItems, rawActiveActivityId);
   if (mode === "prepend") {
     s.prependHistory(items, page);
+    applyHistoryToolResults(sessionId, messages);
   } else if (mode === "append") {
-    s.appendHistoryPage(items, page);
+    s.appendHistoryPage(items, page, isNewestPage ? activeActivityId : null);
+    applyHistoryToolResults(sessionId, messages);
   } else {
     s.setHistory(items, page);
+    setState({ activeActivityId });
     // Only hydrate the budget snapshot on a fresh load — paging in older /
     // newer chunks doesn't change "what the agent's current context size
     // looks like" so we leave the dial alone.
@@ -156,6 +235,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
       });
     }
   }
+  applyPendingHistoryToolResults(sessionId);
   if (mode === "replace") {
     if (runtime) {
       applyRuntimeSnapshot(sessionId, runtime);

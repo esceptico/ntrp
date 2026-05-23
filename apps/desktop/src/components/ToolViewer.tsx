@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
-import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
+import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { ScrollBlurTop } from "./ScrollBlur";
@@ -175,7 +175,7 @@ export function ToolViewer() {
                     title="Output"
                     body={output.body}
                     html={outputHtml}
-                    placeholder={live?.result == null ? "Waiting for result…" : "Empty result."}
+                    placeholder={live && activityItemStatus(live) === "ongoing" ? "Waiting for result…" : "Empty result."}
                   />
                   {directChildren.length > 0 && <ChildRuns items={directChildren} />}
                 </>
@@ -210,6 +210,8 @@ function AgentBody({
 }) {
   const task = useMemo(() => extractTask(item.args) ?? item.target, [item.args, item.target]);
   const stats = useMemo(() => buildStats(descendants), [descendants]);
+  const running = activityItemStatus(item) === "ongoing";
+  const result = item.result ?? "";
 
   return (
     <>
@@ -234,21 +236,21 @@ function AgentBody({
           <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
             Result
           </h3>
-          {item.result != null && item.result.length > 0 && (
-            <CopyButton getValue={() => item.result ?? ""} />
+          {result.length > 0 && (
+            <CopyButton getValue={() => result} />
           )}
         </div>
-        {item.result == null ? (
+        {running ? (
           <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
             Working…
           </div>
-        ) : item.result.trim().length === 0 ? (
+        ) : result.trim().length === 0 ? (
           <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
             Empty result.
           </div>
         ) : (
           <div className="rounded-[10px] border border-line-soft bg-bg-main px-3 py-2.5 max-h-[40vh] overflow-y-auto scroll-thin min-w-0">
-            <Markdown content={item.result} />
+            <Markdown content={result} />
           </div>
         )}
       </section>
@@ -351,7 +353,7 @@ function ActivityTreeNode({
   const agent = isAgent(item);
   const label = agent ? friendlyAgentLabel(item.kind) : item.kind;
   const detail = agent ? extractTask(item.args) ?? item.target : item.target;
-  const running = item.result == null;
+  const running = activityItemStatus(item) === "ongoing";
   return (
     <li className="m-0 p-0">
       <button

@@ -6,18 +6,39 @@ import { MOTION, EASE_OUT } from "../lib/motion";
 import { ICON } from "../lib/icons";
 
 const TOAST_VISIBLE_MS = 4500;
+type LastCompaction = { before: number; after: number; at: number };
+const claimedCompactionToasts = new Set<string>();
+
+function compactionToastKey(sessionId: string | null, compaction: LastCompaction): string {
+  return `${sessionId ?? "unknown"}:${compaction.at}:${compaction.before}:${compaction.after}`;
+}
+
+function claimCompactionToast(sessionId: string | null, compaction: LastCompaction | null): boolean {
+  if (!compaction) return false;
+  const key = compactionToastKey(sessionId, compaction);
+  if (claimedCompactionToasts.has(key)) return false;
+  claimedCompactionToasts.add(key);
+  return true;
+}
+
+export const claimCompactionToastForTest = claimCompactionToast;
+
+export function resetCompactionToastClaimsForTest() {
+  claimedCompactionToasts.clear();
+}
 
 export function CompactionIndicator() {
+  const sessionId = useStore((s) => s.currentSessionId);
   const compacting = useStore((s) => s.compacting);
   const lastCompaction = useStore((s) => s.lastCompaction);
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
-    if (!lastCompaction) return;
+    if (!claimCompactionToast(sessionId, lastCompaction)) return;
     setShowToast(true);
     const t = setTimeout(() => setShowToast(false), TOAST_VISIBLE_MS);
     return () => clearTimeout(t);
-  }, [lastCompaction]);
+  }, [sessionId, lastCompaction]);
 
   return (
     <AnimatePresence mode="wait">

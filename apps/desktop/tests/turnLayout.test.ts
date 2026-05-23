@@ -35,6 +35,22 @@ test("keeps completed turns split into work block plus final assistant", () => {
   });
 });
 
+test("does not treat hidden todo state as completed-turn work", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "todo-1", role: "todo" },
+      { id: "assistant-1", role: "assistant" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: [],
+    afterWorkIds: ["todo-1", "assistant-1"],
+    finalAssistantId: "assistant-1",
+  });
+});
+
 test("puts pre-tool assistant text inside completed work when there is a final response", () => {
   const layout = turnLayout({
     children: [
@@ -116,9 +132,44 @@ test("keeps the final assistant visible when replay appends trailing activity", 
   });
 
   expect(layout).toEqual({
-    workIds: ["activity-1", "activity-2"],
-    afterWorkIds: ["assistant-1"],
+    workIds: ["activity-1"],
+    afterWorkIds: ["assistant-1", "activity-2"],
     finalAssistantId: "assistant-1",
+  });
+});
+
+test("does not reorder a completed reload when activity follows assistant text", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "activity-load-tools", role: "activity" },
+      { id: "assistant-progress", role: "assistant" },
+      { id: "activity-read-thread", role: "activity" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["activity-load-tools"],
+    afterWorkIds: ["assistant-progress", "activity-read-thread"],
+    finalAssistantId: "assistant-progress",
+  });
+});
+
+test("keeps only the trailing assistant and later activity inline", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "activity-load-tools", role: "activity" },
+      { id: "activity-read-files", role: "activity" },
+      { id: "assistant-progress", role: "assistant" },
+      { id: "activity-run-tests", role: "activity" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["activity-load-tools", "activity-read-files"],
+    afterWorkIds: ["assistant-progress", "activity-run-tests"],
+    finalAssistantId: "assistant-progress",
   });
 });
 

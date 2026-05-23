@@ -530,6 +530,26 @@ async def test_marks_interrupted_chat_runs_on_startup(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_starting_new_chat_run_interrupts_stale_foreground_runs(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running", last_seq=12)
+
+    await store.record_chat_run_started("run-2", "sess-1")
+
+    old_run = await store.get_chat_run("run-1")
+    new_run = await store.get_chat_run("run-2")
+
+    assert old_run is not None
+    assert old_run["status"] == "interrupted"
+    assert old_run["stop_reason"] == "superseded"
+    assert old_run["error_code"] == "run_superseded"
+    assert old_run["last_seq"] == 12
+    assert old_run["ended_at"] is not None
+    assert new_run is not None
+    assert new_run["status"] == "pending"
+
+
+@pytest.mark.asyncio
 async def test_background_agent_run_lifecycle(store: SessionStore):
     await store.record_background_agent_started(
         task_id="bg-1",
@@ -892,10 +912,7 @@ async def test_session_messages_preserve_raw_transcript_across_compaction(store:
 @pytest.mark.asyncio
 async def test_session_message_pagination_before_and_around(store: SessionStore):
     state = _make_state()
-    messages = [
-        {"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"}
-        for i in range(5)
-    ]
+    messages = [{"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"} for i in range(5)]
     await store.save_session(state, messages)
 
     latest = await store.list_session_messages("test-session", limit=2)
@@ -922,10 +939,16 @@ async def test_latest_session_messages_include_visible_user_anchor_for_tool_heav
         {
             "role": "assistant",
             "content": "",
-            "tool_calls": [{"id": "call-1", "type": "function", "function": {"name": "search_text", "arguments": "{}"}}],
+            "tool_calls": [
+                {"id": "call-1", "type": "function", "function": {"name": "search_text", "arguments": "{}"}}
+            ],
         },
         {"role": "tool", "tool_call_id": "call-1", "content": "result 1"},
-        {"role": "assistant", "content": "", "tool_calls": [{"id": "call-2", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "call-2", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}],
+        },
         {"role": "tool", "tool_call_id": "call-2", "content": "result 2"},
     ]
     await store.save_session(state, messages)
@@ -945,12 +968,46 @@ async def test_latest_session_messages_include_visible_user_anchor_for_tool_heav
 
 
 @pytest.mark.asyncio
+async def test_latest_session_messages_keep_latest_tail_when_adding_visible_user_anchor(store: SessionStore):
+    state = _make_state()
+    messages = [{"role": "user", "content": "implement the goal", "client_id": "u-1"}]
+    for i in range(130):
+        call_id = f"call-{i}"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "client_id": f"a-{i}",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": "bash", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": call_id, "content": f"result {i}", "client_id": f"t-{i}"},
+            ]
+        )
+    messages.append({"role": "assistant", "content": "final answer", "client_id": "final"})
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=50)
+
+    assert latest["messages"][0]["message_id"] == "u-1"
+    assert latest["messages"][-1]["message_id"] == "final"
+    assert latest["messages"][-1]["message"]["content"] == "final answer"
+    assert latest["messages"][1]["message"]["role"] == "assistant"
+    assert len(latest["messages"]) == 52
+    assert latest["has_more_before"] is False
+    assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
 async def test_delete_session_messages_from_trims_reverted_future(store: SessionStore):
     state = _make_state()
-    messages = [
-        {"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"}
-        for i in range(4)
-    ]
+    messages = [{"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"} for i in range(4)]
     await store.save_session(state, messages)
 
     assert await store.delete_session_messages_from("test-session", message_id="m-2")

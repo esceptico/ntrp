@@ -59,6 +59,7 @@ class SessionService:
                 await self.store.save_session(session_state, messages, metadata=metadata)
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
+            raise
 
     async def save_progress(self, session_state: SessionState, messages: list[dict]) -> None:
         """Mid-run checkpoint — upserts messages, leaves metadata alone."""
@@ -68,12 +69,14 @@ class SessionService:
                 await self.store.update_progress(session_state, messages)
         except Exception as e:
             _logger.warning("Failed to save mid-run progress: %s", e)
+            raise
 
     async def record_chat_run_started(self, run_id: str, session_id: str, metadata: dict | None = None) -> None:
         try:
             await self.store.record_chat_run_started(run_id, session_id, metadata=metadata)
         except Exception as e:
             _logger.warning("Failed to record chat run start: %s", e)
+            raise
 
     async def claim_chat_idempotency_key(
         self,
@@ -128,6 +131,7 @@ class SessionService:
             )
         except Exception as e:
             _logger.warning("Failed to record chat run status: %s", e)
+            raise
 
     async def record_chat_queued_message(
         self,
@@ -148,18 +152,21 @@ class SessionService:
             )
         except Exception as e:
             _logger.warning("Failed to record queued chat message: %s", e)
+            raise
 
     async def mark_chat_queued_message_ingested(self, client_id: str, ingested_seq: int | None = None) -> None:
         try:
             await self.store.mark_chat_queued_message_ingested(client_id, ingested_seq=ingested_seq)
         except Exception as e:
             _logger.warning("Failed to mark queued chat message ingested: %s", e)
+            raise
 
     async def mark_chat_queued_message_cancelled(self, client_id: str) -> None:
         try:
             await self.store.mark_chat_queued_message_cancelled(client_id)
         except Exception as e:
             _logger.warning("Failed to mark queued chat message cancelled: %s", e)
+            raise
 
     async def record_chat_compaction(
         self,

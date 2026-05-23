@@ -20,6 +20,8 @@ interface ServerEventCallbacks {
   resendQueuedMessage?: (text: string, images: QueuedMessage["images"]) => void | Promise<void>;
 }
 
+export const REPLAY_MUTATION_HOLD_MS = 160;
+
 export interface ChatStreamState extends TranscriptProjectionState {
   replayGapReloadingSessions: Map<string, Promise<boolean>>;
   replayGapBlockedSessions: Set<string>;
@@ -412,8 +414,7 @@ export function handleReplayServerEvent(event: ServerEvent): ServerEventEffect |
 }
 
 function markReplayMutation(): void {
-  if (typeof document === "undefined") return;
-  document.documentElement.dataset.streamReplaying = "true";
+  setReplayMotionSuppressed(true);
   if (chatStreamState.replayMutationTimer !== null) {
     clearTimeout(chatStreamState.replayMutationTimer);
   }
@@ -424,7 +425,7 @@ function markReplayMutation(): void {
       replayMutationActive: false,
     });
     clearReplayMutationDomMarker();
-  }, 0);
+  }, REPLAY_MUTATION_HOLD_MS);
   updateChatStreamState({
     ...chatStreamState,
     replayMutationTimer,
@@ -432,10 +433,16 @@ function markReplayMutation(): void {
   });
 }
 
-function clearReplayMutationDomMarker(): void {
+function setReplayMotionSuppressed(active: boolean): void {
   if (typeof document !== "undefined") {
-    delete document.documentElement.dataset.streamReplaying;
+    if (active) document.documentElement.dataset.streamReplaying = "true";
+    else delete document.documentElement.dataset.streamReplaying;
   }
+  setState({ streamReplaying: active });
+}
+
+function clearReplayMutationDomMarker(): void {
+  setReplayMotionSuppressed(false);
 }
 
 function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
@@ -444,7 +451,8 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
 
   switch (event.type) {
     case "stream_reset": {
-      if (s.activeActivityId) {
+      const activeActivity = s.activeActivityId ? s.messages.get(s.activeActivityId) : null;
+      if (s.activeActivityId && activeActivity && !activeActivity.sourceMessageId) {
         s.truncateFrom(s.activeActivityId);
       }
       s.setActiveActivityId(null);

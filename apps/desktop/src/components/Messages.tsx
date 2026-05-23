@@ -6,6 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
 import { visibleMessageIds } from "../lib/messageVisibility";
+import { messageSegments } from "../lib/messageSegments";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "../actions";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
@@ -144,58 +145,18 @@ export function Messages() {
   const metaFlags = useStore(
     useShallow((s) => order.map((id) => Boolean(s.messages.get(id)?.isMeta))),
   );
+  const contents = useStore(
+    useShallow((s) => order.map((id) => s.messages.get(id)?.content ?? "")),
+  );
   const visibleOrder = useMemo(
-    () => visibleMessageIds({ ids: order, roles }),
-    [order, roles],
+    () => visibleMessageIds({ ids: order, roles, metaFlags, contents }),
+    [order, roles, metaFlags, contents],
   );
 
-  const roleById = useMemo(() => {
-    const out = new Map<string, typeof roles[number]>();
-    for (let i = 0; i < order.length; i++) out.set(order[i], roles[i]);
-    return out;
-  }, [order, roles]);
-
-  const metaById = useMemo(() => {
-    const out = new Map<string, boolean>();
-    for (let i = 0; i < order.length; i++) out.set(order[i], metaFlags[i]);
-    return out;
-  }, [order, metaFlags]);
-
-  const segments = useMemo(() => {
-    type Segment = { userId: string | null; childIds: string[] };
-    const out: Segment[] = [];
-    let current: Segment | null = null;
-    for (const id of visibleOrder) {
-      const role = roleById.get(id);
-      if (role === "user") {
-        // Meta user messages (loop ticks) are hidden from the transcript
-        // but still segment-anchor: close the current segment and start
-        // a fresh null-userId one so the agent's response renders cleanly
-        // without being grouped under the previous user's "Worked" block.
-        if (metaById.get(id)) {
-          if (current) out.push(current);
-          current = { userId: null, childIds: [] };
-          continue;
-        }
-        if (current) out.push(current);
-        current = { userId: id, childIds: [] };
-      } else if (role === "status" || role === "error") {
-        // System notices (from builtin slash commands like /loop, /clear)
-        // are not children of any turn — surface them between turns so
-        // they don't get buried inside the previous turn's "Worked" collapse.
-        if (current) {
-          out.push(current);
-          current = null;
-        }
-        out.push({ userId: null, childIds: [id] });
-      } else {
-        if (!current) current = { userId: null, childIds: [] };
-        current.childIds.push(id);
-      }
-    }
-    if (current) out.push(current);
-    return out;
-  }, [roleById, metaById, visibleOrder]);
+  const segments = useMemo(
+    () => messageSegments({ ids: order, roles, metaFlags, visibleIds: visibleOrder }),
+    [order, roles, metaFlags, visibleOrder],
+  );
 
   return (
     <div className="absolute inset-0">
