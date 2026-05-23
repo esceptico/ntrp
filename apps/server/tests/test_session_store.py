@@ -1005,6 +1005,47 @@ async def test_latest_session_messages_keep_latest_tail_when_adding_visible_user
 
 
 @pytest.mark.asyncio
+async def test_latest_session_messages_include_previous_exchange_for_tool_heavy_latest_turn(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": "previous question", "client_id": "u-previous"},
+        {"role": "assistant", "content": "previous answer", "client_id": "a-previous"},
+        {"role": "user", "content": "continue pls dude", "client_id": "u-current"},
+    ]
+    for i in range(60):
+        call_id = f"call-{i}"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "client_id": f"a-{i}",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": "bash", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": call_id, "content": f"result {i}", "client_id": f"t-{i}"},
+            ]
+        )
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=50)
+
+    assert [row["message_id"] for row in latest["messages"][:3]] == [
+        "u-previous",
+        "a-previous",
+        "u-current",
+    ]
+    assert latest["messages"][-1]["message_id"] == "t-59"
+    assert latest["has_more_before"] is False
+    assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
 async def test_delete_session_messages_from_trims_reverted_future(store: SessionStore):
     state = _make_state()
     messages = [{"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"} for i in range(4)]

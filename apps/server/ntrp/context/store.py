@@ -2004,39 +2004,36 @@ class SessionStore:
         return not bool(message.get("is_meta"))
 
     async def _latest_rows_with_visible_user_anchor(self, session_id: str, rows: list[Any]) -> list[Any]:
-        if not rows or any(self._row_is_visible_user(row) for row in rows):
+        if not rows:
             return rows
-        first_seq = rows[0]["seq"]
-        anchors = await self.read_conn.execute_fetchall(
-            """
-            SELECT * FROM session_messages
-            WHERE session_id = ? AND seq < ? AND role = 'user'
-            ORDER BY seq DESC
-            LIMIT 1
-            """,
-            (session_id, first_seq),
-        )
-        if not anchors:
+
+        visible_users = [row for row in rows if self._row_is_visible_user(row)]
+        if len(visible_users) >= 2:
             return rows
-        anchor = anchors[0]
-        if not self._row_is_visible_user(anchor):
+
+        if visible_users:
+            anchor = visible_users[0]
+            previous_anchor = await self._visible_user_before(session_id, anchor["seq"])
+            if previous_anchor:
+                expanded = await self._bounded_rows_between(session_id, previous_anchor["seq"], rows[-1]["seq"])
+                if expanded is not None:
+                    return expanded
             return rows
-        count_rows = await self.read_conn.execute_fetchall(
-            """
-            SELECT COUNT(*) AS count FROM session_messages
-            WHERE session_id = ? AND seq >= ? AND seq <= ?
-            """,
-            (session_id, anchor["seq"], rows[-1]["seq"]),
-        )
-        if count_rows and int(count_rows[0]["count"]) <= 250:
-            return await self.read_conn.execute_fetchall(
-                """
-                SELECT * FROM session_messages
-                WHERE session_id = ? AND seq >= ? AND seq <= ?
-                ORDER BY seq ASC
-                """,
-                (session_id, anchor["seq"], rows[-1]["seq"]),
-            )
+
+        anchor = await self._visible_user_before(session_id, rows[0]["seq"])
+        if not anchor:
+            return rows
+
+        previous_anchor = await self._visible_user_before(session_id, anchor["seq"])
+        if previous_anchor:
+            expanded = await self._bounded_rows_between(session_id, previous_anchor["seq"], rows[-1]["seq"])
+            if expanded is not None:
+                return expanded
+
+        expanded = await self._bounded_rows_between(session_id, anchor["seq"], rows[-1]["seq"])
+        if expanded is not None:
+            return expanded
+
         context_rows = await self._missing_leading_tool_context_rows(session_id, anchor["seq"], rows)
         out = [anchor]
         seen = {anchor["message_id"]}
@@ -2046,6 +2043,40 @@ class SessionStore:
             out.append(row)
             seen.add(row["message_id"])
         return out
+
+    async def _visible_user_before(self, session_id: str, before_seq: int) -> Any | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq < ? AND role = 'user'
+            ORDER BY seq DESC
+            LIMIT 50
+            """,
+            (session_id, before_seq),
+        )
+        for row in rows:
+            if self._row_is_visible_user(row):
+                return row
+        return None
+
+    async def _bounded_rows_between(self, session_id: str, start_seq: int, end_seq: int) -> list[Any] | None:
+        count_rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT COUNT(*) AS count FROM session_messages
+            WHERE session_id = ? AND seq >= ? AND seq <= ?
+            """,
+            (session_id, start_seq, end_seq),
+        )
+        if not count_rows or int(count_rows[0]["count"]) > 250:
+            return None
+        return await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq >= ? AND seq <= ?
+            ORDER BY seq ASC
+            """,
+            (session_id, start_seq, end_seq),
+        )
 
     async def _missing_leading_tool_context_rows(self, session_id: str, anchor_seq: int, rows: list[Any]) -> list[Any]:
         if not rows:
