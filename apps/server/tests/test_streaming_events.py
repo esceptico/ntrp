@@ -20,6 +20,7 @@ from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
+    ApprovalNeededEvent,
     AutomationProgressEvent,
     CompactionFinishedEvent,
     CompactionStartedEvent,
@@ -333,6 +334,75 @@ async def test_event_stream_emits_stream_reset_on_future_cursor():
     assert reset_payload["reason"] == "future_cursor"
     assert reset_payload["session_id"] == "sess-1"
     assert reset_payload["seq"] == 1
+
+
+@pytest.mark.asyncio
+async def test_event_stream_replays_pending_approval():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(ApprovalNeededEvent(tool_id="tool-1", name="edit_file"))
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    run.pending_approvals["tool-1"] = asyncio.get_running_loop().create_future()
+
+    stream = _event_stream("sess-1", buses, registry, stream=True, after_seq=0)
+    try:
+        chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    payload = json.loads(chunk.split("data: ", 1)[1].strip())
+    assert payload["type"] == "approval_needed"
+    assert payload["tool_id"] == "tool-1"
+    assert payload["replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_event_stream_skips_resolved_approval_replay():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(ApprovalNeededEvent(tool_id="tool-1", name="edit_file"))
+    await bus.emit(ThinkingEvent(status="tail"))
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    future = asyncio.get_running_loop().create_future()
+    future.set_result({"approved": True, "result": ""})
+    run.pending_approvals["tool-1"] = future
+
+    class BrieflyStaleStore:
+        async def get_latest_session_event_seq(self, session_id: str) -> int:
+            return 0
+
+        async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+            return 0
+
+        async def list_session_events(self, session_id: str, *, after_seq: int, limit: int) -> list:
+            return []
+
+        async def list_pending_tool_approvals(self, session_id: str) -> list[dict]:
+            return [{"tool_call_id": "tool-1"}]
+
+    stream = _event_stream(
+        "sess-1",
+        buses,
+        registry,
+        stream=True,
+        after_seq=0,
+        event_store=BrieflyStaleStore(),
+    )
+    try:
+        chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    payload = json.loads(chunk.split("data: ", 1)[1].strip())
+    assert payload["type"] == "thinking"
+    assert payload["status"] == "tail"
+    assert payload["seq"] == 2
 
 
 @pytest.mark.asyncio

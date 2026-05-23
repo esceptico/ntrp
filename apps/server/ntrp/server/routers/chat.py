@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ntrp.events.sse import TextDeltaEvent
+from ntrp.events.sse import ApprovalNeededEvent, TextDeltaEvent
 from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -93,6 +93,38 @@ async def _event_stream(
     def should_emit(event) -> bool:
         return stream or not isinstance(event, TextDeltaEvent)
 
+    durable_pending_approval_ids: set[str] | None = None
+
+    async def is_pending_approval(tool_id: str) -> bool:
+        active_run = run_registry.get_active_run(session_id)
+        future = active_run.pending_approvals.get(tool_id) if active_run else None
+        if future is not None:
+            return not future.done()
+
+        nonlocal durable_pending_approval_ids
+        if durable_pending_approval_ids is None:
+            list_pending = getattr(event_store, "list_pending_tool_approvals", None)
+            if list_pending is None:
+                durable_pending_approval_ids = set()
+            else:
+                rows = await list_pending(session_id)
+                durable_pending_approval_ids = {
+                    row["tool_call_id"]
+                    for row in rows
+                    if isinstance(row.get("tool_call_id"), str)
+                }
+        return tool_id in durable_pending_approval_ids
+
+    async def filter_replay_records(records: list[StreamRecord]) -> list[StreamRecord]:
+        filtered: list[StreamRecord] = []
+        for record in records:
+            # approval_needed is a UI edge; the canonical state is the live
+            # Future / durable tool_approvals row. Do not replay stale cards.
+            if isinstance(record.event, ApprovalNeededEvent) and not await is_pending_approval(record.event.tool_id):
+                continue
+            filtered.append(record)
+        return filtered
+
     async def durable_replay_records() -> list[StreamRecord] | None:
         if event_store is None or after_seq is None:
             return None
@@ -116,7 +148,11 @@ async def _event_stream(
         elif after_seq is not None and after_seq < bus.checkpoint_seq:
             yield reset_chunk(session_id, "replay_gap", bus.checkpoint_seq)
             await asyncio.sleep(0)
-            async for chunk in iter_replay_records(session_id, snapshot, should_emit=should_emit):
+            async for chunk in iter_replay_records(
+                session_id,
+                await filter_replay_records(snapshot),
+                should_emit=should_emit,
+            ):
                 yield chunk
         else:
             durable_records = await durable_replay_records()
@@ -129,7 +165,11 @@ async def _event_stream(
             else:
                 records_to_replay = durable_records
 
-            async for chunk in iter_replay_records(session_id, records_to_replay, should_emit=should_emit):
+            async for chunk in iter_replay_records(
+                session_id,
+                await filter_replay_records(records_to_replay),
+                should_emit=should_emit,
+            ):
                 yield chunk
 
         async for chunk in live_records(
