@@ -113,14 +113,6 @@ export function applyChatEventToTranscript(
         error: null,
       }));
       if (event.is_meta_run) {
-        if (event.meta_client_id?.startsWith("goal:")) {
-          s.appendMessage({
-            id: `goal-nudge-${event.run_id}`,
-            role: "status",
-            content: "Goal nudge",
-            suppressEntryMotion,
-          });
-        }
         s.appendMessage({
           id: `meta-user-${event.run_id}`,
           role: "user",
@@ -436,20 +428,9 @@ export function rebuildTranscriptFromHistory(
     const stampedAt = msg.created_at ? Date.parse(msg.created_at) : 0;
 
     if (msg.role === "user") {
-      const hasVisibleMetaMarker = Boolean(msg.is_meta && stableId.startsWith("goal:"));
-      if (!msg.is_meta || hasVisibleMetaMarker) {
+      if (!msg.is_meta) {
         activeActivityId = null;
         activeTodoId = null;
-      }
-      if (hasVisibleMetaMarker) {
-        items.push({
-          id: `${stableId}-nudge`,
-          role: "status",
-          sourceIndex,
-          sourceMessageId,
-          suppressEntryMotion: true,
-          content: "Goal nudge",
-        });
       }
       items.push({
         id: stableId,

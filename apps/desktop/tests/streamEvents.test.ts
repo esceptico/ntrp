@@ -60,7 +60,7 @@ test("continues assistant content by message id without moving prior text below 
   expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("read app");
 });
 
-test("live goal meta run shows subtle nudge marker", () => {
+test("live goal meta run stays visually hidden", () => {
   handleServerEvent({
     type: "RUN_STARTED",
     run_id: "goal-run-1",
@@ -70,9 +70,7 @@ test("live goal meta run shows subtle nudge marker", () => {
   });
 
   const state = getState();
-  expect(state.order).toEqual(["goal-nudge-goal-run-1", "meta-user-goal-run-1"]);
-  expect(state.messages.get("goal-nudge-goal-run-1")?.role).toBe("status");
-  expect(state.messages.get("goal-nudge-goal-run-1")?.content).toBe("Goal nudge");
+  expect(state.order).toEqual(["meta-user-goal-run-1"]);
   expect(state.messages.get("meta-user-goal-run-1")?.isMeta).toBe(true);
 });
 

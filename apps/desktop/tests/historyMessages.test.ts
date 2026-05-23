@@ -147,7 +147,7 @@ test("keeps regular activity separate from persisted todo calls", () => {
   expect(items[2].activity?.items.map((item) => item.id)).toEqual(["tool-1"]);
 });
 
-test("shows a subtle nudge marker for persisted goal meta turns", () => {
+test("keeps persisted goal meta turns visually hidden", () => {
   const messages: HistoryMessage[] = [
     { role: "user", content: "Continue", id: "goal:goal-1:1", is_meta: true },
     { role: "assistant", content: "Working on it.", id: "assistant-1" },
@@ -156,11 +156,10 @@ test("shows a subtle nudge marker for persisted goal meta turns", () => {
   const items = historyMessagesToUi(messages, null);
 
   expect(items.map((item) => [item.role, item.content])).toEqual([
-    ["status", "Goal nudge"],
     ["user", "Continue"],
     ["assistant", "Working on it."],
   ]);
-  expect(items[1].isMeta).toBe(true);
+  expect(items[0].isMeta).toBe(true);
 });
 
 test("preserves persisted switch-back order when assistant text is between tool groups", () => {
