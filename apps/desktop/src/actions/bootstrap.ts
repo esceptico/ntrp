@@ -1,5 +1,6 @@
 import { apiWithConfig, checkHealth, loadInitialConfig, type SessionListItem } from "../api";
 import { getState } from "../store";
+import { fetchGoal } from "./goals";
 import { loadHistory } from "./history";
 import { fetchSkills } from "./skills";
 import { fetchServerConfig } from "./server";
@@ -21,6 +22,11 @@ export async function refresh(): Promise<void> {
     s.setSessions(sessions);
     s.setCurrentSession(session.session_id);
     await loadHistory(session.session_id);
+    try {
+      await fetchGoal(session.session_id);
+    } catch {
+      // Goal state is accessory UI; history/session refresh should remain usable.
+    }
   } catch (error) {
     s.setConnected(false);
     s.setError(error instanceof Error ? error.message : String(error));

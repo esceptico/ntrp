@@ -29,6 +29,7 @@ import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
 import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
+import { awaitingFirstRunOutput } from "../lib/runIndicators";
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -140,10 +141,10 @@ export function Composer() {
   // that produced the action. The visual variant is user-configurable
   // via Settings → Appearance.
   const order = useStore((s) => s.order);
-  const lastRole = useStore((s) =>
-    order.length > 0 ? s.messages.get(order[order.length - 1])?.role ?? null : null,
+  const lastMessage = useStore((s) =>
+    order.length > 0 ? s.messages.get(order[order.length - 1]) ?? null : null,
   );
-  const awaitingFirstToken = running && lastRole !== "assistant";
+  const awaitingFirstToken = awaitingFirstRunOutput(running, lastMessage);
   // 350ms threshold — fast replies (cached, small models, short tool
   // chains) shouldn't briefly flash the indicator. If the agent starts
   // emitting within the threshold, awaitingFirstToken flips false before

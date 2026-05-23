@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
+import { refresh } from "../src/actions/bootstrap.ts";
 import { loadHistory } from "../src/actions/history.ts";
 import { switchSession } from "../src/actions/sessions.ts";
 import { getState, setState, useStore } from "../src/store/index.ts";
@@ -25,6 +26,7 @@ function blank() {
     sourceFocus: null,
     editingId: null,
     queuedMessages: [],
+    goals: {},
   });
 }
 
@@ -215,7 +217,7 @@ test("switchSession preserves cached preview until canonical history replaces it
               status: 200,
               statusText: "OK",
               contentType: "application/json",
-              data: { goal: null },
+              data: null,
               text: "",
             };
           }
@@ -274,6 +276,130 @@ test("switchSession preserves cached preview until canonical history replaces it
     expect(getState().sessionView.canonicalHistoryRequired).toBe(false);
     expect(getState().running).toBe(false);
     expect(getState().currentRunId).toBeNull();
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("refresh hydrates the current session goal", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const requests: string[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => {
+          requests.push(request.path);
+          if (request.path === "/health") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { auth: true }, text: "" };
+          }
+          if (request.path === "/sessions") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
+          }
+          if (request.path === "/session") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { session_id: "A", name: "A" }, text: "" };
+          }
+          if (request.path === "/session/history?session_id=A") {
+            return {
+              ok: true,
+              status: 200,
+              statusText: "OK",
+              contentType: "application/json",
+              data: { messages: [], active_run_id: null, page: { has_more_before: false, has_more_after: false } },
+              text: "",
+            };
+          }
+          if (request.path === "/sessions/A/goal") {
+            return {
+              ok: true,
+              status: 200,
+              statusText: "OK",
+              contentType: "application/json",
+              data: {
+                goal_id: "goal-1",
+                session_id: "A",
+                objective: "Keep status stable",
+                status: "active",
+                token_budget: null,
+                tokens_used: 0,
+                time_used_seconds: 0,
+                evidence: [],
+                created_at: "",
+                updated_at: "",
+              },
+              text: "",
+            };
+          }
+          throw new Error(`unexpected request: ${request.path}`);
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({ config: { serverUrl: "http://localhost:6877", apiKey: "" } });
+    await refresh();
+
+    expect(requests).toContain("/sessions/A/goal");
+    expect(getState().goals["A"]?.objective).toBe("Keep status stable");
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("refresh keeps the current session usable when goal hydration fails", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const requests: string[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => {
+          requests.push(request.path);
+          if (request.path === "/health") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { auth: true }, text: "" };
+          }
+          if (request.path === "/sessions") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
+          }
+          if (request.path === "/session") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { session_id: "A", name: "A" }, text: "" };
+          }
+          if (request.path === "/session/history?session_id=A") {
+            return {
+              ok: true,
+              status: 200,
+              statusText: "OK",
+              contentType: "application/json",
+              data: {
+                messages: [{ id: "server-a-1", role: "user", content: "canonical A" }],
+                active_run_id: null,
+                page: { has_more_before: false, has_more_after: false },
+              },
+              text: "",
+            };
+          }
+          if (request.path === "/sessions/A/goal") {
+            throw new Error("goal route failed");
+          }
+          throw new Error(`unexpected request: ${request.path}`);
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({ config: { serverUrl: "http://localhost:6877", apiKey: "" } });
+    await refresh();
+
+    expect(requests).toContain("/sessions/A/goal");
+    expect(getState().connected).toBe(true);
+    expect(getState().error).toBeNull();
+    expect(getState().currentSessionId).toBe("A");
+    expect(getState().sessionView.historyLoadedFor).toBe("A");
+    expect(getState().messages.get("server-a-1")?.content).toBe("canonical A");
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }

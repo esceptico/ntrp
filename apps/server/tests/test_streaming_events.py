@@ -1259,7 +1259,7 @@ async def test_run_chat_emits_live_token_usage_after_model_response(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkeypatch):
+async def test_active_goal_does_not_dispatch_hidden_continuation_after_user_turn(monkeypatch):
     from ntrp.services import chat as chat_service
 
     registry = RunRegistry()
@@ -1321,17 +1321,11 @@ async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkey
 
     await run_chat(ctx, SessionBus(session_id="sess-1"))
 
-    assert len(dispatched) == 1
-    assert dispatched[0][0] == "sess-1"
-    assert dispatched[0][1].startswith("<goal_context>")
-    assert "Continue working toward the active session goal." in dispatched[0][1]
-    assert "<objective>\nKeep going\n</objective>" in dispatched[0][1]
-    assert dispatched[0][2].startswith("goal:goal-1:")
-    assert dispatched[0][3] is True
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
-async def test_goal_continuation_without_tool_activity_does_not_spin(monkeypatch):
+async def test_goal_meta_run_does_not_dispatch_followup(monkeypatch):
     from ntrp.services import chat as chat_service
 
     registry = RunRegistry()
