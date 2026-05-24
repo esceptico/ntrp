@@ -76,6 +76,39 @@ async def test_project_round_trip_and_session_scoping(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_project_schema_migrates_existing_sessions_table(tmp_path: Path):
+    conn = await database.connect(tmp_path / "legacy-projects.db")
+    read_conn = await database.connect(tmp_path / "legacy-projects.db", readonly=True)
+    await conn.executescript(
+        """
+        CREATE TABLE sessions (
+            session_id TEXT PRIMARY KEY,
+            started_at TEXT NOT NULL,
+            last_activity TEXT NOT NULL,
+            messages TEXT,
+            metadata TEXT,
+            name TEXT,
+            archived_at TEXT,
+            session_type TEXT NOT NULL DEFAULT 'chat',
+            origin_automation_id TEXT
+        );
+        """
+    )
+    await conn.commit()
+
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+
+    columns = await conn.execute_fetchall("PRAGMA table_info(sessions)")
+    indexes = await conn.execute_fetchall("PRAGMA index_list(sessions)")
+    assert "project_id" in {row["name"] for row in columns}
+    assert "idx_sessions_project_activity" in {row["name"] for row in indexes}
+
+    await read_conn.close()
+    await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_save_and_load_round_trip(store: SessionStore):
     state = _make_state(name="my chat")
     messages = [

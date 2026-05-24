@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_project_activity ON sessions(project_id, last_activity DESC);
 
 CREATE TABLE IF NOT EXISTS session_messages (
     session_id TEXT NOT NULL,
