@@ -477,7 +477,8 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   if (!message?.activity || message.activity.items.length === 0) return null;
   const { items, done } = message.activity;
 
-  // While the run is producing tools, show the rolling tail (last 3).
+  // While the run is producing tools, show the rolling tool tail. Agent
+  // parent rows stay visible so parallel research agents do not disappear.
   // After it's done, switch to a static list with all items and let collapse
   // just animate the container height — switching modes mid-collapse caused
   // the items to swap out (43 → 3) before the height finished shrinking,

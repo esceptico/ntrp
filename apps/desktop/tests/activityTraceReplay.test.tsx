@@ -167,6 +167,44 @@ test("agent trace row shows generated name but not prompt text", () => {
   expect(html).not.toContain("inspect current eval/test harness opportunities");
 });
 
+test("rolling activity keeps all agent rows while capping ordinary tool rows", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "old-tool",
+          kind: "ReadFile",
+          target: "ReadFile(path='old')",
+          status: "ongoing",
+        },
+        ...["One", "Two", "Three", "Four"].map((name) => ({
+          id: `agent-${name}`,
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          displayName: `Agent ${name}`,
+          status: "ongoing",
+        })),
+        {
+          id: "tail-tool",
+          kind: "WebSearch",
+          target: "WebSearch(query='latest')",
+          status: "ongoing",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain("Agent One");
+  expect(html).toContain("Agent Two");
+  expect(html).toContain("Agent Three");
+  expect(html).toContain("Agent Four");
+  expect(html).toContain("WebSearch(query=&#x27;latest&#x27;)");
+  expect(html).not.toContain("ReadFile(path=&#x27;old&#x27;)");
+});
+
 test("activity stats include subagent rows and their child tools", () => {
   expect(activityTraceStats([
     {

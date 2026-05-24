@@ -109,9 +109,10 @@ export function ActivityTail({
   motionDisabled?: boolean;
 }) {
   // Two render modes:
-  //   - "rolling" (max set): used live during a run. Each level (top, plus
-  //     each *running* parent's children) keeps its last `max` rows; deeper
-  //     descendants of a finished parent are hidden so the tail stays short.
+  //   - "rolling" (max set): used live during a run. Agent parent rows stay
+  //     visible so parallel research agents do not disappear; ordinary tool
+  //     rows still keep a short tail at each level. Deeper descendants of a
+  //     finished parent are hidden so the tail stays short.
   //   - "static"  (max unset): post-run, expanded list. Flat top-level only —
   //     children are reachable via the inspector.
   const rolling = max != null;
@@ -230,10 +231,11 @@ function buildStaticTree(items: ActivityItem[]): ActivityItem[] {
 }
 
 /** Walk the activity tree and return a flat ordered list to render in
- *  rolling mode. Each level is capped at `max`; we recurse into a parent's
- *  children only while the parent is still running, so finished agents
- *  don't keep their detail on screen. Parents appear before their kids so
- *  the natural document order doubles as visual hierarchy (depth-based
+ *  rolling mode. Agent rows are pinned so all spawned research agents remain
+ *  visible; non-agent rows at each level are capped at `max`. We recurse into
+ *  a parent's children only while the parent is still running, so finished
+ *  agents don't keep their detail on screen. Parents appear before their kids
+ *  so the natural document order doubles as visual hierarchy (depth-based
  *  indent comes from `ItemButton`).
  *
  *  A `seen` set guards the recursion so a malformed tree (cycle, or a
@@ -258,19 +260,25 @@ function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
     out.push(item);
     if (activityItemStatus(item) === "ongoing") {
       const kids = childrenByParent.get(item.id);
-      if (kids) for (const k of kids.slice(-max)) include(k);
+      if (kids) for (const k of rollingLevel(kids, max)) include(k);
     }
   };
 
   const topLevel = items.filter((it) => (it.depth ?? 0) === 0);
-  for (const t of topLevel.slice(-max)) include(t);
-  for (const it of items.filter((item) => item.parentToolId && !ids.has(item.parentToolId)).slice(-max)) {
+  for (const t of rollingLevel(topLevel, max)) include(t);
+  for (const it of rollingLevel(items.filter((item) => item.parentToolId && !ids.has(item.parentToolId)), max)) {
     include(it);
   }
   if (out.length === 0) {
-    for (const it of items.slice(-max)) include(it);
+    for (const it of rollingLevel(items, max)) include(it);
   }
   return out;
+}
+
+function rollingLevel(items: ActivityItem[], max: number): ActivityItem[] {
+  const pinnedAgentIds = new Set(items.filter(isAgent).map((item) => item.id));
+  const tailIds = new Set(items.slice(-max).map((item) => item.id));
+  return items.filter((item) => pinnedAgentIds.has(item.id) || tailIds.has(item.id));
 }
 
 function ItemButton({
