@@ -3,9 +3,11 @@ from urllib.parse import urlparse
 
 import trafilatura
 from ddgs import DDGS
+from ddgs.exceptions import DDGSException
 from trafilatura import bare_extraction
 from trafilatura.settings import use_config
 
+from ntrp.integrations.web.exceptions import NoSearchResultsException, WebSearchProviderException
 from ntrp.integrations.web.types import WebContentResult, WebSearchResult
 
 _logger = logging.getLogger(__name__)
@@ -13,6 +15,8 @@ _logger = logging.getLogger(__name__)
 _cfg = use_config()
 _cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "10")
 _cfg.set("DEFAULT", "MAX_FILE_SIZE", "1000000")
+
+_DDGS_NO_RESULTS = ("No results found.",)
 
 
 def _guess_title(url: str) -> str:
@@ -33,7 +37,14 @@ class DDGSWebSource:
         del category
         results: list[WebSearchResult] = []
         with DDGS() as client:
-            items = client.text(query, max_results=num_results) or []
+            try:
+                items = client.text(query, max_results=num_results) or []
+            except DDGSException as e:
+                if e.args == _DDGS_NO_RESULTS:
+                    raise NoSearchResultsException(query) from e
+                else:
+                    _logger.warning("DuckDuckGo search failed: %s", e)
+                    raise WebSearchProviderException("DuckDuckGo request failed.") from e
             for item in items:
                 title = (item.get("title") or item.get("heading") or "").strip()
                 url = (item.get("href") or item.get("url") or "").strip()

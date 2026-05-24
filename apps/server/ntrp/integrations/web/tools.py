@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.constants import WEB_SEARCH_MAX_RESULTS
+from ntrp.integrations.web.exceptions import NoSearchResultsException, WebSearchProviderException
 from ntrp.integrations.web.types import WebClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -26,6 +27,21 @@ class WebSearchCategory(StrEnum):
 
 
 _DEFAULT_SEARCH_RESULTS = 5
+
+
+def _empty_search_content(query: str) -> str:
+    return (
+        f'No results for "{query}". '
+        "Try again with a simpler or broader query: remove quotes/operators, use fewer words, "
+        "or search 1-3 core keywords."
+    )
+
+
+def _provider_failure_content(error: WebSearchProviderException) -> str:
+    return (
+        f"{error} This is a provider/network failure, not an empty-results response. "
+        "Retry once; if it repeats, use another web search provider or report that search is temporarily unavailable."
+    )
 
 
 class WebSearchInput(BaseModel):
@@ -64,9 +80,16 @@ async def web_search(execution: ToolExecution, args: WebSearchInput) -> ToolResu
                 item["highlights"] = r.highlights[:3]
             formatted.append(item)
 
+        if not formatted:
+            return ToolResult(content=_empty_search_content(args.query), preview="0 results")
+
         content = json.dumps({"query": args.query, "results": formatted}, indent=2, ensure_ascii=False)
         return ToolResult(content=content, preview=f"{len(formatted)} results")
 
+    except NoSearchResultsException:
+        return ToolResult(content=_empty_search_content(args.query), preview="0 results")
+    except WebSearchProviderException as e:
+        return ToolResult(content=_provider_failure_content(e), preview="Search failed", is_error=True)
     except Exception as e:
         return ToolResult(content=f"Error: Search failed: {e}", preview="Search failed", is_error=True)
 
