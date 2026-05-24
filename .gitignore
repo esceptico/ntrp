@@ -17,6 +17,7 @@ wheels/
 .claude
 .context/
 .features/
+.superpowers/
 data/
 backups/
 evals/
