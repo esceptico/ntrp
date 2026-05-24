@@ -165,7 +165,7 @@ export function applyChatEventToTranscript(
     case "run_cancelled":
       if (s.currentRunId && s.currentRunId !== event.run_id) break;
       effect = runCancelledEffect(s.queuedMessages);
-      endActivity(s);
+      endActivity(s, "Stopped");
       endTurn(s, ts);
       setActiveAssistantMessageId(context, null);
       setState((state) =>
@@ -921,9 +921,9 @@ function takePendingResultPatch(
 }
 
 /** End the active activity (if any) and clear the marker. */
-function endActivity(s: ReturnType<typeof getState>) {
+function endActivity(s: ReturnType<typeof getState>, label: "Called" | "Stopped" = "Called") {
   if (s.activeActivityId) {
-    s.finalizeActivity(s.activeActivityId);
+    s.finalizeActivity(s.activeActivityId, label);
     s.setActiveActivityId(null);
   }
 }

@@ -40,6 +40,11 @@ from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
+from ntrp.services.goal_continuation import (
+    goal_continuation_prompt,
+    has_current_turn_tool_activity,
+    is_goal_client_id,
+)
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
@@ -611,6 +616,8 @@ async def prepare_chat(
     run = registry.create_run(session_state.session_id)
     run.messages = messages
     run.session_state = session_state
+    run.client_id = client_id
+    run.input_message_index = len(messages) - 1
     if skip_approvals is not None:
         run.set_skip_approvals(skip_approvals)
     run.history_prefix = history_prefix
@@ -649,12 +656,18 @@ def _loop_task_id_from_client_id(client_id: str | None) -> str | None:
     return rest[:last_colon]
 
 
-def _first_user_client_id(run: RunState) -> str | None:
-    for message in run.messages:
-        if message.get("role") == Role.USER:
-            client_id = message.get("client_id")
-            return client_id if isinstance(client_id, str) else None
-    return None
+def _run_input_boundary(run: RunState) -> tuple[str | None, int | None]:
+    if run.input_message_index is not None and 0 <= run.input_message_index < len(run.messages):
+        message = run.messages[run.input_message_index]
+        client_id = message.get("client_id")
+        return (client_id if isinstance(client_id, str) else run.client_id), run.input_message_index
+    for index in range(len(run.messages) - 1, -1, -1):
+        message = run.messages[index]
+        if message.get("role") != Role.USER:
+            continue
+        client_id = message.get("client_id")
+        return (client_id if isinstance(client_id, str) else run.client_id), index
+    return run.client_id, None
 
 
 async def _update_run_client_idempotency(
@@ -662,7 +675,7 @@ async def _update_run_client_idempotency(
     run: RunState,
     status: str,
 ) -> None:
-    client_id = _first_user_client_id(run)
+    client_id, _ = _run_input_boundary(run)
     if not client_id or session_service is None:
         return
     try:
@@ -674,6 +687,39 @@ async def _update_run_client_idempotency(
         )
     except Exception:
         _logger.warning("Failed to update chat idempotency status", exc_info=True)
+
+
+async def _maybe_dispatch_goal_continuation(ctx: ChatContext, run: RunState, *, run_failed: bool) -> None:
+    if run_failed or run.cancelled or run.backgrounded or not ctx.goal_id:
+        return
+    if not ctx.dispatch_session_message:
+        return
+    get_goal = getattr(ctx.session_service, "get_goal", None)
+    if not get_goal:
+        return
+    goal = await get_goal(ctx.session_state.session_id)
+    if not goal or goal.get("goal_id") != ctx.goal_id or goal.get("status") != "active":
+        return
+
+    # Hidden goal runs should not spin forever when the agent only talks.
+    # A fresh user turn can still restart continuation.
+    client_id, input_message_index = _run_input_boundary(run)
+    if not client_id:
+        return
+    if is_goal_client_id(client_id) and not has_current_turn_tool_activity(run.messages, input_message_index):
+        return
+
+    active = ctx.run_registry.get_active_run(ctx.session_state.session_id)
+    if active is not None:
+        return
+
+    client_id = f"goal:{ctx.goal_id}:{int(datetime.now(UTC).timestamp() * 1000)}"
+    await ctx.dispatch_session_message(
+        ctx.session_state.session_id,
+        goal_continuation_prompt(goal),
+        client_id,
+        True,
+    )
 
 
 async def submit_chat_message(
@@ -1097,7 +1143,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 skip_approvals=run.approval_controls.skip_approvals,
                 session_name=session_state.name or "",
                 is_meta_run=bool(run.loop_task_id) or run.is_meta_run,
-                meta_client_id=_first_user_client_id(run) if run.is_meta_run else None,
+                meta_client_id=_run_input_boundary(run)[0] if run.is_meta_run else None,
             )
         )
         if ctx.session_name_task is not None:
@@ -1432,6 +1478,10 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                             await ctx.enqueue_run_completed(event)
                         except Exception:
                             _logger.warning("Failed to enqueue run-completed side effect", exc_info=True)
+                    try:
+                        await _maybe_dispatch_goal_continuation(ctx, run, run_failed=run_failed)
+                    except Exception:
+                        _logger.warning("Failed to dispatch goal continuation", exc_info=True)
                 except Exception as exc:
                     _logger.exception(
                         "Chat finalization failed (run_id=%s, session_id=%s)",

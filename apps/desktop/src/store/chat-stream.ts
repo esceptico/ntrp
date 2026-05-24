@@ -155,11 +155,20 @@ export function reduceReplayGap(
   state: ChatStreamState,
   sessionId: string,
 ): ChatStreamState {
+  const resetSeq = state.lastEventSeqBySession.get(sessionId);
+  const cleared = clearTransientStreamState(state);
+  let lastEventSeqBySession = cleared.lastEventSeqBySession;
+  const clearedSeq = lastEventSeqBySession.get(sessionId);
+  if (resetSeq !== undefined && (clearedSeq === undefined || clearedSeq < resetSeq)) {
+    lastEventSeqBySession = new Map(lastEventSeqBySession);
+    lastEventSeqBySession.set(sessionId, resetSeq);
+  }
   const replayGapBlockedSessions = new Set(state.replayGapBlockedSessions);
   replayGapBlockedSessions.add(sessionId);
 
   return {
-    ...clearTransientStreamState(state),
+    ...cleared,
+    lastEventSeqBySession,
     sessionId,
     projectionSessionId: sessionId,
     replayGapBlockedSessions,

@@ -1779,6 +1779,38 @@ test("run_cancelled resends pending queued messages through stream callback", ()
   expect(getState().queuedMessages).toEqual([]);
 });
 
+test("run_cancelled marks active activity stopped instead of executed", () => {
+  setState({
+    running: true,
+    currentRunId: "run-cancel",
+    activeActivityId: "activity-1",
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: {
+            label: "Calling",
+            done: false,
+            items: [{ id: "tool-1", kind: "WebSearch", target: "WebSearch()", status: "ongoing" }],
+          },
+        },
+      ],
+    ]),
+    order: ["activity-1"],
+  });
+
+  handleServerEvent({ type: "run_cancelled", run_id: "run-cancel", timestamp: 3 });
+
+  expect(getState().messages.get("activity-1")?.activity).toMatchObject({
+    done: true,
+    label: "Stopped",
+    items: [{ id: "tool-1", status: "executed" }],
+  });
+});
+
 test("loadHistory restores currentRunId for active sessions", async () => {
   const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
   (globalThis as typeof globalThis & { window?: unknown }).window = {

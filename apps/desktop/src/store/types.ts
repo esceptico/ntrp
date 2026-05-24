@@ -187,7 +187,7 @@ export interface ActivityItem {
   cost?: number;
 }
 
-export type ActivityLabel = "Calling" | "Called" | "Backgrounded";
+export type ActivityLabel = "Calling" | "Called" | "Backgrounded" | "Stopped";
 
 export interface ActivityState {
   items: ActivityItem[];

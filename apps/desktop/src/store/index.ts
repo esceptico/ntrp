@@ -57,6 +57,7 @@ import {
 // Re-export types so existing `import { X } from "../store"` keeps working.
 export type {
   ActivityItem,
+  ActivityLabel,
   ActivityState,
   Actions,
   ApprovalState,

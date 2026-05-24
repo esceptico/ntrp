@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  eventStreamReadyForSession,
   reconnectDelayMs,
   runDesktopEventStreamLoop,
   transportDiagnosticsForSession,
@@ -12,6 +13,17 @@ test("reconnectDelayMs uses capped exponential backoff with bounded jitter", () 
   expect(reconnectDelayMs(10, { baseMs: 500, maxMs: 15_000, random: () => 0.5 })).toBe(15_000);
   expect(reconnectDelayMs(0, { baseMs: 500, random: () => 0 })).toBe(400);
   expect(reconnectDelayMs(0, { baseMs: 500, random: () => 1 })).toBe(600);
+});
+
+test("event stream stays mounted during replay-gap history reload", () => {
+  expect(eventStreamReadyForSession({
+    sessionId: "sess-1",
+    historyLoadedFor: "sess-1",
+  })).toBe(true);
+  expect(eventStreamReadyForSession({
+    sessionId: "sess-1",
+    historyLoadedFor: null,
+  })).toBe(false);
 });
 
 async function waitFor(predicate: () => boolean) {

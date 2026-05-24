@@ -68,18 +68,19 @@ export function reduceCachePreviewRestored(
   state: SessionViewState,
   sessionId: string,
 ): SessionViewState {
+  const hasLoadedHistory = state.historyLoadedFor === sessionId;
   return {
     ...state,
     currentSessionId: sessionId,
     historyPhase: "cached-preview",
     cachePreviewRestoredFor: sessionId,
     canonicalHistoryRequired: true,
-    historyLoadedFor: null,
+    historyLoadedFor: hasLoadedHistory ? sessionId : null,
     historyReloadingFor: null,
-    historyHasMoreBefore: false,
-    historyHasMoreAfter: false,
-    historyBeforeCursor: null,
-    historyAfterCursor: null,
+    historyHasMoreBefore: hasLoadedHistory ? state.historyHasMoreBefore : false,
+    historyHasMoreAfter: hasLoadedHistory ? state.historyHasMoreAfter : false,
+    historyBeforeCursor: hasLoadedHistory ? state.historyBeforeCursor : null,
+    historyAfterCursor: hasLoadedHistory ? state.historyAfterCursor : null,
     historyLoadingBefore: false,
     historyLoadingAfter: false,
   };

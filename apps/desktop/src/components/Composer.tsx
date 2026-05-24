@@ -17,12 +17,7 @@ import {
 } from "../actions";
 import { QueueCard } from "./QueueCard";
 import { GoalStatusBar } from "./GoalStrip";
-import {
-  CommandPicker,
-  filterCommands,
-  useCommandList,
-  type CommandEntry,
-} from "./CommandPicker";
+import { CommandPicker } from "./CommandPicker";
 import { Chip } from "./Chip";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
@@ -30,6 +25,7 @@ import { BudgetDial } from "./composer/BudgetDial";
 import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 import { awaitingFirstRunOutput } from "../lib/runIndicators";
+import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {

@@ -8,7 +8,7 @@ import { GlassToggle } from "../../GlassToggle";
 import { GlassSwitch } from "../../GlassSwitch";
 import { SectionHeader } from "../../SectionHeader";
 
-export const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
+const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
   { value: "ask", label: "Ask" },
   { value: "deny", label: "Deny" },

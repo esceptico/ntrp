@@ -1,11 +1,14 @@
 import {
   apiWithConfig,
   type HistoryMessage,
-  type HistoryPage,
   type SessionRuntimeSnapshot,
 } from "../api";
-import { getState, setState, type UiMessage } from "../store";
-import { clearReplayGapBlockForSession, setEventCursorForSession } from "../store/chat-stream";
+import { getState, setState } from "../store";
+import {
+  clearReplayGapBlockForSession,
+  lastEventSeqForSession,
+  setEventCursorForSession,
+} from "../store/chat-stream";
 import {
   isCurrentHistoryReplaceRequestVersion,
   nextHistoryReplaceRequestVersion,
@@ -19,14 +22,25 @@ import {
 } from "../store/run-lifecycle";
 import {
   isTodoToolName,
-  newestHistoryActivityId,
-  rebuildTranscriptFromHistory,
 } from "../store/transcript-projection";
-import { normalizeActivityGroups } from "../store/session-cache";
+import {
+  cachedSessionFromHistory,
+  historyMessagesToUi,
+  pendingApprovalsFromRuntime,
+  projectHistoryResponse,
+  queuedMessagesFromRuntime,
+  runtimeView,
+  type HistoryResponse,
+} from "../store/history-response";
 import { isForegroundRunStatus } from "../lib/runStatus";
+
+export { historyMessagesToUi };
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
 const pendingHistoryToolResultsBySession = new Map<string, Map<string, string>>();
+const cachedHistoryRefreshes = new Map<string, Promise<boolean>>();
+const cachedHistoryRefreshedAt = new Map<string, number>();
+const ACTIVE_SESSION_CACHE_REFRESH_MS = 5_000;
 
 export interface LoadHistoryOptions {
   mode?: HistoryLoadMode;
@@ -37,6 +51,19 @@ export interface LoadHistoryOptions {
   limit?: number;
 }
 
+export interface LiveSessionSnapshot {
+  runId?: string | null;
+  sessionId: string;
+  status?: string | null;
+  backgrounded?: boolean;
+}
+
+export interface CachedHistoryRefreshOptions {
+  force?: boolean;
+  minIntervalMs?: number;
+  now?: number;
+}
+
 function historyPath(sessionId: string, options: LoadHistoryOptions): string {
   const params = new URLSearchParams({ session_id: sessionId });
   if (options.limit) params.set("limit", String(options.limit));
@@ -45,6 +72,28 @@ function historyPath(sessionId: string, options: LoadHistoryOptions): string {
   if (options.around) params.set("around", options.around);
   if (options.aroundSeq !== undefined) params.set("around_seq", String(options.aroundSeq));
   return `/session/history?${params.toString()}`;
+}
+
+function activeCacheSessionIds(
+  runs: LiveSessionSnapshot[],
+  currentSessionId: string | null,
+): string[] {
+  const ids = new Set<string>();
+  for (const run of runs) {
+    if (run.sessionId === currentSessionId) continue;
+    if (
+      run.backgrounded === true ||
+      run.status === "backgrounded" ||
+      isForegroundRunStatus(run.status)
+    ) {
+      ids.add(run.sessionId);
+    }
+  }
+  return [...ids];
+}
+
+export function cachedHistoryRefreshSessionIds(runs: LiveSessionSnapshot[]): string[] {
+  return activeCacheSessionIds(runs, getState().currentSessionId);
 }
 
 function historyBoundaryId(
@@ -59,51 +108,6 @@ function historyBoundaryId(
     if (msg?.sourceMessageId) return msg.sourceMessageId;
   }
   return null;
-}
-
-export function historyMessagesToUi(
-  messages: HistoryMessage[],
-  activeRunId: string | null,
-  options: { isNewestPage?: boolean } = {},
-): UiMessage[] {
-  const isNewestPage = options.isNewestPage ?? true;
-  const items = rebuildTranscriptFromHistory(messages, { activeRunId, isNewestPage });
-
-  // If the server has an active run for this session, the latest user
-  // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
-  // collapse it under "Worked for Xs" — the SSE replay + live events
-  // build the in-flight UI on top of the history.
-  if (activeRunId && isNewestPage) {
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (it.role === "user" && it.turn) {
-        it.turn = { ...it.turn, endedAt: null, durationMs: null };
-        break;
-      }
-    }
-  }
-
-  return items;
-}
-
-function normalizeHistoryItems(
-  items: UiMessage[],
-  activeActivityId: string | null,
-): { items: UiMessage[]; activeActivityId: string | null } {
-  const map = new Map<string, UiMessage>();
-  const order: string[] = [];
-  for (const item of items) {
-    map.set(item.id, item);
-    order.push(item.id);
-  }
-  const normalized = normalizeActivityGroups(map, order, activeActivityId);
-  return {
-    items: normalized.order.flatMap((id) => {
-      const item = normalized.messages.get(id);
-      return item ? [item] : [];
-    }),
-    activeActivityId: normalized.activeActivityId,
-  };
 }
 
 function applyHistoryToolResults(sessionId: string, messages: HistoryMessage[]): void {
@@ -139,14 +143,6 @@ function applyPendingHistoryToolResults(sessionId: string): void {
   if (pending.size === 0) pendingHistoryToolResultsBySession.delete(sessionId);
 }
 
-function foregroundActiveRunId(
-  activeRunId: string | null,
-  runtime: SessionRuntimeSnapshot | undefined,
-): string | null {
-  if (!runtime) return activeRunId;
-  return isForegroundRunStatus(runtime.active_run?.status) ? activeRunId : null;
-}
-
 function syncAutoForActiveRun(sessionId: string, value: boolean): void {
   const { config } = getState();
   void apiWithConfig(config, `/sessions/${sessionId}/auto`, {
@@ -160,40 +156,88 @@ function syncAutoForActiveRun(sessionId: string, value: boolean): void {
 
 function applyRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeSnapshot | undefined): void {
   if (!runtime) return;
-  setEventCursorForSession(sessionId, runtime.checkpoint_seq);
-  const activeRun = runtime.active_run;
-  const hasForegroundRun = isForegroundRunStatus(activeRun?.status);
-  if (getState().skipApprovals && hasForegroundRun) {
+  setEventCursorForSession(
+    sessionId,
+    Math.max(runtime.checkpoint_seq, lastEventSeqForSession(sessionId) ?? 0),
+  );
+  const view = runtimeView(runtime.active_run?.run_id ?? null, runtime);
+  if (getState().skipApprovals && view.hasForegroundRun) {
     syncAutoForActiveRun(sessionId, true);
   }
   setState((state) => {
-    const pendingApprovals = state.skipApprovals || !hasForegroundRun ? [] : runtime.pending_approvals;
-      const lifecycle =
-        activeRun && hasForegroundRun
-          ? reduceRunStarted(state, { runId: activeRun.run_id, sessionId })
+    const lifecycle =
+      view.currentRunId
+        ? reduceRunStarted(state, { runId: view.currentRunId, sessionId })
         : reduceForegroundRunCleared(state, {
-            runId: activeRun?.run_id ?? state.currentRunId,
+            runId: view.activeRunId ?? state.currentRunId,
             sessionId,
-            markBackgrounded: activeRun?.status === "backgrounded",
+            markBackgrounded: view.markBackgrounded,
           });
     return {
       ...lifecycle,
-      pendingApprovals: pendingApprovals.map((approval) => ({
-        toolId: approval.tool_id,
-        toolName: approval.tool_name,
-        preview: approval.preview ?? undefined,
-        diff: approval.diff ?? undefined,
-        status: "pending" as const,
-      })),
-      queuedMessages: (hasForegroundRun ? runtime.queued_messages : []).map((message) => ({
-        clientId: message.client_id,
-        text: message.text,
-        images: message.images,
-        status: message.status,
-        enqueuedAt: message.enqueued_at ? Date.parse(message.enqueued_at) : Date.now(),
-      })),
+      pendingApprovals: pendingApprovalsFromRuntime(runtime, view.hasForegroundRun, state.skipApprovals),
+      queuedMessages: queuedMessagesFromRuntime(runtime, view.hasForegroundRun),
     };
   });
+}
+
+export async function refreshCachedSessionHistory(
+  sessionId: string,
+  options: CachedHistoryRefreshOptions = {},
+): Promise<boolean> {
+  const now = options.now ?? Date.now();
+  const minIntervalMs = options.minIntervalMs ?? ACTIVE_SESSION_CACHE_REFRESH_MS;
+  const lastRefreshedAt = cachedHistoryRefreshedAt.get(sessionId) ?? 0;
+  if (!options.force && lastRefreshedAt > 0 && now - lastRefreshedAt < minIntervalMs) return false;
+
+  const existingRefresh = cachedHistoryRefreshes.get(sessionId);
+  if (existingRefresh) return existingRefresh;
+
+  const task = (async () => {
+    const state = getState();
+    const history = await apiWithConfig<HistoryResponse>(
+      state.config,
+      historyPath(sessionId, {}),
+    );
+    if (history.runtime) {
+      setEventCursorForSession(
+        sessionId,
+        Math.max(history.runtime.checkpoint_seq, lastEventSeqForSession(sessionId) ?? 0),
+      );
+    }
+    setState((current) => {
+      if (current.currentSessionId === sessionId) return {};
+      const sessionCache = new Map(current.sessionCache);
+      sessionCache.set(
+        sessionId,
+        cachedSessionFromHistory(
+          sessionId,
+          history,
+          sessionCache.get(sessionId),
+          current.skipApprovals,
+        ),
+      );
+      return { sessionCache };
+    });
+    cachedHistoryRefreshedAt.set(sessionId, Date.now());
+    return true;
+  })().catch((error) => {
+    if (options.force) throw error;
+    return false;
+  }).finally(() => {
+    cachedHistoryRefreshes.delete(sessionId);
+  });
+
+  cachedHistoryRefreshes.set(sessionId, task);
+  return task;
+}
+
+export async function refreshCachedActiveSessionHistories(
+  runs: LiveSessionSnapshot[],
+  options: CachedHistoryRefreshOptions = {},
+): Promise<void> {
+  const sessionIds = cachedHistoryRefreshSessionIds(runs);
+  await Promise.all(sessionIds.map((sessionId) => refreshCachedSessionHistory(sessionId, options)));
 }
 
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
@@ -206,13 +250,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     setState({ sessionView });
   }
 
-  let history: {
-    messages: HistoryMessage[];
-    active_run_id: string | null;
-    runtime?: SessionRuntimeSnapshot;
-    page?: HistoryPage;
-    usage?: { last_input_tokens: number; message_count: number };
-  };
+  let history: HistoryResponse;
   try {
     history = await apiWithConfig(s.config, historyPath(sessionId, options));
   } catch (error) {
@@ -237,12 +275,12 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
     pendingHistoryToolResultsBySession.delete(sessionId);
   }
 
-  const { messages, active_run_id, runtime, page, usage } = history;
-  const activeForegroundRunId = foregroundActiveRunId(active_run_id, runtime);
+  const { messages, runtime, page, usage } = history;
   const isNewestPage = mode !== "prepend" && page?.has_more_after !== true;
-  const rawItems = historyMessagesToUi(messages, activeForegroundRunId, { isNewestPage });
-  const rawActiveActivityId = activeForegroundRunId ? newestHistoryActivityId(rawItems) : null;
-  const { items, activeActivityId } = normalizeHistoryItems(rawItems, rawActiveActivityId);
+  const { activeForegroundRunId, activeActivityId, items } = projectHistoryResponse(
+    history,
+    isNewestPage,
+  );
   if (mode === "prepend") {
     s.prependHistory(items, page);
     applyHistoryToolResults(sessionId, messages);

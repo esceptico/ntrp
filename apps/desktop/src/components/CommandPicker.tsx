@@ -14,15 +14,9 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
-import { BUILTIN_COMMANDS } from "../actions";
 import { ICON } from "../lib/icons";
+import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
 import { PickerRow } from "./PickerRow";
-
-export interface CommandEntry {
-  name: string;
-  description: string;
-  kind: "builtin" | "skill";
-}
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   help: HelpCircle,
@@ -38,31 +32,6 @@ const BUILTIN_ICONS: Record<string, LucideIcon> = {
 function iconFor(entry: CommandEntry): LucideIcon {
   if (entry.kind === "builtin") return BUILTIN_ICONS[entry.name] ?? HelpCircle;
   return Sparkles;
-}
-
-export function useCommandList(): CommandEntry[] {
-  const skills = useStore((s) => s.skills);
-  return useMemo(() => {
-    const builtins: CommandEntry[] = BUILTIN_COMMANDS
-      .filter((c) => !c.hidden)
-      .map((c) => ({
-        name: c.name,
-        description: c.description,
-        kind: "builtin" as const,
-      }));
-    const skillEntries: CommandEntry[] = skills.map((s) => ({
-      name: s.name,
-      description: s.description || "Skill",
-      kind: "skill" as const,
-    }));
-    return [...builtins, ...skillEntries];
-  }, [skills]);
-}
-
-export function filterCommands(all: CommandEntry[], query: string): CommandEntry[] {
-  const q = query.toLowerCase();
-  if (!q) return all;
-  return all.filter((c) => c.name.toLowerCase().startsWith(q));
 }
 
 export function CommandPicker({

@@ -12,6 +12,8 @@ from ntrp.context.models import SessionData, SessionState
 from ntrp.events.sse import event_from_payload
 from ntrp.server.bus import StreamRecord
 
+LATEST_VISIBLE_ANCHOR_ROW_LIMIT = 1000
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
     project_id TEXT PRIMARY KEY,
@@ -2061,6 +2063,7 @@ class SessionStore:
                 "archived_at": row["archived_at"],
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
+                "project_id": row["project_id"],
             }
             for row in rows
         ]
@@ -2202,7 +2205,12 @@ class SessionStore:
             anchor = visible_users[0]
             previous_anchor = await self._visible_user_before(session_id, anchor["seq"])
             if previous_anchor:
-                expanded = await self._bounded_rows_between(session_id, previous_anchor["seq"], rows[-1]["seq"])
+                expanded = await self._bounded_rows_between(
+                    session_id,
+                    previous_anchor["seq"],
+                    rows[-1]["seq"],
+                    max_count=LATEST_VISIBLE_ANCHOR_ROW_LIMIT,
+                )
                 if expanded is not None:
                     return expanded
             return rows
@@ -2213,23 +2221,24 @@ class SessionStore:
 
         previous_anchor = await self._visible_user_before(session_id, anchor["seq"])
         if previous_anchor:
-            expanded = await self._bounded_rows_between(session_id, previous_anchor["seq"], rows[-1]["seq"])
+            expanded = await self._bounded_rows_between(
+                session_id,
+                previous_anchor["seq"],
+                rows[-1]["seq"],
+                max_count=LATEST_VISIBLE_ANCHOR_ROW_LIMIT,
+            )
             if expanded is not None:
                 return expanded
 
-        expanded = await self._bounded_rows_between(session_id, anchor["seq"], rows[-1]["seq"])
+        expanded = await self._bounded_rows_between(
+            session_id,
+            anchor["seq"],
+            rows[-1]["seq"],
+            max_count=LATEST_VISIBLE_ANCHOR_ROW_LIMIT,
+        )
         if expanded is not None:
             return expanded
-
-        context_rows = await self._missing_leading_tool_context_rows(session_id, anchor["seq"], rows)
-        out = [anchor]
-        seen = {anchor["message_id"]}
-        for row in [*context_rows, *rows]:
-            if row["message_id"] in seen:
-                continue
-            out.append(row)
-            seen.add(row["message_id"])
-        return out
+        return rows
 
     async def _visible_user_before(self, session_id: str, before_seq: int) -> Any | None:
         rows = await self.read_conn.execute_fetchall(
@@ -2246,7 +2255,14 @@ class SessionStore:
                 return row
         return None
 
-    async def _bounded_rows_between(self, session_id: str, start_seq: int, end_seq: int) -> list[Any] | None:
+    async def _bounded_rows_between(
+        self,
+        session_id: str,
+        start_seq: int,
+        end_seq: int,
+        *,
+        max_count: int = 250,
+    ) -> list[Any] | None:
         count_rows = await self.read_conn.execute_fetchall(
             """
             SELECT COUNT(*) AS count FROM session_messages
@@ -2254,7 +2270,7 @@ class SessionStore:
             """,
             (session_id, start_seq, end_seq),
         )
-        if not count_rows or int(count_rows[0]["count"]) > 250:
+        if not count_rows or int(count_rows[0]["count"]) > max_count:
             return None
         return await self.read_conn.execute_fetchall(
             """
@@ -2265,46 +2281,6 @@ class SessionStore:
             (session_id, start_seq, end_seq),
         )
 
-    async def _missing_leading_tool_context_rows(self, session_id: str, anchor_seq: int, rows: list[Any]) -> list[Any]:
-        if not rows:
-            return []
-        present_call_ids = set()
-        needed_call_ids = []
-        for row in rows:
-            payload = self._row_message_json(row)
-            if row["role"] == "assistant":
-                present_call_ids.update(self._assistant_tool_call_ids(payload))
-            if row["role"] == "tool" and (call_id := payload.get("tool_call_id")):
-                if call_id not in present_call_ids:
-                    needed_call_ids.append(call_id)
-                continue
-            break
-        if not needed_call_ids:
-            return []
-
-        previous_rows = await self.read_conn.execute_fetchall(
-            """
-            SELECT * FROM session_messages
-            WHERE session_id = ? AND seq > ? AND seq < ?
-            ORDER BY seq DESC
-            LIMIT 50
-            """,
-            (session_id, anchor_seq, rows[0]["seq"]),
-        )
-        found: list[Any] = []
-        missing = set(needed_call_ids)
-        for row in previous_rows:
-            if row["role"] != "assistant":
-                continue
-            ids = self._assistant_tool_call_ids(self._row_message_json(row))
-            if not ids.intersection(missing):
-                continue
-            found.append(row)
-            missing.difference_update(ids)
-            if not missing:
-                break
-        return list(reversed(found))
-
     @staticmethod
     def _row_message_json(row: Any) -> dict:
         try:
@@ -2312,14 +2288,6 @@ class SessionStore:
         except Exception:
             return {}
         return payload if isinstance(payload, dict) else {}
-
-    @staticmethod
-    def _assistant_tool_call_ids(message: dict) -> set[str]:
-        ids: set[str] = set()
-        for tool_call in message.get("tool_calls") or []:
-            if isinstance(tool_call, dict) and isinstance(tool_call.get("id"), str):
-                ids.add(tool_call["id"])
-        return ids
 
     async def delete_session_messages_from(
         self,

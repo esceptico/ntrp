@@ -1,8 +1,10 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ActivityHeader, ActivityTail } from "../src/components/trace/ActivityTrace.tsx";
 import { activityTraceStats } from "../src/lib/agent.ts";
+import { turnHeaderLabel } from "../src/lib/turnHeader.ts";
+import { setState } from "../src/store/index.ts";
 
 const items = [
   {
@@ -23,6 +25,14 @@ const items = [
   },
 ];
 
+beforeEach(() => {
+  setState({
+    messages: new Map(),
+    order: [],
+    streamReplaying: false,
+  });
+});
+
 test("replayed rolling activity rows keep the motion row path disabled", () => {
   const html = renderToStaticMarkup(
     <ActivityTail items={items} max={3} motionDisabled />,
@@ -30,6 +40,28 @@ test("replayed rolling activity rows keep the motion row path disabled", () => {
 
   expect(html).toContain('data-activity-motion-row="true"');
   expect(html).toContain('data-motion-suppressed="true"');
+});
+
+test("rolling activity renders orphaned child rows from restored tails", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "child-1",
+          kind: "read_file",
+          target: 'read_file(path="a")',
+          parentToolId: "missing-research",
+          depth: 1,
+          status: "ongoing",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain('read_file(path=&quot;a&quot;)');
+  expect(html).toContain("↳");
 });
 
 test("activity header shows active calls separately from total calls", () => {
@@ -51,6 +83,20 @@ test("activity header keeps calling state while active run waits between tools",
 
   expect(html).toContain("Calling");
   expect(html).not.toContain("Executed");
+});
+
+test("activity header shows stopped state after run cancellation", () => {
+  const html = renderToStaticMarkup(
+    <ActivityHeader done count={109} activeCount={0} label="Stopped" />,
+  );
+
+  expect(html).toContain("Stopped");
+  expect(html).not.toContain("Executed");
+});
+
+test("stopped turn header does not say worked", () => {
+  expect(turnHeaderLabel(163000, true)).toBe("Stopped after 2m 43s");
+  expect(turnHeaderLabel(163000, false)).toBe("Worked for 2m 43s");
 });
 
 test("running agent row renders a stop control", () => {

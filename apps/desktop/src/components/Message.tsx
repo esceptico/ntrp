@@ -500,13 +500,20 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
       <ActivityTrace>
         <ActivityHeader
           done={done}
+          label={message.activity.label}
           count={totalCount}
           activeCount={activeCount}
           backgrounded={!!message.activity.backgrounded}
+          motionDisabled={message.suppressEntryMotion}
           onToggle={done ? () => setExpanded((v) => !v) : undefined}
           expanded={expanded}
         />
-        <ActivityTail items={items} max={max} collapsed={collapsed} />
+        <ActivityTail
+          items={items}
+          max={max}
+          collapsed={collapsed}
+          motionDisabled={message.suppressEntryMotion}
+        />
       </ActivityTrace>
     </article>
   );

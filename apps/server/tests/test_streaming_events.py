@@ -1335,12 +1335,14 @@ async def test_run_chat_emits_live_token_usage_after_model_response(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_active_goal_does_not_dispatch_hidden_continuation_after_user_turn(monkeypatch):
+async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkeypatch):
     from ntrp.services import chat as chat_service
 
     registry = RunRegistry()
     run = registry.create_run("sess-1")
     run.messages = [{"role": "user", "content": "is this active?", "client_id": "user-1"}]
+    run.client_id = "user-1"
+    run.input_message_index = 0
     session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
     dispatched = []
 
@@ -1397,7 +1399,13 @@ async def test_active_goal_does_not_dispatch_hidden_continuation_after_user_turn
 
     await run_chat(ctx, SessionBus(session_id="sess-1"))
 
-    assert dispatched == []
+    assert len(dispatched) == 1
+    assert dispatched[0][0] == "sess-1"
+    assert dispatched[0][1].startswith("<goal_context>")
+    assert "Continue working toward the active session goal." in dispatched[0][1]
+    assert "<objective>\nKeep going\n</objective>" in dispatched[0][1]
+    assert dispatched[0][2].startswith("goal:goal-1:")
+    assert dispatched[0][3] is True
 
 
 @pytest.mark.asyncio
@@ -1406,7 +1414,18 @@ async def test_goal_meta_run_does_not_dispatch_followup(monkeypatch):
 
     registry = RunRegistry()
     run = registry.create_run("sess-1")
-    run.messages = [{"role": "user", "content": "Continue", "client_id": "goal:goal-1:1", "is_meta": True}]
+    run.messages = [
+        {"role": "user", "content": "old visible turn", "client_id": "user-1"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "old-tool", "name": "Bash", "arguments": "{}"}],
+        },
+        {"role": "tool", "content": "old result", "tool_call_id": "old-tool"},
+        {"role": "user", "content": "Continue", "client_id": "goal:goal-1:1", "is_meta": True},
+    ]
+    run.client_id = "goal:goal-1:1"
+    run.input_message_index = 3
     session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
     dispatched = []
 

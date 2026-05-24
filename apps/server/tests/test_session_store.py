@@ -1075,7 +1075,7 @@ async def test_latest_session_messages_keep_latest_tail_when_adding_visible_user
     assert latest["messages"][-1]["message_id"] == "final"
     assert latest["messages"][-1]["message"]["content"] == "final answer"
     assert latest["messages"][1]["message"]["role"] == "assistant"
-    assert len(latest["messages"]) == 52
+    assert len(latest["messages"]) == 262
     assert latest["has_more_before"] is False
     assert latest["has_more_after"] is False
 
@@ -1118,6 +1118,106 @@ async def test_latest_session_messages_include_previous_exchange_for_tool_heavy_
     ]
     assert latest["messages"][-1]["message_id"] == "t-59"
     assert latest["has_more_before"] is False
+    assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
+async def test_latest_session_messages_keep_previous_exchange_when_latest_turn_exceeds_page_cap(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": "previous question", "client_id": "u-previous"},
+        {
+            "role": "assistant",
+            "content": "",
+            "client_id": "a-previous-tool",
+            "tool_calls": [
+                {
+                    "id": "previous-call",
+                    "type": "function",
+                    "function": {"name": "research", "arguments": "{}"},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "previous-call",
+            "content": "previous result",
+            "client_id": "t-previous-tool",
+        },
+        {"role": "user", "content": "current long research", "client_id": "u-current"},
+    ]
+    for i in range(130):
+        call_id = f"call-{i}"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "client_id": f"a-{i}",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": "bash", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": call_id, "content": f"result {i}", "client_id": f"t-{i}"},
+            ]
+        )
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=50)
+
+    assert [row["message_id"] for row in latest["messages"][:3]] == [
+        "u-previous",
+        "a-previous-tool",
+        "t-previous-tool",
+    ]
+    assert latest["messages"][3]["message_id"] == "u-current"
+    assert [row["message_id"] for row in latest["messages"][:4]] == [
+        "u-previous",
+        "a-previous-tool",
+        "t-previous-tool",
+        "u-current",
+    ]
+    assert latest["messages"][-1]["message_id"] == "t-129"
+    assert latest["has_more_before"] is False
+    assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
+async def test_latest_session_messages_keep_contiguous_tail_when_anchor_range_is_too_large(store: SessionStore):
+    state = _make_state()
+    messages = [{"role": "user", "content": "very large research", "client_id": "u-1"}]
+    for i in range(600):
+        call_id = f"call-{i}"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "client_id": f"a-{i}",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": "bash", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": call_id, "content": f"result {i}", "client_id": f"t-{i}"},
+            ]
+        )
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=50)
+
+    assert len(latest["messages"]) == 50
+    assert latest["messages"][0]["message_id"] == "a-575"
+    assert latest["messages"][-1]["message_id"] == "t-599"
+    assert all(row["message_id"] != "u-1" for row in latest["messages"])
+    assert latest["has_more_before"] is True
     assert latest["has_more_after"] is False
 
 

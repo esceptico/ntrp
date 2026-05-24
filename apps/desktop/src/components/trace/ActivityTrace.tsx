@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type ActivityItem } from "../../store";
+import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
 import { activityItemStatus, friendlyAgentLabel, isAgent } from "../../lib/agent";
 import { cancelSubagent } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
@@ -24,23 +24,36 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
 
 export function ActivityHeader({
   done,
+  label,
   count,
   activeCount = 0,
   backgrounded = false,
+  motionDisabled,
   onToggle,
   expanded,
 }: {
   done: boolean;
+  label?: ActivityLabel;
   count: number;
   activeCount?: number;
   backgrounded?: boolean;
+  motionDisabled?: boolean;
   onToggle?: () => void;
   expanded?: boolean;
 }) {
   const word = count === 1 ? "call" : "calls";
-  const heading = backgrounded ? "Backgrounded" : activeCount > 0 ? "Running" : done ? "Executed" : "Calling";
+  const heading = backgrounded
+    ? "Backgrounded"
+    : label === "Stopped"
+      ? "Stopped"
+      : activeCount > 0
+        ? "Running"
+        : done
+          ? "Executed"
+          : "Calling";
   const interactive = !!onToggle;
   const streamReplaying = useStore((s) => s.streamReplaying);
+  const suppressMotion = motionDisabled ?? streamReplaying;
 
   return (
     <button
@@ -58,15 +71,15 @@ export function ActivityHeader({
           singular/plural switch ("tool" / "tools") each animate
           independently instead of the whole string snapping. */}
       <span className="mr-1.5 inline-flex h-full items-center leading-none">
-        <RollingToken value={heading} motionDisabled={streamReplaying} />
+        <RollingToken value={heading} motionDisabled={suppressMotion} />
       </span>
       <span className="inline-flex h-full items-center gap-1 leading-none">
-        <RollingToken value={String(count)} mono motionDisabled={streamReplaying} />
-        <RollingToken value={word} motionDisabled={streamReplaying} />
+        <RollingToken value={String(count)} mono motionDisabled={suppressMotion} />
+        <RollingToken value={word} motionDisabled={suppressMotion} />
       </span>
       {activeCount > 0 && (
         <span className="inline-flex h-full items-center gap-1.5 leading-none">
-          <RollingToken value={String(activeCount)} mono motionDisabled={streamReplaying} />
+          <RollingToken value={String(activeCount)} mono motionDisabled={suppressMotion} />
           <span>active</span>
         </span>
       )}
@@ -228,6 +241,7 @@ function buildStaticTree(items: ActivityItem[]): ActivityItem[] {
  *  duplicate React keys. */
 function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
   const childrenByParent = new Map<string, ActivityItem[]>();
+  const ids = new Set(items.map((it) => it.id));
   for (const it of items) {
     if (!it.parentToolId) continue;
     const arr = childrenByParent.get(it.parentToolId) ?? [];
@@ -250,6 +264,12 @@ function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
 
   const topLevel = items.filter((it) => (it.depth ?? 0) === 0);
   for (const t of topLevel.slice(-max)) include(t);
+  for (const it of items.filter((item) => item.parentToolId && !ids.has(item.parentToolId)).slice(-max)) {
+    include(it);
+  }
+  if (out.length === 0) {
+    for (const it of items.slice(-max)) include(it);
+  }
   return out;
 }
 

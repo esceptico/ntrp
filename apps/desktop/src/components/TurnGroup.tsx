@@ -6,22 +6,11 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
+import { turnHeaderLabel } from "../lib/turnHeader";
 import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/motion";
 import { ICON } from "../lib/icons";
 
 const EASE = EASE_EMPHASIZED;
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return "less than a second";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const remS = s % 60;
-  if (m < 60) return remS === 0 ? `${m}m` : `${m}m ${remS}s`;
-  const h = Math.floor(m / 60);
-  const remM = m % 60;
-  return remM === 0 ? `${h}h` : `${h}h ${remM}m`;
-}
 
 export function TurnGroup({
   userId,
@@ -37,12 +26,28 @@ export function TurnGroup({
     Boolean(s.messages.get(userId)?.suppressEntryMotion || s.streamReplaying),
   );
 
-  const childRoles = useStore(
-    useShallow((s) => childIds.map((id) => s.messages.get(id)?.role ?? null)),
+  const childSummaryKeys = useStore(
+    useShallow((s) =>
+      childIds.map((id) => {
+        const message = s.messages.get(id);
+        return `${message?.role ?? ""}\t${message?.activity?.label ?? ""}`;
+      }),
+    ),
+  );
+  const childSummaries = useMemo(
+    () =>
+      childSummaryKeys.map((key) => {
+        const [role, activityLabel] = key.split("\t");
+        return {
+          role: role || null,
+          activityLabel: activityLabel || null,
+        };
+      }),
+    [childSummaryKeys],
   );
   const children = useMemo(
-    () => childIds.map((id, index) => ({ id, role: childRoles[index] ?? null })),
-    [childIds, childRoles],
+    () => childIds.map((id, index) => ({ id, role: childSummaries[index]?.role ?? null })),
+    [childIds, childSummaries],
   );
 
   // Only group into a "Worked Xs" block when the turn actually invoked
@@ -71,9 +76,8 @@ export function TurnGroup({
   const hasWork = layout.workIds.length > 0;
   // Live runs have a real durationMs; historic ones don't (we don't persist
   // turn timing). Show the time when we have it, plain "Worked" otherwise.
-  const headerLabel = turn?.durationMs != null
-    ? `Worked for ${formatDuration(turn.durationMs)}`
-    : "Worked";
+  const wasStopped = childSummaries.some((child) => child.activityLabel === "Stopped");
+  const headerLabel = turnHeaderLabel(turn?.durationMs, wasStopped);
 
   const showInterim = !isDone || expanded;
   // Stagger sibling reveals per Rauno's Depth essay ("Stagger sibling

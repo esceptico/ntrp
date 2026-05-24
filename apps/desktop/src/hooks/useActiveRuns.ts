@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { apiWithConfig } from "../api";
 import { useStore } from "../store";
+import { refreshCachedActiveSessionHistories } from "../actions/history";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -40,7 +41,9 @@ export function useActiveRuns(): void {
       try {
         const data = await apiWithConfig<RunsStatus>(config, "/chat/runs/status");
         if (disposed) return;
-        syncActiveRuns(runStatusSnapshots(data.active_runs));
+        const runs = runStatusSnapshots(data.active_runs);
+        syncActiveRuns(runs);
+        void refreshCachedActiveSessionHistories(runs);
       } catch {
         /* transient — next tick will retry */
       }

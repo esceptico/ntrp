@@ -86,6 +86,16 @@ export function reconnectDelayMs(
   return Math.max(0, Math.round(exponential + jitter));
 }
 
+export function eventStreamReadyForSession({
+  sessionId,
+  historyLoadedFor,
+}: {
+  sessionId: string | null;
+  historyLoadedFor: string | null;
+}): boolean {
+  return sessionId !== null && historyLoadedFor === sessionId;
+}
+
 export async function runDesktopEventStreamLoop({
   desktopEvents,
   config,
@@ -176,11 +186,10 @@ export async function runDesktopEventStreamLoop({
 export function useEvents(sessionId: string | null) {
   const config = useStore((s) => s.config);
   const historyLoadedFor = useStore((s) => s.sessionView.historyLoadedFor);
-  const historyReloadingFor = useStore((s) => s.sessionView.historyReloadingFor);
-  const ready =
-    sessionId !== null &&
-    historyLoadedFor === sessionId &&
-    historyReloadingFor !== sessionId;
+  const ready = eventStreamReadyForSession({
+    sessionId,
+    historyLoadedFor,
+  });
 
   useEffect(() => {
     if (!sessionId || !ready) return;

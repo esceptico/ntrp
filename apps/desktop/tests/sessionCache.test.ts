@@ -96,10 +96,10 @@ test("switching back hydrates cached state", () => {
   expect(getState().sessionView.historyLoadedFor).toBeNull();
 
   s.setCurrentSession("A");
-  // Restored from cache: the preview comes back, but canonical history
-  // still has to reload before live tail can open.
+  // Restored canonical cache is render-ready while the caller reconciles
+  // with fresh server history.
   expect(getState().messages.get("a-1")?.content).toBe("hello A");
-  expect(getState().sessionView.historyLoadedFor).toBeNull();
+  expect(getState().sessionView.historyLoadedFor).toBe("A");
   expect(getState().sessionView.historyPhase).toBe("cached-preview");
   expect(getState().sessionView.canonicalHistoryRequired).toBe(true);
 });
@@ -267,7 +267,7 @@ test("switchSession preserves cached preview until canonical history replaces it
     expect(getState().messages.get("a-1")?.content).toBe("cached A");
     expect(getState().running).toBe(true);
     expect(getState().currentRunId).toBe("run-A");
-    expect(getState().sessionView.historyLoadedFor).toBeNull();
+    expect(getState().sessionView.historyLoadedFor).toBe("A");
     expect(getState().sessionView.historyReloadingFor).toBe("A");
     expect(getState().sessionView.historyPhase).toBe("loading-history");
 
@@ -314,7 +314,10 @@ test("refresh hydrates the current session goal", async () => {
           if (request.path === "/health") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { auth: true }, text: "" };
           }
-          if (request.path === "/sessions") {
+          if (request.path === "/projects") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { projects: [] }, text: "" };
+          }
+          if (request.path === "/sessions" || request.path === "/sessions?limit=500") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
           }
           if (request.path === "/session") {
@@ -381,7 +384,10 @@ test("refresh keeps the current session usable when goal hydration fails", async
           if (request.path === "/health") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { auth: true }, text: "" };
           }
-          if (request.path === "/sessions") {
+          if (request.path === "/projects") {
+            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { projects: [] }, text: "" };
+          }
+          if (request.path === "/sessions" || request.path === "/sessions?limit=500") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
           }
           if (request.path === "/session") {
