@@ -104,7 +104,7 @@ def test_summary_compactor_waits_for_usage_or_message_ceiling():
 
 def test_compaction_timeout_is_finite():
     assert constants.COMPACTION_TIMEOUT is not None
-    assert constants.COMPACTION_TIMEOUT > 0
+    assert constants.COMPACTION_TIMEOUT == 600
 
 
 @pytest.mark.asyncio

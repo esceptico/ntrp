@@ -35,7 +35,7 @@ test("compactSessionApi uses an extended timeout", async () => {
     path: "/compact",
     method: "POST",
     body: JSON.stringify({ session_id: "sess-1" }),
-    timeout: 180_000,
+    timeout: 600_000,
   });
 });
 

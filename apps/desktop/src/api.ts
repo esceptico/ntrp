@@ -447,7 +447,7 @@ export async function cancelSubagentApi(
   );
 }
 
-const COMPACT_TIMEOUT_MS = 180_000;
+const COMPACT_TIMEOUT_MS = 600_000;
 
 export interface CompactResponse {
   status: string;
