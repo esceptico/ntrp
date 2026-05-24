@@ -42,13 +42,13 @@ class MCPTokenStorage:
         data = self._read()
         if not (tokens := data.get("tokens")):
             return None
-        # If access token has expired, strip it so the SDK falls into
+        # If access token has expired, make it falsy so the SDK falls into
         # the refresh path instead of sending a stale token and hitting 401.
         expires_at = data.get("expires_at")
         if expires_at and time.time() > expires_at:
-            tokens = {k: v for k, v in tokens.items() if k != "access_token"}
             if not tokens.get("refresh_token"):
                 return None
+            tokens = {**tokens, "access_token": ""}
         return OAuthToken(**tokens)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:

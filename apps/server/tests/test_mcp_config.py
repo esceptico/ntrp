@@ -1,5 +1,8 @@
+import time
+
 import pytest
 
+from ntrp.mcp import oauth
 from ntrp.mcp.models import HttpTransport, parse_server_config
 from ntrp.server.routers import mcp as mcp_router
 from ntrp.server.routers.mcp import prepare_mcp_server_config
@@ -102,6 +105,28 @@ def test_oauth_discovery_paths_include_resource_path():
         "/mcp/.well-known/oauth-authorization-server",
         "/.well-known/oauth-authorization-server",
     ]
+
+
+@pytest.mark.asyncio
+async def test_expired_oauth_tokens_with_refresh_token_load_for_refresh(monkeypatch, tmp_path):
+    monkeypatch.setattr(oauth, "OAUTH_DIR", tmp_path)
+    storage = oauth.MCPTokenStorage("linear")
+    storage._write(
+        {
+            "tokens": {
+                "access_token": "expired-access",
+                "token_type": "Bearer",
+                "refresh_token": "refresh-token",
+            },
+            "expires_at": time.time() - 1,
+        }
+    )
+
+    tokens = await storage.get_tokens()
+
+    assert tokens is not None
+    assert tokens.access_token == ""
+    assert tokens.refresh_token == "refresh-token"
 
 
 @pytest.mark.asyncio
