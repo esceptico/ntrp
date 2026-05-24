@@ -30,7 +30,6 @@ PROFILE_POLICY_VERSION = "knowledge.profiles.trimem.v1"
 PROFILE_ENTITY_EXTRACTOR = "knowledge.entities.profile_metadata.v1"
 PROFILE_EVIDENCE_TYPES = {
     KnowledgeObjectType.FACT,
-    KnowledgeObjectType.PATTERN,
     KnowledgeObjectType.LESSON,
     KnowledgeObjectType.PROCEDURE,
 }
@@ -123,9 +122,11 @@ def profile_entity_name(value: str, *, explicit: bool) -> str | None:
     if len(name) < 2 or len(name) > 120:
         return None
     lowered = name.casefold()
-    if "/" in name or "\\" in name or PROFILE_FILE_SUFFIX_RE.search(lowered):
+    if "/" in name or "\\" in name or "_" in name or PROFILE_FILE_SUFFIX_RE.search(lowered):
         return None
     if re.fullmatch(r"[0-9_:-]+", lowered):
+        return None
+    if re.search(r"\b[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b", name):
         return None
     if re.match(r"^(knowledge|session|run|turn):", lowered):
         return None

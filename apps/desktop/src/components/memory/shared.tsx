@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Search } from "lucide-react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Search, X } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
 import { ScrollBlurTop } from "../ScrollBlur";
@@ -226,13 +226,15 @@ export function GhostBtn({
   children,
   onClick,
   disabled,
+  ...buttonProps
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-}) {
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "onClick" | "disabled" | "className">) {
   return (
     <button
+      {...buttonProps}
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -270,10 +272,12 @@ export function SearchInput({
   value,
   onChange,
   placeholder,
+  ariaLabel = placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  ariaLabel?: string;
 }) {
   return (
     <div className="relative flex-1 min-w-0">
@@ -287,9 +291,20 @@ export function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md bg-[rgba(0,0,0,0.04)] focus:bg-[rgba(0,0,0,0.06)] border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-7 rounded-md bg-[rgba(0,0,0,0.04)] focus:bg-[rgba(0,0,0,0.06)] border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
       />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Clear search"
+          className="absolute right-1.5 top-1/2 grid size-4 -translate-y-1/2 place-items-center rounded text-faint hover:bg-surface-soft hover:text-ink"
+        >
+          <X size={ICON.XS} strokeWidth={2} />
+        </button>
+      )}
     </div>
   );
 }

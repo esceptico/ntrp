@@ -35,6 +35,8 @@ def test_builtin_memory_automations_use_current_constructs():
 
     profile_refresh = by_id[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID]
     assert profile_refresh.handler == "knowledge_profile_refresh"
+    assert profile_refresh.enabled is False
+    assert profile_refresh.triggers == []
     assert profile_refresh.writable is True
 
 
@@ -74,15 +76,18 @@ class _FakeEvents:
 class _FakeKnowledgeObjects:
     async def count_by_type(self) -> dict[str, int]:
         return {
-            KnowledgeObjectType.EPISODE.value: 2,
+            KnowledgeObjectType.MEMORY_EPISODE.value: 2,
             KnowledgeObjectType.FACT.value: 1,
-            KnowledgeObjectType.PATTERN.value: 1,
             KnowledgeObjectType.LESSON.value: 1,
-            KnowledgeObjectType.PROCEDURE.value: 1,
-            KnowledgeObjectType.ENTITY_PROFILE.value: 1,
-            KnowledgeObjectType.PROCEDURE_CANDIDATE.value: 1,
-            KnowledgeObjectType.ACTION_CANDIDATE.value: 1,
             KnowledgeObjectType.ARTIFACT.value: 1,
+        }
+
+    async def count_by_type_and_status(self) -> dict[str, dict[str, int]]:
+        return {
+            KnowledgeObjectType.MEMORY_EPISODE.value: {KnowledgeObjectStatus.ACTIVE.value: 2},
+            KnowledgeObjectType.FACT.value: {KnowledgeObjectStatus.ACTIVE.value: 1},
+            KnowledgeObjectType.LESSON.value: {KnowledgeObjectStatus.ACTIVE.value: 1},
+            KnowledgeObjectType.ARTIFACT.value: {KnowledgeObjectStatus.ACTIVE.value: 1},
         }
 
     async def list(self, *, object_type=None, status=None, limit: int = 100, offset: int = 0):
@@ -729,25 +734,21 @@ async def test_summary_exposes_draft_ui_surfaces_and_next_actions():
     summary = await service.summary()
 
     assert [surface.name for surface in summary.surfaces] == [
-        "Episodes",
+        "Memory episodes",
         "Facts",
-        "Patterns",
         "Lessons",
-        "Procedures",
-        "Profiles",
-        "Improve",
-        "Actions",
         "Artifacts",
-        "Activation",
     ]
     counts = {surface.object_type: surface.count for surface in summary.surfaces}
-    assert counts[KnowledgeObjectType.EPISODE] == 2
+    assert counts[KnowledgeObjectType.MEMORY_EPISODE] == 2
     assert counts[KnowledgeObjectType.FACT] == 1
-    assert counts[KnowledgeObjectType.PROCEDURE] == 1
-    assert counts[KnowledgeObjectType.ENTITY_PROFILE] == 1
-    assert counts[KnowledgeObjectType.OUTCOME_FEEDBACK] == 1
-    assert {surface.name: surface.count for surface in summary.surfaces}["Lessons"] == 1
-    assert {surface.name: surface.count for surface in summary.surfaces}["Actions"] == 1
+    assert counts[KnowledgeObjectType.LESSON] == 1
+    assert counts[KnowledgeObjectType.ARTIFACT] == 1
+    status_counts = {surface.object_type: surface.counts_by_status for surface in summary.surfaces}
+    assert status_counts[KnowledgeObjectType.MEMORY_EPISODE][KnowledgeObjectStatus.ACTIVE] == 2
+    assert status_counts[KnowledgeObjectType.FACT][KnowledgeObjectStatus.ACTIVE] == 1
+    assert status_counts[KnowledgeObjectType.LESSON][KnowledgeObjectStatus.ACTIVE] == 1
+    assert status_counts[KnowledgeObjectType.ARTIFACT][KnowledgeObjectStatus.ACTIVE] == 1
     assert {action.title for action in summary.next_actions} == {
         "Reflect recent memory episodes",
         "Review manual knowledge edits",
@@ -884,9 +885,9 @@ async def test_processors_reflect_render_publish_and_feedback(db: GraphDatabase,
     types = {obj.object_type for obj in reflected.created}
     assert KnowledgeObjectType.FACT not in types
     assert KnowledgeObjectType.LESSON not in types
-    assert KnowledgeObjectType.PATTERN in types
-    assert KnowledgeObjectType.PROCEDURE_CANDIDATE in types
-    assert KnowledgeObjectType.ACTION_CANDIDATE in types
+    assert KnowledgeObjectType.PATTERN not in types
+    assert KnowledgeObjectType.PROCEDURE_CANDIDATE not in types
+    assert KnowledgeObjectType.ACTION_CANDIDATE not in types
 
     artifact = await processors.render_artifact(
         KnowledgeArtifactRenderRequest(
@@ -920,13 +921,25 @@ async def test_processors_reflect_render_publish_and_feedback(db: GraphDatabase,
     assert sources.object.id == artifact.id
     assert sources.sources[0].object.id == episode.id
 
+    procedure_candidate = await service.knowledge_objects.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            title="Procedure candidate from explicit review",
+            text="When a note task workflow fails, review whether future behavior should change.",
+            status=KnowledgeObjectStatus.DRAFT,
+            scope="session:s1",
+            source_ids=[f"knowledge:{episode.id}"],
+            metadata={"processor": "manual_review", "episode_id": episode.id},
+        )
+    )
     updated = await service.knowledge_objects.update(
-        next(obj.id for obj in reflected.created if obj.object_type == KnowledgeObjectType.PROCEDURE_CANDIDATE),
+        procedure_candidate.id,
         KnowledgeObjectUpdate(status=KnowledgeObjectStatus.APPROVED),
     )
     assert updated.status == KnowledgeObjectStatus.APPROVED
-    procedures = await service.knowledge_objects.list(object_type=KnowledgeObjectType.PROCEDURE)
-    assert len(procedures) == 1
+    lessons = await service.knowledge_objects.list(object_type=KnowledgeObjectType.LESSON)
+    assert len(lessons) == 1
+    assert lessons[0].metadata["approved_candidate_id"] == procedure_candidate.id
 
     pruned = await processors.prune_retention(KnowledgePruneRequest(older_than_days=1, apply=True))
     assert pruned.policy_version == "knowledge.retention.v1"
@@ -974,9 +987,12 @@ async def test_negative_procedure_feedback_creates_revision_candidate_and_supers
     await service.knowledge_objects.update(candidates[0].id, KnowledgeObjectUpdate(status=KnowledgeObjectStatus.APPROVED))
     old = await service.knowledge_objects.get(procedure.id)
     procedures = await service.knowledge_objects.list(object_type=KnowledgeObjectType.PROCEDURE)
+    lessons = await service.knowledge_objects.list(object_type=KnowledgeObjectType.LESSON)
     assert old is not None
     assert old.status == KnowledgeObjectStatus.SUPERSEDED
-    assert len([item for item in procedures if item.status == KnowledgeObjectStatus.ACTIVE]) == 1
+    assert len([item for item in procedures if item.status == KnowledgeObjectStatus.ACTIVE]) == 0
+    assert len([item for item in lessons if item.status == KnowledgeObjectStatus.ACTIVE]) == 1
+    assert lessons[0].metadata["target_procedure_id"] == procedure.id
 
 
 @pytest.mark.asyncio
@@ -1155,6 +1171,111 @@ async def test_assimilate_run_completed_groups_runs_and_respects_boundaries(db: 
 
 
 @pytest.mark.asyncio
+async def test_assimilate_run_completed_excludes_tool_results_from_episode_text(db: GraphDatabase):
+    from ntrp.agent import Usage
+    from ntrp.events.internal import RunCompleted
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    episode, decision = await service.assimilate_run_completed(
+        RunCompleted(
+            run_id="run-tool-tail",
+            session_id="sess-tool-tail",
+            messages=(
+                {"role": "tool", "content": "tool: [1000 lines of pytest output]"},
+                {"role": "assistant", "content": "Cleaned up review source tracing and verification passed."},
+            ),
+            usage=Usage(),
+            result="Cleaned up review source tracing and verification passed.",
+        )
+    )
+
+    assert episode is not None
+    assert decision.open_new is True
+    assert not episode.title.lower().startswith("episode: tool")
+    assert "tool: [1000 lines" not in episode.text
+    assert "Cleaned up review source tracing" in episode.text
+
+
+@pytest.mark.asyncio
+async def test_assimilate_run_completed_strips_bundled_tool_prefix_from_assistant_episode_text(db: GraphDatabase):
+    from ntrp.agent import Usage
+    from ntrp.events.internal import RunCompleted
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    episode, decision = await service.assimilate_run_completed(
+        RunCompleted(
+            run_id="run-bundled-tool-prefix",
+            session_id="sess-bundled-tool-prefix",
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "tool: Todo list updated.\ntool: Remembered knowledge #1.\nassistant: Finished the memory cleanup pass.",
+                },
+            ),
+            usage=Usage(),
+            result=None,
+        )
+    )
+
+    assert episode is not None
+    assert decision.open_new is True
+    assert not episode.title.lower().startswith("episode: tool")
+    assert not episode.text.lower().startswith("assistant: tool:")
+    assert "tool: Todo list updated" not in episode.text
+    assert "Finished the memory cleanup pass" in episode.text
+
+
+@pytest.mark.asyncio
+async def test_assimilate_run_completed_skips_tool_only_memory_episode(db: GraphDatabase):
+    from ntrp.agent import Usage
+    from ntrp.events.internal import RunCompleted
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    episode, decision = await service.assimilate_run_completed(
+        RunCompleted(
+            run_id="run-tool-only",
+            session_id="sess-tool-only",
+            messages=({"role": "tool", "content": "tool: Todo list updated."},),
+            usage=Usage(),
+            result=None,
+        )
+    )
+
+    assert episode is None
+    assert decision.open_new is False
+    assert decision.boundary_type == "non_narrative_run"
+    episodes = await service.list(object_type=KnowledgeObjectType.MEMORY_EPISODE)
+    assert episodes == []
+
+
+@pytest.mark.asyncio
 async def test_assimilate_run_completed_explicit_switch_starts_new_episode(db: GraphDatabase):
     from ntrp.agent import Usage
     from ntrp.events.internal import RunCompleted
@@ -1226,6 +1347,7 @@ async def test_run_completion_captures_run_provenance_not_memory_episode(db: Gra
     assert obj is not None
     assert obj.object_type == KnowledgeObjectType.RUN_PROVENANCE
     assert obj.metadata["memory_role"] == "run_provenance"
+    assert obj.status == KnowledgeObjectStatus.ARCHIVED
     assert obj.activation == "audit"
     assert obj.scope == "session:sess-1"
     assert obj.source_ids == ["run:run-1", "session:sess-1"]
@@ -1343,6 +1465,9 @@ async def test_episode_close_model_extractor_creates_typed_candidates(db: GraphD
                                 '{"memories":[{"object_type":"fact","title":"User wants durable retrieval",'
                                 '"text":"The user wants retrieval to prefer durable memories by default.",'
                                 '"kind":"preference","confidence":0.88,"source_quote":"prefer durable memories"},'
+                                '{"object_type":"pattern","title":"Closed episodes improve extraction",'
+                                '"text":"Closing episodes before extraction makes durable memory review easier.",'
+                                '"kind":"implementation pattern","confidence":0.9,"source_quote":"episode close"},'
                                 '{"object_type":"procedure_candidate","title":"Close episodes before extracting",'
                                 '"text":"Extract durable memories only after an episode closes unless the user gives an explicit memory command.",'
                                 '"kind":"procedure_candidate","confidence":0.86,"source_quote":"episode close"}]}'
@@ -1365,9 +1490,15 @@ async def test_episode_close_model_extractor_creates_typed_candidates(db: GraphD
 
     assert closed is not None
     extracted = [await service.get(object_id) for object_id in closed.metadata["extracted_memory_ids"]]
-    assert KnowledgeObjectType.FACT in {obj.object_type for obj in extracted if obj is not None}
-    assert KnowledgeObjectType.PROCEDURE_CANDIDATE in {obj.object_type for obj in extracted if obj is not None}
-    assert all(obj.metadata["extractor"] == "episode.close.model.v1" for obj in extracted[:2] if obj is not None)
+    extracted_types = {obj.object_type for obj in extracted if obj is not None}
+    assert KnowledgeObjectType.FACT in extracted_types
+    assert KnowledgeObjectType.LESSON in extracted_types
+    assert KnowledgeObjectType.PROCEDURE_CANDIDATE not in extracted_types
+    assert KnowledgeObjectType.PATTERN not in extracted_types
+    normalized = [obj for obj in extracted if obj and obj.metadata.get("normalized_from_object_type") == "procedure_candidate"]
+    assert normalized
+    assert all(obj.object_type == KnowledgeObjectType.LESSON for obj in normalized)
+    assert all(obj.metadata["extractor"] == "episode.close.model.v2" for obj in extracted[:3] if obj is not None)
 
 
 @pytest.mark.asyncio
@@ -1481,7 +1612,7 @@ async def test_profile_synthesis_creates_source_backed_derived_entity_profile(db
             metadata={"entities": ["Dex"]},
         )
     )
-    pattern = await service.knowledge_objects.create(
+    await service.knowledge_objects.create(
         KnowledgeObjectCreate(
             object_type=KnowledgeObjectType.PATTERN,
             title="Dex profile pattern",
@@ -1503,9 +1634,10 @@ async def test_profile_synthesis_creates_source_backed_derived_entity_profile(db
     assert profile.metadata["valid_as_of"]
     assert profile.metadata["stale_after_days"] == 30
     assert profile.metadata["caveats"]
-    assert {fact.id, pattern.id} <= set(profile.metadata["source_object_ids"])
+    assert set(profile.metadata["source_object_ids"]) == {fact.id}
     assert f"knowledge:{fact.id}" in profile.source_ids
     assert "episode:dex-1" in profile.source_ids
+    assert "episode:dex-2" not in profile.source_ids
     assert all(section["source_ids"] for section in profile.metadata["profile_sections"])
     assert "Derived profile" in profile.text
 
@@ -1519,7 +1651,7 @@ async def test_profile_synthesis_creates_source_backed_derived_entity_profile(db
 
 
 @pytest.mark.asyncio
-async def test_profile_synthesis_auto_candidates_skip_junk_entity_names(db: GraphDatabase):
+async def test_profile_synthesis_requires_explicit_entity_names_and_does_not_auto_generate_profiles(db: GraphDatabase):
     from ntrp.memory.service import KnowledgeObjectService
 
     class _Memory:
@@ -1543,6 +1675,8 @@ async def test_profile_synthesis_auto_candidates_skip_junk_entity_names(db: Grap
         ("AO curriculum", "borderline context label with acronym"),
         ("Stage 1 hard-negative v2", "experiment-stage topic label"),
         ("dex-automations-audit-12-05-25.md", "filename artifact label"),
+        ("parseFrontmatter", "code symbol"),
+        ("PUBLIC_EXTENSION_ID", "config symbol"),
         ("User", "generic user label"),
     ):
         await service.knowledge_objects.create(
@@ -1558,15 +1692,9 @@ async def test_profile_synthesis_auto_candidates_skip_junk_entity_names(db: Grap
 
     result = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
 
-    profile_entities = {profile.metadata["profile_entity"] for profile in result.profiles}
-    assert {"Dex", "Regina Lin", "Trigger.dev"} <= profile_entities
-    assert "audit" not in profile_entities
-    assert "automation audit" not in profile_entities
-    assert "quota user-limit cases" not in profile_entities
-    assert "AO curriculum" not in profile_entities
-    assert "Stage 1 hard-negative v2" not in profile_entities
-    assert "dex-automations-audit-12-05-25.md" not in profile_entities
-    assert "User" not in profile_entities
+    assert result.profiles == []
+    assert result.skipped == 0
+    assert await service.knowledge_objects.get_entity_profile("Dex") is None
 
 
 @pytest.mark.asyncio
@@ -1627,7 +1755,7 @@ async def test_profiles_refresh_progressively_from_scheduled_or_manual_batch(db:
                 text = (
                     "# Entity profile: Dex\n\n"
                     "Derived profile.\n\n"
-                    "## Summary\nDex is the memory-backed browser copilot project with recurring work on inspectable activation."
+                    "## Summary\nDex is the memory-backed browser copilot project after a second source-backed refresh."
                 )
             return ProfileSynthesisOutput(
                 text=text,
@@ -1658,7 +1786,7 @@ async def test_profiles_refresh_progressively_from_scheduled_or_manual_batch(db:
     assert await knowledge_objects.get_entity_profile("Dex") is None
     assert synthesizer.calls == []
 
-    first = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
+    first = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(entity_names=["Dex"], limit_entities=10, apply=True))
     assert len(first.profiles) == 1
     created_profile = first.profiles[0]
     assert created_profile.metadata["profile_update_count"] == 1
@@ -1680,16 +1808,16 @@ async def test_profiles_refresh_progressively_from_scheduled_or_manual_batch(db:
     assert unchanged_profile is not None
     assert unchanged_profile.metadata["profile_update_count"] == 1
 
-    second = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(limit_entities=10, apply=True))
+    second = await processors.synthesize_profiles(KnowledgeProfileSynthesisRequest(entity_names=["Dex"], limit_entities=10, apply=True))
     assert len(second.profiles) == 1
     updated_profile = second.profiles[0]
     assert updated_profile.id == created_profile.id
     assert updated_profile.metadata["profile_update_count"] == 2
     assert updated_profile.metadata["updated_progressively"] is True
-    assert {fact.id, pattern.id} <= set(updated_profile.metadata["source_object_ids"])
+    assert set(updated_profile.metadata["source_object_ids"]) == {fact.id}
     assert f"knowledge:{fact.id}" in updated_profile.source_ids
-    assert f"knowledge:{pattern.id}" in updated_profile.source_ids
-    assert "inspectable activation" in updated_profile.text
+    assert f"knowledge:{pattern.id}" not in updated_profile.source_ids
+    assert "inspectable activation" not in updated_profile.text
     assert synthesizer.calls[0][2] is None
     assert synthesizer.calls[1][2] == created_profile.id
 
@@ -1714,7 +1842,13 @@ async def test_generated_profile_objects_do_not_trigger_recursive_profile_update
             text="# Entity profile: Dex\n\n## Summary\nDex profile text.",
             status=KnowledgeObjectStatus.ACTIVE,
             source_ids=["knowledge:123", "episode:dex"],
-            metadata={"entities": ["Dex"], "profile_entity": "Dex", "profile_schema_version": "trimem.profile.v1"},
+            metadata={
+                "entities": ["Dex"],
+                "profile_entity": "Dex",
+                "profile_schema_version": "trimem.profile.v1",
+                "source_anchored": True,
+                "source_object_ids": [123],
+            },
         )
     )
 
@@ -2101,7 +2235,13 @@ async def test_benchmark_memory_suite_runs_against_seeded_long_term_memory(db: G
             text="# Entity profile: Dex\n\n## Summary\nDex is the memory-backed browser copilot project.",
             status=KnowledgeObjectStatus.ACTIVE,
             source_ids=[f"knowledge:{current_policy.id}"],
-            metadata={"entities": ["Dex"], "profile_entity": "Dex", "profile_schema_version": "trimem.profile.v1"},
+            metadata={
+                "entities": ["Dex"],
+                "profile_entity": "Dex",
+                "profile_schema_version": "trimem.profile.v1",
+                "source_anchored": True,
+                "source_object_ids": [current_policy.id],
+            },
         )
     )
     prime_procedure = await service.knowledge_objects.create(
@@ -2399,3 +2539,95 @@ async def test_long_episode_snippets_keep_adjacent_answer_context():
     assert "redeemed a $5 coupon on coffee creamer" in bundle.candidates[0].text
     assert "Target" in bundle.candidates[0].text
     assert len(bundle.candidates[0].text) < 2_500
+
+
+@pytest.mark.asyncio
+async def test_memory_create_policy_archives_unsourced_profiles_and_large_patterns(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    profile = await service.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.ENTITY_PROFILE,
+            title="Profile: Garbage",
+            text="A profile without provenance should not be active.",
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=[],
+            metadata={"profile_entity": "Garbage"},
+        )
+    )
+    assert profile.status == KnowledgeObjectStatus.ARCHIVED
+    assert profile.metadata["create_policy_reason"] == "entity_profiles_must_be_source_backed"
+
+    large_pattern = await service.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PATTERN,
+            title="Huge rollup",
+            text="noisy summary\n" * 80,
+            status=KnowledgeObjectStatus.ACTIVE,
+            source_ids=["episode:noisy"],
+            metadata={},
+        )
+    )
+    assert large_pattern.status == KnowledgeObjectStatus.ARCHIVED
+    assert large_pattern.metadata["create_policy_reason"] == "large_pattern_summaries_are_not_active_memory"
+
+    legacy_procedure = await service.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            title="Legacy workflow candidate",
+            text="A stale episode extractor should not recreate procedure_candidate drafts.",
+            status=KnowledgeObjectStatus.DRAFT,
+            scope="session:test",
+            activation="review",
+            source_ids=["knowledge:episode-1"],
+            metadata={"extractor": "episode.close.model.v1", "kind": "workflow"},
+        )
+    )
+    assert legacy_procedure.object_type == KnowledgeObjectType.LESSON
+    assert legacy_procedure.status == KnowledgeObjectStatus.ACTIVE
+    assert legacy_procedure.activation == "prompt"
+    assert legacy_procedure.metadata["normalized_from_object_type"] == "procedure_candidate"
+    assert (
+        legacy_procedure.metadata["create_policy_reason"]
+        == "episode_extractor_legacy_procedure_normalized_to_lesson"
+    )
+
+
+@pytest.mark.asyncio
+async def test_memory_episode_create_archives_oldest_rows_over_session_cap(db: GraphDatabase):
+    from ntrp.memory.service import KnowledgeObjectService
+
+    class _Memory:
+        pass
+
+    memory = _Memory()
+    memory.db = db
+    memory.facts = type("_Facts", (), {"read_conn": db.conn})()
+    memory.events = _FakeEventWriter()
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+
+    created = []
+    for idx in range(32):
+        created.append(
+            await service.create_memory_episode(
+                session_id="cap-test",
+                title=f"Episode {idx}",
+                summary=f"Useful short episode {idx}",
+            )
+        )
+
+    refreshed = [await service.get(item.id) for item in created]
+    active = [item for item in refreshed if item is not None and item.status == KnowledgeObjectStatus.ACTIVE]
+    archived = [item for item in refreshed if item is not None and item.status == KnowledgeObjectStatus.ARCHIVED]
+    assert len(active) == 30
+    assert {item.id for item in archived} == {created[0].id, created[1].id}
+    assert all(item.metadata["archived_reason"] == "memory_episode_retention_cap" for item in archived)

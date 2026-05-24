@@ -213,8 +213,11 @@ async def test_seed_builtins_uses_knowledge_handlers(automation_store: Automatio
     } <= set(automations)
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].handler == "knowledge_reflection"
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].enabled is True
-    assert automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID].handler == "knowledge_profile_refresh"
-    assert automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID].writable is True
+    profile_refresh = automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID]
+    assert profile_refresh.handler == "knowledge_profile_refresh"
+    assert profile_refresh.enabled is False
+    assert profile_refresh.triggers == []
+    assert profile_refresh.writable is True
     assert any(
         isinstance(trigger, KnowledgeEventTrigger)
         and trigger.object_types == (KnowledgeObjectType.MEMORY_EPISODE.value,)

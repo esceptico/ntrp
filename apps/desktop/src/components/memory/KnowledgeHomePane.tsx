@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
-import type { KnowledgeObject, KnowledgeSummary } from "../../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KnowledgeObject, KnowledgeObjectType, KnowledgeSummary } from "../../api";
 import { getKnowledgeSummaryApi, listKnowledgeObjectsApi } from "../../api";
 import { useStore } from "../../store";
 import { formatRelativePast } from "../../lib/format";
-import { KNOWLEDGE_LIBRARY_TYPES, knowledgeSurfaceCount } from "../../lib/knowledgeViews";
+import {
+  KNOWLEDGE_LIBRARY_TYPES,
+  KNOWLEDGE_REVIEW_TYPES,
+  knowledgeSurfaceCount,
+  shouldReviewKnowledgeObject,
+} from "../../lib/knowledgeViews";
 import { ErrorPill, GhostBtn, Pill } from "./shared";
 import { ScrollBlurTop } from "../ScrollBlur";
 
@@ -12,38 +17,47 @@ export function KnowledgeHomePane({
   onOpenReview,
   onOpenActivation,
 }: {
-  onOpenLibrary: () => void;
+  onOpenLibrary: (type?: KnowledgeObjectType | "all") => void;
   onOpenReview: () => void;
   onOpenActivation: () => void;
 }) {
   const config = useStore((s) => s.config);
   const [summary, setSummary] = useState<KnowledgeSummary | null>(null);
   const [recent, setRecent] = useState<KnowledgeObject[] | null>(null);
+  const [reviewCount, setReviewCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const loadGenerationRef = useRef(0);
+
+  const libraryCount = useMemo(() => {
+    if (!summary) return 0;
+    return KNOWLEDGE_LIBRARY_TYPES.reduce((sum, view) => sum + knowledgeSurfaceCount(summary.surfaces, view.type), 0);
+  }, [summary]);
 
   async function load() {
+    const generation = ++loadGenerationRef.current;
     setError(null);
     try {
-      const [nextSummary, recentObjects] = await Promise.all([
+      const [nextSummary, recentObjects, reviewResults] = await Promise.all([
         getKnowledgeSummaryApi(config),
         listKnowledgeObjectsApi(config, { limit: 8 }),
+        Promise.all(
+          KNOWLEDGE_REVIEW_TYPES.map((type) =>
+            listKnowledgeObjectsApi(config, { object_type: type, status: "draft", limit: 250 }),
+          ),
+        ),
       ]);
+      if (generation !== loadGenerationRef.current) return;
       setSummary(nextSummary);
       setRecent(recentObjects.objects);
+      setReviewCount(reviewResults.flatMap((result) => result.objects).filter(shouldReviewKnowledgeObject).length);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (generation === loadGenerationRef.current) setError(e instanceof Error ? e.message : String(e));
     }
   }
 
   useEffect(() => {
     void load();
   }, []);
-
-  const reviewCount = summary
-    ? knowledgeSurfaceCount(summary.surfaces, "procedure_candidate")
-      + knowledgeSurfaceCount(summary.surfaces, "action_candidate")
-      + knowledgeSurfaceCount(summary.surfaces, "artifact")
-    : 0;
 
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
@@ -67,9 +81,9 @@ export function KnowledgeHomePane({
             <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <OverviewButton
                 title="Library"
-                value={summary.surfaces.reduce((sum, surface) => sum + surface.count, 0)}
-                detail="typed objects"
-                onClick={onOpenLibrary}
+                value={libraryCount}
+                detail="active facts, lessons, artifacts, episodes"
+                onClick={() => onOpenLibrary("all")}
               />
               <OverviewButton title="Review" value={reviewCount} detail="draft decisions" onClick={onOpenReview} />
               <OverviewButton
@@ -90,7 +104,7 @@ export function KnowledgeHomePane({
                   <button
                     key={view.type}
                     type="button"
-                    onClick={onOpenLibrary}
+                    onClick={() => onOpenLibrary(view.type)}
                     className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-left hover:bg-surface-soft transition-colors"
                   >
                     <div className="flex items-center justify-between gap-3">

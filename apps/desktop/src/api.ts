@@ -585,6 +585,8 @@ export async function permanentlyDeleteSessionApi(config: AppConfig, sessionId: 
 export type KnowledgeObjectType =
   | "source"
   | "evidence_ref"
+  | "run_provenance"
+  | "memory_episode"
   | "episode"
   | "fact"
   | "pattern"
@@ -621,6 +623,7 @@ export interface KnowledgeSurface {
   object_type: KnowledgeObjectType;
   count: number;
   description: string;
+  counts_by_status?: Partial<Record<KnowledgeObjectStatus, number>>;
 }
 
 export interface KnowledgeNextAction {
@@ -714,11 +717,12 @@ export async function getKnowledgeSummaryApi(config: AppConfig): Promise<Knowled
 
 export async function listKnowledgeObjectsApi(
   config: AppConfig,
-  filters: { object_type?: KnowledgeObjectType; status?: KnowledgeObjectStatus; limit?: number; offset?: number } = {},
+  filters: { object_type?: KnowledgeObjectType; status?: KnowledgeObjectStatus; query?: string; limit?: number; offset?: number } = {},
 ): Promise<{ objects: KnowledgeObject[] }> {
   const params = new URLSearchParams();
   if (filters.object_type) params.set("object_type", filters.object_type);
   if (filters.status) params.set("status", filters.status);
+  if (filters.query?.trim()) params.set("query", filters.query.trim());
   if (filters.limit != null) params.set("limit", String(filters.limit));
   if (filters.offset != null) params.set("offset", String(filters.offset));
   const suffix = params.toString() ? `?${params.toString()}` : "";

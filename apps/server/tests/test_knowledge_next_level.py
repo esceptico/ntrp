@@ -107,6 +107,34 @@ async def test_knowledge_service_backfills_old_object_embeddings(db: GraphDataba
 
 
 @pytest.mark.asyncio
+async def test_knowledge_service_promotes_procedure_candidate_to_lesson(db: GraphDatabase):
+    memory = _TransactionMemory(db)
+    service = KnowledgeObjectService(memory)  # type: ignore[arg-type]
+    repo = KnowledgeObjectRepository(db.conn)
+
+    candidate = await service.create(
+        KnowledgeObjectCreate(
+            object_type=KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            title="Candidate: inspect prod run first",
+            text="When debugging production, inspect the real run before static reasoning.",
+            status=KnowledgeObjectStatus.DRAFT,
+            scope="dex",
+            source_ids=["episode:prod-run"],
+        )
+    )
+
+    updated = await service.update(candidate.id, KnowledgeObjectUpdate(status=KnowledgeObjectStatus.APPROVED))
+    promoted = await repo.list(object_type=KnowledgeObjectType.LESSON, status=KnowledgeObjectStatus.ACTIVE)
+
+    assert updated.status == KnowledgeObjectStatus.APPROVED
+    assert len(promoted) == 1
+    assert promoted[0].object_type == KnowledgeObjectType.LESSON
+    assert promoted[0].text == candidate.text
+    assert promoted[0].metadata["approved_candidate_id"] == candidate.id
+    assert promoted[0].metadata["promoted_from"] == KnowledgeObjectType.PROCEDURE_CANDIDATE.value
+
+
+@pytest.mark.asyncio
 async def test_knowledge_service_extracts_entity_graph_metadata(db: GraphDatabase):
     memory = _TransactionMemory(db)
     service = KnowledgeObjectService(memory)  # type: ignore[arg-type]

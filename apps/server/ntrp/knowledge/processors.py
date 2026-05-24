@@ -21,15 +21,8 @@ from ntrp.knowledge.profiles import PROFILE_POLICY_VERSION, profile_entity_name,
 from ntrp.knowledge.sinks import publish_artifact
 from ntrp.memory.service import MemoryService
 
-_ACTION_HINTS = ("note", "artifact", "reminder", "task", "todo", "verify", "obsidian", "publish")
-_PROCEDURE_HINTS = ("failed", "error", "correction", "corrected", "should", "prefer", "always", "never")
 _NEGATIVE_SIGNALS = {"not_helpful", "harmful", "corrected", "wrong", "failed"}
 _POSITIVE_SIGNALS = {"helpful", "success", "used"}
-def _first_line(text: str, limit: int = 100) -> str:
-    line = text.strip().splitlines()[0] if text.strip() else "Untitled"
-    return line[:limit]
-
-
 class KnowledgeProcessorService:
     def __init__(self, memory: MemoryService):
         self.memory = memory
@@ -58,17 +51,16 @@ class KnowledgeProcessorService:
         return KnowledgeReflectResult(created=created, skipped=skipped)
 
     async def synthesize_profiles(self, request: KnowledgeProfileSynthesisRequest) -> KnowledgeProfileSynthesisResult:
-        list_names = getattr(self.memory.knowledge_objects, "list_profile_entity_names", None)
+        # Profiles are deliberately manual/explicit only. The previous auto-candidate
+        # path could turn noisy extracted entities and topic labels into durable
+        # active profiles, which polluted recall. Keep the endpoint for typed names,
+        # but never fan out over every entity in the store.
         entity_names = unique(
             [name for raw in request.entity_names if (name := profile_entity_name(raw, explicit=True)) is not None]
-        )
-        if not entity_names and list_names is not None:
-            listed = await list_names(limit=max(request.limit_entities * 4, request.limit_entities))
-            entity_names = unique([name for raw in listed if (name := profile_entity_name(raw, explicit=False)) is not None])
-        entity_names = entity_names[: request.limit_entities]
+        )[: request.limit_entities]
 
         refresh_profile = getattr(self.memory.knowledge_objects, "refresh_entity_profile", None)
-        if refresh_profile is None or not request.apply:
+        if refresh_profile is None or not request.apply or not entity_names:
             return KnowledgeProfileSynthesisResult(skipped=len(entity_names), policy_version=PROFILE_POLICY_VERSION)
 
         profiles: list[KnowledgeObject] = []
@@ -241,70 +233,7 @@ class KnowledgeProcessorService:
             await self.memory.knowledge_objects.update(episode.id, KnowledgeObjectUpdate(metadata=metadata))
             return extracted
 
-        source_id = f"knowledge:{episode.id}"
-        lowered = episode.text.lower()
-        created: list[KnowledgeObject] = []
-
-        if (
-            any(hint in lowered for hint in _PROCEDURE_HINTS)
-            and await self.memory.knowledge_objects.get_by_source_id(source_id, KnowledgeObjectType.PATTERN) is None
-        ):
-            created.append(
-                await self.memory.knowledge_objects.create(
-                    KnowledgeObjectCreate(
-                        object_type=KnowledgeObjectType.PATTERN,
-                        title=f"Pattern from {episode.title}",
-                        text=f"Potential repeated pattern to validate: {_first_line(episode.text, 240)}",
-                        status=KnowledgeObjectStatus.DRAFT,
-                        scope=episode.scope,
-                        activation="review",
-                        proactiveness_level="L2",
-                        score=0.25,
-                        source_ids=[source_id],
-                        metadata={"processor": "reflect", "episode_id": episode.id},
-                    )
-                )
-            )
-        if any(hint in lowered for hint in _PROCEDURE_HINTS):
-            if (
-                await self.memory.knowledge_objects.get_by_source_id(source_id, KnowledgeObjectType.PROCEDURE_CANDIDATE)
-                is None
-            ):
-                created.append(
-                    await self.memory.knowledge_objects.create(
-                        KnowledgeObjectCreate(
-                            object_type=KnowledgeObjectType.PROCEDURE_CANDIDATE,
-                            title=f"Procedure candidate from {episode.title}",
-                            text=f"Review whether this episode should change future behavior: {_first_line(episode.text, 240)}",
-                            status=KnowledgeObjectStatus.DRAFT,
-                            scope=episode.scope,
-                            activation="review",
-                            proactiveness_level="L2",
-                            score=0.3,
-                            source_ids=[source_id],
-                            metadata={"processor": "reflect", "episode_id": episode.id},
-                        )
-                    )
-                )
-        if any(hint in lowered for hint in _ACTION_HINTS):
-            if (
-                await self.memory.knowledge_objects.get_by_source_id(source_id, KnowledgeObjectType.ACTION_CANDIDATE)
-                is None
-            ):
-                created.append(
-                    await self.memory.knowledge_objects.create(
-                        KnowledgeObjectCreate(
-                            object_type=KnowledgeObjectType.ACTION_CANDIDATE,
-                            title=f"Action candidate from {episode.title}",
-                            text=f"Review whether this episode needs a follow-up action: {_first_line(episode.text, 240)}",
-                            status=KnowledgeObjectStatus.DRAFT,
-                            scope=episode.scope,
-                            activation="review",
-                            proactiveness_level="L2",
-                            score=0.3,
-                            source_ids=[source_id],
-                            metadata={"processor": "reflect", "episode_id": episode.id},
-                        )
-                    )
-                )
-        return created
+        # Do not synthesize legacy review objects from keyword heuristics. They were noisy
+        # enough to dominate memory cleanup (pattern/procedure/action candidates) and should
+        # only come from explicit, source-backed extraction paths.
+        return []

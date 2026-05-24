@@ -49,6 +49,11 @@ if TYPE_CHECKING:
 
 _logger = get_logger(__name__)
 
+MAX_ACTIVE_MEMORY_EPISODES = 250
+MAX_ACTIVE_MEMORY_EPISODES_PER_SESSION = 30
+MAX_ACTIVE_PATTERN_CHARS = 1_800
+MAX_ACTIVE_PATTERN_LINES = 40
+
 
 class KnowledgeEmbeddingBackfillResult(TypedDict):
     apply: bool
@@ -151,6 +156,57 @@ class KnowledgeObjectService:
 
     def _derived_profile_entity_result(self, object_type: KnowledgeObjectType, metadata: dict[str, Any]) -> EntityResolutionResult | None:
         return profile_entity_resolution(object_type, metadata)
+
+    def _apply_create_policy(self, payload: KnowledgeObjectCreate) -> KnowledgeObjectCreate:
+        metadata = dict(payload.metadata)
+        status = payload.status
+        policy_reason: str | None = None
+
+        if payload.object_type in {KnowledgeObjectType.PROCEDURE, KnowledgeObjectType.PROCEDURE_CANDIDATE} and str(
+            metadata.get("extractor", "")
+        ).startswith("episode.close."):
+            metadata.update(
+                {
+                    "create_policy": "knowledge.write_guardrails.v1",
+                    "create_policy_reason": "episode_extractor_legacy_procedure_normalized_to_lesson",
+                    "normalized_from_object_type": payload.object_type.value,
+                    "requested_status": payload.status.value,
+                }
+            )
+            return payload.model_copy(
+                update={
+                    "object_type": KnowledgeObjectType.LESSON,
+                    "status": KnowledgeObjectStatus.ACTIVE,
+                    "activation": "prompt",
+                    "metadata": metadata,
+                }
+            )
+
+        if payload.object_type == KnowledgeObjectType.PATTERN and status == KnowledgeObjectStatus.ACTIVE:
+            is_large = len(payload.text) > MAX_ACTIVE_PATTERN_CHARS or payload.text.count("\n") + 1 > MAX_ACTIVE_PATTERN_LINES
+            explicitly_allowed = bool(metadata.get("allow_active_pattern"))
+            if is_large and not explicitly_allowed:
+                status = KnowledgeObjectStatus.ARCHIVED
+                policy_reason = "large_pattern_summaries_are_not_active_memory"
+
+        if payload.object_type == KnowledgeObjectType.ENTITY_PROFILE and status == KnowledgeObjectStatus.ACTIVE:
+            source_object_ids = metadata.get("source_object_ids") or metadata.get("last_updated_from_object_ids")
+            source_backed = bool(payload.source_ids) and bool(metadata.get("source_anchored")) and bool(source_object_ids)
+            if not source_backed:
+                status = KnowledgeObjectStatus.ARCHIVED
+                policy_reason = "entity_profiles_must_be_source_backed"
+
+        if policy_reason is None:
+            return payload
+
+        metadata.update(
+            {
+                "create_policy": "knowledge.write_guardrails.v1",
+                "create_policy_reason": policy_reason,
+                "requested_status": payload.status.value,
+            }
+        )
+        return payload.model_copy(update={"status": status, "metadata": metadata})
 
     async def _with_extracted_entities(
         self, payload: KnowledgeObjectCreate
@@ -333,11 +389,14 @@ class KnowledgeObjectService:
         return await self._profiles.refresh(entity_name, evidence_limit=evidence_limit, explicit_refresh=explicit_refresh)
 
     async def create(self, payload: KnowledgeObjectCreate) -> KnowledgeObject:
+        payload = self._apply_create_policy(payload)
         payload, entity_result = await self._with_extracted_entities(payload)
         obj = await self._repo.create(payload)
         await self._sync_entity_resolution(obj, entity_result)
         obj = await self._annotate_semantic_conflicts(obj)
         await self._embed_object(obj)
+        if obj.object_type == KnowledgeObjectType.MEMORY_EPISODE and obj.status == KnowledgeObjectStatus.ACTIVE:
+            await self._archive_excess_memory_episodes(obj)
         await self._memory.events.create(
             actor="user",
             action="knowledge.created",
@@ -350,6 +409,31 @@ class KnowledgeObjectService:
         await self._emit_event(obj, "created")
         await self._memory.db.conn.commit()
         return obj
+
+    async def _archive_excess_memory_episodes(self, newest: KnowledgeObject) -> None:
+        episodes = await self._repo.list_many(
+            object_types={KnowledgeObjectType.MEMORY_EPISODE},
+            statuses={KnowledgeObjectStatus.ACTIVE},
+            limit=1_000,
+        )
+        to_archive: dict[int, KnowledgeObject] = {
+            episode.id: episode for episode in episodes[MAX_ACTIVE_MEMORY_EPISODES:] if episode.id != newest.id
+        }
+        same_session = [episode for episode in episodes if episode.scope == newest.scope]
+        for episode in same_session[MAX_ACTIVE_MEMORY_EPISODES_PER_SESSION:]:
+            if episode.id != newest.id:
+                to_archive[episode.id] = episode
+
+        for episode in to_archive.values():
+            metadata = {
+                **episode.metadata,
+                "archived_by": "knowledge.write_guardrails.v1",
+                "archived_reason": "memory_episode_retention_cap",
+            }
+            await self._repo.update(
+                episode.id,
+                KnowledgeObjectUpdate(status=KnowledgeObjectStatus.ARCHIVED, metadata=metadata),
+            )
 
     async def _emit_event(self, obj: KnowledgeObject, action: str) -> None:
         if self._event_dispatcher is None:
@@ -387,7 +471,7 @@ class KnowledgeObjectService:
                 object_type=KnowledgeObjectType.RUN_PROVENANCE,
                 title=title,
                 text=text,
-                status=KnowledgeObjectStatus.ACTIVE,
+                status=KnowledgeObjectStatus.ARCHIVED,
                 scope=f"session:{event.session_id}",
                 activation="audit",
                 proactiveness_level="L0",
@@ -527,7 +611,7 @@ class KnowledgeObjectService:
             "source_run_ids": episode.metadata.get("source_run_ids", []) or [],
             "source_turn_ids": episode.metadata.get("source_turn_ids", []) or [],
             "extracted_from": "episode_close",
-            "extractor": "episode.close.model.v1",
+            "extractor": "episode.close.model.v2",
         }
         payload = {
             "episode": {
@@ -550,8 +634,8 @@ class KnowledgeObjectService:
                         "role": "system",
                         "content": (
                             "Extract only durable, user-specific memory from a closed personal-assistant episode. "
-                            "Return facts/preferences as fact, repeated observations as pattern, validated outcomes as lesson, "
-                            "candidate reusable workflows as procedure_candidate, reusable outputs as artifact, and follow-ups as action_candidate. "
+                            "Return facts/preferences as fact, reusable observations, implementation patterns, and behavior changes as lesson, "
+                            "reusable outputs as artifact, and follow-ups as action_candidate. "
                             "Be conservative: omit transient implementation steps, generic knowledge, CI noise, and weak guesses. "
                             "Every memory must be useful months later and grounded in the episode. Return strict JSON."
                         ),
@@ -571,9 +655,14 @@ class KnowledgeObjectService:
             "preference": KnowledgeObjectType.FACT,
             "decision": KnowledgeObjectType.FACT,
             "lesson": KnowledgeObjectType.LESSON,
-            "pattern": KnowledgeObjectType.PATTERN,
-            "procedure": KnowledgeObjectType.PROCEDURE_CANDIDATE,
-            "procedure_candidate": KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            # Legacy model outputs may still say "pattern"; keep the simplified
+            # active memory model by storing those as lessons, not pattern rows.
+            "pattern": KnowledgeObjectType.LESSON,
+            # Legacy model outputs may still say "procedure" or
+            # "procedure_candidate". Store those as lessons so extraction cannot
+            # regenerate review-only procedure rows.
+            "procedure": KnowledgeObjectType.LESSON,
+            "procedure_candidate": KnowledgeObjectType.LESSON,
             "artifact": KnowledgeObjectType.ARTIFACT,
             "action": KnowledgeObjectType.ACTION_CANDIDATE,
             "action_candidate": KnowledgeObjectType.ACTION_CANDIDATE,
@@ -582,7 +671,8 @@ class KnowledgeObjectService:
         for item in extraction.memories:
             if item.confidence < 0.7:
                 continue
-            object_type = type_map.get(item.object_type.lower())
+            raw_object_type = item.object_type.lower()
+            object_type = type_map.get(raw_object_type)
             if object_type is None:
                 continue
             status = (
@@ -590,6 +680,14 @@ class KnowledgeObjectService:
                 if object_type in {KnowledgeObjectType.PROCEDURE_CANDIDATE, KnowledgeObjectType.ACTION_CANDIDATE}
                 else KnowledgeObjectStatus.ACTIVE
             )
+            metadata = {
+                **provenance,
+                "kind": item.kind,
+                "confidence": item.confidence,
+                "source_quote": item.source_quote,
+            }
+            if raw_object_type != object_type.value:
+                metadata["normalized_from_object_type"] = raw_object_type
             candidates.append(
                 KnowledgeObjectCreate(
                     object_type=object_type,
@@ -601,12 +699,7 @@ class KnowledgeObjectService:
                     proactiveness_level="L0",
                     score=min(0.5, item.confidence * 0.4),
                     source_ids=source_ids,
-                    metadata={
-                        **provenance,
-                        "kind": item.kind,
-                        "confidence": item.confidence,
-                        "source_quote": item.source_quote,
-                    },
+                    metadata=metadata,
                 )
             )
         return candidates
@@ -854,16 +947,64 @@ class KnowledgeObjectService:
         ]
         return max(scoped, key=lambda episode: episode.updated_at, default=None)
 
+    def _strip_leading_tool_transcript_lines(self, text: str) -> str:
+        lines = text.splitlines()
+        index = 0
+        while index < len(lines):
+            stripped = lines[index].strip().lower()
+            if not stripped or stripped.startswith("tool:"):
+                index += 1
+                continue
+            break
+        return "\n".join(lines[index:]).strip()
+
+    def _episode_message_text(self, content: Any) -> str:
+        if isinstance(content, str):
+            return self._strip_leading_tool_transcript_lines(content.strip())
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item.strip())
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if isinstance(text, str):
+                        parts.append(text.strip())
+            return self._strip_leading_tool_transcript_lines("\n".join(part for part in parts if part).strip())
+        return ""
+
+    def _is_synthetic_episode_text(self, text: str) -> bool:
+        stripped = text.lstrip().lower()
+        return (
+            stripped.startswith("<goal_context>")
+            or stripped.startswith("[session state handoff]")
+            or stripped.startswith("tool:")
+        )
+
     def _run_episode_text(self, event: RunCompleted) -> str:
-        result = event.result or "Run completed without a final result."
-        messages = []
-        for message in event.messages[-4:]:
-            role = message.get("role", "unknown")
-            content = message.get("content", "")
-            if isinstance(content, str) and content.strip():
-                messages.append(f"{role}: {content.strip()[:500]}")
-        transcript = "\n".join(messages)
-        return f"Run {event.run_id} result: {result}" if not transcript else f"{transcript}\nRun {event.run_id} result: {result}"
+        """Build narrative episode text from user-visible conversation only.
+
+        Tool messages are evidence/provenance for a run, not the episode itself.
+        Keeping raw tool results out of episode text prevents junk titles like
+        "Episode: tool: ..." and keeps episodes centered on user intent/outcome.
+        """
+        visible_messages: list[str] = []
+        for message in event.messages:
+            role = str(message.get("role", "unknown")).lower()
+            if role not in {"user", "assistant"}:
+                continue
+            content = self._episode_message_text(message.get("content", ""))
+            if not content or self._is_synthetic_episode_text(content):
+                continue
+            visible_messages.append(f"{role}: {content[:500]}")
+
+        result = (event.result or "").strip()
+        if result and not self._is_synthetic_episode_text(result):
+            transcript = "\n".join(visible_messages)
+            if result[:200].lower() not in transcript.lower():
+                visible_messages.append(f"assistant result: {result[:500]}")
+
+        return "\n".join(visible_messages[-6:]).strip()
 
     async def assimilate_run_completed(
         self,
@@ -882,6 +1023,26 @@ class KnowledgeObjectService:
         event_text = self._run_episode_text(event)
         classifier = classifier or self._boundary_classifier
         current = await self.get_open_memory_episode(event.session_id)
+        if not event_text:
+            decision = EpisodeBoundaryDecision(
+                continue_current=current is not None,
+                close_current=False,
+                open_new=False,
+                boundary_type="non_narrative_run",
+                confidence=0.9,
+                evidence=["Run had no user-visible narrative messages; tool-only evidence stays in run provenance."],
+            )
+            if current is None:
+                return None, decision
+            run_source_ids = [f"run:{event.run_id}"]
+            if provenance is not None:
+                run_source_ids.append(f"knowledge:{provenance.id}")
+            updated = await self.append_memory_episode_sources(
+                current.id,
+                run_ids=[event.run_id],
+                source_ids=run_source_ids,
+            )
+            return updated, decision
         maybe_decision = classifier.decide(current_episode=current, event_text=event_text, idle_seconds=idle_seconds)
         decision = await maybe_decision if isawaitable(maybe_decision) else maybe_decision
         run_source_ids = [f"run:{event.run_id}"]
@@ -1116,8 +1277,11 @@ class KnowledgeObjectService:
         candidates: list[KnowledgeObject] = []
         age_prunable_types = {
             KnowledgeObjectType.RUN_PROVENANCE,
+            KnowledgeObjectType.MEMORY_EPISODE,
             KnowledgeObjectType.EPISODE,
+            KnowledgeObjectType.PATTERN,
             KnowledgeObjectType.PROCEDURE_CANDIDATE,
+            KnowledgeObjectType.ENTITY_PROFILE,
             KnowledgeObjectType.ACTION_CANDIDATE,
             KnowledgeObjectType.ARTIFACT,
             KnowledgeObjectType.SINK_RECEIPT,
@@ -1125,11 +1289,8 @@ class KnowledgeObjectService:
         }
         durable_types = {
             KnowledgeObjectType.FACT,
-            KnowledgeObjectType.PATTERN,
             KnowledgeObjectType.LESSON,
             KnowledgeObjectType.PROCEDURE,
-            KnowledgeObjectType.ENTITY_PROFILE,
-            KnowledgeObjectType.MEMORY_EPISODE,
         }
         for obj in await self.list(limit=request.limit):
             if obj.status in {
@@ -1162,6 +1323,9 @@ class KnowledgeObjectService:
 
     async def count_by_type(self) -> dict[str, int]:
         return await self._repo.count_by_type()
+
+    async def count_by_type_and_status(self) -> dict[str, dict[str, int]]:
+        return await self._repo.count_by_type_and_status()
 
     async def update(self, object_id: int, payload: KnowledgeObjectUpdate) -> KnowledgeObject:
         obj = await self._repo.update(object_id, payload)
@@ -1219,8 +1383,8 @@ class KnowledgeObjectService:
                         )
                 await self.create(
                     KnowledgeObjectCreate(
-                        object_type=KnowledgeObjectType.PROCEDURE,
-                        title=obj.title.replace("candidate", "procedure").replace("Candidate", "Procedure"),
+                        object_type=KnowledgeObjectType.LESSON,
+                        title=obj.title.replace("candidate", "lesson").replace("Candidate", "Lesson"),
                         text=obj.text,
                         status=KnowledgeObjectStatus.ACTIVE,
                         scope=obj.scope,
@@ -1228,7 +1392,7 @@ class KnowledgeObjectService:
                         proactiveness_level="L0",
                         score=max(obj.score, 0.5),
                         source_ids=[source_id, *obj.source_ids],
-                        metadata={"approved_candidate_id": obj.id, **obj.metadata},
+                        metadata={"approved_candidate_id": obj.id, "promoted_from": obj.object_type.value, **obj.metadata},
                     )
                 )
         return obj

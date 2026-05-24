@@ -1024,6 +1024,19 @@ class KnowledgeObjectRepository:
         )
         return {str(row["object_type"]): int(row["count"]) for row in rows}
 
+    async def count_by_type_and_status(self) -> dict[str, dict[str, int]]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT object_type, status, COUNT(*) AS count
+            FROM knowledge_objects
+            GROUP BY object_type, status
+            """
+        )
+        counts: dict[str, dict[str, int]] = {}
+        for row in rows:
+            counts.setdefault(str(row["object_type"]), {})[str(row["status"])] = int(row["count"])
+        return counts
+
     async def update(self, object_id: int, payload: KnowledgeObjectUpdate) -> KnowledgeObject:
         existing = await self.get(object_id)
         if existing is None:

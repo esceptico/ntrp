@@ -229,6 +229,7 @@ class KnowledgeActivationService:
 
     async def summary(self) -> KnowledgeSummary:
         object_counts = await self.memory.knowledge_objects.count_by_type()
+        object_status_counts = await self.memory.knowledge_objects.count_by_type_and_status()
         recent_events = await self.memory.events.list_recent(limit=20)
         activation_count = await self._activation_event_count()
         next_actions: list[KnowledgeNextAction] = []
@@ -256,67 +257,41 @@ class KnowledgeActivationService:
                 )
             )
 
+        def counts_by_status(object_type: KnowledgeObjectType) -> dict[KnowledgeObjectStatus, int]:
+            return {
+                KnowledgeObjectStatus(status): count
+                for status, count in object_status_counts.get(object_type.value, {}).items()
+            }
+
         return KnowledgeSummary(
             surfaces=[
                 KnowledgeSurface(
-                    name="Episodes",
-                    object_type=KnowledgeObjectType.EPISODE,
-                    count=object_counts.get(KnowledgeObjectType.EPISODE.value, 0),
-                    description="captured work moments",
+                    name="Memory episodes",
+                    object_type=KnowledgeObjectType.MEMORY_EPISODE,
+                    count=object_counts.get(KnowledgeObjectType.MEMORY_EPISODE.value, 0),
+                    description="short rolling conversation episodes",
+                    counts_by_status=counts_by_status(KnowledgeObjectType.MEMORY_EPISODE),
                 ),
                 KnowledgeSurface(
                     name="Facts",
                     object_type=KnowledgeObjectType.FACT,
                     count=object_counts.get(KnowledgeObjectType.FACT.value, 0),
-                    description="source-backed facts",
-                ),
-                KnowledgeSurface(
-                    name="Patterns",
-                    object_type=KnowledgeObjectType.PATTERN,
-                    count=object_counts.get(KnowledgeObjectType.PATTERN.value, 0),
-                    description="derived context with fact provenance",
+                    description="durable source-backed facts",
+                    counts_by_status=counts_by_status(KnowledgeObjectType.FACT),
                 ),
                 KnowledgeSurface(
                     name="Lessons",
                     object_type=KnowledgeObjectType.LESSON,
                     count=object_counts.get(KnowledgeObjectType.LESSON.value, 0),
-                    description="reusable conclusions from episodes and feedback",
-                ),
-                KnowledgeSurface(
-                    name="Procedures",
-                    object_type=KnowledgeObjectType.PROCEDURE,
-                    count=object_counts.get(KnowledgeObjectType.PROCEDURE.value, 0),
-                    description="approved behavior",
-                ),
-                KnowledgeSurface(
-                    name="Profiles",
-                    object_type=KnowledgeObjectType.ENTITY_PROFILE,
-                    count=object_counts.get(KnowledgeObjectType.ENTITY_PROFILE.value, 0),
-                    description="source-backed entity/context profiles",
-                ),
-                KnowledgeSurface(
-                    name="Improve",
-                    object_type=KnowledgeObjectType.PROCEDURE_CANDIDATE,
-                    count=object_counts.get(KnowledgeObjectType.PROCEDURE_CANDIDATE.value, 0),
-                    description="review-gated behavior changes",
-                ),
-                KnowledgeSurface(
-                    name="Actions",
-                    object_type=KnowledgeObjectType.ACTION_CANDIDATE,
-                    count=object_counts.get(KnowledgeObjectType.ACTION_CANDIDATE.value, 0),
-                    description="proactive suggestions and drafts",
+                    description="reusable conclusions and preferences",
+                    counts_by_status=counts_by_status(KnowledgeObjectType.LESSON),
                 ),
                 KnowledgeSurface(
                     name="Artifacts",
                     object_type=KnowledgeObjectType.ARTIFACT,
                     count=object_counts.get(KnowledgeObjectType.ARTIFACT.value, 0),
-                    description="human-facing reusable outputs",
-                ),
-                KnowledgeSurface(
-                    name="Activation",
-                    object_type=KnowledgeObjectType.OUTCOME_FEEDBACK,
-                    count=activation_count,
-                    description="activation/access events",
+                    description="important reusable outputs",
+                    counts_by_status=counts_by_status(KnowledgeObjectType.ARTIFACT),
                 ),
             ],
             next_actions=next_actions,

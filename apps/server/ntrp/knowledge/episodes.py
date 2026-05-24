@@ -19,7 +19,7 @@ class EpisodeBoundaryDecision(BaseModel):
 
 
 class EpisodeMemoryCandidate(BaseModel):
-    object_type: str = Field(description="fact, lesson, pattern, procedure_candidate, artifact, or action_candidate")
+    object_type: str = Field(description="fact, lesson, artifact, or action_candidate")
     title: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2000)
     kind: str = "episode_close"

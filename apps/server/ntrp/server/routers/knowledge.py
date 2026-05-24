@@ -30,16 +30,27 @@ async def get_knowledge_summary(svc: MemoryService = Depends(require_memory)):
 async def list_knowledge_objects(
     object_type: KnowledgeObjectType | None = None,
     status: KnowledgeObjectStatus | None = None,
+    query: str | None = None,
     limit: int = 100,
     offset: int = 0,
     svc: MemoryService = Depends(require_memory),
 ):
-    objects = await svc.knowledge_objects.list(
-        object_type=object_type,
-        status=status,
-        limit=limit,
-        offset=offset,
-    )
+    search = query.strip() if query else ""
+    if search:
+        objects = await svc.knowledge_objects.search_text(
+            search,
+            object_types={object_type} if object_type else None,
+            statuses={status} if status else None,
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        objects = await svc.knowledge_objects.list(
+            object_type=object_type,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
     return {"objects": [obj.model_dump() for obj in objects]}
 
 

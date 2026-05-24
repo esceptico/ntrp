@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import { type ActivationBundle, type ActivationCandidate, inspectKnowledgeActivationApi } from "../../api";
@@ -14,18 +14,39 @@ export function RecallPane() {
   const [result, setResult] = useState<ActivationBundle | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const runGenerationRef = useRef(0);
+
+  function clearQuery() {
+    runGenerationRef.current += 1;
+    setQuery("");
+    setResult(null);
+    setError(null);
+    setLoading(false);
+  }
+
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    if (!nextQuery.trim()) {
+      runGenerationRef.current += 1;
+      setResult(null);
+      setError(null);
+      setLoading(false);
+    }
+  }
 
   async function run() {
     const trimmed = query.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed) return;
+    const generation = ++runGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
-      setResult(await inspectKnowledgeActivationApi(config, trimmed));
+      const nextResult = await inspectKnowledgeActivationApi(config, trimmed);
+      if (generation === runGenerationRef.current) setResult(nextResult);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (generation === runGenerationRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (generation === runGenerationRef.current) setLoading(false);
     }
   }
 
@@ -37,14 +58,26 @@ export function RecallPane() {
             <Search size={ICON.MD} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => updateQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void run();
               }}
               spellCheck={false}
               placeholder="Ask what knowledge would activate for a query"
-              className="h-9 w-full rounded-[8px] border border-line-soft bg-bg-main pl-9 pr-3 text-base text-ink outline-none transition-colors focus:border-line-strong"
+              aria-label="Activation inspector query"
+              title="Press Enter to inspect activation"
+              className="h-9 w-full rounded-[8px] border border-line-soft bg-bg-main pl-9 pr-8 text-base text-ink outline-none transition-colors focus:border-line-strong"
             />
+            {query && (
+              <button
+                type="button"
+                onClick={clearQuery}
+                aria-label="Clear activation query"
+                className="absolute right-2.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-faint hover:bg-surface-soft hover:text-ink"
+              >
+                <X size={ICON.XS} strokeWidth={2} />
+              </button>
+            )}
           </div>
           <GhostBtn onClick={() => void run()} disabled={loading || !query.trim()}>
             {loading ? "Inspecting..." : "Inspect activation"}

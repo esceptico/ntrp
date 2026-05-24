@@ -13,7 +13,6 @@ from ntrp.constants import (
     BUILTIN_KNOWLEDGE_RETENTION_ID,
     DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
-    DEFAULT_KNOWLEDGE_PROFILE_REFRESH_IDLE_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES,
@@ -70,12 +69,10 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
         name="Knowledge Profile Refresh",
-        description="Refresh source-backed entity profiles from due facts, patterns, lessons, and procedures",
-        triggers=[
-            TimeTrigger(every="2h"),
-            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_PROFILE_REFRESH_IDLE_MINUTES),
-        ],
+        description="Disabled by default; entity profiles are manual/source-backed only after memory simplification",
+        triggers=[],
         handler="knowledge_profile_refresh",
+        enabled=False,
         cooldown_minutes=DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
         writable=True,
     ),
@@ -130,6 +127,8 @@ async def seed_builtins(store: AutomationStore) -> None:
                 changes["handler"] = spec.handler
             if existing.writable != spec.writable:
                 changes["writable"] = spec.writable
+            if existing.enabled != spec.enabled:
+                changes["enabled"] = spec.enabled
             if existing.cooldown_minutes is None and spec.cooldown_minutes is not None:
                 changes["cooldown_minutes"] = spec.cooldown_minutes
             spec_triggers = [{"type": t.type, **t.params()} for t in spec.triggers]

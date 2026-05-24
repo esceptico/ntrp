@@ -127,6 +127,7 @@ class KnowledgeSurface(BaseModel):
     object_type: KnowledgeObjectType
     count: int
     description: str
+    counts_by_status: dict[KnowledgeObjectStatus, int] = Field(default_factory=dict)
 
 
 class KnowledgeNextAction(BaseModel):
