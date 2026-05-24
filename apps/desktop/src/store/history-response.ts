@@ -18,6 +18,7 @@ import {
   reduceHistoryLoadSucceeded,
 } from "./session-view";
 import type {
+  ActivityItem,
   ApprovalState,
   CachedSessionState,
   QueuedMessage,
@@ -73,9 +74,13 @@ export function historyMessagesToUi(
 export function projectHistoryResponse(
   history: HistoryResponse,
   isNewestPage: boolean,
+  existing?: Pick<CachedSessionState, "messages" | "order" | "activeActivityId">,
 ): HistoryProjection {
   const activeForegroundRunId = foregroundActiveRunId(history.active_run_id, history.runtime);
-  const rawItems = historyMessagesToUi(history.messages, activeForegroundRunId, { isNewestPage });
+  let rawItems = historyMessagesToUi(history.messages, activeForegroundRunId, { isNewestPage });
+  if (activeForegroundRunId && isNewestPage && existing) {
+    rawItems = mergeActiveLiveProjection(rawItems, existing);
+  }
   const rawActiveActivityId = activeForegroundRunId ? newestHistoryActivityId(rawItems) : null;
   const { items, activeActivityId } = normalizeHistoryItems(rawItems, rawActiveActivityId);
   return { activeForegroundRunId, activeActivityId, items };
@@ -137,6 +142,7 @@ export function cachedSessionFromHistory(
   const { activeForegroundRunId, activeActivityId, items } = projectHistoryResponse(
     history,
     page?.has_more_after !== true,
+    existing,
   );
   const view = runtimeView(activeForegroundRunId, runtime);
   const map = new Map<string, UiMessage>();
@@ -171,6 +177,111 @@ export function cachedSessionFromHistory(
     pendingApprovals: pendingApprovalsFromRuntime(runtime, view.hasForegroundRun, skipApprovals),
     reviewingApprovalToolId: null,
     queuedMessages: queuedMessagesFromRuntime(runtime, view.hasForegroundRun),
+  };
+}
+
+function mergeActiveLiveProjection(
+  historyItems: UiMessage[],
+  existing: Pick<CachedSessionState, "messages" | "order" | "activeActivityId">,
+): UiMessage[] {
+  const historyIds = new Set(historyItems.map((item) => item.id));
+  const historyById = new Map(historyItems.map((item) => [item.id, item]));
+  const out = historyItems.slice();
+  let targetActivityId = newestHistoryActivityId(out);
+
+  for (const id of existing.order) {
+    const cached = existing.messages.get(id);
+    if (!cached) continue;
+
+    if (
+      cached.role === "activity" &&
+      cached.activity &&
+      shouldPreserveCachedActivity(cached, existing.activeActivityId)
+    ) {
+      if (!targetActivityId) {
+        out.push({ ...cached, suppressEntryMotion: true });
+        targetActivityId = cached.id;
+        historyIds.add(cached.id);
+        historyById.set(cached.id, cached);
+        continue;
+      }
+
+      const target = historyById.get(targetActivityId);
+      if (!target?.activity) continue;
+      const merged: UiMessage = {
+        ...target,
+        suppressEntryMotion: true,
+        activity: {
+          ...target.activity,
+          label: target.activity.done && cached.activity.done ? target.activity.label : "Calling",
+          done: target.activity.done && cached.activity.done,
+          items: mergeActivityItems(target.activity.items, cached.activity.items),
+        },
+      };
+      historyById.set(targetActivityId, merged);
+      const index = out.findIndex((item) => item.id === targetActivityId);
+      if (index >= 0) out[index] = merged;
+      continue;
+    }
+
+    if (!historyIds.has(id) && isUnsavedLiveMessage(cached)) {
+      out.push({ ...cached, suppressEntryMotion: true });
+      historyIds.add(id);
+      historyById.set(id, cached);
+    }
+  }
+
+  return out;
+}
+
+function shouldPreserveCachedActivity(message: UiMessage, activeActivityId: string | null): boolean {
+  if (!message.activity) return false;
+  if (message.id === activeActivityId) return true;
+  if (!message.activity.done) return true;
+  return message.activity.items.some((item) => item.status === "ongoing" || item.result == null);
+}
+
+function isUnsavedLiveMessage(message: UiMessage): boolean {
+  if (message.sourceMessageId) return false;
+  return message.role === "assistant" || message.role === "reasoning" || message.role === "status";
+}
+
+function mergeActivityItems(historyItems: ActivityItem[], liveItems: ActivityItem[]): ActivityItem[] {
+  const byId = new Map<string, ActivityItem>();
+  const ids: string[] = [];
+  for (const item of historyItems) {
+    byId.set(item.id, item);
+    ids.push(item.id);
+  }
+  for (const item of liveItems) {
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, item);
+      ids.push(item.id);
+      continue;
+    }
+    byId.set(item.id, mergeActivityItem(existing, item));
+  }
+  return ids.flatMap((id) => {
+    const item = byId.get(id);
+    return item ? [item] : [];
+  });
+}
+
+function mergeActivityItem(historyItem: ActivityItem, liveItem: ActivityItem): ActivityItem {
+  const hasHistoryResult = historyItem.result != null && historyItem.result !== "";
+  return {
+    ...historyItem,
+    ...liveItem,
+    result: liveItem.result ?? historyItem.result,
+    status:
+      hasHistoryResult && liveItem.status === "ongoing"
+        ? historyItem.status
+        : liveItem.status ?? historyItem.status,
+    durationMs: liveItem.durationMs ?? historyItem.durationMs,
+    error: liveItem.error ?? historyItem.error,
+    usage: liveItem.usage ?? historyItem.usage,
+    cost: liveItem.cost ?? historyItem.cost,
   };
 }
 

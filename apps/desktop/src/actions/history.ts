@@ -280,6 +280,7 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   const { activeForegroundRunId, activeActivityId, items } = projectHistoryResponse(
     history,
     isNewestPage,
+    getState(),
   );
   if (mode === "prepend") {
     s.prependHistory(items, page);

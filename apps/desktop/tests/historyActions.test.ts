@@ -28,6 +28,12 @@ beforeEach(() => {
     skipApprovals: false,
     pendingApprovals: [],
     queuedMessages: [],
+    activeRunSessionIds: new Set(),
+    backgroundedRunSessionIds: new Set(),
+    unreadDoneSessionIds: new Set(),
+    sessionCache: new Map(),
+    stoppingRunId: null,
+    terminalRunIds: new Set(),
   });
 });
 
@@ -175,6 +181,223 @@ test("active-session cache refresh hydrates inactive running sessions with curre
     expect(getState().messages.get(activityId!)?.activity?.items[0]).toMatchObject({
       id: "research-1",
       status: "ongoing",
+    });
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("active-session cache refresh preserves live agent trace not represented in history", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              { role: "user", content: "research", id: "user-1" },
+              {
+                role: "assistant",
+                content: "",
+                id: "assistant-load-tools",
+                tool_calls: [
+                  {
+                    id: "load-tools",
+                    name: "load_tools",
+                    arguments: '{"group":"mcp:obsidian"}',
+                  },
+                ],
+              },
+            ],
+            active_run_id: "run-A",
+            runtime: {
+              session_id: "A",
+              latest_event_seq: 20,
+              checkpoint_seq: 10,
+              active_run: { run_id: "run-A", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+    s.appendMessage({ id: "user-1", role: "user", content: "research" });
+    s.appendMessage({
+      id: "live-activity",
+      role: "activity",
+      content: "",
+      suppressEntryMotion: true,
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [
+          {
+            id: "research-parent",
+            kind: "research",
+            semanticKind: "agent",
+            displayName: "Continual LLM memory",
+            target: "Research(task='Find recent projects')",
+            status: "ongoing",
+            taskStatus: "running",
+            runId: "run-A",
+          },
+          {
+            id: "child-search",
+            kind: "WebSearch",
+            target: "WebSearch(query='continual learning benchmark')",
+            status: "ongoing",
+            depth: 1,
+            parentToolId: "research-parent",
+          },
+        ],
+      },
+    });
+    s.setActiveActivityId("live-activity");
+    s.markRunStarted("run-A", "A");
+    s.setCurrentSession("B");
+
+    await refreshCachedActiveSessionHistories(
+      [{ sessionId: "A", runId: "run-A", status: "running" }],
+      { force: true },
+    );
+
+    const cached = getState().sessionCache.get("A");
+    const activityId = cached?.activeActivityId;
+    const activity = activityId ? cached?.messages.get(activityId)?.activity : null;
+    expect(activity?.items.map((item) => item.id)).toEqual([
+      "load-tools",
+      "research-parent",
+      "child-search",
+    ]);
+    expect(activity?.items.find((item) => item.id === "child-search")).toMatchObject({
+      parentToolId: "research-parent",
+      depth: 1,
+    });
+    expect(activity?.items.find((item) => item.id === "research-parent")).toMatchObject({
+      semanticKind: "agent",
+      taskStatus: "running",
+    });
+
+    s.setCurrentSession("A");
+    const restoredActivity = getState().messages.get(getState().activeActivityId!)?.activity;
+    expect(restoredActivity?.items.map((item) => item.id)).toEqual([
+      "load-tools",
+      "research-parent",
+      "child-search",
+    ]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("loadHistory preserves visible live agent trace not represented in history", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [
+              { role: "user", content: "research", id: "user-1" },
+              {
+                role: "assistant",
+                content: "",
+                id: "assistant-load-tools",
+                tool_calls: [
+                  {
+                    id: "load-tools",
+                    name: "load_tools",
+                    arguments: '{"group":"mcp:obsidian"}',
+                  },
+                ],
+              },
+            ],
+            active_run_id: "run-A",
+            runtime: {
+              session_id: "A",
+              latest_event_seq: 20,
+              checkpoint_seq: 10,
+              active_run: { run_id: "run-A", status: "running" },
+              pending_approvals: [],
+              queued_messages: [],
+            },
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    const s = getState();
+    s.setConfig({ serverUrl: "http://localhost:6877", apiKey: "" });
+    s.setCurrentSession("A");
+    s.appendMessage({
+      id: "live-activity",
+      role: "activity",
+      content: "",
+      suppressEntryMotion: true,
+      activity: {
+        label: "Calling",
+        done: false,
+        items: [
+          {
+            id: "research-parent",
+            kind: "research",
+            semanticKind: "agent",
+            displayName: "Continual LLM memory",
+            target: "Research(task='Find recent projects')",
+            status: "ongoing",
+            taskStatus: "running",
+            runId: "run-A",
+          },
+          {
+            id: "child-search",
+            kind: "WebSearch",
+            target: "WebSearch(query='continual learning benchmark')",
+            status: "ongoing",
+            depth: 1,
+            parentToolId: "research-parent",
+          },
+        ],
+      },
+    });
+    s.setActiveActivityId("live-activity");
+    s.markRunStarted("run-A", "A");
+
+    await loadHistory("A");
+
+    const activity = getState().messages.get(getState().activeActivityId!)?.activity;
+    expect(activity?.items.map((item) => item.id)).toEqual([
+      "load-tools",
+      "research-parent",
+      "child-search",
+    ]);
+    expect(activity?.items.find((item) => item.id === "child-search")).toMatchObject({
+      parentToolId: "research-parent",
+      depth: 1,
     });
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
