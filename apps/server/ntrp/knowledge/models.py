@@ -1,5 +1,6 @@
+from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -66,6 +67,25 @@ class KnowledgeObjectCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryWriteAction(StrEnum):
+    WRITE = "write"
+    IGNORE = "ignore"
+    EXPIRE = "expire"
+    REVIEW = "review"
+
+
+class MemoryWriteDecision(BaseModel):
+    action: MemoryWriteAction
+    object_type: KnowledgeObjectType | None = None
+    target_id: int | None = None
+    candidate: KnowledgeObjectCreate | None = None
+    patch: dict[str, Any] | None = None
+    reason: str
+    confidence: float = Field(ge=0, le=1)
+    source_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class KnowledgeObjectUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     text: str | None = Field(default=None, min_length=1, max_length=50_000)
@@ -81,45 +101,7 @@ class KnowledgeObjectUpdate(BaseModel):
     supersession_reason: str | None = Field(default=None, max_length=500)
 
 
-class ActivationRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=10_000)
-    scope: str | None = Field(default=None, max_length=500)
-    task: str | None = Field(default=None, max_length=500)
-    budget_chars: int = Field(default=1_200, ge=200, le=20_000)
-    limit: int = Field(default=5, ge=1, le=50)
-    include_actions: bool = True
-    record_access: bool = False
-
-
-class ActivationSignal(BaseModel):
-    name: str
-    value: float | str | bool | None = None
-    reason: str
-
-
-class ActivationCandidate(BaseModel):
-    object_type: KnowledgeObjectType
-    object_id: str
-    title: str
-    text: str
-    score: float
-    reasons: list[str] = Field(default_factory=list)
-    signals: list[ActivationSignal] = Field(default_factory=list)
-    source_ids: list[str] = Field(default_factory=list)
-    activation: str = "prompt"
-    proactiveness_level: str = "L0"
-
-
-class ActivationBundle(BaseModel):
-    query: str
-    scope: str | None = None
-    task: str | None = None
-    budget_chars: int
-    used_chars: int
-    candidates: list[ActivationCandidate]
-    omitted: list[ActivationCandidate] = Field(default_factory=list)
-    policy_version: str = "knowledge.activation.v1"
-    prompt_context: str | None = None
+ActivationState = Literal["injected", "selected_not_injected", "omitted"]
 
 
 class KnowledgeSurface(BaseModel):
@@ -153,6 +135,49 @@ class KnowledgeReflectResult(BaseModel):
     policy_version: str = "knowledge.reflect.v1"
 
 
+class KnowledgeSkillPromotionResult(BaseModel):
+    created: list[KnowledgeObject] = Field(default_factory=list)
+    skipped: int = 0
+    policy_version: str = "knowledge.skill_promotion.v1"
+
+
+class KnowledgeWorkflowCluster(BaseModel):
+    id: str
+    scope: str = "global"
+    key: str
+    title: str
+    summary: str = ""
+    trigger_description: str = ""
+    status: Literal["candidate", "reviewed", "promoted", "rejected", "stale"] = "candidate"
+    promotion_status: Literal["ready", "candidate_exists", "below_threshold"]
+    lesson_count: int = 0
+    usage_event_count: int = 0
+    source_lesson_ids: list[int] = Field(default_factory=list)
+    source_episode_ids: list[str] = Field(default_factory=list)
+    source_artifact_ids: list[str] = Field(default_factory=list)
+    source_usage_event_ids: list[int] = Field(default_factory=list)
+    last_seen_at: str | None = None
+    success_count: int = 0
+    helpful_count: int = 0
+    failure_count: int = 0
+    correction_count: int = 0
+    has_skill_candidate: bool = False
+    skill_candidate_ids: list[int] = Field(default_factory=list)
+    why_should_exist: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeWorkflowClusterResult(BaseModel):
+    clusters: list[KnowledgeWorkflowCluster] = Field(default_factory=list)
+    skipped: int = 0
+    policy_version: str = "knowledge.workflow_clusters.v1"
+
+
+class KnowledgeWorkflowClusterReviewRequest(BaseModel):
+    status: Literal["reviewed", "rejected"]
+    reason: str | None = Field(default=None, max_length=2_000)
+
+
 class KnowledgeProfileSynthesisRequest(BaseModel):
     entity_names: list[str] = Field(default_factory=list, max_length=100)
     limit_entities: int = Field(default=25, ge=1, le=200)
@@ -180,10 +205,56 @@ class KnowledgePublishRequest(BaseModel):
 
 class KnowledgeFeedbackRequest(BaseModel):
     target_object_id: int | None = Field(default=None, gt=0)
+    usage_event_id: int | None = Field(default=None, gt=0)
     query: str | None = Field(default=None, max_length=10_000)
     signal: str = Field(..., min_length=1, max_length=100)
     detail: str | None = Field(default=None, max_length=20_000)
     score_delta: float = Field(default=0.0, ge=-1.0, le=1.0)
+    outcome: (
+        Literal["helped", "helpful", "irrelevant", "harmful", "corrected", "task_success", "task_failure", "unknown"]
+        | None
+    ) = None
+
+
+class KnowledgeUsageOutcomeRequest(BaseModel):
+    target_object_ids: list[Annotated[int, Field(gt=0)]] | None = Field(default=None, max_length=100)
+    signal: str = Field(..., min_length=1, max_length=100)
+    outcome: Literal["helpful", "helped", "irrelevant", "harmful", "corrected", "task_success", "task_failure", "unknown"]
+    detail: str | None = Field(default=None, max_length=20_000)
+    user_corrected_answer: bool | None = None
+
+
+class KnowledgeUsageObjectSummary(BaseModel):
+    object_id: int
+    object_type: KnowledgeObjectType | None = None
+    object_status: KnowledgeObjectStatus | None = None
+    object_title: str | None = None
+    event_count: int = 0
+    retrieved_count: int = 0
+    selected_count: int = 0
+    injected_count: int = 0
+    omitted_count: int = 0
+    used_by_model_count: int = 0
+    model_visible_count: int = 0
+    actually_used_count: int = 0
+    selection_reasons: dict[str, int] = Field(default_factory=dict)
+    surfaces: dict[str, int] = Field(default_factory=dict)
+    outcome_counts: dict[str, int] = Field(default_factory=dict)
+    last_activation_rank: int | None = None
+    last_activation_score: float | None = None
+    last_activation_surface: str | None = None
+    last_selection_reason: str | None = None
+    last_used_by_model: bool | None = None
+    last_activation_state: ActivationState | None = None
+    last_model_visible: bool | None = None
+    last_actual_use_observed: bool | None = None
+    last_activation_reasons: list[str] = Field(default_factory=list)
+    last_activation_task: str | None = None
+    last_activation_task_id: str | None = None
+    last_activation_session_id: str | None = None
+    last_activation_run_id: str | None = None
+    last_event_id: int | None = None
+    last_seen_at: datetime | None = None
 
 
 class KnowledgeSupersessionProposal(BaseModel):
@@ -203,6 +274,45 @@ class KnowledgeSupersessionCommitResult(BaseModel):
     policy_version: str = "knowledge.supersession.v1"
 
 
+class KnowledgeFactConsolidationProposal(BaseModel):
+    canonical_object_id: int = Field(..., gt=0)
+    duplicate_object_ids: list[int] = Field(default_factory=list, min_length=1, max_length=200)
+    reason: str = Field(..., min_length=1, max_length=500)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    proposed_by: str = Field(default="knowledge.fact_consolidation.heuristic.v1", max_length=100)
+    evidence_terms: list[str] = Field(default_factory=list, max_length=50)
+    source_ids: list[str] = Field(default_factory=list, max_length=500)
+
+
+class KnowledgeFactConflictProposal(BaseModel):
+    object_ids: list[int] = Field(..., min_length=2, max_length=20)
+    reason: str = Field(..., min_length=1, max_length=500)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence_terms: list[str] = Field(default_factory=list, max_length=50)
+    proposed_by: str = Field(default="knowledge.fact_consolidation.heuristic.v1", max_length=100)
+
+
+class KnowledgeFactConsolidationResult(BaseModel):
+    proposals: list[KnowledgeFactConsolidationProposal] = Field(default_factory=list)
+    conflicts: list[KnowledgeFactConflictProposal] = Field(default_factory=list)
+    scanned: int = 0
+    skipped: int = 0
+    policy_version: str = "knowledge.fact_consolidation.v1"
+
+
+class KnowledgeFactConsolidationCommitRequest(BaseModel):
+    proposal: KnowledgeFactConsolidationProposal
+
+
+class KnowledgeFactConsolidationCommitResult(BaseModel):
+    proposal: KnowledgeFactConsolidationProposal
+    committed: bool
+    reason: str
+    commits: list[KnowledgeSupersessionCommitResult] = Field(default_factory=list)
+    canonical: KnowledgeObject | None = None
+    policy_version: str = "knowledge.fact_consolidation.v1"
+
+
 class KnowledgePruneRequest(BaseModel):
     older_than_days: int = Field(default=30, ge=1, le=3650)
     limit: int = Field(default=200, ge=1, le=1000)
@@ -220,6 +330,21 @@ class KnowledgeHealthResult(BaseModel):
     missing_provenance: int = 0
     stale: int = 0
     review_queue: int = 0
+    memory_usage_events_7d: int = 0
+    memory_helped_7d: int = 0
+    memory_irrelevant_7d: int = 0
+    memory_harmful_7d: int = 0
+    active_legacy_objects: int = 0
+    tool_episode_candidates: int = 0
+    extracted_without_source_episode: int = 0
+    unsourced_active_durable_objects: int = 0
+    write_gate_decisions: int = 0
+    write_gate_reviews_pending: int = 0
+    correction_candidates_pending: int = 0
+    skill_candidates_pending: int = 0
+    dangling_source_refs: int = 0
+    duplicate_fact_clusters: int = 0
+    fact_conflict_clusters: int = 0
     policy_version: str = "knowledge.health.v1"
 
 
@@ -231,4 +356,8 @@ class KnowledgeSourceTrace(BaseModel):
 class KnowledgeSourceTraceResult(BaseModel):
     object: KnowledgeObject
     sources: list[KnowledgeSourceTrace] = Field(default_factory=list)
-    policy_version: str = "knowledge.sources.v1"
+    derived_objects: list[KnowledgeObject] = Field(default_factory=list)
+    related_objects: list[KnowledgeObject] = Field(default_factory=list)
+    superseded_versions: list[KnowledgeObject] = Field(default_factory=list)
+    superseded_by_object: KnowledgeObject | None = None
+    policy_version: str = "knowledge.sources.v2"

@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.events.internal import RunCompleted
 from ntrp.events.triggers import KnowledgeObjectChanged
-from ntrp.knowledge.contradictions import annotate_conflicts, semantic_conflict
+from ntrp.knowledge.conflict_reviews import KnowledgeConflictReviewService
+from ntrp.knowledge.contradictions import semantic_conflict
+from ntrp.knowledge.corrections import KnowledgeCorrectionService
 from ntrp.knowledge.entity_extraction import (
     EntityExtractionPipeline,
     EntityResolutionResult,
@@ -21,7 +23,11 @@ from ntrp.knowledge.episodes import (
     EpisodeMemoryExtraction,
     ModelBackedEpisodeBoundaryClassifier,
 )
+from ntrp.knowledge.fact_consolidation import KnowledgeFactConsolidationService
 from ntrp.knowledge.models import (
+    KnowledgeFactConsolidationCommitResult,
+    KnowledgeFactConsolidationProposal,
+    KnowledgeFactConsolidationResult,
     KnowledgeObject,
     KnowledgeObjectCreate,
     KnowledgeObjectStatus,
@@ -33,16 +39,103 @@ from ntrp.knowledge.models import (
     KnowledgeSourceTraceResult,
     KnowledgeSupersessionCommitResult,
     KnowledgeSupersessionProposal,
+    MemoryWriteDecision,
 )
 from ntrp.knowledge.profiles import (
     KnowledgeProfileService,
     KnowledgeProfileSynthesizer,
     profile_entity_resolution,
 )
+from ntrp.knowledge.review_promotions import KnowledgeReviewPromotionService
 from ntrp.knowledge.store import KnowledgeObjectRepository
+from ntrp.knowledge.write_gate import KnowledgeWriteGate, KnowledgeWriteGateService
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import MemoryAccessEvent, MemoryEvent
+
+_OBSERVED_ACTUAL_USE_OUTCOMES = {"corrected", "harmful", "helpful"}
+_OBSERVED_ACTUAL_USE_SIGNALS = {"corrected", "harmful", "helpful", "wrong", "used"}
+_NEGATIVE_ACTUAL_USE_OUTCOMES = {"irrelevant"}
+_NEGATIVE_ACTUAL_USE_SIGNALS = {"irrelevant", "not_helpful"}
+
+
+def _coerce_object_id(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _trace_item_model_visible(item: dict[str, Any]) -> bool:
+    model_visible = item.get("model_visible")
+    if isinstance(model_visible, bool):
+        return model_visible
+    state = item.get("activation_state")
+    if state == "injected":
+        return True
+    if state in {"selected_not_injected", "omitted"}:
+        return False
+    injected = item.get("injected")
+    if isinstance(injected, bool):
+        return injected
+    used_by_model = item.get("used_by_model")
+    return bool(used_by_model)
+
+
+def _actual_use_observation_for_feedback(signal: str | None, outcome: str | None) -> bool | None:
+    normalized_signal = (signal or "").lower()
+    normalized_outcome = (outcome or "").lower()
+    if normalized_signal in _OBSERVED_ACTUAL_USE_SIGNALS or normalized_outcome in _OBSERVED_ACTUAL_USE_OUTCOMES:
+        return True
+    if normalized_signal in _NEGATIVE_ACTUAL_USE_SIGNALS or normalized_outcome in _NEGATIVE_ACTUAL_USE_OUTCOMES:
+        return False
+    return None
+
+
+def _patch_actual_use_observation(
+    *,
+    details: dict[str, Any],
+    target_object_ids: list[int],
+    signal: str | None,
+    outcome: str | None,
+) -> dict[str, Any]:
+    observed = _actual_use_observation_for_feedback(signal, outcome)
+    if observed is None or not target_object_ids:
+        return {}
+
+    targets = set(target_object_ids)
+    patch: dict[str, Any] = {}
+    touched_visible_targets: list[int] = []
+
+    for key in ("candidates", "omitted"):
+        raw_items = details.get(key)
+        if not isinstance(raw_items, list):
+            continue
+        changed = False
+        items: list[Any] = []
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                items.append(raw_item)
+                continue
+            object_id = _coerce_object_id(raw_item.get("object_id"))
+            if object_id not in targets:
+                items.append(raw_item)
+                continue
+            item = dict(raw_item)
+            model_visible = _trace_item_model_visible(item)
+            actual_use_observed = bool(observed and model_visible)
+            item["actual_use_observed"] = actual_use_observed
+            item["actual_use_signal"] = outcome
+            if actual_use_observed:
+                touched_visible_targets.append(object_id)
+            items.append(item)
+            changed = True
+        if changed:
+            patch[key] = items
+
+    if patch:
+        patch["actual_use_observed_target_object_ids"] = sorted(set(touched_visible_targets))
+    return patch
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -53,6 +146,13 @@ MAX_ACTIVE_MEMORY_EPISODES = 250
 MAX_ACTIVE_MEMORY_EPISODES_PER_SESSION = 30
 MAX_ACTIVE_PATTERN_CHARS = 1_800
 MAX_ACTIVE_PATTERN_LINES = 40
+_DURABLE_MEMORY_TYPES = {KnowledgeObjectType.FACT, KnowledgeObjectType.LESSON, KnowledgeObjectType.ARTIFACT}
+_LEGACY_WRITABLE_TYPES = {
+    KnowledgeObjectType.PATTERN,
+    KnowledgeObjectType.PROCEDURE,
+    KnowledgeObjectType.PROCEDURE_CANDIDATE,
+}
+_GATED_WRITE_STATUSES = {KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.DRAFT}
 
 
 class KnowledgeEmbeddingBackfillResult(TypedDict):
@@ -88,6 +188,48 @@ class MemoryAccessEventService:
             formatted_chars=formatted_chars,
             policy_version=policy_version,
             details=details,
+        )
+        await self._memory.db.conn.commit()
+        return event
+
+    async def get(self, event_id: int) -> MemoryAccessEvent | None:
+        return await self._memory.access_events.get(event_id)
+
+    async def update_outcome(
+        self,
+        *,
+        event_id: int,
+        outcome: str,
+        reason: str | None = None,
+        user_corrected_answer: bool = False,
+        signal: str | None = None,
+        target_object_ids: list[int] | None = None,
+        feedback_by_object: dict[str, Any] | None = None,
+    ) -> MemoryAccessEvent | None:
+        event = await self._memory.access_events.get(event_id)
+        patch = {
+            "outcome": outcome,
+            "outcome_reason": reason,
+            "user_corrected_answer": user_corrected_answer,
+            "feedback_signal": signal,
+            "feedback_updated_at": datetime.now(UTC).isoformat(),
+        }
+        if event is not None and target_object_ids is not None:
+            patch.update(
+                _patch_actual_use_observation(
+                    details=event.details,
+                    target_object_ids=target_object_ids,
+                    signal=signal,
+                    outcome=outcome,
+                )
+            )
+        if target_object_ids is not None:
+            patch["target_object_ids"] = sorted(set(target_object_ids))
+        if feedback_by_object is not None:
+            patch["feedback_by_object"] = feedback_by_object
+        event = await self._memory.access_events.update_details(
+            event_id,
+            patch,
         )
         await self._memory.db.conn.commit()
         return event
@@ -150,12 +292,59 @@ class KnowledgeObjectService:
             embed_object=self._embed_object,
             emit_event=self._emit_event,
         )
+        self._write_gate = KnowledgeWriteGateService(
+            KnowledgeWriteGate(self._repo),
+            memory=self._memory,
+            create_object=self._create_without_write_gate,
+        )
+        self._conflict_reviews = KnowledgeConflictReviewService(
+            repo=self._repo,
+            create_object=self._create_without_write_gate,
+        )
+        self._fact_consolidation = KnowledgeFactConsolidationService(
+            repo=self._repo,
+            objects=self,
+            metadata_entity_names=self._metadata_entity_names,
+        )
+        self._corrections = KnowledgeCorrectionService(objects=self, memory=self._memory)
+        self._review_promotions = KnowledgeReviewPromotionService(
+            objects=self,
+            events=self._memory.events,
+            create_replacement=self._create_without_write_gate,
+        )
 
     def set_event_dispatcher(self, dispatcher: Callable[[KnowledgeObjectChanged], Awaitable[None]] | None) -> None:
         self._event_dispatcher = dispatcher
 
     def _derived_profile_entity_result(self, object_type: KnowledgeObjectType, metadata: dict[str, Any]) -> EntityResolutionResult | None:
         return profile_entity_resolution(object_type, metadata)
+
+    async def write_gate_decision(self, payload: KnowledgeObjectCreate) -> MemoryWriteDecision:
+        return await self._write_gate.decide(payload)
+
+    async def apply_write_gate_decision(self, decision: MemoryWriteDecision) -> KnowledgeObject | None:
+        return await self._write_gate.apply(decision)
+
+    async def propose_fact_consolidation(
+        self,
+        *,
+        limit: int = 1_000,
+        min_confidence: float = 0.86,
+        max_proposals: int = 50,
+    ) -> KnowledgeFactConsolidationResult:
+        return await self._fact_consolidation.propose(
+            limit=limit,
+            min_confidence=min_confidence,
+            max_proposals=max_proposals,
+        )
+
+    async def commit_fact_consolidation_proposal(
+        self,
+        proposal: KnowledgeFactConsolidationProposal,
+        *,
+        apply: bool = True,
+    ) -> KnowledgeFactConsolidationCommitResult:
+        return await self._fact_consolidation.commit(proposal, apply=apply)
 
     def _apply_create_policy(self, payload: KnowledgeObjectCreate) -> KnowledgeObjectCreate:
         metadata = dict(payload.metadata)
@@ -346,25 +535,15 @@ class KnowledgeObjectService:
             statuses={KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.APPROVED},
             limit=1_000,
         )
-        conflicts = [conflict for other in existing if (conflict := semantic_conflict(obj, other)) is not None]
+        conflicts = [
+            conflict
+            for other in existing
+            if other.id != obj.id and (conflict := semantic_conflict(obj, other)) is not None
+        ]
         if not conflicts:
             return obj
 
-        obj = await self._repo.update(obj.id, KnowledgeObjectUpdate(metadata=annotate_conflicts(obj.metadata, conflicts)))
-        for conflict in conflicts:
-            other = await self._repo.get(conflict.object_id)
-            if other is None:
-                continue
-            await self.commit_supersession_proposal(
-                KnowledgeSupersessionProposal(
-                    superseded_object_id=other.id,
-                    superseding_object_id=obj.id,
-                    reason=conflict.reason,
-                    confidence=conflict.confidence,
-                    proposed_by="knowledge.contradictions.heuristic.v1",
-                    evidence_terms=conflict.shared_terms,
-                )
-            )
+        await self._conflict_reviews.ensure_review(obj, conflicts)
         return obj
 
     async def _embed_object(self, obj: KnowledgeObject) -> None:
@@ -389,6 +568,14 @@ class KnowledgeObjectService:
         return await self._profiles.refresh(entity_name, evidence_limit=evidence_limit, explicit_refresh=explicit_refresh)
 
     async def create(self, payload: KnowledgeObjectCreate) -> KnowledgeObject:
+        payload = self._apply_create_policy(payload)
+        decision = await self.write_gate_decision(payload)
+        obj = await self.apply_write_gate_decision(decision)
+        if obj is None:
+            raise ValueError(f"knowledge write gate rejected create: {decision.reason}")
+        return obj
+
+    async def _create_without_write_gate(self, payload: KnowledgeObjectCreate) -> KnowledgeObject:
         payload = self._apply_create_policy(payload)
         payload, entity_result = await self._with_extracted_entities(payload)
         obj = await self._repo.create(payload)
@@ -766,7 +953,10 @@ class KnowledgeObjectService:
 
         created: list[KnowledgeObject] = []
         for payload in candidates[:3]:
-            created.append(await self.create(payload))
+            decision = await self.write_gate_decision(payload)
+            obj = await self.apply_write_gate_decision(decision)
+            if obj is not None:
+                created.append(obj)
         return created
 
     async def apply_explicit_memory_command(
@@ -862,7 +1052,7 @@ class KnowledgeObjectService:
             kind = "correction"
             score = 0.45
 
-        created_obj = await self.create(
+        decision = await self.write_gate_decision(
             KnowledgeObjectCreate(
                 object_type=object_type,
                 title=memory_text[:100],
@@ -876,6 +1066,9 @@ class KnowledgeObjectService:
                 metadata={"explicit_memory_command": command, "kind": kind, "confidence": 0.95},
             )
         )
+        created_obj = await self.apply_write_gate_decision(decision)
+        if created_obj is None:
+            return []
         created.append(created_obj)
 
         if command in {"actually", "correction"}:
@@ -897,6 +1090,23 @@ class KnowledgeObjectService:
                     ),
                 )
         return created
+
+    async def apply_correction_signal(
+        self,
+        text: str,
+        *,
+        source_ids: list[str] | None = None,
+        scope: str | None = None,
+        target_memory_ids: list[int] | None = None,
+        usage_event_id: int | None = None,
+    ) -> list[KnowledgeObject]:
+        return await self._corrections.apply(
+            text,
+            source_ids=source_ids,
+            scope=scope,
+            target_memory_ids=target_memory_ids,
+            usage_event_id=usage_event_id,
+        )
 
     async def close_memory_episode(
         self,
@@ -1053,11 +1263,17 @@ class KnowledgeObjectService:
                 continue
             content = message.get("content", "")
             if isinstance(content, str):
-                await self.apply_explicit_memory_command(
+                explicit = await self.apply_explicit_memory_command(
                     content,
                     source_ids=run_source_ids,
                     scope=f"session:{event.session_id}",
                 )
+                if not explicit:
+                    await self.apply_correction_signal(
+                        content,
+                        source_ids=run_source_ids,
+                        scope=f"session:{event.session_id}",
+                    )
         note_text = f"Run {event.run_id}: {event.result or 'completed without final result.'}"
 
         if current is None:
@@ -1119,10 +1335,11 @@ class KnowledgeObjectService:
         *,
         object_type: KnowledgeObjectType | None = None,
         status: KnowledgeObjectStatus | None = None,
+        query: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[KnowledgeObject]:
-        return await self._repo.list(object_type=object_type, status=status, limit=limit, offset=offset)
+        return await self._repo.list(object_type=object_type, status=status, query=query, limit=limit, offset=offset)
 
     async def list_many(
         self,
@@ -1248,6 +1465,234 @@ class KnowledgeObjectService:
     async def get_batch(self, object_ids: list[int]) -> dict[int, KnowledgeObject]:
         return await self._repo.get_batch(object_ids)
 
+    @staticmethod
+    def _increment_metadata_counter(metadata: dict[str, Any], key: str) -> None:
+        value = metadata.get(key, 0)
+        try:
+            current = int(value)
+        except (TypeError, ValueError):
+            current = 0
+        metadata[key] = current + 1
+
+    @staticmethod
+    def _decrement_metadata_counter(metadata: dict[str, Any], key: str) -> None:
+        value = metadata.get(key, 0)
+        try:
+            current = int(value)
+        except (TypeError, ValueError):
+            current = 0
+        metadata[key] = max(0, current - 1)
+
+    @staticmethod
+    def _usage_outcome_counter(signal: str | None, outcome: str | None) -> str | None:
+        normalized_signal = (signal or "").lower()
+        normalized_outcome = (outcome or "").lower()
+        if normalized_signal == "corrected":
+            return "corrected_count"
+        if normalized_outcome in {"helped", "helpful", "success", "task_success"} or normalized_signal in {
+            "helpful",
+            "success",
+            "used",
+        }:
+            return "helpful_count"
+        if normalized_outcome in {"irrelevant", "not_helpful"} or normalized_signal in {"irrelevant", "not_helpful"}:
+            return "irrelevant_count"
+        if normalized_outcome in {"harmful", "failure", "task_failure", "failed"} or normalized_signal in {
+            "harmful",
+            "wrong",
+            "failed",
+        }:
+            return "harmful_count"
+        return None
+
+    @staticmethod
+    def _usage_outcome_timestamp_counters(counter: str | None, outcome: str | None) -> set[str]:
+        counters = {counter} if counter is not None else set()
+        if (outcome or "").lower() in {"harmful", "failure", "task_failure", "failed"}:
+            counters.add("harmful_count")
+        return counters
+
+    @staticmethod
+    def _feedback_applies_to_latest_visible_activation(metadata: dict[str, Any], usage_event_id: int | None) -> bool:
+        if usage_event_id is None:
+            return False
+        return metadata.get("last_activation_event_id") == usage_event_id and metadata.get("last_model_visible") is True
+
+    @classmethod
+    def _apply_actual_use_observation_metadata(
+        cls,
+        metadata: dict[str, Any],
+        *,
+        signal: str | None,
+        outcome: str | None,
+        previous_signal: str | None,
+        previous_outcome: str | None,
+        replace_existing: bool,
+        usage_event_id: int | None,
+        timestamp: str,
+    ) -> None:
+        if not cls._feedback_applies_to_latest_visible_activation(metadata, usage_event_id):
+            return
+        observed = _actual_use_observation_for_feedback(signal, outcome)
+        previous_observed = (
+            _actual_use_observation_for_feedback(previous_signal, previous_outcome) if replace_existing else None
+        )
+        if replace_existing and previous_observed is True and observed is not True:
+            cls._decrement_metadata_counter(metadata, "actual_use_observed_count")
+        if observed is True and previous_observed is not True:
+            cls._increment_metadata_counter(metadata, "actual_use_observed_count")
+        if observed is not None:
+            metadata["last_actual_use_observed"] = observed
+            metadata["last_actual_use_observed_at"] = timestamp
+            metadata["last_actual_use_signal"] = signal
+            metadata["last_actual_use_outcome"] = outcome
+
+    @staticmethod
+    def _apply_usage_outcome_timestamp_metadata(
+        metadata: dict[str, Any],
+        *,
+        counters: set[str],
+        timestamp: str,
+    ) -> None:
+        if "helpful_count" in counters:
+            metadata["last_helpful_at"] = timestamp
+        if "irrelevant_count" in counters:
+            metadata["last_irrelevant_at"] = timestamp
+        if "harmful_count" in counters:
+            metadata["last_harmful_at"] = timestamp
+        if "corrected_count" in counters:
+            metadata["last_corrected_at"] = timestamp
+
+    @staticmethod
+    def _activation_trace_by_object_id(activation_traces: list[dict[str, Any]] | None) -> dict[int, dict[str, Any]]:
+        traces: dict[int, dict[str, Any]] = {}
+        for trace in activation_traces or []:
+            raw_object_id = trace.get("object_id") if isinstance(trace, dict) else None
+            try:
+                object_id = int(raw_object_id)
+            except (TypeError, ValueError):
+                continue
+            traces[object_id] = trace
+        return traces
+
+    @staticmethod
+    def _apply_activation_trace_metadata(metadata: dict[str, Any], trace: dict[str, Any]) -> None:
+        trace_fields = {
+            "rank": "last_activation_rank",
+            "score": "last_activation_score",
+            "surface": "last_activation_surface",
+            "selection_reason": "last_selection_reason",
+            "used_by_model": "last_used_by_model",
+            "activation_state": "last_activation_state",
+            "model_visible": "last_model_visible",
+            "actual_use_observed": "last_actual_use_observed",
+            "selected": "last_activation_selected",
+            "injected": "last_activation_injected",
+            "reasons": "last_activation_reasons",
+        }
+        for source_key, metadata_key in trace_fields.items():
+            if source_key in trace:
+                metadata[metadata_key] = trace[source_key]
+
+    async def record_activation_usage(
+        self,
+        *,
+        retrieved_ids: list[int],
+        injected_ids: list[int],
+        omitted_ids: list[int],
+        usage_event_id: int | None = None,
+        activated_at: str | None = None,
+        activation_traces: list[dict[str, Any]] | None = None,
+    ) -> None:
+        object_ids = sorted(set(retrieved_ids) | set(injected_ids) | set(omitted_ids))
+        if not object_ids:
+            return
+
+        retrieved = set(retrieved_ids)
+        injected = set(injected_ids)
+        omitted = set(omitted_ids)
+        timestamp = activated_at or datetime.now(UTC).isoformat()
+        traces = self._activation_trace_by_object_id(activation_traces)
+        objects = await self._repo.get_batch(object_ids)
+        for object_id, obj in objects.items():
+            metadata = dict(obj.metadata)
+            self._increment_metadata_counter(metadata, "activation_count")
+            metadata["last_activated_at"] = timestamp
+            if usage_event_id is not None:
+                metadata["last_activation_event_id"] = usage_event_id
+            trace = traces.get(object_id)
+            if trace is not None:
+                self._apply_activation_trace_metadata(metadata, trace)
+            if object_id in retrieved:
+                self._increment_metadata_counter(metadata, "retrieved_count")
+                metadata["last_retrieved_at"] = timestamp
+            if object_id in injected:
+                self._increment_metadata_counter(metadata, "injected_count")
+                self._increment_metadata_counter(metadata, "used_count")
+                metadata["last_used_at"] = timestamp
+            if object_id in omitted:
+                self._increment_metadata_counter(metadata, "omitted_count")
+                metadata["last_omitted_at"] = timestamp
+            await self._repo.update(obj.id, KnowledgeObjectUpdate(metadata=metadata))
+
+    async def record_usage_outcome(
+        self,
+        *,
+        object_ids: list[int],
+        signal: str | None,
+        outcome: str | None,
+        usage_event_id: int | None = None,
+        feedback_at: str | None = None,
+        previous_signal: str | None = None,
+        previous_outcome: str | None = None,
+        replace_existing: bool = False,
+    ) -> None:
+        unique_ids = sorted(set(object_ids))
+        if not unique_ids:
+            return
+
+        timestamp = feedback_at or datetime.now(UTC).isoformat()
+        counter = self._usage_outcome_counter(signal, outcome)
+        previous_counter = self._usage_outcome_counter(previous_signal, previous_outcome) if replace_existing else None
+        objects = await self._repo.get_batch(unique_ids)
+        for obj in objects.values():
+            metadata = dict(obj.metadata)
+            if replace_existing:
+                if previous_counter is not None and previous_counter != counter:
+                    self._decrement_metadata_counter(metadata, previous_counter)
+                    if previous_counter == "corrected_count":
+                        self._decrement_metadata_counter(metadata, "correction_count")
+            else:
+                self._increment_metadata_counter(metadata, "feedback_count")
+            metadata["last_feedback_signal"] = signal
+            metadata["last_feedback_outcome"] = outcome
+            metadata["last_feedback_at"] = timestamp
+            if usage_event_id is not None:
+                metadata["last_feedback_event_id"] = usage_event_id
+            if counter is not None and counter != previous_counter:
+                self._increment_metadata_counter(metadata, counter)
+                if counter == "corrected_count":
+                    self._increment_metadata_counter(metadata, "correction_count")
+            timestamp_counters = self._usage_outcome_timestamp_counters(counter, outcome)
+            if "harmful_count" in timestamp_counters and counter != "harmful_count":
+                self._increment_metadata_counter(metadata, "harmful_count")
+            self._apply_usage_outcome_timestamp_metadata(
+                metadata,
+                counters=timestamp_counters,
+                timestamp=timestamp,
+            )
+            self._apply_actual_use_observation_metadata(
+                metadata,
+                signal=signal,
+                outcome=outcome,
+                previous_signal=previous_signal,
+                previous_outcome=previous_outcome,
+                replace_existing=replace_existing,
+                usage_event_id=usage_event_id,
+                timestamp=timestamp,
+            )
+            await self._repo.update(obj.id, KnowledgeObjectUpdate(metadata=metadata))
+
     async def get_by_source_id(
         self,
         source_id: str,
@@ -1270,7 +1715,60 @@ class KnowledgeObjectService:
             else:
                 source_obj = await self.get_by_source_id(source_id)
             sources.append(KnowledgeSourceTrace(source_id=source_id, object=source_obj))
-        return KnowledgeSourceTraceResult(object=obj, sources=sources)
+
+        derived_objects = await self._repo.list_referencing_source_ids(
+            [f"knowledge:{obj.id}"],
+            object_types={
+                KnowledgeObjectType.FACT,
+                KnowledgeObjectType.LESSON,
+                KnowledgeObjectType.ARTIFACT,
+                KnowledgeObjectType.ACTION_CANDIDATE,
+                KnowledgeObjectType.MEMORY_EPISODE,
+            },
+            statuses={
+                KnowledgeObjectStatus.ACTIVE,
+                KnowledgeObjectStatus.DRAFT,
+                KnowledgeObjectStatus.APPROVED,
+                KnowledgeObjectStatus.SUPERSEDED,
+            },
+            exclude_ids={obj.id},
+            limit=100,
+        )
+        related_objects = await self._repo.list_referencing_source_ids(
+            obj.source_ids,
+            object_types={
+                KnowledgeObjectType.FACT,
+                KnowledgeObjectType.LESSON,
+                KnowledgeObjectType.ARTIFACT,
+                KnowledgeObjectType.ACTION_CANDIDATE,
+                KnowledgeObjectType.MEMORY_EPISODE,
+            },
+            statuses={
+                KnowledgeObjectStatus.ACTIVE,
+                KnowledgeObjectStatus.DRAFT,
+                KnowledgeObjectStatus.APPROVED,
+                KnowledgeObjectStatus.SUPERSEDED,
+            },
+            exclude_ids={obj.id},
+            limit=100,
+        )
+        derived_ids = {item.id for item in derived_objects}
+        source_object_ids = {
+            source.object.id for source in sources if source.object is not None and source.source_id.startswith("knowledge:")
+        }
+        related_objects = [
+            item for item in related_objects if item.id not in derived_ids and item.id not in source_object_ids
+        ]
+        superseded_versions = await self._repo.list_superseded_by(obj.id, limit=100)
+        superseded_by_object = await self.get(obj.superseded_by_object_id) if obj.superseded_by_object_id else None
+        return KnowledgeSourceTraceResult(
+            object=obj,
+            sources=sources,
+            derived_objects=derived_objects,
+            related_objects=related_objects,
+            superseded_versions=superseded_versions,
+            superseded_by_object=superseded_by_object,
+        )
 
     async def prune_retention(self, request: KnowledgePruneRequest) -> KnowledgePruneResult:
         cutoff = datetime.now(UTC).timestamp() - (request.older_than_days * 24 * 60 * 60)
@@ -1327,7 +1825,27 @@ class KnowledgeObjectService:
     async def count_by_type_and_status(self) -> dict[str, dict[str, int]]:
         return await self._repo.count_by_type_and_status()
 
+    def _validate_update_policy(self, current: KnowledgeObject, payload: KnowledgeObjectUpdate) -> None:
+        next_status = payload.status if payload.status is not None else current.status
+        if next_status not in _GATED_WRITE_STATUSES:
+            return
+        if current.object_type in _LEGACY_WRITABLE_TYPES:
+            unsafe_fields = {"title", "text", "source_ids", "activation", "proactiveness_level"}
+            if payload.status in _GATED_WRITE_STATUSES or payload.model_fields_set & unsafe_fields:
+                raise ValueError(f"Cannot write active/draft legacy knowledge type: {current.object_type.value}")
+        next_source_ids = (
+            payload.source_ids
+            if "source_ids" in payload.model_fields_set and payload.source_ids is not None
+            else current.source_ids
+        )
+        if current.object_type in _DURABLE_MEMORY_TYPES and not next_source_ids:
+            raise ValueError("Active/draft durable knowledge requires source_ids")
+
     async def update(self, object_id: int, payload: KnowledgeObjectUpdate) -> KnowledgeObject:
+        current = await self.get(object_id)
+        if current is None:
+            raise ValueError(f"knowledge object not found: {object_id}")
+        self._validate_update_policy(current, payload)
         obj = await self._repo.update(object_id, payload)
         if payload.model_fields_set & {"title", "text", "source_ids", "metadata"}:
             entity_result = self._derived_profile_entity_result(obj.object_type, obj.metadata)
@@ -1351,50 +1869,7 @@ class KnowledgeObjectService:
         )
         await self._emit_event(obj, "updated")
         await self._memory.db.conn.commit()
-        if obj.object_type == KnowledgeObjectType.PROCEDURE_CANDIDATE and obj.status == KnowledgeObjectStatus.APPROVED:
-            source_id = f"knowledge:{obj.id}"
-            existing = await self.get_by_source_id(source_id)
-            if existing is None:
-                raw_target_procedure_id = obj.metadata.get("target_procedure_id")
-                try:
-                    target_procedure_id = int(raw_target_procedure_id) if raw_target_procedure_id is not None else None
-                except (TypeError, ValueError):
-                    target_procedure_id = None
-                if target_procedure_id is not None:
-                    target = await self.get(target_procedure_id)
-                    if target is not None and target.status == KnowledgeObjectStatus.ACTIVE:
-                        await self._repo.update(
-                            target.id,
-                            KnowledgeObjectUpdate(
-                                status=KnowledgeObjectStatus.SUPERSEDED,
-                                superseded_by_object_id=obj.id,
-                                superseded_at=datetime.now(UTC).isoformat(),
-                                supersession_reason="approved procedure candidate superseded target procedure",
-                            ),
-                        )
-                        await self._memory.events.create(
-                            actor="system",
-                            action="knowledge.superseded",
-                            target_type=target.object_type.value,
-                            target_id=target.id,
-                            reason="approved procedure candidate superseded target procedure",
-                            policy_version="knowledge.objects.v1",
-                            details={"approved_candidate_id": obj.id},
-                        )
-                await self.create(
-                    KnowledgeObjectCreate(
-                        object_type=KnowledgeObjectType.LESSON,
-                        title=obj.title.replace("candidate", "lesson").replace("Candidate", "Lesson"),
-                        text=obj.text,
-                        status=KnowledgeObjectStatus.ACTIVE,
-                        scope=obj.scope,
-                        activation="prompt",
-                        proactiveness_level="L0",
-                        score=max(obj.score, 0.5),
-                        source_ids=[source_id, *obj.source_ids],
-                        metadata={"approved_candidate_id": obj.id, "promoted_from": obj.object_type.value, **obj.metadata},
-                    )
-                )
+        await self._review_promotions.promote_if_approved(obj)
         return obj
 
 

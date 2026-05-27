@@ -2,7 +2,14 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel
 
-from ntrp.agent import CompletionResponse, ReasoningContentDelta, SpecificTool, ToolChoice, ToolChoiceMode
+from ntrp.agent import (
+    CompletionResponse,
+    ReasoningContentDelta,
+    SpecificTool,
+    ToolCallStreamDelta,
+    ToolChoice,
+    ToolChoiceMode,
+)
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 
@@ -33,7 +40,7 @@ class NtrpLLMClient:
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_key: str | None = None,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         client = get_completion_client(model)
         reasoning_effort = self._supported_reasoning_effort(model, reasoning_effort)
         kwargs = {}

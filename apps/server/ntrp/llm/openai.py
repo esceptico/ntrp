@@ -13,6 +13,7 @@ from ntrp.agent import (
     ReasoningContentDelta,
     Role,
     ToolCall,
+    ToolCallStreamDelta,
     Usage,
 )
 from ntrp.core.content import render_context
@@ -186,7 +187,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         if self._uses_responses_api(tools, reasoning_effort):
             request = self._prepare_responses(
                 messages,
@@ -253,13 +254,25 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                         if tc.index not in tool_call_chunks:
                             tool_call_chunks[tc.index] = {"id": "", "name": "", "arguments": ""}
                         entry = tool_call_chunks[tc.index]
+                        tool_id = tc.id or None
+                        name = None
+                        arguments_delta = None
                         if tc.id:
                             entry["id"] = tc.id
                         if tc.function:
+                            name = tc.function.name or None
+                            arguments_delta = tc.function.arguments or None
                             if tc.function.name:
                                 entry["name"] = tc.function.name
                             if tc.function.arguments:
                                 entry["arguments"] += tc.function.arguments
+                        if tool_id or name or arguments_delta:
+                            yield ToolCallStreamDelta(
+                                index=tc.index,
+                                tool_id=tool_id,
+                                name=name,
+                                arguments_delta=arguments_delta,
+                            )
         except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
             raise RuntimeError("OpenAI chat completion stream disconnected before completion") from exc
 
@@ -274,6 +287,13 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                 )
                 for _, tc in sorted(tool_call_chunks.items())
             ]
+            for index, tc in sorted(tool_call_chunks.items()):
+                yield ToolCallStreamDelta(
+                    index=index,
+                    tool_id=tc["id"] or None,
+                    name=tc["name"] or None,
+                    done=True,
+                )
 
         if usage_chunk:
             details = getattr(usage_chunk, "prompt_tokens_details", None)

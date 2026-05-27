@@ -6,9 +6,13 @@ from ntrp.agent.coverage import ResearchOutline
 from ntrp.agent.ledger import ContradictionNote, DeadEndNote, FactNote, GapNote, SharedLedger
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
-from ntrp.knowledge.activation import KnowledgeActivationService
-from ntrp.knowledge.models import ActivationRequest
 from ntrp.logging import get_logger
+from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.skills.activation import (
+    activated_skill_entries,
+    format_activated_skill_context,
+    record_auto_activated_skill_events,
+)
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
@@ -86,12 +90,14 @@ DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work dire
 
 {{ ledger_summary }}
 {% endif %}
-{% if user_facts %}
+{% if memory_context %}
 
 USER CONTEXT:
-{% for fact in user_facts -%}
-- {{ fact.text }}
-{% endfor %}
+{{ memory_context }}
+{% endif %}
+{% if activated_skill_context %}
+
+{{ activated_skill_context }}
 {% endif %}
 
 RESEARCH LEDGER TOOLS:
@@ -137,7 +143,9 @@ class ResearchCoverInput(BaseModel):
     source: str = Field(description="Source path, URL, message id, or tool result reference.")
 
 
-async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
+async def _build_research_prompt(
+    ctx, depth: str, remaining_depth: int, tool_id: str, task: str | None = None
+) -> str:
     ledger_summary = None
     if ctx.ledger:
         ledger_summary = _format_ledger(
@@ -146,20 +154,46 @@ async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id:
             coverage_scope=ctx.run.research_scope_id or "default",
         )
 
-    user_facts = []
-    memory = ctx.services.get("memory")
-    if memory:
-        bundle = await KnowledgeActivationService(memory).inspect(
-            ActivationRequest(query="user identity preferences current projects", limit=5, task="research_context")
+    memory_context = None
+    activated_skill_context = None
+    memory_retrieval = ctx.services.get("memory_retrieval")
+    if memory_retrieval:
+        query = task or "user identity preferences current projects"
+        bundle = await memory_retrieval.search(
+            MemoryActivationRequest(
+                query=query,
+                limit=5,
+                task="research_context",
+                task_id=tool_id,
+                session_id=ctx.session_id,
+                run_id=ctx.run.run_id,
+                surface="prompt",
+                record_access=True,
+            )
         )
-        user_facts = bundle.candidates
+        memory_context = bundle.prompt_context
+        skill_registry = ctx.services.get("skill_registry")
+        selected_skill_entries = activated_skill_entries(bundle, skill_registry)
+        activated_skill_context = format_activated_skill_context(selected_skill_entries)
+        await record_auto_activated_skill_events(
+            ctx.services.get("memory"),
+            bundle,
+            skill_registry,
+            task="research_context_auto_skill_activation",
+            activation_surface="research_context",
+            task_id=tool_id,
+            session_id=ctx.session_id,
+            run_id=ctx.run.run_id,
+            entries=selected_skill_entries,
+        )
 
     return RESEARCH_SYSTEM_PROMPT.render(
         base_prompt=RESEARCH_PROMPTS[depth],
         date=current_date_formatted(),
         remaining_depth=remaining_depth,
         ledger_summary=ledger_summary,
-        user_facts=user_facts,
+        memory_context=memory_context,
+        activated_skill_context=activated_skill_context,
     )
 
 
@@ -185,7 +219,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
         if name not in ctx.registry
     }
     tools.extend(agent_tool.to_dict(name) for name, agent_tool in RESEARCH_AGENT_TOOLS.items())
-    prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
+    prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id, task=args.task)
     try:
         spawn = await ctx.spawn_fn(
             ctx,

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
-from re import findall, fullmatch
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -34,69 +33,6 @@ def _object_from_row(row: aiosqlite.Row) -> KnowledgeObject:
     data["metadata"] = json.loads(data["metadata"] or "{}")
     return KnowledgeObject.model_validate(data)
 
-
-def _query_terms(query: str) -> set[str]:
-    return {term for term in findall(r"[a-zA-Z0-9_]+", query.lower()) if len(term) > 2}
-
-
-def _candidate_entity_names(query: str) -> list[str]:
-    names: list[str] = []
-    seen: set[str] = set()
-    raw = query.strip()
-    # Preserve explicitly supplied entity names even when they are lowercase
-    # project/product names or topic-like labels. Broader natural-language
-    # questions still fall through to phrase/term extraction.
-    if 1 <= len(raw.split()) <= 6 and fullmatch(r"[A-Za-z0-9_.+-]+(?:\s+[A-Za-z0-9_.+-]+)*", raw):
-        key = raw.casefold()
-        if len(raw) > 2:
-            names.append(raw)
-            seen.add(key)
-    # Preserve explicit capitalized phrases like "Prime Intellect" and "Trigger.dev"-ish terms.
-    for match in findall(r"(?:[A-Z][\w.-]+)(?:\s+[A-Z][\w.-]+)*", query):
-        value = match.strip()
-        key = value.casefold()
-        if len(value) > 2 and key not in seen:
-            names.append(value)
-            seen.add(key)
-    for term in _query_terms(query):
-        if term not in seen:
-            names.append(term)
-            seen.add(term)
-    return names[:12]
-
-
-def _temporal_window(query: str) -> tuple[str, str] | None:
-    lowered = query.lower()
-    now = datetime.now(UTC)
-    if any(term in lowered for term in ("today", "tonight")):
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return start.isoformat(), now.isoformat()
-    if "yesterday" in lowered:
-        end = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start = end - timedelta(days=1)
-        return start.isoformat(), end.isoformat()
-    if any(term in lowered for term in ("recent", "latest", "current", "lately", "last week", "this week")):
-        return (now - timedelta(days=14)).isoformat(), now.isoformat()
-    if any(term in lowered for term in ("last month", "this month")):
-        return (now - timedelta(days=45)).isoformat(), now.isoformat()
-    return None
-
-
-def _fts_query(query: str) -> str | None:
-    terms = [term for term in findall(r"[a-zA-Z0-9_]+", query.lower()) if len(term) > 2]
-    if not terms:
-        return None
-    # Quote terms to avoid FTS syntax surprises from user text; OR keeps recall high
-    # and the activation reranker handles precision.
-    return " OR ".join(f'"{term}"' for term in terms[:32])
-
-
-_SQL_SEARCH_KNOWLEDGE_OBJECTS_VEC = """
-    SELECT v.knowledge_object_id, v.distance
-    FROM knowledge_objects_vec v
-    WHERE v.embedding MATCH ? AND k = ?
-    ORDER BY v.distance
-"""
 
 _SQL_UPDATE_KNOWLEDGE_OBJECT_EMBEDDING = "UPDATE knowledge_objects SET embedding = ? WHERE id = ?"
 _SQL_DELETE_KNOWLEDGE_OBJECT_VEC = "DELETE FROM knowledge_objects_vec WHERE knowledge_object_id = ?"
@@ -194,6 +130,7 @@ class KnowledgeObjectRepository:
         *,
         object_type: KnowledgeObjectType | None = None,
         status: KnowledgeObjectStatus | None = None,
+        query: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[KnowledgeObject]:
@@ -205,6 +142,10 @@ class KnowledgeObjectRepository:
         if status is not None:
             clauses.append("status = ?")
             params.append(status.value)
+        if query is not None and query.strip():
+            pattern = f"%{query.strip().lower()}%"
+            clauses.append("(lower(title) LIKE ? OR lower(text) LIKE ?)")
+            params.extend([pattern, pattern])
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = await self.read_conn.execute_fetchall(
             f"""
@@ -247,177 +188,55 @@ class KnowledgeObjectRepository:
         )
         return [_object_from_row(row) for row in rows]
 
-    async def search_text(
+    async def list_referencing_source_ids(
         self,
-        query: str,
+        source_ids: list[str],
         *,
         object_types: set[KnowledgeObjectType] | None = None,
         statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-        offset: int = 0,
+        exclude_ids: set[int] | None = None,
+        limit: int = 100,
     ) -> list[KnowledgeObject]:
-        match = _fts_query(query)
-        if not match:
-            return await self.list_many(object_types=object_types, statuses=statuses, limit=limit, offset=offset)
-
-        clauses = ["knowledge_objects_fts MATCH ?"]
-        params: list[object] = [match]
+        unique_source_ids = [item for item in dict.fromkeys(source_ids) if item]
+        if not unique_source_ids:
+            return []
+        clauses = [f"json_each.value IN ({','.join('?' for _ in unique_source_ids)})"]
+        params: list[object] = list(unique_source_ids)
         if object_types:
-            placeholders = ",".join("?" for _ in object_types)
-            clauses.append(f"ko.object_type IN ({placeholders})")
+            clauses.append(f"knowledge_objects.object_type IN ({','.join('?' for _ in object_types)})")
             params.extend(sorted(item.value for item in object_types))
         if statuses:
-            placeholders = ",".join("?" for _ in statuses)
-            clauses.append(f"ko.status IN ({placeholders})")
+            clauses.append(f"knowledge_objects.status IN ({','.join('?' for _ in statuses)})")
             params.extend(sorted(item.value for item in statuses))
-        where = " AND ".join(clauses)
-        try:
-            rows = await self.read_conn.execute_fetchall(
-                f"""
-                SELECT ko.*
-                FROM knowledge_objects_fts
-                JOIN knowledge_objects ko ON ko.id = knowledge_objects_fts.rowid
-                WHERE {where}
-                ORDER BY bm25(knowledge_objects_fts), ko.updated_at DESC, ko.id DESC
-                LIMIT ? OFFSET ?
-                """,
-                (*params, limit, offset),
-            )
-        except Exception:
-            return await self.list_many(object_types=object_types, statuses=statuses, limit=limit, offset=offset)
-        return [_object_from_row(row) for row in rows]
-
-    async def search_vector(
-        self,
-        query_embedding: Embedding,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-    ) -> list[tuple[KnowledgeObject, float]]:
-        query_bytes = serialize_embedding(query_embedding)
-        search_limit = limit if not (object_types or statuses) else max(limit * 10, limit)
-        try:
-            rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_KNOWLEDGE_OBJECTS_VEC, (query_bytes, search_limit))
-        except Exception:
-            return []
-        if not rows:
-            return []
-        object_ids = [int(row[0]) for row in rows]
-        distances = {int(row[0]): float(row[1]) for row in rows}
-        objects_by_id = await self.get_batch(object_ids)
-        results: list[tuple[KnowledgeObject, float]] = []
-        for object_id in object_ids:
-            obj = objects_by_id.get(object_id)
-            if obj is None:
-                continue
-            if object_types and obj.object_type not in object_types:
-                continue
-            if statuses and obj.status not in statuses:
-                continue
-            results.append((obj, 1.0 - distances[object_id]))
-            if len(results) >= limit:
-                break
-        return results
-
-    async def search_entities(
-        self,
-        query: str,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-    ) -> list[KnowledgeObject]:
-        names = _candidate_entity_names(query)
-        if not names:
-            return []
-        entity_clauses: list[str] = []
-        params: list[object] = []
-        for name in names:
-            entity_clauses.append(
-                """EXISTS (
-                    SELECT 1
-                    FROM knowledge_entity_refs ker
-                    JOIN entities ent ON ent.id = ker.entity_id
-                    WHERE ker.knowledge_object_id = ko.id
-                      AND (ent.name = ? COLLATE NOCASE OR ker.name = ? COLLATE NOCASE)
-                )"""
-            )
-            entity_clauses.append(
-                "EXISTS (SELECT 1 FROM json_each(ko.metadata, '$.entities') e WHERE e.value = ? COLLATE NOCASE)"
-            )
-            entity_clauses.append(
-                "EXISTS (SELECT 1 FROM json_each(ko.metadata, '$.entity_graph.entities') e WHERE e.value = ? COLLATE NOCASE)"
-            )
-            entity_clauses.append(
-                """EXISTS (
-                    SELECT 1
-                    FROM knowledge_entity_refs ker_alias
-                    JOIN entity_aliases ea ON ea.entity_id = ker_alias.entity_id
-                    WHERE ker_alias.knowledge_object_id = ko.id
-                      AND ea.status = 'active'
-                      AND ea.normalized_alias = ? COLLATE NOCASE
-                )"""
-            )
-            entity_clauses.append(
-                "EXISTS (SELECT 1 FROM json_tree(ko.metadata, '$.entity_graph.aliases') a WHERE a.type = 'text' AND a.value = ? COLLATE NOCASE)"
-            )
-            entity_clauses.append("EXISTS (SELECT 1 FROM json_each(ko.source_ids) s WHERE s.value = ? COLLATE NOCASE)")
-            params.extend([name, name, name, name, canonical_key(name), name, name])
-        clauses = [f"({' OR '.join(entity_clauses)})"]
-        if object_types:
-            placeholders = ",".join("?" for _ in object_types)
-            clauses.append(f"ko.object_type IN ({placeholders})")
-            params.extend(sorted(item.value for item in object_types))
-        if statuses:
-            placeholders = ",".join("?" for _ in statuses)
-            clauses.append(f"ko.status IN ({placeholders})")
-            params.extend(sorted(item.value for item in statuses))
+        if exclude_ids:
+            clauses.append(f"knowledge_objects.id NOT IN ({','.join('?' for _ in exclude_ids)})")
+            params.extend(sorted(exclude_ids))
         rows = await self.read_conn.execute_fetchall(
             f"""
-            SELECT ko.*
-            FROM knowledge_objects ko
+            SELECT DISTINCT knowledge_objects.*
+            FROM knowledge_objects, json_each(knowledge_objects.source_ids)
             WHERE {' AND '.join(clauses)}
-            ORDER BY ko.score DESC, ko.updated_at DESC, ko.id DESC
+            ORDER BY knowledge_objects.updated_at DESC, knowledge_objects.id DESC
             LIMIT ?
             """,
             (*params, limit),
         )
         return [_object_from_row(row) for row in rows]
 
-    async def search_temporal(
+    async def list_superseded_by(
         self,
-        query: str,
+        object_id: int,
         *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
+        limit: int = 100,
     ) -> list[KnowledgeObject]:
-        window = _temporal_window(query)
-        if window is None:
-            return []
-        start, end = window
-        clauses = [
-            "COALESCE(json_extract(ko.metadata, '$.happened_at'), json_extract(ko.metadata, '$.verified_at'), ko.updated_at, ko.created_at) BETWEEN ? AND ?"
-        ]
-        params: list[object] = [start, end]
-        if object_types:
-            placeholders = ",".join("?" for _ in object_types)
-            clauses.append(f"ko.object_type IN ({placeholders})")
-            params.extend(sorted(item.value for item in object_types))
-        if statuses:
-            placeholders = ",".join("?" for _ in statuses)
-            clauses.append(f"ko.status IN ({placeholders})")
-            params.extend(sorted(item.value for item in statuses))
         rows = await self.read_conn.execute_fetchall(
-            f"""
-            SELECT ko.*
-            FROM knowledge_objects ko
-            WHERE {' AND '.join(clauses)}
-            ORDER BY COALESCE(json_extract(ko.metadata, '$.happened_at'), json_extract(ko.metadata, '$.verified_at'), ko.updated_at, ko.created_at) DESC
+            """
+            SELECT * FROM knowledge_objects
+            WHERE superseded_by_object_id = ?
+            ORDER BY superseded_at DESC, updated_at DESC, id DESC
             LIMIT ?
             """,
-            (*params, limit),
+            (object_id, limit),
         )
         return [_object_from_row(row) for row in rows]
 

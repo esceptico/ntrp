@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import shutil
@@ -9,22 +10,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+import numpy as np
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 import ntrp.database as database
-from ntrp.knowledge import (
-    ActivationRequest,
-    KnowledgeActivationService,
-    KnowledgeObjectCreate,
-    KnowledgeObjectStatus,
-    KnowledgeObjectType,
-    KnowledgeObjectUpdate,
-)
-from ntrp.knowledge.entity_extraction import EntityExtractionPipeline
-from ntrp.memory.service import KnowledgeObjectService
+from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
+from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.store.base import GraphDatabase
 
 
@@ -64,6 +59,18 @@ class _BenchmarkMemory:
     pass
 
 
+class _BenchmarkEmbedder:
+    async def embed_one(self, text: str) -> np.ndarray:
+        h = hashlib.sha256(text.encode()).digest()
+        values = list(h) * (1536 // len(h))
+        arr = np.array(values, dtype=np.float32) / 255.0
+        norm = np.linalg.norm(arr)
+        return arr / norm if norm > 0 else arr
+
+    async def embed(self, texts: list[str]) -> np.ndarray:
+        return np.array([await self.embed_one(text) for text in texts])
+
+
 def _json_default(value: Any) -> Any:
     if isinstance(value, set):
         return sorted(value)
@@ -76,6 +83,20 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False, default=_json_default) + "\n")
+
+
+def _stored_session_source_id(session_id: str) -> str:
+    return f"source:{session_id}"
+
+
+def _display_source_id(source_id: str) -> str:
+    if source_id.startswith("source:"):
+        return source_id.removeprefix("source:")
+    return source_id
+
+
+def _stored_session_source_ids(session_id: str) -> list[str]:
+    return [_stored_session_source_id(session_id), f"longmemeval:{session_id}"]
 
 
 def _session_text(*, date: str | None, session_id: str, messages: list[dict[str, Any]]) -> str:
@@ -158,15 +179,18 @@ def select_cases(
 
 async def _new_case_service(db_path: Path, *, extraction_model: str | None = None) -> tuple[Any, Any]:
     conn = await database.connect(db_path, vec=True)
-    db = GraphDatabase(conn, 768)
+    db = GraphDatabase(conn, 1536)
     await db.init_schema()
+    embedder = _BenchmarkEmbedder()
     memory = _BenchmarkMemory()
     memory.db = db
     memory.facts = type("_Facts", (), {"read_conn": conn})()
     memory.events = _BenchmarkEvents()
     memory.model = extraction_model
     service = type("_Service", (), {})()
-    service.knowledge_objects = KnowledgeObjectService(memory, entity_pipeline=EntityExtractionPipeline())  # type: ignore[arg-type]
+    service.embedder = embedder
+    service.items = MemoryItemsRepository(conn)
+    service.memory_retrieval = MemoryRetrieval(conn, embedder)
     return conn, service
 
 
@@ -176,25 +200,16 @@ async def _ingest_case(service: Any, case: dict[str, Any]) -> None:
         session_id = str(session["session_id"])
         date = str(session.get("date") or "")
         messages = session.get("messages") or []
-        await service.knowledge_objects.create(
-            KnowledgeObjectCreate(
-                object_type=KnowledgeObjectType.MEMORY_EPISODE,
-                title=f"LongMemEval session {session_id}",
-                text=_session_text(date=date, session_id=session_id, messages=messages),
-                status=KnowledgeObjectStatus.ACTIVE,
+        text = _session_text(date=date, session_id=session_id, messages=messages)
+        await service.items.insert_item(
+            MemoryItemInsert(
+                kind="episode",
+                content=text,
+                confidence=0.8,
                 scope=scope,
-                activation="prompt",
-                proactiveness_level="L0",
-                source_ids=[session_id, f"longmemeval:{session_id}"],
-                metadata={
-                    "benchmark": "longmemeval",
-                    "memory_role": "memory_episode",
-                    "episode_status": "closed",
-                    "question_id": case["question_id"],
-                    "question_type": case["question_type"],
-                    "session_id": session_id,
-                    "session_date": date,
-                },
+                source_refs=[{"kind": "longmemeval_session", "ref": sid} for sid in _stored_session_source_ids(session_id)],
+                tags=["longmemeval", "memory_episode", str(case["question_type"])],
+                embedding=await service.embedder.embed_one(text),
             )
         )
 
@@ -206,21 +221,7 @@ async def _ingest_model_extracted_memories(service: Any, case: dict[str, Any], *
     extracted-only runs, raw episodes are archived after extraction so retrieval
     can only see the generated memories.
     """
-    scope = f"longmemeval:{case['question_id']}"
-    episodes = [
-        obj
-        for obj in await service.knowledge_objects.list_many(
-            object_types={KnowledgeObjectType.MEMORY_EPISODE},
-            statuses={KnowledgeObjectStatus.ACTIVE},
-            limit=500,
-        )
-        if obj.scope == scope
-    ]
-    for episode in episodes:
-        await service.knowledge_objects._extract_memories_from_closed_episode(episode)
-    if not keep_raw_episodes:
-        for episode in episodes:
-            await service.knowledge_objects.update(episode.id, KnowledgeObjectUpdate(status=KnowledgeObjectStatus.ARCHIVED))
+    raise RuntimeError("model-extracted LongMemEval memories are deferred after the memory_items retrieval swap")
 
 
 async def _ingest_extracted_turn_memories(service: Any, case: dict[str, Any]) -> None:
@@ -283,45 +284,32 @@ async def _ingest_extracted_turn_memories(service: Any, case: dict[str, Any]) ->
             f"{prefix}"
             + "\n".join(selected_lines)
         )
-        await service.knowledge_objects.create(
-            KnowledgeObjectCreate(
-                object_type=KnowledgeObjectType.FACT,
-                title=f"LongMemEval extracted focused memory {session_id}",
-                text=text,
-                status=KnowledgeObjectStatus.ACTIVE,
+        await service.items.insert_item(
+            MemoryItemInsert(
+                kind="claim",
+                content=text,
+                confidence=0.75,
                 scope=scope,
-                activation="prompt",
-                proactiveness_level="L0",
-                source_ids=[session_id, f"longmemeval:{session_id}"],
-                score=0.24,
-                metadata={
-                    "benchmark": "longmemeval",
-                    "benchmark_variant": "extracted",
-                    "extractor": "focused_session_baseline_v4",
-                    "memory_role": "extracted_fact",
-                    "question_id": case["question_id"],
-                    "question_type": case["question_type"],
-                    "session_id": session_id,
-                    "session_date": date,
-                    "question_conditioned": True,
-                },
+                source_refs=[{"kind": "longmemeval_session", "ref": sid} for sid in _stored_session_source_ids(session_id)],
+                tags=["longmemeval", "extracted", str(case["question_type"])],
+                embedding=await service.embedder.embed_one(text),
             )
         )
 
 
 def _candidate_trace(candidate: Any, rank: int, gold_session_ids: set[str]) -> dict[str, Any]:
-    source_ids = list(candidate.source_ids)
+    source_ids = list(dict.fromkeys(_display_source_id(str(source_id)) for source_id in _candidate_source_ids(candidate)))
     return {
         "rank": rank,
-        "object_id": candidate.object_id,
-        "object_type": candidate.object_type.value,
-        "title": candidate.title,
+        "object_id": getattr(candidate, "item_id", getattr(candidate, "object_id", "")),
+        "object_type": _candidate_kind(candidate),
+        "title": _candidate_kind(candidate),
         "score": candidate.score,
         "source_ids": source_ids,
         "gold_hit": bool(gold_session_ids & set(source_ids)),
         "reasons": list(candidate.reasons),
-        "signals": [signal.model_dump() for signal in candidate.signals],
-        "text_preview": candidate.text[:500],
+        "signals": [],
+        "text_preview": _candidate_text(candidate)[:500],
     }
 
 
@@ -460,12 +448,36 @@ def _answer_supported_by_text(expected_answer: str, text: str) -> bool:
     )
 
 
+def _candidate_text(candidate: Any) -> str:
+    return str(getattr(candidate, "content", getattr(candidate, "text", "")))
+
+
+def _candidate_kind(candidate: Any) -> str:
+    raw_kind = getattr(candidate, "kind", None)
+    if raw_kind is not None:
+        return str(raw_kind)
+    raw_type = getattr(candidate, "object_type", None)
+    return str(getattr(raw_type, "value", raw_type or "unknown"))
+
+
+def _candidate_source_ids(candidate: Any) -> list[str]:
+    source_ids = getattr(candidate, "source_ids", None)
+    if source_ids:
+        return [str(source_id) for source_id in source_ids]
+    refs = getattr(candidate, "source_refs", None) or []
+    ids: list[str] = []
+    for ref in refs:
+        if isinstance(ref, dict) and ref.get("ref"):
+            ids.append(str(ref["ref"]))
+    return ids
+
+
 def _candidate_primary_source(candidate: Any) -> str | None:
-    for source_id in getattr(candidate, "source_ids", []) or []:
+    for source_id in _candidate_source_ids(candidate):
         source = str(source_id)
         if not source.startswith("longmemeval:"):
-            return source
-    source_ids = list(getattr(candidate, "source_ids", []) or [])
+            return _display_source_id(source)
+    source_ids = _candidate_source_ids(candidate)
     return str(source_ids[0]) if source_ids else None
 
 
@@ -488,10 +500,11 @@ def _candidate_evidence_excerpt(question: str, candidate: Any, *, max_chars: int
     keep a small ordered excerpt from the candidate rather than overfitting one
     sentence selector.
     """
-    sentences = _candidate_sentences(str(candidate.text))
+    text = _candidate_text(candidate)
+    sentences = _candidate_sentences(text)
     cleaned = [sentence for sentence in sentences if sentence and sentence != "Focused source snippets:"]
     if not cleaned:
-        return str(candidate.text).strip()[:max_chars]
+        return text.strip()[:max_chars]
 
     question_terms = _content_tokens(question)
     scored: list[tuple[float, int]] = []
@@ -571,7 +584,7 @@ _NUMBER_WORDS = {
 
 
 def _source_year(candidate: Any) -> int | None:
-    text = str(getattr(candidate, "text", ""))
+    text = _candidate_text(candidate)
     match = re.search(r"Date:\s*(\d{4})/", text)
     return int(match.group(1)) if match else None
 
@@ -614,7 +627,7 @@ def _evidence_records(question: str, candidates: list[Any], *, candidate_limit: 
         excerpt = _candidate_evidence_excerpt(question, candidate, max_chars=1_200)
         if not excerpt:
             continue
-        full_text = str(getattr(candidate, "text", ""))
+        full_text = _candidate_text(candidate)
         records.append(
             {
                 "source_id": source_id,
@@ -815,8 +828,8 @@ async def _generate_llm_answer_from_candidates(question: str, candidates: list[A
         context.append(
             {
                 "source_id": source_id,
-                "object_type": getattr(getattr(candidate, "object_type", None), "value", str(getattr(candidate, "object_type", "unknown"))),
-                "title": getattr(candidate, "title", ""),
+                "object_type": _candidate_kind(candidate),
+                "title": _candidate_kind(candidate),
                 "text": _candidate_evidence_excerpt(question, candidate, max_chars=1400),
             }
         )
@@ -860,8 +873,10 @@ def _judge_generated_answer(
 ) -> dict[str, Any]:
     candidate_text_by_source: dict[str, str] = {}
     for candidate in candidates:
-        for source_id in getattr(candidate, "source_ids", []) or []:
-            candidate_text_by_source[str(source_id)] = str(candidate.text)
+        text = _candidate_text(candidate)
+        for source_id in _candidate_source_ids(candidate):
+            candidate_text_by_source[str(source_id)] = text
+            candidate_text_by_source[_display_source_id(str(source_id))] = text
     known_citations = [source_id for source_id in cited_source_ids if source_id in candidate_text_by_source]
     unknown_citations = [source_id for source_id in cited_source_ids if source_id not in candidate_text_by_source]
     cited_text = "\n".join(candidate_text_by_source[source_id] for source_id in known_citations)
@@ -912,8 +927,9 @@ async def _judge_generated_answer_with_llm(
     )
     candidate_text_by_source: dict[str, str] = {}
     for candidate in candidates:
-        for source_id in getattr(candidate, "source_ids", []) or []:
-            candidate_text_by_source[str(source_id)] = str(candidate.text)
+        text = _candidate_text(candidate)
+        for source_id in _candidate_source_ids(candidate):
+            candidate_text_by_source[str(source_id)] = text
     cited_text = "\n".join(candidate_text_by_source.get(source_id, "") for source_id in cited_source_ids)
     try:
         response = await get_completion_client(model).completion(
@@ -1015,13 +1031,12 @@ async def _run_case(
         activation_query = str(case["question"])
         if raw_evidence_query:
             activation_query = f"source evidence for {activation_query}"
-        bundle = await KnowledgeActivationService(service).inspect(
-            ActivationRequest(
+        bundle = await service.memory_retrieval.search(
+            MemoryActivationRequest(
                 query=activation_query,
                 scope=f"longmemeval:{case['question_id']}",
                 limit=top_k,
                 budget_chars=budget_chars,
-                include_actions=False,
                 record_access=False,
             )
         )

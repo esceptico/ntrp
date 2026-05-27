@@ -14,6 +14,7 @@ from ntrp.agent import (
     ReasoningContentDelta,
     Role,
     ToolCall,
+    ToolCallStreamDelta,
     Usage,
 )
 from ntrp.core.content import render_context
@@ -88,7 +89,7 @@ async def complete_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
     response = await client.responses.create(**request)
     parsed = parse_responses_response(response, model)
     for item in _completion_response_items(parsed):
@@ -100,7 +101,7 @@ async def buffered_stream_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
     request = {**request, "stream": True}
     attempts = 2
 
@@ -120,7 +121,7 @@ async def stream_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
     request = {**request, "stream": True}
     try:
         stream = await client.responses.create(**request)
@@ -142,8 +143,8 @@ async def stream_responses_completion(
 
 def _completion_response_items(
     response: CompletionResponse,
-) -> list[str | ReasoningContentDelta | CompletionResponse]:
-    items: list[str | ReasoningContentDelta | CompletionResponse] = []
+) -> list[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+    items: list[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse] = []
     if response.choices:
         msg = response.choices[0].message
         if msg.reasoning_content:
@@ -179,7 +180,7 @@ class _ResponsesStreamCollector:
         self.final_response = None
         self.done = False
 
-    def consume(self, event, *, emit_deltas: bool) -> list[str | ReasoningContentDelta]:
+    def consume(self, event, *, emit_deltas: bool) -> list[str | ReasoningContentDelta | ToolCallStreamDelta]:
         data = event.model_dump(exclude_none=True)
         event_type = data.get("type")
 
@@ -192,6 +193,28 @@ class _ResponsesStreamCollector:
         if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
             return self._consume_reasoning_delta(data.get("delta"), emit_deltas=emit_deltas)
 
+        if event_type == "response.output_item.added":
+            item = data.get("item")
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                return [
+                    ToolCallStreamDelta(
+                        index=_event_output_index(data),
+                        tool_id=item.get("call_id"),
+                        name=item.get("name"),
+                        arguments_delta=item.get("arguments") or None,
+                    )
+                ]
+            return []
+
+        if event_type == "response.function_call_arguments.delta":
+            delta = data.get("delta")
+            return [
+                ToolCallStreamDelta(
+                    index=_event_output_index(data),
+                    arguments_delta=delta if isinstance(delta, str) and delta else None,
+                )
+            ]
+
         if event_type == "response.completed":
             self.final_response = event.response
             self.done = True
@@ -201,6 +224,15 @@ class _ResponsesStreamCollector:
             item = data.get("item")
             if isinstance(item, dict):
                 self.completed_items.append(item)
+                if item.get("type") == "function_call":
+                    return [
+                        ToolCallStreamDelta(
+                            index=_event_output_index(data),
+                            tool_id=item.get("call_id"),
+                            name=item.get("name"),
+                            done=True,
+                        )
+                    ]
             return []
 
         if event_type in ("response.failed", "response.incomplete"):
@@ -257,6 +289,13 @@ def _missing_done_text_delta(data: dict[str, Any], text_parts: list[str]) -> str
     if not current:
         return text
     return None
+
+
+def _event_output_index(data: dict[str, Any]) -> int:
+    index = data.get("output_index")
+    if isinstance(index, int):
+        return index
+    return 0
 
 
 def _with_streamed_fallbacks(

@@ -1,11 +1,12 @@
 """Knowledge-system abstractions over current memory primitives."""
 
 from ntrp.knowledge.models import (
-    ActivationBundle,
-    ActivationCandidate,
-    ActivationRequest,
-    ActivationSignal,
     KnowledgeArtifactRenderRequest,
+    KnowledgeFactConflictProposal,
+    KnowledgeFactConsolidationCommitRequest,
+    KnowledgeFactConsolidationCommitResult,
+    KnowledgeFactConsolidationProposal,
+    KnowledgeFactConsolidationResult,
     KnowledgeFeedbackRequest,
     KnowledgeHealthResult,
     KnowledgeNextAction,
@@ -21,29 +22,28 @@ from ntrp.knowledge.models import (
     KnowledgePublishRequest,
     KnowledgeReflectRequest,
     KnowledgeReflectResult,
+    KnowledgeSkillPromotionResult,
     KnowledgeSourceTrace,
     KnowledgeSourceTraceResult,
     KnowledgeSummary,
     KnowledgeSupersessionCommitResult,
     KnowledgeSupersessionProposal,
     KnowledgeSurface,
+    KnowledgeUsageObjectSummary,
+    KnowledgeUsageOutcomeRequest,
+    KnowledgeWorkflowCluster,
+    KnowledgeWorkflowClusterResult,
+    KnowledgeWorkflowClusterReviewRequest,
+    MemoryWriteAction,
+    MemoryWriteDecision,
 )
 
-
-def __getattr__(name: str) -> object:
-    if name == "KnowledgeActivationService":
-        from ntrp.knowledge.activation import KnowledgeActivationService
-
-        return KnowledgeActivationService
-    raise AttributeError(name)
-
-
 __all__ = [
-    "ActivationBundle",
-    "ActivationCandidate",
-    "ActivationRequest",
-    "ActivationSignal",
-    "KnowledgeActivationService",
+    "KnowledgeFactConflictProposal",
+    "KnowledgeFactConsolidationCommitRequest",
+    "KnowledgeFactConsolidationCommitResult",
+    "KnowledgeFactConsolidationProposal",
+    "KnowledgeFactConsolidationResult",
     "KnowledgeNextAction",
     "KnowledgeObject",
     "KnowledgeObjectCreate",
@@ -56,14 +56,22 @@ __all__ = [
     "KnowledgeObjectType",
     "KnowledgeArtifactRenderRequest",
     "KnowledgeFeedbackRequest",
+    "KnowledgeUsageObjectSummary",
+    "KnowledgeUsageOutcomeRequest",
     "KnowledgeHealthResult",
     "KnowledgePublishRequest",
     "KnowledgeReflectRequest",
     "KnowledgeReflectResult",
+    "KnowledgeSkillPromotionResult",
     "KnowledgeSourceTrace",
+    "KnowledgeWorkflowCluster",
+    "KnowledgeWorkflowClusterResult",
+    "KnowledgeWorkflowClusterReviewRequest",
     "KnowledgeSourceTraceResult",
     "KnowledgeSummary",
     "KnowledgeSupersessionCommitResult",
     "KnowledgeSupersessionProposal",
     "KnowledgeSurface",
+    "MemoryWriteAction",
+    "MemoryWriteDecision",
 ]

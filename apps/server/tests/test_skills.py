@@ -1,11 +1,19 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from ntrp.context.models import SessionState
+from ntrp.memory.activation import ActivationSkillSuggestion, MemoryActivationBundle
 from ntrp.server.app import app
 from ntrp.server.deps import require_skill_service
+from ntrp.skills.activation import record_auto_activated_skill_events, render_activated_skill_context
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
+from ntrp.skills.tool import UseSkillInput, use_skill
+from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
+from ntrp.tools.core.registry import ToolRegistry
 
 
 def _write_skill(root: Path, name: str, frontmatter: str, body: str = "# Body\n") -> None:
@@ -59,6 +67,73 @@ def test_registry_loads_skill_governance_metadata(tmp_path):
     assert skill.reviewed_at == "2026-05-16"
 
 
+
+def test_registry_renders_skill_xml_with_arguments(tmp_path):
+    _write_skill(
+        tmp_path,
+        "research-helper",
+        "name: research-helper\ndescription: Helps with research\n",
+        body="# Research helper\nUse <skill_path> for local assets.\n",
+    )
+    registry = SkillRegistry()
+    registry.load([(tmp_path, "project")])
+
+    rendered = registry.render_skill_xml("research-helper", args="Current user request: audit it")
+
+    assert rendered is not None
+    assert rendered.startswith(f'<skill name="research-helper" path="{tmp_path / "research-helper"}">')
+    assert f"Use {tmp_path / 'research-helper'} for local assets." in rendered
+    assert "ARGUMENTS: Current user request: audit it" in rendered
+
+
+def test_chat_activation_renders_top_selected_skill_body(tmp_path):
+    _write_skill(
+        tmp_path,
+        "dex-audit",
+        "name: dex-audit\ndescription: Audit Dex deploys\n",
+        body="# Dex audit\nCheck deploy invariants.\n",
+    )
+    _write_skill(
+        tmp_path,
+        "ignored-skill",
+        "name: ignored-skill\ndescription: Should not render by default\n",
+        body="# Ignored\n",
+    )
+    registry = SkillRegistry()
+    registry.load([(tmp_path, "project")])
+    bundle = MemoryActivationBundle(
+        query="audit the dex deploy",
+        scope=None,
+        kinds=None,
+        used_chars=0,
+        prompt_context="",
+        candidates=[],
+        skills_to_use=[
+            ActivationSkillSuggestion(
+                object_id="101",
+                skill_name="dex-audit",
+                description="Audit Dex deploys",
+                score=0.9,
+            ),
+            ActivationSkillSuggestion(
+                object_id="102",
+                skill_name="ignored-skill",
+                description="Should not render by default",
+                score=0.8,
+            ),
+        ],
+    )
+
+    context = render_activated_skill_context(bundle, registry)
+
+    assert context is not None
+    assert context.startswith("<activated_skills>")
+    assert '<skill name="dex-audit"' in context
+    assert "# Dex audit" in context
+    assert "ARGUMENTS: Current user request: audit the dex deploy" in context
+    assert "ignored-skill" not in context
+
+
 def test_skill_service_governance_report_marks_cleanup_candidates(tmp_path):
     _write_skill(
         tmp_path,
@@ -104,3 +179,129 @@ def test_skill_governance_endpoint_returns_report(tmp_path):
     assert response.status_code == 200
     assert response.json()["summary"]["cleanup_candidate_count"] == 1
     assert response.json()["cleanup_candidates"][0]["name"] == "old-helper"
+
+class _FakeAccessEvents:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return kwargs
+
+
+class _FakeMemory:
+    def __init__(self) -> None:
+        self.access_events = _FakeAccessEvents()
+
+
+def _skill_execution(registry: SkillRegistry, memory: _FakeMemory | None = None) -> ToolExecution:
+    ctx = ToolContext(
+        session_state=SessionState(session_id="session-1", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="run-1"),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="session-1"),
+        services={"skill_registry": registry, **({"memory": memory} if memory is not None else {})},
+    )
+    return ToolExecution(tool_id="tool-1", tool_name="use_skill", ctx=ctx)
+
+
+
+@pytest.mark.asyncio
+async def test_chat_auto_activated_skill_records_distinct_telemetry(tmp_path):
+    _write_skill(
+        tmp_path,
+        "dex-audit",
+        "name: dex-audit\ndescription: Audit Dex deploys\nsource: knowledge:skill-1\n",
+        body="# Dex audit\nCheck deploy invariants.\n",
+    )
+    registry = SkillRegistry()
+    registry.load([(tmp_path, "project")])
+    memory = _FakeMemory()
+    bundle = MemoryActivationBundle(
+        query="audit the dex deploy",
+        scope=None,
+        kinds=None,
+        used_chars=0,
+        prompt_context="",
+        candidates=[],
+        usage_event_id=88,
+        skills_to_use=[
+            ActivationSkillSuggestion(
+                object_id="101",
+                skill_name="dex-audit",
+                description="Audit Dex deploys",
+                score=0.9,
+                reasons=["skill_promotion_match"],
+            )
+        ],
+    )
+
+    await record_auto_activated_skill_events(
+        memory,
+        bundle,
+        registry,
+        task="chat_prompt_auto_skill_activation",
+        activation_surface="chat_prompt",
+        task_id="client-1",
+        session_id="session-1",
+        run_id="run-1",
+    )
+
+    assert len(memory.access_events.calls) == 1
+    call = memory.access_events.calls[0]
+    assert call["source"] == "skill_activation"
+    assert call["query"] == "dex-audit"
+    assert call["policy_version"] == "skills.auto_activation.v1"
+    assert call["details"] == {
+        "task": "chat_prompt_auto_skill_activation",
+        "task_id": "client-1",
+        "session_id": "session-1",
+        "run_id": "run-1",
+        "surface": "skill",
+        "activation_surface": "chat_prompt",
+        "skill_name": "dex-audit",
+        "skill_args": "Current user request: audit the dex deploy",
+        "triggering_usage_event_id": 88,
+        "triggering_memory_object_id": "101",
+        "selection_score": 0.9,
+        "selection_reasons": ["skill_promotion_match"],
+        "skill_path": str(tmp_path / "dex-audit"),
+        "skill_location": "project",
+        "skill_source": "knowledge:skill-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_use_skill_records_activation_telemetry(tmp_path):
+    _write_skill(
+        tmp_path,
+        "research-helper",
+        "name: research-helper\ndescription: Helps with research\nsource: knowledge:123\n",
+        body="# Research helper\nUse fresh sources.\n",
+    )
+    registry = SkillRegistry()
+    registry.load([(tmp_path, "project")])
+    memory = _FakeMemory()
+
+    result = await use_skill(_skill_execution(registry, memory), UseSkillInput(skill="research-helper", args="go deep"))
+
+    assert not result.is_error
+    assert result.preview == "Loaded skill: research-helper"
+    assert len(memory.access_events.calls) == 1
+    call = memory.access_events.calls[0]
+    assert call["source"] == "skill_activation"
+    assert call["query"] == "research-helper"
+    assert call["policy_version"] == "skills.use.activation.v1"
+    assert call["details"] == {
+        "task": "use_skill_tool",
+        "task_id": "tool-1",
+        "session_id": "session-1",
+        "run_id": "run-1",
+        "surface": "skill",
+        "skill_name": "research-helper",
+        "skill_args": "go deep",
+        "skill_path": str(tmp_path / "research-helper"),
+        "skill_location": "project",
+        "skill_source": "knowledge:123",
+    }

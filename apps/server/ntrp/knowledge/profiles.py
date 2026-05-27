@@ -462,10 +462,8 @@ class KnowledgeProfileService:
         evidence_limit: int = 12,
         explicit_refresh: bool = True,
     ) -> KnowledgeObject | None:
-        evidence = await self._repo.search_entities(
-            entity_name,
-            object_types=PROFILE_EVIDENCE_TYPES,
-            statuses={KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.APPROVED},
-            limit=evidence_limit,
-        )
-        return await self.upsert(entity_name, evidence, explicit_refresh=explicit_refresh)
+        # Slice 3 removes the knowledge-object search path this profile refresh
+        # depended on. Profile synthesis stays disabled until a memory_items
+        # evidence adapter is designed in a later slice.
+        _ = (entity_name, evidence_limit, explicit_refresh)
+        return None

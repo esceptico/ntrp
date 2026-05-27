@@ -30,22 +30,26 @@ from ntrp.events.sse import (
     ThinkingEvent,
     TokenUsageEvent,
 )
-from ntrp.knowledge.activation import KnowledgeActivationService
-from ntrp.knowledge.models import ActivationRequest
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
+from ntrp.memory.activation import MemoryActivationRequest
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.service import MemoryService
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import BusRegistry, SessionBus, prime_bus_cursor_from_store
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
 from ntrp.services.goal_continuation import (
     goal_continuation_prompt,
-    has_current_turn_tool_activity,
-    is_goal_client_id,
 )
 from ntrp.services.session import SessionService
+from ntrp.skills.activation import (
+    activated_skill_entries,
+    append_context_block,
+    format_activated_skill_context,
+    record_auto_activated_skill_events,
+)
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
 from ntrp.tools.core.types import ToolAction
@@ -134,6 +138,7 @@ class ChatDeps:
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
     memory: FactMemory | None = None
     memory_service: MemoryService | None = None
+    memory_retrieval: MemoryRetrieval | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: NotifierService | None = None
 
@@ -275,16 +280,12 @@ def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bo
     parts = stripped[1:].split(None, 1)
     skill_name = parts[0]
     args = parts[1] if len(parts) > 1 else ""
-    body = registry.load_body(skill_name)
-    if body is None:
+    expanded = registry.render_skill_xml(skill_name, args=args, args_label="User request")
+    if expanded is None:
         return message, False
-    meta = registry.get(skill_name)
-    body = body.replace("<skill_path>", str(meta.path)) if meta else body
-    path_attr = f' path="{meta.path}"' if meta else ""
-    expanded = f'<skill name="{skill_name}"{path_attr}>\n{body}\n</skill>'
-    if args:
-        expanded += f"\n\nUser request: {args}"
     return expanded, True
+
+
 
 
 def _is_anthropic(model: str) -> bool:
@@ -391,23 +392,42 @@ async def _prepare_messages(
     context: list[dict] | None = None,
     client_id: str | None = None,
     session_id: str | None = None,
+    run_id: str | None = None,
     goal_context: dict | None = None,
     project_context: ProjectContext | None = None,
 ) -> list[dict]:
     memory_context = None
-    if deps.memory_service:
+    if deps.memory_retrieval:
         activation_scope = project_context.knowledge_scope if project_context else None
-        bundle = await KnowledgeActivationService(deps.memory_service).inspect(
-            ActivationRequest(
+        bundle = await deps.memory_retrieval.search(
+            MemoryActivationRequest(
                 query=user_message,
                 scope=activation_scope or (f"session:{session_id}" if session_id else None),
                 task="chat_prompt",
+                task_id=client_id,
+                session_id=session_id,
+                run_id=run_id,
                 budget_chars=1_500,
                 limit=8,
                 record_access=True,
             )
         )
-        memory_context = bundle.prompt_context
+        selected_skill_entries = activated_skill_entries(bundle, deps.skill_registry)
+        memory_context = append_context_block(
+            bundle.prompt_context,
+            format_activated_skill_context(selected_skill_entries),
+        )
+        await record_auto_activated_skill_events(
+            deps.memory_service,
+            bundle,
+            deps.skill_registry,
+            task="chat_prompt_auto_skill_activation",
+            activation_surface="chat_prompt",
+            task_id=client_id,
+            session_id=session_id,
+            run_id=run_id,
+            entries=selected_skill_entries,
+        )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
@@ -594,6 +614,8 @@ async def prepare_chat(
         else None
     )
 
+    run = registry.create_run(session_state.session_id)
+
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
     goal_context = await get_goal(session_state.session_id) if get_goal else None
@@ -609,11 +631,11 @@ async def prepare_chat(
         context=context,
         client_id=client_id,
         session_id=session_state.session_id,
+        run_id=run.run_id,
         goal_context=goal_context,
         project_context=project_context,
     )
 
-    run = registry.create_run(session_state.session_id)
     run.messages = messages
     run.session_state = session_state
     run.client_id = client_id
@@ -699,14 +721,6 @@ async def _maybe_dispatch_goal_continuation(ctx: ChatContext, run: RunState, *, 
         return
     goal = await get_goal(ctx.session_state.session_id)
     if not goal or goal.get("goal_id") != ctx.goal_id or goal.get("status") != "active":
-        return
-
-    # Hidden goal runs should not spin forever when the agent only talks.
-    # A fresh user turn can still restart continuation.
-    client_id, input_message_index = _run_input_boundary(run)
-    if not client_id:
-        return
-    if is_goal_client_id(client_id) and not has_current_turn_tool_activity(run.messages, input_message_index):
         return
 
     active = ctx.run_registry.get_active_run(ctx.session_state.session_id)
@@ -811,6 +825,8 @@ async def submit_chat_message(
         return {"run_id": active_run.run_id, "session_id": session_id, "status": "queued"}
 
     deps = build_deps()
+    cursor_service = session_service or deps.session_service
+    await prime_bus_cursor_from_store(buses, session_id, cursor_service.store)
     bus = buses.get_or_create(session_id)
     ctx = await prepare_chat(
         deps,
@@ -1149,7 +1165,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         if ctx.session_name_task is not None:
             asyncio.create_task(_apply_generated_session_name(ctx, bus))
 
-        await bus.emit(ThinkingEvent(status="processing..."))
+        await bus.emit(
+            ThinkingEvent(
+                session_id=session_state.session_id,
+                run_id=run.run_id,
+                status="processing...",
+            )
+        )
 
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
         bg_registry.record_event = _background_event_recorder(ctx.session_service)

@@ -28,12 +28,14 @@ from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.model_context_budget import ToolResultContextBudgetMiddleware
 from ntrp.core.naming import generate_agent_name
+from ntrp.core.prompts import PROJECT_BLOCK
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
     BackgroundTaskEvent,
     SSEEvent,
     TaskFinishedEvent,
+    TaskProgressEvent,
     TaskStartedEvent,
     TokenUsageEvent,
     agent_events_to_sse,
@@ -205,6 +207,12 @@ def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -
     )
 
 
+def _with_project_context(system_prompt: str, calling_ctx: ToolContext) -> str:
+    if not calling_ctx.project:
+        return system_prompt
+    return f"{system_prompt}\n\n{PROJECT_BLOCK.render(project=calling_ctx.project)}"
+
+
 def create_spawn_fn(
     executor: ToolExecutor,
     model: str,
@@ -312,7 +320,7 @@ def create_spawn_fn(
             skip_duplicate_reads=True,
         )
         child_system_prompt = append_deferred_tools_prompt(
-            system_prompt,
+            _with_project_context(system_prompt, calling_ctx),
             child_registry,
             frozenset(child_ctx.services),
             filtered_tools,
@@ -471,31 +479,73 @@ def create_spawn_fn(
             )
 
         if not background:
-            async def _agent_label() -> str:
-                if agent_label_task is None:
-                    return "Agent"
-                return await agent_label_task
+            label_update_task: asyncio.Task[None] | None = None
 
-            async def _run_foreground() -> tuple[str, str]:
-                agent_label = await _agent_label()
-                if parent_emit:
+            async def _emit_agent_label_when_ready() -> None:
+                if parent_emit is None or agent_label_task is None:
+                    return
+                try:
+                    agent_label = await agent_label_task
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _logger.debug("Failed to generate sub-agent label", exc_info=True)
+                    return
+                if agent_label and agent_label != "Agent":
                     await parent_emit(
-                        TaskStartedEvent(
+                        TaskProgressEvent(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             name=agent_label,
+                            status="running",
                             summary=task_summary,
                             depth=task_depth,
                         )
                     )
-                return agent_label, await _stream_to(_foreground_child_events)
+
+            async def _settle_agent_label_update() -> None:
+                if label_update_task is None:
+                    return
+                if agent_label_task is not None and agent_label_task.done():
+                    with suppress(asyncio.CancelledError):
+                        await label_update_task
+                    return
+                if not label_update_task.done():
+                    label_update_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await label_update_task
 
             def _current_agent_label() -> str:
                 if agent_label_task is not None and agent_label_task.done() and not agent_label_task.cancelled():
                     with suppress(Exception):
                         return agent_label_task.result()
                 return "Agent"
+
+            def _event_agent_label() -> str:
+                agent_label = _current_agent_label()
+                return agent_label if agent_label != "Agent" else ""
+
+            async def _run_foreground() -> tuple[str, str]:
+                nonlocal label_update_task
+                if parent_emit:
+                    await parent_emit(
+                        TaskStartedEvent(
+                            run_id=calling_ctx.run.run_id,
+                            task_id=lifecycle_task_id,
+                            parent_tool_call_id=parent_id,
+                            # The actual generated label is produced asynchronously. Do not send
+                            # the placeholder "Agent" here; it would overwrite the tool display
+                            # name (for example, "Research") before the generated label is ready.
+                            name="",
+                            summary=task_summary,
+                            depth=task_depth,
+                        )
+                    )
+                if parent_emit is not None and agent_label_task is not None:
+                    label_update_task = asyncio.create_task(_emit_agent_label_when_ready())
+                text = await _stream_to(_foreground_child_events)
+                return _current_agent_label(), text
 
             stream_task = asyncio.create_task(_run_foreground())
             subagent_handle = None
@@ -506,14 +556,15 @@ def create_spawn_fn(
                     stream_task,
                 )
             try:
-                agent_label, text = await asyncio.wait_for(stream_task, timeout=timeout)
+                _agent_label, text = await asyncio.wait_for(stream_task, timeout=timeout)
+                await _settle_agent_label_update()
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
-                            name=agent_label,
+                            name=_event_agent_label(),
                             status="failed" if stream_failed else "completed",
                             summary="failed" if stream_failed else "completed",
                             depth=task_depth,
@@ -527,7 +578,6 @@ def create_spawn_fn(
                     else None
                 )
                 if run_state and not run_state.cancelled and subagent_handle and subagent_handle.cancel_requested:
-                    agent_label = _current_agent_label()
                     summary = await _salvage_summary(
                         child_model,
                         child_messages,
@@ -539,27 +589,28 @@ def create_spawn_fn(
                         if summary
                         else _deterministic_cancel_salvage(child_messages)
                     )
+                    await _settle_agent_label_update()
                     if parent_emit:
                         await parent_emit(
                             TaskFinishedEvent(
                                 run_id=calling_ctx.run.run_id,
                                 task_id=lifecycle_task_id,
                                 parent_tool_call_id=parent_id,
-                                name=agent_label,
+                                name=_event_agent_label(),
                                 status="cancelled",
                                 summary="cancelled; partial summary returned",
                                 depth=task_depth,
                             )
                         )
                     return _settle_with(text)
-                agent_label = _current_agent_label()
+                await _settle_agent_label_update()
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
-                            name=agent_label,
+                            name=_event_agent_label(),
                             status="cancelled",
                             summary="cancelled",
                             depth=task_depth,
@@ -568,14 +619,14 @@ def create_spawn_fn(
                 raise
             except TimeoutError:
                 # Same idea on timeout — try to salvage what we collected.
+                await _settle_agent_label_update()
                 if parent_emit:
-                    agent_label = _current_agent_label()
                     await parent_emit(
                         TaskFinishedEvent(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
-                            name=agent_label,
+                            name=_event_agent_label(),
                             status="failed",
                             summary=f"timed out after {timeout}s",
                             depth=task_depth,
@@ -599,6 +650,10 @@ def create_spawn_fn(
                     stream_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await stream_task
+                if label_update_task is not None and not label_update_task.done():
+                    label_update_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await label_update_task
                 if agent_label_task is not None and not agent_label_task.done():
                     agent_label_task.cancel()
                     with suppress(asyncio.CancelledError):

@@ -13,6 +13,7 @@ from ntrp.agent import (
     ReasoningContentDelta,
     Role,
     ToolCall,
+    ToolCallStreamDelta,
     Usage,
 )
 from ntrp.core.content import render_context
@@ -125,7 +126,7 @@ class AnthropicClient(CompletionClient):
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         model, request = self._prepare(
             messages,
             model,

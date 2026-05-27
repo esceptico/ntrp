@@ -1,8 +1,11 @@
 from pydantic import BaseModel, Field
 
+from ntrp.logging import get_logger
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
+
+_logger = get_logger(__name__)
 
 
 class UseSkillInput(BaseModel):
@@ -18,10 +21,41 @@ USE_SKILL_DESCRIPTION = (
 )
 
 
+async def _record_skill_activation(
+    execution: ToolExecution, args: UseSkillInput, *, path: str, location: str, source: str | None
+) -> None:
+    memory = execution.ctx.services.get("memory")
+    if memory is None or not hasattr(memory, "access_events"):
+        return
+    details = {
+        "task": "use_skill_tool",
+        "task_id": execution.tool_id,
+        "session_id": execution.ctx.session_id,
+        "run_id": execution.ctx.run.run_id,
+        "surface": "skill",
+        "skill_name": args.skill,
+        "skill_args": args.args,
+        "skill_path": path,
+        "skill_location": location,
+    }
+    if source:
+        details["skill_source"] = source
+    try:
+        await memory.access_events.create(
+            source="skill_activation",
+            query=args.skill,
+            policy_version="skills.use.activation.v1",
+            details=details,
+        )
+    except Exception:  # pragma: no cover - telemetry must not break skill loading
+        _logger.exception("Failed to record skill activation telemetry", skill=args.skill)
+
+
 async def use_skill(execution: ToolExecution, args: UseSkillInput) -> ToolResult:
     registry = execution.ctx.services["skill_registry"]
-    body = registry.load_body(args.skill)
-    if body is None:
+    meta = registry.get(args.skill)
+    content = registry.render_skill_xml(args.skill, args.args)
+    if meta is None or content is None:
         available = ", ".join(registry.names)
         return ToolResult(
             content=f"Unknown skill: {args.skill}. Available: {available}",
@@ -29,11 +63,9 @@ async def use_skill(execution: ToolExecution, args: UseSkillInput) -> ToolResult
             is_error=True,
         )
 
-    meta = registry.get(args.skill)
-    body = body.replace("<skill_path>", str(meta.path))
-    content = f'<skill name="{args.skill}" path="{meta.path}">\n{body}\n</skill>'
-    if args.args:
-        content += f"\n\nARGUMENTS: {args.args}"
+    await _record_skill_activation(
+        execution, args, path=str(meta.path), location=meta.location, source=meta.source
+    )
 
     return ToolResult(content=content, preview=f"Loaded skill: {args.skill}")
 
