@@ -1,6 +1,11 @@
 from ntrp.config import Config
+from ntrp.knowledge.episodes import EpisodeBoundaryClassifier
 from ntrp.logging import get_logger
+from ntrp.memory.buffers_store import EpisodeBufferRepository
+from ntrp.memory.connectors.chat import ChatConnector
+from ntrp.memory.connectors.episode_close import CompletionSummaryClient
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.service import MemoryService
 from ntrp.server.indexer import Indexer
@@ -18,6 +23,7 @@ class KnowledgeRuntime:
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
         self.memory_search_source: MemorySearchSource | None = None
+        self.chat_connector: ChatConnector | None = None
 
     @property
     def memory_ready(self) -> bool:
@@ -84,6 +90,14 @@ class KnowledgeRuntime:
         )
         self.memory_service = MemoryService(self.memory)
         self.memory_search_source = MemorySearchSource(self.memory.db)
+        self.chat_connector = ChatConnector(
+            items=MemoryItemsRepository(self.memory.db.conn),
+            buffers=EpisodeBufferRepository(self.memory.db.conn),
+            embedder=self.memory.embedder,
+            llm_client=CompletionSummaryClient(self.config.memory_model),
+            boundary_classifier=EpisodeBoundaryClassifier(),
+        )
+        self.memory_service.chat_connector = self.chat_connector  # type: ignore[attr-defined]
 
     async def _close_memory(self) -> None:
         if self.memory:
@@ -91,6 +105,7 @@ class KnowledgeRuntime:
         self.memory = None
         self.memory_service = None
         self.memory_search_source = None
+        self.chat_connector = None
 
     async def _sync_memory(self, stores: Stores) -> None:
         if self.memory_ready and not self.memory:
@@ -105,6 +120,8 @@ class KnowledgeRuntime:
                 return
             if self.memory.model != self.config.memory_model:
                 self.memory.update_model(self.config.memory_model)
+                if self.chat_connector:
+                    self.chat_connector.llm_client = CompletionSummaryClient(self.config.memory_model)
         elif not self.config.memory and self.memory:
             await self._close_memory()
 

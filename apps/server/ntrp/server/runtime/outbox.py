@@ -1,8 +1,12 @@
+import asyncio
 from collections.abc import Callable
 from datetime import datetime
 
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
+from ntrp.logging import get_logger
+from ntrp.memory.connectors.chat import ChatConnector
+from ntrp.memory.connectors.idle_sweeper import IdleBufferSweeper
 from ntrp.memory.service import MemoryService
 from ntrp.outbox import (
     OUTBOX_RUN_COMPLETED,
@@ -12,6 +16,8 @@ from ntrp.outbox import (
 )
 from ntrp.outbox.store import OutboxStore
 from ntrp.server.indexer import Indexer
+
+_logger = get_logger(__name__)
 
 
 class RuntimeOutbox:
@@ -30,12 +36,23 @@ class RuntimeOutbox:
         self.scheduler = scheduler
         self.indexer = indexer
         self._get_memory_service = get_memory_service
+        self._idle_sweeper_task: asyncio.Task | None = None
         self._register_handlers()
 
     def start(self) -> None:
         self.worker.start()
+        connector = self._get_chat_connector()
+        if connector and (self._idle_sweeper_task is None or self._idle_sweeper_task.done()):
+            self._idle_sweeper_task = asyncio.create_task(IdleBufferSweeper(connector).run_loop())
 
     async def stop(self) -> None:
+        if self._idle_sweeper_task:
+            self._idle_sweeper_task.cancel()
+            try:
+                await self._idle_sweeper_task
+            except asyncio.CancelledError:
+                pass
+            self._idle_sweeper_task = None
         await self.worker.stop()
 
     def _register_handlers(self) -> None:
@@ -43,10 +60,23 @@ class RuntimeOutbox:
 
     async def _on_run_completed(self, event: OutboxEvent) -> None:
         run_completed = run_completed_from_payload(event.payload)
+        chat_connector = self._get_chat_connector()
+        if chat_connector:
+            try:
+                await chat_connector.on_run_completed(run_completed)
+            except Exception:
+                _logger.warning("Chat connector run-completed handler failed", exc_info=True)
         await self.scheduler.handle_run_completed(run_completed)
         memory_service: MemoryService | None = self._get_memory_service()
         if memory_service:
-            await memory_service.knowledge_objects.assimilate_run_completed(run_completed)
+            try:
+                await memory_service.knowledge_objects.assimilate_run_completed(run_completed)
+            except Exception:
+                _logger.warning("Legacy knowledge assimilation failed", exc_info=True)
+
+    def _get_chat_connector(self) -> ChatConnector | None:
+        memory_service = self._get_memory_service()
+        return getattr(memory_service, "chat_connector", None) if memory_service else None
 
     async def get_status(self) -> dict:
         worker_running = self.worker.is_running
