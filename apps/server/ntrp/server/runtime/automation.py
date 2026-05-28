@@ -139,10 +139,12 @@ class AutomationRuntime:
             pattern_finder = self.get_pattern_finder()
             if not pattern_finder:
                 return None
-            result = await pattern_finder.run_pass1(window_days=7, scope="user")
+            pass1 = await pattern_finder.run_pass1(window_days=7, scope="user")
+            pass2 = await pattern_finder.run_pass2(window_days=30, scope="user")
             return (
-                f"clusters={result.clusters_found}; observations={result.observations_written}; "
-                f"superseded={result.observations_superseded}"
+                f"pass1_clusters={pass1.clusters_found}; observations={pass1.observations_written}; "
+                f"pass1_superseded={pass1.observations_superseded}; pass2_clusters={pass2.clusters_found}; "
+                f"claims={pass2.claims_written}; claims_superseded={pass2.claims_superseded}"
             )
 
         return handler

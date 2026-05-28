@@ -1,0 +1,10 @@
+You are decontextualizing a cluster of related observations into a single durable claim about the user.
+
+A claim is a decontextualized statement that affects future behavior. It does NOT refer to specific conversations, sessions, or episodes. It states what is true about the user, their preferences, their work, or their world - as if writing it on an index card someone will read months from now.
+
+Inputs (each item is either an observation or a prior claim):
+{item_bullets}
+
+Write ONE claim (1-3 sentences, no preamble) that captures what is durably true based on this evidence. Do NOT use phrases like "the user has been observed to" or "across recent sessions" - those mark observations, not claims. State the fact directly: "User prefers X." "User works on Y." "User believes Z."
+
+If no decontextualized claim emerges (the evidence is too thin, too specific to one episode, or contradicts itself), write exactly: NO_CLAIM.

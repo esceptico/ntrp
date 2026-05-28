@@ -989,15 +989,6 @@ class KnowledgeObjectService:
             limit: int = 5,
         ) -> list[KnowledgeObject]:
             statuses = {KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.APPROVED, KnowledgeObjectStatus.DRAFT}
-            matches = await self.search_text(
-                query,
-                object_types=object_types,
-                statuses=statuses,
-                limit=limit,
-            )
-            scoped_matches = [match for match in matches if scope_matches(match)]
-            if scoped_matches:
-                return scoped_matches
             terms = {term for term in findall(r"[a-z0-9_]+", query.lower()) if len(term) > 2}
             if not terms:
                 return []
@@ -1350,59 +1341,6 @@ class KnowledgeObjectService:
         offset: int = 0,
     ) -> list[KnowledgeObject]:
         return await self._repo.list_many(object_types=object_types, statuses=statuses, limit=limit, offset=offset)
-
-    async def search_text(
-        self,
-        query: str,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-        offset: int = 0,
-    ) -> list[KnowledgeObject]:
-        return await self._repo.search_text(
-            query,
-            object_types=object_types,
-            statuses=statuses,
-            limit=limit,
-            offset=offset,
-        )
-
-    async def search_vector(
-        self,
-        query: str,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-    ) -> list[tuple[KnowledgeObject, float]]:
-        embedding = await self._memory.embedder.embed_one(query)
-        return await self._repo.search_vector(
-            embedding,
-            object_types=object_types,
-            statuses=statuses,
-            limit=limit,
-        )
-
-    async def search_entities(
-        self,
-        query: str,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-    ) -> list[KnowledgeObject]:
-        return await self._repo.search_entities(query, object_types=object_types, statuses=statuses, limit=limit)
-
-    async def search_temporal(
-        self,
-        query: str,
-        *,
-        object_types: set[KnowledgeObjectType] | None = None,
-        statuses: set[KnowledgeObjectStatus] | None = None,
-        limit: int = 500,
-    ) -> list[KnowledgeObject]:
-        return await self._repo.search_temporal(query, object_types=object_types, statuses=statuses, limit=limit)
 
     async def list_profile_entity_names(self, *, limit: int = 100) -> list[str]:
         return await self._repo.list_profile_entity_names(limit=limit)

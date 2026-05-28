@@ -252,6 +252,8 @@ class MemoryRetrieval:
                 + self.w_confidence * breakdown.confidence
             )
             reasons: list[str] = []
+            if row.kind == "claim" and (row.fts_bm25 is not None or row.vector_distance is not None):
+                reasons.append("claim_match")
             if row.fts_bm25 is not None:
                 reasons.append("fts_match")
             if row.vector_distance is not None:

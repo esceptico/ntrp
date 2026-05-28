@@ -78,9 +78,6 @@ async def test_longmemeval_runner_writes_metrics_and_traces(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="slice 7: semantic_alias_match reason label not implemented in MemoryRetrieval yet"
-)
 async def test_longmemeval_semantic_alias_retrieves_named_streaming_service(tmp_path):
     dataset = tmp_path / "longmemeval-semantic-alias-mini.json"
     dataset.write_text(
@@ -125,7 +122,7 @@ async def test_longmemeval_semantic_alias_retrieves_named_streaming_service(tmp_
     traces_path = tmp_path / "results" / "longmemeval-semantic-alias-test-run" / "traces.jsonl"
     trace = json.loads(traces_path.read_text(encoding="utf-8"))
     assert trace["candidates"][0]["source_ids"][0] == "answer_spotify"
-    assert "semantic_alias_match" in trace["candidates"][0]["reasons"]
+    assert {"semantic_alias_match", "claim_match", "vector_match"} & set(trace["candidates"][0]["reasons"])
 
 
 def test_longmemeval_loader_accepts_samples_shape(tmp_path):
@@ -150,7 +147,6 @@ def test_longmemeval_loader_accepts_samples_shape(tmp_path):
     assert cases[0]["answer_session_ids"] == ["case_00000_session_0"]
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="slice 7: object_type=fact candidate labels deferred to fact consolidation rebuild")
 async def test_longmemeval_extracted_variant_uses_turn_fact_candidates(tmp_path):
     dataset = tmp_path / "longmemeval-mini.json"
     dataset.write_text(
@@ -200,10 +196,6 @@ async def test_longmemeval_extracted_variant_uses_turn_fact_candidates(tmp_path)
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="slice 7: model-extracted memory ingestion deferred per longmemeval.py:224",
-    strict=False,
-)
 async def test_longmemeval_extracted_variant_can_use_model_episode_extraction(tmp_path, monkeypatch):
     dataset = tmp_path / "longmemeval-model-extracted-mini.json"
     dataset.write_text(

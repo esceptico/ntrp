@@ -132,7 +132,7 @@ async def test_search_fts_only_match(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="rare lexical", limit=5), now=NOW)
 
     assert [candidate.item_id for candidate in bundle.candidates] == ["needle"]
-    assert bundle.candidates[0].reasons == ["fts_match"]
+    assert bundle.candidates[0].reasons == ["claim_match", "fts_match"]
 
 
 async def test_search_vector_only_match(conn: aiosqlite.Connection):
@@ -156,7 +156,7 @@ async def test_search_hybrid_fts_and_vector(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="project zebra", limit=3), now=NOW)
 
     assert bundle.candidates[0].item_id == "both"
-    assert set(bundle.candidates[0].reasons) == {"fts_match", "vector_match"}
+    assert set(bundle.candidates[0].reasons) == {"claim_match", "fts_match", "vector_match"}
 
 
 async def test_search_status_filter_active_only(conn: aiosqlite.Connection):

@@ -188,6 +188,7 @@ async def _new_case_service(db_path: Path, *, extraction_model: str | None = Non
     memory.events = _BenchmarkEvents()
     memory.model = extraction_model
     service = type("_Service", (), {})()
+    service.model = extraction_model
     service.embedder = embedder
     service.items = MemoryItemsRepository(conn)
     service.memory_retrieval = MemoryRetrieval(conn, embedder)
@@ -221,7 +222,69 @@ async def _ingest_model_extracted_memories(service: Any, case: dict[str, Any], *
     extracted-only runs, raw episodes are archived after extraction so retrieval
     can only see the generated memories.
     """
-    raise RuntimeError("model-extracted LongMemEval memories are deferred after the memory_items retrieval swap")
+    from ntrp.llm.router import get_completion_client
+
+    scope = f"longmemeval:{case['question_id']}"
+    client = get_completion_client(service.model)
+    for session in case["sessions"]:
+        session_id = str(session["session_id"])
+        date = str(session.get("date") or "")
+        messages = session.get("messages") or []
+        text = _session_text(date=date, session_id=session_id, messages=messages)
+        response = await client.completion(
+            model=service.model,
+            temperature=0,
+            max_tokens=800,
+            response_format=_ExtractedBenchmarkMemories,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract durable user memory facts from the session. "
+                        "Return JSON with a memories array; each memory has object_type, title, text, kind, confidence, source_quote."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+        )
+        content = response.choices[0].message.content if response.choices else None
+        extracted = _ExtractedBenchmarkMemories.model_validate_json(content or "{}")
+        for memory in extracted.memories:
+            body = memory.text.strip()
+            if not body:
+                continue
+            confidence = max(0.0, min(1.0, float(memory.confidence)))
+            await service.items.insert_item(
+                MemoryItemInsert(
+                    kind="claim",
+                    content=body,
+                    confidence=confidence,
+                    scope=scope,
+                    source_refs=[
+                        {
+                            "kind": "longmemeval_session",
+                            "ref": sid,
+                            "source_quote": memory.source_quote,
+                        }
+                        for sid in _stored_session_source_ids(session_id)
+                    ],
+                    tags=["longmemeval", "extracted", str(case["question_type"]), str(memory.kind)],
+                    embedding=await service.embedder.embed_one(body),
+                )
+            )
+    if not keep_raw_episodes:
+        now = datetime.now(UTC).isoformat()
+        await service.items.conn.execute(
+            """
+            UPDATE memory_items
+            SET status = 'archived',
+                invalid_at = ?,
+                updated_at = ?
+            WHERE scope = ? AND kind = 'episode'
+            """,
+            (now, now, scope),
+        )
+        await service.items.conn.commit()
 
 
 async def _ingest_extracted_turn_memories(service: Any, case: dict[str, Any]) -> None:
@@ -317,6 +380,19 @@ def _candidate_trace(candidate: Any, rank: int, gold_session_ids: set[str]) -> d
 class _LLMAnswer(BaseModel):
     answer: str = Field(description="Answer grounded only in the provided cited sources.")
     cited_source_ids: list[str] = Field(default_factory=list, description="Source ids used to answer.")
+
+
+class _ExtractedBenchmarkMemory(BaseModel):
+    object_type: str = "fact"
+    title: str = ""
+    text: str
+    kind: str = "fact"
+    confidence: float = 0.75
+    source_quote: str | None = None
+
+
+class _ExtractedBenchmarkMemories(BaseModel):
+    memories: list[_ExtractedBenchmarkMemory] = Field(default_factory=list)
 
 
 class _LLMJudge(BaseModel):
@@ -455,6 +531,10 @@ def _candidate_text(candidate: Any) -> str:
 def _candidate_kind(candidate: Any) -> str:
     raw_kind = getattr(candidate, "kind", None)
     if raw_kind is not None:
+        if str(raw_kind) == "claim":
+            return "fact"
+        if str(raw_kind) == "episode":
+            return "memory_episode"
         return str(raw_kind)
     raw_type = getattr(candidate, "object_type", None)
     return str(getattr(raw_type, "value", raw_type or "unknown"))

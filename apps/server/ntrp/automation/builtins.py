@@ -103,7 +103,7 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_PATTERN_FINDER_DAILY_ID,
         name="Pattern Finder Daily",
-        description="Cluster recent memory episodes into observations",
+        description="Cluster recent memory episodes into observations and claims",
         triggers=[
             TimeTrigger(at="04:00", days="daily"),
         ],
