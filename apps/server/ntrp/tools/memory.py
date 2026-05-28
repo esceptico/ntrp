@@ -1,13 +1,11 @@
 from pydantic import BaseModel, Field
 
-from ntrp.knowledge.activation import KnowledgeActivationService
 from ntrp.knowledge.models import (
-    ActivationRequest,
     KnowledgeObjectCreate,
     KnowledgeObjectStatus,
     KnowledgeObjectType,
-    KnowledgeObjectUpdate,
 )
+from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
@@ -99,23 +97,37 @@ class RecallInput(BaseModel):
     )
 
 
+def _activation_bundle_payload(bundle: MemoryActivationBundle) -> dict:
+    return bundle.model_dump(mode="json")
+
+
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
-    memory = execution.ctx.services["memory"]
+    retrieval = execution.ctx.services["memory_retrieval"]
     project = execution.ctx.project
-    bundle = await KnowledgeActivationService(memory).inspect(
-        ActivationRequest(
+    bundle = await retrieval.search(
+        MemoryActivationRequest(
             query=args.query,
             scope=project.knowledge_scope if project else None,
             limit=args.limit,
             task="recall_tool",
+            task_id=execution.tool_id,
+            session_id=execution.ctx.session_id,
+            run_id=execution.ctx.run.run_id,
+            surface="tool",
             record_access=True,
         )
     )
+    payload = _activation_bundle_payload(bundle)
     if bundle.prompt_context:
-        return ToolResult(content=bundle.prompt_context, preview=f"{len(bundle.candidates)} knowledge objects")
+        return ToolResult(
+            content=bundle.prompt_context,
+            preview=f"{len(bundle.candidates)} memory items",
+            data={"activation_bundle": payload},
+        )
     return ToolResult(
         content="No knowledge found for this query. Try broader terms or use remember() to store durable knowledge first.",
-        preview="0 knowledge objects",
+        preview="0 memory items",
+        data={"activation_bundle": payload},
     )
 
 
@@ -128,21 +140,28 @@ async def approve_forget(execution: ToolExecution, args: ForgetInput) -> Approva
 
 
 async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
-    memory = execution.ctx.services["memory"]
-    bundle = await KnowledgeActivationService(memory).inspect(
-        ActivationRequest(query=args.query, limit=20, task="forget_tool", include_actions=False)
+    retrieval = execution.ctx.services["memory_retrieval"]
+    bundle = await retrieval.search(
+        MemoryActivationRequest(
+            query=args.query,
+            limit=20,
+            task="forget_tool",
+            task_id=execution.tool_id,
+            session_id=execution.ctx.session_id,
+            run_id=execution.ctx.run.run_id,
+            surface="tool",
+        )
     )
     count = 0
     for candidate in bundle.candidates:
-        if not candidate.object_id.isdigit():
-            continue
-        await memory.knowledge_objects.update(
-            int(candidate.object_id),
-            KnowledgeObjectUpdate(status=KnowledgeObjectStatus.ARCHIVED),
+        cursor = await retrieval.conn.execute(
+            "UPDATE memory_items SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (candidate.item_id,),
         )
-        count += 1
+        count += cursor.rowcount if cursor.rowcount > 0 else 0
+    await retrieval.conn.commit()
     return ToolResult(
-        content=f"Archived {count} knowledge object(s) related to '{args.query}'.", preview=f"Archived {count}"
+        content=f"Archived {count} memory item(s) related to '{args.query}'.", preview=f"Archived {count}"
     )
 
 
