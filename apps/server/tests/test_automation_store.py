@@ -17,6 +17,7 @@ from ntrp.constants import (
     BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
     BUILTIN_KNOWLEDGE_RETENTION_ID,
     BUILTIN_PATTERN_FINDER_DAILY_ID,
+    BUILTIN_SKILL_INDUCER_DAILY_ID,
 )
 from ntrp.knowledge import KnowledgeObjectType
 
@@ -212,6 +213,7 @@ async def test_seed_builtins_uses_knowledge_handlers(automation_store: Automatio
         BUILTIN_KNOWLEDGE_RETENTION_ID,
         BUILTIN_KNOWLEDGE_HEALTH_ID,
         BUILTIN_PATTERN_FINDER_DAILY_ID,
+        BUILTIN_SKILL_INDUCER_DAILY_ID,
     } <= set(automations)
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].handler == "knowledge_reflection"
     assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].enabled is True
@@ -236,6 +238,8 @@ async def test_seed_builtins_uses_knowledge_handlers(automation_store: Automatio
     assert automations[BUILTIN_PATTERN_FINDER_DAILY_ID].handler == "pattern_finder_daily"
     assert automations[BUILTIN_PATTERN_FINDER_DAILY_ID].enabled is True
     assert any(isinstance(trigger, TimeTrigger) for trigger in automations[BUILTIN_PATTERN_FINDER_DAILY_ID].triggers)
+    assert automations[BUILTIN_SKILL_INDUCER_DAILY_ID].handler == "skill_inducer_daily"
+    assert any(isinstance(trigger, TimeTrigger) for trigger in automations[BUILTIN_SKILL_INDUCER_DAILY_ID].triggers)
     assert all(automation.handler != "learning_review" for automation in automations.values())
 
 

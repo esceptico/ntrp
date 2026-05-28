@@ -12,6 +12,7 @@ from ntrp.constants import (
     BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
     BUILTIN_KNOWLEDGE_RETENTION_ID,
     BUILTIN_PATTERN_FINDER_DAILY_ID,
+    BUILTIN_SKILL_INDUCER_DAILY_ID,
     DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
@@ -108,6 +109,16 @@ BUILTINS = [
             TimeTrigger(at="04:00", days="daily"),
         ],
         handler="pattern_finder_daily",
+        writable=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_SKILL_INDUCER_DAILY_ID,
+        name="Skill Inducer Daily",
+        description="Draft skill proposals from repeated toolable memory claims",
+        triggers=[
+            TimeTrigger(at="06:00", days="daily"),
+        ],
+        handler="skill_inducer_daily",
         writable=True,
     ),
 ]

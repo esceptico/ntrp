@@ -192,6 +192,8 @@ async def test_search_kind_filter_subset(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="kind token", kinds=["claim", "skill"], limit=10), now=NOW)
 
     assert {candidate.item_id for candidate in bundle.candidates} == {"claim", "skill"}
+    skill = next(candidate for candidate in bundle.candidates if candidate.item_id == "skill")
+    assert "skill_match" in skill.reasons
 
 
 async def test_search_validity_window_excludes_future_valid_from(conn: aiosqlite.Connection):

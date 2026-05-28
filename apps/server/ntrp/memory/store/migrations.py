@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 31
+CURRENT_VERSION = 32
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -1075,6 +1075,9 @@ async def _migrate_v31(conn: aiosqlite.Connection) -> None:
     ):
         await conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
 
+    for view in ("knowledge_object_source_refs", "knowledge_object_metadata_entries", "knowledge_activation_items"):
+        await conn.execute(f"DROP VIEW IF EXISTS {view}")
+
     for table in ("observations_fts", "facts_fts", "knowledge_objects_fts"):
         await conn.execute(f"DROP TABLE IF EXISTS {table}")
 
@@ -1206,6 +1209,37 @@ async def _migrate_v31(conn: aiosqlite.Connection) -> None:
     """)
 
 
+async def _migrate_v32(conn: aiosqlite.Connection) -> None:
+    """Allow skill/proposal provenance edges back to source claims."""
+    _logger.info("Migration v32: adding derives_from memory item parent role")
+
+    for view in ("knowledge_object_source_refs", "knowledge_object_metadata_entries", "knowledge_activation_items"):
+        await conn.execute(f"DROP VIEW IF EXISTS {view}")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_item_parents_new (
+            child_id    TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+            parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+            role        TEXT NOT NULL CHECK (role IN (
+                            'step', 'evidence', 'contradicts',
+                            'supersedes', 'similar_to', 'derives_from'
+                        )),
+            "order"     INTEGER,
+            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (child_id, parent_id, role)
+        )
+    """)
+    await conn.execute("""
+        INSERT OR IGNORE INTO memory_item_parents_new (child_id, parent_id, role, "order", created_at)
+        SELECT child_id, parent_id, role, "order", created_at
+        FROM memory_item_parents
+    """)
+    await conn.execute("DROP TABLE memory_item_parents")
+    await conn.execute("ALTER TABLE memory_item_parents_new RENAME TO memory_item_parents")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_child ON memory_item_parents(child_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_parent ON memory_item_parents(parent_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_role ON memory_item_parents(role)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -1233,6 +1267,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (29, _migrate_v29),
     (30, _migrate_v30),
     (31, _migrate_v31),
+    (32, _migrate_v32),
 ]
 
 

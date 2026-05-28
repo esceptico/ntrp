@@ -13,6 +13,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.connectors.episode_close import SummaryClient
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
+from ntrp.memory.skill_inducer import IsToolableGate
 
 DEFAULT_PATTERN_FINDER_SIM_THRESHOLD = 0.70
 DEFAULT_PATTERN_FINDER_PASS2_THRESHOLD = 0.72
@@ -310,6 +311,10 @@ class PatternFinder:
                 await cast("ContradictionWatcher", self.contradiction_watcher).scan_for_new_claim(claim_id, scope=scope)
             except Exception:
                 _logger.exception("Contradiction watcher scan failed for claim %s", claim_id)
+        try:
+            await IsToolableGate(repo=self.repo, judge_client=self.summary_client).evaluate_and_tag(claim_id)
+        except Exception:
+            _logger.exception("is_toolable gate failed for claim %s", claim_id)
         return claim_id
 
 

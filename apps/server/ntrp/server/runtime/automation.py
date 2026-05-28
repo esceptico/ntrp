@@ -10,6 +10,7 @@ from ntrp.knowledge.processors import KnowledgeProcessorService
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.service import MemoryService
+from ntrp.memory.skill_inducer import SkillInducer
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
@@ -82,6 +83,10 @@ class AutomationRuntime:
                 "pattern_finder_daily",
                 self._build_pattern_finder_daily_handler(),
             )
+            self.scheduler.register_handler(
+                "skill_inducer_daily",
+                self._build_skill_inducer_daily_handler(),
+            )
 
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
@@ -145,6 +150,27 @@ class AutomationRuntime:
                 f"pass1_clusters={pass1.clusters_found}; observations={pass1.observations_written}; "
                 f"pass1_superseded={pass1.observations_superseded}; pass2_clusters={pass2.clusters_found}; "
                 f"claims={pass2.claims_written}; claims_superseded={pass2.claims_superseded}"
+            )
+
+        return handler
+
+    def _build_skill_inducer_daily_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            pattern_finder = self.get_pattern_finder()
+            if not pattern_finder:
+                return None
+            inducer = getattr(pattern_finder, "skill_inducer", None)
+            if inducer is None:
+                inducer = SkillInducer(
+                    repo=pattern_finder.repo,
+                    draft_client=pattern_finder.summary_client,
+                    embedder=pattern_finder.embedder,
+                )
+                pattern_finder.skill_inducer = inducer
+            result = await inducer.run(window_days=30, scope="user")
+            return (
+                f"claims_considered={result.claims_considered}; toolable_claims={result.toolable_claims}; "
+                f"clusters={result.clusters_found}; proposals={result.proposals_written}"
             )
 
         return handler

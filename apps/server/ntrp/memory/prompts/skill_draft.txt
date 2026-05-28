@@ -1,0 +1,33 @@
+You are drafting a reusable skill in Markdown.
+
+The skill formalizes this recurring workflow:
+
+Trigger: {trigger}
+Claim(s):
+{claim_bullets}
+
+Supporting episodes (concrete examples):
+{episode_bullets}
+
+Write a SKILL.md body with this exact structure:
+
+# <Skill name in Title Case>
+
+## When to use
+<1-2 sentences describing the trigger condition>
+
+## Steps
+1. <step>
+2. <step>
+...
+
+## Inputs
+- <named input, if any>
+
+## Outputs
+- <named output, if any>
+
+## Notes
+<any caveats, edge cases, or invariants from the evidence>
+
+Keep it concrete. Use the user's actual vocabulary from the claims/episodes. Do NOT invent steps that weren't supported by the evidence.

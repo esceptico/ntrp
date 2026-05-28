@@ -11,6 +11,7 @@ from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.service import MemoryService
+from ntrp.memory.skill_inducer import SkillInducer
 from ntrp.server.indexer import Indexer
 from ntrp.server.stores import Stores
 
@@ -102,6 +103,11 @@ class KnowledgeRuntime:
         self.memory_retrieval = MemoryRetrieval(self.memory.db.conn, self.memory.embedder)
         memory_items = MemoryItemsRepository(self.memory.db.conn)
         summary_client = CompletionSummaryClient(self.config.memory_model)
+        skill_inducer = SkillInducer(
+            repo=memory_items,
+            draft_client=summary_client,
+            embedder=self.memory.embedder,
+        )
         self.pattern_finder = PatternFinder(
             repo=memory_items,
             summary_client=summary_client,
@@ -112,6 +118,7 @@ class KnowledgeRuntime:
                 judge_client=summary_client,
             ),
         )
+        self.pattern_finder.skill_inducer = skill_inducer
         self.chat_connector = ChatConnector(
             items=MemoryItemsRepository(self.memory.db.conn),
             buffers=EpisodeBufferRepository(self.memory.db.conn),
