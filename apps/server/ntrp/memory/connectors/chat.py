@@ -7,12 +7,11 @@ from typing import Any
 import aiosqlite
 
 from ntrp.events.internal import RunCompleted
-from ntrp.knowledge.episodes import EpisodeBoundaryClassifier
-from ntrp.knowledge.models import KnowledgeObject, KnowledgeObjectStatus, KnowledgeObjectType
 from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBuffer, EpisodeBufferRepository, TurnUpdate
 from ntrp.memory.connectors._constants import IDLE_GAP
 from ntrp.memory.connectors.episode_close import SummaryClient, evaluate_triggers, finalize_buffer
+from ntrp.memory.episodes import EpisodeBoundaryClassifier, EpisodeContext
 from ntrp.memory.items_store import MemoryItemsRepository
 
 _logger = get_logger(__name__)
@@ -120,16 +119,10 @@ class ChatConnector:
             return buffer, False
 
     async def _explicit_close(self, buffer: EpisodeBuffer, content: str) -> tuple[bool, str | None]:
-        current_episode = KnowledgeObject(
-            id=0,
-            object_type=KnowledgeObjectType.MEMORY_EPISODE,
+        current_episode = EpisodeContext(
             title="Open chat episode",
             text=buffer.content_so_far,
-            status=KnowledgeObjectStatus.ACTIVE,
-            scope=buffer.scope,
             metadata={"episode_status": "open"},
-            created_at=buffer.started_at.isoformat(),
-            updated_at=buffer.last_activity_at.isoformat(),
         )
         decision = self.boundary_classifier.decide(
             current_episode=current_episode,

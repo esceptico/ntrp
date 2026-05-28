@@ -13,7 +13,7 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.agent import Usage
 from ntrp.events.internal import RunCompleted
-from ntrp.knowledge.episodes import EpisodeBoundaryClassifier
+from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.buffers_store import BufferCarry, EpisodeBufferRepository, TurnUpdate
 from ntrp.memory.connectors._confidence import compute_confidence, confidence_bucket
 from ntrp.memory.connectors.chat import ChatConnector
