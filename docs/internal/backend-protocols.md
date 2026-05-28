@@ -140,9 +140,9 @@ Current event types:
 
 | Event type | Producers | Runtime handler |
 | --- | --- | --- |
-| `run.completed` | Chat runs, operator runs, CLI runs | Call `Scheduler.handle_run_completed()`, then capture source/evidence/episode objects in `knowledge_objects` |
+| `run.completed` | Chat runs, operator runs, CLI runs | Call `Scheduler.handle_run_completed()`, then capture source/evidence/episode rows in `memory_items` |
 
-Search indexing now scans canonical knowledge objects through `MemorySearchSource`; the old `memory.fact.index.*` outbox events were removed with the fact/observation service surface.
+Search indexing now scans active `memory_items` through `MemorySearchSource`; the old `memory.fact.index.*` outbox events were removed with the fact/observation service surface.
 
 Processing model:
 

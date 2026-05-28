@@ -11,8 +11,8 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.activation import MemoryActivationRequest
-from ntrp.memory.facts import FactMemory
 from ntrp.memory.retrieval import MemoryRetrieval
+from ntrp.memory.runtime import MemoryDatabase
 from ntrp.memory.service import MemoryService
 from ntrp.server.bus import SessionBus
 from ntrp.skills.activation import (
@@ -31,7 +31,7 @@ from ntrp.tools.executor import ToolExecutor
 @dataclass(frozen=True)
 class OperatorDeps:
     executor: ToolExecutor
-    memory: FactMemory | None
+    memory: MemoryDatabase | None
     memory_service: MemoryService | None
     config: AgentConfig
     source_details: dict[str, dict]

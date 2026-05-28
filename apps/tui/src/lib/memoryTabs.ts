@@ -1,4 +1,4 @@
-export const MEMORY_TABS = ["overview", "library", "review", "activation"] as const;
+export const MEMORY_TABS = ["today", "graph", "skills", "search"] as const;
 
 export type MemoryTabType = (typeof MEMORY_TABS)[number];
 
@@ -11,29 +11,29 @@ export const MEMORY_TAB_COPY: Record<
     description: string;
   }
 > = {
-  overview: {
-    wide: "Overview",
-    narrow: "View",
-    title: "Overview",
-    description: "counts, review queue, recent knowledge",
+  today: {
+    wide: "Today",
+    narrow: "Today",
+    title: "Today",
+    description: "review proposals, corrections, and fresh memory",
   },
-  library: {
-    wide: "Library",
-    narrow: "Types",
-    title: "Library",
-    description: "browse knowledge by object type",
+  graph: {
+    wide: "Graph",
+    narrow: "Graph",
+    title: "Graph",
+    description: "provenance DAG for memory items",
   },
-  review: {
-    wide: "Review",
-    narrow: "Review",
-    title: "Review",
-    description: "draft procedures, actions, and artifacts",
+  skills: {
+    wide: "Skills",
+    narrow: "Skills",
+    title: "Skills",
+    description: "toolable procedures and proposals",
   },
-  activation: {
-    wide: "Activation",
-    narrow: "Use",
-    title: "Activation",
-    description: "preview what enters the agent context",
+  search: {
+    wide: "Search",
+    narrow: "Search",
+    title: "Search",
+    description: "hybrid memory search with filters",
   },
 };
 

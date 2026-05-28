@@ -12,8 +12,7 @@ from pydantic import BaseModel, Field
 class EpisodeContext:
     """Minimal shape the boundary classifier needs about the current open episode.
 
-    Replaces the legacy KnowledgeObject coupling; the chat connector builds one
-    of these from the episode buffer.
+    The chat connector builds one of these from the episode buffer.
     """
 
     title: str

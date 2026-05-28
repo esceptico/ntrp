@@ -11,7 +11,7 @@ from ntrp.memory.skill_inducer import (
     SkillInducer,
     SkillSlugCollision,
 )
-from ntrp.server.deps import require_pattern_finder
+from ntrp.server.deps import require_memory, require_pattern_finder
 
 router = APIRouter(prefix="/admin/memory", tags=["admin"])
 
@@ -37,6 +37,10 @@ class SkillInducerRunRequest(BaseModel):
 
 class ProposalRejectRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=200)
+
+
+class SkillEnabledRequest(BaseModel):
+    enabled: bool
 
 
 @router.post("/pattern-finder/run")
@@ -184,3 +188,249 @@ def _require_skill_inducer(pattern_finder: PatternFinder) -> SkillInducer:
         raise HTTPException(status_code=503, detail="Skill inducer is unavailable") from exc
     pattern_finder.skill_inducer = inducer
     return inducer
+
+
+_ALLOWED_KINDS = {"episode", "observation", "claim", "skill", "proposal", "artifact_ref"}
+_ALLOWED_STATUSES = {"active", "superseded", "archived"}
+_ALLOWED_VALIDITY = {"all", "current", "future", "expired"}
+_GRAPH_EDGE_ROLES = {"step", "evidence", "contradicts", "supersedes", "similar_to"}
+
+
+def _serialize_item(item: Any) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "kind": item.kind,
+        "content": item.content,
+        "provenance": item.provenance,
+        "source_refs": item.source_refs,
+        "confidence": item.confidence,
+        "status": item.status,
+        "valid_from": item.valid_from.isoformat() if item.valid_from else None,
+        "invalid_at": item.invalid_at.isoformat() if item.invalid_at else None,
+        "scope": item.scope,
+        "tags": item.tags,
+        "artifact_ref": item.artifact_ref,
+        "usage": item.usage,
+        "feedback": item.feedback,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "has_embedding": item.embedding is not None,
+    }
+
+
+def _parse_csv(value: str | None, allowed: set[str], field: str) -> list[str] | None:
+    if not value:
+        return None
+    items = [v.strip() for v in value.split(",") if v.strip()]
+    bad = [v for v in items if v not in allowed]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}: {', '.join(bad)}")
+    return items or None
+
+
+def _parse_validity(value: str | None) -> str | None:
+    if not value or value == "all":
+        return None
+    if value not in _ALLOWED_VALIDITY:
+        raise HTTPException(status_code=400, detail=f"Invalid validity: {value}")
+    return value
+
+
+def _serialize_edge(edge: Any) -> dict[str, Any]:
+    return {
+        "child_id": edge.child_id,
+        "parent_id": edge.parent_id,
+        "role": edge.role,
+        "order": edge.order,
+        "created_at": edge.created_at.isoformat() if edge.created_at else None,
+    }
+
+
+@router.get("/today")
+async def memory_today(
+    scope: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    pending_proposals = [
+        item
+        for item in await repo.list_items(kinds=["proposal"], statuses=["active"], scope=scope, limit=limit * 3)
+        if "proposal-status:open" in item.tags
+    ][:limit]
+    new_skills = await repo.list_items(kinds=["skill"], statuses=["active"], scope=scope, limit=limit)
+    low_confidence_claims = [
+        item
+        for item in await repo.list_items(kinds=["claim"], statuses=["active"], scope=scope, limit=limit * 2)
+        if item.confidence < 0.6
+    ][:limit]
+    superseded_claims = await repo.list_items(kinds=["claim"], statuses=["superseded"], scope=scope, limit=limit)
+    return {
+        "new_skills": [_serialize_item(item) for item in new_skills],
+        "pending_proposals": [_serialize_item(item) for item in pending_proposals],
+        "low_confidence_claims": [_serialize_item(item) for item in low_confidence_claims],
+        "recent_corrections": [_serialize_item(item) for item in superseded_claims],
+    }
+
+
+@router.get("/skills")
+async def list_memory_skills(
+    scope: str | None = Query(default=None),
+    include_disabled: bool = Query(default=True),
+    limit: int = Query(default=100, ge=1, le=200),
+    memory=Depends(require_memory),
+):
+    statuses = ["active", "archived"] if include_disabled else ["active"]
+    skills = await memory.memory.items.list_items(kinds=["skill"], statuses=statuses, scope=scope, limit=limit)
+    return {"skills": [_serialize_item(item) for item in skills]}
+
+
+@router.post("/skills/{skill_id}/enabled")
+async def set_memory_skill_enabled(
+    skill_id: str,
+    request: SkillEnabledRequest,
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    item = await repo.get_item(skill_id)
+    if item is None or item.kind != "skill":
+        raise HTTPException(status_code=404, detail="Skill memory item not found")
+    status = "active" if request.enabled else "archived"
+    await repo.conn.execute(
+        "UPDATE memory_items SET status = ?, invalid_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (status, skill_id),
+    )
+    await repo.conn.commit()
+    updated = await repo.get_item(skill_id)
+    return {"skill": _serialize_item(updated)}
+
+
+@router.get("/items/{item_id}/graph")
+async def get_memory_item_graph(
+    item_id: str,
+    depth: int = Query(default=3, ge=0, le=5),
+    direction: str = Query(default="both", pattern="^(parents|children|both)$"),
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    root = await repo.get_item(item_id)
+    if root is None:
+        raise HTTPException(status_code=404, detail="Memory item not found")
+
+    nodes = {root.id: root}
+    edge_map: dict[tuple[str, str, str], Any] = {}
+    frontier = {root.id}
+    visited = {root.id}
+    for _ in range(depth):
+        next_frontier: set[str] = set()
+        for node_id in frontier:
+            incident = []
+            if direction in {"parents", "both"}:
+                incident.extend(await repo.list_parent_edges(node_id))
+            if direction in {"children", "both"}:
+                incident.extend(await repo.list_child_edges(node_id))
+            for edge in incident:
+                edge_map[(edge.child_id, edge.parent_id, edge.role)] = edge
+                other_id = edge.parent_id if edge.child_id == node_id else edge.child_id
+                if other_id not in nodes:
+                    other = await repo.get_item(other_id)
+                    if other is not None:
+                        nodes[other_id] = other
+                if other_id not in visited:
+                    visited.add(other_id)
+                    next_frontier.add(other_id)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    return {
+        "root_id": item_id,
+        "nodes": [_serialize_item(item) for item in nodes.values()],
+        "edges": [_serialize_edge(edge) for edge in edge_map.values() if edge.role in _GRAPH_EDGE_ROLES],
+        "depth": depth,
+        "direction": direction,
+    }
+
+
+@router.get("/items")
+async def list_memory_items(
+    kinds: str | None = Query(default=None, description="Comma-separated kinds"),
+    statuses: str | None = Query(default="active", description="Comma-separated statuses"),
+    scope: str | None = Query(default=None),
+    query: str | None = Query(default=None, description="FTS query; if provided overrides ordering"),
+    validity: str | None = Query(default="all", description="all/current/future/expired"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    kind_list = _parse_csv(kinds, _ALLOWED_KINDS, "kinds")
+    status_list = _parse_csv(statuses, _ALLOWED_STATUSES, "statuses")
+    validity_filter = _parse_validity(validity)
+    if query:
+        items = await repo.search_items_fts(
+            query,
+            kinds=kind_list,
+            statuses=status_list,
+            scope=scope,
+            validity=validity_filter,
+            limit=limit,
+        )
+        total = len(items)
+    else:
+        items = await repo.list_items(
+            kinds=kind_list,
+            statuses=status_list,
+            scope=scope,
+            validity=validity_filter,
+            limit=limit,
+            offset=offset,
+        )
+        total = await repo.count_items(
+            kinds=kind_list,
+            statuses=status_list,
+            scope=scope,
+            validity=validity_filter,
+        )
+    return {
+        "items": [_serialize_item(it) for it in items],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/items/{item_id}")
+async def get_memory_item(item_id: str, memory=Depends(require_memory)):
+    repo = memory.memory.items
+    item = await repo.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Memory item not found")
+    parent_edges = await repo.list_parent_edges(item_id)
+    parents = []
+    for edge in parent_edges:
+        parent_item = await repo.get_item(edge.parent_id)
+        parents.append(
+            {
+                "parent_id": edge.parent_id,
+                "role": edge.role,
+                "order": edge.order,
+                "created_at": edge.created_at.isoformat() if edge.created_at else None,
+                "parent": _serialize_item(parent_item) if parent_item else None,
+            }
+        )
+    return {
+        "item": _serialize_item(item),
+        "parents": parents,
+    }
+
+
+@router.get("/stats")
+async def memory_stats(memory=Depends(require_memory)):
+    repo = memory.memory.items
+    counts: dict[str, dict[str, int]] = {}
+    for kind in sorted(_ALLOWED_KINDS):
+        counts[kind] = {}
+        for status in sorted(_ALLOWED_STATUSES):
+            counts[kind][status] = await repo.count_items(kinds=[kind], statuses=[status])
+    return {"counts": counts}

@@ -5,21 +5,10 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
-from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import KnowledgeEventTrigger, TimeTrigger
-from ntrp.constants import (
-    BUILTIN_KNOWLEDGE_HEALTH_ID,
-    BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
-    BUILTIN_KNOWLEDGE_REFLECTION_ID,
-    BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
-    BUILTIN_KNOWLEDGE_RETENTION_ID,
-    BUILTIN_PATTERN_FINDER_DAILY_ID,
-    BUILTIN_SKILL_INDUCER_DAILY_ID,
-)
-from ntrp.knowledge import KnowledgeObjectType
+from ntrp.automation.triggers import TimeTrigger, parse_triggers
 
 
 @pytest_asyncio.fixture
@@ -71,6 +60,14 @@ async def test_count_state_is_persistent_and_clearable(automation_store: Automat
 
     assert await automation_store.increment_count("task-1", "session-1", now) == 1
     assert await automation_store.increment_count("task-1", "session-2", now) == 2
+
+
+def test_legacy_knowledge_event_triggers_are_ignored():
+    triggers = parse_triggers(
+        '[{"type":"knowledge_event","object_types":["episode"],"actions":["created"],"statuses":["active"]}]'
+    )
+
+    assert triggers == []
 
 
 @pytest.mark.asyncio
@@ -198,78 +195,6 @@ async def test_claim_and_enqueue_event_rolls_back_dedupe_when_enqueue_fails(auto
     )
 
     assert rows == []
-
-
-@pytest.mark.asyncio
-async def test_seed_builtins_uses_knowledge_handlers(automation_store: AutomationStore):
-    await seed_builtins(automation_store)
-
-    automations = {automation.task_id: automation for automation in await automation_store.list_all()}
-
-    assert {
-        BUILTIN_KNOWLEDGE_REFLECTION_ID,
-        BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
-        BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
-        BUILTIN_KNOWLEDGE_RETENTION_ID,
-        BUILTIN_KNOWLEDGE_HEALTH_ID,
-        BUILTIN_PATTERN_FINDER_DAILY_ID,
-        BUILTIN_SKILL_INDUCER_DAILY_ID,
-    } <= set(automations)
-    assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].handler == "knowledge_reflection"
-    assert automations[BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID].enabled is True
-    profile_refresh = automations[BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID]
-    assert profile_refresh.handler == "knowledge_profile_refresh"
-    assert profile_refresh.enabled is False
-    assert profile_refresh.triggers == []
-    assert profile_refresh.writable is True
-    assert any(
-        isinstance(trigger, KnowledgeEventTrigger)
-        and trigger.object_types == (KnowledgeObjectType.MEMORY_EPISODE.value,)
-        and trigger.actions == ("created",)
-        for trigger in automations[BUILTIN_KNOWLEDGE_REFLECTION_ID].triggers
-    )
-    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].handler == "knowledge_retention"
-    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].enabled is True
-    assert automations[BUILTIN_KNOWLEDGE_RETENTION_ID].writable is False
-    assert "stale generated knowledge objects" in automations[BUILTIN_KNOWLEDGE_RETENTION_ID].description
-    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].handler == "knowledge_health"
-    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].enabled is True
-    assert automations[BUILTIN_KNOWLEDGE_HEALTH_ID].writable is False
-    assert automations[BUILTIN_PATTERN_FINDER_DAILY_ID].handler == "pattern_finder_daily"
-    assert automations[BUILTIN_PATTERN_FINDER_DAILY_ID].enabled is True
-    assert any(isinstance(trigger, TimeTrigger) for trigger in automations[BUILTIN_PATTERN_FINDER_DAILY_ID].triggers)
-    assert automations[BUILTIN_SKILL_INDUCER_DAILY_ID].handler == "skill_inducer_daily"
-    assert any(isinstance(trigger, TimeTrigger) for trigger in automations[BUILTIN_SKILL_INDUCER_DAILY_ID].triggers)
-    assert all(automation.handler != "learning_review" for automation in automations.values())
-
-
-@pytest.mark.asyncio
-async def test_seed_builtins_removes_stale_knowledge_builtins(automation_store: AutomationStore):
-    stale_builtins = [
-        ("builtin:chat-extraction", "Knowledge Reflection", "knowledge_reflection"),
-        ("builtin:consolidation", "Knowledge Consolidation", "knowledge_reflection"),
-        ("builtin:memory-maintenance", "Knowledge Retention", "knowledge_retention"),
-        ("builtin:memory-health", "Knowledge Health Audit", "knowledge_health"),
-    ]
-    for task_id, name, handler in stale_builtins:
-        await automation_store.save(_automation(task_id, name=name, handler=handler, builtin=True))
-    await automation_store.save(_automation("builtin:other", name="Other Builtin", handler="other", builtin=True))
-    await automation_store.save(_automation("user-knowledge", handler="knowledge_reflection", builtin=False))
-
-    await seed_builtins(automation_store)
-
-    automations = {automation.task_id: automation for automation in await automation_store.list_all()}
-    assert {task_id for task_id, _, _ in stale_builtins}.isdisjoint(automations)
-    assert "builtin:other" in automations
-    assert "user-knowledge" in automations
-    assert {
-        BUILTIN_KNOWLEDGE_REFLECTION_ID,
-        BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
-        BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
-        BUILTIN_KNOWLEDGE_RETENTION_ID,
-        BUILTIN_KNOWLEDGE_HEALTH_ID,
-        BUILTIN_PATTERN_FINDER_DAILY_ID,
-    } <= set(automations)
 
 
 @pytest.mark.asyncio
@@ -604,3 +529,41 @@ def test_scheduler_constructor_has_no_learning_recorder(automation_store: Automa
             build_deps=lambda: None,
             record_learning_event=record_learning_event,
         )
+
+@pytest.mark.asyncio
+async def test_seed_builtins_schedules_new_memory_jobs(automation_store: AutomationStore):
+    from ntrp.automation.builtins import seed_builtins
+    from ntrp.constants import BUILTIN_PATTERN_FINDER_DAILY_ID, BUILTIN_SKILL_INDUCER_DAILY_ID
+
+    await seed_builtins(automation_store)
+
+    pattern = await automation_store.get(BUILTIN_PATTERN_FINDER_DAILY_ID)
+    skills = await automation_store.get(BUILTIN_SKILL_INDUCER_DAILY_ID)
+    assert pattern is not None
+    assert skills is not None
+    assert pattern.enabled is True
+    assert skills.enabled is True
+    assert pattern.next_run_at is not None
+    assert skills.next_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_seed_builtins_repairs_missing_next_run_at(automation_store: AutomationStore):
+    from ntrp.automation.builtins import seed_builtins
+    from ntrp.constants import BUILTIN_PATTERN_FINDER_DAILY_ID
+
+    automation = _automation(
+        BUILTIN_PATTERN_FINDER_DAILY_ID,
+        name="Pattern Finder Daily",
+        handler="pattern_finder_daily",
+        builtin=True,
+        enabled=True,
+        next_run_at=None,
+    )
+    await automation_store.save(automation)
+
+    await seed_builtins(automation_store)
+
+    repaired = await automation_store.get(BUILTIN_PATTERN_FINDER_DAILY_ID)
+    assert repaired is not None
+    assert repaired.next_run_at is not None

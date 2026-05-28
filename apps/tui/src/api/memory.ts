@@ -1,55 +1,38 @@
 import type { Config } from "../types.js";
 import { api } from "./fetch.js";
 
-export type KnowledgeObjectType =
-  | "source"
-  | "evidence_ref"
-  | "episode"
-  | "fact"
-  | "pattern"
-  | "lesson"
-  | "procedure"
-  | "procedure_candidate"
-  | "artifact"
-  | "action_candidate"
-  | "sink_receipt"
-  | "outcome_feedback";
+export type MemoryItemKind = "episode" | "observation" | "claim" | "skill" | "proposal" | "artifact_ref";
+export type MemoryItemStatus = "active" | "superseded" | "archived";
 
-export type KnowledgeObjectStatus = "draft" | "active" | "approved" | "rejected" | "archived" | "superseded";
-
-export interface KnowledgeObject {
-  id: number;
-  object_type: KnowledgeObjectType;
-  title: string;
-  text: string;
-  status: KnowledgeObjectStatus;
-  scope: string | null;
-  activation: string;
-  proactiveness_level: string;
-  score: number;
-  source_ids: string[];
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  reviewed_at: string | null;
+export interface MemoryItem {
+  id: string;
+  kind: MemoryItemKind;
+  content: string;
+  provenance: string;
+  source_refs: Array<Record<string, unknown>>;
+  confidence: number;
+  status: MemoryItemStatus;
+  valid_from: string | null;
+  invalid_at: string | null;
+  scope: string;
+  tags: string[];
+  artifact_ref: string | null;
+  usage: Record<string, unknown>;
+  feedback: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+  has_embedding: boolean;
 }
 
-export interface KnowledgeSurface {
-  name: string;
-  object_type: KnowledgeObjectType;
-  count: number;
-  description: string;
+export interface MemoryItemsResponse {
+  items: MemoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
-export interface KnowledgeSummary {
-  surfaces: KnowledgeSurface[];
-  next_actions: Array<{
-    title: string;
-    detail: string;
-    activation: string;
-    proactiveness_level: string;
-  }>;
-  policy_version: string;
+export interface MemoryStats {
+  counts: Record<MemoryItemKind, Record<MemoryItemStatus, number>>;
 }
 
 export interface Stats {
@@ -57,67 +40,36 @@ export interface Stats {
   observation_count: number;
 }
 
-export interface ActivationSignal {
-  name: string;
-  value: number | string | boolean | null;
-  reason: string;
-}
-
-export interface ActivationCandidate {
-  object_type: KnowledgeObjectType;
-  object_id: string;
-  title: string;
-  text: string;
-  score: number;
-  reasons: string[];
-  signals: ActivationSignal[];
-  source_ids: string[];
-  activation: string;
-  proactiveness_level: string;
-}
-
-export interface ActivationBundle {
-  query: string;
-  scope: string | null;
-  task: string | null;
-  budget_chars: number;
-  used_chars: number;
-  candidates: ActivationCandidate[];
-  omitted: ActivationCandidate[];
-  policy_version: string;
-  prompt_context: string | null;
-}
-
-export async function getKnowledgeSummary(config: Config): Promise<KnowledgeSummary> {
-  return api.get<KnowledgeSummary>(`${config.serverUrl}/knowledge/summary`);
-}
-
-export async function getStats(config: Config): Promise<Stats> {
-  const summary = await getKnowledgeSummary(config);
-  const count = (type: KnowledgeObjectType) => summary.surfaces.find((surface) => surface.object_type === type)?.count ?? 0;
-  return {
-    fact_count: count("fact"),
-    observation_count: count("pattern"),
-  };
-}
-
-export async function listKnowledgeObjects(
+export async function listMemoryItems(
   config: Config,
-  filters: { object_type?: KnowledgeObjectType; status?: KnowledgeObjectStatus; limit?: number; offset?: number } = {},
-): Promise<{ objects: KnowledgeObject[] }> {
+  filters: {
+    kinds?: MemoryItemKind[];
+    statuses?: MemoryItemStatus[];
+    scope?: string;
+    query?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<MemoryItemsResponse> {
   const params = new URLSearchParams();
-  if (filters.object_type) params.set("object_type", filters.object_type);
-  if (filters.status) params.set("status", filters.status);
+  if (filters.kinds?.length) params.set("kinds", filters.kinds.join(","));
+  if (filters.statuses?.length) params.set("statuses", filters.statuses.join(","));
+  if (filters.scope) params.set("scope", filters.scope);
+  if (filters.query) params.set("query", filters.query);
   if (filters.limit != null) params.set("limit", String(filters.limit));
   if (filters.offset != null) params.set("offset", String(filters.offset));
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return api.get<{ objects: KnowledgeObject[] }>(`${config.serverUrl}/knowledge/objects${suffix}`);
+  return api.get<MemoryItemsResponse>(`${config.serverUrl}/admin/memory/items${suffix}`);
 }
 
-export async function inspectKnowledgeActivation(
-  config: Config,
-  query: string,
-  limit = 5,
-): Promise<ActivationBundle> {
-  return api.post<ActivationBundle>(`${config.serverUrl}/knowledge/activation/inspect`, { query, limit });
+export async function getMemoryStats(config: Config): Promise<MemoryStats> {
+  return api.get<MemoryStats>(`${config.serverUrl}/admin/memory/stats`);
+}
+
+export async function getStats(config: Config): Promise<Stats> {
+  const stats = await getMemoryStats(config);
+  return {
+    fact_count: stats.counts.claim?.active ?? 0,
+    observation_count: stats.counts.observation?.active ?? 0,
+  };
 }

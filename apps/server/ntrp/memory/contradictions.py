@@ -129,15 +129,18 @@ class ContradictionWatcher:
                     """,
                     (child_id, parent_id),
                 )
-                await self.repo.conn.execute(
-                    """
-                    UPDATE memory_items
-                    SET status = 'active', invalid_at = NULL, updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (now, parent_id),
-                )
-                restored = True
+                if not await self._has_remaining_supersedes_edges(parent_id):
+                    await self.repo.conn.execute(
+                        """
+                        UPDATE memory_items
+                        SET status = 'active', invalid_at = NULL, updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (now, parent_id),
+                    )
+                    restored = True
+                else:
+                    restored = False
             await self.repo.conn.commit()
         except BaseException:
             await self.repo.conn.rollback()
@@ -261,6 +264,21 @@ class ContradictionWatcher:
     async def _edge_exists(self, child_id: str, parent_id: str, role: str) -> bool:
         edges = await self.repo.list_parent_edges(child_id)
         return any(edge.parent_id == parent_id and edge.role == role for edge in edges)
+
+    async def _has_remaining_supersedes_edges(self, parent_id: str) -> bool:
+        rows = await self.repo.conn.execute_fetchall(
+            """
+            SELECT 1
+            FROM memory_item_parents p
+            JOIN memory_items child ON child.id = p.child_id
+            WHERE p.parent_id = ?
+              AND p.role = 'supersedes'
+              AND child.status = 'active'
+            LIMIT 1
+            """,
+            (parent_id,),
+        )
+        return bool(rows)
 
     async def _has_remaining_cross_scope_edges(self, child_id: str, child_scope: str) -> bool:
         rows = await self.repo.conn.execute_fetchall(

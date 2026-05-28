@@ -99,20 +99,8 @@ def _runtime_outbox(indexer=None, memory_service=None):
 
 
 @pytest.mark.asyncio
-async def test_runtime_outbox_routes_run_completed_to_scheduler_and_knowledge_capture():
-    class _KnowledgeObjects:
-        def __init__(self):
-            self.captured = []
-
-        async def assimilate_run_completed(self, event):
-            self.captured.append(event)
-
-    class _MemoryService:
-        def __init__(self):
-            self.knowledge_objects = _KnowledgeObjects()
-
-    memory_service = _MemoryService()
-    runtime_outbox, _, _, scheduler = _runtime_outbox(memory_service=memory_service)
+async def test_runtime_outbox_routes_run_completed_to_scheduler():
+    runtime_outbox, _, _, scheduler = _runtime_outbox()
     payload = run_completed_payload(
         RunCompleted(
             run_id="run-1",
@@ -126,7 +114,6 @@ async def test_runtime_outbox_routes_run_completed_to_scheduler_and_knowledge_ca
     await runtime_outbox._on_run_completed(_event(OUTBOX_RUN_COMPLETED, payload))
 
     assert scheduler.completed[0].run_id == "run-1"
-    assert memory_service.knowledge_objects.captured[0].run_id == "run-1"
 
 
 @pytest.mark.asyncio

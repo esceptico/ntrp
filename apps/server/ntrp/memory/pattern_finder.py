@@ -111,7 +111,7 @@ class PatternFinder:
     ) -> PatternFinderRunResult:
         started = time.perf_counter()
         timestamp = _as_utc(now or datetime.now(UTC))
-        episodes = await self.repo.list_recent_items(kind="episode", window_days=window_days, limit=limit, scope=scope)
+        episodes = await self.repo.list_recent_items(kind="episode", window_days=window_days, limit=limit, scope=scope, now=timestamp)
         clusters = cluster_episodes(episodes, threshold=self.sim_threshold)
         existing = await _existing_observation_evidence(self.repo, window_days=window_days, scope=scope, limit=limit)
 
@@ -163,8 +163,8 @@ class PatternFinder:
     ) -> PatternFinderPass2RunResult:
         started = time.perf_counter()
         timestamp = _as_utc(now or datetime.now(UTC))
-        observations = await self.repo.list_recent_items(kind="observation", window_days=window_days, limit=limit, scope=scope)
-        existing_claims = await self.repo.list_recent_items(kind="claim", window_days=window_days, limit=limit, scope=scope)
+        observations = await self.repo.list_recent_items(kind="observation", window_days=window_days, limit=limit, scope=scope, now=timestamp)
+        existing_claims = await self.repo.list_recent_items(kind="claim", window_days=window_days, limit=limit, scope=scope, now=timestamp)
         observations = [item for item in observations if item.status == "active"]
         existing_claims = [item for item in existing_claims if item.status == "active"]
         clusters = cluster_observations(

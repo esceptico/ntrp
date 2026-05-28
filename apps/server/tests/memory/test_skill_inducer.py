@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -19,8 +20,6 @@ from ntrp.memory.skill_inducer import (
 from ntrp.memory.store.base import GraphDatabase
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import aiosqlite
 
 TEST_EMBEDDING_DIM = 8
@@ -238,7 +237,7 @@ async def test_inducer_writes_proposal_file_row_and_derivation_edges(conn: aiosq
     assert (draft_dir / "pr-triage" / "SKILL.md").read_text() == SKILL_BODY
     assert {"proposal", "skill-draft", "proposal-status:open", "slug:pr-triage"} <= set(json.loads(proposals[0]["tags"]))
     edges = await MemoryItemsRepository(conn).list_parent_edges(proposals[0]["id"])
-    assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "derives_from")]
+    assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "evidence")]
 
 
 @pytest.mark.asyncio
@@ -278,7 +277,7 @@ async def test_inducer_skips_claim_with_existing_derived_proposal(conn: aiosqlit
     repo = MemoryItemsRepository(conn)
     claim_id = await _claim_with_evidence(conn, tags=["toolable:true", "trigger:morning-pr-triage"])
     proposal_id = await _insert_item(conn, "draft", kind="proposal", tags=["proposal-status:open"])
-    await repo.insert_parent_edge(proposal_id, claim_id, "derives_from")
+    await repo.insert_parent_edge(proposal_id, claim_id, "evidence")
 
     result = await SkillInducer(
         repo=repo,
@@ -307,7 +306,7 @@ async def test_inducer_clusters_by_trigger_tag(conn: aiosqlite.Connection, tmp_p
     edges = await MemoryItemsRepository(conn).list_parent_edges(proposals[0]["id"])
     assert result.clusters_found == 1
     assert result.proposals_written == 1
-    assert len([edge for edge in edges if edge.role == "derives_from"]) == 2
+    assert len([edge for edge in edges if edge.role == "evidence"]) == 2
 
 
 @pytest.mark.asyncio
@@ -415,3 +414,60 @@ async def test_list_proposals_returns_open_status_and_source_count(conn: aiosqli
     assert proposals[0]["status"] == "open"
     assert proposals[0]["slug"] == "pr-triage"
     assert proposals[0]["source_claim_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_approve_proposal_rolls_back_skill_file_when_db_insert_fails(
+    conn: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _claim_with_evidence(conn, tags=["toolable:true", "trigger:morning-pr-triage"])
+    repo = MemoryItemsRepository(conn)
+    inducer = SkillInducer(
+        repo=repo,
+        draft_client=_FakeLLM(SKILL_BODY),
+        embedder=_FakeEmbedder(),
+        draft_dir=tmp_path / "drafts",
+        skills_dir=tmp_path / "skills",
+    )
+    await inducer.run(now=NOW)
+    proposal = (await inducer.list_proposals(status="open"))[0]
+    draft_path = Path(proposal["draft_path"])
+
+    async def fail_insert(*args, **kwargs):
+        raise RuntimeError("db insert failed")
+
+    monkeypatch.setattr(repo, "insert_item", fail_insert)
+
+    with pytest.raises(RuntimeError, match="db insert failed"):
+        await inducer.approve_proposal(proposal["id"], now=NOW)
+
+    assert draft_path.exists()
+    assert not (tmp_path / "skills" / proposal["slug"] / "SKILL.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_run_removes_draft_file_when_proposal_insert_fails(
+    conn: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _claim_with_evidence(conn, tags=["toolable:true", "trigger:morning-pr-triage"])
+    repo = MemoryItemsRepository(conn)
+    inducer = SkillInducer(
+        repo=repo,
+        draft_client=_FakeLLM(SKILL_BODY),
+        embedder=_FakeEmbedder(),
+        draft_dir=tmp_path / "drafts",
+    )
+
+    async def fail_insert(*args, **kwargs):
+        raise RuntimeError("db insert failed")
+
+    monkeypatch.setattr(repo, "insert_item", fail_insert)
+
+    with pytest.raises(RuntimeError, match="db insert failed"):
+        await inducer.run(now=NOW)
+
+    assert list((tmp_path / "drafts").glob("**/SKILL.md")) == []

@@ -13,6 +13,7 @@ from ntrp.database import serialize_embedding
 from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.memory.activation import (
+    ActivationSkillSuggestion,
     MemoryActivationBundle,
     MemoryActivationCandidate,
     MemoryActivationRequest,
@@ -107,6 +108,7 @@ class MemoryRetrieval:
         selected, omitted, prompt_context, used_chars = await self._fit_budget(candidates, request)
 
         if request.record_access:
+            await self._record_activation(selected, timestamp)
             _logger.info(
                 "memory_activation",
                 query=request.query,
@@ -121,6 +123,7 @@ class MemoryRetrieval:
                 omitted_count=len(omitted),
                 used_chars=used_chars,
             )
+        skills_to_use = _skill_suggestions(selected)
 
         return MemoryActivationBundle(
             query=request.query,
@@ -130,8 +133,27 @@ class MemoryRetrieval:
             omitted=omitted,
             used_chars=used_chars,
             prompt_context=prompt_context,
-            skills_to_use=[],
+            skills_to_use=skills_to_use,
         )
+
+    async def _record_activation(self, selected: list[MemoryActivationCandidate], timestamp: datetime) -> None:
+        if not selected:
+            return
+        placeholders = ",".join("?" for _ in selected)
+        await self.conn.execute(
+            f"""
+            UPDATE memory_items
+            SET usage = json_set(
+                    CASE WHEN json_valid(usage) THEN usage ELSE '{{}}' END,
+                    '$.activated',
+                    COALESCE(json_extract(CASE WHEN json_valid(usage) THEN usage ELSE '{{}}' END, '$.activated'), 0) + 1
+                ),
+                updated_at = ?
+            WHERE id IN ({placeholders})
+            """,
+            (timestamp.isoformat(), *[candidate.item_id for candidate in selected]),
+        )
+        await self.conn.commit()
 
     async def _fts_candidates(self, request: MemoryActivationRequest, now: datetime) -> list[_CandidateRow]:
         match = _fts_query(request.query)
@@ -441,7 +463,64 @@ def _recency_score(raw_created_at: str, now: datetime, tau_days: float) -> float
 def _usage_score(usage: dict[str, Any]) -> float:
     helped = _float_value(usage.get("helped"))
     hurt = _float_value(usage.get("hurt"))
-    return _clamp01(math.tanh((helped - hurt) / 3.0) / 2.0 + 0.5)
+    ignored = _float_value(usage.get("ignored"))
+    return _clamp01(math.tanh((helped - hurt - ignored * 0.25) / 3.0) / 2.0 + 0.5)
+
+
+def _skill_suggestions(candidates: list[MemoryActivationCandidate]) -> list[ActivationSkillSuggestion]:
+    suggestions: list[ActivationSkillSuggestion] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate.kind != "skill":
+            continue
+        skill_name = _skill_name(candidate)
+        if not skill_name or skill_name in seen:
+            continue
+        seen.add(skill_name)
+        suggestions.append(
+            ActivationSkillSuggestion(
+                object_id=candidate.item_id,
+                skill_name=skill_name,
+                description=_skill_description(candidate.content),
+                score=candidate.score,
+                reason="memory skill matched the current request",
+                reasons=candidate.reasons,
+                source_ids=[candidate.item_id, *_source_ref_ids(candidate.source_refs)],
+                selection_role="advisory",
+                confidence=candidate.confidence,
+            )
+        )
+    return suggestions
+
+
+def _skill_name(candidate: MemoryActivationCandidate) -> str | None:
+    for tag in candidate.tags:
+        if tag.startswith("slug:"):
+            return tag.removeprefix("slug:").strip() or None
+    for ref in candidate.source_refs:
+        if ref.get("type") == "skill_path" and ref.get("path"):
+            path = str(ref["path"]).rstrip("/")
+            parent = path.rsplit("/", 2)[-2] if path.endswith("/SKILL.md") and "/" in path else ""
+            if parent:
+                return parent
+    return None
+
+
+def _skill_description(content: str) -> str:
+    for line in content.splitlines():
+        stripped = line.strip().lstrip("#").strip()
+        if stripped:
+            return stripped[:200]
+    return ""
+
+
+def _source_ref_ids(source_refs: list[dict[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for ref in source_refs:
+        value = ref.get("id") or ref.get("item_id") or ref.get("ref")
+        if value:
+            ids.append(str(value))
+    return ids
 
 
 def _float_value(value: object) -> float:

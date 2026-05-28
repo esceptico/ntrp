@@ -35,10 +35,6 @@ class TriggerPatch:
     end: str | None = None
     idle_minutes: int | None = None
     every_n: int | None = None
-    actions: object = None
-    object_types: object = None
-    statuses: object = None
-    scopes: object = None
 
     @property
     def has_changes(self) -> bool:
@@ -149,7 +145,7 @@ class AutomationService:
             time_fields = {"at", "every", "days", "start", "end"} & patch.overrides.keys()
             if time_fields:
                 raise ValueError(f"Time fields ({', '.join(sorted(time_fields))}) cannot be set on an event trigger")
-        elif effective_type in {"idle", "count", "knowledge_event"}:
+        elif effective_type in {"idle", "count"}:
             time_fields = {"at", "every", "days", "start", "end", "event_type", "lead_minutes"} & patch.overrides.keys()
             if time_fields:
                 raise ValueError(
@@ -171,10 +167,6 @@ class AutomationService:
         lead_minutes: int | str | None = None,
         idle_minutes: int | None = None,
         every_n: int | None = None,
-        actions: object = None,
-        object_types: object = None,
-        statuses: object = None,
-        scopes: object = None,
         start: str | None = None,
         end: str | None = None,
         writable: bool | None = None,
@@ -212,15 +204,11 @@ class AutomationService:
             end=end,
             idle_minutes=idle_minutes,
             every_n=every_n,
-            actions=actions,
-            object_types=object_types,
-            statuses=statuses,
-            scopes=scopes,
         )
 
         # Full triggers list replacement takes precedence over field-level patching
         if triggers:
-            parsed_triggers = [parse_one(t) for t in triggers]
+            parsed_triggers = [trigger for t in triggers if (trigger := parse_one(t)) is not None]
             time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
             changes["triggers"] = parsed_triggers
             changes["next_run_at"] = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
@@ -254,10 +242,6 @@ class AutomationService:
         lead_minutes: int | str | None = None,
         idle_minutes: int | None = None,
         every_n: int | None = None,
-        actions: object = None,
-        object_types: object = None,
-        statuses: object = None,
-        scopes: object = None,
         writable: bool = False,
         start: str | None = None,
         end: str | None = None,
@@ -273,7 +257,7 @@ class AutomationService:
         attempt_n: int | None = None,
     ) -> Automation | None:
         if triggers:
-            parsed_triggers = [parse_one(t) for t in triggers]
+            parsed_triggers = [trigger for t in triggers if (trigger := parse_one(t)) is not None]
             time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
             next_run = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
         elif trigger_type:
@@ -288,10 +272,6 @@ class AutomationService:
                 end=end,
                 idle_minutes=idle_minutes,
                 every_n=every_n,
-                actions=actions,
-                object_types=object_types,
-                statuses=statuses,
-                scopes=scopes,
             )
             parsed_triggers = [trigger]
         else:

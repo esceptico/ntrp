@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, KnowledgeEventTrigger, TimeTrigger
+from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, TimeTrigger
 from ntrp.constants import (
     SCHEDULER_DEDUP_TTL,
     SCHEDULER_EVENT_MAX_RETRIES,
@@ -16,7 +16,7 @@ from ntrp.constants import (
 )
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SSEEvent
-from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, KnowledgeObjectChanged, TriggerEvent
+from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry
@@ -612,16 +612,6 @@ class Scheduler:
             await self._start_next_queued_event_if_idle(automation.task_id)
 
     async def _matching_event_automations(self, event: TriggerEvent) -> list[Automation]:
-        if isinstance(event, KnowledgeObjectChanged):
-            automations = await self.store.list_by_trigger_type("knowledge_event")
-            return [
-                automation
-                for automation in automations
-                if any(
-                    isinstance(trigger, KnowledgeEventTrigger) and trigger.matches(event)
-                    for trigger in automation.triggers
-                )
-            ]
         return await self.store.list_event_triggered(event.event_type)
 
     def schedule_run(self, task_id: str) -> None:

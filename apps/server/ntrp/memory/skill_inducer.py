@@ -206,7 +206,7 @@ class SkillInducer:
     ) -> SkillInducerRunResult:
         started = time.perf_counter()
         timestamp = _as_utc(now or datetime.now(UTC))
-        claims = await self.repo.list_recent_items(kind="claim", window_days=window_days, limit=limit, scope=scope)
+        claims = await self.repo.list_recent_items(kind="claim", window_days=window_days, limit=limit, scope=scope, now=timestamp)
         toolable_claims = [claim for claim in claims if claim.status == "active" and "toolable:true" in claim.tags]
 
         candidates: list[MemoryItem] = []
@@ -268,15 +268,16 @@ class SkillInducer:
             raise SkillSlugCollision(f"skill slug exists: {skill_slug}")
 
         skill_body = draft_path.read_text()
-        target_dir.mkdir(parents=True)
-        skill_path = target_dir / "SKILL.md"
-        draft_path.rename(skill_path)
-
         source_claim_ids = _source_claim_ids(proposal)
         trigger_tags = [tag for tag in proposal.tags if tag.startswith("trigger:")]
         embedding = await self.embedder.embed_one(skill_body) if self.embedder is not None else None
+        skill_path = target_dir / "SKILL.md"
+        moved_to_final = False
         await self.repo.conn.execute("BEGIN")
         try:
+            target_dir.mkdir(parents=True)
+            draft_path.rename(skill_path)
+            moved_to_final = True
             skill_id = await self.repo.insert_item(
                 MemoryItemInsert(
                     kind="skill",
@@ -293,7 +294,7 @@ class SkillInducer:
                 commit=False,
             )
             for claim_id in source_claim_ids:
-                await self.repo.insert_parent_edge(skill_id, claim_id, "derives_from", commit=False)
+                await self.repo.insert_parent_edge(skill_id, claim_id, "evidence", commit=False)
             await self._update_proposal_tags(
                 proposal.id,
                 _transition_proposal_tags(proposal.tags, "approved", timestamp, reason=None),
@@ -301,6 +302,16 @@ class SkillInducer:
             await self.repo.conn.commit()
         except BaseException:
             await self.repo.conn.rollback()
+            if moved_to_final and skill_path.exists():
+                draft_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    skill_path.rename(draft_path)
+                except OSError:
+                    _logger.warning("skill_approval_rollback_failed", draft_path=str(draft_path), skill_path=str(skill_path))
+            try:
+                target_dir.rmdir()
+            except OSError:
+                pass
             raise
         return {"skill_id": skill_id, "skill_path": str(skill_path)}
 
@@ -378,11 +389,20 @@ class SkillInducer:
                 commit=False,
             )
             for claim_id in draft.source_claim_ids:
-                await self.repo.insert_parent_edge(proposal_id, claim_id, "derives_from", commit=False)
+                await self.repo.insert_parent_edge(proposal_id, claim_id, "evidence", commit=False)
             await self.repo.conn.commit()
             return proposal_id
         except BaseException:
             await self.repo.conn.rollback()
+            if draft.draft_path.exists():
+                try:
+                    draft.draft_path.unlink()
+                except OSError:
+                    _logger.warning("skill_proposal_draft_cleanup_failed", draft_path=str(draft.draft_path))
+            try:
+                draft.draft_path.parent.rmdir()
+            except OSError:
+                pass
             raise
 
     async def _supporting_items_for_claims(self, claims: list[MemoryItem]) -> list[MemoryItem]:
@@ -403,7 +423,7 @@ class SkillInducer:
             FROM memory_item_parents p
             JOIN memory_items m ON m.id = p.child_id
             WHERE p.parent_id = ?
-              AND p.role = 'derives_from'
+              AND p.role = 'evidence'
               AND m.kind IN ('proposal', 'skill')
             LIMIT 1
             """,

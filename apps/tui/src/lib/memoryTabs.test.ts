@@ -4,21 +4,21 @@ import { MEMORY_TABS, memoryTabLabels } from "./memoryTabs.js";
 test("uses compact memory tab labels for narrow dialogs", () => {
   const labels = memoryTabLabels(68);
 
-  expect(labels.overview).toBe("1");
-  expect(labels.library).toBe("2");
-  expect(labels.review).toBe("3");
-  expect(labels.activation).toBe("4");
+  expect(labels.today).toBe("1");
+  expect(labels.graph).toBe("2");
+  expect(labels.skills).toBe("3");
+  expect(labels.search).toBe("4");
 });
 
 test("uses readable memory tab labels when there is room", () => {
   const labels = memoryTabLabels(100);
 
-  expect(labels.overview).toBe("View");
-  expect(labels.library).toBe("Types");
-  expect(labels.review).toBe("Review");
-  expect(labels.activation).toBe("Use");
+  expect(labels.today).toBe("Today");
+  expect(labels.graph).toBe("Graph");
+  expect(labels.skills).toBe("Skills");
+  expect(labels.search).toBe("Search");
 });
 
-test("memory tabs expose explicit knowledge surfaces", () => {
-  expect(MEMORY_TABS).toEqual(["overview", "library", "review", "activation"]);
+test("memory tabs expose the spec surfaces", () => {
+  expect(MEMORY_TABS).toEqual(["today", "graph", "skills", "search"]);
 });

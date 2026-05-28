@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
+import numpy as np
 
 from ntrp.events.internal import RunCompleted
 from ntrp.logging import get_logger
@@ -68,16 +69,11 @@ class ChatConnector:
         buffer, created = await self._find_or_create_open(scope)
         turn = TurnUpdate(
             content=content,
-            # Per-turn delta. event.usage.total_tokens is the LLM API's
-            # cumulative run-total — each round-trip's prompt_tokens
-            # includes the full growing context, so summing across the
-            # agent's round-trips double-counts the conversation history
-            # (quadratic-ish blowup, see slice-07-backlog §4).
-            # completion_tokens is per-response; summed across round-trips
-            # it equals the run's total assistant output, which IS the new
-            # content added by this turn. Misses the user-message input
-            # tokens (~5% under-count) — acceptable for budget triggers.
-            tokens=max(0, event.usage.completion_tokens),
+            # Budget the captured user evidence, not the assistant's generated
+            # completion. Run usage is cumulative across LLM round-trips and/or
+            # assistant-only output, so using it here can both inflate buffers
+            # and preserve refusals/status text as user memory.
+            tokens=_estimate_tokens(content),
             source_ref={"kind": _SOURCE_KIND, "ref": event.run_id, "captured_at": datetime.now(UTC).isoformat()},
             embedding=turn_vec,
         )
@@ -92,6 +88,7 @@ class ChatConnector:
 
         if should_close:
             if not await self._embedding_dim_matches():
+                await self.buffers.apply_turn(buffer.id, await self._turn_with_safe_embedding(buffer, turn))
                 return
             next_buffer = await finalize_buffer(
                 buffer=buffer,
@@ -134,6 +131,19 @@ class ChatConnector:
         explicit = bool(decision.close_current and decision.boundary_type == "explicit_switch")
         return explicit, decision.boundary_type if explicit else None
 
+    async def _turn_with_safe_embedding(self, buffer: EpisodeBuffer, turn: TurnUpdate) -> TurnUpdate:
+        if buffer.running_centroid_vec is not None:
+            fallback_vec = buffer.running_centroid_vec.astype(np.float32)
+        else:
+            expected = await self.items.embedding_dim()
+            fallback_vec = np.zeros(int(expected or len(turn.embedding)), dtype=np.float32)
+        return TurnUpdate(
+            content=turn.content,
+            tokens=turn.tokens,
+            source_ref=turn.source_ref,
+            embedding=fallback_vec,
+        )
+
     async def _embedding_dim_matches(self) -> bool:
         expected = await self.items.embedding_dim()
         actual = int(self.embedder.config.dim)
@@ -149,13 +159,13 @@ class ChatConnector:
 
 def _turn_text(event: RunCompleted) -> str:
     user_text = _last_role_text(event.messages, "user")
-    assistant_text = _last_role_text(event.messages, "assistant") or event.result or ""
-    parts = []
-    if user_text:
-        parts.append(f"User: {user_text}")
-    if assistant_text:
-        parts.append(f"Assistant: {assistant_text}")
-    return "\n".join(parts)
+    if not user_text.strip():
+        return ""
+    return f"User: {user_text}"
+
+
+def _estimate_tokens(text: str) -> int:
+    return max(1, (len(text) + 3) // 4)
 
 
 def _last_role_text(messages: tuple[dict, ...], role: str) -> str:

@@ -4,22 +4,10 @@ from datetime import UTC, datetime
 
 from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import CountTrigger, IdleTrigger, KnowledgeEventTrigger, TimeTrigger, Trigger
+from ntrp.automation.triggers import TimeTrigger, Trigger
 from ntrp.constants import (
-    BUILTIN_KNOWLEDGE_HEALTH_ID,
-    BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
-    BUILTIN_KNOWLEDGE_REFLECTION_ID,
-    BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
-    BUILTIN_KNOWLEDGE_RETENTION_ID,
     BUILTIN_PATTERN_FINDER_DAILY_ID,
     BUILTIN_SKILL_INDUCER_DAILY_ID,
-    DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
-    DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
-    DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
-    DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
-    DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES,
-    DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES,
-    KNOWLEDGE_REFLECTION_EVERY_N_TURNS,
 )
 from ntrp.logging import get_logger
 
@@ -39,68 +27,6 @@ class BuiltinSpec:
 
 
 BUILTINS = [
-    BuiltinSpec(
-        task_id=BUILTIN_KNOWLEDGE_REFLECTION_ID,
-        name="Knowledge Reflection",
-        description="Reflect durable episodes into lessons, actions, procedures, and artifacts",
-        triggers=[
-            KnowledgeEventTrigger(
-                actions=("created",),
-                object_types=("memory_episode",),
-                statuses=("active",),
-            ),
-            CountTrigger(every_n=KNOWLEDGE_REFLECTION_EVERY_N_TURNS),
-            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES),
-        ],
-        handler="knowledge_reflection",
-        cooldown_minutes=DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
-        writable=True,
-    ),
-    BuiltinSpec(
-        task_id=BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
-        name="Knowledge Reflection Sweep",
-        description="Run knowledge reflection over active episodes",
-        triggers=[
-            TimeTrigger(every="30m"),
-            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES),
-        ],
-        handler="knowledge_reflection",
-        cooldown_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_COOLDOWN_MINUTES,
-        writable=True,
-    ),
-    BuiltinSpec(
-        task_id=BUILTIN_KNOWLEDGE_PROFILE_REFRESH_ID,
-        name="Knowledge Profile Refresh",
-        description="Disabled by default; entity profiles are manual/source-backed only after memory simplification",
-        triggers=[],
-        handler="knowledge_profile_refresh",
-        enabled=False,
-        cooldown_minutes=DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
-        writable=True,
-    ),
-    BuiltinSpec(
-        task_id=BUILTIN_KNOWLEDGE_RETENTION_ID,
-        name="Knowledge Retention",
-        description="Archive stale generated knowledge objects",
-        triggers=[
-            TimeTrigger(at="03:30", days="daily"),
-            IdleTrigger(idle_minutes=DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES),
-        ],
-        handler="knowledge_retention",
-        cooldown_minutes=DEFAULT_KNOWLEDGE_RETENTION_COOLDOWN_MINUTES,
-        writable=False,
-    ),
-    BuiltinSpec(
-        task_id=BUILTIN_KNOWLEDGE_HEALTH_ID,
-        name="Knowledge Health Audit",
-        description="Read-only knowledge health and provenance snapshot",
-        triggers=[
-            TimeTrigger(at="04:00", days="daily"),
-        ],
-        handler="knowledge_health",
-        cooldown_minutes=DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
-        writable=False,
-    ),
     BuiltinSpec(
         task_id=BUILTIN_PATTERN_FINDER_DAILY_ID,
         name="Pattern Finder Daily",
@@ -155,16 +81,19 @@ async def seed_builtins(store: AutomationStore) -> None:
                 changes["cooldown_minutes"] = spec.cooldown_minutes
             spec_triggers = [{"type": t.type, **t.params()} for t in spec.triggers]
             existing_triggers = [{"type": t.type, **t.params()} for t in existing.triggers]
+            time_triggers = [t for t in spec.triggers if isinstance(t, TimeTrigger)]
             if existing_triggers != spec_triggers:
                 changes["triggers"] = spec.triggers
-                time_triggers = [t for t in spec.triggers if isinstance(t, TimeTrigger)]
-                changes["next_run_at"] = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
+            if spec.enabled and existing.next_run_at is None and time_triggers:
+                changes["next_run_at"] = time_triggers[0].next_run(datetime.now(UTC))
             if changes:
                 updated = dc_replace(existing, **changes)
                 await store.update_metadata(updated)
                 _logger.info("Updated builtin automation defaults: %s", spec.name)
             continue
 
+        now = datetime.now(UTC)
+        time_triggers = [t for t in spec.triggers if isinstance(t, TimeTrigger)]
         automation = Automation(
             task_id=spec.task_id,
             name=spec.name,
@@ -172,8 +101,8 @@ async def seed_builtins(store: AutomationStore) -> None:
             model=None,
             triggers=spec.triggers,
             enabled=spec.enabled,
-            created_at=datetime.now(UTC),
-            next_run_at=None,
+            created_at=now,
+            next_run_at=time_triggers[0].next_run(now) if spec.enabled and time_triggers else None,
             last_run_at=None,
             last_result=None,
             running_since=None,

@@ -69,37 +69,6 @@ async def record_auto_activated_skill_events(
     max_skills: int = 1,
     entries: list[ActivatedSkillEntry] | None = None,
 ) -> None:
-    access_events = getattr(memory_service, "access_events", None) if memory_service is not None else None
-    if access_events is None:
-        return
-    selected_entries = entries if entries is not None else activated_skill_entries(bundle, registry, max_skills=max_skills)
-    for suggestion, _ in selected_entries:
-        meta = registry.get(suggestion.skill_name) if registry is not None else None
-        details = {
-            "task": task,
-            "task_id": task_id,
-            "session_id": session_id,
-            "run_id": run_id,
-            "surface": "skill",
-            "activation_surface": activation_surface,
-            "skill_name": suggestion.skill_name,
-            "skill_args": f"Current user request: {bundle.query}",
-            "triggering_usage_event_id": bundle.usage_event_id,
-            "triggering_memory_object_id": suggestion.object_id,
-            "selection_score": suggestion.score,
-            "selection_reasons": suggestion.reasons,
-        }
-        if meta is not None:
-            details["skill_path"] = str(meta.path)
-            details["skill_location"] = meta.location
-            if meta.source:
-                details["skill_source"] = meta.source
-        try:
-            await access_events.create(
-                source="skill_activation",
-                query=suggestion.skill_name,
-                policy_version="skills.auto_activation.v1",
-                details=details,
-            )
-        except Exception:
-            _logger.exception("Failed to record auto skill activation telemetry", skill=suggestion.skill_name)
+    # Telemetry sink removed with the legacy access_events table.
+    # Auto-activated skills now flow through usage feedback on memory_items.
+    return

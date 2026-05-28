@@ -117,7 +117,7 @@ Keys for `policy.permissions` and `execution.ctx.services`:
 | `gmail` | `MultiGmailSource` | Email read/search/send |
 | `calendar` | `MultiCalendarSource` | Calendar events CRUD |
 | `web` | `WebClient` | Web search and content fetch |
-| `memory` | `FactMemory` | Long-term memory store |
+| `memory` | `MemoryService` | Long-term memory service |
 | `automation` | `AutomationService` | Scheduled automation management |
 | `skill_registry` | `SkillRegistry` | Skill lookup and loading |
 | `search_index` | `SearchIndex` | Vector search across indexed sources |

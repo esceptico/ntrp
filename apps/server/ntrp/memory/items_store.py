@@ -34,6 +34,13 @@ WHERE child_id = ?
 ORDER BY role, "order", parent_id
 """
 
+_SQL_LIST_CHILD_EDGES = """
+SELECT child_id, parent_id, role, "order", created_at
+FROM memory_item_parents
+WHERE parent_id = ?
+ORDER BY role, "order", child_id
+"""
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -138,6 +145,28 @@ def _row_to_parent(row: aiosqlite.Row) -> MemoryItemParent:
     )
 
 
+def _apply_validity_filter(clauses: list[str], params: list[Any], *, alias: str, validity: str | None, at: datetime | None) -> None:
+    if not validity or validity == "all":
+        return
+    timestamp = _format_dt(at or _now())
+    prefix = f"{alias}." if alias else ""
+    if validity == "current":
+        clauses.append(f"datetime({prefix}valid_from) <= datetime(?)")
+        params.append(timestamp)
+        clauses.append(f"({prefix}invalid_at IS NULL OR datetime({prefix}invalid_at) > datetime(?))")
+        params.append(timestamp)
+        return
+    if validity == "future":
+        clauses.append(f"datetime({prefix}valid_from) > datetime(?)")
+        params.append(timestamp)
+        return
+    if validity in {"expired", "invalid"}:
+        clauses.append(f"{prefix}invalid_at IS NOT NULL AND datetime({prefix}invalid_at) <= datetime(?)")
+        params.append(timestamp)
+        return
+    raise ValueError(f"invalid validity filter: {validity}")
+
+
 class MemoryItemsRepository:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
@@ -148,8 +177,16 @@ class MemoryItemsRepository:
             return None
         return int(rows[0]["value"])
 
-    async def list_recent_items(self, *, kind: str, window_days: int, limit: int, scope: str) -> list[MemoryItem]:
-        window_start = _now() - timedelta(days=window_days)
+    async def list_recent_items(
+        self,
+        *,
+        kind: str,
+        window_days: int,
+        limit: int,
+        scope: str,
+        now: datetime | None = None,
+    ) -> list[MemoryItem]:
+        window_start = (now or _now()) - timedelta(days=window_days)
         rows = await self.conn.execute_fetchall(
             """
             SELECT m.*, v.embedding
@@ -207,10 +244,155 @@ class MemoryItemsRepository:
         *,
         commit: bool = True,
     ) -> None:
+        if child_id == parent_id:
+            raise ValueError("memory item parent graph must be acyclic: self-edge rejected")
+        if await self._edge_would_create_cycle(child_id, parent_id):
+            raise ValueError("memory item parent graph must be acyclic")
         await self.conn.execute(_SQL_INSERT_PARENT_EDGE, (child_id, parent_id, role, order))
         if commit:
             await self.conn.commit()
 
+    async def _edge_would_create_cycle(self, child_id: str, parent_id: str) -> bool:
+        rows = await self.conn.execute_fetchall(
+            """
+            WITH RECURSIVE ancestors(id) AS (
+                SELECT parent_id
+                FROM memory_item_parents
+                WHERE child_id = ?
+              UNION
+                SELECT p.parent_id
+                FROM memory_item_parents p
+                JOIN ancestors a ON p.child_id = a.id
+            )
+            SELECT 1
+            FROM ancestors
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (parent_id, child_id),
+        )
+        return bool(rows)
+
     async def list_parent_edges(self, child_id: str) -> list[MemoryItemParent]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_PARENT_EDGES, (child_id,))
         return [_row_to_parent(row) for row in rows]
+
+    async def list_child_edges(self, parent_id: str) -> list[MemoryItemParent]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_CHILD_EDGES, (parent_id,))
+        return [_row_to_parent(row) for row in rows]
+
+    async def get_item(self, item_id: str) -> MemoryItem | None:
+        rows = await self.conn.execute_fetchall(
+            """
+            SELECT m.*, v.embedding
+            FROM memory_items m
+            LEFT JOIN memory_items_vec v ON v.item_id = m.id
+            WHERE m.id = ?
+            """,
+            (item_id,),
+        )
+        return _row_to_item(rows[0]) if rows else None
+
+    async def list_items(
+        self,
+        *,
+        kinds: list[str] | None = None,
+        statuses: list[str] | None = None,
+        scope: str | None = None,
+        validity: str | None = None,
+        validity_at: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[MemoryItem]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if kinds:
+            clauses.append(f"m.kind IN ({','.join('?' for _ in kinds)})")
+            params.extend(kinds)
+        if statuses:
+            clauses.append(f"m.status IN ({','.join('?' for _ in statuses)})")
+            params.extend(statuses)
+        if scope:
+            clauses.append("m.scope = ?")
+            params.append(scope)
+        _apply_validity_filter(clauses, params, alias="m", validity=validity, at=validity_at)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([limit, offset])
+        rows = await self.conn.execute_fetchall(
+            f"""
+            SELECT m.*, v.embedding
+            FROM memory_items m
+            LEFT JOIN memory_items_vec v ON v.item_id = m.id
+            {where}
+            ORDER BY datetime(m.updated_at) DESC, m.id
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        )
+        return [_row_to_item(row) for row in rows]
+
+    async def count_items(
+        self,
+        *,
+        kinds: list[str] | None = None,
+        statuses: list[str] | None = None,
+        scope: str | None = None,
+        validity: str | None = None,
+        validity_at: datetime | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if kinds:
+            clauses.append(f"kind IN ({','.join('?' for _ in kinds)})")
+            params.extend(kinds)
+        if statuses:
+            clauses.append(f"status IN ({','.join('?' for _ in statuses)})")
+            params.extend(statuses)
+        if scope:
+            clauses.append("scope = ?")
+            params.append(scope)
+        _apply_validity_filter(clauses, params, alias="", validity=validity, at=validity_at)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = await self.conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM memory_items {where}",
+            params,
+        )
+        return int(rows[0][0]) if rows else 0
+
+    async def search_items_fts(
+        self,
+        query: str,
+        *,
+        kinds: list[str] | None = None,
+        statuses: list[str] | None = None,
+        scope: str | None = None,
+        validity: str | None = None,
+        validity_at: datetime | None = None,
+        limit: int = 50,
+    ) -> list[MemoryItem]:
+        where_clauses: list[str] = ["memory_items_fts MATCH ?"]
+        params: list[Any] = [query]
+        if kinds:
+            where_clauses.append(f"m.kind IN ({','.join('?' for _ in kinds)})")
+            params.extend(kinds)
+        if statuses:
+            where_clauses.append(f"m.status IN ({','.join('?' for _ in statuses)})")
+            params.extend(statuses)
+        if scope:
+            where_clauses.append("m.scope = ?")
+            params.append(scope)
+        _apply_validity_filter(where_clauses, params, alias="m", validity=validity, at=validity_at)
+        params.append(limit)
+        rows = await self.conn.execute_fetchall(
+            f"""
+            SELECT m.*, v.embedding, bm25(memory_items_fts) AS rank
+            FROM memory_items_fts
+            JOIN memory_items m ON m.id = memory_items_fts.item_id
+            LEFT JOIN memory_items_vec v ON v.item_id = m.id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY rank
+            LIMIT ?
+            """,
+            params,
+        )
+        return [_row_to_item(row) for row in rows]

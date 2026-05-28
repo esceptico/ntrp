@@ -118,7 +118,12 @@ def _overlap_carry(buffer: EpisodeBuffer) -> BufferCarry:
     return BufferCarry(
         content=join_turns(carried_turns),
         source_refs=carried_refs,
-        centroid=buffer.running_centroid_vec,
+        # We do not store per-turn embeddings, so the previous running centroid
+        # represents the whole closed buffer, not just the overlap subset. Carry
+        # the textual/provenance overlap but clear centroid accounting so the
+        # next buffer does not weight a stale full-buffer centroid as if it came
+        # only from the overlap.
+        centroid=None,
         turn_count=len(carried_refs),
         tokens=0,
     )

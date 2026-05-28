@@ -52,16 +52,9 @@ export function formatCountdown(iso: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number; idle_minutes?: number; every_n?: number; actions?: string[]; object_types?: string[]; statuses?: string[]; scopes?: string[] }, compact?: boolean): string {
+export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number; idle_minutes?: number; every_n?: number }, compact?: boolean): string {
   if (trigger.type === "idle") return `idle ${trigger.idle_minutes}m`;
   if (trigger.type === "count") return `every ${trigger.every_n} turns`;
-  if (trigger.type === "knowledge_event") {
-    const objects = trigger.object_types?.length ? trigger.object_types.join(",") : "object";
-    const actions = trigger.actions?.length ? trigger.actions.join(",") : "changed";
-    const statuses = !compact && trigger.statuses?.length ? ` ${trigger.statuses.join(",")}` : "";
-    const scopes = !compact && trigger.scopes?.length ? ` scope:${trigger.scopes.join(",")}` : "";
-    return `knowledge:${objects} ${actions}${statuses}${scopes}`;
-  }
   if (trigger.type === "time") {
     let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
     if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;

@@ -177,7 +177,7 @@ async def test_approve_promotes_proposal_to_skill_file_row_and_edges(conn: aiosq
     assert "skill_match" not in json.loads(skills[0]["tags"])
     assert "proposal-status:approved" in json.loads((await _row(conn, proposal_id))["tags"])
     edges = await MemoryItemsRepository(conn).list_parent_edges(skills[0]["id"])
-    assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "derives_from")]
+    assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "evidence")]
 
 
 @pytest.mark.asyncio

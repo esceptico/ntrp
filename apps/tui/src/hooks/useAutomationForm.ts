@@ -231,10 +231,6 @@ export function useAutomationForm({
       trigger.setCreateEventType(t.event_type);
       trigger.eventLeadInput.reset();
       trigger.eventLeadInput.setValue(`${t.lead_minutes ?? 60}m`);
-    } else if (t.type === "knowledge_event") {
-      trigger.setCreateTriggerType("event");
-      trigger.setCreateEventType("knowledge_object_changed");
-      trigger.eventLeadInput.reset();
     } else {
       trigger.setCreateTriggerType("time");
       if (t.every) {

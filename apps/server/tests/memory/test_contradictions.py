@@ -339,6 +339,30 @@ async def test_undo_endpoint_restores_old_claim_status_within_scope(conn: aiosql
 
 
 @pytest.mark.asyncio
+async def test_undo_does_not_restore_claim_still_superseded_by_another_active_claim(conn: aiosqlite.Connection):
+    old = await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=3))
+    new_a = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW - timedelta(minutes=1))
+    new_b = await _insert_claim(conn, "User no longer buys Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW)
+    watcher = _watcher(conn)
+    await watcher.scan_for_new_claim(new_a, scope="user")
+    repo = MemoryItemsRepository(conn)
+    await repo.insert_parent_edge(new_b, old, "supersedes")
+    await conn.execute(
+        "UPDATE memory_items SET status = 'superseded', invalid_at = ? WHERE id = ?",
+        (NOW.isoformat(), old),
+    )
+    await conn.commit()
+
+    result = await watcher.undo(child_id=new_a, parent_id=old)
+
+    assert result == {"already_undone": False, "restored": False, "cross_scope": False}
+    old_row = await _row(conn, old)
+    assert old_row["status"] == "superseded"
+    assert old_row["invalid_at"] is not None
+    assert (new_b, old, "supersedes") in [tuple(edge) for edge in await _edges(conn)]
+
+
+@pytest.mark.asyncio
 async def test_undo_endpoint_idempotent(conn: aiosqlite.Connection):
     old = await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=2))
     new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW)

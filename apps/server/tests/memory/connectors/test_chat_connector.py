@@ -13,11 +13,11 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.agent import Usage
 from ntrp.events.internal import RunCompleted
-from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.buffers_store import BufferCarry, EpisodeBufferRepository, TurnUpdate
 from ntrp.memory.connectors._confidence import compute_confidence, confidence_bucket
 from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.idle_sweeper import IdleBufferSweeper
+from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.store.base import GraphDatabase
 
@@ -93,8 +93,9 @@ def _event(
             {"role": "user", "content": user},
             {"role": "assistant", "content": assistant},
         ),
-        # Connector uses completion_tokens as the per-turn delta — see
-        # chat.py:_on_run_completed and slice-07-backlog §4 for rationale.
+        # completion_tokens is intentionally ignored by the connector; token
+        # budget is estimated from captured user evidence. The argument stays
+        # here so tests can prove assistant usage does not pollute memory.
         usage=Usage(completion_tokens=tokens),
         result=assistant,
     )
@@ -170,12 +171,24 @@ async def test_first_msg_creates_buffer(conn: aiosqlite.Connection):
     assert row["scope"] == "user"
     assert row["source_kind"] == "chat_msg"
     assert row["turn_count"] == 1
-    assert row["tokens"] == 12
-    assert row["content_so_far"] == "User: hello\nAssistant: done"
+    assert row["tokens"] == 3
+    assert row["content_so_far"] == "User: hello"
     refs = json.loads(row["source_refs_so_far"])
     assert refs[0]["kind"] == "chat_msg"
     assert refs[0]["ref"] == "run-1"
     assert datetime.fromisoformat(refs[0]["captured_at"])
+
+
+@pytest.mark.asyncio
+async def test_assistant_only_output_is_not_captured_as_user_memory(conn: aiosqlite.Connection):
+    connector, _, embedder = _connector(conn, vectors=[_vec(0)])
+
+    await connector.on_run_completed(
+        _event(run_id="run-1", user="", assistant="I don't have access to your files", tokens=12)
+    )
+
+    assert await _open_buffers(conn) == []
+    embedder.embed_one.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -189,7 +202,7 @@ async def test_subsequent_msg_updates_buffer(conn: aiosqlite.Connection):
     assert len(rows) == 1
     row = rows[0]
     assert row["turn_count"] == 2
-    assert row["tokens"] == 12
+    assert row["tokens"] == 6
     assert "User: first" in row["content_so_far"]
     assert "User: second" in row["content_so_far"]
     refs = json.loads(row["source_refs_so_far"])
@@ -214,9 +227,24 @@ async def test_turn_budget_close(conn: aiosqlite.Connection):
 
 
 @pytest.mark.asyncio
+async def test_close_dim_mismatch_keeps_current_turn(conn: aiosqlite.Connection):
+    connector, buffers, _ = _connector(conn, vectors=[np.ones(5, dtype=np.float32)], dim=5)
+    await _seed_buffer(buffers, count=49, embedding=_vec(0))
+
+    await connector.on_run_completed(_event(run_id="run-mismatch", user="do not drop me", tokens=1))
+
+    assert await _closed_buffers(conn) == []
+    open_rows = await _open_buffers(conn)
+    assert len(open_rows) == 1
+    assert open_rows[0]["turn_count"] == 50
+    assert "User: do not drop me" in open_rows[0]["content_so_far"]
+    assert json.loads(open_rows[0]["source_refs_so_far"])[-1]["ref"] == "run-mismatch"
+
+
+@pytest.mark.asyncio
 async def test_token_budget_close(conn: aiosqlite.Connection):
     connector, buffers, _ = _connector(conn, vectors=[_vec(0), _vec(0)])
-    await _seed_buffer(buffers, count=3, tokens_per_turn=2_500)
+    await _seed_buffer(buffers, count=3, tokens_per_turn=2_665)
 
     await connector.on_run_completed(_event(run_id="run-token", user="cross token budget", tokens=500))
 
@@ -269,7 +297,7 @@ async def test_explicit_close_marker(conn: aiosqlite.Connection):
 
 @pytest.mark.asyncio
 async def test_overlap_carry(conn: aiosqlite.Connection):
-    connector, buffers, _ = _connector(conn, vectors=[_vec(0), _vec(0)])
+    connector, buffers, _ = _connector(conn, vectors=[_vec(1), _vec(1)])
     await _seed_buffer(buffers, count=7)
 
     await connector.on_run_completed(_event(run_id="run-close", user="new topic: carry me"))
@@ -281,6 +309,10 @@ async def test_overlap_carry(conn: aiosqlite.Connection):
     assert "seed turn 1" not in open_rows[0]["content_so_far"]
     assert "seed turn 2" in open_rows[0]["content_so_far"]
     assert "User: new topic: carry me" in open_rows[0]["content_so_far"]
+    centroid = np.frombuffer(open_rows[0]["running_centroid_vec"], dtype=np.float32)
+    assert centroid[1] > 0.9
+    assert centroid[0] < 0.1
+    assert open_rows[0]["turn_count"] == 6
 
 
 @pytest.mark.asyncio

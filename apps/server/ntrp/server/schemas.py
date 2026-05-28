@@ -439,10 +439,6 @@ class CreateAutomationRequest(BaseModel):
     lead_minutes: int | str | None = None
     idle_minutes: int | None = None
     every_n: int | None = None
-    actions: list[str] | str | None = None
-    object_types: list[str] | str | None = None
-    statuses: list[str] | str | None = None
-    scopes: list[str] | str | None = None
     writable: bool = False
     start: str | None = None
     end: str | None = None
@@ -462,10 +458,6 @@ class UpdateAutomationRequest(BaseModel):
     lead_minutes: int | str | None = None
     idle_minutes: int | None = None
     every_n: int | None = None
-    actions: list[str] | str | None = None
-    object_types: list[str] | str | None = None
-    statuses: list[str] | str | None = None
-    scopes: list[str] | str | None = None
     start: str | None = None
     end: str | None = None
     writable: bool | None = None

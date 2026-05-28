@@ -67,12 +67,6 @@ class RuntimeOutbox:
             except Exception:
                 _logger.warning("Chat connector run-completed handler failed", exc_info=True)
         await self.scheduler.handle_run_completed(run_completed)
-        memory_service: MemoryService | None = self._get_memory_service()
-        if memory_service:
-            try:
-                await memory_service.knowledge_objects.assimilate_run_completed(run_completed)
-            except Exception:
-                _logger.warning("Legacy knowledge assimilation failed", exc_info=True)
 
     def _get_chat_connector(self) -> ChatConnector | None:
         memory_service = self._get_memory_service()

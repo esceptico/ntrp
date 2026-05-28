@@ -1,56 +1,42 @@
 import { useEffect, useState } from "react";
 import type { Config } from "../../../types.js";
 import {
-  getKnowledgeSummary,
-  listKnowledgeObjects,
-  type KnowledgeObject,
-  type KnowledgeObjectType,
-  type KnowledgeSummary,
+  getMemoryStats,
+  listMemoryItems,
+  type MemoryItem,
+  type MemoryItemKind,
+  type MemoryStats,
 } from "../../../api/client.js";
-import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { useKeypress } from "../../../hooks/useKeypress.js";
-import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
+import { MEMORY_TAB_COPY, MEMORY_TABS, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { formatAge } from "../../../lib/utils.js";
-import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
-import { KNOWLEDGE_LIBRARY_TYPES, knowledgeSurfaceCount, reviewKind, shouldReviewKnowledgeObject } from "../../../lib/knowledgeViews.js";
-import { RecallInspectSection } from "./RecallInspectSection.js";
+import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
 
 interface MemoryViewerProps {
   config: Config;
   onClose: () => void;
 }
 
-type ReviewItem = KnowledgeObject & { review_kind: "procedure" | "action" | "artifact" };
+const MEMORY_KINDS: MemoryItemKind[] = ["episode", "observation", "claim", "skill", "proposal", "artifact_ref"];
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
-  const [activeTab, setActiveTab] = useState<MemoryTabType>("overview");
-  const [summary, setSummary] = useState<KnowledgeSummary | null>(null);
-  const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
-  const [libraryItems, setLibraryItems] = useState<KnowledgeObject[] | null>(null);
-  const [libraryType, setLibraryType] = useState<KnowledgeObjectType>("episode");
-  const [recentSent, setRecentSent] = useState<KnowledgeObject[] | null>(null);
+  const [activeTab, setActiveTab] = useState<MemoryTabType>("today");
+  const [stats, setStats] = useState<MemoryStats | null>(null);
+  const [items, setItems] = useState<MemoryItem[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [kind, setKind] = useState<MemoryItemKind>("episode");
   const [error, setError] = useState<string | null>(null);
-  const recallTab = useRecallInspectTab(config);
 
-  async function load() {
+  async function load(nextKind = kind) {
     setError(null);
     try {
-      const [nextSummary, procedures, actions, artifacts, sent, library] = await Promise.all([
-        getKnowledgeSummary(config),
-        listKnowledgeObjects(config, { object_type: "procedure_candidate", status: "draft" }),
-        listKnowledgeObjects(config, { object_type: "action_candidate", status: "draft" }),
-        listKnowledgeObjects(config, { object_type: "artifact", status: "draft" }),
-        listKnowledgeObjects(config, { object_type: "outcome_feedback", limit: 5 }),
-        listKnowledgeObjects(config, { object_type: libraryType, limit: 12 }),
+      const [nextStats, page] = await Promise.all([
+        getMemoryStats(config),
+        listMemoryItems(config, { kinds: [nextKind], statuses: ["active"], limit: 12 }),
       ]);
-      setSummary(nextSummary);
-      setReviewItems([
-        ...procedures.objects.map((item) => ({ ...item, review_kind: "procedure" as const })),
-        ...actions.objects.map((item) => ({ ...item, review_kind: "action" as const })),
-        ...artifacts.objects.map((item) => ({ ...item, review_kind: "artifact" as const })),
-      ].filter(shouldReviewKnowledgeObject));
-      setLibraryItems(library.objects);
-      setRecentSent(sent.objects.slice(0, 5));
+      setStats(nextStats);
+      setItems(page.items);
+      setTotal(page.total);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -62,7 +48,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
   useKeypress((key) => {
     if (key.name === "escape") {
-      if (activeTab === "activation" && recallTab.inputActive) return;
       onClose();
       return;
     }
@@ -75,19 +60,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     }
     if (Number.isInteger(Number(key.sequence))) {
       const index = Number(key.sequence) - 1;
-      if (MEMORY_TABS[index]) setActiveTab(MEMORY_TABS[index]);
-      return;
-    }
-    if (activeTab === "library") {
-      const nextType = typeFromKey(key.sequence);
-      if (nextType) {
-        setLibraryType(nextType);
-        void listKnowledgeObjects(config, { object_type: nextType, limit: 12 })
-          .then((result) => setLibraryItems(result.objects))
-          .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      if (activeTab === "search" && MEMORY_KINDS[index]) {
+        const nextKind = MEMORY_KINDS[index];
+        setKind(nextKind);
+        void load(nextKind);
+        return;
       }
+      if (MEMORY_TABS[index]) setActiveTab(MEMORY_TABS[index]);
     }
-    if (activeTab === "activation") recallTab.handleKeys(key);
   }, { isActive: true });
 
   return (
@@ -95,11 +75,9 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       {({ width, height }) => {
         const sectionHeight = Math.max(1, height - 5 - (error ? 1 : 0));
         const copy = MEMORY_TAB_COPY[activeTab];
-        const status = activeTab === "activation"
-          ? recallTab.result
-            ? `${recallTab.result.candidates.length} activated · ${recallTab.result.omitted.length} omitted`
-            : "no query yet"
-          : `${reviewItems?.length ?? 0} review · ${summary?.surfaces.reduce((sum, surface) => sum + surface.count, 0) ?? 0} objects`;
+        const status = stats
+          ? `${stats.counts.claim?.active ?? 0} claims · ${stats.counts.observation?.active ?? 0} observations`
+          : "loading";
 
         return (
           <>
@@ -116,7 +94,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               <box width={Math.max(20, Math.floor(width * 0.58))}>
                 <text>
                   <span fg={colors.text.secondary}>{copy.title}</span>
-                  <span fg={colors.text.disabled}> {"\u2502"} {truncateText(copy.description, Math.max(8, Math.floor(width * 0.58) - copy.title.length - 3))}</span>
+                  <span fg={colors.text.disabled}> {"|"} {truncateText(copy.description, Math.max(8, Math.floor(width * 0.58) - copy.title.length - 3))}</span>
                 </text>
               </box>
               <box flexGrow={1} />
@@ -129,33 +107,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               </box>
             )}
 
-            {activeTab === "overview" && (
-              <KnowledgeOverview
-                summary={summary}
-                reviewItems={reviewItems}
-                recentSent={recentSent}
+            {activeTab === "today" && <MemoryOverview stats={stats} height={sectionHeight} width={width} />}
+            {activeTab === "graph" && (
+              <MemoryStaticPanel
+                title="GRAPH"
+                lines={["Desktop renders the real provenance DAG from /admin/memory/items/:id/graph.", "TUI navigation is keyboard-only for now; use Search to pick ids."]}
                 height={sectionHeight}
                 width={width}
               />
             )}
-            {activeTab === "library" && (
-              <KnowledgeLibrary
-                summary={summary}
-                items={libraryItems}
-                activeType={libraryType}
+            {activeTab === "skills" && (
+              <MemoryStaticPanel
+                title="SKILLS"
+                lines={["Skills are memory_items.kind=skill with evidence parents and source_refs to skill files.", "Desktop exposes enable/archive actions via /admin/memory/skills."]}
                 height={sectionHeight}
                 width={width}
               />
             )}
-            {activeTab === "review" && (
-              <KnowledgeReview
-                items={reviewItems}
-                height={sectionHeight}
-                width={width}
-              />
-            )}
-            {activeTab === "activation" && (
-              <RecallInspectSection tab={recallTab} height={sectionHeight} width={width} />
+            {activeTab === "search" && (
+              <MemoryItems items={items} total={total} activeKind={kind} height={sectionHeight} width={width} />
             )}
           </>
         );
@@ -164,149 +134,83 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   );
 }
 
-function typeFromKey(sequence: string | undefined): KnowledgeObjectType | null {
-  const index = Number(sequence) - 1;
-  if (!Number.isInteger(index)) return null;
-  return KNOWLEDGE_LIBRARY_TYPES[index]?.type ?? null;
-}
-
-function KnowledgeOverview({
-  summary,
-  reviewItems,
-  recentSent,
-  height,
-  width,
-}: {
-  summary: KnowledgeSummary | null;
-  reviewItems: ReviewItem[] | null;
-  recentSent: KnowledgeObject[] | null;
-  height: number;
-  width: number;
-}) {
+function MemoryStaticPanel({ title, lines, height, width }: { title: string; lines: string[]; height: number; width: number }) {
   const contentWidth = Math.max(20, width - 4);
-  const lines: string[] = [];
-
-  lines.push("COUNTS");
-  if (!summary) {
-    lines.push("loading");
-  } else {
-    for (const view of KNOWLEDGE_LIBRARY_TYPES) {
-      lines.push(`${view.label.padEnd(12)} ${String(knowledgeSurfaceCount(summary.surfaces, view.type)).padStart(4)}  ${view.description}`);
-    }
-  }
-
-  lines.push("", "NEEDS REVIEW");
-  if (reviewItems === null) {
-    lines.push("loading");
-  } else if (reviewItems.length === 0) {
-    lines.push("nothing needs review");
-  } else {
-    for (const item of reviewItems.slice(0, 8)) {
-      lines.push(`${reviewKind(item)} · ${item.proactiveness_level} · ${truncateText(item.title, Math.max(12, contentWidth - 24))}`);
-      lines.push(`  ${truncateText(item.text.replace(/\s+/g, " "), Math.max(12, contentWidth - 2))}`);
-    }
-  }
-
-  lines.push("", "RECENT ACTIVATION");
-  if (recentSent === null) {
-    lines.push("loading");
-  } else if (recentSent.length === 0) {
-    lines.push("no activation records yet");
-  } else {
-    for (const item of recentSent) {
-      lines.push(`${formatAge(item.updated_at)} · ${truncateText(item.text.replace(/\s+/g, " "), Math.max(12, contentWidth - 8))}`);
-    }
-  }
+  const visible = [title, "", ...lines].slice(0, Math.max(1, height - 2));
   return (
-    <box flexDirection="column" width={width} height={height} paddingLeft={1} paddingRight={1} overflow="hidden">
-      {lines.slice(0, height).map((line, index) => {
-        const heading = line === line.toUpperCase() && line.length > 0;
-        return (
-          <text key={index}>
-            <span fg={heading ? colors.text.secondary : colors.text.muted}>{truncateText(line || " ", contentWidth)}</span>
-          </text>
-        );
-      })}
+    <box flexDirection="column" height={height}>
+      {visible.map((line, index) => (
+        <text key={index}>
+          <span fg={index === 0 ? colors.text.primary : colors.text.secondary}>
+            {truncateText(line, contentWidth)}
+          </span>
+        </text>
+      ))}
     </box>
   );
 }
 
-function KnowledgeLibrary({
-  summary,
+function MemoryOverview({ stats, height, width }: { stats: MemoryStats | null; height: number; width: number }) {
+  const contentWidth = Math.max(20, width - 4);
+  const lines: string[] = ["COUNTS"];
+  if (!stats) {
+    lines.push("loading");
+  } else {
+    for (const kind of MEMORY_KINDS) {
+      const counts = stats.counts[kind] ?? { active: 0, superseded: 0, archived: 0 };
+      lines.push(
+        `${kind.padEnd(12)} ${String(counts.active ?? 0).padStart(4)} active  ${String(counts.superseded ?? 0).padStart(4)} superseded  ${String(counts.archived ?? 0).padStart(4)} archived`,
+      );
+    }
+  }
+  lines.push("", "Press tab for item lists. In Items, keys 1-6 switch kind.");
+
+  return <TextLines lines={lines} height={height} width={contentWidth} />;
+}
+
+function MemoryItems({
   items,
-  activeType,
+  total,
+  activeKind,
   height,
   width,
 }: {
-  summary: KnowledgeSummary | null;
-  items: KnowledgeObject[] | null;
-  activeType: KnowledgeObjectType;
+  items: MemoryItem[] | null;
+  total: number;
+  activeKind: MemoryItemKind;
   height: number;
   width: number;
 }) {
   const contentWidth = Math.max(20, width - 4);
-  const lines: string[] = [];
-
-  lines.push("TYPES");
-  for (const [index, view] of KNOWLEDGE_LIBRARY_TYPES.entries()) {
-    const marker = view.type === activeType ? ">" : " ";
-    const count = summary ? knowledgeSurfaceCount(summary.surfaces, view.type) : 0;
-    lines.push(`${marker} ${index + 1}. ${view.label.padEnd(12)} ${String(count).padStart(4)}  ${view.description}`);
-  }
-
-  lines.push("", activeType.toUpperCase());
-  if (items === null) {
-    lines.push("loading");
-  } else if (items.length === 0) {
-    lines.push("no objects");
-  } else {
-    for (const item of items) {
-      lines.push(`${formatAge(item.updated_at)} · ${item.status} · ${truncateText(item.title, Math.max(12, contentWidth - 22))}`);
-      lines.push(`  ${truncateText(item.text.replace(/\s+/g, " "), Math.max(12, contentWidth - 2))}`);
-    }
-  }
-
-  return <Lines lines={lines} height={height} width={width} />;
-}
-
-function KnowledgeReview({
-  items,
-  height,
-  width,
-}: {
-  items: ReviewItem[] | null;
-  height: number;
-  width: number;
-}) {
-  const contentWidth = Math.max(20, width - 4);
-  const lines: string[] = ["DRAFT DECISIONS"];
+  const lines: string[] = [
+    MEMORY_KINDS.map((kind, index) => `${index + 1}:${kind}${kind === activeKind ? "*" : ""}`).join("  "),
+    "",
+  ];
 
   if (items === null) {
     lines.push("loading");
   } else if (items.length === 0) {
-    lines.push("nothing needs review");
+    lines.push(`No active ${activeKind} items.`);
   } else {
+    lines.push(`${items.length}/${total} active ${activeKind}`);
     for (const item of items) {
-      lines.push(`${reviewKind(item)} · ${item.proactiveness_level} · ${item.status} · ${truncateText(item.title, Math.max(12, contentWidth - 30))}`);
-      lines.push(`  ${truncateText(item.text.replace(/\s+/g, " "), Math.max(12, contentWidth - 2))}`);
+      const updated = item.updated_at ? formatAge(item.updated_at) : "unknown";
+      lines.push(`${updated} · ${item.status} · ${truncateText(item.content.replace(/\s+/g, " "), contentWidth - 18)}`);
+      if (item.tags.length) lines.push(`  tags: ${truncateText(item.tags.join(", "), contentWidth - 8)}`);
     }
   }
 
-  return <Lines lines={lines} height={height} width={width} />;
+  return <TextLines lines={lines} height={height} width={contentWidth} />;
 }
 
-function Lines({ lines, height, width }: { lines: string[]; height: number; width: number }) {
-  const contentWidth = Math.max(20, width - 4);
+function TextLines({ lines, height, width }: { lines: string[]; height: number; width: number }) {
   return (
-    <box flexDirection="column" width={width} height={height} paddingLeft={1} paddingRight={1} overflow="hidden">
-      {lines.slice(0, height).map((line, index) => {
-        const heading = line === line.toUpperCase() && line.length > 0;
-        return (
-          <text key={index}>
-            <span fg={heading ? colors.text.secondary : colors.text.muted}>{truncateText(line || " ", contentWidth)}</span>
-          </text>
-        );
-      })}
+    <box flexDirection="column" height={height}>
+      {lines.slice(0, height).map((line, index) => (
+        <text key={`${index}-${line}`}>
+          <span fg={line === "" ? colors.text.disabled : colors.text.primary}>{truncateText(line, width)}</span>
+        </text>
+      ))}
     </box>
   );
 }

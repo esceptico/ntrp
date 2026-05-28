@@ -5,10 +5,10 @@ from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.episode_close import CompletionSummaryClient
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
-from ntrp.memory.facts import FactMemory
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.retrieval import MemoryRetrieval
+from ntrp.memory.runtime import MemoryDatabase
 from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.service import MemoryService
 from ntrp.memory.skill_inducer import SkillInducer
@@ -24,7 +24,7 @@ class KnowledgeRuntime:
         self.embedding = config.embedding
         self.indexer = Indexer(db_path=config.search_db_path, embedding=self.embedding) if self.embedding else None
         self.search_index = None
-        self.memory: FactMemory | None = None
+        self.memory: MemoryDatabase | None = None
         self.memory_service: MemoryService | None = None
         self.memory_search_source: MemorySearchSource | None = None
         self.memory_retrieval: MemoryRetrieval | None = None
@@ -98,7 +98,7 @@ class KnowledgeRuntime:
             _logger.warning("Memory enabled but no embedding model configured — skipping")
 
     async def _create_memory(self, stores: Stores) -> None:
-        self.memory = await FactMemory.create(
+        self.memory = await MemoryDatabase.create(
             db_path=self.config.memory_db_path,
             embedding=self.embedding,
             model=self.config.memory_model,

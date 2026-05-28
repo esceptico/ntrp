@@ -536,13 +536,6 @@ function formatTrigger(t: AutomationTrigger): string {
   }
   if (t.type === "idle") return `idle ${t.idle_minutes}m`;
   if (t.type === "count") return `every ${t.every_n ?? t.threshold ?? "?"} turns`;
-  if (t.type === "knowledge_event") {
-    const objects = t.object_types?.length ? t.object_types.join(",") : "object";
-    const actions = t.actions?.length ? t.actions.join(",") : "changed";
-    const statuses = t.statuses?.length ? ` · ${t.statuses.join(",")}` : "";
-    const scopes = t.scopes?.length ? ` · ${t.scopes.join(",")}` : "";
-    return `knowledge:${objects} ${actions}${statuses}${scopes}`;
-  }
   return t.type;
 }
 

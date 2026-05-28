@@ -33,8 +33,8 @@ from ntrp.events.sse import (
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.activation import MemoryActivationRequest
-from ntrp.memory.facts import FactMemory
 from ntrp.memory.retrieval import MemoryRetrieval
+from ntrp.memory.runtime import MemoryDatabase
 from ntrp.memory.service import MemoryService
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus, prime_bus_cursor_from_store
@@ -136,7 +136,7 @@ class ChatDeps:
     integration_errors: dict[str, str]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
-    memory: FactMemory | None = None
+    memory: MemoryDatabase | None = None
     memory_service: MemoryService | None = None
     memory_retrieval: MemoryRetrieval | None = None
     skill_registry: SkillRegistry | None = None

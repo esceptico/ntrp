@@ -123,6 +123,47 @@ async def test_search_empty_returns_empty_bundle(conn: aiosqlite.Connection):
     assert bundle.skills_to_use == []
 
 
+async def test_search_returns_accepted_skill_suggestion(conn: aiosqlite.Connection):
+    await _insert_item(
+        conn,
+        "skill-1",
+        "Use this skill when handling frobnicator deployments.",
+        kind="skill",
+        confidence=0.95,
+        tags=["skill", "slug:frobnicator-deploy"],
+        source_refs=[{"type": "skill_path", "path": "/tmp/frobnicator-deploy/SKILL.md"}],
+        embedding=_vec(0),
+    )
+    await _insert_item(
+        conn,
+        "skill-archived",
+        "Use this skill when handling frobnicator rollbacks.",
+        kind="skill",
+        status="archived",
+        tags=["skill", "slug:frobnicator-rollback"],
+        embedding=_vec(0),
+    )
+    retrieval = MemoryRetrieval(conn, FakeEmbedder(default=_vec(0)))
+
+    bundle = await retrieval.search(MemoryActivationRequest(query="frobnicator deploy", kinds=["skill"]), now=NOW)
+
+    assert [skill.skill_name for skill in bundle.skills_to_use] == ["frobnicator-deploy"]
+    suggestion = bundle.skills_to_use[0]
+    assert suggestion.object_id == "skill-1"
+    assert suggestion.confidence == pytest.approx(0.95)
+    assert suggestion.selection_role == "advisory"
+
+
+async def test_search_records_activation_usage(conn: aiosqlite.Connection):
+    await _insert_item(conn, "claim-usage", "activation usage token", usage={"activated": 2})
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    await retrieval.search(MemoryActivationRequest(query="activation usage", record_access=True), now=NOW)
+
+    rows = await conn.execute_fetchall("SELECT usage FROM memory_items WHERE id = 'claim-usage'")
+    assert json.loads(rows[0]["usage"])["activated"] == 3
+
+
 async def test_search_fts_only_match(conn: aiosqlite.Connection):
     await _insert_item(conn, "needle", "rare lexical memory token")
     await _insert_item(conn, "haystack-1", "ordinary unrelated text")

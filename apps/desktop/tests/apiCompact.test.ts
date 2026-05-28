@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { compactSessionApi, getKnowledgeSummaryApi } from "../src/api.ts";
+import { compactSessionApi, listProjectsApi } from "../src/api.ts";
 import { runBuiltinCommand } from "../src/actions/builtins.ts";
 import { getState, setState } from "../src/store/index.ts";
 
@@ -39,7 +39,7 @@ test("compactSessionApi uses an extended timeout", async () => {
   });
 });
 
-test("knowledge requests use the default API timeout", async () => {
+test("standard API calls use the default timeout", async () => {
   let request: { path: string; method?: string; body?: string; timeout?: number } | null = null;
   (globalThis as typeof globalThis & { window?: unknown }).window = {
     ntrpDesktop: {
@@ -51,7 +51,7 @@ test("knowledge requests use the default API timeout", async () => {
             status: 200,
             statusText: "OK",
             contentType: "application/json",
-            data: { surfaces: [], next_actions: [], policy_version: "test" },
+            data: [],
             text: "",
           };
         },
@@ -59,10 +59,10 @@ test("knowledge requests use the default API timeout", async () => {
     },
   };
 
-  await getKnowledgeSummaryApi({ serverUrl: "http://localhost:6877", apiKey: "" });
+  await listProjectsApi({ serverUrl: "http://localhost:6877", apiKey: "" });
 
   expect(request).toEqual({
-    path: "/knowledge/summary",
+    path: "/projects",
     method: "GET",
     body: undefined,
     timeout: 60_000,

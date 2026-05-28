@@ -166,8 +166,7 @@ class Runtime:
         await self.config_runtime.reload()
 
     async def _after_config_reload(self) -> None:
-        if self.automation:
-            self.automation.sync_knowledge_event_dispatcher()
+        return
 
     async def sync_mcp(self, config: Config | None = None) -> None:
         config = config or self.config
