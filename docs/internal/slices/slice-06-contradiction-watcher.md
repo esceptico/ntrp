@@ -99,7 +99,7 @@ async def scan_for_new_claim(self, claim_id: str, *, scope: str) -> list[Contrad
     if scope == "user":
         # naive: also pull project-scoped claims of common projects
         # For slice 6, just scan within-scope; cross-scope expansion is
-        # documented as a known limitation (see §16 risks).
+        # documented as a known limitation (see §15 risks).
         other_scope_claims: list[MemoryItem] = []
     else:
         other_scope_claims = await self.repo.list_recent_items(
@@ -111,7 +111,7 @@ async def scan_for_new_claim(self, claim_id: str, *, scope: str) -> list[Contrad
     return seeded
 ```
 
-**Important simplification:** within-scope contradiction is the only case slice 6 implements robustly. Cross-scope (`user` vs `project:<X>`) requires either entity matching OR scope-aware tag conventions; both are slice 8+ territory. Slice 6 documents cross-scope as a known gap in §16 risks and §14 out-of-scope, rather than half-implementing it.
+**Important simplification:** within-scope contradiction is the only case slice 6 implements robustly. Cross-scope (`user` vs `project:<X>`) requires either entity matching OR scope-aware tag conventions; both are slice 8+ territory. Slice 6 documents cross-scope as a known gap in §15 risks and §14 out-of-scope, rather than half-implementing it.
 
 **Helper `_get_item_or_raise`** — small inline:
 ```python
@@ -468,7 +468,7 @@ Do NOT push. Do NOT touch frozen zones. Ask in §10 if ambiguous.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| LLM judge fires too often → token cost spikes | Medium | Medium | §4.3 cost guard + PM gate question (§10.1); threshold tunable. |
+| LLM judge fires too often → token cost spikes | Medium | Medium | §4.3 cost guard + PM gate question (§10 Q1); threshold tunable. |
 | `negation_score` is too crude → misses real contradictions | High | Medium | LLM judge covers the gap; expanding `NEGATION_MARKERS` is a slice-7+ follow-up if PR data shows missed cases. |
 | Cross-scope annotation breaks retrieval prompt structure | Medium | High | Single render helper, opt-in based on metadata; turn off via env if it regresses. |
 | Auto-supersede flips wrong claim (newer is wrong, older was right) | Medium | High | Undo endpoint is mandatory; surface every flip in run-result so user can audit. |
