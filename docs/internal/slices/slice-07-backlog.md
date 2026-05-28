@@ -415,10 +415,16 @@ both as hard gates.
 When a slice absorbs an item from this doc, move it from here to the slice
 brief and check it off below.
 
-- [ ] §1 LongMemEval xfails → slice 5
-- [ ] §2A `test_knowledge_next_level.py` → slice 5
-- [ ] §2B `test_knowledge_write_gate.py` → slice 7
-- [ ] §3A `_repo.search_*` landmine → slice 5
-- [ ] §3B 11 untracked knowledge modules → slice 5 PM gate decision
-- [ ] §4 episode_buffers token anomaly → slice 4
-- [ ] §5 PM grep-gate lesson → slice 4 brief incorporates
+- [x] §1 LongMemEval xfails → slice 5 (commit `7aeb3d82`, all 3 xfails removed; LongMemEval now handles `claim`/`fact` candidate kinds)
+- [x] §2A `test_knowledge_next_level.py` → slice 5 (commit `7aeb3d82`, ported as `tests/memory/test_knowledge_next_level_migrated.py`, 1 placeholder skipped pending slice-6 follow-up)
+- [x] §2B `test_knowledge_write_gate.py` → slice 7 (commit `d6292ac4`, 28 new tests across `test_skill_inducer.py` + `test_proposal_flow.py` cover cluster discovery, body/evidence capping, review markers, promotion blocking, unsourced rejection, missing draft routing, duplicate proposal skip, slug collision, direct promote to skill, source claim refs, reject cleanup; dropped old `lesson` normalization + legacy direct create/update gating per spec)
+- [x] §3A `_repo.search_*` landmine → slice 5 (commit `7aeb3d82`, 4 dead wrappers removed from `memory/service.py`, stale internal caller fixed)
+- [x] §3B 11 untracked knowledge modules → resolved 2026-05-28 in HEAD-cleanup commits before slice 5; working tree clean, knowledge/ matches imports
+- [x] §4 episode_buffers token anomaly → token-counter fix `3b66a043`, audit log `ba38b6ca` (per-turn delta, not cumulative)
+- [x] §5 PM grep-gate lesson → slice 4 brief incorporated; carried forward into v2 slice-5/6/7 briefs (repo-surface audit §17)
+
+**Final state 2026-05-28:** all 7 items closed. Slice 5 (`7aeb3d82`), Slice 6 (`7c457b34`), Slice 7 (`d6292ac4`) land the full pipeline `episode → observation → claim → resolved-claim → skill-proposal → skill-file`.
+
+**Known follow-ups (not blockers):**
+- `test_knowledge_next_level_semantic_conflict_routing_deferred_to_slice_6` (test_knowledge_next_level_migrated.py) remains `@pytest.mark.skip(reason="slice 6: contradiction watcher owns semantic conflict routing")` despite slice 6 landing. Body is empty (`assert conn`). Either unskip + flesh out, or delete. Logged for slice 8+.
+- Slice 7 ships degraded `determinism` + `success_signal` gates (stubbed `True`) per `slice-07-skill-inducer.md §17` audit log. Future "memory-metadata-column" slice unlocks full spec §3.5 gate via `MemoryItem.metadata`.

@@ -367,3 +367,30 @@ slice 8 numbering-wise).
 
 **Next step:** user gate → fire `slice-05-invoke.sh`. After slice 5 lands,
 re-audit slices 6/7 against actual claim-layer code before firing them.
+
+---
+
+## Final state 2026-05-28 (post slices 5/6/7)
+
+All three slices landed sequentially:
+- Slice 5 `7aeb3d82` — pattern finder pass 2 (observation → claim), 9/9 gates
+- Slice 6 `7c457b34` — contradiction watcher (claim conflicts + supersession), 8/8 gates, 875 passed
+- Slice 7 `d6292ac4` — skill inducer + is_toolable gate + proposal flow, 11/11 gates, 903 passed
+
+**Independent verification (this session, not from codex output):**
+- `cd apps/server && uv run pytest tests/ -q` → 903 passed, 1 skipped, 23.51s
+- `uv run --project apps/server ruff check apps/server/ntrp apps/server/tests` → All checks passed
+- `git log --oneline -3` matches the three slice commits above
+- Memory pipeline `episode → observation → claim → resolved-claim → skill-proposal → skill-file` now exists end-to-end in landed code (verified by file-by-file inspection of `pattern_finder.py`, `contradictions.py`, `skill_inducer.py`)
+
+**A/B questions resolution log:**
+- Slice 5 (5 questions in open-questions.md earlier): codex resolved them inline during exec by following the brief's spec defaults; verified by gate green
+- Slice 6 (1 question — cross-scope contradiction narrowness): accepted; v1 watcher writes `contradicts` edge + `cross-scope-override` tag, no supersession across scopes (verified in `test_contradictions.py`)
+- Slice 7 (degraded gate accept/reject): accepted v1 with degraded gate; `determinism` + `success_signal` stubbed `True` with explicit skip reasons; future "memory-metadata-column" slice unlocks full spec §3.5 gate
+
+**Known follow-up (logged in `slice-07-backlog.md` re-home section):**
+- `test_knowledge_next_level_semantic_conflict_routing_deferred_to_slice_6` still marked `@pytest.mark.skip` — body is empty. Slice 6 conceptually covers it via `test_contradictions.py`. Decision (slice 8+): either flesh out the migrated test or delete the placeholder. Not a blocker for the redesign DoD.
+
+**One artifact cleanup:** slice 7's E2E gate created a real `~/.ntrp/skills/slice-7-gate-33fd4063/SKILL.md` (count 14→15). Moved to `/tmp/slice-7-gate-cleanup-*` in this session — out of skill registry.
+
+**Status:** all 6 DoD items closed. Goal complete.
