@@ -97,6 +97,14 @@ class Runtime:
         return self.knowledge.memory_service
 
     @property
+    def memory_retrieval(self):
+        return self.knowledge.memory_retrieval
+
+    @property
+    def pattern_finder(self):
+        return self.knowledge.pattern_finder
+
+    @property
     def search_index(self):
         return self.knowledge.search_index
 
@@ -218,6 +226,7 @@ class Runtime:
             build_operator_deps=self.build_operator_deps,
             get_memory=lambda: self.memory,
             get_memory_service=lambda: self.memory_service,
+            get_pattern_finder=lambda: self.pattern_finder,
             get_calendar_source=lambda: self.integrations.get_client("calendar"),
             indexer=self.indexer,
         )
@@ -282,6 +291,7 @@ class Runtime:
             dispatch_session_message=self.dispatch_session_message,
             memory=self.memory,
             memory_service=self.memory_service,
+            memory_retrieval=self.memory_retrieval,
             skill_registry=self.skill_registry,
             notifier_service=self.notifier_service,
         )
@@ -293,11 +303,13 @@ class Runtime:
             executor=self.executor,
             memory=self.memory,
             memory_service=self.memory_service,
+            memory_retrieval=self.memory_retrieval,
             config=AgentConfig.from_config(self.config),
             source_details={},
             create_session=self.stores.sessions.create,
             notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
             enqueue_run_completed=self.stores.outbox.enqueue_run_completed,
+            skill_registry=self.skill_registry,
         )
 
     async def start_scheduler(self) -> None:

@@ -11,6 +11,7 @@ from ntrp.constants import (
     BUILTIN_KNOWLEDGE_REFLECTION_ID,
     BUILTIN_KNOWLEDGE_REFLECTION_SWEEP_ID,
     BUILTIN_KNOWLEDGE_RETENTION_ID,
+    BUILTIN_PATTERN_FINDER_DAILY_ID,
     DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_PROFILE_REFRESH_COOLDOWN_MINUTES,
     DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES,
@@ -98,6 +99,16 @@ BUILTINS = [
         handler="knowledge_health",
         cooldown_minutes=DEFAULT_KNOWLEDGE_HEALTH_COOLDOWN_MINUTES,
         writable=False,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_PATTERN_FINDER_DAILY_ID,
+        name="Pattern Finder Daily",
+        description="Cluster recent memory episodes into observations",
+        triggers=[
+            TimeTrigger(at="04:00", days="daily"),
+        ],
+        handler="pattern_finder_daily",
+        writable=True,
     ),
 ]
 

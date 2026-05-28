@@ -8,6 +8,7 @@ from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.knowledge.models import KnowledgePruneRequest, KnowledgeReflectRequest
 from ntrp.knowledge.processors import KnowledgeProcessorService
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.service import MemoryService
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
@@ -25,12 +26,14 @@ class AutomationRuntime:
         build_operator_deps: Callable[[], OperatorDeps],
         get_memory: Callable[[], FactMemory | None],
         get_memory_service: Callable[[], MemoryService | None],
+        get_pattern_finder: Callable[[], PatternFinder | None],
         get_calendar_source: Callable[[], object | None],
         indexer: Indexer | None,
     ):
         self.stores = stores
         self.get_memory = get_memory
         self.get_memory_service = get_memory_service
+        self.get_pattern_finder = get_pattern_finder
         self.get_calendar_source = get_calendar_source
         self.scheduler = Scheduler(
             store=stores.automations,
@@ -74,6 +77,10 @@ class AutomationRuntime:
             self.scheduler.register_handler(
                 "knowledge_health",
                 self._build_knowledge_health_handler(),
+            )
+            self.scheduler.register_handler(
+                "pattern_finder_daily",
+                self._build_pattern_finder_daily_handler(),
             )
 
         await seed_builtins(self.stores.automations)
@@ -123,6 +130,19 @@ class AutomationRuntime:
             return (
                 f"{counts}; review_queue={health.review_queue}; "
                 f"missing_provenance={health.missing_provenance}; stale={health.stale}"
+            )
+
+        return handler
+
+    def _build_pattern_finder_daily_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            pattern_finder = self.get_pattern_finder()
+            if not pattern_finder:
+                return None
+            result = await pattern_finder.run_pass1(window_days=7, scope="user")
+            return (
+                f"clusters={result.clusters_found}; observations={result.observations_written}; "
+                f"superseded={result.observations_superseded}"
             )
 
         return handler

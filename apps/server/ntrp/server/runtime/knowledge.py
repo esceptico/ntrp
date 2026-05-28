@@ -6,6 +6,8 @@ from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.episode_close import CompletionSummaryClient
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.items_store import MemoryItemsRepository
+from ntrp.memory.pattern_finder import PatternFinder
+from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.service import MemoryService
 from ntrp.server.indexer import Indexer
@@ -23,6 +25,8 @@ class KnowledgeRuntime:
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
         self.memory_search_source: MemorySearchSource | None = None
+        self.memory_retrieval: MemoryRetrieval | None = None
+        self.pattern_finder: PatternFinder | None = None
         self.chat_connector: ChatConnector | None = None
 
     @property
@@ -56,6 +60,10 @@ class KnowledgeRuntime:
         services: dict[str, object] = {}
         if self.memory_service:
             services["memory"] = self.memory_service
+        if self.memory_retrieval:
+            services["memory_retrieval"] = self.memory_retrieval
+        if self.pattern_finder:
+            services["pattern_finder"] = self.pattern_finder
         if self.search_index:
             services["search_index"] = self.search_index
         return services
@@ -90,6 +98,12 @@ class KnowledgeRuntime:
         )
         self.memory_service = MemoryService(self.memory)
         self.memory_search_source = MemorySearchSource(self.memory.db)
+        self.memory_retrieval = MemoryRetrieval(self.memory.db.conn, self.memory.embedder)
+        self.pattern_finder = PatternFinder(
+            repo=MemoryItemsRepository(self.memory.db.conn),
+            summary_client=CompletionSummaryClient(self.config.memory_model),
+            embedder=self.memory.embedder,
+        )
         self.chat_connector = ChatConnector(
             items=MemoryItemsRepository(self.memory.db.conn),
             buffers=EpisodeBufferRepository(self.memory.db.conn),
@@ -105,6 +119,8 @@ class KnowledgeRuntime:
         self.memory = None
         self.memory_service = None
         self.memory_search_source = None
+        self.memory_retrieval = None
+        self.pattern_finder = None
         self.chat_connector = None
 
     async def _sync_memory(self, stores: Stores) -> None:
@@ -122,6 +138,8 @@ class KnowledgeRuntime:
                 self.memory.update_model(self.config.memory_model)
                 if self.chat_connector:
                     self.chat_connector.llm_client = CompletionSummaryClient(self.config.memory_model)
+                if self.pattern_finder:
+                    self.pattern_finder.summary_client = CompletionSummaryClient(self.config.memory_model)
         elif not self.config.memory and self.memory:
             await self._close_memory()
 

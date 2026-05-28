@@ -11,8 +11,9 @@ from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
 from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.middleware import AuthMiddleware
+from ntrp.server.routers.admin_memory import router as admin_memory_router
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
 from ntrp.server.routers.context import router as context_router
@@ -148,6 +149,8 @@ async def lifespan(app: FastAPI):
 
             deps = runtime.build_operator_deps()
             if bus_registry:
+                event_store = runtime.session_service.store if runtime.session_service else None
+                await prime_bus_cursor_from_store(bus_registry, AUTOMATION_BUS_KEY, event_store)
                 bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
                 run_result = await run_agent_streaming(deps, request, bus, automation.task_id)
             else:
@@ -222,6 +225,7 @@ app.add_middleware(AuthMiddleware)
 
 app.include_router(gmail_router)
 app.include_router(knowledge_router)
+app.include_router(admin_memory_router)
 app.include_router(automation_router)
 app.include_router(chat_router)
 app.include_router(context_router)

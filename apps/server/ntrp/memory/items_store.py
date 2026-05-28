@@ -1,12 +1,13 @@
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import aiosqlite
 import numpy as np
 
-from ntrp.database import serialize_embedding
+from ntrp.database import deserialize_embedding, serialize_embedding
 
 _SQL_INSERT_ITEM = """
 INSERT INTO memory_items (
@@ -20,6 +21,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 _SQL_INSERT_ITEM_VEC = "INSERT INTO memory_items_vec (item_id, embedding) VALUES (?, ?)"
 
 _SQL_GET_EMBEDDING_DIM = "SELECT value FROM meta WHERE key = 'embedding_dim'"
+
+_SQL_INSERT_PARENT_EDGE = """
+INSERT OR IGNORE INTO memory_item_parents (child_id, parent_id, role, "order")
+VALUES (?, ?, ?, ?)
+"""
+
+_SQL_LIST_PARENT_EDGES = """
+SELECT child_id, parent_id, role, "order", created_at
+FROM memory_item_parents
+WHERE child_id = ?
+ORDER BY role, "order", parent_id
+"""
 
 
 def _now() -> datetime:
@@ -50,6 +63,81 @@ class MemoryItemInsert:
     invalid_at: datetime | None = None
 
 
+@dataclass(slots=True)
+class MemoryItem:
+    id: str
+    kind: str
+    content: str
+    provenance: str
+    source_refs: list[dict[str, Any]]
+    confidence: float
+    status: str
+    valid_from: datetime
+    invalid_at: datetime | None
+    scope: str
+    tags: list[str]
+    artifact_ref: str | None
+    usage: dict[str, Any]
+    feedback: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+    embedding: np.ndarray | None
+
+
+@dataclass(slots=True)
+class MemoryItemParent:
+    child_id: str
+    parent_id: str
+    role: str
+    order: int | None
+    created_at: datetime
+
+
+def _parse_dt(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    value = datetime.fromisoformat(str(raw))
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+def _loads_json(raw: str | None, fallback):
+    if not raw:
+        return fallback
+    return json.loads(raw)
+
+
+def _row_to_item(row: aiosqlite.Row) -> MemoryItem:
+    return MemoryItem(
+        id=str(row["id"]),
+        kind=str(row["kind"]),
+        content=str(row["content"]),
+        provenance=str(row["provenance"]),
+        source_refs=_loads_json(row["source_refs"], []),
+        confidence=float(row["confidence"]),
+        status=str(row["status"]),
+        valid_from=_parse_dt(row["valid_from"]),
+        invalid_at=_parse_dt(row["invalid_at"]),
+        scope=str(row["scope"]),
+        tags=_loads_json(row["tags"], []),
+        artifact_ref=row["artifact_ref"],
+        usage=_loads_json(row["usage"], {}),
+        feedback=_loads_json(row["feedback"], {}),
+        created_at=_parse_dt(row["created_at"]),
+        updated_at=_parse_dt(row["updated_at"]),
+        embedding=deserialize_embedding(row["embedding"]),
+    )
+
+
+def _row_to_parent(row: aiosqlite.Row) -> MemoryItemParent:
+    return MemoryItemParent(
+        child_id=str(row["child_id"]),
+        parent_id=str(row["parent_id"]),
+        role=str(row["role"]),
+        order=row["order"],
+        created_at=_parse_dt(row["created_at"]),
+    )
+
+
 class MemoryItemsRepository:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
@@ -60,7 +148,25 @@ class MemoryItemsRepository:
             return None
         return int(rows[0]["value"])
 
-    async def insert_item(self, item: MemoryItemInsert) -> str:
+    async def list_recent_items(self, *, kind: str, window_days: int, limit: int, scope: str) -> list[MemoryItem]:
+        window_start = _now() - timedelta(days=window_days)
+        rows = await self.conn.execute_fetchall(
+            """
+            SELECT m.*, v.embedding
+            FROM memory_items m
+            LEFT JOIN memory_items_vec v ON v.item_id = m.id
+            WHERE m.kind = ?
+              AND m.scope = ?
+              AND m.status = 'active'
+              AND m.valid_from >= ?
+            ORDER BY m.valid_from DESC, m.id
+            LIMIT ?
+            """,
+            (kind, scope, _format_dt(window_start), limit),
+        )
+        return [_row_to_item(row) for row in rows]
+
+    async def insert_item(self, item: MemoryItemInsert, *, commit: bool = True) -> str:
         item_id = uuid.uuid4().hex
         now = _now()
         valid_from = item.valid_from or now
@@ -88,5 +194,23 @@ class MemoryItemsRepository:
         )
         if embedding is not None:
             await self.conn.execute(_SQL_INSERT_ITEM_VEC, (item_id, embedding))
-        await self.conn.commit()
+        if commit:
+            await self.conn.commit()
         return item_id
+
+    async def insert_parent_edge(
+        self,
+        child_id: str,
+        parent_id: str,
+        role: str,
+        order: int | None = None,
+        *,
+        commit: bool = True,
+    ) -> None:
+        await self.conn.execute(_SQL_INSERT_PARENT_EDGE, (child_id, parent_id, role, order))
+        if commit:
+            await self.conn.commit()
+
+    async def list_parent_edges(self, child_id: str) -> list[MemoryItemParent]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_PARENT_EDGES, (child_id,))
+        return [_row_to_parent(row) for row in rows]

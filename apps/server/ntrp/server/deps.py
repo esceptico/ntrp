@@ -18,6 +18,16 @@ def require_memory(runtime: Runtime = Depends(get_runtime)):
     return runtime.memory_service
 
 
+def require_pattern_finder(runtime: Runtime = Depends(get_runtime)):
+    if not runtime.pattern_finder:
+        if runtime.config.memory:
+            detail = "Pattern finder is unavailable - configure memory with an embedding model"
+        else:
+            detail = "Memory is disabled"
+        raise HTTPException(status_code=503, detail=detail)
+    return runtime.pattern_finder
+
+
 def require_session_service(runtime: Runtime = Depends(get_runtime)):
     if not runtime.session_service:
         raise HTTPException(status_code=503, detail="Session service not available")

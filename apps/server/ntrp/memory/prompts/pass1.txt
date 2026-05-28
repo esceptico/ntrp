@@ -1,0 +1,8 @@
+You are summarizing a cluster of related conversation episodes into a single observation.
+
+An observation is a witnessed pattern that recurs across these episodes - something the user did, said, preferred, or struggled with that shows up more than once. It is still context-bound (you may refer to "across these conversations" or "in recent sessions") but it is NOT yet a decontextualized claim about the user.
+
+Episodes in this cluster:
+{episode_bullets}
+
+Write ONE observation (3-5 sentences, no preamble) that captures the recurring pattern. Do not list every episode. Do not invent facts not present in the input. If no real pattern emerges, write exactly: NO_PATTERN.
