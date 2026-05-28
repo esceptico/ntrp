@@ -56,6 +56,25 @@ class ReasoningEnded(AgentEventBase):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ToolInputStarted(AgentEventBase):
+    tool_id: str
+    name: str
+    display_name: str
+    kind: str = "tool"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolInputDelta(AgentEventBase):
+    tool_id: str
+    delta: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolInputEnded(AgentEventBase):
+    tool_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class ToolStarted(AgentEventBase):
     tool_id: str
     name: str

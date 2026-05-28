@@ -44,3 +44,14 @@ class CompletionResponse:
 @dataclass(frozen=True)
 class ReasoningContentDelta:
     content: str
+
+
+@dataclass(frozen=True)
+class ToolCallStreamDelta:
+    """Incremental tool-call data emitted by a streaming LLM provider."""
+
+    index: int
+    tool_id: str | None = None
+    name: str | None = None
+    arguments_delta: str | None = None
+    done: bool = False

@@ -9,9 +9,20 @@ from ntrp.agent.types.events import (
     TextEnded,
     TextStarted,
     ToolCompleted,
+    ToolInputDelta,
+    ToolInputEnded,
+    ToolInputStarted,
     ToolStarted,
 )
-from ntrp.agent.types.llm import Choice, CompletionResponse, FinishReason, Message, ReasoningContentDelta, Role
+from ntrp.agent.types.llm import (
+    Choice,
+    CompletionResponse,
+    FinishReason,
+    Message,
+    ReasoningContentDelta,
+    Role,
+    ToolCallStreamDelta,
+)
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_call import FunctionCall, PendingToolCall, ToolCall
 from ntrp.agent.types.tool_choice import SpecificTool, ToolChoice, ToolChoiceMode
@@ -41,7 +52,11 @@ __all__ = [
     "ToolCall",
     "ToolChoice",
     "ToolChoiceMode",
+    "ToolCallStreamDelta",
     "ToolCompleted",
+    "ToolInputDelta",
+    "ToolInputEnded",
+    "ToolInputStarted",
     "ToolMeta",
     "ToolResult",
     "ToolStarted",
