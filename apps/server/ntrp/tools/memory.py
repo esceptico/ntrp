@@ -1,11 +1,10 @@
+from __future__ import annotations
+
+import numpy as np
 from pydantic import BaseModel, Field
 
-from ntrp.knowledge.models import (
-    KnowledgeObjectCreate,
-    KnowledgeObjectStatus,
-    KnowledgeObjectType,
-)
 from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
+from ntrp.memory.items_store import MemoryItemInsert
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
@@ -23,9 +22,9 @@ The system prompt has activated knowledge only — recall() searches the full kn
 PREFER recall() FOR: Known facts, user preferences, stored knowledge, lessons, procedures, artifacts, and past context
 PREFER source tools FOR: Finding new info in email, files, or web pages; use search_text/read_file for local files"""
 
-FORGET_DESCRIPTION = "Archive knowledge objects by semantic search."
+FORGET_DESCRIPTION = "Archive memory items by semantic search."
 
-REMEMBER_DESCRIPTION = """Store a knowledge object for future activation.
+REMEMBER_DESCRIPTION = """Store a memory item for future activation.
 
 WHEN TO USE:
 - After learning something important about the user
@@ -38,7 +37,7 @@ BAD: "Python is a programming language" (not user-specific)"""
 
 class RememberInput(BaseModel):
     fact: str = Field(description="The knowledge to remember (natural language).")
-    kind: str = Field(default="note", description="Knowledge type/scope label.")
+    kind: str = Field(default="note", description="Knowledge type/scope label (free-form tag, e.g. note, preference, lesson, artifact).")
     lifetime: str = Field(default="durable", description="How long this should remain active: durable or temporary.")
     salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in the stated fact.")
@@ -53,38 +52,42 @@ async def approve_remember(execution: ToolExecution, args: RememberInput) -> App
 
 
 async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
-    memory = execution.ctx.services["memory"]
+    items = execution.ctx.services["memory_items"]
+    embedder = execution.ctx.services.get("embedder")
     project = execution.ctx.project
-    scope = project.knowledge_scope if project and project.knowledge_scope else args.kind
-    obj = await memory.knowledge_objects.create(
-        KnowledgeObjectCreate(
-            object_type=KnowledgeObjectType.FACT,
-            title=args.fact[:100],
-            text=args.fact,
-            status=KnowledgeObjectStatus.ACTIVE,
+    scope = project.knowledge_scope if project and project.knowledge_scope else "user"
+
+    tags = [f"kind:{args.kind}", f"lifetime:{args.lifetime}", f"salience:{args.salience}"]
+    if args.entities:
+        tags.extend(f"entity:{e}" for e in args.entities)
+    if args.happened_at:
+        tags.append(f"happened_at:{args.happened_at}")
+    if args.expires_at:
+        tags.append(f"expires_at:{args.expires_at}")
+
+    source_refs: list[dict] = []
+    if args.source:
+        source_refs.append({"kind": "user", "ref": args.source})
+
+    embedding: np.ndarray | None = None
+    if embedder is not None:
+        vec = await embedder.embed_one(args.fact)
+        embedding = np.asarray(vec, dtype=np.float32) if vec is not None else None
+
+    item_id = await items.insert_item(
+        MemoryItemInsert(
+            content=args.fact,
+            source_refs=source_refs,
+            confidence=args.confidence,
             scope=scope,
-            activation="prompt",
-            proactiveness_level="L0",
-            score=args.salience * 0.2,
-            source_ids=[args.source] if args.source else [],
-            metadata={
-                "kind": args.kind,
-                "project_id": project.project_id if project else None,
-                "lifetime": args.lifetime,
-                "salience": args.salience,
-                "confidence": args.confidence,
-                "entities": args.entities or [],
-                "happened_at": args.happened_at,
-                "expires_at": args.expires_at,
-                "tool": "remember",
-            },
+            kind="claim",
+            provenance="user_authored",
+            status="active",
+            tags=tags,
+            embedding=embedding,
         )
     )
-
-    return ToolResult(
-        content=f"Remembered knowledge #{obj.id}: {obj.text}\nScope: {obj.scope}\nStatus: {obj.status}",
-        preview="Remembered",
-    )
+    return ToolResult(content=f"Stored memory item {item_id}.", preview=args.fact[:80])
 
 
 _DEFAULT_RECALL_LIMIT = 5

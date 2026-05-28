@@ -115,3 +115,55 @@ async def test_forget_tool_passes_runtime_context_to_activation():
     assert request.run_id == "run-1"
     assert request.surface == "tool"
     assert request.limit == 20
+
+
+class _FakeItemsRepo:
+    def __init__(self):
+        self.inserted: list = []
+
+    async def insert_item(self, item):
+        self.inserted.append(item)
+        return "item-xyz"
+
+
+class _FakeEmbedder:
+    async def embed_one(self, text: str):
+        return [0.1, 0.2, 0.3]
+
+
+@pytest.mark.asyncio
+async def test_remember_writes_memory_item_as_user_authored_claim():
+    project = ProjectContext(
+        project_id="proj-1",
+        name="proj",
+        knowledge_scope="project:proj-1",
+    )
+    items = _FakeItemsRepo()
+    embedder = _FakeEmbedder()
+    execution = _execution(project=project, retrieval=None)
+    execution.ctx.services["memory_items"] = items
+    execution.ctx.services["embedder"] = embedder
+
+    args = memory_tools.RememberInput(
+        fact="user prefers casual tone",
+        kind="preference",
+        salience=1,
+        confidence=0.9,
+        entities=["User"],
+        source="session:abc",
+    )
+    result = await memory_tools.remember(execution, args)
+
+    assert result.preview == "user prefers casual tone"
+    assert len(items.inserted) == 1
+    rec = items.inserted[0]
+    assert rec.content == "user prefers casual tone"
+    assert rec.kind == "claim"
+    assert rec.provenance == "user_authored"
+    assert rec.scope == "project:proj-1"
+    assert rec.confidence == 0.9
+    assert "kind:preference" in rec.tags
+    assert "salience:1" in rec.tags
+    assert "entity:User" in rec.tags
+    assert rec.source_refs == [{"kind": "user", "ref": "session:abc"}]
+    assert rec.embedding is not None

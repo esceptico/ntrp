@@ -28,6 +28,7 @@ class KnowledgeRuntime:
         self.memory_service: MemoryService | None = None
         self.memory_search_source: MemorySearchSource | None = None
         self.memory_retrieval: MemoryRetrieval | None = None
+        self.memory_items: MemoryItemsRepository | None = None
         self.pattern_finder: PatternFinder | None = None
         self.chat_connector: ChatConnector | None = None
 
@@ -64,6 +65,10 @@ class KnowledgeRuntime:
             services["memory"] = self.memory_service
         if self.memory_retrieval:
             services["memory_retrieval"] = self.memory_retrieval
+        if self.memory_items:
+            services["memory_items"] = self.memory_items
+        if self.memory and getattr(self.memory, "embedder", None):
+            services["embedder"] = self.memory.embedder
         if self.pattern_finder:
             services["pattern_finder"] = self.pattern_finder
         if self.search_index:
@@ -102,6 +107,7 @@ class KnowledgeRuntime:
         self.memory_search_source = MemorySearchSource(self.memory.db)
         self.memory_retrieval = MemoryRetrieval(self.memory.db.conn, self.memory.embedder)
         memory_items = MemoryItemsRepository(self.memory.db.conn)
+        self.memory_items = memory_items
         summary_client = CompletionSummaryClient(self.config.memory_model)
         skill_inducer = SkillInducer(
             repo=memory_items,
@@ -135,6 +141,7 @@ class KnowledgeRuntime:
         self.memory_service = None
         self.memory_search_source = None
         self.memory_retrieval = None
+        self.memory_items = None
         self.pattern_finder = None
         self.chat_connector = None
 
