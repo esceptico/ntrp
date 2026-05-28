@@ -9,6 +9,7 @@ import { RecallPane } from "./memory/RecallPane";
 import { KnowledgeHomePane } from "./memory/KnowledgeHomePane";
 import { KnowledgeLibraryPane, type LibraryTypeFilter } from "./memory/KnowledgeLibraryPane";
 import { KnowledgeReviewPane } from "./memory/KnowledgeReviewPane";
+import { PipelinePane } from "./memory/PipelinePane";
 import { ICON } from "../lib/icons";
 
 export function MemoryModal() {
@@ -94,6 +95,11 @@ export function MemoryModal() {
         {tab === "library" && (
           <section id="memory-panel-library" role="tabpanel" aria-labelledby="memory-tab-library" className="h-full">
             <KnowledgeLibraryPane initialType={libraryInitialType} focusVersion={libraryFocusVersion} />
+          </section>
+        )}
+        {tab === "pipeline" && (
+          <section id="memory-panel-pipeline" role="tabpanel" aria-labelledby="memory-tab-pipeline" className="h-full">
+            <PipelinePane />
           </section>
         )}
         {tab === "review" && (

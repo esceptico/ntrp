@@ -1707,3 +1707,138 @@ export async function createKnowledgeSkillPromotionApi(
     body: JSON.stringify({}),
   });
 }
+
+// ─── Memory pipeline (admin/memory) ─────────────────────────────────────
+
+export type MemoryProposalStatus = "open" | "approved" | "rejected";
+
+export interface MemoryProposal {
+  id: string;
+  content: string;
+  status: MemoryProposalStatus;
+  slug: string;
+  draft_path: string;
+  source_claim_count: number;
+  scope: string;
+}
+
+export interface PatternFinderPass1Result {
+  window_days: number;
+  scope: string;
+  episodes_considered: number;
+  clusters_found: number;
+  observations_written: number;
+  observations_superseded: number;
+  elapsed_ms: number;
+}
+
+export interface PatternFinderPass2Result {
+  window_days: number;
+  scope: string;
+  observations_considered: number;
+  existing_claims_considered: number;
+  clusters_found: number;
+  claims_written: number;
+  claims_superseded: number;
+  elapsed_ms: number;
+}
+
+export interface SkillInducerResult {
+  claims_considered: number;
+  toolable_claims: number;
+  clusters_found: number;
+  proposals_written: number;
+  elapsed_ms: number;
+}
+
+export interface ContradictionScanResult {
+  scope: string;
+  window_days: number;
+  claims_scanned: number;
+  contradictions_found: number;
+}
+
+export type PatternFinderRunResponse =
+  | PatternFinderPass1Result
+  | { pass1: PatternFinderPass1Result }
+  | { pass2: PatternFinderPass2Result }
+  | { pass1: PatternFinderPass1Result; pass2: PatternFinderPass2Result };
+
+export async function listMemoryProposalsApi(
+  config: AppConfig,
+  options: { status?: MemoryProposalStatus; scope?: string } = {},
+): Promise<{ proposals: MemoryProposal[] }> {
+  const params = new URLSearchParams();
+  if (options.status) params.set("status", options.status);
+  if (options.scope) params.set("scope", options.scope);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/admin/memory/proposals${suffix}`);
+}
+
+export async function approveMemoryProposalApi(
+  config: AppConfig,
+  proposalId: string,
+  options: { slug?: string } = {},
+): Promise<{ skill_id?: string; skill_path?: string; slug?: string }> {
+  const params = new URLSearchParams();
+  if (options.slug) params.set("slug", options.slug);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/admin/memory/proposals/${encodeURIComponent(proposalId)}/approve${suffix}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function rejectMemoryProposalApi(
+  config: AppConfig,
+  proposalId: string,
+  options: { reason?: string } = {},
+): Promise<{ status: string }> {
+  return apiWithConfig(config, `/admin/memory/proposals/${encodeURIComponent(proposalId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason: options.reason ?? null }),
+  });
+}
+
+export async function runMemoryPatternFinderApi(
+  config: AppConfig,
+  options: { pass?: 1 | 2 | "both"; window_days?: number; scope?: string; limit?: number } = {},
+): Promise<PatternFinderRunResponse> {
+  return apiWithConfig(config, "/admin/memory/pattern-finder/run", {
+    method: "POST",
+    body: JSON.stringify({
+      pass: options.pass ?? null,
+      window_days: options.window_days ?? null,
+      scope: options.scope ?? "user",
+      limit: options.limit ?? 500,
+    }),
+  });
+}
+
+export async function runMemorySkillInducerApi(
+  config: AppConfig,
+  options: { window_days?: number; scope?: string; limit?: number } = {},
+): Promise<SkillInducerResult> {
+  return apiWithConfig(config, "/admin/memory/skill-inducer/run", {
+    method: "POST",
+    body: JSON.stringify({
+      window_days: options.window_days ?? 30,
+      scope: options.scope ?? "user",
+      limit: options.limit ?? 500,
+    }),
+  });
+}
+
+export async function scanMemoryContradictionsApi(
+  config: AppConfig,
+  options: { window_days?: number; scope?: string; limit?: number } = {},
+): Promise<ContradictionScanResult> {
+  return apiWithConfig(config, "/admin/memory/contradictions/scan", {
+    method: "POST",
+    body: JSON.stringify({
+      window_days: options.window_days ?? 30,
+      scope: options.scope ?? "user",
+      limit: options.limit ?? 500,
+    }),
+  });
+}

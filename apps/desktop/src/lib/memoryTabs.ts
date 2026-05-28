@@ -1,4 +1,4 @@
-export type MemoryTab = "overview" | "library" | "review" | "activation";
+export type MemoryTab = "overview" | "library" | "pipeline" | "review" | "activation";
 
 export interface MemoryTabConfig {
   id: MemoryTab;
@@ -8,6 +8,7 @@ export interface MemoryTabConfig {
 export const MEMORY_TABS: MemoryTabConfig[] = [
   { id: "overview", label: "Overview" },
   { id: "library", label: "Library" },
+  { id: "pipeline", label: "Pipeline" },
   { id: "review", label: "Review" },
   { id: "activation", label: "Activation" },
 ];
