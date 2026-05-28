@@ -93,7 +93,9 @@ def _event(
             {"role": "user", "content": user},
             {"role": "assistant", "content": assistant},
         ),
-        usage=Usage(prompt_tokens=tokens),
+        # Connector uses completion_tokens as the per-turn delta — see
+        # chat.py:_on_run_completed and slice-07-backlog §4 for rationale.
+        usage=Usage(completion_tokens=tokens),
         result=assistant,
     )
 

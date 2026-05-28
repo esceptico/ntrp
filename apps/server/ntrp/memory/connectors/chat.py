@@ -69,7 +69,16 @@ class ChatConnector:
         buffer, created = await self._find_or_create_open(scope)
         turn = TurnUpdate(
             content=content,
-            tokens=max(0, event.usage.total_tokens),
+            # Per-turn delta. event.usage.total_tokens is the LLM API's
+            # cumulative run-total — each round-trip's prompt_tokens
+            # includes the full growing context, so summing across the
+            # agent's round-trips double-counts the conversation history
+            # (quadratic-ish blowup, see slice-07-backlog §4).
+            # completion_tokens is per-response; summed across round-trips
+            # it equals the run's total assistant output, which IS the new
+            # content added by this turn. Misses the user-message input
+            # tokens (~5% under-count) — acceptable for budget triggers.
+            tokens=max(0, event.usage.completion_tokens),
             source_ref={"kind": _SOURCE_KIND, "ref": event.run_id, "captured_at": datetime.now(UTC).isoformat()},
             embedding=turn_vec,
         )
