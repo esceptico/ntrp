@@ -255,3 +255,35 @@ Alternatives considered and rejected:
 from `apps/server/uv.lock`. `pyproject.toml` had already dropped it in
 `136c068d` (zero import sites), but lockfile leftovers made `uv lock`
 unparseable and blocked all pytest gates this session until fixed.
+
+### Slice 5 brief — 2026-05-28 05:13 — ready for A/B gate (commit `ffd5f1d1`)
+
+Drafted `docs/internal/slices/slice-05-claim-layer.md` (461 lines) +
+`slice-05-invoke.sh` (104 lines, prompt extracts from §13). Mirrors slice-4
+shape: TL;DR → goal → scope → algorithm → tests → gates → PM checklist →
+codex prompt → sequence → out-of-scope → risks.
+
+**Absorbed from `slice-07-backlog.md`:**
+- §1 LongMemEval xfails (3 tests)
+- §2A test_knowledge_next_level.py (≥10 of 14 ported)
+- §3A 4 dead search_* wrappers in memory/service.py
+
+**Frozen zones enumerated:** pass-1 code in `pattern_finder.py`,
+slice-2 connectors, slice-3 activation, slice-6 contradictions,
+slice-7 skill/write-gate, desktop UI memory components.
+
+**Open questions for the A/B gate (user to answer before fire):**
+1. Pass-2 threshold 0.72 (vs pass-1 0.68) — accept or tune?
+2. Scheduler Option A (separate job) vs Option B (sequential in one job)?
+   Brief defers to codex based on slice-4 actual; user can pin a choice now.
+3. `claim_match` reason label naming — keep, or use `consolidated_claim_match`
+   to distinguish from future direct-user claims?
+4. Should the resurrection of `test_knowledge_next_level.py` skip the entire
+   entity-resolution subtree (current plan) or include 1-2 placeholder
+   `@pytest.mark.skip` markers as a slice-8+ TODO trail?
+5. If LongMemEval xfail #1 (`semantic_alias_match`) can't close because real
+   alias-matching is slice 8, accept "11 passed, 1 xfailed" instead of
+   "12 passed" as the new baseline?
+
+**Next step:** user A/B gate on brief, then either fire `slice-05-invoke.sh`
+or hand back for revisions.
