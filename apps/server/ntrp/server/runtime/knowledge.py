@@ -4,6 +4,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBufferRepository
 from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.episode_close import CompletionSummaryClient
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.pattern_finder import PatternFinder
@@ -99,10 +100,17 @@ class KnowledgeRuntime:
         self.memory_service = MemoryService(self.memory)
         self.memory_search_source = MemorySearchSource(self.memory.db)
         self.memory_retrieval = MemoryRetrieval(self.memory.db.conn, self.memory.embedder)
+        memory_items = MemoryItemsRepository(self.memory.db.conn)
+        summary_client = CompletionSummaryClient(self.config.memory_model)
         self.pattern_finder = PatternFinder(
-            repo=MemoryItemsRepository(self.memory.db.conn),
-            summary_client=CompletionSummaryClient(self.config.memory_model),
+            repo=memory_items,
+            summary_client=summary_client,
             embedder=self.memory.embedder,
+            contradiction_watcher=ContradictionWatcher(
+                repo=memory_items,
+                embedder=self.memory.embedder,
+                judge_client=summary_client,
+            ),
         )
         self.chat_connector = ChatConnector(
             items=MemoryItemsRepository(self.memory.db.conn),

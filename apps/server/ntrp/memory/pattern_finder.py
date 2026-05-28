@@ -5,11 +5,13 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
+from ntrp.logging import get_logger
 from ntrp.memory.connectors.episode_close import SummaryClient
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 
 DEFAULT_PATTERN_FINDER_SIM_THRESHOLD = 0.70
@@ -17,6 +19,7 @@ DEFAULT_PATTERN_FINDER_PASS2_THRESHOLD = 0.72
 PATTERN_FINDER_CONFIDENCE = 0.6
 _PROMPT_PATH = Path(__file__).with_name("prompts") / "pass1.txt"
 _PASS2_PROMPT_PATH = Path(__file__).with_name("prompts") / "pass2.txt"
+_logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -89,11 +92,13 @@ class PatternFinder:
         summary_client: SummaryClient,
         embedder: Any,
         sim_threshold: float | None = None,
+        contradiction_watcher: Any | None = None,
     ):
         self.repo = repo
         self.summary_client = summary_client
         self.embedder = embedder
         self.sim_threshold = sim_threshold if sim_threshold is not None else _threshold_from_env()
+        self.contradiction_watcher = contradiction_watcher
 
     async def run_pass1(
         self,
@@ -297,10 +302,15 @@ class PatternFinder:
                     (now.isoformat(), now.isoformat(), old_claim_id),
                 )
             await self.repo.conn.commit()
-            return claim_id
         except BaseException:
             await self.repo.conn.rollback()
             raise
+        if self.contradiction_watcher is not None:
+            try:
+                await cast("ContradictionWatcher", self.contradiction_watcher).scan_for_new_claim(claim_id, scope=scope)
+            except Exception:
+                _logger.exception("Contradiction watcher scan failed for claim %s", claim_id)
+        return claim_id
 
 
 async def summarize_cluster(episodes: list[MemoryItem], client: SummaryClient) -> ObservationDraft:

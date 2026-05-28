@@ -1,0 +1,13 @@
+You are deciding whether two claims about a user contradict each other.
+
+Claim A: {claim_a}
+Claim B: {claim_b}
+
+Shared entities: {entities}
+
+Answer with exactly ONE word:
+- "opposed" if the claims cannot both be true at the same time for the same context
+- "compatible" if the claims can coexist (different contexts, refinements, or unrelated facets)
+- "unclear" if you genuinely cannot tell
+
+Then on a new line, give a one-sentence reason.

@@ -18,6 +18,7 @@ from ntrp.memory.activation import (
     MemoryActivationRequest,
     MemoryItemKind,
 )
+from ntrp.memory.contradictions import CROSS_SCOPE_OVERRIDE_TAG
 
 if TYPE_CHECKING:
     import aiosqlite
@@ -103,7 +104,7 @@ class MemoryRetrieval:
 
         candidates = self._score_candidates(list(rows_by_id.values()), timestamp)
         candidates.sort(key=lambda candidate: (candidate.score, candidate.created_at, candidate.item_id), reverse=True)
-        selected, omitted, prompt_context, used_chars = self._fit_budget(candidates, request)
+        selected, omitted, prompt_context, used_chars = await self._fit_budget(candidates, request)
 
         if request.record_access:
             _logger.info(
@@ -277,7 +278,7 @@ class MemoryRetrieval:
             )
         return candidates
 
-    def _fit_budget(
+    async def _fit_budget(
         self,
         candidates: list[MemoryActivationCandidate],
         request: MemoryActivationRequest,
@@ -292,7 +293,7 @@ class MemoryRetrieval:
                 omitted.append(candidate)
                 continue
             prefix = len(separator) if blocks else 0
-            block = _candidate_block(candidate)
+            block = await self._candidate_block(candidate)
             remaining = request.budget_chars - used_chars - prefix
             if remaining <= 0:
                 omitted.append(candidate)
@@ -301,7 +302,7 @@ class MemoryRetrieval:
                 if selected:
                     omitted.append(candidate)
                     continue
-                block = _candidate_block(candidate, max_chars=remaining)
+                block = await self._candidate_block(candidate, max_chars=remaining)
                 if len(block) > remaining:
                     omitted.append(candidate)
                     continue
@@ -310,6 +311,37 @@ class MemoryRetrieval:
             used_chars += prefix + len(block)
         omitted.extend(candidates[len(selected) + len(omitted) :])
         return selected, omitted[:50], separator.join(blocks), used_chars
+
+    async def _candidate_block(self, candidate: MemoryActivationCandidate, *, max_chars: int | None = None) -> str:
+        header = f"[{candidate.kind} · conf={_confidence_bucket(candidate.confidence)}]"
+        content = await self._render_cross_scope_annotation(candidate)
+        if max_chars is None:
+            return f"{header}\n{content}"
+        content_budget = max_chars - len(header) - 1
+        if content_budget <= 0:
+            return header[:max_chars]
+        return f"{header}\n{content[:content_budget]}"
+
+    async def _render_cross_scope_annotation(self, item: MemoryActivationCandidate) -> str:
+        if item.kind != "claim" or CROSS_SCOPE_OVERRIDE_TAG not in item.tags:
+            return item.content
+        rows = await self.conn.execute_fetchall(
+            """
+            SELECT m.content, m.scope, m.status
+            FROM memory_item_parents p
+            JOIN memory_items m ON m.id = p.parent_id
+            WHERE p.child_id = ?
+              AND p.role = 'contradicts'
+            ORDER BY m.scope, m.id
+            """,
+            (item.item_id,),
+        )
+        other = [row for row in rows if row["scope"] != item.scope and row["status"] == "active"]
+        if not other:
+            return item.content
+        parts = [f"general ({row['scope']}): {row['content']}" for row in other]
+        parts.append(f"in current scope ({item.scope}): {item.content}")
+        return "\n".join(parts)
 
 
 def _sql_filters(
