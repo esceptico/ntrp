@@ -1,6 +1,8 @@
 # Slice 7 — Skill inducer + `is_toolable` gate + `proposal` flow
 
-**Status:** Draft for PM A/B gate, then codex fire. **PRE-REQUISITES: slices 5 + 6 must land first.** Brief is speculative; revise post-slice-6 if claim/contradiction shape diverges.
+**Status:** Draft for PM A/B gate, then codex fire. **REVISED 2026-05-28 05:35** — repo-surface corrections + honest gate degradation (see §16 audit). **PRE-REQUISITES: slices 5 + 6 must land first.** Brief is speculative; revise post-slice-6 if claim/contradiction shape diverges.
+
+> **CRITICAL:** the `is_toolable` gate as originally specified in `ntrp-memory-redesign-spec.md` §3.5 assumes per-claim metadata, per-episode `tool_sequence`, and episode success-signal metadata — **none of which exist on `MemoryItem` today**. Slice 7 implements a **degraded** gate using only `tags` and existing repo methods. The degradation is honest, not silent. See §16 audit log for the explicit list of skipped checks and their re-home plan.
 **Prereqs:** slice 6 shipped. Claim layer producing `kind=claim` rows with `is_toolable` field on metadata (added in this slice). Contradiction watcher resolving conflicts. Test baseline ≥ 856 passed.
 **Backlog absorbed from `slice-07-backlog.md`:** §2B (`test_knowledge_write_gate.py` — 30 tests, 29 dead; reborn as proposal-gate tests against the new `kind=proposal` flow).
 **Out of scope:** UI for skill proposals (post-slice-7, separate UX slice), entity-resolution-driven skill grouping (slice 8+), skill-execution runtime changes (skills already execute via existing `~/.ntrp/skills/<name>/SKILL.md` loading).
@@ -60,80 +62,75 @@ No deletions. The old knowledge layer stays in place until a follow-up cleanup s
 
 ---
 
-## 3. The `is_toolable` gate
+## 3. The `is_toolable` gate (DEGRADED — see §16 audit)
 
-Per spec §3.5, four criteria. Each is a method on `IsToolableGate`:
+Per spec §3.5, four criteria. **Degraded implementation:** repetition + LLM-judged-trigger only. Determinism and success-signal both require episode metadata that doesn't exist on `MemoryItem` today (see §16). They're skipped — codex documents this in §10 and the spec gets a "v1 limitation" footnote.
 
-### 3.1 Repetition
+### 3.1 Repetition (KEPT)
 
 ```python
 async def _check_repetition(self, claim: MemoryItem) -> tuple[bool, str]:
-    evidence_count = await self.repo.count_parents(item_id=claim.id, role="evidence")
+    # `list_parent_edges` returns this claim's parent edges. Count role='evidence'.
+    edges = await self.repo.list_parent_edges(claim.id)
+    evidence_count = sum(1 for e in edges if e.role == "evidence")
     if evidence_count < self.min_episodes:  # default 3
-        return False, f"only {evidence_count} supporting episodes (need ≥ 3)"
-    return True, f"{evidence_count} supporting episodes"
+        return False, f"only {evidence_count} supporting items (need ≥ 3)"
+    return True, f"{evidence_count} supporting items"
 ```
 
-### 3.2 Determinism
+Note: "supporting items" not "supporting episodes" — evidence chain may include observations and prior claims, not raw episodes. To strictly count episodes, codex would need to recursively follow edges via `list_parent_edges(parent_id)` until hitting `kind='episode'` items. For slice 7 v1, accept any-kind evidence count. Document in §10.
 
-```python
-async def _check_determinism(self, claim: MemoryItem) -> tuple[bool, str]:
-    # Pull supporting episodes via evidence edges
-    episodes = await self.repo.get_evidence_chain(claim.id, max_depth=2, kind="episode")
-    if len(episodes) < 2:
-        return False, "no episode chain to evaluate variance"
-    # Jaccard over each episode's tool-call sequence
-    sequences = [tuple(ep.metadata.get("tool_sequence", [])) for ep in episodes]
-    if not all(sequences):
-        return False, "episodes lack tool_sequence metadata"
-    avg_jaccard = _mean_pairwise_jaccard(sequences)
-    if avg_jaccard < 0.7:
-        return False, f"tool-sequence Jaccard {avg_jaccard:.2f} < 0.7"
-    return True, f"deterministic (Jaccard {avg_jaccard:.2f})"
-```
+### 3.2 Determinism (SKIPPED in v1)
 
-`tool_sequence` is added to episode metadata in this slice (the connector already records tool calls — we add a `tool_sequence` projection at episode-close time). **EXCEPTION to the frozen zone**: codex MAY add one field to the episode-close metadata payload. Document in §10.
+Spec called for tool-call-sequence Jaccard over evidence episodes. **Impossible today** because:
+- `MemoryItem.metadata` doesn't exist (no JSON metadata column)
+- No `tool_sequence` is ever stored against episodes at episode-close time
+- Adding `tool_sequence` storage requires touching `memory/connectors/chat.py` and `buffers_store.py` — both are frozen-zone slice-2 territory
 
-### 3.3 Trigger identification
+**Re-home:** a follow-up slice "memory-metadata-column" adds a `metadata JSON` column + `tool_sequence` recording at episode-close, and slice 7 v2 re-enables this check.
+
+For v1, `_check_determinism` is a stub that returns `(True, "skipped — see §16")`. The gate still functions; it just permits more claims through than the full spec would. Risk: more noisy proposals. Mitigation: user-approval gate is the safety net.
+
+### 3.3 Trigger identification (KEPT, but stored as tag)
 
 ```python
 async def _check_trigger(self, claim: MemoryItem) -> tuple[bool, str]:
-    # Use LLM judge to extract a trigger phrase from the claim + episodes
-    trigger = await self._extract_trigger_with_llm(claim)
+    # Use LLM judge to extract a trigger phrase from the claim + immediate evidence
+    edges = await self.repo.list_parent_edges(claim.id)
+    evidence_ids = [e.parent_id for e in edges if e.role == "evidence"]
+    evidence = [await self._get_item_or_raise(eid) for eid in evidence_ids[:5]]
+    trigger = await self._extract_trigger_with_llm(claim, evidence)
     if trigger is None or trigger == "unclear":
         return False, "no identifiable trigger"
-    # Store on metadata for skill-draft step
-    await self.repo.update_metadata_key(claim.id, "induced_trigger", trigger)
+    # Persist trigger as a tag prefixed `trigger:<slug>` (no metadata column to use).
+    # Slugify: lowercase, ASCII-only, dashes for spaces, max 40 chars.
+    trigger_tag = f"trigger:{_slugify(trigger)}"
+    await self._add_tag_if_missing(claim.id, trigger_tag)
     return True, f"trigger: '{trigger}'"
 ```
 
-LLM prompt:
+`_add_tag_if_missing` uses the same raw-SQL `json_each` / `json_insert` pattern from slice-6 §5.2. `_get_item_or_raise` is also the helper from slice 6 §3.2 — codex reuses if slice 6 landed first, otherwise re-implements.
+
+LLM prompt at `apps/server/ntrp/memory/prompts/is_toolable.txt`:
 ```
-Given this claim and supporting episodes, identify the precondition or trigger that starts the workflow.
+Given this claim and supporting evidence, identify the precondition or trigger that starts the workflow.
 
 Claim: {claim_content}
-Episodes:
-{episode_bullets}
+Evidence (observations and/or prior claims):
+{evidence_bullets}
 
 Answer with ONE short phrase (≤ 10 words) describing when this workflow begins, or the word "unclear" if no consistent trigger exists.
 ```
 
-### 3.4 Success signal
+### 3.4 Success signal (SKIPPED in v1)
 
-```python
-async def _check_success_signal(self, claim: MemoryItem) -> tuple[bool, str]:
-    episodes = await self.repo.get_evidence_chain(claim.id, max_depth=2, kind="episode")
-    # Two ways to count "success":
-    #   (a) explicit positive feedback metadata (already tracked per ntrp directives)
-    #   (b) absence of correction within 24h of episode close
-    success_count = sum(1 for ep in episodes if self._episode_succeeded(ep))
-    success_rate = success_count / max(len(episodes), 1)
-    if success_rate < 0.6:
-        return False, f"success rate {success_rate:.0%} < 60%"
-    return True, f"{success_count}/{len(episodes)} episodes succeeded"
-```
+Spec called for episode `feedback_score` metadata OR "absence of correction within 24h" check. **Impossible today** because:
+- `feedback` and `usage` fields on `MemoryItem` are dicts but exist primarily on the insert path, NOT exposed on read in any consumable form by the gate
+- "absence of correction within 24h" requires episode-correction tagging that doesn't exist
 
-`self._episode_succeeded(ep)` checks `ep.metadata.get("feedback_score", 0) > 0` OR (`ep.closed_at` exists AND no episode within 24h tagged as `"correction_of": ep.id`).
+Same re-home as §3.2.
+
+For v1, `_check_success_signal` returns `(True, "skipped — see §16")`.
 
 ### 3.5 Aggregate
 
@@ -141,23 +138,25 @@ async def _check_success_signal(self, claim: MemoryItem) -> tuple[bool, str]:
 async def evaluate(self, claim: MemoryItem) -> tuple[bool, str]:
     checks = [
         await self._check_repetition(claim),
-        await self._check_determinism(claim),
+        await self._check_determinism(claim),   # stub returns True
         await self._check_trigger(claim),
-        await self._check_success_signal(claim),
+        await self._check_success_signal(claim),  # stub returns True
     ]
     passed = all(ok for ok, _ in checks)
     reason = "; ".join(msg for _, msg in checks)
     return passed, reason
 
 async def evaluate_and_tag(self, claim_id: str) -> None:
-    claim = await self.repo.get_item(claim_id)
+    claim = await self._get_item_or_raise(claim_id)
     is_toolable, reason = await self.evaluate(claim)
-    metadata = dict(claim.metadata)
-    metadata["is_toolable"] = is_toolable
-    metadata["toolable_reason"] = reason
-    metadata["toolable_evaluated_at"] = now_iso()
-    await self.repo.update_metadata(item_id=claim_id, metadata=metadata)
+    # Persist verdict as a tag: `toolable:true` or `toolable:false`.
+    # Verdict reason is logged, NOT persisted (no metadata column).
+    verdict_tag = "toolable:true" if is_toolable else "toolable:false"
+    await self._add_tag_if_missing(claim_id, verdict_tag)
+    logger.info("is_toolable verdict claim=%s passed=%s reason=%s", claim_id, is_toolable, reason)
 ```
+
+**Honest gate behavior:** with determinism + success-signal stubbed to True, the v1 gate is effectively "repetition ≥ 3 AND trigger identifiable". That's permissive. Risk: noisy proposals. Mitigation: user must explicitly approve each one.
 
 ---
 
@@ -165,12 +164,24 @@ async def evaluate_and_tag(self, claim_id: str) -> None:
 
 `SkillInducer.run(window_days=30, scope='user')`:
 
-1. Fetch all `kind=claim` rows where `metadata.is_toolable=True` AND no existing `kind=proposal` derives from this claim (via reverse edge lookup).
-2. Cluster by `induced_trigger` similarity (string Jaccard on trigger phrases) + entity overlap. Min cluster size: 1 (a single toolable claim can become a skill).
-3. For each cluster, draft SKILL.md body via LLM (prompt §5).
-4. Write `kind=proposal` row + `/tmp/ntrp/proposed-skills/<slug>/SKILL.md` file + `role='derives_from'` edges to source claims.
+1. Fetch all `kind=claim` rows via `list_recent_items(kind='claim', window_days=window_days, ...)`, filter in Python for tag `toolable:true` AND status `active`.
+2. For each candidate, look up its parent edges and skip if a `kind=proposal` row already derives from it (via reverse-edge query — there's no built-in reverse query method, so raw SQL: `SELECT child_id FROM memory_item_parents WHERE parent_id=? AND role='derives_from'`). Codex MAY add a `list_child_edges(parent_id)` helper if multiple call sites end up needing it.
+3. Cluster claims by `trigger:<slug>` tag overlap (no entities available — tag overlap is the only signal). Min cluster size: 1.
+4. For each cluster, draft SKILL.md body via LLM (prompt §5).
+5. Write `kind=proposal` row + `/tmp/ntrp/proposed-skills/<slug>/SKILL.md` file + `role='derives_from'` edges to source claims (`insert_parent_edge(proposal_id, claim_id, 'derives_from')`).
 
-`PatternFinderProposalRunResult` dataclass mirrors the slice-4/5 result shape (`claims_considered`, `proposals_written`, `elapsed_ms`).
+`SkillInducerRunResult` dataclass:
+```python
+@dataclass(slots=True)
+class SkillInducerRunResult:
+    claims_considered: int
+    toolable_claims: int
+    clusters_found: int
+    proposals_written: int
+    elapsed_ms: int
+```
+
+Mirror slice-4/5 result-dataclass shape.
 
 ---
 
@@ -220,25 +231,29 @@ Skill slug derived from the title: lowercase, hyphenated, ASCII-only.
 
 ## 6. Proposal lifecycle
 
+**Constraint:** no `metadata` JSON column on `MemoryItem`. Proposal lifecycle state (open/approved/rejected, skill_slug, draft_path) lives in `tags` and `source_refs` (which IS a `list[dict]` and IS exposed on `MemoryItemInsert`).
+
 ### 6.1 Storage
 
-`kind=proposal` row:
+`kind=proposal` row (note: `kind='proposal'` must be allowed by the schema — codex confirms by checking `memory_items` CHECK constraints; if proposal isn't allowed yet, codex adds a migration in this slice. Document in §10).
+
 ```python
-MemoryItem(
+MemoryItemInsert(
     kind="proposal",
+    content=draft_skill_md,            # full SKILL.md body in content
+    provenance="inferred",
+    source_refs=[
+        {"type": "proposal", "skill_slug": slug, "draft_path": f"/tmp/ntrp/proposed-skills/{slug}/SKILL.md"},
+        *[{"type": "source_claim", "id": cid} for cid in source_claim_ids],
+    ],
+    confidence=0.5,                    # placeholder; proposals don't really have a confidence
+    status="active",                   # status flips via tag 'proposal-status:approved' or 'rejected'
     scope=scope,
-    content=draft_skill_md,         # full SKILL.md body in content
-    tags=["proposal", "skill-draft"] + topic_tags,
-    metadata={
-        "proposal_type": "skill",
-        "skill_slug": slug,
-        "draft_path": "/tmp/ntrp/proposed-skills/<slug>/SKILL.md",
-        "induced_trigger": trigger,
-        "source_claim_ids": [...],
-        "status": "open",  # open | approved | rejected
-    },
+    tags=["proposal", "skill-draft", "proposal-status:open", f"slug:{slug}", f"trigger:{_slugify(trigger)}"],
 )
 ```
+
+`source_refs` is the right place for structured pointers (it's already `list[dict[str, Any]]`). Lifecycle status goes in `tags` so it's queryable via the existing tag-overlap query.
 
 ### 6.2 Approve
 
@@ -246,27 +261,32 @@ MemoryItem(
 POST /admin/memory/proposals/{id}/approve
 ```
 
-1. Load proposal. If `metadata.status != 'open'`, 409.
-2. Read draft file at `metadata.draft_path`.
-3. Compute target dir: `~/.ntrp/skills/<slug>/`. If exists, 409 (skill name collision — user must rename via a query param).
-4. Move file: `mv /tmp/ntrp/proposed-skills/<slug>/SKILL.md ~/.ntrp/skills/<slug>/SKILL.md`.
-5. Write new `kind=skill` row:
+1. Load proposal via `_get_item_or_raise(id)`. If tags contain `proposal-status:approved` or `proposal-status:rejected`, return 409.
+2. Extract `slug` and `draft_path` from `source_refs` (find dict with `type='proposal'`).
+3. Read draft file at `draft_path`. If missing, 410 (gone — codex chooses 410 vs 404).
+4. Compute target dir: `~/.ntrp/skills/<slug>/`. If exists, 409 (collision; user must rename via `?slug=<new>` query param).
+5. `mkdir -p ~/.ntrp/skills/<slug>/` then `mv draft_path ~/.ntrp/skills/<slug>/SKILL.md`.
+6. Write new `kind=skill` row:
    ```python
-   MemoryItem(
-       kind="skill",
-       scope=proposal.scope,
-       content=draft_skill_md,
-       tags=["skill"] + topic_tags,
-       metadata={
-           "skill_slug": slug,
-           "skill_path": "~/.ntrp/skills/<slug>/SKILL.md",
-           "induced_trigger": trigger,
-       },
+   skill_id = await repo.insert_item(
+       MemoryItemInsert(
+           kind="skill",
+           content=draft_skill_md,
+           provenance="approved-proposal",
+           source_refs=[{"type": "skill_path", "path": f"~/.ntrp/skills/{slug}/SKILL.md"}],
+           confidence=1.0,
+           status="active",
+           scope=proposal.scope,
+           tags=["skill", f"slug:{slug}", trigger_tag],
+       ),
+       commit=False,
    )
    ```
-6. For each `source_claim_id`: `repo.add_parent(item_id=skill_id, parent_id=claim_id, role='derives_from')`.
-7. Update proposal: `metadata.status = 'approved'`, `metadata.approved_at = now`, `metadata.skill_id = skill_id`.
-8. Return `{skill_id, skill_path}`.
+7. For each source claim (extracted from proposal's `source_refs`): `insert_parent_edge(skill_id, claim_id, 'derives_from', commit=False)`.
+8. Flip proposal status: append tag `proposal-status:approved`, remove `proposal-status:open` (raw SQL `json_remove` + `json_insert`). Append `approved-at:<iso>` tag.
+9. Commit transaction. Return `{skill_id, skill_path}`.
+
+`provenance` field accepts arbitrary strings per `MemoryItemInsert`; `"approved-proposal"` documents the origin.
 
 ### 6.3 Reject
 
@@ -274,9 +294,9 @@ POST /admin/memory/proposals/{id}/approve
 POST /admin/memory/proposals/{id}/reject
 ```
 
-1. Load proposal. If `metadata.status != 'open'`, 409.
-2. Delete file at `metadata.draft_path` (if exists).
-3. Update proposal: `metadata.status = 'rejected'`, `metadata.rejected_at = now`, `metadata.rejection_reason = body.reason` (optional).
+1. Load proposal. If status tag is not `open`, 409.
+2. Extract `draft_path` from `source_refs`. Delete file if exists (`os.unlink` ignored if missing).
+3. Flip proposal status: append `proposal-status:rejected`, remove `proposal-status:open`. Optionally append `rejection-reason:<slugified-reason>` tag if request body includes `reason`.
 4. Return `{rejected_at}`.
 
 ### 6.4 List
@@ -285,7 +305,9 @@ POST /admin/memory/proposals/{id}/reject
 GET /admin/memory/proposals?status=open
 ```
 
-Returns proposals filtered by status, with their draft SKILL.md content + source-claim count.
+Implementation: `list_recent_items(kind='proposal', window_days=365, ...)`, filter in Python for `proposal-status:<status>` tag. Return JSON with proposal id, content (the draft SKILL.md), source-claim count (from `source_refs`), and the slug.
+
+Codex MAY add a `list_recent_items` `tag_filter` kwarg if Python-side filtering hurts list perf in tests; otherwise plain in-memory filter is fine for the v1 proposal volume (expected < 100 open proposals at any time).
 
 ---
 
@@ -328,13 +350,13 @@ These count toward the §9 gate of ≥ 15 tests in `test_skill_inducer.py`.
 
 ## 10. PM checklist for codex's report
 
-1. Did `tool_sequence` get added cleanly to episode-close metadata? Paste the diff for the episode-close exception.
-2. How did you compute `_episode_succeeded`? Heuristic, feedback metadata, or both?
-3. What `is_toolable=True` rate did your test fixtures produce? Should match the 5–15% range (too high = gate too loose).
-4. List the 10 ported §2B behaviors. Which got dropped entirely?
-5. Paste all 11 gate outputs.
-6. Did you have to add any new `memory_items` columns or migrations?
-7. Did the approve flow correctly mv files OR copy + delete (atomic vs not)? Document.
+1. Confirm: determinism + success-signal checks are stubbed-to-True with explicit "skipped — see §16" reason strings. No `tool_sequence` was added (no metadata column to put it in).
+2. What `is_toolable=True` rate did your test fixtures produce? With determinism/success stubbed, expect 30–60% (much higher than spec's 5–15% target). Document.
+3. Did the `memory_items` schema CHECK constraint already permit `kind='proposal'` and `kind='skill'`, or did you add a migration? Paste the constraint check or migration diff.
+4. How are `memory_item_parents` reverse queries (`role='derives_from'` from claim → proposal) implemented — raw SQL inline, or did you add a `list_child_edges` helper? Paste the call site.
+5. List the ≥ 10 ported §2B behaviors. Which got dropped entirely?
+6. Paste all 11 gate outputs.
+7. Did the approve flow `mv` atomically (same fs) or `copy + unlink`? Document the cross-fs risk if `/tmp` and `~/.ntrp/` are on different mounts (unlikely on macOS, possible on Linux).
 8. `git diff --stat` vs `main` HEAD.
 
 ---
@@ -411,6 +433,47 @@ Do NOT push. Ask in §10 if ambiguous. This is the slice that completes the memo
 | Episode `tool_sequence` field absent in pre-slice-7 episodes | High | Low | Determinism check returns False with "episodes lack tool_sequence metadata"; only affects historical data, new episodes have it. |
 | Test count gate forces shallow tests | Low | Medium | §9 sets minimums; codex can write more. PM checklist Q4 asks about depth. |
 | `proposal` kind unrecognized by retrieval until skill exists | Low | Low | Intentional: proposals are not surfaced. Only skills go via `skill_match`. |
+
+---
+
+## 16. Repo-surface audit + honest gate degradation (2026-05-28 05:35)
+
+Audited `apps/server/ntrp/memory/items_store.py` + `pattern_finder.py` + the connector layer. Findings that drove this revision:
+
+### What the slice 7 v1 brief assumed (and was wrong about)
+
+| Assumption | Reality |
+|------------|---------|
+| `MemoryItem.metadata` JSON field | Does not exist. Only structured fields: `tags`, `source_refs`, `usage`, `feedback`. |
+| Episode `tool_sequence` metadata at episode-close | Does not exist. No tool-call projection in `memory/connectors/chat.py` or `buffers_store.py`. |
+| `repo.count_parents(role=...)` | Does not exist. Use `list_parent_edges` + Python count. |
+| `repo.get_evidence_chain(item_id, max_depth)` | Does not exist. Walk `list_parent_edges` manually if needed. |
+| `repo.update_metadata` / `update_metadata_key` | Don't exist. Persist verdict state via tags + raw SQL. |
+| `repo.get_item(item_id)` | Doesn't exist. Codex adds `_get_item_or_raise` helper inline (shared with slice 6). |
+
+### What v2 drops or stubs
+
+| Spec §3.5 gate | v1 brief | v2 brief |
+|----------------|----------|----------|
+| Repetition | Real check via `count_parents` | **Real check** via `list_parent_edges` + Python count |
+| Determinism (tool-sequence Jaccard) | Real check via `metadata.tool_sequence` | **SKIPPED** — stubbed to True. Re-home: future "memory-metadata-column" slice. |
+| Trigger identification | LLM judge + metadata store | **Real check** — LLM judge + tag-store (`trigger:<slug>`) |
+| Success signal (feedback / no-correction) | Real check via episode metadata | **SKIPPED** — stubbed to True. Same re-home. |
+
+Effective v1 gate: **repetition ≥ 3 AND trigger identifiable**. Permissive. The user-approval gate on every proposal is the safety net.
+
+### Re-home plan for skipped gates
+
+A future slice "memory-metadata-column" adds:
+- `memory_items.metadata JSON` column (one schema migration)
+- Episode-close hook to record `tool_sequence` per turn
+- Episode-correction tagging (e.g. `corrects:<prior_episode_id>` tag for 24h-correction-absence success check)
+
+After that slice ships, `_check_determinism` and `_check_success_signal` get real implementations and slice 7's gate matches spec §3.5 fully.
+
+### Carry-forward for slices 8+ skill execution
+
+`kind='skill'` rows from this slice persist a `slug:<name>` tag and a `source_refs` entry pointing at `~/.ntrp/skills/<slug>/SKILL.md`. The existing skill loader (already in production) discovers skills by directory listing of `~/.ntrp/skills/`. So slice 7's skill files are picked up automatically — no executor changes required. Retrieval `skill_match` reason is the only new label needed.
 
 ---
 

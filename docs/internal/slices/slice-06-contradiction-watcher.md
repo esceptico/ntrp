@@ -1,6 +1,6 @@
 # Slice 6 — Contradiction watcher (claim conflict detection + supersession)
 
-**Status:** Draft for PM A/B gate, then codex fire. **PRE-REQUISITE: slice 5 must land first.** Brief is speculative until then; revise post-slice-5 if pass-2 claim shape diverges from §3.3 spec.
+**Status:** Draft for PM A/B gate, then codex fire. **REVISED 2026-05-28 05:30** — repo-surface corrections (see slice 5 §17 audit). **PRE-REQUISITE: slice 5 must land first.** Brief is speculative until then; revise again post-slice-5 if pass-2 claim shape diverges.
 **Prereqs:** slice 5 shipped (claim layer + `'claim_match'` reason label). Pass 2 producing `kind=claim` rows with `memory_item_parents(role='evidence')` edges. Test baseline ≥ 844 passed.
 **Backlog absorbed:** none directly; this slice consumes the supersession-edge infrastructure already added in slice 4 and exercised in slice 5.
 **Out of scope:** skill inducer (slice 7), UI surfacing of contradictions (post-slice-7), entity-resolution-based contradiction grouping (slice 8+), bi-temporal range queries (post-slice-7).
@@ -42,7 +42,7 @@ After slice 6 ships, this works end-to-end:
 **Modify:**
 - `apps/server/ntrp/memory/pattern_finder.py` — `_persist_claim` calls `ContradictionWatcher.scan_for_new_claim(claim_id)` after evidence edges are written. ONE line added at the end of the method. No other changes.
 - `apps/server/ntrp/memory/retrieval.py` — add cross-scope annotation rendering when surfacing claims with `contradicts` edges to other-scope claims. Single helper `_render_cross_scope_annotation(item)` + one call site in the search-result rendering path.
-- `apps/server/ntrp/memory/repository.py` (or wherever `MemoryItemsRepository` lives — codex must locate) — add `set_status(item_id, status, invalid_at=None)` if not already present. If present, skip.
+- `apps/server/ntrp/memory/items_store.py` — status flips happen via raw SQL inside the watcher (mirror slice-4's `_persist_observation` pattern). No new repo method required. **EXCEPTION:** if codex finds it cleaner to add a thin `set_status(item_id, status, invalid_at)` helper to keep watcher code small, document the addition in §10. The whole watcher should be < 400 lines either way.
 - The slice-5 admin router — add 2 endpoints: `/admin/memory/contradictions/scan` + `/admin/memory/contradictions/{edge_id}/undo`.
 
 ### Files codex MUST NOT touch (frozen zones)
@@ -74,25 +74,57 @@ Synchronous. If the watcher raises, the pass-2 run logs the error but does NOT r
 
 ### 3.2 Candidate pool
 
+**Audited 2026-05-28:** `MemoryItem` has no `metadata` JSON column and no `entities` field. Slice 5 confirmed entities won't land until slice 8+. Candidate pool therefore uses **tag overlap + cosine pre-filter** instead of structured entity match.
+
 ```python
 async def scan_for_new_claim(self, claim_id: str, *, scope: str) -> list[ContradictionCandidate]:
-    new_claim = await self.repo.get_item(claim_id)
-    new_entities = set(new_claim.metadata.get("entities", []))
-    if not new_entities:
-        return []  # no entities → no contradiction grounding; skip
+    # Load new claim — no get_item method on repo, so we use list_recent_items
+    # with a tight window and filter in Python. Codex MAY add a thin
+    # repo.get_item(item_id) helper if the watcher needs it more than once;
+    # otherwise inline the fetch via raw SQL.
+    new_claim = await self._get_item_or_raise(claim_id)
+    if not new_claim.tags:
+        return []  # no tags → no candidate-pool seed; skip
 
-    # candidates: active claims sharing at least one entity
-    candidates = await self.repo.list_items_by_entities(
+    # candidate pool: claims sharing ≥ 1 tag, same scope OR another scope
+    # window 30 days; status filter applied in Python (no status kwarg on
+    # list_recent_items today — see slice-5 §17).
+    claims = await self.repo.list_recent_items(
         kind="claim",
-        status="active",
-        entities=list(new_entities),
-        exclude_ids=[claim_id],
-        limit=200,
+        window_days=30,
+        limit=500,
+        scope=scope,
     )
-    ...
+    # also pull other-scope claims if we want cross-scope detection
+    if scope == "user":
+        # naive: also pull project-scoped claims of common projects
+        # For slice 6, just scan within-scope; cross-scope expansion is
+        # documented as a known limitation (see §16 risks).
+        other_scope_claims: list[MemoryItem] = []
+    else:
+        other_scope_claims = await self.repo.list_recent_items(
+            kind="claim", window_days=30, limit=500, scope="user",
+        )
+    active = [c for c in claims + other_scope_claims if c.status == "active" and c.id != claim_id]
+    new_tags = set(new_claim.tags)
+    seeded = [c for c in active if set(c.tags) & new_tags]
+    return seeded
 ```
 
-If `list_items_by_entities` doesn't exist on the repo, codex adds it (it's a natural extension and slice 6 is the right place for it). The implementation is a `LIKE '%entity%'` over `metadata->entities` or a JOIN against a future entity table — codex picks the simplest working SQL.
+**Important simplification:** within-scope contradiction is the only case slice 6 implements robustly. Cross-scope (`user` vs `project:<X>`) requires either entity matching OR scope-aware tag conventions; both are slice 8+ territory. Slice 6 documents cross-scope as a known gap in §16 risks and §14 out-of-scope, rather than half-implementing it.
+
+**Helper `_get_item_or_raise`** — small inline:
+```python
+async def _get_item_or_raise(self, item_id: str) -> MemoryItem:
+    rows = await self.repo.conn.execute_fetchall(
+        "SELECT * FROM memory_items WHERE id = ?", (item_id,),
+    )
+    if not rows:
+        raise ValueError(f"Item {item_id} not found")
+    return _row_to_memory_item(rows[0])  # reuse the existing private helper from items_store
+```
+
+Codex must locate `_row_to_memory_item` (or equivalent) in `items_store.py` and re-use it. Do NOT re-implement row parsing.
 
 ### 3.3 Scoring per candidate
 
@@ -115,13 +147,15 @@ Threshold: `NTRP_CONTRADICTION_THRESHOLD` (default 0.65 final). Above threshold 
 
 **Borderline rule** (`0.5 ≤ final_score ≤ 0.75` AND `negation_score ≤ 0.6`): call `judge_pair_with_llm` (§4.2) to get a tiebreaker verdict. If verdict == "opposed", treat as contradiction; else skip.
 
-### 3.4 Cross-scope detection
+### 3.4 Cross-scope detection (STUB)
 
 ```python
 cross_scope = (new_claim.scope != old_claim.scope)
 ```
 
-The current scope hierarchy in `memory_items` is flat strings (`"user"`, `"project:<slug>"`). Cross-scope means string inequality. Slice 6 does NOT introduce scope inheritance (`user` is NOT a parent of `project:ntrp` in the data model yet) — that's slice 8+ territory. So `user` vs `project:ntrp` are equally "cross-scope" as `project:foo` vs `project:bar`.
+The current scope hierarchy in `memory_items` is flat strings (`"user"`, `"project:<slug>"`). Cross-scope means string inequality. Slice 6 does NOT introduce scope inheritance (`user` is NOT a parent of `project:ntrp` in the data model yet) — that's slice 8+ territory.
+
+**Honest scope-stub note:** without entity-resolved candidate selection (§3.2 falls back to tag-overlap), cross-scope detection in practice fires only when a `user`-scope and `project:X`-scope claim share at least one tag AND have high cosine similarity AND high negation score. That's a narrow window. The cross-scope rendering path in §6 stays implemented because it costs nothing and exercises the data-flow; in production the path will rarely trigger until slice 8+ entity work lands.
 
 ---
 
@@ -192,81 +226,112 @@ Never call the judge unless heuristic is in the 0.5–0.75 final-score band. In 
 
 ## 5. Persistence — edges + status flips
 
+All edge writes use the real repo surface: `repo.insert_parent_edge(child_id, parent_id, role, commit=False)` inside a transaction (mirror slice-4 `_persist_observation`).
+
+There is no `metadata` column for cross-scope annotation, so cross-scope state is tracked via **a `tag` marker** instead: when a claim has at least one cross-scope contradicts edge, write a `tag` `cross-scope-override` (codex picks the exact string). Retrieval-side rendering (§6) reads `list_parent_edges` and filters for `role='contradicts'` edges where the parent has a different scope.
+
 ### 5.1 Within-scope (`cross_scope = False`)
 
 ```python
-# write contradicts edge (both directions semantically, one row practically)
-await self.repo.add_parent(
-    item_id=new_claim_id,
-    parent_id=old_claim_id,
-    role="contradicts",
-)
-# write supersedes edge
-await self.repo.add_parent(
-    item_id=new_claim_id,
-    parent_id=old_claim_id,
-    role="supersedes",
-)
-# flip old claim status
-await self.repo.set_status(
-    item_id=old_claim_id,
-    status="superseded",
-    invalid_at=now,
-)
+await self.repo.conn.execute("BEGIN")
+try:
+    await self.repo.insert_parent_edge(
+        new_claim_id, old_claim_id, "contradicts", commit=False,
+    )
+    await self.repo.insert_parent_edge(
+        new_claim_id, old_claim_id, "supersedes", commit=False,
+    )
+    await self.repo.conn.execute(
+        """
+        UPDATE memory_items
+        SET status = 'superseded', invalid_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (now.isoformat(), now.isoformat(), old_claim_id),
+    )
+    await self.repo.conn.commit()
+except BaseException:
+    await self.repo.conn.rollback()
+    raise
 ```
 
 ### 5.2 Cross-scope (`cross_scope = True`)
 
 ```python
-# write contradicts edge ONLY
-await self.repo.add_parent(
-    item_id=new_claim_id,
-    parent_id=old_claim_id,
-    role="contradicts",
-)
-# tag new claim's metadata for retrieval-time annotation
-metadata = dict(new_claim.metadata)
-metadata.setdefault("cross_scope_overrides", []).append(old_claim_id)
-await self.repo.update_metadata(item_id=new_claim_id, metadata=metadata)
+await self.repo.conn.execute("BEGIN")
+try:
+    await self.repo.insert_parent_edge(
+        new_claim_id, old_claim_id, "contradicts", commit=False,
+    )
+    # Tag the new claim so retrieval knows to render cross-scope context.
+    # Append to tags if not already present (use raw SQL — no update_tags
+    # method on repo today).
+    await self.repo.conn.execute(
+        """
+        UPDATE memory_items
+        SET tags = json_insert(tags, '$[#]', 'cross-scope-override'),
+            updated_at = ?
+        WHERE id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM json_each(tags) WHERE value = 'cross-scope-override'
+          )
+        """,
+        (now.isoformat(), new_claim_id),
+    )
+    await self.repo.conn.commit()
+except BaseException:
+    await self.repo.conn.rollback()
+    raise
 # NO status change. NO invalid_at. NO supersedes edge.
 ```
 
+(Codex confirms the `tags` column is stored as JSON array — likely yes given slice-4 patterns; raw SQL above uses `json_each` / `json_insert`. If `tags` is stored as a different shape, codex adapts via the same approach used in slice 4 when inserting tags.)
+
 ### 5.3 Idempotency
 
-Before either branch: check if a `contradicts` edge already exists between this pair (either direction). If yes, skip. This makes the back-fill scan endpoint safe to run repeatedly.
+Before either branch: query `list_parent_edges(new_claim_id)` and check if a `(parent_id=old_claim_id, role='contradicts')` edge already exists. Also check the reverse via `list_parent_edges(old_claim_id)` for `(parent_id=new_claim_id, role='contradicts')`. If either exists, skip. This makes the back-fill scan endpoint safe to run repeatedly.
 
 ### 5.4 Undo
 
-`POST /admin/memory/contradictions/{edge_id}/undo`:
+`POST /admin/memory/contradictions/{contradicts_edge_id}/undo`:
 
-1. Look up the `contradicts` edge by ID. If not found, 404.
-2. If within-scope (old claim was superseded): remove `contradicts` + `supersedes` edges, restore old claim `status='active'`, clear `invalid_at`.
-3. If cross-scope: remove `contradicts` edge, remove the new claim's `cross_scope_overrides[old_claim_id]` metadata entry.
-4. Idempotent: if state already shows the undo applied (old claim is active, no edges), return 200 with `already_undone: true`.
+Edges in `memory_item_parents` don't have a single `id` column today (audit needed in §10 PM checklist — codex confirms). If edges are identified by `(child_id, parent_id, role)` triple, the undo endpoint takes those three path params instead of `edge_id`.
+
+1. Look up the `contradicts` edge by `(child_id, parent_id, role='contradicts')`. If not found, 404.
+2. Look up the contradicted claim — `_get_item_or_raise(parent_id)`.
+3. If within-scope (claim is `status='superseded'`): delete `contradicts` + `supersedes` edges, restore old claim `status='active'`, clear `invalid_at`. Use raw SQL `DELETE FROM memory_item_parents WHERE child_id=? AND parent_id=? AND role IN ('contradicts', 'supersedes')` and `UPDATE memory_items SET status='active', invalid_at=NULL ...`.
+4. If cross-scope: delete `contradicts` edge only. Remove the `cross-scope-override` tag from the new claim IF no other cross-scope contradicts edges remain.
+5. Idempotent: if state already shows the undo applied (old claim is active, no edges), return 200 with `already_undone: true`.
 
 ---
 
 ## 6. Retrieval-side annotation
 
-`apps/server/ntrp/memory/retrieval.py` — when surfacing a claim to the LLM context:
+`apps/server/ntrp/memory/retrieval.py` — when surfacing a claim to the LLM context, check if the claim has the `cross-scope-override` tag. If yes, look up its `contradicts` parent edges, fetch the other-scope claims, and prepend a structured annotation.
 
 ```python
-def _render_claim_with_annotations(item: MemoryItem) -> str:
-    overrides = item.metadata.get("cross_scope_overrides", [])
-    if not overrides:
+async def _render_claim_with_annotations(item: MemoryItem) -> str:
+    if "cross-scope-override" not in item.tags:
         return item.content
-    # fetch the overridden claims (cached batch fetch)
-    overridden = await self._batch_get_items(overrides)
+    edges = await self.repo.list_parent_edges(item.id)
+    contradicts = [e for e in edges if e.role == "contradicts"]
+    if not contradicts:
+        return item.content  # tag without edges — stale; render unannotated
+    overridden = await asyncio.gather(*[
+        self._get_item_or_raise(e.parent_id) for e in contradicts
+    ])
+    # only annotate other-scope contradictions (same-scope is superseded, not surfaced)
+    other = [c for c in overridden if c.scope != item.scope and c.status == "active"]
+    if not other:
+        return item.content
     parts = []
-    for prior in overridden:
-        prior_scope = prior.scope
-        new_scope = item.scope
-        parts.append(f"general ({prior_scope}): {prior.content}")
+    for prior in other:
+        parts.append(f"general ({prior.scope}): {prior.content}")
     parts.append(f"in current scope ({item.scope}): {item.content}")
     return "\n".join(parts)
 ```
 
-This is the ONLY retrieval-layer change. No ranking changes, no new score, no new reason label (it's still `'claim_match'` from slice 5; the annotation is rendering, not retrieval).
+This is the ONLY retrieval-layer change. No ranking changes, no new score, no new reason label (it's still `'claim_match'` from slice 5; the annotation is rendering, not retrieval). The function must be async because `list_parent_edges` and the per-edge item fetches are.
 
 ---
 
@@ -330,11 +395,13 @@ Pick 12+ from this list.
 ## 10. PM checklist for codex's report
 
 1. How often did the LLM judge fire in your test runs? If > 30%, why?
-2. What's the actual `list_items_by_entities` SQL you wrote? Paste the query.
-3. Did you have to add any new columns to `memory_items` (e.g. `invalid_at`)? Confirm migration or confirm it already existed from slice 4.
-4. Paste output of all 8 gates from §9.
-5. Confirm `knowledge/contradictions.py` was NOT modified (just deprecation-commented).
-6. `git diff --stat` against `main` HEAD before commit.
+2. Confirm: no new `metadata` JSON column was added. No new `entities` column was added. Candidate selection is via tag overlap + cosine pre-filter only.
+3. Did you add a `set_status` or `get_item` helper to `MemoryItemsRepository`? Describe + paste signature. If you kept the watcher self-contained with raw SQL, say so.
+4. How are `memory_item_parents` edges identified for the undo endpoint — by `(child_id, parent_id, role)` triple, or did you find a hidden `id` column? Paste the schema check.
+5. Paste output of all 8 gates from §9.
+6. Confirm `knowledge/contradictions.py` was NOT modified (just deprecation-commented).
+7. Cross-scope detection: did any of your test fixtures actually trigger a cross-scope contradiction? If not, the path is correct-by-construction; document.
+8. `git diff --stat` against `main` HEAD before commit.
 
 ---
 

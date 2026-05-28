@@ -321,3 +321,49 @@ are mechanical but tedious. Two options:
 This is the kind of error a "would have wasted a codex run" gate caught.
 Lesson for future briefs: audit the actual repo surface BEFORE writing
 algorithm pseudocode, not after.
+
+### Slice 6 + 7 v2 revisions — 2026-05-28 05:40
+
+Both follow-up briefs revised against the audited repo surface.
+
+**Slice 6 (`slice-06-contradiction-watcher.md`):**
+- §3.2 candidate pool: replaced `list_items_by_entities` with tag-overlap +
+  cosine pre-filter. Documented that cross-scope contradiction without
+  entity resolution is a narrow window in practice.
+- §5 persistence: all edge writes via `insert_parent_edge(child_id, parent_id, role)`;
+  status flips via raw SQL UPDATE; cross-scope marker is a `cross-scope-override`
+  tag (no metadata column).
+- §6 retrieval annotation: reads `list_parent_edges` + tag check instead of
+  `metadata.cross_scope_overrides`.
+- §10 PM checklist: confirms no metadata column added, asks about edge-id shape.
+- 414 → 480 lines.
+
+**Slice 7 (`slice-07-skill-inducer.md`):**
+- **DEGRADED gate**: determinism + success-signal stubbed to True (both
+  require episode metadata that doesn't exist).
+- Effective v1 gate is "repetition ≥ 3 AND trigger identifiable". Permissive.
+  User-approval gate is the safety net.
+- §3 rewritten: verdict persisted as tags (`toolable:true`, `trigger:<slug>`)
+  not metadata. Repetition counts evidence edges via `list_parent_edges`.
+- §6 proposal lifecycle: status in tags (`proposal-status:open|approved|rejected`);
+  draft path in `source_refs` (which IS a `list[dict]`). No metadata column needed.
+- §16 audit log + explicit re-home plan: future "memory-metadata-column"
+  slice adds the JSON column + tool_sequence recording + correction tagging,
+  then slice 7 v2's full gate becomes possible.
+- 418 → 480 lines.
+
+**All three briefs (5/6/7) now match the actual repo surface.** They are all
+fireable from a repo-surface-correctness standpoint. Slice 7 ships a DEGRADED
+gate by design — user should decide whether that's acceptable or whether to
+insert a "memory-metadata-column" slice first (which would push slice 7 to
+slice 8 numbering-wise).
+
+**A/B questions for user:**
+1. Slice 7 degraded gate (repetition + trigger only) — accept v1, or insert
+   metadata-column slice first?
+2. Cross-scope contradiction in slice 6 (narrow practical window without
+   entities) — accept the partial coverage in v1?
+3. Earlier 5 A/B questions on slice 5 still stand.
+
+**Next step:** user gate → fire `slice-05-invoke.sh`. After slice 5 lands,
+re-audit slices 6/7 against actual claim-layer code before firing them.
