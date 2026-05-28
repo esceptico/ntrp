@@ -8,6 +8,7 @@ import {
   reduceForegroundRunCleared,
   reduceRunCompleted,
   reduceRunFailed,
+  reduceRunOutputObserved,
   reduceRunStarted,
 } from "./run-lifecycle";
 
@@ -232,14 +233,23 @@ export function applyChatEventToTranscript(
     }
 
     case "TEXT_MESSAGE_START":
+      if (!event.depth) {
+        setState((state) => reduceRunOutputObserved(state));
+      }
       if (!event.depth) ensureAssistantMessage(context, assistantIdFrom(event), ts, suppressEntryMotion);
       break;
 
     case "TEXT_MESSAGE_CONTENT":
+      if (!event.depth) {
+        setState((state) => reduceRunOutputObserved(state));
+      }
       if (!event.depth) appendAssistantDelta(context, assistantIdFrom(event), event.delta, ts, suppressEntryMotion);
       break;
 
     case "TEXT_MESSAGE_END":
+      if (!event.depth) {
+        setState((state) => reduceRunOutputObserved(state));
+      }
       if (!event.depth && event.content !== undefined) {
         reconcileAssistantContent(context, assistantIdFrom(event), event.content, ts, suppressEntryMotion);
       }
@@ -343,6 +353,11 @@ export function applyChatEventToTranscript(
       if (isTodoToolName(event.name)) break;
       const result = event.content ?? event.preview ?? "";
       const patch: Partial<ActivityItem> = { result, status: "executed" };
+      if (event.kind === SEMANTIC_KIND_AGENT) patch.semanticKind = SEMANTIC_KIND_AGENT;
+      // Agent task lifecycle events may have replaced the generic tool label
+      // ("Research") with the generated agent name; don't clobber it when the
+      // final tool result arrives with static executor metadata.
+      if (event.display_name && event.kind !== SEMANTIC_KIND_AGENT) patch.displayName = event.display_name;
       if (event.parent_id) patch.parentToolId = event.parent_id;
       if (event.depth != null) patch.depth = event.depth || undefined;
       if (event.is_error) patch.error = true;
@@ -802,6 +817,7 @@ function activityPatchFromPending(pending: PendingToolCall): Partial<ActivityIte
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
   };
+  if (pending.semanticKind === SEMANTIC_KIND_AGENT) patch.semanticKind = SEMANTIC_KIND_AGENT;
   if (pending.displayName) patch.displayName = pending.displayName;
   return patch;
 }

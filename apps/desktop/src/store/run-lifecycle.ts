@@ -10,6 +10,8 @@ type RunLifecyclePatch = Partial<
     State,
     | "running"
     | "currentRunId"
+    | "thinkingRunId"
+    | "thinkingStatus"
     | "activeRunSessionIds"
     | "backgroundedRunSessionIds"
     | "unreadDoneSessionIds"
@@ -47,9 +49,41 @@ export function reduceRunStarted(
   return {
     running: appliesToCurrentSession ? true : state.running,
     currentRunId: appliesToCurrentSession ? input.runId : state.currentRunId,
+    thinkingRunId: appliesToCurrentSession ? null : state.thinkingRunId,
+    thinkingStatus: appliesToCurrentSession ? null : state.thinkingStatus,
     activeRunSessionIds,
     pendingResume: null,
     stoppingRunId: input.runId && state.stoppingRunId === input.runId ? null : state.stoppingRunId,
+  };
+}
+
+export function reduceRunThinking(
+  state: State,
+  input: { runId: string; sessionId: string; status: string },
+): RunLifecyclePatch {
+  const appliesToCurrentSession =
+    state.currentSessionId === null || state.currentSessionId === input.sessionId;
+  if (!appliesToCurrentSession) return {};
+  if (!state.running && state.currentRunId !== input.runId) return {};
+  if (state.currentRunId && state.currentRunId !== input.runId) return {};
+
+  const activeRunSessionIds = new Set(state.activeRunSessionIds);
+  activeRunSessionIds.add(input.sessionId);
+
+  return {
+    running: true,
+    currentRunId: input.runId,
+    activeRunSessionIds,
+    thinkingRunId: input.runId,
+    thinkingStatus: input.status,
+  };
+}
+
+export function reduceRunOutputObserved(state: State): RunLifecyclePatch {
+  if (!state.thinkingRunId) return {};
+  return {
+    thinkingRunId: null,
+    thinkingStatus: null,
   };
 }
 
@@ -115,6 +149,8 @@ export function reduceRunStatus(
       unreadDoneSessionIds,
       running: false,
       currentRunId: null,
+      thinkingRunId: null,
+      thinkingStatus: null,
       pendingResume: null,
       queuedMessages: [],
       stoppingRunId:
@@ -132,6 +168,8 @@ export function reduceRunStatus(
       unreadDoneSessionIds,
       running: false,
       currentRunId: null,
+      thinkingRunId: null,
+      thinkingStatus: null,
       pendingResume: null,
       queuedMessages: [],
       stoppingRunId:
@@ -158,6 +196,8 @@ export function reduceRunStatus(
       unreadDoneSessionIds,
       running: false,
       currentRunId: null,
+      thinkingRunId: null,
+      thinkingStatus: null,
       pendingResume: null,
       queuedMessages: [],
       stoppingRunId:
@@ -403,6 +443,8 @@ function reduceForegroundInactiveRun(
   return {
     running: false,
     currentRunId: null,
+    thinkingRunId: null,
+    thinkingStatus: null,
     activeRunSessionIds,
     backgroundedRunSessionIds,
     unreadDoneSessionIds,

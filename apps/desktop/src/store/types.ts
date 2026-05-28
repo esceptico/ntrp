@@ -274,6 +274,8 @@ export interface CachedSessionState {
   order: string[];
   running: boolean;
   currentRunId: string | null;
+  thinkingRunId: string | null;
+  thinkingStatus: string | null;
   usage: SessionUsage;
   editingId: string | null;
   activeActivityId: string | null;
@@ -317,6 +319,8 @@ export interface State {
   editingId: string | null;
   activeActivityId: string | null;
   currentRunId: string | null;
+  thinkingRunId: string | null;
+  thinkingStatus: string | null;
   skipApprovals: boolean;
   skills: SkillDescriptor[];
   commandPickerOpen: boolean;

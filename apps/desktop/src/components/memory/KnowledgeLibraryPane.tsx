@@ -26,6 +26,11 @@ import { ScrollBlurTop } from "../ScrollBlur";
 
 const LIBRARY_PAGE_SIZE = 250;
 const LIBRARY_LIST_LIMIT = LIBRARY_PAGE_SIZE + 1;
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 export type LibraryTypeFilter = KnowledgeObjectType | "all";
 type LibraryStatusFilter = Extract<KnowledgeObjectStatus, "active" | "archived"> | "all";
 
@@ -68,6 +73,10 @@ export function KnowledgeLibraryPane({
     () => items?.find((item) => item.id === selectedId) ?? items?.[0] ?? null,
     [items, selectedId],
   );
+  const selectedActivationCount = selected ? metadataNumber(selected.metadata, "activation_count") : null;
+  const selectedObservedUseCount = selected ? metadataNumber(selected.metadata, "actual_use_observed_count") : null;
+  const selectedHelpfulCount = selected ? metadataNumber(selected.metadata, "helpful_count") : null;
+  const selectedHarmfulCount = selected ? metadataNumber(selected.metadata, "harmful_count") : null;
 
   async function copyText(key: string, value: string) {
     if (!value.trim()) return;
@@ -414,6 +423,10 @@ export function KnowledgeLibraryPane({
             <div className="flex flex-wrap gap-2">
               <Pill>score {selected.score.toFixed(2)}</Pill>
               <Pill>sources {selected.source_ids.length}</Pill>
+              {selectedActivationCount !== null && <Pill>{selectedActivationCount} activations</Pill>}
+              {selectedObservedUseCount !== null && <Pill>{selectedObservedUseCount} observed uses</Pill>}
+              {selectedHelpfulCount !== null && <Pill>{selectedHelpfulCount} helpful</Pill>}
+              {selectedHarmfulCount !== null && <Pill>{selectedHarmfulCount} harmful</Pill>}
               {selected.scope && <Pill>scope {selected.scope}</Pill>}
               {selected.reviewed_at && <Pill>reviewed {formatRelativePast(selected.reviewed_at)}</Pill>}
             </div>
@@ -489,6 +502,26 @@ export function KnowledgeLibraryPane({
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+
+            <section className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-3">
+              <h4 className="m-0 mb-2 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">Source relationships</h4>
+              {sourcesLoading ? (
+                <p className="m-0 text-sm italic text-faint">Loading relationships</p>
+              ) : sourcesError ? (
+                <ErrorPill message={sourcesError} />
+              ) : !sources ? (
+                <p className="m-0 text-sm italic text-faint">No relationship trace</p>
+              ) : (
+                <div className="grid gap-3">
+                  <KnowledgeObjectMiniList title="Extracted from this object" objects={sources.derived_objects ?? []} />
+                  <KnowledgeObjectMiniList title="Related through the same sources" objects={sources.related_objects ?? []} />
+                  <KnowledgeObjectMiniList title="Superseded versions" objects={sources.superseded_versions ?? []} />
+                  {sources.superseded_by_object ? (
+                    <KnowledgeObjectMiniList title="Superseded by" objects={[sources.superseded_by_object]} />
+                  ) : null}
+                </div>
               )}
             </section>
 
@@ -663,6 +696,31 @@ function sourceKind(sourceId: string): string {
   const prefix = sourceId.includes(":") ? sourceId.split(":", 1)[0] : "source";
   if (prefix === "knowledge") return "memory";
   return prefix;
+}
+
+function KnowledgeObjectMiniList({ title, objects }: { title: string; objects: KnowledgeObject[] }) {
+  return (
+    <div>
+      <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+      {objects.length === 0 ? (
+        <p className="m-0 text-xs italic text-faint">None</p>
+      ) : (
+        <ul className="m-0 grid list-none gap-1.5 p-0">
+          {objects.map((object) => (
+            <li key={object.id} className="rounded-[7px] border border-line-soft bg-surface-soft/50 px-2.5 py-2">
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                <Pill>{object.object_type.replaceAll("_", " ")}</Pill>
+                <Pill>{object.status}</Pill>
+                <span className="font-mono text-2xs text-faint">#{object.id}</span>
+              </div>
+              <div className="text-sm font-semibold text-ink-soft">{object.title}</div>
+              <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-snug text-faint">{object.text}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function CopyableBlock({

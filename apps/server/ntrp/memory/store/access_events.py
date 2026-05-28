@@ -25,6 +25,9 @@ _SQL_LIST_ACCESS_EVENTS = """
     LIMIT ? OFFSET ?
 """
 
+_SQL_GET_ACCESS_EVENT = "SELECT * FROM memory_access_events WHERE id = ?"
+_SQL_UPDATE_ACCESS_EVENT_DETAILS = "UPDATE memory_access_events SET details = ? WHERE id = ?"
+
 
 def _json_default(value: Any) -> Any:
     if isinstance(value, datetime):
@@ -123,6 +126,21 @@ class MemoryAccessEventRepository:
             tuple(params),
         )
         return int(rows[0]["count"]) if rows else 0
+
+    async def get(self, event_id: int) -> MemoryAccessEvent | None:
+        rows = await self.read_conn.execute_fetchall(_SQL_GET_ACCESS_EVENT, (event_id,))
+        return MemoryAccessEvent.model_validate(_row_dict(rows[0])) if rows else None
+
+    async def update_details(self, event_id: int, patch: dict[str, Any]) -> MemoryAccessEvent | None:
+        existing = await self.get(event_id)
+        if existing is None:
+            return None
+        details = {**existing.details, **patch}
+        await self.conn.execute(
+            _SQL_UPDATE_ACCESS_EVENT_DETAILS,
+            (json.dumps(details, default=_json_default, sort_keys=True), event_id),
+        )
+        return await self.get(event_id)
 
     async def list_recent(
         self,

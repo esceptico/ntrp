@@ -9,7 +9,7 @@ from ntrp.core.content import blocks_to_text
 from ntrp.core.llm_client import llm_client
 from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS, compact_tool_result_text
 from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -214,7 +214,14 @@ def _clean_goal_proposal(text: str) -> str:
     return objective
 
 
-async def _emit_goal_event(buses: BusRegistry, session_id: str, goal: dict | None) -> None:
+async def _emit_goal_event(
+    buses: BusRegistry,
+    session_id: str,
+    goal: dict | None,
+    *,
+    event_store: object | None = None,
+) -> None:
+    await prime_bus_cursor_from_store(buses, session_id, event_store)
     bus = buses.get_or_create(session_id)
     if goal is None:
         await bus.emit(GoalClearedEvent(session_id=session_id))
@@ -518,7 +525,7 @@ async def set_session_goal(
     goal = await svc.set_goal(session_id, objective, token_budget=req.token_budget)
     if not goal:
         raise HTTPException(status_code=500, detail="Failed to set goal")
-    await _emit_goal_event(buses, session_id, goal)
+    await _emit_goal_event(buses, session_id, goal, event_store=svc.store)
     return goal
 
 
@@ -568,7 +575,7 @@ async def update_session_goal(
     )
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-    await _emit_goal_event(buses, session_id, goal)
+    await _emit_goal_event(buses, session_id, goal, event_store=svc.store)
     return goal
 
 
@@ -580,7 +587,7 @@ async def clear_session_goal(
 ):
     cleared = await svc.clear_goal(session_id)
     if cleared:
-        await _emit_goal_event(buses, session_id, None)
+        await _emit_goal_event(buses, session_id, None, event_store=svc.store)
     return {"status": "cleared", "session_id": session_id}
 
 

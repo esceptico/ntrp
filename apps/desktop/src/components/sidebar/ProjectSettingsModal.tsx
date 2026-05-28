@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { FolderOpen } from "lucide-react";
 import type { Project } from "../../api";
 import { saveProject } from "../../actions";
+import { selectDirectory } from "../../lib/directoryPicker";
+import { ICON } from "../../lib/icons";
 import { PageModal } from "../PageModal";
 
 interface ProjectSettingsModalProps {
@@ -13,6 +16,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
   const [cwd, setCwd] = useState("");
   const [instructions, setInstructions] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pickingCwd, setPickingCwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +26,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
     setInstructions(project.instructions ?? "");
     setError(null);
     setSaving(false);
+    setPickingCwd(false);
   }, [project]);
 
   const canSave = useMemo(() => Boolean(project && name.trim() && !saving), [project, name, saving]);
@@ -42,6 +47,20 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function pickCwd() {
+    if (saving || pickingCwd) return;
+    setPickingCwd(true);
+    setError(null);
+    try {
+      const selected = await selectDirectory({ defaultPath: cwd.trim() || undefined });
+      if (selected) setCwd(selected);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPickingCwd(false);
     }
   }
 
@@ -66,12 +85,23 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
           </label>
           <label className="block">
             <span className="block text-xs font-medium uppercase tracking-[0.06em] text-faint mb-1.5">Default cwd</span>
-            <input
-              value={cwd}
-              onChange={(event) => setCwd(event.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm font-mono text-ink outline-none focus:border-accent"
-              spellCheck={false}
-            />
+            <div className="flex gap-2">
+              <input
+                value={cwd}
+                onChange={(event) => setCwd(event.target.value)}
+                className="min-w-0 flex-1 px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm font-mono text-ink outline-none focus:border-accent"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                disabled={saving || pickingCwd}
+                onClick={pickCwd}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft disabled:opacity-50"
+              >
+                <FolderOpen size={ICON.SM} strokeWidth={2} />
+                Choose
+              </button>
+            </div>
           </label>
           <label className="block">
             <span className="block text-xs font-medium uppercase tracking-[0.06em] text-faint mb-1.5">Instructions</span>

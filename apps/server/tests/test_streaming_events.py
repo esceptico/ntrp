@@ -1177,6 +1177,9 @@ async def test_run_chat_completed_outbox_failure_does_not_reclassify_run(monkeyp
     await run_chat(ctx, bus)
 
     event_types = [record.event.type.value for record in bus._recent]
+    thinking = next(record.event for record in bus._recent if record.event.type.value == "thinking")
+    assert thinking.session_id == "sess-1"
+    assert thinking.run_id == run.run_id
     assert "RUN_ERROR" not in event_types
     assert "RUN_FINISHED" in event_types
     assert service.statuses[-1]["status"] == RunStatus.COMPLETED.value
@@ -1409,7 +1412,7 @@ async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkey
 
 
 @pytest.mark.asyncio
-async def test_goal_meta_run_does_not_dispatch_followup(monkeypatch):
+async def test_goal_meta_run_dispatches_followup_even_without_tool_activity(monkeypatch):
     from ntrp.services import chat as chat_service
 
     registry = RunRegistry()
@@ -1482,7 +1485,11 @@ async def test_goal_meta_run_does_not_dispatch_followup(monkeypatch):
 
     await run_chat(ctx, SessionBus(session_id="sess-1"))
 
-    assert dispatched == []
+    assert len(dispatched) == 1
+    assert dispatched[0][0][0] == "sess-1"
+    assert dispatched[0][0][1].startswith("<goal_context>")
+    assert dispatched[0][0][2].startswith("goal:goal-1:")
+    assert dispatched[0][0][3] is True
 
 
 @pytest.mark.asyncio

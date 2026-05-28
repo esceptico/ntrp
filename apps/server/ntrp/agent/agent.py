@@ -22,9 +22,12 @@ from ntrp.agent.types.events import (
     TextEnded,
     TextStarted,
     ToolCompleted,
+    ToolInputDelta,
+    ToolInputEnded,
+    ToolInputStarted,
     ToolStarted,
 )
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, Role
+from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, Role, ToolCallStreamDelta
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
@@ -40,6 +43,9 @@ AgentEvent = (
     | ReasoningEnded
     | ToolStarted
     | ToolCompleted
+    | ToolInputStarted
+    | ToolInputDelta
+    | ToolInputEnded
     | Result
 )
 
@@ -97,9 +103,11 @@ class Agent:
         self._clock = clock
         self._started_at = started_at
         self._budget = budget or RunBudget()
+        self._executor = executor
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
         self._last_text_id: str | None = None
+        self._last_streamed_tool_input_ids: set[str] = set()
         self._usage = Usage()
         self._cost = 0.0
 
@@ -168,7 +176,10 @@ class Agent:
                     return
                 self._record_tool_calls(len(calls))
 
+                streamed_tool_input_ids = self._last_streamed_tool_input_ids
                 async for event in dispatch_tools(self._runner, messages, calls, response_message.tool_calls):
+                    if isinstance(event, ToolStarted) and event.tool_id in streamed_tool_input_ids:
+                        continue
                     yield event
 
                 if reason := self._budget_stop_reason(started_at):
@@ -271,6 +282,7 @@ class Agent:
         reasoning_effort: str | None,
     ) -> AsyncGenerator[AgentEvent]:
         try:
+            self._last_streamed_tool_input_ids = set()
             response = None
             # Stable id assigned at the start of the assistant turn. Used both
             # in the SSE `message_id` for streaming clients and persisted on
@@ -282,6 +294,8 @@ class Agent:
             reasoning_id = f"reasoning-{uuid4().hex[:10]}"
             reasoning_started = False
             reasoning_parts: list[str] = []
+            streamed_tool_inputs: dict[int, dict[str, object]] = {}
+            streamed_tool_input_ids: set[str] = set()
 
             def close_text(content: str | None = None) -> TextEnded | None:
                 nonlocal text_ended
@@ -294,6 +308,17 @@ class Agent:
                     message_id=text_id,
                     content="".join(text_chunks) if content is None else content,
                 )
+
+            def get_tool_input(index: int) -> dict[str, object]:
+                if index not in streamed_tool_inputs:
+                    streamed_tool_inputs[index] = {
+                        "tool_id": None,
+                        "name": None,
+                        "args": "",
+                        "started": False,
+                        "ended": False,
+                    }
+                return streamed_tool_inputs[index]
 
             kwargs = {"tool_choice": tool_choice}
             if reasoning_effort is not None:
@@ -334,6 +359,53 @@ class Agent:
                         message_id=reasoning_id,
                         content=content,
                     )
+                elif isinstance(item, ToolCallStreamDelta):
+                    state = get_tool_input(item.index)
+                    if item.tool_id:
+                        state["tool_id"] = item.tool_id
+                    if item.name:
+                        state["name"] = item.name
+                    if item.arguments_delta:
+                        state["args"] = str(state["args"]) + item.arguments_delta
+
+                    tool_id = state["tool_id"]
+                    name = state["name"]
+                    if tool_id and name and not state["started"]:
+                        if event := close_text():
+                            yield event
+                        state["started"] = True
+                        streamed_tool_input_ids.add(str(tool_id))
+                        meta = self._executor.get_meta(str(name))
+                        yield ToolInputStarted(
+                            depth=self.current_depth,
+                            parent_id=self.parent_id,
+                            tool_id=str(tool_id),
+                            name=str(name),
+                            display_name=meta.display_name if meta else str(name),
+                            kind=meta.kind if meta else "tool",
+                        )
+                        if args := str(state["args"]):
+                            yield ToolInputDelta(
+                                depth=self.current_depth,
+                                parent_id=self.parent_id,
+                                tool_id=str(tool_id),
+                                delta=args,
+                            )
+                    elif item.arguments_delta and state["started"] and tool_id:
+                        yield ToolInputDelta(
+                            depth=self.current_depth,
+                            parent_id=self.parent_id,
+                            tool_id=str(tool_id),
+                            delta=item.arguments_delta,
+                        )
+
+                    if item.done and state["started"] and not state["ended"] and tool_id:
+                        state["ended"] = True
+                        yield ToolInputEnded(
+                            depth=self.current_depth,
+                            parent_id=self.parent_id,
+                            tool_id=str(tool_id),
+                        )
                 elif isinstance(item, CompletionResponse):
                     response = item
         except asyncio.CancelledError:
@@ -351,6 +423,17 @@ class Agent:
             if event := close_text():
                 yield event
             raise RuntimeError("LLM stream ended without a CompletionResponse")
+
+        for state in streamed_tool_inputs.values():
+            tool_id = state["tool_id"]
+            if state["started"] and not state["ended"] and tool_id:
+                state["ended"] = True
+                yield ToolInputEnded(
+                    depth=self.current_depth,
+                    parent_id=self.parent_id,
+                    tool_id=str(tool_id),
+                )
+        self._last_streamed_tool_input_ids = streamed_tool_input_ids
 
         self._last_response = response
         self._usage += response.usage

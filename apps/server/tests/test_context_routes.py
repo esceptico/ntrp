@@ -34,9 +34,20 @@ class _Runtime:
         self.run_registry = RunRegistry()
 
 
+class _EmptyEventStore:
+    async def get_latest_session_event_seq(self, session_id: str) -> int:
+        return 0
+
+    async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+        return 0
+
+
 class _SessionService:
     saved = False
     recorded_compactions = 0
+
+    def __init__(self):
+        self.store = _EmptyEventStore()
 
     async def load(self, session_id: str | None = None):
         state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))

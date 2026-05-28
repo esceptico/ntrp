@@ -25,8 +25,12 @@ from ntrp.agent import (
     TextEnded,
     TextStarted,
     ToolCall,
+    ToolCallStreamDelta,
     ToolChoiceMode,
     ToolCompleted,
+    ToolInputDelta,
+    ToolInputEnded,
+    ToolInputStarted,
     ToolMeta,
     ToolResult,
     Usage,
@@ -125,6 +129,65 @@ def _make_agent(llm: FakeLLM, executor: FakeExecutor, **kwargs) -> Agent:
 # ============================================================
 # Basic loop
 # ============================================================
+
+
+
+
+@pytest.mark.asyncio
+async def test_streamed_tool_input_surfaces_before_tool_execution():
+    class StreamingToolLLM:
+        def __init__(self):
+            self.call_count = 0
+
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None) -> AsyncGenerator:
+            self.call_count += 1
+            if self.call_count == 1:
+                yield ToolCallStreamDelta(index=0, tool_id="c1", name="test")
+                yield ToolCallStreamDelta(index=0, arguments_delta='{"x"')
+                yield ToolCallStreamDelta(index=0, arguments_delta=':1}')
+                yield ToolCallStreamDelta(index=0, tool_id="c1", name="test", done=True)
+                yield _response(tool_calls=[_tc("c1", "test", {"x": 1})])
+                return
+            yield "done"
+            yield _response(text="done")
+
+        async def complete(self, model, messages, **kwargs):
+            raise AssertionError("complete should not be called")
+
+    executor = FakeExecutor(
+        {"test": ToolResult(content="ok", preview="ok")},
+        meta={"test": ToolMeta(name="test", display_name="Research", kind="agent")},
+    )
+    agent = _make_agent(StreamingToolLLM(), executor)
+
+    stream = agent.stream(_msgs())
+
+    event = await anext(stream)
+    assert isinstance(event, ToolInputStarted)
+    assert event.tool_id == "c1"
+    assert event.name == "test"
+    assert event.display_name == "Research"
+    assert event.kind == "agent"
+    assert executor.call_log == []
+
+    event = await anext(stream)
+    assert isinstance(event, ToolInputDelta)
+    assert event.delta == '{"x"'
+    assert executor.call_log == []
+
+    event = await anext(stream)
+    assert isinstance(event, ToolInputDelta)
+    assert event.delta == ':1}'
+    assert executor.call_log == []
+
+    event = await anext(stream)
+    assert isinstance(event, ToolInputEnded)
+    assert executor.call_log == []
+
+    rest = [item async for item in stream]
+    assert executor.call_log == [("test", {"x": 1})]
+    assert any(isinstance(item, ToolCompleted) for item in rest)
+    assert not any(item.__class__.__name__ == "ToolStarted" and item.tool_id == "c1" for item in rest)
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ import {
   type TranscriptProjectionEffect,
   type TranscriptProjectionState,
 } from "./transcript-projection";
+import { reduceRunThinking } from "./run-lifecycle";
 
 export { runCancelledEffect } from "./transcript-projection";
 
@@ -483,6 +484,19 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
     }
     case "stream_keepalive":
       return;
+    case "thinking": {
+      const runId = event.run_id;
+      const sessionId = event.session_id;
+      if (!runId || !sessionId) return;
+      setState((state) =>
+        reduceRunThinking(state, {
+          runId,
+          sessionId,
+          status: event.status,
+        }),
+      );
+      return;
+    }
     case "approval_needed":
       s.addPendingApproval({
         toolId: event.tool_id,
@@ -538,6 +552,7 @@ export function eventStreamUrl(config: AppConfig, sessionId: string): string {
 
 export function resetStreamStateForTest(): void {
   updateChatStreamState(reduceStreamDisconnected(chatStreamState));
+  setState({ thinkingRunId: null, thinkingStatus: null });
   clearReplayMutationDomMarker();
 }
 

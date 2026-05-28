@@ -714,6 +714,8 @@ class SessionStore:
         status: str | None = None,
         evidence: str | None = None,
         blocked_reason: str | None = None,
+        evidence_kind: str | None = None,
+        evidence_blocked_reason: str | None = None,
         tokens_used_delta: int = 0,
         time_used_seconds_delta: int = 0,
     ) -> dict | None:
@@ -725,6 +727,8 @@ class SessionStore:
                 status=status,
                 evidence=evidence,
                 blocked_reason=blocked_reason,
+                evidence_kind=evidence_kind,
+                evidence_blocked_reason=evidence_blocked_reason,
                 tokens_used_delta=tokens_used_delta,
                 time_used_seconds_delta=time_used_seconds_delta,
             )
@@ -737,6 +741,8 @@ class SessionStore:
         status: str | None = None,
         evidence: str | None = None,
         blocked_reason: str | None = None,
+        evidence_kind: str | None = None,
+        evidence_blocked_reason: str | None = None,
         tokens_used_delta: int = 0,
         time_used_seconds_delta: int = 0,
     ) -> dict | None:
@@ -747,7 +753,12 @@ class SessionStore:
             return None
         next_evidence = list(current["evidence"])
         if evidence:
-            next_evidence.append({"text": evidence, "created_at": datetime.now(UTC).isoformat()})
+            evidence_entry = {"text": evidence, "created_at": datetime.now(UTC).isoformat()}
+            if evidence_kind:
+                evidence_entry["kind"] = evidence_kind
+            if evidence_blocked_reason:
+                evidence_entry["blocked_reason"] = evidence_blocked_reason
+            next_evidence.append(evidence_entry)
         next_status = status or current["status"]
         next_tokens_used = current["tokens_used"] + max(0, tokens_used_delta)
         if (

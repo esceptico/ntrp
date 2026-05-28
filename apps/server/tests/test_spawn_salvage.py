@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
+from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, Result, StopReason, ToolCall, Usage
 from ntrp.agent.types.tools import ToolMeta
 from ntrp.agent.types.tools import ToolResult as AgentToolResult
-from ntrp.context.models import SessionState
+from ntrp.context.models import ProjectContext, SessionState
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import (
     _clamp_for_salvage,
@@ -20,7 +20,7 @@ from ntrp.core.spawner import (
     _salvage_summary,
     create_spawn_fn,
 )
-from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent, TokenUsageEvent
+from ntrp.events.sse import TaskFinishedEvent, TaskProgressEvent, TaskStartedEvent, TokenUsageEvent
 from ntrp.server.state import RunRegistry
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
@@ -29,6 +29,44 @@ from tests.helpers import make_executor
 class ParentTracker:
     def __init__(self, cost: float = 0.0):
         self.cost = cost
+
+
+@pytest.mark.asyncio
+async def test_spawned_agent_prompt_includes_project_context(monkeypatch):
+    captured = {}
+
+    class FakeAgent:
+        async def stream(self, messages):
+            captured["messages"] = messages
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr(spawner_module, "Agent", lambda **kwargs: FakeAgent())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+        project=ProjectContext(
+            project_id="proj-1",
+            name="Ntrp",
+            default_cwd="/Users/me/src/ntrp",
+            instructions="Use the repo conventions.",
+            knowledge_scope="project:proj-1",
+        ),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(ctx, "research task", system_prompt="child prompt", tools=[])
+
+    assert result.text == "done"
+    prompt = captured["messages"][0]["content"]
+    assert "## PROJECT" in prompt
+    assert "Name: Ntrp" in prompt
+    assert "Default cwd: /Users/me/src/ntrp" in prompt
+    assert "Instructions:\nUse the repo conventions." in prompt
 
 
 def test_clamp_for_salvage_leaves_short_messages_alone():
@@ -165,6 +203,57 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
     assert task_events[0].parent_tool_call_id == "call-research"
     assert task_events[0].depth == 1
     assert task_events[1].status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_foreground_subagent_emits_generated_name_while_running(monkeypatch):
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    async def fake_generate_agent_name(model: str, task: str) -> str:
+        await asyncio.sleep(0)
+        return "Web Release Scout"
+
+    class FakeAgent:
+        async def stream(self, messages):
+            await asyncio.sleep(0.01)
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr(spawner_module, "generate_agent_name", fake_generate_agent_name)
+    monkeypatch.setattr(spawner_module, "Agent", lambda **kwargs: FakeAgent())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "do web research",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-research",
+        timeout=1,
+    )
+
+    assert result.text == "done"
+    task_events = [
+        event
+        for event in emitted
+        if isinstance(event, (TaskStartedEvent, TaskProgressEvent, TaskFinishedEvent))
+    ]
+    assert [event.type.value for event in task_events] == ["task_started", "task_progress", "task_finished"]
+    assert task_events[0].name == ""
+    assert task_events[1].name == "Web Release Scout"
+    assert task_events[1].parent_tool_call_id == "call-research"
+    assert task_events[2].name == "Web Release Scout"
 
 
 @pytest.mark.asyncio
@@ -367,6 +456,12 @@ async def test_spawn_emits_live_token_usage_for_child_response(monkeypatch):
             )
 
     monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    async def slow_agent_name(model, task):
+        await asyncio.sleep(2)
+        return "Slow label"
+
+    monkeypatch.setattr(spawner_module, "generate_agent_name", slow_agent_name)
 
     emitted = []
 

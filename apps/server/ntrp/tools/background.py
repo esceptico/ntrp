@@ -2,6 +2,13 @@ from pydantic import BaseModel, Field
 
 from ntrp.constants import BACKGROUND_AGENT_TIMEOUT
 from ntrp.events.sse import BackgroundTaskEvent
+from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.skills.activation import (
+    activated_skill_entries,
+    append_context_block,
+    format_activated_skill_context,
+    record_auto_activated_skill_events,
+)
 from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
@@ -29,6 +36,44 @@ class BackgroundInput(BaseModel):
     task: str = Field(description="What the background agent should do.")
 
 
+async def _build_background_system_prompt(ctx, task: str, tool_id: str) -> str:
+    memory_retrieval = ctx.services.get("memory_retrieval")
+    if memory_retrieval is None:
+        return BACKGROUND_SYSTEM_PROMPT
+
+    bundle = await memory_retrieval.search(
+        MemoryActivationRequest(
+            query=task,
+            task="background_prompt",
+            task_id=tool_id,
+            session_id=ctx.session_id,
+            run_id=ctx.run.run_id,
+            surface="prompt",
+            budget_chars=1_500,
+            limit=8,
+            record_access=True,
+        )
+    )
+    skill_registry = ctx.services.get("skill_registry")
+    selected_skill_entries = activated_skill_entries(bundle, skill_registry)
+    memory_context = append_context_block(
+        bundle.prompt_context,
+        format_activated_skill_context(selected_skill_entries),
+    )
+    await record_auto_activated_skill_events(
+        ctx.services.get("memory"),
+        bundle,
+        skill_registry,
+        task="background_prompt_auto_skill_activation",
+        activation_surface="background_prompt",
+        task_id=tool_id,
+        session_id=ctx.session_id,
+        run_id=ctx.run.run_id,
+        entries=selected_skill_entries,
+    )
+    return append_context_block(BACKGROUND_SYSTEM_PROMPT, memory_context) or BACKGROUND_SYSTEM_PROMPT
+
+
 async def background(execution: ToolExecution, args: BackgroundInput) -> ToolResult:
     ctx = execution.ctx
 
@@ -37,10 +82,12 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
 
     tools = ctx.registry.get_schemas(read_only=True, capabilities=ctx.capabilities)
 
+    system_prompt = await _build_background_system_prompt(ctx, args.task, execution.tool_id)
+
     spawn = await ctx.spawn_fn(
         ctx,
         task=args.task,
-        system_prompt=BACKGROUND_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         tools=tools,
         timeout=BACKGROUND_AGENT_TIMEOUT,
         parent_id=execution.tool_id,

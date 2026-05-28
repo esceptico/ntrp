@@ -36,6 +36,9 @@ from ntrp.agent import (
     TextEnded,
     TextStarted,
     ToolCompleted,
+    ToolInputDelta,
+    ToolInputEnded,
+    ToolInputStarted,
     ToolStarted,
 )
 
@@ -293,6 +296,8 @@ class ReasoningEndEvent(SSEEvent):
 @dataclass(frozen=True)
 class ThinkingEvent(SSEEvent):
     type: EventType = field(default=EventType.THINKING, init=False)
+    session_id: str = ""
+    run_id: str = ""
     status: str = ""
 
 
@@ -603,6 +608,35 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
             return (
                 ReasoningMessageEndEvent(message_id=event.message_id, **base),
                 ReasoningEndEvent(message_id=event.message_id, **base),
+            )
+        case ToolInputStarted():
+            return (
+                ToolCallStartEvent(
+                    tool_call_id=event.tool_id,
+                    tool_call_name=event.name,
+                    display_name=event.display_name,
+                    description="",
+                    depth=event.depth,
+                    parent_id=event.parent_id,
+                    kind=event.kind,
+                ),
+            )
+        case ToolInputDelta():
+            return (
+                ToolCallArgsEvent(
+                    tool_call_id=event.tool_id,
+                    delta=event.delta,
+                    depth=event.depth,
+                    parent_id=event.parent_id,
+                ),
+            )
+        case ToolInputEnded():
+            return (
+                ToolCallEndEvent(
+                    tool_call_id=event.tool_id,
+                    depth=event.depth,
+                    parent_id=event.parent_id,
+                ),
             )
         case ToolStarted():
             description = _format_call(event.display_name or event.name, event.args)

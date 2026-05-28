@@ -3,6 +3,7 @@ import json
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field
+from typing import Protocol
 
 from ntrp.events.sse import SSEEvent, StreamResetEvent
 from ntrp.logging import get_logger
@@ -17,6 +18,12 @@ SESSION_EVENT_RECORD_QUEUE_MAXSIZE = 10000
 # ~2MB per active session, which is fine for a single-user app.
 RECENT_BUFFER_MAX = 10000
 _logger = get_logger(__name__)
+
+
+class SessionEventCursorStore(Protocol):
+    async def get_latest_session_event_seq(self, session_id: str) -> int: ...
+
+    async def get_latest_session_checkpoint_seq(self, session_id: str) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,3 +365,25 @@ class BusRegistry:
             return_exceptions=True,
         )
         self._buses.clear()
+
+
+async def prime_bus_cursor_from_store(
+    bus_registry: BusRegistry,
+    session_id: str,
+    event_store: SessionEventCursorStore | None,
+) -> None:
+    if bus_registry.get(session_id) is not None:
+        return
+    if event_store is None:
+        return
+    latest_seq = await event_store.get_latest_session_event_seq(session_id)
+    if bus_registry.get(session_id) is not None:
+        return
+    if not latest_seq:
+        return
+    checkpoint_seq = await event_store.get_latest_session_checkpoint_seq(session_id)
+    bus_registry.remember_session_cursor(
+        session_id,
+        next_seq=int(latest_seq) + 1,
+        checkpoint_seq=int(checkpoint_seq),
+    )

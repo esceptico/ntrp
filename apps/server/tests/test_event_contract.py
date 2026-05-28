@@ -9,6 +9,7 @@ from ntrp.events.sse import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    ThinkingEvent,
 )
 from ntrp.server.bus import StreamRecord, stream_record_to_sse_string
 
@@ -33,6 +34,16 @@ def test_terminal_events_identify_run_session_and_sequence():
         assert payload["session_id"] == "sess-1"
         assert payload["seq"] == 1
         assert payload["run_id"] == "run-1"
+
+
+def test_thinking_event_identifies_run_session_and_sequence():
+    payload = _payload(ThinkingEvent(session_id="sess-1", run_id="run-1", status="processing..."))
+
+    assert payload["type"] == "thinking"
+    assert payload["session_id"] == "sess-1"
+    assert payload["seq"] == 1
+    assert payload["run_id"] == "run-1"
+    assert payload["status"] == "processing..."
 
 
 def test_stream_record_uses_sse_id_as_cursor():

@@ -11,13 +11,22 @@ from ntrp.server.runtime import get_runtime
 from ntrp.tools.core import EmptyInput
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.goals import complete_goal
+from ntrp.tools.goals import BlockGoalInput, block_goal, complete_goal
 from tests.helpers import make_text_response
+
+
+class _EmptyEventStore:
+    async def get_latest_session_event_seq(self, session_id: str) -> int:
+        return 0
+
+    async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+        return 0
 
 
 class _GoalSessionService:
     def __init__(self):
         self.goal: dict | None = None
+        self.store = _EmptyEventStore()
 
     async def load(self, session_id: str | None = None):
         state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
@@ -48,8 +57,14 @@ class _GoalSessionService:
             return None
         if status := kwargs.get("status"):
             self.goal["status"] = status
+        self.goal["blocked_reason"] = kwargs.get("blocked_reason") if self.goal["status"] == "blocked" else None
         if evidence := kwargs.get("evidence"):
-            self.goal["evidence"].append({"text": evidence, "created_at": datetime.now(UTC).isoformat()})
+            entry = {"text": evidence, "created_at": datetime.now(UTC).isoformat()}
+            if kind := kwargs.get("evidence_kind"):
+                entry["kind"] = kind
+            if blocked_reason := kwargs.get("evidence_blocked_reason"):
+                entry["blocked_reason"] = blocked_reason
+            self.goal["evidence"].append(entry)
         self.goal["updated_at"] = datetime.now(UTC).isoformat()
         return self.goal
 
@@ -159,3 +174,37 @@ async def test_complete_goal_tool_emits_goal_update():
     assert "visible concise completion report" in result.content
     assert events[-1].type.value == "goal_updated"
     assert events[-1].goal["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_block_goal_requires_repeated_same_blocker_before_terminal():
+    svc = _GoalSessionService()
+    await svc.set_goal("sess-1", "ship it")
+    events = []
+
+    async def emit(event):
+        events.append(event.goal["status"])
+
+    ctx = ToolContext(
+        session_state=SessionState(session_id="sess-1", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="run-1"),
+        io=IOBridge(emit=emit),
+        services={"session": svc},
+    )
+    execution = ToolExecution(tool_id="tool-1", tool_name="block_goal", ctx=ctx)
+    args = BlockGoalInput(reason="Need credentials", evidence="Login requires user credentials.")
+
+    first = await block_goal(execution, args)
+    second = await block_goal(execution, args)
+    third = await block_goal(execution, args)
+
+    assert not first.is_error
+    assert not second.is_error
+    assert not third.is_error
+    assert "Goal remains active" in first.content
+    assert "Goal remains active" in second.content
+    assert svc.goal is not None
+    assert svc.goal["status"] == "blocked"
+    assert svc.goal["blocked_reason"] == "Need credentials"
+    assert events == ["active", "active", "blocked"]

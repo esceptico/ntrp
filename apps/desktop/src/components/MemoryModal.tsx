@@ -91,30 +91,21 @@ export function MemoryModal() {
             />
           </section>
         )}
-        <section
-          id="memory-panel-library"
-          role="tabpanel"
-          aria-labelledby="memory-tab-library"
-          className={clsx("h-full", tab === "library" ? "block" : "hidden")}
-        >
-          <KnowledgeLibraryPane initialType={libraryInitialType} focusVersion={libraryFocusVersion} />
-        </section>
-        <section
-          id="memory-panel-review"
-          role="tabpanel"
-          aria-labelledby="memory-tab-review"
-          className={clsx("h-full", tab === "review" ? "block" : "hidden")}
-        >
-          <KnowledgeReviewPane />
-        </section>
-        <section
-          id="memory-panel-activation"
-          role="tabpanel"
-          aria-labelledby="memory-tab-activation"
-          className={clsx("h-full", tab === "activation" ? "block" : "hidden")}
-        >
-          <RecallPane />
-        </section>
+        {tab === "library" && (
+          <section id="memory-panel-library" role="tabpanel" aria-labelledby="memory-tab-library" className="h-full">
+            <KnowledgeLibraryPane initialType={libraryInitialType} focusVersion={libraryFocusVersion} />
+          </section>
+        )}
+        {tab === "review" && (
+          <section id="memory-panel-review" role="tabpanel" aria-labelledby="memory-tab-review" className="h-full">
+            <KnowledgeReviewPane />
+          </section>
+        )}
+        {tab === "activation" && (
+          <section id="memory-panel-activation" role="tabpanel" aria-labelledby="memory-tab-activation" className="h-full">
+            <RecallPane />
+          </section>
+        )}
       </div>
     </PageModal>
   );

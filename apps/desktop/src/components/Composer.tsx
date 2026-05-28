@@ -137,10 +137,18 @@ export function Composer() {
   // that produced the action. The visual variant is user-configurable
   // via Settings → Appearance.
   const order = useStore((s) => s.order);
-  const lastMessage = useStore((s) =>
-    order.length > 0 ? s.messages.get(order[order.length - 1]) ?? null : null,
+  const messages = useStore((s) => s.messages);
+  const currentRunId = useStore((s) => s.currentRunId);
+  const thinkingRunId = useStore((s) => s.thinkingRunId);
+  const indicatorMessages = useMemo(
+    () =>
+      order
+        .map((id) => messages.get(id))
+        .filter((message): message is NonNullable<typeof message> => message !== undefined),
+    [order, messages],
   );
-  const awaitingFirstToken = awaitingFirstRunOutput(running, lastMessage);
+  const serverThinking = Boolean(thinkingRunId && (!currentRunId || thinkingRunId === currentRunId));
+  const awaitingFirstToken = serverThinking || awaitingFirstRunOutput(running, indicatorMessages);
   // 350ms threshold — fast replies (cached, small models, short tool
   // chains) shouldn't briefly flash the indicator. If the agent starts
   // emitting within the threshold, awaitingFirstToken flips false before

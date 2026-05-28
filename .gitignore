@@ -18,6 +18,8 @@ wheels/
 .context/
 .features/
 .superpowers/
+.ntrp-tmp/
+docs/internal/sandbox/
 data/
 backups/
 evals/

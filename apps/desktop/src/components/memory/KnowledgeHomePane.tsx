@@ -57,7 +57,7 @@ export function KnowledgeHomePane({
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [config]);
 
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
@@ -75,7 +75,7 @@ export function KnowledgeHomePane({
       <div className="min-h-0 overflow-y-auto scroll-thin px-7 py-5">
         <ScrollBlurTop />
         {!summary ? (
-          <div className="grid h-full place-items-center text-base italic text-faint">Loading</div>
+          <div className="grid h-full place-items-center text-base italic text-faint">{error ? "Could not load memory overview" : "Loading"}</div>
         ) : (
           <div className="grid gap-6">
             <section className="grid grid-cols-1 gap-3 md:grid-cols-3">

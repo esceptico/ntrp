@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from ntrp.knowledge.models import ActivationBundle, ActivationRequest
+from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
 
 
 class ActivationInspector(Protocol):
-    async def inspect(self, request: ActivationRequest) -> ActivationBundle: ...
+    async def search(self, request: MemoryActivationRequest) -> MemoryActivationBundle: ...
 
 
 @dataclass(frozen=True)
@@ -90,17 +90,16 @@ async def run_memory_eval_cases(
     """
     results: list[MemoryEvalCaseResult] = []
     for case in cases:
-        bundle = await inspector.inspect(
-            ActivationRequest(
+        bundle = await inspector.search(
+            MemoryActivationRequest(
                 query=case.query,
                 scope=case.scope,
                 budget_chars=budget_chars,
                 limit=limit,
-                include_actions=False,
                 record_access=False,
             )
         )
-        retrieved = [candidate.object_id for candidate in bundle.candidates]
+        retrieved = [candidate.item_id for candidate in bundle.candidates]
         retrieved_set = set(retrieved)
         hits, precision, recall = _case_metrics(case.expected_object_ids, retrieved_set)
         missing = case.expected_object_ids - retrieved_set

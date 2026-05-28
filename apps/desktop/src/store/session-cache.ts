@@ -16,6 +16,8 @@ export function blankSessionView(): CachedSessionState {
     order: [],
     running: false,
     currentRunId: null,
+    thinkingRunId: null,
+    thinkingStatus: null,
     usage: initialUsage,
     editingId: null,
     activeActivityId: null,
@@ -37,6 +39,8 @@ export function snapshotSession(s: State): CachedSessionState {
     order: transcript.order,
     running: s.running,
     currentRunId: s.currentRunId,
+    thinkingRunId: s.thinkingRunId,
+    thinkingStatus: s.thinkingStatus,
     usage: s.usage,
     editingId: s.editingId,
     activeActivityId: transcript.activeActivityId,
@@ -57,6 +61,8 @@ export function normalizeCachedSessionState(view: CachedSessionState): CachedSes
     messages: suppressEntryMotion(transcript.messages),
     order: transcript.order,
     activeActivityId: transcript.activeActivityId,
+    thinkingRunId: view.running ? view.thinkingRunId ?? null : null,
+    thinkingStatus: view.running ? view.thinkingStatus ?? null : null,
     compacting: false,
   };
 }

@@ -35,6 +35,14 @@ class _RuntimeStub:
         self.session_service = type("SessionServiceStub", (), {"store": store})()
 
 
+class _EmptyEventStore:
+    async def get_latest_session_event_seq(self, session_id: str) -> int:
+        return 0
+
+    async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+        return 0
+
+
 def _parse_sse_chunk(chunk: str) -> tuple[int, str, dict]:
     lines = chunk.splitlines()
     assert lines[0].startswith("id: ")
@@ -1018,6 +1026,8 @@ async def test_submit_message_after_cancel_starts_new_run(monkeypatch):
     registry.cancel_run(old_run.run_id)
 
     class FakeSessionService:
+        store = _EmptyEventStore()
+
         async def load(self, session_id=None):
             state = SessionState(
                 session_id=session_id or "sess-1",
@@ -1187,9 +1197,10 @@ async def test_pre_task_setup_failure_clears_prepared_run(monkeypatch):
     class FakeSessionService:
         def __init__(self):
             self.statuses = []
+            self.store = _EmptyEventStore()
 
         async def load(self, session_id=None):
-            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC), name="Existing")
             return SessionData(state=state, messages=[])
 
         async def record_chat_run_started(self, run_id, session_id, metadata=None):
@@ -1248,6 +1259,8 @@ async def test_pre_start_cancelled_task_emits_terminal_fallback():
     registry = RunRegistry()
 
     class FakeSessionService:
+        store = _EmptyEventStore()
+
         async def load(self, session_id=None):
             state = SessionState(
                 session_id=session_id or "sess-1",
@@ -1297,6 +1310,76 @@ async def test_pre_start_cancelled_task_emits_terminal_fallback():
     assert [record.event.type.value for record in bus._recent] == ["run_cancelled"]
     assert run.cancel_terminal_emitted is True
     assert run.status == RunStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_submit_chat_message_primes_bus_cursor_from_durable_events(tmp_path, monkeypatch):
+    import ntrp.database as database
+    from ntrp.services import chat as chat_service
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_session_event(StreamRecord(seq=187, session_id="sess-1", event=ThinkingEvent(status="old")))
+
+    class FakeSessionService:
+        def __init__(self, store):
+            self.store = store
+
+        async def load(self, session_id=None):
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            return SessionData(state=state, messages=[])
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+        async def record_chat_run_started(self, run_id, session_id, *, metadata=None):
+            return None
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    async def hold_run(ctx, bus):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(chat_service, "run_chat", hold_run)
+
+    registry = RunRegistry()
+    buses = BusRegistry(record_event=store.record_session_event)
+    session_service = FakeSessionService(store)
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=session_service,
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+
+    try:
+        result = await chat_service.submit_chat_message(
+            registry,
+            lambda: deps,
+            buses,
+            message="hello",
+            session_id="sess-1",
+            session_service=session_service,
+        )
+        bus = buses.get("sess-1")
+        assert bus is not None
+        assert bus.next_seq == 188
+    finally:
+        run = registry.get_run(result["run_id"]) if "result" in locals() else None
+        if run and run.task:
+            run.task.cancel()
+            with suppress(asyncio.CancelledError):
+                await run.task
+        await buses.close_all()
+        await read_conn.close()
+        await conn.close()
 
 
 # --- Full chain: agent.stream + real closure + real bus + mid-run inject ---

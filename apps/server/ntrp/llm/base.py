@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel
 
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta
+from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, ToolCallStreamDelta
 from ntrp.llm.retry import with_retry
 
 
@@ -36,7 +36,7 @@ class CompletionClient(ABC):
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         """Yield text deltas, then the final CompletionResponse.
 
         Default: non-streaming fallback.
@@ -57,7 +57,7 @@ class CompletionClient(ABC):
             yield text
         yield response
 
-    async def stream_completion(self, **kwargs) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    async def stream_completion(self, **kwargs) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         async for item in self._stream_completion(**kwargs):
             yield item
 

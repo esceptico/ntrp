@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 28
+CURRENT_VERSION = 31
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -882,6 +882,137 @@ async def _migrate_v27(conn: aiosqlite.Connection) -> None:
     """)
 
 
+
+_KNOWLEDGE_ACTIVATION_ITEMS_VIEW_SQL = """
+    CREATE VIEW knowledge_activation_items AS
+    SELECT
+        event.id AS access_event_id,
+        event.created_at AS created_at,
+        event.source AS source,
+        event.query AS query,
+        json_extract(event.details, '$.run_id') AS run_id,
+        json_extract(event.details, '$.session_id') AS session_id,
+        json_extract(event.details, '$.task_id') AS task_id,
+        CAST(json_extract(item.value, '$.rank') AS INTEGER) AS rank,
+        json_extract(item.value, '$.object_id') AS object_id,
+        CAST(json_extract(item.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
+        json_extract(item.value, '$.object_type') AS object_type,
+        CAST(json_extract(item.value, '$.score') AS REAL) AS score,
+        CASE WHEN json_extract(item.value, '$.selected') THEN 1 ELSE 0 END AS selected,
+        CASE WHEN json_extract(item.value, '$.injected') THEN 1 ELSE 0 END AS injected,
+        CASE
+            WHEN json_type(item.value, '$.used_by_model') IS NOT NULL
+            THEN CASE WHEN json_extract(item.value, '$.used_by_model') THEN 1 ELSE 0 END
+            ELSE CASE WHEN json_extract(item.value, '$.injected') THEN 1 ELSE 0 END
+        END AS used_by_model,
+        COALESCE(json_extract(item.value, '$.surface'), 'prompt') AS surface,
+        COALESCE(
+            json_extract(item.value, '$.selection_reason'),
+            CASE
+                WHEN json_extract(item.value, '$.injected') THEN 'selected_for_prompt'
+                ELSE 'selected_not_injected'
+            END
+        ) AS selection_reason,
+        json_extract(item.value, '$.activation') AS activation,
+        json_extract(item.value, '$.proactiveness_level') AS proactiveness_level,
+        json_extract(item.value, '$.chars') AS chars,
+        json_extract(item.value, '$.reasons') AS reasons,
+        json_extract(item.value, '$.signals') AS signals,
+        json_extract(item.value, '$.source_ids') AS source_ids,
+        ko.title AS object_title,
+        ko.status AS object_status
+    FROM memory_access_events event
+    JOIN json_each(CASE
+        WHEN json_valid(event.details) AND json_type(event.details, '$.candidates') = 'array'
+        THEN json_extract(event.details, '$.candidates')
+        ELSE '[]'
+    END) AS item
+    LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(item.value, '$.object_id') AS INTEGER)
+
+    UNION ALL
+
+    SELECT
+        event.id AS access_event_id,
+        event.created_at AS created_at,
+        event.source AS source,
+        event.query AS query,
+        json_extract(event.details, '$.run_id') AS run_id,
+        json_extract(event.details, '$.session_id') AS session_id,
+        json_extract(event.details, '$.task_id') AS task_id,
+        CAST(json_extract(omitted.value, '$.rank') AS INTEGER) AS rank,
+        json_extract(omitted.value, '$.object_id') AS object_id,
+        CAST(json_extract(omitted.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
+        json_extract(omitted.value, '$.object_type') AS object_type,
+        CAST(json_extract(omitted.value, '$.score') AS REAL) AS score,
+        0 AS selected,
+        0 AS injected,
+        CASE WHEN json_extract(omitted.value, '$.used_by_model') THEN 1 ELSE 0 END AS used_by_model,
+        COALESCE(json_extract(omitted.value, '$.surface'), 'context') AS surface,
+        COALESCE(
+            json_extract(omitted.value, '$.selection_reason'),
+            'omitted_by_budget_or_limit'
+        ) AS selection_reason,
+        json_extract(omitted.value, '$.activation') AS activation,
+        json_extract(omitted.value, '$.proactiveness_level') AS proactiveness_level,
+        json_extract(omitted.value, '$.chars') AS chars,
+        json_extract(omitted.value, '$.reasons') AS reasons,
+        json_extract(omitted.value, '$.signals') AS signals,
+        json_extract(omitted.value, '$.source_ids') AS source_ids,
+        ko.title AS object_title,
+        ko.status AS object_status
+    FROM memory_access_events event
+    JOIN json_each(CASE
+        WHEN json_valid(event.details) AND json_type(event.details, '$.omitted') = 'array'
+        THEN json_extract(event.details, '$.omitted')
+        ELSE '[]'
+    END) AS omitted
+    LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(omitted.value, '$.object_id') AS INTEGER)
+
+    UNION ALL
+
+    SELECT
+        event.id AS access_event_id,
+        event.created_at AS created_at,
+        event.source AS source,
+        event.query AS query,
+        json_extract(event.details, '$.run_id') AS run_id,
+        json_extract(event.details, '$.session_id') AS session_id,
+        json_extract(event.details, '$.task_id') AS task_id,
+        NULL AS rank,
+        fallback.value AS object_id,
+        CAST(fallback.value AS INTEGER) AS knowledge_object_id,
+        json_extract(event.details, '$.candidate_types[0]') AS object_type,
+        NULL AS score,
+        1 AS selected,
+        CASE WHEN json_extract(event.details, '$.injected') THEN 1 ELSE 0 END AS injected,
+        CASE WHEN json_extract(event.details, '$.injected') THEN 1 ELSE 0 END AS used_by_model,
+        'prompt' AS surface,
+        'legacy_candidate_id' AS selection_reason,
+        NULL AS activation,
+        NULL AS proactiveness_level,
+        NULL AS chars,
+        NULL AS reasons,
+        NULL AS signals,
+        NULL AS source_ids,
+        ko.title AS object_title,
+        ko.status AS object_status
+    FROM memory_access_events event
+    JOIN json_each(CASE
+        WHEN json_valid(event.details)
+         AND json_type(event.details, '$.candidates') IS NULL
+         AND json_type(event.details, '$.candidate_ids') = 'array'
+        THEN json_extract(event.details, '$.candidate_ids')
+        ELSE '[]'
+    END) AS fallback
+    LEFT JOIN knowledge_objects ko ON ko.id = CAST(fallback.value AS INTEGER)
+"""
+
+
+async def _recreate_knowledge_activation_items_view(conn: aiosqlite.Connection) -> None:
+    await conn.execute("DROP VIEW IF EXISTS knowledge_activation_items")
+    await conn.execute(_KNOWLEDGE_ACTIVATION_ITEMS_VIEW_SQL)
+
+
 async def _migrate_v28(conn: aiosqlite.Connection) -> None:
     """Move activation telemetry out of active knowledge and expose activation item traces."""
     _logger.info("Migration v28: archiving legacy activation telemetry and adding activation item view")
@@ -902,99 +1033,178 @@ async def _migrate_v28(conn: aiosqlite.Connection) -> None:
           AND json_extract(metadata, '$.kind') = 'activation_access'
     """)
 
-    await conn.execute("DROP VIEW IF EXISTS knowledge_activation_items")
+    await _recreate_knowledge_activation_items_view(conn)
+
+
+async def _migrate_v29(conn: aiosqlite.Connection) -> None:
+    """Expose closed-loop usage fields in activation item traces."""
+    _logger.info("Migration v29: adding closed-loop usage fields to activation item view")
+    await _recreate_knowledge_activation_items_view(conn)
+
+
+async def _migrate_v30(conn: aiosqlite.Connection) -> None:
+    """Expose run/session/task identifiers in activation item traces."""
+    _logger.info("Migration v30: adding context identifiers to activation item view")
+    await _recreate_knowledge_activation_items_view(conn)
+
+
+async def _migrate_v31(conn: aiosqlite.Connection) -> None:
+    """Burn pre-v31 memory storage and create the redesigned primitive schema."""
+    _logger.info(
+        "Migration v31: memory redesign — burn old tables, create memory_items + memory_item_parents + episode_buffers"
+    )
+    _logger.warning(
+        "Migration v31: dropping all pre-v31 memory tables (knowledge_objects, facts, observations, entities, …). "
+        "This is the memory redesign burn step. Pre-v31 data is unrecoverable from this DB; restore from backup if needed."
+    )
+    foreign_key_rows = await conn.execute_fetchall("PRAGMA foreign_keys")
+    restore_foreign_keys = bool(foreign_key_rows and foreign_key_rows[0][0])
+    if restore_foreign_keys:
+        await conn.execute("PRAGMA foreign_keys=OFF")
+
+    for trigger in (
+        "observations_ai",
+        "observations_ad",
+        "observations_au",
+        "facts_ai",
+        "facts_ad",
+        "facts_au",
+        "knowledge_objects_ai",
+        "knowledge_objects_ad",
+        "knowledge_objects_au",
+    ):
+        await conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+    for table in ("observations_fts", "facts_fts", "knowledge_objects_fts"):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    for table in ("observations_vec", "facts_vec", "knowledge_objects_vec"):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    for table in ("facts", "observations", "knowledge_objects"):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    for table in (
+        "entities",
+        "entity_aliases",
+        "entity_identity_edges",
+        "entity_mentions",
+        "entity_refs",
+        "entity_resolution_candidates",
+        "entity_resolution_commits",
+        "obs_entity_refs",
+        "observation_facts",
+        "knowledge_entity_refs",
+    ):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    for table in ("memory_access_events", "memory_events", "temporal_checkpoints"):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    if restore_foreign_keys:
+        await conn.execute("PRAGMA foreign_keys=ON")
+
     await conn.execute("""
-        CREATE VIEW knowledge_activation_items AS
-        SELECT
-            event.id AS access_event_id,
-            event.created_at AS created_at,
-            event.source AS source,
-            event.query AS query,
-            CAST(json_extract(item.value, '$.rank') AS INTEGER) AS rank,
-            json_extract(item.value, '$.object_id') AS object_id,
-            CAST(json_extract(item.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
-            json_extract(item.value, '$.object_type') AS object_type,
-            CAST(json_extract(item.value, '$.score') AS REAL) AS score,
-            CASE WHEN json_extract(item.value, '$.selected') THEN 1 ELSE 0 END AS selected,
-            CASE WHEN json_extract(item.value, '$.injected') THEN 1 ELSE 0 END AS injected,
-            json_extract(item.value, '$.activation') AS activation,
-            json_extract(item.value, '$.proactiveness_level') AS proactiveness_level,
-            json_extract(item.value, '$.chars') AS chars,
-            json_extract(item.value, '$.reasons') AS reasons,
-            json_extract(item.value, '$.signals') AS signals,
-            json_extract(item.value, '$.source_ids') AS source_ids,
-            ko.title AS object_title,
-            ko.status AS object_status
-        FROM memory_access_events event
-        JOIN json_each(CASE
-            WHEN json_valid(event.details) AND json_type(event.details, '$.candidates') = 'array'
-            THEN json_extract(event.details, '$.candidates')
-            ELSE '[]'
-        END) AS item
-        LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(item.value, '$.object_id') AS INTEGER)
-
-        UNION ALL
-
-        SELECT
-            event.id AS access_event_id,
-            event.created_at AS created_at,
-            event.source AS source,
-            event.query AS query,
-            CAST(json_extract(omitted.value, '$.rank') AS INTEGER) AS rank,
-            json_extract(omitted.value, '$.object_id') AS object_id,
-            CAST(json_extract(omitted.value, '$.object_id') AS INTEGER) AS knowledge_object_id,
-            json_extract(omitted.value, '$.object_type') AS object_type,
-            CAST(json_extract(omitted.value, '$.score') AS REAL) AS score,
-            0 AS selected,
-            0 AS injected,
-            json_extract(omitted.value, '$.activation') AS activation,
-            json_extract(omitted.value, '$.proactiveness_level') AS proactiveness_level,
-            json_extract(omitted.value, '$.chars') AS chars,
-            json_extract(omitted.value, '$.reasons') AS reasons,
-            json_extract(omitted.value, '$.signals') AS signals,
-            json_extract(omitted.value, '$.source_ids') AS source_ids,
-            ko.title AS object_title,
-            ko.status AS object_status
-        FROM memory_access_events event
-        JOIN json_each(CASE
-            WHEN json_valid(event.details) AND json_type(event.details, '$.omitted') = 'array'
-            THEN json_extract(event.details, '$.omitted')
-            ELSE '[]'
-        END) AS omitted
-        LEFT JOIN knowledge_objects ko ON ko.id = CAST(json_extract(omitted.value, '$.object_id') AS INTEGER)
-
-        UNION ALL
-
-        SELECT
-            event.id AS access_event_id,
-            event.created_at AS created_at,
-            event.source AS source,
-            event.query AS query,
-            CAST(fallback.key AS INTEGER) + 1 AS rank,
-            fallback.value AS object_id,
-            CAST(fallback.value AS INTEGER) AS knowledge_object_id,
-            json_extract(event.details, '$.candidate_types[' || fallback.key || ']') AS object_type,
-            NULL AS score,
-            1 AS selected,
-            CASE WHEN json_extract(event.details, '$.injected') THEN 1 ELSE 0 END AS injected,
-            NULL AS activation,
-            NULL AS proactiveness_level,
-            NULL AS chars,
-            NULL AS reasons,
-            NULL AS signals,
-            NULL AS source_ids,
-            ko.title AS object_title,
-            ko.status AS object_status
-        FROM memory_access_events event
-        JOIN json_each(CASE
-            WHEN json_valid(event.details)
-             AND json_type(event.details, '$.candidates') IS NULL
-             AND json_type(event.details, '$.candidate_ids') = 'array'
-            THEN json_extract(event.details, '$.candidate_ids')
-            ELSE '[]'
-        END) AS fallback
-        LEFT JOIN knowledge_objects ko ON ko.id = CAST(fallback.value AS INTEGER)
+        CREATE TABLE IF NOT EXISTS memory_items (
+            id              TEXT PRIMARY KEY,
+            kind            TEXT NOT NULL CHECK (kind IN (
+                                'episode', 'observation', 'claim',
+                                'skill', 'proposal', 'artifact_ref'
+                            )),
+            content         TEXT NOT NULL,
+            provenance      TEXT NOT NULL CHECK (provenance IN (
+                                'recorded', 'inferred', 'user_authored', 'external'
+                            )),
+            source_refs     TEXT NOT NULL DEFAULT '[]',
+            confidence      REAL NOT NULL DEFAULT 0.5 CHECK (
+                                confidence >= 0.0 AND confidence <= 1.0
+                            ),
+            status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN (
+                                'active', 'superseded', 'archived'
+                            )),
+            valid_from      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            invalid_at      TIMESTAMP,
+            scope           TEXT NOT NULL DEFAULT 'user',
+            tags            TEXT NOT NULL DEFAULT '[]',
+            artifact_ref    TEXT,
+            usage           TEXT NOT NULL DEFAULT '{"activated":0,"helped":0,"hurt":0,"ignored":0}',
+            feedback        TEXT NOT NULL DEFAULT '{"thumbs_up":0,"thumbs_down":0,"corrections":0}',
+            created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
     """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_items_status_scope_kind ON memory_items(status, scope, kind)"
+    )
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_items_valid_from ON memory_items(valid_from)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_items_invalid_at ON memory_items(invalid_at)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_items_updated_at ON memory_items(updated_at)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_item_parents (
+            child_id    TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+            parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+            role        TEXT NOT NULL CHECK (role IN (
+                            'step', 'evidence', 'contradicts',
+                            'supersedes', 'similar_to'
+                        )),
+            "order"     INTEGER,
+            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (child_id, parent_id, role)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_child ON memory_item_parents(child_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_parent ON memory_item_parents(parent_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_mip_role ON memory_item_parents(role)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS episode_buffers (
+            id                      TEXT PRIMARY KEY,
+            scope                   TEXT NOT NULL,
+            source_kind             TEXT NOT NULL,
+            started_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_activity_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            turn_count              INTEGER NOT NULL DEFAULT 0,
+            tokens                  INTEGER NOT NULL DEFAULT 0,
+            content_so_far          TEXT NOT NULL DEFAULT '',
+            source_refs_so_far      TEXT NOT NULL DEFAULT '[]',
+            running_centroid_vec    BLOB,
+            closed_at               TIMESTAMP
+        )
+    """)
+    await conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uniq_episode_buffers_open_per_scope
+            ON episode_buffers(scope, source_kind)
+            WHERE closed_at IS NULL
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_episode_buffers_last_activity ON episode_buffers(last_activity_at)"
+    )
+
+    await conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_items_fts USING fts5(
+            item_id UNINDEXED,
+            content,
+            tokenize = 'unicode61 remove_diacritics 2'
+        )
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_items_ai AFTER INSERT ON memory_items BEGIN
+            INSERT INTO memory_items_fts(item_id, content) VALUES (new.id, new.content);
+        END
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_items_ad AFTER DELETE ON memory_items BEGIN
+            DELETE FROM memory_items_fts WHERE item_id = old.id;
+        END
+    """)
+    await conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_items_au AFTER UPDATE ON memory_items BEGIN
+            DELETE FROM memory_items_fts WHERE item_id = old.id;
+            INSERT INTO memory_items_fts(item_id, content) VALUES (new.id, new.content);
+        END
+    """)
+
 
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
@@ -1020,6 +1230,9 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (26, _migrate_v26),
     (27, _migrate_v27),
     (28, _migrate_v28),
+    (29, _migrate_v29),
+    (30, _migrate_v30),
+    (31, _migrate_v31),
 ]
 
 

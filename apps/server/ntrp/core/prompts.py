@@ -165,6 +165,7 @@ Today is {{ date }} at {{ time }} (user's local time).""")
 PROJECT_BLOCK = env.from_string("""## PROJECT
 Name: {{ project.name }}
 {% if project.default_cwd %}Default cwd: {{ project.default_cwd }}
+Use relative paths from the default cwd in tool arguments and user-facing file references. Use absolute paths only for files outside the default cwd.
 {% endif %}
 Knowledge scope: {{ project.knowledge_scope }}
 {% if project.instructions %}
@@ -182,7 +183,7 @@ Evidence:
 {% for item in goal.evidence[-5:] %}- {{ item.text }}
 {% endfor %}{% endif %}
 Use current session history and goal evidence before searching external memory or files. Do not rediscover context already present above.
-Keep working toward this goal unless the user redirects you. Mark it complete only after concrete evidence. `complete_goal` takes no input; after it succeeds, send a visible concise completion report with the evidence and verification. If blocked, use `block_goal` with the specific missing input, then send a visible blocked report.""")
+Keep working toward this goal unless the user redirects you. Mark it complete only after concrete evidence. `complete_goal` takes no input; after it succeeds, send a visible concise completion report with the evidence and verification. If progress appears blocked, first exhaust viable local, repo, tool, or system steps. Use `block_goal` only when missing user or system input truly prevents progress. Reuse the same concise reason only if the same blocker still applies; the first two matching reports keep the goal active for automatic continuation, and the third marks it blocked.""")
 
 TEMPORAL_REMINDER = env.from_string("Remember: today is {{ date }}.")
 

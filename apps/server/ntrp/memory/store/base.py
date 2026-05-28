@@ -6,6 +6,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.store.migrations import run_migrations
 
 _logger = get_logger(__name__)
+MEMORY_ITEMS_SCHEMA_VERSION = 31
 
 SCHEMA = """
 -- Observations (consolidated patterns from facts)
@@ -329,8 +330,15 @@ class GraphDatabase:
         self.dim_changed = False
 
     async def init_schema(self) -> None:
-        await self.conn.executescript(SCHEMA)
         await self.conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+        stored_schema_version = await self._get_meta("schema_version")
+        try:
+            schema_version = int(stored_schema_version) if stored_schema_version is not None else 0
+        except ValueError:
+            schema_version = 0
+        if schema_version < MEMORY_ITEMS_SCHEMA_VERSION:
+            await self.conn.executescript(SCHEMA)
+            await self.conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
         await run_migrations(self.conn)
 
         stored_dim = await self._get_meta("embedding_dim")
@@ -343,16 +351,30 @@ class GraphDatabase:
             await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
             await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
             await self.conn.execute("DROP TABLE IF EXISTS knowledge_objects_vec")
+            await self.conn.execute("DROP TABLE IF EXISTS memory_items_vec")
             # Only trigger re-embed when there's existing data with stale embeddings
-            rows = await self.conn.execute_fetchall("""
-                SELECT EXISTS(
-                    SELECT 1 FROM facts WHERE embedding IS NOT NULL
-                    UNION ALL
-                    SELECT 1 FROM observations WHERE embedding IS NOT NULL
-                    UNION ALL
-                    SELECT 1 FROM knowledge_objects WHERE embedding IS NOT NULL
+            old_embedding_tables = {
+                row[0]
+                for row in await self.conn.execute_fetchall(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)",
+                    ("facts", "observations", "knowledge_objects"),
                 )
-            """)
+            }
+            stale_embedding_queries = []
+            if "facts" in old_embedding_tables:
+                stale_embedding_queries.append("SELECT 1 FROM facts WHERE embedding IS NOT NULL")
+            if "observations" in old_embedding_tables:
+                stale_embedding_queries.append("SELECT 1 FROM observations WHERE embedding IS NOT NULL")
+            if "knowledge_objects" in old_embedding_tables:
+                stale_embedding_queries.append("SELECT 1 FROM knowledge_objects WHERE embedding IS NOT NULL")
+            if stale_embedding_queries:
+                rows = await self.conn.execute_fetchall(f"""
+                    SELECT EXISTS(
+                        {" UNION ALL ".join(stale_embedding_queries)}
+                    )
+                """)
+            else:
+                rows = []
             if rows and rows[0][0]:
                 self.dim_changed = True
 
@@ -379,11 +401,24 @@ class GraphDatabase:
 
     async def _init_vec_tables(self) -> None:
         dim = self.embedding_dim
+        stored_schema_version = await self._get_meta("schema_version")
+        try:
+            schema_version = int(stored_schema_version) if stored_schema_version is not None else 0
+        except ValueError:
+            schema_version = 0
+        create_legacy_vec_tables = schema_version < MEMORY_ITEMS_SCHEMA_VERSION
+        vec_table_names = ("memory_items_vec",)
+        if create_legacy_vec_tables:
+            vec_table_names = ("observations_vec", "facts_vec", "knowledge_objects_vec", "memory_items_vec")
         existing = {
             row[0]
             for row in await self.conn.execute_fetchall(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)",
-                ("observations_vec", "facts_vec", "knowledge_objects_vec"),
+                f"""
+                SELECT name FROM sqlite_master
+                WHERE type = 'table'
+                  AND name IN ({",".join("?" for _ in vec_table_names)})
+                """,
+                vec_table_names,
             )
         }
         # sqlite-vec can spend a long time opening large existing virtual tables
@@ -398,7 +433,7 @@ class GraphDatabase:
                     return
                 raise
 
-        if "observations_vec" not in existing:
+        if create_legacy_vec_tables and "observations_vec" not in existing:
             await create_vec_table(
                 "observations_vec",
                 f"""
@@ -408,7 +443,7 @@ class GraphDatabase:
                 );
                 """,
             )
-        if "facts_vec" not in existing:
+        if create_legacy_vec_tables and "facts_vec" not in existing:
             await create_vec_table(
                 "facts_vec",
                 f"""
@@ -418,12 +453,22 @@ class GraphDatabase:
                 );
                 """,
             )
-        if "knowledge_objects_vec" not in existing:
+        if create_legacy_vec_tables and "knowledge_objects_vec" not in existing:
             await create_vec_table(
                 "knowledge_objects_vec",
                 f"""
                 CREATE VIRTUAL TABLE knowledge_objects_vec USING vec0(
                     knowledge_object_id INTEGER PRIMARY KEY,
+                    embedding float[{dim}] distance_metric=cosine
+                );
+                """,
+            )
+        if "memory_items_vec" not in existing:
+            await create_vec_table(
+                "memory_items_vec",
+                f"""
+                CREATE VIRTUAL TABLE memory_items_vec USING vec0(
+                    item_id TEXT PRIMARY KEY,
                     embedding float[{dim}] distance_metric=cosine
                 );
                 """,
@@ -444,6 +489,7 @@ class GraphDatabase:
         await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
         await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
         await self.conn.execute("DROP TABLE IF EXISTS knowledge_objects_vec")
+        await self.conn.execute("DROP TABLE IF EXISTS memory_items_vec")
         await self._init_vec_tables()
         await self._set_meta("embedding_dim", str(new_dim))
         await self.conn.commit()

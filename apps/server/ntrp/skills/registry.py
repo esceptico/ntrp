@@ -157,6 +157,17 @@ class SkillRegistry:
         _, body = parsed
         return body.strip()
 
+    def render_skill_xml(self, name: str, args: str = "", *, args_label: str = "ARGUMENTS") -> str | None:
+        meta = self.get(name)
+        body = self.load_body(name)
+        if meta is None or body is None:
+            return None
+        body = body.replace("<skill_path>", str(meta.path))
+        content = f'<skill name="{name}" path="{meta.path}">\n{body}\n</skill>'
+        if args:
+            content += f"\n\n{args_label}: {args}"
+        return content
+
     def to_prompt_xml(self) -> str:
         if not self._skills:
             return ""

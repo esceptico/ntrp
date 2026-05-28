@@ -196,6 +196,48 @@ def run(prompt: str):
     asyncio.run(_run_headless(prompt))
 
 
+@main.command("mcp")
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "streamable-http"]),
+    default="stdio",
+    show_default=True,
+    help="MCP transport to serve.",
+)
+@click.option("--host", default=None, help="Host for streamable-http transport")
+@click.option("--port", default=None, type=int, help="Port for streamable-http transport")
+def mcp_command(transport: str, host: str | None, port: int | None):
+    """Start the ntrp MCP server."""
+    config = get_config()
+    if not config.chat_model and not config.research_model:
+        _require_chat_model(config)
+
+    from ntrp.mcp.server import create_mcp_server
+
+    host = host or config.host
+    port = port or 6878
+    api_key_hash = None
+    if transport == "streamable-http":
+        if not config.api_key_hash:
+            settings = load_user_settings()
+            plaintext, hashed = generate_api_key()
+            settings["api_key_hash"] = hashed
+            save_user_settings(settings)
+            config.api_key_hash = hashed
+            console.print(f"[bold]MCP API key:[/bold] [cyan]{plaintext}[/cyan]")
+            console.print("[dim]Use this as Authorization: Bearer <key>. It won't be shown again.[/dim]")
+            console.print()
+        api_key_hash = config.api_key_hash
+
+    server = create_mcp_server(
+        host=host,
+        port=port,
+        api_key_hash=api_key_hash,
+        public_url=f"http://{host}:{port}",
+    )
+    server.run(transport=transport)
+
+
 async def _run_headless(prompt: str):
     runtime = Runtime()
     await runtime.connect()

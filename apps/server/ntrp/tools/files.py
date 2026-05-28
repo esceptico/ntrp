@@ -1,7 +1,8 @@
 import asyncio
 import difflib
-import fnmatch
-import os
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -13,13 +14,29 @@ from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScop
 
 READ_FILE_DESCRIPTION = (
     "Read content from a file. Use for code, configs, logs, etc. "
-    "For large files, use offset and limit parameters to read in chunks."
+    "For large files, use offset and limit parameters to read in chunks. "
+    "When a project default cwd is set, use paths relative to it unless reading outside the project."
 )
-LIST_FILES_DESCRIPTION = "List files in a directory with compact type/size metadata."
-FIND_FILES_DESCRIPTION = "Find files by glob pattern under a directory."
-SEARCH_TEXT_DESCRIPTION = "Search local files for literal text."
-WRITE_FILE_DESCRIPTION = "Write exact UTF-8 content to a file. Creates the file or replaces existing content."
-EDIT_FILE_DESCRIPTION = "Edit a file by replacing one exact text block with another."
+LIST_FILES_DESCRIPTION = (
+    "List files in a directory with compact type/size metadata. "
+    "When a project default cwd is set, use paths relative to it unless listing outside the project."
+)
+FIND_FILES_DESCRIPTION = (
+    "Find files by glob pattern under a directory. "
+    "When a project default cwd is set, use paths relative to it unless searching outside the project."
+)
+SEARCH_TEXT_DESCRIPTION = (
+    "Search local files for literal text. "
+    "When a project default cwd is set, use paths relative to it unless searching outside the project."
+)
+WRITE_FILE_DESCRIPTION = (
+    "Write exact UTF-8 content to a file. Creates the file or replaces existing content. "
+    "When a project default cwd is set, use paths relative to it unless writing outside the project."
+)
+EDIT_FILE_DESCRIPTION = (
+    "Edit a file by replacing one exact text block with another. "
+    "When a project default cwd is set, use paths relative to it unless editing outside the project."
+)
 
 
 _DEFAULT_OFFSET = 1
@@ -28,6 +45,7 @@ _OFFLOAD_DIR = "/tmp/ntrp/"
 _OFFLOAD_READ_LIMIT = 100
 _DEFAULT_ENTRY_LIMIT = 200
 _DEFAULT_MATCH_LIMIT = 100
+_RG_TIMEOUT_SECONDS = 20
 
 
 def _session_cwd(execution: ToolExecution) -> str | None:
@@ -53,25 +71,38 @@ def _size_label(path: Path) -> str:
     return f"{size / (1024 * 1024):.1f}MB"
 
 
-def _has_hidden_part(path: Path, root: Path) -> bool:
-    try:
-        relative = path.relative_to(root)
-    except ValueError:
-        relative = path
-    return any(part.startswith(".") for part in relative.parts)
-
-
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def _unified_diff(path: Path, before: str, after: str) -> str | None:
+def _relative_path(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _display_path(path: Path, cwd: str | None = None) -> str:
+    if not cwd:
+        return str(path)
+    return _relative_path(path, Path(cwd).expanduser().resolve())
+
+
+def _path_data(path: Path, cwd: str | None = None) -> dict:
+    data = {"path": _display_path(path, cwd)}
+    if cwd:
+        data["absolute_path"] = str(path)
+    return data
+
+
+def _unified_diff(path: Path, before: str, after: str, *, display_path: str | None = None) -> str | None:
+    label = display_path or str(path)
     diff = "".join(
         difflib.unified_diff(
             before.splitlines(keepends=True),
             after.splitlines(keepends=True),
-            fromfile=str(path),
-            tofile=str(path),
+            fromfile=label,
+            tofile=label,
         )
     )
     return diff or None
@@ -84,7 +115,7 @@ def _unified_diff(path: Path, before: str, after: str) -> str | None:
 
 
 class ReadFileInput(BaseModel):
-    path: str = Field(description="Path to the file (relative or absolute)")
+    path: str = Field(description="File path. Prefer relative paths from the project default cwd when set.")
     offset: int = Field(
         default=_DEFAULT_OFFSET, description=f"Line number to start from (1-based, default: {_DEFAULT_OFFSET})"
     )
@@ -136,7 +167,9 @@ async def read_file(execution: ToolExecution, args: ReadFileInput) -> ToolResult
 
 
 class ListFilesInput(BaseModel):
-    path: str = Field(default=".", description="Directory path to list.")
+    path: str = Field(
+        default=".", description="Directory path to list. Prefer relative paths from the project default cwd when set."
+    )
     limit: int = Field(default=_DEFAULT_ENTRY_LIMIT, ge=1, le=1000, description="Maximum entries to return.")
     include_hidden: bool = Field(default=False, description="Include dotfiles and dot-directories.")
 
@@ -157,7 +190,7 @@ def _list_files_sync(args: ListFilesInput, cwd: str | None = None) -> ToolResult
             entries.append(
                 {
                     "name": f"{child.name}{suffix}",
-                    "path": str(child),
+                    **_path_data(child, cwd),
                     "kind": "directory" if child.is_dir() else "file",
                     "size": _size_label(child),
                 }
@@ -167,11 +200,11 @@ def _list_files_sync(args: ListFilesInput, cwd: str | None = None) -> ToolResult
         lines = [f"{item['name']:<48} {item['size']}" for item in visible]
         if len(entries) > args.limit:
             lines.append(f"... {len(entries) - args.limit} more")
-        header = f"{root} ({len(entries)} entries)"
+        header = f"{_display_path(root, cwd)} ({len(entries)} entries)"
         return ToolResult(
             content=header + ("\n" + "\n".join(lines) if lines else "\n(empty)"),
             preview=f"{len(entries)} entries",
-            data={"path": str(root), "entries": visible, "total": len(entries)},
+            data={**_path_data(root, cwd), "entries": visible, "total": len(entries)},
         )
     except PermissionError:
         return ToolResult(content=f"Permission denied: {args.path}", preview="Denied", is_error=True)
@@ -183,11 +216,99 @@ async def list_files(execution: ToolExecution, args: ListFilesInput) -> ToolResu
     return await asyncio.to_thread(_list_files_sync, args, _session_cwd(execution))
 
 
+def _start_rg(args: list[str], cwd: Path) -> subprocess.Popen[str]:
+    executable = shutil.which("rg")
+    if executable is None:
+        raise FileNotFoundError("ripgrep (rg) is required for file search")
+    return subprocess.Popen(
+        [executable, *args],
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def _stop_rg(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1)
+
+
+def _wait_rg(process: subprocess.Popen[str]) -> int:
+    try:
+        return_code = process.wait(timeout=_RG_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        _stop_rg(process)
+        raise TimeoutError(f"ripgrep timed out after {_RG_TIMEOUT_SECONDS}s")
+    if return_code not in (0, 1):
+        raise RuntimeError(f"ripgrep failed with exit code {return_code}")
+    return return_code
+
+
 class FindFilesInput(BaseModel):
-    path: str = Field(default=".", description="Directory path to search under.")
+    path: str = Field(
+        default=".",
+        description="Directory path to search under. Prefer relative paths from the project default cwd when set.",
+    )
     pattern: str = Field(default="*", description="Glob pattern, for example '*.py' or '**/README.md'.")
     limit: int = Field(default=_DEFAULT_ENTRY_LIMIT, ge=1, le=1000, description="Maximum files to return.")
     include_hidden: bool = Field(default=False, description="Include dotfiles and dot-directories.")
+
+
+def _find_files_with_rg(root: Path, args: FindFilesInput) -> list[dict]:
+    command = ["--files", "--color", "never", "--no-ignore", "--glob", args.pattern]
+    if args.include_hidden:
+        command.append("--hidden")
+
+    process = _start_rg(command, root)
+    assert process.stdout is not None
+
+    matches = []
+    for raw_line in process.stdout:
+        relative = raw_line.rstrip("\n")
+        if not relative:
+            continue
+        path = (root / relative).resolve()
+        if not path.is_file():
+            continue
+        matches.append({"path": str(path), "relative_path": relative, "size": _size_label(path)})
+        if len(matches) >= args.limit:
+            _stop_rg(process)
+            return matches
+
+    _wait_rg(process)
+    return matches
+
+
+def _find_files_failed(root: Path, args: FindFilesInput, error: Exception) -> ToolResult:
+    return ToolResult(
+        content=f"Error finding files with ripgrep: {error}",
+        preview="Find failed",
+        is_error=True,
+        data={"path": str(root), "pattern": args.pattern, "matches": []},
+    )
+
+
+def _format_find_files_result(
+    root: Path, args: FindFilesInput, matches: list[dict], cwd: str | None = None
+) -> ToolResult:
+    matches = [{**item, **_path_data(Path(item["path"]), cwd)} for item in matches]
+    lines = [f"{item['relative_path']:<72} {item['size']}" for item in matches]
+    if not lines:
+        lines = ["No files found."]
+    return ToolResult(
+        content=f"{_display_path(root, cwd)} / {args.pattern}\n" + "\n".join(lines),
+        preview=f"{len(matches)} files",
+        data={**_path_data(root, cwd), "pattern": args.pattern, "matches": matches},
+    )
 
 
 def _find_files_sync(args: FindFilesInput, cwd: str | None = None) -> ToolResult:
@@ -198,36 +319,10 @@ def _find_files_sync(args: FindFilesInput, cwd: str | None = None) -> ToolResult
         return ToolResult(content=f"Path is not a directory: {args.path}", preview="Not a directory", is_error=True)
 
     try:
-        matches = []
-        for current_root, dir_names, file_names in os.walk(root):
-            current = Path(current_root)
-            if not args.include_hidden:
-                dir_names[:] = [name for name in dir_names if not name.startswith(".")]
-                file_names = [name for name in file_names if not name.startswith(".")]
-            dir_names.sort(key=str.lower)
-            for name in sorted(file_names, key=str.lower):
-                path = current / name
-                relative = path.relative_to(root).as_posix()
-                if not fnmatch.fnmatch(relative, args.pattern) and not fnmatch.fnmatch(name, args.pattern):
-                    continue
-                matches.append({"path": str(path), "relative_path": relative, "size": _size_label(path)})
-                if len(matches) >= args.limit:
-                    break
-            if len(matches) >= args.limit:
-                break
-
-        lines = [f"{item['relative_path']:<72} {item['size']}" for item in matches]
-        if not lines:
-            lines = ["No files found."]
-        return ToolResult(
-            content=f"{root} / {args.pattern}\n" + "\n".join(lines),
-            preview=f"{len(matches)} files",
-            data={"path": str(root), "pattern": args.pattern, "matches": matches},
-        )
-    except PermissionError:
-        return ToolResult(content=f"Permission denied: {args.path}", preview="Denied", is_error=True)
-    except OSError as e:
-        return ToolResult(content=f"Error finding files: {e}", preview="Find failed", is_error=True)
+        matches = _find_files_with_rg(root, args)
+        return _format_find_files_result(root, args, matches, cwd)
+    except (OSError, RuntimeError) as e:
+        return _find_files_failed(root, args, e)
 
 
 async def find_files(execution: ToolExecution, args: FindFilesInput) -> ToolResult:
@@ -236,7 +331,10 @@ async def find_files(execution: ToolExecution, args: FindFilesInput) -> ToolResu
 
 class SearchTextInput(BaseModel):
     query: str = Field(min_length=1, description="Literal text to search for.")
-    path: str = Field(default=".", description="File or directory path to search.")
+    path: str = Field(
+        default=".",
+        description="File or directory path to search. Prefer relative paths from the project default cwd when set.",
+    )
     file_glob: str | None = Field(default=None, description="Optional file glob, for example '*.py'.")
     limit: int = Field(default=_DEFAULT_MATCH_LIMIT, ge=1, le=1000, description="Maximum matches to return.")
 
@@ -245,50 +343,67 @@ def _format_match(match: dict) -> str:
     return f"{match['relative_path']}:{match['line']}:{match['column']}: {match['text']}"
 
 
-def _search_text_sync(args: SearchTextInput, cwd: str | None = None) -> ToolResult:
-    root = _resolve_path(args.path, cwd)
-    if not root.exists():
-        return ToolResult(content=f"Path not found: {args.path}", preview="Not found", is_error=True)
+def _search_text_with_rg(root: Path, args: SearchTextInput) -> list[dict]:
+    cwd = root if root.is_dir() else root.parent
+    target = "." if root.is_dir() else root.name
+    command = [
+        "--json",
+        "--fixed-strings",
+        "--line-number",
+        "--column",
+        "--color",
+        "never",
+        "--no-heading",
+        "--no-ignore",
+    ]
+    if args.file_glob:
+        command.extend(["--glob", args.file_glob])
+    command.extend(["--", args.query, target])
 
-    try:
-        return _do_search(root, args)
-    except OSError as e:
-        return ToolResult(content=f"Error searching files: {e}", preview="Search failed", is_error=True)
+    process = _start_rg(command, cwd)
+    assert process.stdout is not None
 
-
-def _do_search(root: Path, args: SearchTextInput) -> ToolResult:
-    paths = (root,) if root.is_file() else root.rglob(args.file_glob or "*")
     matches = []
-    for path in paths:
-        if not path.is_file():
+    for raw_line in process.stdout:
+        event = json.loads(raw_line)
+        if event.get("type") != "match":
             continue
-        if root.is_dir() and _has_hidden_part(path, root):
-            continue
-        try:
-            for line_no, line in enumerate(_read_text(path).splitlines(), start=1):
-                column = line.find(args.query)
-                if column == -1:
-                    continue
-                try:
-                    relative = path.relative_to(root).as_posix()
-                except ValueError:
-                    relative = str(path)
-                matches.append(
-                    {
-                        "path": str(path),
-                        "relative_path": relative,
-                        "line": line_no,
-                        "column": column + 1,
-                        "text": line,
-                    }
-                )
-                if len(matches) >= args.limit:
-                    break
-        except UnicodeDecodeError:
-            continue
-        if len(matches) >= args.limit:
-            break
 
+        data = event.get("data", {})
+        raw_path = data["path"]["text"]
+        path = (cwd / raw_path).resolve()
+        line_text = str(data["lines"]["text"]).rstrip("\r\n")
+        column = line_text.find(args.query) + 1
+        if column <= 0:
+            column = int(data["submatches"][0]["start"]) + 1
+
+        matches.append(
+            {
+                "path": str(path),
+                "relative_path": _relative_path(path, root),
+                "line": int(data["line_number"]),
+                "column": column,
+                "text": line_text,
+            }
+        )
+        if len(matches) >= args.limit:
+            _stop_rg(process)
+            return matches
+
+    _wait_rg(process)
+    return matches
+
+
+def _search_text_failed(root: Path, args: SearchTextInput, error: Exception) -> ToolResult:
+    return ToolResult(
+        content=f"Error searching files with ripgrep: {error}",
+        preview="Search failed",
+        is_error=True,
+        data={"path": str(root), "query": args.query, "matches": []},
+    )
+
+
+def _format_search_text_result(root: Path, args: SearchTextInput, matches: list[dict]) -> ToolResult:
     if not matches:
         return ToolResult(
             content=f"No matches for {args.query!r} under {root}.",
@@ -302,12 +417,24 @@ def _do_search(root: Path, args: SearchTextInput) -> ToolResult:
     )
 
 
+def _search_text_sync(args: SearchTextInput, cwd: str | None = None) -> ToolResult:
+    root = _resolve_path(args.path, cwd)
+    if not root.exists():
+        return ToolResult(content=f"Path not found: {args.path}", preview="Not found", is_error=True)
+
+    try:
+        matches = _search_text_with_rg(root, args)
+        return _format_search_text_result(root, args, matches)
+    except (OSError, RuntimeError, KeyError, json.JSONDecodeError) as e:
+        return _search_text_failed(root, args, e)
+
+
 async def search_text(execution: ToolExecution, args: SearchTextInput) -> ToolResult:
     return await asyncio.to_thread(_search_text_sync, args, _session_cwd(execution))
 
 
 class WriteFileInput(BaseModel):
-    path: str = Field(description="Path to write.")
+    path: str = Field(description="Path to write. Prefer relative paths from the project default cwd when set.")
     content: str = Field(description="Full file content to write.")
 
 
@@ -318,9 +445,10 @@ def _approve_write_file_sync(args: WriteFileInput, cwd: str | None = None) -> Ap
     if not path.parent.exists():
         return None
     before = _read_text(path) if path.exists() and path.is_file() else ""
-    diff = _unified_diff(path, before, args.content)
+    display = _display_path(path, cwd)
+    diff = _unified_diff(path, before, args.content, display_path=display)
     action = "Replace" if path.exists() else "Create"
-    return ApprovalInfo(description=f"{action} {path}", preview=args.content[:500], diff=diff)
+    return ApprovalInfo(description=f"{action} {display}", preview=args.content[:500], diff=diff)
 
 
 async def approve_write_file(execution: ToolExecution, args: WriteFileInput) -> ApprovalInfo | None:
@@ -332,7 +460,11 @@ def _write_file_sync(args: WriteFileInput, cwd: str | None = None) -> ToolResult
     if path.exists() and path.is_dir():
         return ToolResult(content=f"Path is a directory: {args.path}", preview="Is directory", is_error=True)
     if not path.parent.exists():
-        return ToolResult(content=f"Parent directory does not exist: {path.parent}", preview="No parent", is_error=True)
+        return ToolResult(
+            content=f"Parent directory does not exist: {_display_path(path.parent, cwd)}",
+            preview="No parent",
+            is_error=True,
+        )
 
     try:
         path.write_text(args.content, encoding="utf-8")
@@ -342,10 +474,11 @@ def _write_file_sync(args: WriteFileInput, cwd: str | None = None) -> ToolResult
         return ToolResult(content=f"Error writing file: {e}", preview="Write failed", is_error=True)
 
     lines = args.content.count("\n") + 1 if args.content else 0
+    display = _display_path(path, cwd)
     return ToolResult(
-        content=f"Wrote {path} ({lines} lines).",
+        content=f"Wrote {display} ({lines} lines).",
         preview=f"Wrote {lines} lines",
-        data={"path": str(path), "lines": lines},
+        data={**_path_data(path, cwd), "lines": lines},
     )
 
 
@@ -354,7 +487,7 @@ async def write_file(execution: ToolExecution, args: WriteFileInput) -> ToolResu
 
 
 class EditFileInput(BaseModel):
-    path: str = Field(description="Path to edit.")
+    path: str = Field(description="Path to edit. Prefer relative paths from the project default cwd when set.")
     old_text: str = Field(min_length=1, description="Exact existing text block to replace. Must match once.")
     new_text: str = Field(description="Replacement text.")
 
@@ -367,8 +500,11 @@ def _approve_edit_file_sync(args: EditFileInput, cwd: str | None = None) -> Appr
     if before.count(args.old_text) != 1:
         return None
     after = before.replace(args.old_text, args.new_text, 1)
+    display = _display_path(path, cwd)
     return ApprovalInfo(
-        description=f"Edit {path}", preview=args.new_text[:500], diff=_unified_diff(path, before, after)
+        description=f"Edit {display}",
+        preview=args.new_text[:500],
+        diff=_unified_diff(path, before, after, display_path=display),
     )
 
 
@@ -409,7 +545,8 @@ def _edit_file_sync(args: EditFileInput, cwd: str | None = None) -> ToolResult:
     except OSError as e:
         return ToolResult(content=f"Error editing file: {e}", preview="Edit failed", is_error=True)
 
-    return ToolResult(content=f"Edited {path}.", preview="Edited", data={"path": str(path)})
+    display = _display_path(path, cwd)
+    return ToolResult(content=f"Edited {display}.", preview="Edited", data=_path_data(path, cwd))
 
 
 async def edit_file(execution: ToolExecution, args: EditFileInput) -> ToolResult:

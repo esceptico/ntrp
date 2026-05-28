@@ -211,7 +211,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "run_backgrounded"; run_id: string; session_id?: string }
   | { type: "RUN_ERROR"; run_id: string; message: string; code?: string; debug_id?: string | null; recoverable?: boolean }
   | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool" }
-  | { type: "thinking"; status: string }
+  | { type: "thinking"; status: string; run_id?: string | null }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
   | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string; depth?: number }
@@ -645,6 +645,8 @@ export interface ActivationSignal {
   reason: string;
 }
 
+export type ActivationState = "injected" | "selected_not_injected" | "omitted";
+
 export interface ActivationCandidate {
   object_type: KnowledgeObjectType;
   object_id: string;
@@ -658,6 +660,48 @@ export interface ActivationCandidate {
   proactiveness_level: string;
 }
 
+export interface ActivationSelectionTrace {
+  rank: number;
+  object_id: string;
+  object_type: string;
+  title: string;
+  score: number;
+  selected: boolean;
+  injected: boolean;
+  activation_state: ActivationState;
+  model_visible: boolean;
+  actual_use_observed: boolean | null;
+  used_by_model: boolean | null;
+  surface: "prompt" | "context" | "tool" | "skill";
+  selection_reason: string;
+  selection_role: "required" | "advisory" | "evidence_only";
+  activation: string;
+  proactiveness_level: string;
+  reasons: string[];
+  signals: Record<string, unknown>[];
+  source_ids: string[];
+  chars: number;
+}
+
+export interface ActivationSkillSuggestion {
+  object_id: string;
+  skill_name: string;
+  description: string;
+  score: number;
+  reasons: string[];
+  source_ids: string[];
+  selection_role: "required" | "advisory" | "evidence_only";
+}
+
+export interface ActivationRecallBundle {
+  facts: ActivationCandidate[];
+  lessons: ActivationCandidate[];
+  artifacts: ActivationCandidate[];
+  episodes: ActivationCandidate[];
+  warnings: ActivationCandidate[];
+  skills: ActivationSkillSuggestion[];
+}
+
 export interface ActivationBundle {
   query: string;
   scope: string | null;
@@ -666,6 +710,14 @@ export interface ActivationBundle {
   used_chars: number;
   candidates: ActivationCandidate[];
   omitted: ActivationCandidate[];
+  bundles?: Record<string, ActivationCandidate[]>;
+  recall_bundle: ActivationRecallBundle;
+  skills_to_use: ActivationSkillSuggestion[];
+  selection_trace: ActivationSelectionTrace[];
+  retrieved_memory_ids?: number[];
+  injected_memory_ids?: number[];
+  omitted_memory_ids?: number[];
+  usage_event_id?: number | null;
   policy_version: string;
   prompt_context: string | null;
 }
@@ -679,6 +731,10 @@ export interface KnowledgeSourceTraceResult {
   object: KnowledgeObject;
   sources: KnowledgeSourceTrace[];
   policy_version: string;
+  derived_objects?: KnowledgeObject[];
+  related_objects?: KnowledgeObject[];
+  superseded_versions?: KnowledgeObject[];
+  superseded_by_object?: KnowledgeObject | null;
 }
 
 export interface KnowledgePruneResult {
@@ -1405,4 +1461,249 @@ export async function cancelBackgroundTaskApi(
     `/chat/background-tasks/${encodeURIComponent(taskId)}/cancel?session_id=${encodeURIComponent(sessionId)}`,
     { method: "POST" },
   );
+}
+
+export interface KnowledgeFactConsolidationProposal {
+  canonical_id: number;
+  canonical_object_id?: number;
+  canonical_title: string;
+  canonical_text: string;
+  duplicate_ids: number[];
+  duplicate_object_ids?: number[];
+  duplicate_titles: string[];
+  reason: string;
+  confidence: number;
+  proposed_by?: string;
+  evidence_terms: string[];
+  source_ids: string[];
+}
+
+export interface KnowledgeFactConflictProposal {
+  object_ids: number[];
+  reason: string;
+  confidence: number;
+  evidence_terms: string[];
+  proposed_by?: string;
+}
+
+export interface KnowledgeFactConsolidationResult {
+  proposals: KnowledgeFactConsolidationProposal[];
+  conflicts: KnowledgeFactConflictProposal[];
+  scanned: number;
+  skipped: number;
+  policy_version: string;
+  cache?: { hit: boolean; ttl_seconds: number };
+}
+
+export interface KnowledgeFactConsolidationCommitResult {
+  proposal: KnowledgeFactConsolidationProposal;
+  committed: boolean;
+  reason: string;
+  commits: unknown[];
+  canonical?: KnowledgeObject | null;
+  policy_version: string;
+}
+
+export interface KnowledgeWorkflowCluster {
+  id: string;
+  scope: string;
+  key: string;
+  title: string;
+  summary?: string;
+  trigger_description?: string;
+  status: "candidate" | "reviewed" | "promoted" | "rejected" | "stale";
+  promotion_status: "ready" | "candidate_exists" | "below_threshold";
+  lesson_count: number;
+  usage_event_count: number;
+  source_lesson_ids: number[];
+  source_episode_ids: string[];
+  source_artifact_ids: string[];
+  source_usage_event_ids: number[];
+  last_seen_at?: string | null;
+  success_count: number;
+  helpful_count: number;
+  failure_count: number;
+  correction_count: number;
+  has_skill_candidate: boolean;
+  skill_candidate_ids: number[];
+  why_should_exist: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeWorkflowClusterResult {
+  clusters: KnowledgeWorkflowCluster[];
+  skipped: number;
+  policy_version: string;
+  cache?: { hit: boolean; ttl_seconds: number };
+}
+
+export interface KnowledgeSkillPromotionResult {
+  created: KnowledgeObject[];
+  skipped: number;
+  policy_version: string;
+}
+
+export interface KnowledgeWorkflowClusterReviewResult {
+  object: KnowledgeObject;
+}
+
+export interface KnowledgeActivationUsageEvent {
+  id: number;
+  created_at: string;
+  source: string;
+  query?: string | null;
+  retrieved_fact_ids: number[];
+  retrieved_observation_ids: number[];
+  injected_fact_ids: number[];
+  injected_observation_ids: number[];
+  omitted_fact_ids: number[];
+  omitted_observation_ids: number[];
+  bundled_fact_ids: number[];
+  formatted_chars: number;
+  policy_version: string;
+  details: Record<string, unknown>;
+}
+
+export interface KnowledgeUsageObjectSummary {
+  object_id: number;
+  object_type?: KnowledgeObjectType | null;
+  object_status?: KnowledgeObjectStatus | null;
+  object_title?: string | null;
+  event_count: number;
+  injected_count: number;
+  omitted_count: number;
+  selected_not_injected_count: number;
+  used_by_model_count: number;
+  model_visible_count: number;
+  actually_used_count: number;
+  last_seen_at?: string | null;
+  last_event_id?: number | null;
+  selection_reasons: Record<string, number>;
+  surfaces: Record<string, number>;
+  outcome_counts: Record<string, number>;
+  last_selection_reason?: string | null;
+  last_activation_rank?: number | null;
+  last_activation_score?: number | null;
+  last_activation_surface?: string | null;
+  last_activation_state?: ActivationState | null;
+  last_model_visible?: boolean | null;
+  last_actual_use_observed?: boolean | null;
+  last_activation_task?: string | null;
+  last_activation_task_id?: string | null;
+  last_activation_session_id?: string | null;
+  last_activation_run_id?: string | null;
+}
+
+export async function getKnowledgeFactConsolidationApi(
+  config: AppConfig,
+  options: { limit?: number; min_confidence?: number; max_proposals?: number; refresh?: boolean } = {},
+): Promise<KnowledgeFactConsolidationResult> {
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.min_confidence != null) params.set("min_confidence", String(options.min_confidence));
+  if (options.max_proposals != null) params.set("max_proposals", String(options.max_proposals));
+  if (options.refresh != null) params.set("refresh", String(options.refresh));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/facts/consolidation${suffix}`);
+}
+
+export async function commitKnowledgeFactConsolidationApi(
+  config: AppConfig,
+  proposal: KnowledgeFactConsolidationProposal,
+): Promise<KnowledgeFactConsolidationCommitResult> {
+  return apiWithConfig(config, "/knowledge/facts/consolidation/commit", {
+    method: "POST",
+    body: JSON.stringify({
+      proposal: {
+        canonical_object_id: proposal.canonical_object_id ?? proposal.canonical_id,
+        duplicate_object_ids: proposal.duplicate_object_ids ?? proposal.duplicate_ids,
+        reason: proposal.reason,
+        confidence: proposal.confidence,
+        proposed_by: proposal.proposed_by,
+        evidence_terms: proposal.evidence_terms,
+        source_ids: proposal.source_ids,
+      },
+    }),
+  });
+}
+
+export async function getKnowledgeWorkflowClustersApi(
+  config: AppConfig,
+  options: { limit?: number; min_successes?: number; include_below_threshold?: boolean; refresh?: boolean } = {},
+): Promise<KnowledgeWorkflowClusterResult> {
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.min_successes != null) params.set("min_successes", String(options.min_successes));
+  if (options.include_below_threshold != null) params.set("include_below_threshold", String(options.include_below_threshold));
+  if (options.refresh != null) params.set("refresh", String(options.refresh));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/processors/workflow-clusters${suffix}`);
+}
+
+export async function proposeKnowledgeSkillPromotionsApi(
+  config: AppConfig,
+  options: { limit?: number; min_successes?: number } = {},
+): Promise<KnowledgeSkillPromotionResult> {
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.min_successes != null) params.set("min_successes", String(options.min_successes));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/processors/skill-promotions${suffix}`, { method: "POST" });
+}
+
+export async function reviewKnowledgeWorkflowClusterApi(
+  config: AppConfig,
+  clusterId: string,
+  payload: { status: "reviewed" | "rejected"; reason?: string | null },
+): Promise<KnowledgeWorkflowClusterReviewResult> {
+  return apiWithConfig(config, `/knowledge/processors/workflow-clusters/${encodeURIComponent(clusterId)}/review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listKnowledgeActivationUsageEventsApi(
+  config: AppConfig,
+  options: { limit?: number; offset?: number; source?: string | null } = {},
+): Promise<{ events: KnowledgeActivationUsageEvent[] }> {
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.offset != null) params.set("offset", String(options.offset));
+  if (options.source !== undefined && options.source !== null) params.set("source", options.source);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/activation/usage-events${suffix}`);
+}
+
+export async function listKnowledgeUsageSummaryApi(
+  config: AppConfig,
+  options: { limit?: number; offset?: number; max_objects?: number; source?: string | null } = {},
+): Promise<{ objects: KnowledgeUsageObjectSummary[]; events_scanned: number; policy_version: string }> {
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.offset != null) params.set("offset", String(options.offset));
+  if (options.max_objects != null) params.set("max_objects", String(options.max_objects));
+  if (options.source !== undefined && options.source !== null) params.set("source", options.source);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiWithConfig(config, `/knowledge/activation/usage-summary${suffix}`);
+}
+
+export async function recordKnowledgeUsageEventOutcomeApi(
+  config: AppConfig,
+  eventId: number,
+  payload: { signal: string; outcome?: string | null; detail?: string | null; target_object_ids?: number[]; user_corrected_answer?: string | null },
+): Promise<{ event: KnowledgeActivationUsageEvent }> {
+  return apiWithConfig(config, `/knowledge/activation/usage-events/${eventId}/outcome`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createKnowledgeSkillPromotionApi(
+  config: AppConfig,
+  objectId: number,
+): Promise<{ object: KnowledgeObject; skill: { name?: string | null; path?: string | null } }> {
+  return apiWithConfig(config, `/knowledge/skill-promotions/${objectId}/create`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }

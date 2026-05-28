@@ -1101,6 +1101,51 @@ test("stream_reset can rewind an impossible future cursor", async () => {
   expect(lastEventSeqForSession("reset-future-session")).toBe(1);
 });
 
+test("thinking event drives explicit pre-output run state", () => {
+  setState({ currentSessionId: "thinking-session" });
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-thinking",
+    session_id: "thinking-session",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "thinking",
+    run_id: "run-thinking",
+    status: "processing...",
+    session_id: "thinking-session",
+    seq: 2,
+  });
+
+  expect(getState().thinkingRunId).toBe("run-thinking");
+  expect(getState().thinkingStatus).toBe("processing...");
+
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-thinking",
+    session_id: "thinking-session",
+    seq: 3,
+  });
+
+  expect(getState().thinkingRunId).toBeNull();
+  expect(getState().thinkingStatus).toBeNull();
+});
+
+test("thinking event does not resurrect inactive runs", () => {
+  setState({ currentSessionId: "thinking-stale-session" });
+  handleServerEvent({
+    type: "thinking",
+    run_id: "old-run",
+    status: "processing...",
+    session_id: "thinking-stale-session",
+    seq: 1,
+  });
+
+  expect(getState().running).toBe(false);
+  expect(getState().currentRunId).toBeNull();
+  expect(getState().thinkingRunId).toBeNull();
+});
+
 test("stream_reset clears visible transient activity from the old projection", async () => {
   setState({ currentSessionId: "reset-delayed-session" });
   handleServerEvent({

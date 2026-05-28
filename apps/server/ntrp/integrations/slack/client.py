@@ -38,7 +38,7 @@ def _format_message(user_name: str, text: str, ts: str, channel_name: str | None
     return f"{prefix}:\n{text}"
 
 
-_USER_TOKEN_METHODS = frozenset({"assistant.search.context"})
+_USER_TOKEN_METHODS = frozenset({"assistant.search.context", "chat.postMessage"})
 
 
 class SlackClient:
@@ -170,6 +170,24 @@ class SlackClient:
                 break
         if "im" in types:
             self._dm_index_loaded = True
+
+    # -- public write methods --
+
+    async def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> dict[str, str]:
+        """Post a Slack message with the configured user token. Returns Slack channel/ts metadata."""
+        async with aiohttp.ClientSession() as session:
+            channel_id, channel_name = await self._resolve_channel_id(session, channel)
+            payload = {"channel": channel_id, "text": text}
+            if thread_ts:
+                payload["thread_ts"] = thread_ts
+            data = await self._post(session, "chat.postMessage", **payload)
+            ts = data.get("ts", "")
+            return {
+                "channel": data.get("channel", channel_id),
+                "channel_name": channel_name,
+                "ts": ts,
+                "thread_ts": thread_ts or ts,
+            }
 
     # -- public read methods --
 

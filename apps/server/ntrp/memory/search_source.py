@@ -1,7 +1,5 @@
 from datetime import UTC, datetime
 
-from ntrp.knowledge.models import KnowledgeObjectStatus, KnowledgeObjectType
-from ntrp.knowledge.store import KnowledgeObjectRepository
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.search.types import RawItem
 
@@ -13,37 +11,37 @@ class MemorySearchSource:
         self.db = db
 
     async def scan(self) -> list[RawItem]:
-        repo = KnowledgeObjectRepository(self.db.conn)
-        objects = await repo.list_many(
-            object_types={
-                KnowledgeObjectType.FACT,
-                KnowledgeObjectType.PATTERN,
-                KnowledgeObjectType.LESSON,
-                KnowledgeObjectType.PROCEDURE,
-                KnowledgeObjectType.ARTIFACT,
-            },
-            statuses={KnowledgeObjectStatus.ACTIVE, KnowledgeObjectStatus.APPROVED},
-            limit=10_000,
+        rows = await self.db.conn.execute_fetchall(
+            """
+            SELECT id, kind, content, confidence, status, scope, tags, source_refs, created_at, updated_at
+            FROM memory_items
+            WHERE status = 'active'
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 10000
+            """
         )
         items = []
-        for obj in objects:
-            content = obj.text
-            if obj.scope:
-                content = f"{content}\n\nScope: {obj.scope}"
-            created_at = _parse_dt(obj.created_at)
-            updated_at = _parse_dt(obj.updated_at)
+        for row in rows:
+            content = str(row["content"])
+            if row["scope"]:
+                content = f"{content}\n\nScope: {row['scope']}"
+            created_at = _parse_dt(str(row["created_at"]))
+            updated_at = _parse_dt(str(row["updated_at"]))
             items.append(
                 RawItem(
                     source="memory",
-                    source_id=f"knowledge:{obj.id}",
-                    title=obj.title,
+                    source_id=f"memory_item:{row['id']}",
+                    title=f"{row['kind']}: {str(row['content'])[:80]}",
                     content=content,
                     created_at=created_at,
                     updated_at=updated_at,
                     metadata={
-                        "object_type": obj.object_type.value,
-                        "status": obj.status.value,
-                        "scope": obj.scope,
+                        "kind": row["kind"],
+                        "status": row["status"],
+                        "scope": row["scope"],
+                        "confidence": row["confidence"],
+                        "tags": row["tags"],
+                        "source_refs": row["source_refs"],
                     },
                 )
             )

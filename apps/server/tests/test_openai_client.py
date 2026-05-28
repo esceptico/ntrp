@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 import httpx
 import pytest
 
+from ntrp.agent.types.llm import ToolCallStreamDelta
 from ntrp.llm.openai import OpenAIClient
 from ntrp.llm.openai_responses import (
     buffered_stream_responses_completion,
@@ -411,3 +414,133 @@ async def test_chat_completion_stream_reports_remote_protocol_disconnect():
     assert await anext(stream) == "partial"
     with pytest.raises(RuntimeError, match="OpenAI chat completion stream disconnected before completion"):
         await anext(stream)
+
+
+class _ToolStreamChatCompletions:
+    async def create(self, **kwargs):
+        def chunk(*, finish_reason=None, tool_calls=None):
+            return SimpleNamespace(
+                usage=None,
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=finish_reason,
+                        delta=SimpleNamespace(content=None, reasoning_content=None, tool_calls=tool_calls),
+                    )
+                ],
+            )
+
+        def tool_call(*, index=0, call_id=None, name=None, arguments=None):
+            return SimpleNamespace(
+                index=index,
+                id=call_id,
+                function=SimpleNamespace(name=name, arguments=arguments),
+            )
+
+        return _Stream(
+            [
+                chunk(tool_calls=[tool_call(call_id="call_1", name="Search")]),
+                chunk(tool_calls=[tool_call(arguments='{"q"')]),
+                chunk(finish_reason="tool_calls", tool_calls=[tool_call(arguments=':"hi"}')]),
+            ]
+        )
+
+
+class _ToolStreamChatOpenAI:
+    def __init__(self):
+        self.chat = SimpleNamespace(completions=_ToolStreamChatCompletions())
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_stream_emits_tool_call_deltas_before_final_response():
+    client = OpenAIClient(api_key="test")
+    client._client = _ToolStreamChatOpenAI()
+
+    events = [
+        item
+        async for item in client._stream_completion(
+            messages=[{"role": "user", "content": "search"}],
+            model="gpt-5.2",
+            tools=[{"type": "function", "function": {"name": "Search", "parameters": {"type": "object"}}}],
+            tool_choice="auto",
+        )
+    ]
+
+    deltas = [item for item in events if isinstance(item, ToolCallStreamDelta)]
+    assert deltas == [
+        ToolCallStreamDelta(index=0, tool_id="call_1", name="Search"),
+        ToolCallStreamDelta(index=0, arguments_delta='{"q"'),
+        ToolCallStreamDelta(index=0, arguments_delta=':"hi"}'),
+        ToolCallStreamDelta(index=0, tool_id="call_1", name="Search", done=True),
+    ]
+    assert events[-1].choices[0].message.tool_calls[0].function.arguments == '{"q":"hi"}'
+
+
+class _ToolResponse:
+    status = "completed"
+    usage = _Usage()
+    output = [
+        _FakeItem(
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "Search",
+                "arguments": '{"q":"hi"}',
+            }
+        )
+    ]
+
+
+class _ToolResponses:
+    async def create(self, **kwargs):
+        return _Stream(
+            [
+                _Event(
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": 0,
+                        "item": {"type": "function_call", "call_id": "call_1", "name": "Search", "arguments": ""},
+                    }
+                ),
+                _Event({"type": "response.function_call_arguments.delta", "output_index": 0, "delta": '{"q"'}),
+                _Event({"type": "response.function_call_arguments.delta", "output_index": 0, "delta": ':"hi"}'}),
+                _Event(
+                    {
+                        "type": "response.output_item.done",
+                        "output_index": 0,
+                        "item": {
+                            "type": "function_call",
+                            "call_id": "call_1",
+                            "name": "Search",
+                            "arguments": '{"q":"hi"}',
+                        },
+                    }
+                ),
+                _Event({"type": "response.completed"}, response=_ToolResponse()),
+            ]
+        )
+
+
+class _ToolResponsesOpenAI:
+    def __init__(self):
+        self.responses = _ToolResponses()
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_emits_tool_call_deltas_before_final_response():
+    events = [
+        item
+        async for item in stream_responses_completion(
+            _ToolResponsesOpenAI(),
+            {"model": "gpt-5.5", "input": "search"},
+            model="gpt-5.5",
+        )
+    ]
+
+    deltas = [item for item in events if isinstance(item, ToolCallStreamDelta)]
+    assert deltas == [
+        ToolCallStreamDelta(index=0, tool_id="call_1", name="Search"),
+        ToolCallStreamDelta(index=0, arguments_delta='{"q"'),
+        ToolCallStreamDelta(index=0, arguments_delta=':"hi"}'),
+        ToolCallStreamDelta(index=0, tool_id="call_1", name="Search", done=True),
+    ]
+    assert events[-1].choices[0].message.tool_calls[0].function.arguments == '{"q":"hi"}'

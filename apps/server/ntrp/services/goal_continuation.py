@@ -42,5 +42,5 @@ Budget:
 - Token budget: {budget_text}
 - Tokens remaining: {remaining}
 {evidence_block}
-Use the full current session history above before searching external memory or files. If the goal is complete, call complete_goal only after verifying the current state. If progress is blocked on missing user or system input, call block_goal with the specific blocker.
+Use the full current session history above before searching external memory or files. If the goal is complete, call complete_goal only after verifying the current state. If it is not complete, take the next viable action rather than stopping with only a progress note. If progress appears blocked, first exhaust viable local, repo, tool, or system steps. Call block_goal only when missing user or system input truly prevents progress; reuse the same concise reason only if the same blocker still applies. The first two matching blocker reports keep the goal active so automatic continuation can retry; the third marks it blocked.
 </goal_context>"""

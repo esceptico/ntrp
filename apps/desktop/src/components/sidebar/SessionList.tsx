@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, ChevronDown, Folder, Plus, Search, Settings, X } from "lucide-react";
+import { Archive, ChevronDown, Folder, FolderPlus, Plus, Search, Settings, X } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/motion";
 import { useStore } from "../../store";
 import { compactSessionApi } from "../../api";
-import { archiveSession, createSession, loadHistory, moveSessionToProject } from "../../actions";
+import { archiveSession, createProject, createSession, loadHistory, moveSessionToProject } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
 import { groupProjectSessions } from "../../lib/projects";
@@ -66,19 +66,45 @@ export function SessionList() {
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      {/* Search expands inline at the top of the list when triggered. */}
-      {searchActive && (
-        <div className="px-2.5 pt-3 pb-1">
-          <SessionSearch
-            value={query}
-            onChange={setQuery}
-            onClose={closeSearch}
-            autoFocus
-          />
+      <div className="px-2.5 pt-3 pb-1.5">
+        <div className="flex items-center gap-2 pl-[8px] pr-[6px] h-[26px]">
+          <div className="min-w-0 flex-1 flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
+            <Folder size={ICON.XS} strokeWidth={2.1} />
+            <span className="truncate">Projects</span>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <HeaderIconButton
+              icon={<FolderPlus size={ICON.SM} strokeWidth={2} />}
+              label="New project"
+              onClick={() => void createProject()}
+            />
+            <HeaderIconButton
+              icon={<Search size={ICON.SM} strokeWidth={2} />}
+              label="Filter sessions"
+              title="Filter sessions (⌘F)"
+              active={searchActive}
+              onClick={() => setSearchOpen(true)}
+            />
+            <HeaderIconButton
+              icon={<Archive size={ICON.SM} strokeWidth={2} />}
+              label="View archived sessions"
+              onClick={(e) => openArchive(originFromEvent(e.currentTarget))}
+            />
+          </div>
         </div>
-      )}
+        {searchActive && (
+          <div className="pt-1.5">
+            <SessionSearch
+              value={query}
+              onChange={setQuery}
+              onClose={closeSearch}
+              autoFocus
+            />
+          </div>
+        )}
+      </div>
 
-      <div className={clsx("flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-both pb-3", !searchActive && "pt-3")}>
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
         {sessions.length === 0 && projects.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
@@ -86,14 +112,13 @@ export function SessionList() {
         ) : grouped.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">No matches.</div>
         ) : (
-          grouped.map((group, idx) => {
+          grouped.map((group) => {
             const groupKey = group.project?.project_id ?? "inbox";
             const label = group.project?.name ?? "Inbox";
             const isCollapsed = collapsedGroups.has(groupKey);
-            const isFirst = idx === 0 && !searchActive;
             return (
               <div key={groupKey}>
-                <div className="sticky top-0 z-10 flex items-center gap-1 pr-[18px]">
+                <div className="flex items-center gap-1 pr-[18px]">
                   <button
                     type="button"
                     onClick={() => toggleGroup(groupKey)}
@@ -134,28 +159,6 @@ export function SessionList() {
                     >
                       <Plus size={ICON.SM} strokeWidth={2} />
                     </button>
-                    {isFirst && (
-                      <>
-                      <button
-                        type="button"
-                        onClick={() => setSearchOpen(true)}
-                        aria-label="Filter sessions"
-                        title="Filter sessions (⌘F)"
-                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
-                      >
-                        <Search size={ICON.SM} strokeWidth={2} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => openArchive(originFromEvent(e.currentTarget))}
-                        aria-label="View archived sessions"
-                        title="View archived sessions"
-                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
-                      >
-                        <Archive size={ICON.SM} strokeWidth={2} />
-                      </button>
-                      </>
-                    )}
                   </div>
                 </div>
                 <AnimatePresence initial={false}>
@@ -311,5 +314,36 @@ function SessionSearch({
         <X size={ICON.XS} strokeWidth={2} />
       </button>
     </div>
+  );
+}
+
+function HeaderIconButton({
+  icon,
+  label,
+  title,
+  active = false,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  title?: string;
+  active?: boolean;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={title ?? label}
+      className={clsx(
+        "grid place-items-center w-[26px] h-[22px] rounded-[5px] transition-colors",
+        active
+          ? "text-ink bg-surface-soft/80"
+          : "text-faint hover:text-ink hover:bg-surface-soft/70",
+      )}
+    >
+      {icon}
+    </button>
   );
 }

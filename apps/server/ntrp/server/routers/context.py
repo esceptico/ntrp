@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ntrp.core.compactor import compactable_range
 from ntrp.events.sse import CompactionFinishedEvent, CompactionStartedEvent
 from ntrp.llm.models import get_model
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.deps import get_bus_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CompactRequest, UpdateDirectivesRequest
@@ -95,6 +95,8 @@ async def compact_context(
             "before_tokens": data.last_input_tokens,
         }
 
+    if resolved_session_id:
+        await prime_bus_cursor_from_store(buses, resolved_session_id, runtime.session_service.store)
     bus = buses.get_or_create(resolved_session_id) if resolved_session_id else None
 
     if bus:

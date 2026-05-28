@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ntrp.agent import (
     CompletionResponse,
     ReasoningContentDelta,
+    ToolCallStreamDelta,
 )
 from ntrp.llm.base import CompletionClient
 from ntrp.llm.openai_codex_auth import CODEX_BASE_URL, get_valid_tokens
@@ -71,7 +72,7 @@ class OpenAICodexClient(CompletionClient):
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         client = await self._client()
         try:
             request = self._prepare(

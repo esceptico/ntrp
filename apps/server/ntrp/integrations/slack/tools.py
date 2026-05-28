@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from ntrp.integrations.slack.client import SlackClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
+from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
 from ntrp.utils import truncate
 
 _TEXT_TRUNCATE = 280
@@ -162,6 +162,34 @@ async def slack_file(execution: ToolExecution, args: SlackFileInput) -> ToolResu
     return ToolResult(content=result.text, preview=f"Read image {args.file_id}", model_content=result.model_content)
 
 
+class SlackPostMessageInput(BaseModel):
+    channel: str = Field(description="Channel name (e.g. 'general' or '#general') or channel ID (e.g. 'C0123456789')")
+    text: str = Field(description="Slack message text to post. Supports Slack mrkdwn formatting.")
+    thread_ts: str | None = Field(default=None, description="Optional parent message timestamp to post as a thread reply")
+
+
+SLACK_POST_MESSAGE_DESCRIPTION = (
+    "Post a message to Slack using the configured Slack user token (SLACK_USER_TOKEN / xoxp-). "
+    "Use thread_ts to reply in a thread. Returns the posted message timestamp, which can be used as thread_ts for follow-up replies."
+)
+
+
+async def approve_slack_post_message(execution: ToolExecution, args: SlackPostMessageInput) -> ApprovalInfo | None:
+    location = f"{args.channel} thread {args.thread_ts}" if args.thread_ts else args.channel
+    preview = truncate(args.text, 1000)
+    return ApprovalInfo(description=f"Post Slack message to {location}", preview=preview, diff=None)
+
+
+async def slack_post_message(execution: ToolExecution, args: SlackPostMessageInput) -> ToolResult:
+    source = execution.ctx.get_client("slack", SlackClient)
+    result = await source.post_message(args.channel, args.text, thread_ts=args.thread_ts)
+    channel_label = result.get("channel_name") or result.get("channel") or args.channel
+    ts = result.get("ts", "")
+    thread_ts = result.get("thread_ts", ts)
+    content = f"Posted to #{channel_label} at {ts}\nchannel: {result.get('channel', args.channel)}\nthread_ts: {thread_ts}"
+    return ToolResult(content=content, preview=f"Posted to #{channel_label}")
+
+
 class SlackDmsInput(BaseModel):
     query: str | None = Field(default=None, description="Optional substring to filter by peer name or user id")
     limit: int = Field(default=50, description="Max DMs to return")
@@ -229,6 +257,20 @@ slack_channels_tool = tool(
     input_model=SlackChannelsInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.EXTERNAL, permissions=frozenset({"slack"})),
     execute=slack_channels,
+)
+
+slack_post_message_tool = tool(
+    display_name="SlackPostMessage",
+    description=SLACK_POST_MESSAGE_DESCRIPTION,
+    input_model=SlackPostMessageInput,
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"slack"}),
+    ),
+    approval=approve_slack_post_message,
+    execute=slack_post_message,
 )
 
 slack_dms_tool = tool(

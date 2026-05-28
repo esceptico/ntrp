@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 from typing import Protocol
 
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta
+from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, ToolCallStreamDelta
 from ntrp.agent.types.tool_choice import ToolChoice
 
 
@@ -14,7 +14,7 @@ class LLMClient(Protocol):
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_key: str | None = None,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]: ...
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]: ...
 
     async def complete(
         self,
