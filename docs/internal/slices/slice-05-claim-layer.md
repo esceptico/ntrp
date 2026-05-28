@@ -1,6 +1,6 @@
 # Slice 5 — Pattern finder pass 2 (`observation → claim`) + fact-consolidation rebuild
 
-**Status:** Draft for PM A/B gate, then codex fire.
+**Status:** Draft for PM A/B gate, then codex fire. **REVISED 2026-05-28 05:20** — repo-surface corrections after auditing `items_store.py` (see §17 audit log).
 **Prereqs:** slice 4 shipped (`863ce546`). 832 tests passing + 3 xfailed. Ruff clean. Token-bug fix landed (`3b66a04`). Repo cleanup done (`bfb4148f`).
 **Backlog absorbed from `slice-07-backlog.md`:** §1 (LongMemEval xfails), §2A (`test_knowledge_next_level.py` resurrection — 14 tests), §3A (dead `search_*` wrappers in `memory/service.py`).
 **Out of scope:** contradiction watcher (slice 6), skill inducer + `is_toolable` (slice 7), UI, retrieval-layer changes, entity-resolution revival.
@@ -87,7 +87,9 @@ existing_claims = await self.repo.list_recent_items(
 candidates = observations + existing_claims
 ```
 
-Including existing claims is what enables "claim chains" (claim of claims) — but they must be **marked** so the LLM prompt can render `[claim]` vs `[observation]` differently, and so the supersession logic at the end can distinguish "we updated this old claim with new evidence" from "we made a new claim entirely."
+Including existing claims is what enables "claim chains" (claim of claims) — they must be **marked** so the LLM prompt can render `[claim]` vs `[observation]` differently, and so the supersession logic at the end can distinguish "we updated this old claim with new evidence" from "we made a new claim entirely."
+
+**Note on `list_recent_items` signature (audited 2026-05-28):** the real method is `list_recent_items(*, kind, window_days, limit, scope)` — no `status` filter today. Pass 2 must filter `status == 'active'` in Python after the fetch, OR codex adds an optional `status` kwarg to the repo (small extension, document in §12).
 
 ### 3.2 Similarity
 
@@ -97,18 +99,19 @@ Reuse `_cosine`, `_tag_jaccard`, `_temporal` from pass 1. New combined formula (
 def claim_similarity(a: MemoryItem, b: MemoryItem) -> float:
     cos = _cosine(a.embedding, b.embedding)
     jac = _tag_jaccard(a.tags, b.tags)
-    ent = _entity_overlap(a, b)  # NEW for pass 2
     tmp = _temporal(a.created_at, b.created_at)
     # pass 1: 0.5 cos + 0.2 jac + 0.3 tmp
-    # pass 2: 0.55 cos + 0.15 jac + 0.20 ent + 0.10 tmp
-    return 0.55 * cos + 0.15 * jac + 0.20 * ent + 0.10 * tmp
+    # pass 2: 0.65 cos + 0.20 jac + 0.15 tmp  (more weight on semantic content for claims)
+    return 0.65 * cos + 0.20 * jac + 0.15 * tmp
 ```
 
-`_entity_overlap(a, b)` is a Jaccard over `a.metadata.get("entities", [])` and `b.metadata.get("entities", [])` (strings — names, no IDs). Pass-1 observations already include extracted entities in their metadata via the slice-4 prompt. If `a` or `b` has no entities, return 0.0 (NOT 1.0 — absent entity info should not boost similarity).
+**Entity overlap deliberately omitted.** The `MemoryItem` dataclass (audited 2026-05-28) has no `metadata` column and no `entities` field; entities exist only in `tags` (which `_tag_jaccard` already covers). Reviving structured entity overlap is slice 8+ work alongside entity-resolution revival. Slice 5 must NOT add a `metadata` JSON column — that's a schema migration, out of scope.
+
+If future entity extraction lands on `tags` with a `entity:<name>` prefix convention (decide in slice 8+), pass-2 similarity can be re-tuned without breaking compat.
 
 ### 3.3 Threshold
 
-New env var `NTRP_PATTERN_FINDER_PASS2_THRESHOLD` (default 0.72; pass 1 uses 0.68 per `_threshold_from_env()` in `pattern_finder.py`). Higher threshold because false-positive claims are worse than false-positive observations — a bad claim survives until contradiction watcher (slice 6) catches it.
+New env var `NTRP_PATTERN_FINDER_PASS2_THRESHOLD` (default 0.72; pass 1 uses 0.68 per `_threshold_from_env()` in `pattern_finder.py`). Higher threshold because false-positive claims are worse than false-positive observations — a bad claim survives until contradiction watcher (slice 6) catches it. Add a sibling `_pass2_threshold_from_env()` helper in `pattern_finder.py` (same shape as `_threshold_from_env` — one allowed addition).
 
 ### 3.4 Cluster shape
 
@@ -155,49 +158,92 @@ Extend `_reject_summary` in `pattern_finder.py` to match both `NO_PATTERN` and `
 
 ### 4.4 Confidence
 
-Each claim row gets `score = mean(evidence_scores) * cluster_size_factor` where `cluster_size_factor = min(1.0, 0.5 + 0.1 * len(cluster))`. Per spec §3.7 derivation. Codex MUST implement this — it's the field LongMemEval relies on for `object_type=fact` candidate ranking.
+Each claim row gets `confidence = mean(evidence_confidences) * cluster_size_factor` where `cluster_size_factor = min(1.0, 0.5 + 0.1 * len(cluster))`. Field name is `confidence` on `MemoryItemInsert` (NOT `score` — audited 2026-05-28). Per spec §3.7 derivation. Codex MUST implement this — it's the field LongMemEval relies on for `object_type=fact` candidate ranking.
+
+`evidence_confidences` = list of `item.confidence` for each evidence item (observations + prior claims) in the cluster. Slice 4 sets observation confidence to `PATTERN_FINDER_CONFIDENCE` (constant), so pass-2's mean is constant-dominated until pass-1 starts producing variable confidence. That's acceptable for slice 5; tuning is a follow-up.
 
 ---
 
 ## 5. Persistence
 
-Each claim is written as one `memory_items` row:
+**Mirror slice-4's `_persist_observation` shape exactly** — `pattern_finder.py:111-159`. The real repo surface is:
+
+- `repo.insert_item(MemoryItemInsert(...), commit=False)` — returns new item id
+- `repo.insert_parent_edge(child_id, parent_id, role, commit=False)` — positional, NOT kwargs
+- Status flips via raw SQL `UPDATE memory_items SET status='superseded', invalid_at=?, updated_at=? WHERE id=?`
+- Transaction managed manually: `conn.execute("BEGIN")` → ops with `commit=False` → `conn.commit()` (or `rollback()` on exception)
+
+`_persist_claim` (model on `_persist_observation`):
 
 ```python
-MemoryItem(
-    id=uuid7(),
-    kind="claim",
-    scope=scope,
-    content=draft.content,
-    tags=draft.tags,              # union of evidence tags, deduped, sorted
-    entities=draft.entities,      # union of evidence entities, deduped, sorted
-    embedding=await embedder.embed_one(draft.content),
-    source_refs=[],               # claims don't have direct source_refs — evidence edges carry that
-    score=draft.score,
-    created_at=now,
-    updated_at=now,
-    metadata={
-        "pass": 2,
-        "cluster_size": len(cluster),
-        "evidence_kinds": sorted({item.kind for item in cluster}),  # ["observation"] or ["claim", "observation"]
-    },
-)
+async def _persist_claim(
+    self,
+    draft: ClaimDraft,
+    *,
+    scope: str,
+    superseded_ids: list[str],
+    now: datetime,
+) -> str:
+    embedding = await self.embedder.embed_one(draft.content)
+    await self.repo.conn.execute("BEGIN")
+    try:
+        claim_id = await self.repo.insert_item(
+            MemoryItemInsert(
+                kind="claim",
+                content=draft.content,
+                provenance="inferred",
+                source_refs=[],                  # claims carry evidence via edges, not source_refs
+                confidence=draft.confidence,     # field is `confidence` on the dataclass, NOT `score`
+                status="active",
+                scope=scope,
+                tags=draft.tags,
+                embedding=embedding,
+                valid_from=now,
+            ),
+            commit=False,
+        )
+        for evidence_id in draft.evidence_item_ids:
+            await self.repo.insert_parent_edge(claim_id, evidence_id, "evidence", commit=False)
+        for old_claim_id in superseded_ids:
+            await self.repo.insert_parent_edge(claim_id, old_claim_id, "supersedes", commit=False)
+            await self.repo.conn.execute(
+                """
+                UPDATE memory_items
+                SET status = 'superseded', invalid_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (now.isoformat(), now.isoformat(), old_claim_id),
+            )
+        await self.repo.conn.commit()
+        return claim_id
+    except BaseException:
+        await self.repo.conn.rollback()
+        raise
 ```
 
-Plus N rows in `memory_item_parents`:
+**`ClaimDraft` dataclass:**
 
 ```python
-for evidence_item in cluster:
-    await repo.add_parent(
-        item_id=new_claim_id,
-        parent_id=evidence_item.id,
-        role="evidence",
-    )
+@dataclass(slots=True)
+class ClaimDraft:
+    content: str
+    tags: list[str]               # union of evidence tags, deduped, sorted
+    confidence: float             # see §4.4
+    evidence_item_ids: list[str]
 ```
 
-**Supersession:** if `evidence_ids_strict_superset(new_cluster, old_claim)` then mark `old_claim.status = 'superseded'` AND add an edge `parent_id=new_claim_id, role='supersedes'` from the new claim to the old. (Reuses the supersession edge type already added in slice 4.)
+No `entities`, no `metadata`, no `source_refs` — match the real `MemoryItem` shape.
 
-**Idempotency:** if a claim already exists whose evidence set EQUALS `frozenset(item.id for item in cluster)`, skip (no rewrite). Match pass-1's `existing` check shape.
+**Supersession:** if a candidate cluster's evidence IDs are a strict superset of an existing claim's evidence IDs, that existing claim goes into `superseded_ids`. The check helper mirrors `_existing_observation_evidence` from pass 1 (line 269 of `pattern_finder.py`); generalize as described in §3.5.
+
+**Idempotency:** if a claim already exists whose evidence set EQUALS `frozenset(item.id for item in cluster)`, skip. Mirror pass-1's `existing_evidence_ids in existing` short-circuit.
+
+**Per-pass / cluster-size context lost:** since there's no `metadata` column, the `pass=2 / cluster_size / evidence_kinds` info I originally proposed has nowhere to land. Options:
+  - (a) Encode in `tags` as `pf:pass=2`, `pf:cluster_size=N` (cheap, ugly, parseable).
+  - (b) Skip entirely — pass and cluster_size are reconstructable from `list_parent_edges`.
+  - (c) Add a future-proof `memory_items.metadata JSON` column in a separate migration slice.
+
+Brief picks **(b)**. Codex confirms in §12.
 
 ---
 
@@ -454,6 +500,46 @@ Do NOT push. Do NOT touch frozen zones. Do NOT refactor pass 1. Do NOT delete fi
 | Resurrected `test_knowledge_next_level_migrated.py` discovers bugs in slice 3/4 retrieval | Medium | Medium | Treat as out-of-scope: skip the failing tests with `@pytest.mark.skip(reason="slice 5 follow-up: <description>")` and add an entry to `slice-07-backlog.md`. |
 | `pattern_finder.py` grows past 600 lines | Medium | Low | §2 allows split into `pattern_finder_pass2.py` with re-export shim. |
 | Scheduler regressions break slice 4 daily run | Low | High | If extending the slice-4 scheduler, run pass 1 alone first as a smoke check; gate test #3 catches DB-level breakage. |
+
+---
+
+## 17. Repo-surface audit (2026-05-28 05:20 — post-draft correction)
+
+Audited `apps/server/ntrp/memory/items_store.py` and `pattern_finder.py` after drafting v1 of this brief. Findings that corrected the brief:
+
+### What the repo actually has
+
+`MemoryItemsRepository` public API:
+- `embedding_dim() -> int | None`
+- `list_recent_items(*, kind, window_days, limit, scope) -> list[MemoryItem]`
+- `insert_item(MemoryItemInsert, *, commit=True) -> str`
+- `insert_parent_edge(child_id, parent_id, role, order=None, *, commit=True) -> None`
+- `list_parent_edges(child_id) -> list[MemoryItemParent]`
+
+That is the entire surface. No `get_item`, no `set_status`, no `update_metadata`, no `add_parent`, no entity lookup.
+
+`MemoryItem` columns:
+- `id, kind, content, provenance, source_refs, confidence, status, valid_from, invalid_at, scope, tags, artifact_ref, usage, feedback, created_at, updated_at, embedding`
+
+**No `metadata` JSON column. No `entities` field.** The brief's v1 references to `metadata` and `entities` were invented; v2 (this rev) removes them.
+
+`MemoryItemInsert` defaults: `confidence` is required, `provenance="inferred"`, `status="active"`, `usage`/`feedback` zero-init dicts, `source_refs=list[dict]`, `tags=list[str]`.
+
+### What slice 5 must NOT add
+
+- A `metadata` JSON column on `memory_items` — schema migration is its own slice.
+- A `set_status` repo method — slice 4 already does status flips via raw SQL inside `_persist_observation`; pass 2 mirrors that pattern.
+- Entity-specific repo queries — defer to slice 8+.
+
+### What slice 5 MAY add
+
+- `_pass2_threshold_from_env()` helper next to `_threshold_from_env()` in `pattern_finder.py`.
+- Optional `status` kwarg on `list_recent_items` (default `'active'`) IF codex finds it cleaner than Python-side filtering. Document either way in §12.
+- A generalization of `_existing_observation_evidence` → `_existing_evidence(repo, *, kind, ...)` with a back-compat wrapper (already authorized in §3.5).
+
+### Carry-forward to slice 6 + 7 briefs
+
+Slices 6 and 7 (already committed at `311ecd9b`) reference `add_parent`, `set_status`, `update_metadata`, `update_metadata_key`, `count_parents`, `get_evidence_chain`, `list_items_by_entities`, `update_metadata` — none of which exist. Those briefs will need a similar v2 pass before fire. **Do not fire slice-06-invoke.sh or slice-07-invoke.sh as currently committed.** Open question logged for the user.
 
 ---
 

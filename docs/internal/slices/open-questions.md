@@ -287,3 +287,37 @@ slice-7 skill/write-gate, desktop UI memory components.
 
 **Next step:** user A/B gate on brief, then either fire `slice-05-invoke.sh`
 or hand back for revisions.
+
+### Repo-surface audit revealed brief errors — 2026-05-28 05:25
+
+After drafting all 3 slice briefs, I audited `apps/server/ntrp/memory/items_store.py`
+and `pattern_finder.py` and found the v1 briefs referenced **non-existent
+methods and columns**. The real repo surface is much smaller than the briefs
+assumed.
+
+**Slice 5 (`slice-05-claim-layer.md`) — REVISED in place:**
+- Removed all references to `metadata` JSON column and `entities` field on
+  `MemoryItem` (neither exists).
+- Removed `_entity_overlap` from pass-2 similarity formula; reweighted to
+  `0.65 cos + 0.20 jac + 0.15 tmp`.
+- Rewrote §5 persistence to mirror `_persist_observation` exactly:
+  `insert_item` + `insert_parent_edge(child_id, parent_id, role, ...)` +
+  raw SQL `UPDATE memory_items SET status=...`.
+- Confidence field is `confidence`, not `score`.
+- New §17 documents the audit + carry-forward warning.
+
+**Slices 6 + 7 (`slice-06-*.md`, `slice-07-*.md`) — NEED v2 BEFORE FIRE:**
+Both briefs reference `add_parent`, `set_status`, `update_metadata`,
+`update_metadata_key`, `count_parents`, `get_evidence_chain`,
+`list_items_by_entities` — none exist on `MemoryItemsRepository`.
+
+**DO NOT fire `slice-06-invoke.sh` or `slice-07-invoke.sh` as currently
+committed (`311ecd9b`).** They need similar repo-surface corrections, which
+are mechanical but tedious. Two options:
+- (a) Revise both now in this session before user sees them
+- (b) Let slice 5 land first, then revise 6 + 7 against actual claim-layer
+  surface (cleaner, but adds a session round-trip)
+
+This is the kind of error a "would have wasted a codex run" gate caught.
+Lesson for future briefs: audit the actual repo surface BEFORE writing
+algorithm pseudocode, not after.
