@@ -18,7 +18,6 @@ from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
 from ntrp.server.routers.context import router as context_router
 from ntrp.server.routers.gmail import router as gmail_router
-from ntrp.server.routers.knowledge import router as knowledge_router
 from ntrp.server.routers.loops import router as loops_router
 from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.ops import router as ops_router
@@ -224,7 +223,6 @@ app.add_middleware(AuthMiddleware)
 
 
 app.include_router(gmail_router)
-app.include_router(knowledge_router)
 app.include_router(admin_memory_router)
 app.include_router(automation_router)
 app.include_router(chat_router)
