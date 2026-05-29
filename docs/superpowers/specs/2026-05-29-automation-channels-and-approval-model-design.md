@@ -27,6 +27,9 @@ Three related defects and one missing capability around automations:
 - Per-tool auto-approve allowlists (explicitly rejected in favor of a two-state model).
 - Sidebar grouping of channels by automation (v1 uses a per-card link only).
 - External channel adapters (Slack/iMessage) — out of scope.
+- A dedicated "channels" sidebar tree/directory — explicitly rejected; channels live in projects as ordinary sessions.
+- **Pinned chats** — deferred to a separate spec; it is a general sidebar feature (session model + store + sort) orthogonal to automations.
+- Move-between-projects and project creation — already implemented; no work here.
 
 ---
 
@@ -82,6 +85,8 @@ At automation-creation time, auto-provision a channel and bind the automation to
 
 Applies to **all** automations, including one-shots — the one-shot's output is exactly what the user wants to read afterward.
 
+**Landing project:** channels land in the default project (Inbox) — no special project routing. There is deliberately **no** dedicated "channels" tree; a channel is just a `session_type="channel"` session living in a project, distinguished only by its glyph. Relocating a channel uses the existing session context menu (`Move to Inbox` / per-project entries, [SessionContextMenu.tsx:77-83](../../../apps/desktop/src/components/sidebar/SessionContextMenu.tsx)) and project creation ([SessionList.tsx:79](../../../apps/desktop/src/components/sidebar/SessionList.tsx)) — both already exist, so no new org primitives are needed.
+
 ### Execution: in-session (chat pipeline)
 
 All auto-channel automations execute **inside their channel session** via the chat/iteration path (`_dispatch_iteration` → `submit_chat_message`, [app.py:104-116](../../../apps/server/ntrp/server/app.py)), not the headless post pipeline. The scheduler selects the iteration dispatcher when `read_history=True` ([scheduler.py:552](../../../apps/server/ntrp/automation/scheduler.py)), so auto-channel automations are created with `read_history=True` (this becomes the default rather than an opt-in). Consequences:
@@ -108,6 +113,7 @@ In-session execution accumulates history. This is handled by the app's existing 
 - Rename the **Writable** toggle → **Auto-Approve** (label + `aria-label`) in [AutomationEditor.tsx:312-325](../../../apps/desktop/src/components/automations/AutomationEditor.tsx).
 - Surface the channel: add a link from each automation card → its bound channel, resolved via `origin_automation_id`. Channels already render in the sidebar with a radio icon; the Chat header already shows the origin automation. No new sidebar grouping in v1.
 - The channel composer already works (it is a normal session) — no new chat affordance needed beyond ensuring automation channels are openable.
+- **Channel glyph tooltip:** the radio glyph ([SessionStateIcon.tsx:33-39](../../../apps/desktop/src/components/sidebar/SessionStateIcon.tsx)) currently carries only an `aria-label="Channel"`, which does not appear on hover. Add a real hover tooltip explaining what a channel is (e.g. "Channel — an automation posts its activity here; you can chat in it too"), so new users understand the glyph.
 
 ---
 
