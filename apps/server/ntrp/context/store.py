@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     args_hash TEXT,
     status TEXT NOT NULL,
     result_preview TEXT,
+    result_ref TEXT,
     started_at TEXT NOT NULL,
     ended_at TEXT,
     PRIMARY KEY (run_id, tool_call_id)
@@ -153,6 +154,19 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_run
     ON tool_calls(run_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started
     ON tool_calls(session_id, started_at);
+
+CREATE TABLE IF NOT EXISTS research_artifacts (
+    scope_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    content TEXT NOT NULL,
+    byte_len INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope_id, path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_artifacts_scope
+    ON research_artifacts(scope_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS tool_approvals (
     run_id TEXT NOT NULL,
@@ -432,6 +446,7 @@ class SessionStore:
             "args_hash": row["args_hash"],
             "status": row["status"],
             "result_preview": row["result_preview"],
+            "result_ref": row["result_ref"],
             "started_at": row["started_at"],
             "ended_at": row["ended_at"],
         }
@@ -827,46 +842,50 @@ class SessionStore:
             return
 
         pk_columns = [row["name"] for row in sorted(rows, key=lambda row: row["pk"]) if row["pk"]]
-        if pk_columns == ["run_id", "tool_call_id"]:
-            return
+        if pk_columns != ["run_id", "tool_call_id"]:
+            await self.conn.execute("ALTER TABLE tool_calls RENAME TO tool_calls_old")
+            await self.conn.execute(
+                """
+                CREATE TABLE tool_calls (
+                    run_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    tool_call_id TEXT NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    args_hash TEXT,
+                    status TEXT NOT NULL,
+                    result_preview TEXT,
+                    result_ref TEXT,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    PRIMARY KEY (run_id, tool_call_id)
+                )
+                """
+            )
+            await self.conn.execute(
+                """
+                INSERT OR IGNORE INTO tool_calls (
+                    run_id, session_id, tool_call_id, tool_name, action, scope,
+                    args_hash, status, result_preview, started_at, ended_at
+                )
+                SELECT
+                    run_id, session_id, tool_call_id, tool_name, action, scope,
+                    args_hash, status, result_preview, started_at, ended_at
+                FROM tool_calls_old
+                """
+            )
+            await self.conn.execute("DROP TABLE tool_calls_old")
+            await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id)")
+            await self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started ON tool_calls(session_id, started_at)"
+            )
+            await self.conn.commit()
 
-        await self.conn.execute("ALTER TABLE tool_calls RENAME TO tool_calls_old")
-        await self.conn.execute(
-            """
-            CREATE TABLE tool_calls (
-                run_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                tool_call_id TEXT NOT NULL,
-                tool_name TEXT NOT NULL,
-                action TEXT NOT NULL,
-                scope TEXT NOT NULL,
-                args_hash TEXT,
-                status TEXT NOT NULL,
-                result_preview TEXT,
-                started_at TEXT NOT NULL,
-                ended_at TEXT,
-                PRIMARY KEY (run_id, tool_call_id)
-            )
-            """
-        )
-        await self.conn.execute(
-            """
-            INSERT OR IGNORE INTO tool_calls (
-                run_id, session_id, tool_call_id, tool_name, action, scope,
-                args_hash, status, result_preview, started_at, ended_at
-            )
-            SELECT
-                run_id, session_id, tool_call_id, tool_name, action, scope,
-                args_hash, status, result_preview, started_at, ended_at
-            FROM tool_calls_old
-            """
-        )
-        await self.conn.execute("DROP TABLE tool_calls_old")
-        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id)")
-        await self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started ON tool_calls(session_id, started_at)"
-        )
-        await self.conn.commit()
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(tool_calls)")
+        if "result_ref" not in {row["name"] for row in rows}:
+            await self.conn.execute("ALTER TABLE tool_calls ADD COLUMN result_ref TEXT")
+            await self.conn.commit()
 
     async def _migrate_background_agent_runs_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(background_agent_runs)")
@@ -1369,6 +1388,52 @@ class SessionStore:
             (status, result_preview, now, run_id, tool_call_id),
         )
         await self.conn.commit()
+
+    async def put_research_artifact(self, *, scope_id: str, path: str, content: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            INSERT INTO research_artifacts (scope_id, path, content, byte_len, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(scope_id, path) DO UPDATE SET
+                content = excluded.content,
+                byte_len = excluded.byte_len,
+                updated_at = excluded.updated_at
+            """,
+            (scope_id, path, content, len(content.encode("utf-8")), now, now),
+        )
+        await self.conn.commit()
+
+    async def append_research_artifact(self, *, scope_id: str, path: str, content: str) -> None:
+        existing = await self.get_research_artifact(scope_id=scope_id, path=path) or ""
+        await self.put_research_artifact(scope_id=scope_id, path=path, content=existing + content)
+
+    async def get_research_artifact(self, *, scope_id: str, path: str) -> str | None:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT content FROM research_artifacts WHERE scope_id = ? AND path = ?",
+            (scope_id, path),
+        )
+        return rows[0]["content"] if rows else None
+
+    async def list_research_artifacts(self, *, scope_id: str) -> list[dict]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT path, byte_len, updated_at, substr(content, 1, 120) AS preview
+            FROM research_artifacts
+            WHERE scope_id = ?
+            ORDER BY updated_at ASC
+            """,
+            (scope_id,),
+        )
+        return [
+            {
+                "path": row["path"],
+                "byte_len": row["byte_len"],
+                "updated_at": row["updated_at"],
+                "preview": row["preview"],
+            }
+            for row in rows
+        ]
 
     async def list_tool_calls(self, *, run_id: str) -> list[dict]:
         rows = await self.read_conn.execute_fetchall(

@@ -295,6 +295,9 @@ def _build_compacted_messages(
         compaction["message_start_id"] = start_id
     if end > start and (end_id := _message_ref_id(messages[end - 1])):
         compaction["message_end_id"] = end_id
+    tool_messages = [msg for msg in messages[start:end] if msg.get("role") == Role.TOOL and msg.get("tool_call_id")]
+    if tool_messages:
+        compaction["tool_result_refs"] = [msg["tool_call_id"] for msg in tool_messages]
     if rehydration_state:
         compaction["rehydration"] = rehydration_state
 

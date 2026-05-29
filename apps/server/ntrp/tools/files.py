@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from ntrp.core.tool_result_files import RESULTS_BASE
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.formatting import format_lines_with_pagination
@@ -41,7 +42,7 @@ EDIT_FILE_DESCRIPTION = (
 
 _DEFAULT_OFFSET = 1
 _DEFAULT_LINE_LIMIT = 500
-_OFFLOAD_DIR = "/tmp/ntrp/"
+_OFFLOAD_DIR = f"{RESULTS_BASE}/"  # durable offloaded tool-result files
 _OFFLOAD_READ_LIMIT = 100
 _DEFAULT_ENTRY_LIMIT = 200
 _DEFAULT_MATCH_LIMIT = 100
@@ -151,7 +152,8 @@ def _read_file_sync(args: ReadFileInput, cwd: str | None = None) -> ToolResult:
         content = _read_text(full_path)
         formatted = format_lines_with_pagination(content, offset, limit)
         lines = len(content.split("\n"))
-        return ToolResult(content=formatted, preview=f"Read {lines} lines")
+        source_ref = None if is_offloaded else {"kind": "file", "ref": str(full_path), "title": full_path.name}
+        return ToolResult(content=formatted, preview=f"Read {lines} lines", source_ref=source_ref)
 
     except PermissionError:
         return ToolResult(

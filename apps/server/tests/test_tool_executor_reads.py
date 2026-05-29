@@ -185,7 +185,7 @@ async def test_duplicate_read_retries_after_post_processing_failure(monkeypatch)
     )
     failures = 0
 
-    def flaky_offload(name: str, result: ToolResult) -> ToolResult:
+    def flaky_offload(result: ToolResult, tool_call_id: str) -> ToolResult:
         nonlocal failures
         if failures == 0:
             failures += 1

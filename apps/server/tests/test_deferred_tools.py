@@ -11,8 +11,7 @@ from ntrp.core.compaction_model_request_middleware import CompactionModelRequest
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.model_context_budget import (
-    MODEL_TOOL_RESULT_PREVIEW_CHARS,
-    MODEL_TOOL_RESULT_TOTAL_PREVIEW_CHARS,
+    MODEL_TOOL_RESULT_KEEP_FULL_CHARS,
     ToolResultContextBudgetMiddleware,
 )
 from ntrp.core.spawner import create_spawn_fn
@@ -253,8 +252,9 @@ async def test_compaction_uses_persisted_input_tokens_on_first_request():
 
 
 @pytest.mark.asyncio
-async def test_model_context_budget_clamps_huge_tool_tail_after_compaction():
-    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+async def test_model_context_budget_stubs_oversized_tool_tail_after_compaction():
+    # A single result above the keep-full budget is stubbed (in practice offload catches it first).
+    huge_result = "x" * (MODEL_TOOL_RESULT_KEEP_FULL_CHARS + 10_000)
 
     class CompactsToHugeToolTail:
         def should_compact(self, messages, model, last_input_tokens):
@@ -287,23 +287,16 @@ async def test_model_context_budget_clamps_huge_tool_tail_after_compaction():
 
     tool_content = prepared.messages[-1]["content"]
     assert len(tool_content) < len(huge_result)
-    assert len(tool_content) <= MODEL_TOOL_RESULT_PREVIEW_CHARS + 500
-    assert "Tool result compacted for model context" in tool_content
+    assert "cleared from context" in tool_content
     assert huge_result not in tool_content
 
 
 @pytest.mark.asyncio
-async def test_model_context_budget_uses_small_aggregate_tool_budget():
-    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+async def test_model_context_budget_keeps_recent_full_stubs_old():
+    big = "x" * (MODEL_TOOL_RESULT_KEEP_FULL_CHARS // 2 + 1000)  # only the most recent fits
     messages = [{"role": "system", "content": "system"}]
-    for i in range(12):
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": f"call-{i}",
-                "content": huge_result,
-            }
-        )
+    for i in range(4):
+        messages.append({"role": "tool", "tool_call_id": f"call-{i}", "content": big})
 
     async def next_request(req: ModelRequest) -> ModelRequest:
         return ModelRequest(
@@ -317,13 +310,13 @@ async def test_model_context_budget_uses_small_aggregate_tool_budget():
         )
 
     prepared = await ToolResultContextBudgetMiddleware()(_request(_registry()), next_request)
-    tool_contents = [msg["content"] for msg in prepared.messages if msg.get("role") == "tool"]
+    by_id = {m["tool_call_id"]: m["content"] for m in prepared.messages if m.get("role") == "tool"}
 
-    assert all("Tool result compacted for model context" in content for content in tool_contents)
-    assert all(len(content) <= MODEL_TOOL_RESULT_PREVIEW_CHARS for content in tool_contents[:8])
-    assert any("Preview omitted" in content for content in tool_contents)
-    assert sum(len(content) for content in tool_contents[:8]) <= MODEL_TOOL_RESULT_TOTAL_PREVIEW_CHARS
-    assert huge_result not in "\n".join(tool_contents)
+    # most recent kept full; older ones collapsed to a short stub
+    assert by_id["call-3"] == big
+    for cid in ("call-0", "call-1", "call-2"):
+        assert "cleared from context" in by_id[cid]
+        assert big not in by_id[cid]
 
 
 @pytest.mark.asyncio
@@ -908,7 +901,7 @@ async def test_spawned_agent_extra_tools_are_child_only(monkeypatch):
 async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
     registry = _registry()
     captured = {}
-    huge_result = "x" * (MODEL_TOOL_RESULT_PREVIEW_CHARS + 10_000)
+    huge_result = "x" * (MODEL_TOOL_RESULT_KEEP_FULL_CHARS + 10_000)
 
     class CompactsToHugeToolTail:
         def __init__(self):
@@ -981,7 +974,7 @@ async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
     )
     tool_content = prepared.messages[-1]["content"]
     assert len(tool_content) < len(huge_result)
-    assert "Tool result compacted for model context" in tool_content
+    assert "cleared from context" in tool_content
     assert huge_result not in tool_content
     assert compactor.seen_messages is not None
     assert huge_result not in str(compactor.seen_messages)

@@ -1,15 +1,72 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+import pytest_asyncio
 
+import ntrp.database as database
 import ntrp.tools.research as research_module
 from ntrp.agent import SharedLedger
 from ntrp.context.models import SessionState
+from ntrp.context.store import SessionStore
 from ntrp.core.spawner import SpawnResult
 from ntrp.memory.activation import MemoryActivationBundle
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.executor import ToolExecutor
+
+
+@pytest_asyncio.fixture
+async def session_store(tmp_path: Path):
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    yield store
+    await read_conn.close()
+    await conn.close()
+
+
+SCRATCHPAD_TOOL_NAMES = {
+    "write_research_artifact",
+    "append_research_artifact",
+    "read_research_artifact",
+    "list_research_artifacts",
+}
+
+
+def test_scratchpad_tools_are_research_only():
+    from ntrp.integrations.core import CORE_INTEGRATIONS
+
+    assert set(research_module.RESEARCH_AGENT_TOOLS) >= SCRATCHPAD_TOOL_NAMES
+    main_tool_names = {name for integ in CORE_INTEGRATIONS for name in integ.tools}
+    assert not (SCRATCHPAD_TOOL_NAMES & main_tool_names)
+
+
+@pytest.mark.asyncio
+async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_store: SessionStore):
+    captured = {}
+    registry = ToolExecutor().registry
+
+    async def spawn_fn(ctx, task, **kwargs):
+        captured.update(kwargs)
+        await session_store.put_research_artifact(scope_id="research-1", path="inv.md", content="big inventory")
+        return SpawnResult(text="done")
+
+    ctx = _context(SharedLedger(), registry=registry, spawn_fn=spawn_fn)
+    ctx.services["store"] = session_store
+    execution = ToolExecution(tool_id="research-1", tool_name="research", ctx=ctx)
+
+    result = await research_module.research(
+        execution, research_module.ResearchInput(task="x", depth="normal")
+    )
+
+    tool_names = {schema["function"]["name"] for schema in captured["tools"]}
+    assert tool_names >= SCRATCHPAD_TOOL_NAMES
+    assert result.data is not None
+    assert result.data["artifacts"] == [
+        {"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}
+    ]
 
 
 class _FakeMemoryRetrieval:
@@ -77,7 +134,11 @@ async def test_research_spawns_child_with_research_ledger_helpers():
     assert "research_note" in tool_names
     assert "research_outline" in tool_names
     assert "research_cover" in tool_names
-    assert set(captured["extra_tools"]) == {"research_note", "research_outline", "research_cover"}
+    assert set(captured["extra_tools"]) == {
+        "research_note",
+        "research_outline",
+        "research_cover",
+    } | SCRATCHPAD_TOOL_NAMES
     assert captured["research_scope_id"] == "research-1"
 
 

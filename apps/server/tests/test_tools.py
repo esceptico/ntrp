@@ -157,24 +157,11 @@ async def test_tool_override_deny_blocks_execution():
 
 
 @pytest.mark.asyncio
-async def test_tool_override_ask_bypasses_run_auto_approve():
-    async def handler(execution, args):
-        return ToolResult(content="ok")
-
+async def test_tool_override_ask_headless_bypasses_skip_approvals():
+    """ASK override + headless (no UI) + skip_approvals → bypasses (fires)."""
     registry = ToolRegistry(tool_overrides={"read_state": ToolOverrideDecision.ASK})
-    _register_tools(
-        registry,
-        {
-            "read_state": tool(
-                description="Read state.",
-                execute=handler,
-                policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
-            )
-        },
-    )
-    session_state = SessionState(session_id="test", started_at=datetime.now(UTC))
     ctx = ToolContext(
-        session_state=session_state,
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
         registry=registry,
         run=RunContext(run_id="run-1", approval_controls=ApprovalControls(skip_approvals=True)),
         io=IOBridge(),
@@ -183,8 +170,79 @@ async def test_tool_override_ask_bypasses_run_auto_approve():
 
     rejection = await ToolExecution(tool_id="call-1", tool_name="read_state", ctx=ctx).request_approval("Approve")
 
+    assert rejection is None
+
+
+@pytest.mark.asyncio
+async def test_tool_override_ask_with_ui_connected_still_requires_approval():
+    """ASK override + UI connected + skip_approvals → still blocks (does NOT bypass)."""
+    registry = ToolRegistry(tool_overrides={"read_state": ToolOverrideDecision.ASK})
+    pending: dict[str, asyncio.Future] = {}
+
+    async def emit(event):
+        pass
+
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run-1", approval_controls=ApprovalControls(skip_approvals=True)),
+        io=IOBridge(emit=emit, pending_approvals=pending, approval_timeout_seconds=0.001),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    rejection = await ToolExecution(tool_id="call-1", tool_name="read_state", ctx=ctx).request_approval("Approve")
+
+    # Did not short-circuit at the bypass — went on to await approval and timed out.
     assert rejection is not None
-    assert rejection.feedback == "No UI connected — cannot approve"
+    assert rejection.feedback == "Approval timed out"
+
+
+@pytest.mark.asyncio
+async def test_tool_override_deny_blocks_in_headless_run():
+    """DENY is enforced upstream (registry.execute), independent of skip_approvals."""
+    async def handler(execution, args):
+        return ToolResult(content="should not run")
+
+    registry = ToolRegistry(tool_overrides={"blocked": ToolOverrideDecision.DENY})
+    _register_tools(
+        registry,
+        {
+            "blocked": tool(
+                description="Blocked.",
+                execute=handler,
+                policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+            )
+        },
+    )
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run-1", approval_controls=ApprovalControls(skip_approvals=True)),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    result = await registry.execute("blocked", ToolExecution(tool_id="call-1", tool_name="blocked", ctx=ctx), {})
+
+    assert result.is_error is True
+    assert result.preview == "Denied by settings"
+
+
+@pytest.mark.asyncio
+async def test_non_overridden_tool_skip_approvals_bypasses():
+    """Regression guard: non-overridden tool + skip_approvals → bypasses."""
+    registry = ToolRegistry()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run-1", approval_controls=ApprovalControls(skip_approvals=True)),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    rejection = await ToolExecution(tool_id="call-1", tool_name="some_tool", ctx=ctx).request_approval("Approve")
+
+    assert rejection is None
 
 
 def _make_execution(tool_name: str = "test") -> ToolExecution:
@@ -206,6 +264,13 @@ def _make_tool_context(registry: ToolRegistry, session_id: str = "test") -> Tool
         io=IOBridge(),
         background_tasks=BackgroundTaskRegistry(session_id=session_id),
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_result_files(tmp_path, monkeypatch):
+    import ntrp.core.tool_result_files as trf
+
+    monkeypatch.setattr(trf, "RESULTS_BASE", tmp_path / "tool-results")
 
 
 @pytest_asyncio.fixture
@@ -769,8 +834,8 @@ async def test_ntrp_tool_executor_offload_clamps_single_long_line_preview():
     result = await executor.execute("large_result", {}, "call-1")
 
     assert len(result.content) < OFFLOAD_PREVIEW_CHARS + 500
-    assert "preview truncated" in result.content
-    assert "Full result offloaded" in result.content
+    assert "truncated" in result.content
+    assert "saved to" in result.content
     assert "read_file" in result.content
 
 
@@ -884,6 +949,153 @@ async def test_ntrp_tool_executor_audits_policy_enabled_calls(session_store: Ses
     assert rows[0]["args_hash"] == expected_hash
     assert rows[0]["status"] == "success"
     assert rows[0]["result_preview"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_offloaded_result_persisted_to_file(session_store: SessionStore):
+    import ntrp.core.tool_result_files as trf
+
+    big = "data line\n" * 8000  # > OFFLOAD_THRESHOLD
+
+    async def big_read(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+        return ToolResult(content=big, preview="big")
+
+    registry = ToolRegistry()
+    registry.register(
+        "big_offload",
+        tool(
+            description="Return a big offloadable payload.",
+            input_model=EmptyInput,
+            execute=big_read,
+            policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, audit=True, offload=True),
+        ),
+    )
+    ctx = _make_tool_context(registry, session_id="sess-1")
+    ctx.services["store"] = session_store
+    executor = NtrpToolExecutor(ToolExecutor().with_registry(registry), ctx)
+
+    result = await executor.execute("big_offload", {}, "call-7")
+
+    # full result saved to a durable file, recovered via the normal read_file tool by path
+    assert "read_file" in result.content
+    path = trf.result_file_path("call-7")
+    assert str(path) in result.content
+    assert path.exists()
+    assert path.read_text() == big
+
+
+@pytest.mark.asyncio
+async def test_offload_preview_keeps_head_and_tail(session_store: SessionStore):
+    head_marker = "HEAD_LINE_UNIQUE_MARKER"
+    tail_marker = "TAIL_LINE_UNIQUE_MARKER"
+    middle = "\n".join(f"filler line {i}" for i in range(20_000))  # well over the offload threshold
+    content = f"{head_marker}\n{middle}\n{tail_marker}"
+
+    async def big_ht(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+        return ToolResult(content=content, preview="big")
+
+    registry = ToolRegistry()
+    registry.register(
+        "big_ht",
+        tool(
+            description="Return a big payload with distinct head and tail.",
+            input_model=EmptyInput,
+            execute=big_ht,
+            policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, audit=True, offload=True),
+        ),
+    )
+    ctx = _make_tool_context(registry, session_id="sess-1")
+    ctx.services["store"] = session_store
+    executor = NtrpToolExecutor(ToolExecutor().with_registry(registry), ctx)
+
+    result = await executor.execute("big_ht", {}, "call-ht")
+
+    assert head_marker in result.content  # head preserved
+    assert tail_marker in result.content  # tail preserved (errors early, results late)
+    assert "lines omitted" in result.content
+
+
+@pytest.mark.asyncio
+async def test_research_artifact_write_then_read(session_store: SessionStore):
+    from ntrp.tools.research_artifacts import (
+        ReadResearchArtifactInput,
+        WriteResearchArtifactInput,
+        read_research_artifact,
+        write_research_artifact,
+    )
+
+    class _Svc:
+        store = session_store
+
+    ctx = _make_tool_context(ToolRegistry(), session_id="s")
+    ctx.services["session"] = _Svc()
+    ex = ToolExecution(tool_id="t", tool_name="write_research_artifact", ctx=ctx)
+
+    w = await write_research_artifact(ex, WriteResearchArtifactInput(path="sources/inv.md", content="hello world"))
+    assert not w.is_error
+
+    r = await read_research_artifact(ex, ReadResearchArtifactInput(path="sources/inv.md"))
+    assert not r.is_error
+    assert "hello world" in r.content
+
+
+@pytest.mark.asyncio
+async def test_research_artifact_rejects_traversal(session_store: SessionStore):
+    from ntrp.tools.research_artifacts import WriteResearchArtifactInput, write_research_artifact
+
+    class _Svc:
+        store = session_store
+
+    ctx = _make_tool_context(ToolRegistry(), session_id="s")
+    ctx.services["session"] = _Svc()
+    ex = ToolExecution(tool_id="t", tool_name="write_research_artifact", ctx=ctx)
+
+    for bad in ["/abs/path", "../escape", "a/../b"]:
+        res = await write_research_artifact(ex, WriteResearchArtifactInput(path=bad, content="x"))
+        assert res.is_error, f"expected error for path {bad!r}"
+
+
+@pytest.mark.asyncio
+async def test_research_artifact_size_cap(session_store: SessionStore):
+    from ntrp.tools.research_artifacts import (
+        MAX_ARTIFACT_BYTES,
+        WriteResearchArtifactInput,
+        write_research_artifact,
+    )
+
+    class _Svc:
+        store = session_store
+
+    ctx = _make_tool_context(ToolRegistry(), session_id="s")
+    ctx.services["session"] = _Svc()
+    ex = ToolExecution(tool_id="t", tool_name="write_research_artifact", ctx=ctx)
+
+    res = await write_research_artifact(
+        ex, WriteResearchArtifactInput(path="big.md", content="x" * (MAX_ARTIFACT_BYTES + 1))
+    )
+    assert res.is_error
+
+
+@pytest.mark.asyncio
+async def test_research_artifact_count_cap(session_store: SessionStore):
+    from ntrp.tools.research_artifacts import (
+        MAX_ARTIFACTS_PER_SCOPE,
+        WriteResearchArtifactInput,
+        write_research_artifact,
+    )
+
+    class _Svc:
+        store = session_store
+
+    ctx = _make_tool_context(ToolRegistry(), session_id="s")
+    ctx.services["session"] = _Svc()
+    ex = ToolExecution(tool_id="t", tool_name="write_research_artifact", ctx=ctx)
+
+    for i in range(MAX_ARTIFACTS_PER_SCOPE):
+        ok = await write_research_artifact(ex, WriteResearchArtifactInput(path=f"f{i}.md", content="x"))
+        assert not ok.is_error
+    over = await write_research_artifact(ex, WriteResearchArtifactInput(path="overflow.md", content="x"))
+    assert over.is_error
 
 
 @pytest.mark.asyncio

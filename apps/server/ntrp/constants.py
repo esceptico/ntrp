@@ -68,18 +68,17 @@ MAX_MESSAGES = 120  # message count ceiling — compress regardless of tokens
 COMPRESSION_KEEP_RATIO = 0.2  # the most recent % of messages to keep uncompressed
 SESSION_HANDOFF_MARKER = "[Session State Handoff]"
 
-# Tool result offloading: large results stored externally, compact reference in context.
-# Manus pattern: full representation → file, compact representation → context.
+# Tool result offloading: large results kept in context only as a head+tail preview.
+# Manus/Claude Code pattern: full representation → durable file, compact preview → context.
 #
-# This is the ONE knob that gates tool-result truncation. Tools must not
-# trim their own output without leaving a continuation path — any such
-# in-tool truncation is a bug. NtrpToolExecutor._maybe_offload moves the
-# full content to NTRP_TMP_BASE/<session>/results/<tool>_<n>.txt and
-# returns a head preview + file path so the agent can grep/read it.
-NTRP_TMP_BASE = "/tmp/ntrp"
-OFFLOAD_THRESHOLD = 50000  # chars — results above this are offloaded to temp files
+# This is the ONE knob that gates tool-result truncation. Tools must not trim their own
+# output without leaving a continuation path. Results above OFFLOAD_THRESHOLD are written
+# to a durable file (core.tool_result_files) and NtrpToolExecutor._maybe_offload returns a
+# head+tail preview pointing at read_file(path=...) so the agent reads more by path.
+NTRP_TMP_BASE = "/tmp/ntrp"  # background-task result staging (see context.RESULT_BASE)
+OFFLOAD_THRESHOLD = 50000  # chars — results above this are reduced to a preview + durable file
 OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summary, not raw chars)
-OFFLOAD_PREVIEW_CHARS = 12000  # hard cap for compact references; full content remains in the offload file
+OFFLOAD_PREVIEW_CHARS = 12000  # hard cap for compact references; full content is in the durable file
 
 
 # --- Display Truncation ---

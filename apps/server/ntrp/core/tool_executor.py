@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import json
-from pathlib import Path
 from typing import Any
 
 from ntrp import logging
@@ -9,11 +8,11 @@ from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger, access_key, format_arguments
 from ntrp.constants import (
     DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
-    NTRP_TMP_BASE,
     OFFLOAD_PREVIEW_CHARS,
     OFFLOAD_PREVIEW_LINES,
     OFFLOAD_THRESHOLD,
 )
+from ntrp.core.tool_result_files import persist_result
 from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolScope
 from ntrp.tools.deferred import is_deferred_tool
@@ -45,7 +44,6 @@ class NtrpToolExecutor:
         self._ctx = ctx
         self._ledger = ledger
         self._skip_duplicate_reads = skip_duplicate_reads
-        self._offload_counter = 0
         self._meta_cache: dict[str, ToolMeta | None] = {}
 
     async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
@@ -108,7 +106,7 @@ class NtrpToolExecutor:
 
             result = self._truncate_result(result, tool.policy.max_result_chars)
             if tool.policy.offload:
-                result = self._maybe_offload(name, result)
+                result = self._maybe_offload(result, tool_call_id)
 
             finish_status = self._audit_status(result)
             finish_preview = result.preview
@@ -197,6 +195,7 @@ class NtrpToolExecutor:
             is_error=result.is_error,
             data=result.data,
             model_content=result.model_content,
+            source_ref=result.source_ref,
         )
 
     def get_meta(self, name: str) -> ToolMeta | None:
@@ -213,26 +212,21 @@ class NtrpToolExecutor:
             )
         return self._meta_cache[name]
 
-    def _maybe_offload(self, tool_name: str, result: ToolResult) -> ToolResult:
+    def _maybe_offload(self, result: ToolResult, tool_call_id: str) -> ToolResult:
         content = result.content
         if len(content) <= OFFLOAD_THRESHOLD:
             return result
 
-        self._offload_counter += 1
-        offload_dir = Path(NTRP_TMP_BASE) / self._ctx.session_id / "results"
-        offload_dir.mkdir(parents=True, exist_ok=True)
-        offload_path = offload_dir / f"{tool_name}_{self._offload_counter}.txt"
-        offload_path.write_text(content, encoding="utf-8")
-
+        path = persist_result(tool_call_id, content)
         lines = content.split("\n")
         total = len(lines)
         preview, preview_lines = _bounded_offload_preview(lines)
         hidden_lines = max(0, total - preview_lines)
         compact = (
             f"{preview}\n\n"
-            f"[Full result offloaded → {offload_path}; {total} lines total, {hidden_lines} not shown here.]\n"
-            f"Use bash(grep -n 'pattern' '{offload_path}') to find specific content, "
-            f"or read_file(path='{offload_path}', offset=N, limit=M) to read a specific section."
+            f"[Full result ({total} lines, {hidden_lines} not shown here) saved to {path}.]\n"
+            f"Use read_file(path={str(path)!r}, offset=N, limit=M) to read more, "
+            f"or search_text / bash grep over that file to find specific content."
         )
         return ToolResult(
             content=compact,
@@ -240,19 +234,37 @@ class NtrpToolExecutor:
             is_error=result.is_error,
             data=result.data,
             model_content=result.model_content,
+            source_ref=result.source_ref,
         )
 
 
-def _bounded_offload_preview(lines: list[str]) -> tuple[str, int]:
-    preview: list[str] = []
+def _take_lines(lines: list[str], char_budget: int) -> tuple[str, int]:
+    out: list[str] = []
     used = 0
-    for line in lines[:OFFLOAD_PREVIEW_LINES]:
-        remaining = OFFLOAD_PREVIEW_CHARS - used
+    for line in lines:
+        remaining = char_budget - used
         if remaining <= 0:
             break
         if len(line) > remaining:
-            preview.append(f"{line[:remaining]}... [preview truncated]")
-            return "\n".join(preview), len(preview)
-        preview.append(line)
+            out.append(f"{line[:remaining]}... [truncated]")
+            return "\n".join(out), len(out)
+        out.append(line)
         used += len(line) + 1
-    return "\n".join(preview), len(preview)
+    return "\n".join(out), len(out)
+
+
+def _bounded_offload_preview(lines: list[str]) -> tuple[str, int]:
+    # Keep a head AND a tail: errors/setup tend to appear early, final results/exit codes late.
+    if len(lines) <= OFFLOAD_PREVIEW_LINES:
+        return _take_lines(lines, OFFLOAD_PREVIEW_CHARS)
+
+    head_line_budget = OFFLOAD_PREVIEW_LINES * 3 // 5
+    tail_line_budget = OFFLOAD_PREVIEW_LINES - head_line_budget
+    head_char_budget = OFFLOAD_PREVIEW_CHARS * 3 // 5
+    tail_char_budget = OFFLOAD_PREVIEW_CHARS - head_char_budget
+
+    head_text, head_n = _take_lines(lines[:head_line_budget], head_char_budget)
+    tail_text, tail_n = _take_lines(lines[-tail_line_budget:], tail_char_budget)
+    omitted = max(0, len(lines) - head_n - tail_n)
+    preview = f"{head_text}\n... [{omitted} lines omitted] ...\n{tail_text}"
+    return preview, head_n + tail_n

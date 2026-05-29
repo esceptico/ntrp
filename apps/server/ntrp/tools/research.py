@@ -14,8 +14,14 @@ from ntrp.skills.activation import (
     record_auto_activated_skill_events,
 )
 from ntrp.tools.core import ToolResult, tool
-from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
+from ntrp.tools.research_artifacts import (
+    append_research_artifact_tool,
+    list_research_artifacts_tool,
+    read_research_artifact_tool,
+    write_research_artifact_tool,
+)
 
 _logger = get_logger(__name__)
 
@@ -103,7 +109,11 @@ USER CONTEXT:
 RESEARCH LEDGER TOOLS:
 - Use research_note() to record facts, dead ends, contradictions, and gaps as you find them.
 - For deep or broad tasks, call research_outline() early with the sections the answer must cover, then call research_cover() when a source supports a section.
-- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record that as a note and say so in the final answer.""")
+- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record that as a note and say so in the final answer.
+
+SCRATCHPAD (for long output):
+- For bulky intermediates — long source inventories, large tables, draft reports — write them to an artifact with write_research_artifact()/append_research_artifact() instead of carrying everything in context, and read_research_artifact() back specific parts as needed.
+- Keep your final answer a concise, distilled summary; the caller automatically sees the artifact manifest.""")
 
 RESEARCH_DESCRIPTION = (
     "Spawn a research agent with access to all read-only tools. "
@@ -242,8 +252,24 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
     # Carry the subagent's own usage + cost out via `data` so the desktop
     # can render a per-agent budget breakdown on its trace row. The cost
     # has already rolled into the caller's tracker inside spawn_fn.
-    data = {"usage": spawn.usage, "cost": spawn.cost} if spawn.usage is not None else None
-    return ToolResult(content=spawn.text, preview=f"Researched ({args.depth})", data=data)
+    data: dict = {}
+    if spawn.usage is not None:
+        data["usage"] = spawn.usage
+        data["cost"] = spawn.cost
+    if artifacts := await _list_scope_artifacts(ctx, execution.tool_id):
+        data["artifacts"] = artifacts
+    return ToolResult(content=spawn.text, preview=f"Researched ({args.depth})", data=data or None)
+
+
+async def _list_scope_artifacts(ctx: ToolContext, scope_id: str) -> list[dict]:
+    store = ctx.services.get("store")
+    if store is None:
+        svc = ctx.services.get("session")
+        store = getattr(svc, "store", None) if svc else None
+    if store is None:
+        return []
+    rows = await store.list_research_artifacts(scope_id=scope_id)
+    return [{"path": r["path"], "bytes": r["byte_len"], "preview": r["preview"]} for r in rows]
 
 
 async def research_note(execution: ToolExecution, args: ResearchNoteInput) -> ToolResult:
@@ -349,4 +375,8 @@ RESEARCH_AGENT_TOOLS = {
     "research_note": research_note_tool,
     "research_outline": research_outline_tool,
     "research_cover": research_cover_tool,
+    "write_research_artifact": write_research_artifact_tool,
+    "append_research_artifact": append_research_artifact_tool,
+    "read_research_artifact": read_research_artifact_tool,
+    "list_research_artifacts": list_research_artifacts_tool,
 }

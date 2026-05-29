@@ -53,6 +53,51 @@ def test_build_compacted_messages_embeds_rehydration_state():
     assert compacted[1]["compaction"]["rehydration"] == state
 
 
+def test_compacted_messages_record_tool_result_refs():
+    messages = [
+        {"role": Role.SYSTEM, "content": "system", "message_id": "sys"},
+        {"role": Role.ASSISTANT, "content": "calling", "message_id": "m-1"},
+        {"role": Role.TOOL, "content": "big output", "tool_call_id": "call-A", "name": "read_file"},
+        {"role": Role.TOOL, "content": "more output", "tool_call_id": "call-B", "name": "bash"},
+        {"role": Role.USER, "content": "tail", "message_id": "m-4"},
+    ]
+
+    compacted = _build_compacted_messages(messages, 1, 4, "summary")
+
+    assert compacted[1]["compaction"]["tool_result_refs"] == ["call-A", "call-B"]
+
+
+def test_compacted_messages_omit_tool_result_refs_when_none():
+    messages = [
+        {"role": Role.SYSTEM, "content": "system"},
+        {"role": Role.USER, "content": "old", "message_id": "m1"},
+        {"role": Role.ASSISTANT, "content": "new", "message_id": "m2"},
+    ]
+
+    compacted = _build_compacted_messages(messages, 1, 2, "summary")
+
+    assert "tool_result_refs" not in compacted[1]["compaction"]
+
+
+def test_handoff_content_has_no_reread_ref_list():
+    # The ref-list is an invitation to re-read (all 4 leader systems omit it); only the summary remains.
+    messages = [
+        {"role": Role.SYSTEM, "content": "system"},
+        {"role": Role.ASSISTANT, "content": "calling", "message_id": "m-1"},
+        {"role": Role.TOOL, "content": "the full pricing data here", "tool_call_id": "call-A", "name": "web_fetch"},
+        {"role": Role.USER, "content": "tail", "message_id": "m-4"},
+    ]
+
+    compacted = _build_compacted_messages(messages, 1, 3, "summary text")
+    content = compacted[1]["content"]
+
+    assert content == f"{SESSION_HANDOFF_MARKER}\nsummary text"
+    assert "read_tool_result" not in content
+    assert "tool_result:" not in content
+    # the ids are still in metadata for the UI, just not surfaced to the model
+    assert compacted[1]["compaction"]["tool_result_refs"] == ["call-A"]
+
+
 def _large_history(message_count: int = 10, chars_per_message: int = 45_000) -> list[dict]:
     return [
         {"role": "system", "content": "system"},
