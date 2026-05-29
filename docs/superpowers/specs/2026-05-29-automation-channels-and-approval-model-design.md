@@ -44,7 +44,10 @@ Rename the field `writable` → `auto_approve` across its full surface:
 - **Service:** `toggle_writable` → `toggle_auto_approve`, `create`/`update` param, `_build_metadata_changes`, `create_loop` (hardcoded `writable=True` → `auto_approve=True`).
 - **Runner:** `RunRequest.writable` → `auto_approve` ([runner.py:48](../../../apps/server/ntrp/operator/runner.py)); still used to filter tools (`get_tools(read_only=not auto_approve)`, [runner.py:100](../../../apps/server/ntrp/operator/runner.py)).
 - **Scheduler/app:** `skip_approvals=automation.writable` → `automation.auto_approve` ([scheduler.py:518](../../../apps/server/ntrp/automation/scheduler.py), [app.py:114,145](../../../apps/server/ntrp/server/app.py)).
-- **Desktop:** the "Writable" toggle ([AutomationEditor.tsx:312-325](../../../apps/desktop/src/components/automations/AutomationEditor.tsx)) → "Auto-Approve", plus `FormState`, API payload types.
+- **Desktop:**
+  - The "Writable" toggle ([AutomationEditor.tsx:312-325](../../../apps/desktop/src/components/automations/AutomationEditor.tsx)) → "Auto-Approve" (label + `aria-label`), plus `FormState.writable` and the form↔payload mapping.
+  - API types: `Automation.writable`, `CreateAutomationPayload.writable`, `UpdateAutomationPayload.writable` in [api.ts](../../../apps/desktop/src/api.ts) → `auto_approve`.
+  - The trust badge ([automationTrust.ts](../../../apps/desktop/src/lib/automationTrust.ts), rendered at [AutomationsModal.tsx:385](../../../apps/desktop/src/components/AutomationsModal.tsx)): `automationTrustLabel` returns `"can write"` when `writable` (line 9) → switch to `auto_approve` and relabel to **"auto-approve"** (matches the toggle). `automationTrustTone` returns the cautionary `"bad"` tone when `writable` (line 15) → keep the cautionary tone keyed off `auto_approve`, since an auto-approve automation still acts unsupervised.
 
 ### Semantics (two-state, single boolean)
 
