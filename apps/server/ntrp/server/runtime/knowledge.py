@@ -2,7 +2,7 @@ from ntrp.config import Config
 from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBufferRepository
 from ntrp.memory.connectors.chat import ChatConnector
-from ntrp.memory.connectors.episode_close import CompletionSummaryClient
+from ntrp.memory.connectors.episode_close import CompletionDedupClient, CompletionSummaryClient
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.items_store import MemoryItemsRepository
@@ -131,6 +131,7 @@ class KnowledgeRuntime:
             embedder=self.memory.embedder,
             llm_client=CompletionSummaryClient(self.config.memory_model),
             boundary_classifier=EpisodeBoundaryClassifier(),
+            dedup_client=CompletionDedupClient(self.config.memory_model),
         )
         self.memory_service.chat_connector = self.chat_connector  # type: ignore[attr-defined]
 
@@ -160,6 +161,7 @@ class KnowledgeRuntime:
                 self.memory.update_model(self.config.memory_model)
                 if self.chat_connector:
                     self.chat_connector.llm_client = CompletionSummaryClient(self.config.memory_model)
+                    self.chat_connector.dedup_client = CompletionDedupClient(self.config.memory_model)
                 if self.pattern_finder:
                     self.pattern_finder.summary_client = CompletionSummaryClient(self.config.memory_model)
         elif not self.config.memory and self.memory:
