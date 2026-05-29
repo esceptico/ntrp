@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import aiosqlite
@@ -45,6 +45,7 @@ _SQL_FIND_IDLE = """
 SELECT *
 FROM episode_buffers
 WHERE closed_at IS NULL
+  AND source_kind = ?
   AND last_activity_at < ?
 ORDER BY last_activity_at ASC
 """
@@ -65,6 +66,7 @@ class TurnUpdate:
     tokens: int
     source_ref: dict
     embedding: np.ndarray
+    extra_source_refs: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -201,7 +203,7 @@ class EpisodeBufferRepository:
             if buffer is None:
                 raise ValueError(f"episode buffer not found: {buffer_id}")
             now = _now()
-            refs = [*buffer.source_refs_so_far, turn.source_ref]
+            refs = [*buffer.source_refs_so_far, turn.source_ref, *turn.extra_source_refs]
             centroid = _updated_centroid(buffer.running_centroid_vec, buffer.turn_count, turn.embedding)
             await self.conn.execute(
                 _SQL_UPDATE_BUFFER,
@@ -226,9 +228,9 @@ class EpisodeBufferRepository:
             await self.conn.execute(_SQL_CLOSE_BUFFER, (_format_dt(_now()), buffer_id))
             await self.conn.commit()
 
-    async def find_idle(self, threshold_minutes: float) -> list[EpisodeBuffer]:
+    async def find_idle(self, threshold_minutes: float, source_kind: str) -> list[EpisodeBuffer]:
         cutoff = _now() - timedelta(minutes=threshold_minutes)
-        rows = await self.conn.execute_fetchall(_SQL_FIND_IDLE, (_format_dt(cutoff),))
+        rows = await self.conn.execute_fetchall(_SQL_FIND_IDLE, (source_kind, _format_dt(cutoff)))
         return [_row_to_buffer(row) for row in rows]
 
     async def _get(self, buffer_id: str) -> EpisodeBuffer | None:

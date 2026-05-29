@@ -13,12 +13,13 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.agent import Usage
 from ntrp.events.internal import RunCompleted
-from ntrp.memory.buffers_store import BufferCarry, EpisodeBufferRepository, TurnUpdate
+from ntrp.memory.buffers_store import BufferCarry, EpisodeBuffer, EpisodeBufferRepository, TurnUpdate
 from ntrp.memory.connectors._confidence import compute_confidence, confidence_bucket
 from ntrp.memory.connectors.chat import ChatConnector
+from ntrp.memory.connectors.episode_close import evaluate_triggers, finalize_buffer
 from ntrp.memory.connectors.idle_sweeper import IdleBufferSweeper
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
-from ntrp.memory.items_store import MemoryItemsRepository
+from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.store.base import GraphDatabase
 
 TEST_EMBEDDING_DIM = 8
@@ -85,6 +86,7 @@ def _event(
     user: str = "hello",
     assistant: str = "done",
     tokens: int = 10,
+    source_refs: tuple[dict, ...] = (),
 ) -> RunCompleted:
     return RunCompleted(
         run_id=run_id,
@@ -98,6 +100,7 @@ def _event(
         # here so tests can prove assistant usage does not pollute memory.
         usage=Usage(completion_tokens=tokens),
         result=assistant,
+        source_refs=source_refs,
     )
 
 
@@ -177,6 +180,30 @@ async def test_first_msg_creates_buffer(conn: aiosqlite.Connection):
     assert refs[0]["kind"] == "chat_msg"
     assert refs[0]["ref"] == "run-1"
     assert datetime.fromisoformat(refs[0]["captured_at"])
+
+
+@pytest.mark.asyncio
+async def test_tool_source_refs_folded_into_buffer(conn: aiosqlite.Connection):
+    connector, _, _ = _connector(conn, vectors=[_vec(0)])
+
+    await connector.on_run_completed(
+        _event(
+            run_id="run-1",
+            user="read my notes",
+            source_refs=(
+                {"kind": "file", "ref": "/vault/notes/q3.md", "title": "q3.md"},
+                {"kind": "web", "ref": "https://example.com/x", "title": "X"},
+            ),
+        )
+    )
+
+    rows = await _open_buffers(conn)
+    assert len(rows) == 1
+    refs = json.loads(rows[0]["source_refs_so_far"])
+    kinds = [(r["kind"], r["ref"]) for r in refs]
+    assert ("chat_msg", "run-1") in kinds
+    assert ("file", "/vault/notes/q3.md") in kinds
+    assert ("web", "https://example.com/x") in kinds
 
 
 @pytest.mark.asyncio
@@ -296,6 +323,58 @@ async def test_explicit_close_marker(conn: aiosqlite.Connection):
 
 
 @pytest.mark.asyncio
+async def test_finalize_skips_near_duplicate_episode(conn: aiosqlite.Connection):
+    items = MemoryItemsRepository(conn)
+    buffers = EpisodeBufferRepository(conn)
+    embedder = MockEmbedder(vectors=[_vec(0)])
+    llm = AsyncMock(return_value="recurring episode summary")
+    await items.insert_item(
+        MemoryItemInsert(
+            kind="episode",
+            content="recurring episode summary",
+            source_refs=[],
+            confidence=0.3,
+            embedding=_vec(0),
+        )
+    )
+    buffer = await _seed_buffer(buffers, count=3)
+
+    await finalize_buffer(
+        buffer=buffer,
+        items=items,
+        buffers=buffers,
+        embedder=embedder,
+        llm_client=llm,
+        reason="idle_gap",
+    )
+
+    episodes = [row for row in await _items(conn) if row["kind"] == "episode"]
+    assert len(episodes) == 1
+    assert (await _open_buffers(conn))  # a fresh carry-forward buffer still opens
+
+
+@pytest.mark.asyncio
+async def test_finalize_skips_episode_with_no_durable_knowledge(conn: aiosqlite.Connection):
+    items = MemoryItemsRepository(conn)
+    buffers = EpisodeBufferRepository(conn)
+    embedder = MockEmbedder(vectors=[_vec(0)])
+    llm = AsyncMock(return_value="NONE")
+    buffer = await _seed_buffer(buffers, count=3)
+
+    await finalize_buffer(
+        buffer=buffer,
+        items=items,
+        buffers=buffers,
+        embedder=embedder,
+        llm_client=llm,
+        reason="idle_gap",
+    )
+
+    assert [row for row in await _items(conn) if row["kind"] == "episode"] == []
+    assert (await _open_buffers(conn))  # carry-forward buffer still opens
+
+
+@pytest.mark.asyncio
 async def test_overlap_carry(conn: aiosqlite.Connection):
     connector, buffers, _ = _connector(conn, vectors=[_vec(1), _vec(1)])
     await _seed_buffer(buffers, count=7)
@@ -410,7 +489,44 @@ async def test_idle_sweeper_closes_stale_buffers(conn: aiosqlite.Connection):
     await conn.execute("UPDATE episode_buffers SET last_activity_at = ?", (stale,))
     await conn.commit()
 
-    await IdleBufferSweeper(connector).sweep_once()
+    await IdleBufferSweeper(lambda: [connector]).sweep_once()
 
     assert len(await _closed_buffers(conn)) == 1
     assert len(await _items(conn)) == 1
+
+
+def _buffer_with_centroid(centroid: np.ndarray) -> EpisodeBuffer:
+    now = datetime.now(UTC)
+    return EpisodeBuffer(
+        id="buf-1",
+        scope="user",
+        source_kind="chat_msg",
+        started_at=now,
+        last_activity_at=now,
+        turn_count=1,
+        tokens=10,
+        content_so_far="prior",
+        source_refs_so_far=[],
+        running_centroid_vec=centroid,
+        closed_at=None,
+    )
+
+
+def test_evaluate_triggers_topic_shift_uses_cosine_for_non_unit_turn_vec():
+    centroid = _vec(0)
+    aligned_long = _vec(0) * 5.0
+
+    fire, reason = evaluate_triggers(_buffer_with_centroid(centroid), aligned_long, 10, datetime.now(UTC))
+
+    assert fire is False
+    assert reason is None
+
+
+def test_evaluate_triggers_topic_shift_fires_on_orthogonal_turn():
+    centroid = _vec(0)
+    orthogonal = _vec(1) * 3.0
+
+    fire, reason = evaluate_triggers(_buffer_with_centroid(centroid), orthogonal, 10, datetime.now(UTC))
+
+    assert fire is True
+    assert reason == "topic_shift"
