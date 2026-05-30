@@ -1,8 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
 import { loadHistory } from "../actions/history";
 import { enqueueMessage } from "../actions/messages";
+import { createAnimationFrameBatcher } from "../lib/eventBatch";
+import { createStallWatchdog } from "../lib/streamWatchdog";
 import { setState, useStore } from "../store";
+
+// The server keepalives every 5s; treat ~3x silence as a stalled stream.
+const STREAM_STALL_MS = 15_000;
+const STREAM_STALL_CHECK_MS = 5_000;
 import {
   eventStreamUrl,
   handleIncomingServerEvent,
@@ -186,6 +192,9 @@ export async function runDesktopEventStreamLoop({
 export function useEvents(sessionId: string | null) {
   const config = useStore((s) => s.config);
   const historyLoadedFor = useStore((s) => s.sessionView.historyLoadedFor);
+  // Bumped by the stall watchdog to force a full reconnect of whichever
+  // transport is active; the cursor machinery makes the reconnect lossless.
+  const [reconnectNonce, setReconnectNonce] = useState(0);
   const ready = eventStreamReadyForSession({
     sessionId,
     historyLoadedFor,
@@ -195,6 +204,32 @@ export function useEvents(sessionId: string | null) {
     if (!sessionId || !ready) return;
     let disposed = false;
     const reloadHistory = (reloadSessionId: string) => loadHistory(reloadSessionId);
+    // A half-open stream delivers neither events nor keepalives but never
+    // errors; without this it stays frozen until a manual reload. bump() on
+    // every received frame proves liveness; onStall forces a reconnect.
+    const watchdog = createStallWatchdog({
+      stallMs: STREAM_STALL_MS,
+      checkMs: STREAM_STALL_CHECK_MS,
+      onStall: () => {
+        if (disposed) return;
+        markStreamReconnecting(sessionId, "stalled");
+        setReconnectNonce((n) => n + 1);
+      },
+    });
+    // Coalesce the per-line SSE stream onto animation frames so a burst of
+    // token/tool deltas produces one render per frame instead of one per
+    // delta. Both transports feed this single batcher.
+    const batcher = createAnimationFrameBatcher<ServerEvent>((events) => {
+      for (const event of events) {
+        void handleIncomingServerEvent(event, reloadHistory, {
+          resendQueuedMessage: (text, images) => enqueueMessage(text, images ?? []),
+        });
+      }
+    });
+    const ingest = (event: ServerEvent) => {
+      watchdog.bump();
+      batcher.enqueue(event);
+    };
     const desktopEvents = window.ntrpDesktop?.events;
     if (desktopEvents) {
       const controller = new AbortController();
@@ -203,11 +238,7 @@ export function useEvents(sessionId: string | null) {
         config,
         sessionId,
         signal: controller.signal,
-        onEvent: (event) => {
-          void handleIncomingServerEvent(event, reloadHistory, {
-            resendQueuedMessage: (text, images) => enqueueMessage(text, images ?? []),
-          });
-        },
+        onEvent: (event) => ingest(event),
         onError: (message) => {
           if (!disposed) setState({ error: message });
         },
@@ -216,6 +247,8 @@ export function useEvents(sessionId: string | null) {
       return () => {
         disposed = true;
         controller.abort();
+        watchdog.dispose();
+        batcher.dispose();
       };
     }
 
@@ -253,9 +286,7 @@ export function useEvents(sessionId: string | null) {
               if (!line.startsWith("data: ")) continue;
               try {
                 reconnectAttempt = 0;
-                void handleIncomingServerEvent(JSON.parse(line.slice(6)) as ServerEvent, reloadHistory, {
-                  resendQueuedMessage: (text, images) => enqueueMessage(text, images ?? []),
-                });
+                ingest(JSON.parse(line.slice(6)) as ServerEvent);
               } catch {
                 /* keep-alive */
               }
@@ -275,7 +306,9 @@ export function useEvents(sessionId: string | null) {
     return () => {
       disposed = true;
       controller.abort();
+      watchdog.dispose();
+      batcher.dispose();
       markStreamDisconnected(sessionId);
     };
-  }, [sessionId, config, ready]);
+  }, [sessionId, config, ready, reconnectNonce]);
 }
