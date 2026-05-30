@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import ntrp.database as database
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.pattern_finder import PatternFinder, PatternFinderRunResult
 from ntrp.memory.store.base import GraphDatabase
@@ -143,7 +144,18 @@ async def test_pattern_finder_emits_observation_for_two_similar_episodes(conn: a
     assert result.observations_written == 1
     observations = await _memory_rows(conn, kind="observation")
     assert len(observations) == 1
-    assert observations[0]["confidence"] == 0.6
+    assert observations[0]["confidence"] == pytest.approx(
+        compute_confidence(
+            provenance="inferred",
+            parent_confidences=[0.5, 0.5],
+            contradiction_count=0,
+            age_days=0,
+            last_used_days=0,
+            helped=0,
+            hurt=0,
+            ignored=0,
+        )
+    )
     edges = await MemoryItemsRepository(conn).list_parent_edges(observations[0]["id"])
     assert sorted(edge.role for edge in edges) == ["evidence", "evidence"]
 

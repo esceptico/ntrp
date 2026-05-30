@@ -12,7 +12,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-MEMORY_ITEMS_SCHEMA_VERSION = 32
+MEMORY_ITEMS_SCHEMA_VERSION = 34
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -24,9 +24,11 @@ CREATE TABLE IF NOT EXISTS memory_items (
     id              TEXT PRIMARY KEY,
     kind            TEXT NOT NULL CHECK (kind IN (
                         'episode', 'observation', 'claim',
-                        'skill', 'proposal', 'artifact_ref'
+                        'skill', 'proposal', 'artifact_ref',
+                        'entity', 'directory'
                     )),
     content         TEXT NOT NULL,
+    title           TEXT,
     provenance      TEXT NOT NULL CHECK (provenance IN (
                         'recorded', 'inferred', 'user_authored', 'external'
                     )),
@@ -56,7 +58,7 @@ CREATE TABLE IF NOT EXISTS memory_item_parents (
     parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
     role        TEXT NOT NULL CHECK (role IN (
                     'step', 'evidence', 'contradicts',
-                    'supersedes', 'similar_to'
+                    'supersedes', 'similar_to', 'member_of'
                 )),
     "order"     INTEGER,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -105,6 +107,88 @@ CREATE TRIGGER IF NOT EXISTS memory_items_au AFTER UPDATE ON memory_items BEGIN
 END;
 """
 
+# CHECK constraints cannot be ALTERed, so widening `kind` / `role` requires a
+# full table rebuild. These scripts run inside a single foreign_keys=OFF /
+# BEGIN..COMMIT envelope (see _migrate_constraints). FTS rows and the vec
+# sidecar are keyed by item_id and survive untouched; only the base table's
+# own triggers/indexes are dropped with it and recreated here.
+_REBUILD_MEMORY_ITEMS = """
+CREATE TABLE memory_items_new (
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL CHECK (kind IN (
+                        'episode', 'observation', 'claim',
+                        'skill', 'proposal', 'artifact_ref',
+                        'entity', 'directory'
+                    )),
+    content         TEXT NOT NULL,
+    title           TEXT,
+    provenance      TEXT NOT NULL CHECK (provenance IN (
+                        'recorded', 'inferred', 'user_authored', 'external'
+                    )),
+    source_refs     TEXT NOT NULL DEFAULT '[]',
+    confidence      REAL NOT NULL DEFAULT 0.5 CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN (
+                        'active', 'superseded', 'archived'
+                    )),
+    valid_from      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    invalid_at      TIMESTAMP,
+    scope           TEXT NOT NULL DEFAULT 'user',
+    tags            TEXT NOT NULL DEFAULT '[]',
+    artifact_ref    TEXT,
+    usage           TEXT NOT NULL DEFAULT '{"activated":0,"helped":0,"hurt":0,"ignored":0}',
+    feedback        TEXT NOT NULL DEFAULT '{"thumbs_up":0,"thumbs_down":0,"corrections":0}',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO memory_items_new (
+    id, kind, content, title, provenance, source_refs, confidence, status,
+    valid_from, invalid_at, scope, tags, artifact_ref, usage, feedback,
+    created_at, updated_at
+)
+SELECT
+    id, kind, content, title, provenance, source_refs, confidence, status,
+    valid_from, invalid_at, scope, tags, artifact_ref, usage, feedback,
+    created_at, updated_at
+FROM memory_items;
+DROP TABLE memory_items;
+ALTER TABLE memory_items_new RENAME TO memory_items;
+CREATE INDEX idx_memory_items_status_scope_kind ON memory_items(status, scope, kind);
+CREATE INDEX idx_memory_items_valid_from ON memory_items(valid_from);
+CREATE INDEX idx_memory_items_invalid_at ON memory_items(invalid_at);
+CREATE INDEX idx_memory_items_updated_at ON memory_items(updated_at);
+CREATE TRIGGER memory_items_ai AFTER INSERT ON memory_items BEGIN
+    INSERT INTO memory_items_fts(item_id, content) VALUES (new.id, new.content);
+END;
+CREATE TRIGGER memory_items_ad AFTER DELETE ON memory_items BEGIN
+    DELETE FROM memory_items_fts WHERE item_id = old.id;
+END;
+CREATE TRIGGER memory_items_au AFTER UPDATE ON memory_items BEGIN
+    DELETE FROM memory_items_fts WHERE item_id = old.id;
+    INSERT INTO memory_items_fts(item_id, content) VALUES (new.id, new.content);
+END;
+"""
+
+_REBUILD_MEMORY_ITEM_PARENTS = """
+CREATE TABLE memory_item_parents_new (
+    child_id    TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+    parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+    role        TEXT NOT NULL CHECK (role IN (
+                    'step', 'evidence', 'contradicts',
+                    'supersedes', 'similar_to', 'member_of'
+                )),
+    "order"     INTEGER,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (child_id, parent_id, role)
+);
+INSERT INTO memory_item_parents_new (child_id, parent_id, role, "order", created_at)
+SELECT child_id, parent_id, role, "order", created_at FROM memory_item_parents;
+DROP TABLE memory_item_parents;
+ALTER TABLE memory_item_parents_new RENAME TO memory_item_parents;
+CREATE INDEX idx_mip_child ON memory_item_parents(child_id);
+CREATE INDEX idx_mip_parent ON memory_item_parents(parent_id);
+CREATE INDEX idx_mip_role ON memory_item_parents(role);
+"""
+
 
 class GraphDatabase:
     def __init__(self, conn: aiosqlite.Connection, embedding_dim: int):
@@ -114,6 +198,8 @@ class GraphDatabase:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
+        await self._migrate_columns()
+        await self._migrate_constraints()
         await self._init_vec_table()
 
         stored_dim = await self._get_meta("embedding_dim")
@@ -139,6 +225,28 @@ class GraphDatabase:
         except sqlite3.OperationalError:
             pass
         await self.conn.commit()
+
+    async def _migrate_columns(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(memory_items)")
+        columns = {row["name"] for row in rows}
+        if "title" not in columns:
+            await self.conn.execute("ALTER TABLE memory_items ADD COLUMN title TEXT")
+
+    async def _migrate_constraints(self) -> None:
+        rows = await self.conn.execute_fetchall(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'table' "
+            "AND name IN ('memory_items', 'memory_item_parents')"
+        )
+        sql_by_name = {row["name"]: (row["sql"] or "") for row in rows}
+        parts: list[str] = []
+        if "'entity'" not in sql_by_name.get("memory_items", ""):
+            parts.append(_REBUILD_MEMORY_ITEMS)
+        if "'member_of'" not in sql_by_name.get("memory_item_parents", ""):
+            parts.append(_REBUILD_MEMORY_ITEM_PARENTS)
+        if not parts:
+            return
+        script = "PRAGMA foreign_keys=OFF;\nBEGIN;\n" + "\n".join(parts) + "COMMIT;\nPRAGMA foreign_keys=ON;\n"
+        await self.conn.executescript(script)
 
     async def _init_vec_table(self) -> None:
         rows = await self.conn.execute_fetchall(

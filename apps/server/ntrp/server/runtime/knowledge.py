@@ -7,6 +7,8 @@ from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
+from ntrp.memory.lens_author import LensAuthor, LensAuthorClient
+from ntrp.memory.lens_pass import LensExtractionClient, LensPass
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.runtime import MemoryDatabase
@@ -31,6 +33,8 @@ class KnowledgeRuntime:
         self.memory_retrieval: MemoryRetrieval | None = None
         self.memory_items: MemoryItemsRepository | None = None
         self.pattern_finder: PatternFinder | None = None
+        self.lens_pass: LensPass | None = None
+        self.lens_author: LensAuthor | None = None
         self.chat_connector: ChatConnector | None = None
 
     @property
@@ -126,6 +130,13 @@ class KnowledgeRuntime:
             ),
         )
         self.pattern_finder.skill_inducer = skill_inducer
+        self.lens_pass = LensPass(repo=memory_items, client=LensExtractionClient(self.config.memory_model))
+        self.lens_author = LensAuthor(
+            repo=memory_items,
+            retrieval=self.memory_retrieval,
+            lens_pass=self.lens_pass,
+            client=LensAuthorClient(self.config.memory_model),
+        )
         self.chat_connector = ChatConnector(
             items=MemoryItemsRepository(self.memory.db.conn),
             buffers=EpisodeBufferRepository(self.memory.db.conn),
@@ -136,6 +147,7 @@ class KnowledgeRuntime:
             learnings=LearningsStore(),
         )
         self.memory_service.chat_connector = self.chat_connector  # type: ignore[attr-defined]
+        self.memory_service.register_connector(self.chat_connector)
 
     async def _close_memory(self) -> None:
         if self.memory:
@@ -146,6 +158,8 @@ class KnowledgeRuntime:
         self.memory_retrieval = None
         self.memory_items = None
         self.pattern_finder = None
+        self.lens_pass = None
+        self.lens_author = None
         self.chat_connector = None
 
     async def _sync_memory(self, stores: Stores) -> None:

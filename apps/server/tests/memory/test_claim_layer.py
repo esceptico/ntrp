@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import ntrp.database as database
 from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.pattern_finder import (
     PatternFinder,
@@ -149,7 +150,18 @@ async def test_run_pass2_produces_claim_from_two_observations_with_shared_tags(c
     claims = await _rows(conn, kind="claim")
     assert len(claims) == 1
     assert claims[0]["content"] == CLAIM_TEXT
-    assert claims[0]["confidence"] == pytest.approx(0.49)
+    assert claims[0]["confidence"] == pytest.approx(
+        compute_confidence(
+            provenance="inferred",
+            parent_confidences=[0.6, 0.8],
+            contradiction_count=0,
+            age_days=0,
+            last_used_days=0,
+            helped=0,
+            hurt=0,
+            ignored=0,
+        )
+    )
 
 
 @pytest.mark.asyncio

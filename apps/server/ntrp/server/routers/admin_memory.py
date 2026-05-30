@@ -1,8 +1,11 @@
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ntrp.memory.lens_author import LensAuthorError
+from ntrp.memory.lenses import load_lenses
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.skill_inducer import (
     ProposalDraftGone,
@@ -11,7 +14,7 @@ from ntrp.memory.skill_inducer import (
     SkillInducer,
     SkillSlugCollision,
 )
-from ntrp.server.deps import require_memory, require_pattern_finder
+from ntrp.server.deps import require_lens_author, require_lens_pass, require_memory, require_pattern_finder
 
 router = APIRouter(prefix="/admin/memory", tags=["admin"])
 
@@ -37,6 +40,26 @@ class SkillInducerRunRequest(BaseModel):
 
 class ProposalRejectRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=200)
+
+
+class LensGenerateRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    scope: str = "user"
+
+
+class LensUpdateRequest(BaseModel):
+    markdown: str = Field(min_length=1, max_length=8000)
+    scope: str = "user"
+
+
+class ItemUpdateRequest(BaseModel):
+    content: str | None = Field(default=None, max_length=20000)
+    title: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    tags: list[str] | None = None
+    scope: str | None = None
+    status: str | None = None
+    invalid_at: str | None = None
 
 
 class SkillEnabledRequest(BaseModel):
@@ -190,10 +213,10 @@ def _require_skill_inducer(pattern_finder: PatternFinder) -> SkillInducer:
     return inducer
 
 
-_ALLOWED_KINDS = {"episode", "observation", "claim", "skill", "proposal", "artifact_ref"}
+_ALLOWED_KINDS = {"episode", "observation", "claim", "skill", "proposal", "artifact_ref", "entity", "directory"}
 _ALLOWED_STATUSES = {"active", "superseded", "archived"}
 _ALLOWED_VALIDITY = {"all", "current", "future", "expired"}
-_GRAPH_EDGE_ROLES = {"step", "evidence", "contradicts", "supersedes", "similar_to"}
+_GRAPH_EDGE_ROLES = {"step", "evidence", "contradicts", "supersedes", "similar_to", "member_of"}
 
 
 def _serialize_item(item: Any) -> dict[str, Any]:
@@ -201,6 +224,7 @@ def _serialize_item(item: Any) -> dict[str, Any]:
         "id": item.id,
         "kind": item.kind,
         "content": item.content,
+        "title": item.title,
         "provenance": item.provenance,
         "source_refs": item.source_refs,
         "confidence": item.confidence,
@@ -216,6 +240,13 @@ def _serialize_item(item: Any) -> dict[str, Any]:
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         "has_embedding": item.embedding is not None,
     }
+
+
+def _parse_dt(value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid datetime: {value}") from exc
 
 
 def _parse_csv(value: str | None, allowed: set[str], field: str) -> list[str] | None:
@@ -303,6 +334,129 @@ async def set_memory_skill_enabled(
     await repo.conn.commit()
     updated = await repo.get_item(skill_id)
     return {"skill": _serialize_item(updated)}
+
+
+@router.get("/graph")
+async def get_memory_graph(
+    scope: str | None = Query(default=None),
+    include_unlinked: bool = Query(default=False),
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    items = await repo.list_graph_items(include_unlinked=include_unlinked, scope=scope)
+    node_ids = {item.id for item in items}
+    edges = [
+        edge
+        for edge in await repo.list_all_edges()
+        if edge.role in _GRAPH_EDGE_ROLES and edge.child_id in node_ids and edge.parent_id in node_ids
+    ]
+    return {
+        "nodes": [_serialize_item(item) for item in items],
+        "edges": [_serialize_edge(edge) for edge in edges],
+        "include_unlinked": include_unlinked,
+    }
+
+
+@router.get("/directories")
+async def list_memory_directories(
+    scope: str | None = Query(default=None),
+    memory=Depends(require_memory),
+):
+    repo = memory.memory.items
+    lenses = {lens.slug: lens for lens in load_lenses()}
+    directories = await repo.list_directories(scope=scope)
+    out = []
+    for directory in directories:
+        slug = next((tag.split(":", 1)[1] for tag in directory.tags if tag.startswith("lens:")), None)
+        lens = lenses.get(slug) if slug else None
+        members = await repo.list_directory_members(directory.id)
+        markdown = (
+            f"---\ndirectory: {lens.directory}\nentity_type: {lens.entity_type}\n---\n{lens.body}\n" if lens else None
+        )
+        out.append(
+            {
+                "directory": _serialize_item(directory),
+                "slug": slug,
+                "entity_type": lens.entity_type if lens else None,
+                "markdown": markdown,
+                "members": [_serialize_item(member) for member in members],
+            }
+        )
+    return {"directories": out}
+
+
+@router.get("/lenses")
+async def list_memory_lenses():
+    lenses = load_lenses()
+    return {
+        "lenses": [
+            {"slug": lens.slug, "directory": lens.directory, "entity_type": lens.entity_type, "path": str(lens.path)}
+            for lens in lenses
+        ]
+    }
+
+
+@router.put("/lenses/{slug}")
+async def update_memory_lens(slug: str, request: LensUpdateRequest, lens_author=Depends(require_lens_author)):
+    try:
+        return await lens_author.update_lens(slug, request.markdown, scope=request.scope)
+    except LensAuthorError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/lenses/{slug}")
+async def delete_memory_lens(slug: str, lens_author=Depends(require_lens_author)):
+    return await lens_author.delete_lens(slug)
+
+
+@router.post("/lenses/run")
+async def run_lens_pass(
+    scope: str = Query(default="user"),
+    lens_pass=Depends(require_lens_pass),
+):
+    result = await lens_pass.run(scope=scope)
+    return result.to_dict()
+
+
+@router.post("/lenses/generate")
+async def generate_lens(request: LensGenerateRequest, lens_author=Depends(require_lens_author)):
+    try:
+        proposal = await lens_author.propose(request.query, scope=request.scope)
+    except LensAuthorError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "proposal_id": proposal.proposal_id,
+        "slug": proposal.slug,
+        "directory": proposal.directory,
+        "entity_type": proposal.entity_type,
+        "markdown": proposal.markdown,
+    }
+
+
+@router.get("/lenses/proposals")
+async def list_lens_proposals(scope: str | None = Query(default=None), lens_author=Depends(require_lens_author)):
+    return {"proposals": await lens_author.list_proposals(scope=scope)}
+
+
+@router.post("/lenses/proposals/{proposal_id}/approve")
+async def approve_lens_proposal(
+    proposal_id: str,
+    slug: str | None = Query(default=None),
+    scope: str = Query(default="user"),
+    lens_author=Depends(require_lens_author),
+):
+    try:
+        return await lens_author.approve(proposal_id, slug=slug, scope=scope)
+    except LensAuthorError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/lenses/proposals/{proposal_id}/reject")
+async def reject_lens_proposal(proposal_id: str, lens_author=Depends(require_lens_author)):
+    try:
+        return await lens_author.reject(proposal_id)
+    except LensAuthorError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/items/{item_id}/graph")
@@ -423,6 +577,53 @@ async def get_memory_item(item_id: str, memory=Depends(require_memory)):
         "item": _serialize_item(item),
         "parents": parents,
     }
+
+
+@router.put("/items/{item_id}")
+async def update_memory_item(item_id: str, request: ItemUpdateRequest, memory=Depends(require_memory)):
+    repo = memory.memory.items
+    item = await repo.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Memory item not found")
+
+    content = request.content if request.content is not None else item.content
+    if not content.strip():
+        raise HTTPException(status_code=422, detail="content cannot be empty")
+    scope = request.scope if request.scope is not None else item.scope
+    status = request.status if request.status is not None else item.status
+    if status not in _ALLOWED_STATUSES:
+        raise HTTPException(status_code=422, detail=f"invalid status: {status}")
+
+    invalid_at = item.invalid_at
+    if request.invalid_at is not None:
+        invalid_at = None if request.invalid_at == "" else _parse_dt(request.invalid_at)
+
+    embedding = None
+    if request.content is not None and request.content != item.content:
+        embedding = await memory.memory.embedder.embed_one(content)
+
+    await repo.update_item(
+        item_id,
+        content=content,
+        title=request.title if request.title is not None else item.title,
+        confidence=request.confidence if request.confidence is not None else item.confidence,
+        tags=request.tags if request.tags is not None else item.tags,
+        scope=scope,
+        status=status,
+        invalid_at=invalid_at,
+        embedding=embedding,
+    )
+    return {"item": _serialize_item(await repo.get_item(item_id))}
+
+
+@router.delete("/items/{item_id}")
+async def delete_memory_item(item_id: str, memory=Depends(require_memory)):
+    repo = memory.memory.items
+    item = await repo.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Memory item not found")
+    await repo.delete_item(item_id)
+    return {"deleted": True}
 
 
 @router.get("/stats")

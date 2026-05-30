@@ -234,6 +234,31 @@ async def test_graph_endpoint_returns_parent_and_child_edges(conn: aiosqlite.Con
 
 
 @pytest.mark.asyncio
+async def test_global_graph_hides_unlinked_episodes_by_default(conn: aiosqlite.Connection):
+    repo = MemoryItemsRepository(conn)
+    episode_id = await _insert(repo, kind="episode", content="linked episode")
+    orphan_id = await _insert(repo, kind="episode", content="unlinked episode")
+    observation_id = await _insert(repo, kind="observation", content="distilled observation")
+    await repo.insert_parent_edge(observation_id, episode_id, "evidence")
+
+    client = _build_client(_FakeMemoryService(conn))
+
+    resp = client.get("/admin/memory/graph")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {node["id"] for node in data["nodes"]} == {episode_id, observation_id}
+    assert orphan_id not in {node["id"] for node in data["nodes"]}
+    assert {(e["child_id"], e["parent_id"], e["role"]) for e in data["edges"]} == {
+        (observation_id, episode_id, "evidence"),
+    }
+    assert data["include_unlinked"] is False
+
+    resp = client.get("/admin/memory/graph?include_unlinked=true")
+    data = resp.json()
+    assert orphan_id in {node["id"] for node in data["nodes"]}
+
+
+@pytest.mark.asyncio
 async def test_today_endpoint_surfaces_review_queues(conn: aiosqlite.Connection):
     repo = MemoryItemsRepository(conn)
     proposal_id = await _insert(repo, kind="proposal", content="draft skill", tags=["proposal-status:open"])

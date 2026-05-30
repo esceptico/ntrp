@@ -10,6 +10,7 @@ from typing import Any, cast
 import numpy as np
 
 from ntrp.logging import get_logger
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.connectors.episode_close import SummaryClient
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
@@ -17,7 +18,6 @@ from ntrp.memory.skill_inducer import IsToolableGate
 
 DEFAULT_PATTERN_FINDER_SIM_THRESHOLD = 0.70
 DEFAULT_PATTERN_FINDER_PASS2_THRESHOLD = 0.72
-PATTERN_FINDER_CONFIDENCE = 0.6
 _PROMPT_PATH = Path(__file__).with_name("prompts") / "pass1.txt"
 _PASS2_PROMPT_PATH = Path(__file__).with_name("prompts") / "pass2.txt"
 _logger = get_logger(__name__)
@@ -29,6 +29,7 @@ class ObservationDraft:
     tags: list[str]
     source_refs: list[dict[str, Any]]
     evidence_episode_ids: list[str]
+    confidence: float
 
 
 @dataclass(slots=True)
@@ -232,8 +233,7 @@ class PatternFinder:
                     content=draft.content,
                     provenance="inferred",
                     source_refs=draft.source_refs,
-                    # TODO(slice 5): derive observation confidence from evidence-parent signals.
-                    confidence=PATTERN_FINDER_CONFIDENCE,
+                    confidence=draft.confidence,
                     status="active",
                     scope=scope,
                     tags=draft.tags,
@@ -326,6 +326,16 @@ async def summarize_cluster(episodes: list[MemoryItem], client: SummaryClient) -
         tags=sorted({tag for episode in episodes for tag in episode.tags}),
         source_refs=_merge_source_refs(episodes),
         evidence_episode_ids=[episode.id for episode in episodes],
+        confidence=compute_confidence(
+            provenance="inferred",
+            parent_confidences=[episode.confidence for episode in episodes],
+            contradiction_count=0,
+            age_days=0,
+            last_used_days=0,
+            helped=0,
+            hurt=0,
+            ignored=0,
+        ),
     )
 
 
@@ -347,15 +357,22 @@ async def summarize_observation_cluster(
     body = (await client(prompt)).strip()
     evidence_ids = evidence_item_ids or [item.id for item in items]
     evidence_id_set = set(evidence_ids)
-    confidences = [item.confidence for item in items if item.id in evidence_id_set]
-    if not confidences:
-        confidences = [item.confidence for item in items]
-    mean_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-    cluster_size_factor = min(1.0, 0.5 + 0.1 * len(evidence_ids))
+    parent_confidences = [item.confidence for item in items if item.id in evidence_id_set]
+    if not parent_confidences:
+        parent_confidences = [item.confidence for item in items]
     return ClaimDraft(
         content=body,
         tags=sorted({tag for item in items for tag in item.tags}),
-        confidence=_clamp01(mean_confidence * cluster_size_factor),
+        confidence=compute_confidence(
+            provenance="inferred",
+            parent_confidences=parent_confidences,
+            contradiction_count=0,
+            age_days=0,
+            last_used_days=0,
+            helped=0,
+            hurt=0,
+            ignored=0,
+        ),
         evidence_item_ids=evidence_ids,
     )
 

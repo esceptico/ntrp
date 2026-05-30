@@ -12,6 +12,7 @@ from typing import Any
 
 from ntrp.constants import NTRP_TMP_BASE
 from ntrp.logging import get_logger
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository, _row_to_item
 
 DEFAULT_MIN_SUPPORTING_ITEMS = 3
@@ -269,7 +270,18 @@ class SkillInducer:
 
         skill_body = draft_path.read_text()
         source_claim_ids = _source_claim_ids(proposal)
+        source_claims = [await _get_item_or_raise(self.repo, claim_id) for claim_id in source_claim_ids]
         trigger_tags = [tag for tag in proposal.tags if tag.startswith("trigger:")]
+        confidence = compute_confidence(
+            provenance="user_authored",
+            parent_confidences=[claim.confidence for claim in source_claims],
+            contradiction_count=0,
+            age_days=0,
+            last_used_days=0,
+            helped=0,
+            hurt=0,
+            ignored=0,
+        )
         embedding = await self.embedder.embed_one(skill_body) if self.embedder is not None else None
         skill_path = target_dir / "SKILL.md"
         moved_to_final = False
@@ -284,7 +296,7 @@ class SkillInducer:
                     content=skill_body,
                     provenance="user_authored",
                     source_refs=[{"type": "skill_path", "path": str(skill_path)}],
-                    confidence=1.0,
+                    confidence=confidence,
                     status="active",
                     scope=proposal.scope,
                     tags=["skill", f"slug:{skill_slug}", *trigger_tags],
@@ -299,6 +311,7 @@ class SkillInducer:
                 proposal.id,
                 _transition_proposal_tags(proposal.tags, "approved", timestamp, reason=None),
             )
+            await self.repo.update_status(proposal.id, "superseded", invalid_at=timestamp, commit=False)
             await self.repo.conn.commit()
         except BaseException:
             await self.repo.conn.rollback()
@@ -337,6 +350,7 @@ class SkillInducer:
             proposal.id,
             _transition_proposal_tags(proposal.tags, "rejected", timestamp, reason=reason),
         )
+        await self.repo.update_status(proposal.id, "archived", invalid_at=timestamp, commit=False)
         await self.repo.conn.commit()
         return {"rejected_at": timestamp.isoformat()}
 

@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
+    "@types/d3-force": "^3.0.10",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
@@ -38,6 +39,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "d3-force": "^3.0.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.45",
     "lucide-react": "^1.14.0",

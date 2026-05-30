@@ -1,0 +1,22 @@
+You are organizing a personal memory graph into a named directory.
+
+Directory: {directory}
+Entity type: {entity_type}
+
+The user wrote these instructions describing what belongs in this directory and how each member's profile should be shaped:
+---
+{lens_body}
+---
+
+Below are candidate memory items (observations and claims). Each has an id and content:
+{candidate_bullets}
+
+Identify the distinct {entity_type} entities that belong in "{directory}" according to the instructions. For each one:
+- name: the entity's canonical name (use the user's vocabulary; one name per real-world entity).
+- profile: a concise profile shaped exactly per the "Profile shape" instructions above, grounded ONLY in the candidate items. No speculation.
+- source_ids: the ids of the candidate items that support this profile.
+
+Return STRICT JSON of this exact shape, with no prose around it:
+{{"entities": [{{"name": "...", "profile": "...", "source_ids": ["..."]}}]}}
+
+Only include entities clearly supported by the candidates. If none belong, return {{"entities": []}}.

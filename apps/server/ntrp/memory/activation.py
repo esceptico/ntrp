@@ -4,7 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-MemoryItemKind = Literal["episode", "observation", "claim", "skill", "proposal", "artifact_ref"]
+MemoryItemKind = Literal[
+    "episode", "observation", "claim", "skill", "proposal", "artifact_ref", "entity", "directory"
+]
 
 
 class MemoryActivationRequest(BaseModel):

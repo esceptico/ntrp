@@ -223,6 +223,36 @@ async def test_scan_for_new_claim_cross_scope_writes_only_contradicts_edge(conn:
 
 
 @pytest.mark.asyncio
+async def test_scan_for_new_user_claim_detects_existing_project_claim(conn: aiosqlite.Connection):
+    old = await _insert_claim(
+        conn,
+        "In ntrp, user avoids Nike for running shoes.",
+        tags=["nike"],
+        scope="project:ntrp",
+        created_at=NOW - timedelta(minutes=2),
+    )
+    new = await _insert_claim(
+        conn,
+        "User uses Nike for running shoes.",
+        embedding=_cos_vec(0.95),
+        tags=["nike"],
+        scope="user",
+        created_at=NOW,
+    )
+
+    candidates = await _watcher(conn).scan_for_new_claim(new, scope="user")
+
+    assert len(candidates) == 1
+    assert candidates[0].cross_scope is True
+    edge_tuples = [(row["child_id"], row["parent_id"], row["role"]) for row in await _edges(conn)]
+    assert (new, old, "contradicts") in edge_tuples
+    assert (new, old, "supersedes") not in edge_tuples
+    assert (await _row(conn, old))["status"] == "active"
+    assert (await _row(conn, new))["status"] == "active"
+    assert CROSS_SCOPE_OVERRIDE_TAG in json.loads((await _row(conn, new))["tags"])
+
+
+@pytest.mark.asyncio
 async def test_scan_for_new_claim_cross_scope_tags_metadata_overrides(conn: aiosqlite.Connection):
     await _insert_claim(
         conn,

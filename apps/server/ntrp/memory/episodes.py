@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from re import findall
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+ConfidenceBand = Literal["low", "med", "high"]
+_BAND_MIDPOINT = {"low": 0.25, "med": 0.55, "high": 0.85}
 
 
 @dataclass(slots=True)
@@ -26,21 +29,8 @@ class EpisodeBoundaryDecision(BaseModel):
     open_new: bool = False
     boundary_type: str | None = None
     episode_title: str | None = None
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    confidence: ConfidenceBand = "med"
     evidence: list[str] = Field(default_factory=list)
-
-
-class EpisodeMemoryCandidate(BaseModel):
-    object_type: str = Field(description="fact, lesson, artifact, or action_candidate")
-    title: str = Field(min_length=1, max_length=200)
-    text: str = Field(min_length=1, max_length=2000)
-    kind: str = "episode_close"
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    source_quote: str | None = Field(default=None, max_length=1000)
-
-
-class EpisodeMemoryExtraction(BaseModel):
-    memories: list[EpisodeMemoryCandidate] = Field(default_factory=list, max_length=8)
 
 
 _EXPLICIT_SWITCH_MARKERS = (
@@ -122,7 +112,7 @@ def _first_line_title(text: str) -> str:
 
 def _fallback_safe(decision: EpisodeBoundaryDecision, fallback: EpisodeBoundaryDecision) -> EpisodeBoundaryDecision:
     """Prevent a weak/empty model answer from dropping obvious deterministic signals."""
-    if fallback.close_current and fallback.confidence >= decision.confidence:
+    if fallback.close_current and _BAND_MIDPOINT[fallback.confidence] >= _BAND_MIDPOINT[decision.confidence]:
         return fallback
     if decision.close_current and decision.open_new and not decision.episode_title:
         decision.episode_title = fallback.episode_title
@@ -156,7 +146,7 @@ class EpisodeBoundaryClassifier:
                     open_new=True,
                     boundary_type="task_completed",
                     episode_title=_first_line_title(event_text),
-                    confidence=0.72,
+                    confidence="high",
                     evidence=["No open memory episode exists.", f"Completion marker: {completion_marker!r}."],
                 )
             failure_marker = next((marker for marker in _FAILURE_RESOLVED_MARKERS if marker in text), None)
@@ -167,7 +157,7 @@ class EpisodeBoundaryClassifier:
                     open_new=True,
                     boundary_type="failure_resolved",
                     episode_title=_first_line_title(event_text),
-                    confidence=0.76,
+                    confidence="high",
                     evidence=["No open memory episode exists.", f"Failure-resolution marker: {failure_marker!r}."],
                 )
             return EpisodeBoundaryDecision(
@@ -175,7 +165,7 @@ class EpisodeBoundaryClassifier:
                 open_new=True,
                 boundary_type="no_open_episode",
                 episode_title=_first_line_title(event_text),
-                confidence=0.7,
+                confidence="high",
                 evidence=["No open memory episode exists."],
             )
 
@@ -187,7 +177,7 @@ class EpisodeBoundaryClassifier:
                 open_new=True,
                 boundary_type="explicit_switch",
                 episode_title=_first_line_title(event_text),
-                confidence=0.82,
+                confidence="high",
                 evidence=[f"Explicit switch marker: {switch_marker!r}."],
             )
 
@@ -199,7 +189,7 @@ class EpisodeBoundaryClassifier:
                 close_current=True,
                 open_new=False,
                 boundary_type="task_completed",
-                confidence=0.72,
+                confidence="high",
                 evidence=evidence,
             )
 
@@ -210,7 +200,7 @@ class EpisodeBoundaryClassifier:
                 close_current=True,
                 open_new=False,
                 boundary_type="failure_resolved",
-                confidence=0.76,
+                confidence="high",
                 evidence=[f"Failure-resolution marker: {failure_marker!r}."],
             )
 
@@ -226,7 +216,7 @@ class EpisodeBoundaryClassifier:
             continue_current=True,
             close_current=False,
             open_new=False,
-            confidence=0.6 if overlap else 0.45,
+            confidence="med",
             evidence=evidence or ["No reliable boundary signal."],
         )
 

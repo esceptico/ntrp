@@ -5,6 +5,7 @@ from datetime import datetime
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.logging import get_logger
+from ntrp.memory.connectors.base import BufferingConnector
 from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.idle_sweeper import IdleBufferSweeper
 from ntrp.memory.service import MemoryService
@@ -41,9 +42,9 @@ class RuntimeOutbox:
 
     def start(self) -> None:
         self.worker.start()
-        connector = self._get_chat_connector()
-        if connector and (self._idle_sweeper_task is None or self._idle_sweeper_task.done()):
-            self._idle_sweeper_task = asyncio.create_task(IdleBufferSweeper(connector).run_loop())
+        if self._get_connectors() and (self._idle_sweeper_task is None or self._idle_sweeper_task.done()):
+            sweeper = IdleBufferSweeper(self._get_connectors)
+            self._idle_sweeper_task = asyncio.create_task(sweeper.run_loop())
 
     async def stop(self) -> None:
         if self._idle_sweeper_task:
@@ -71,6 +72,10 @@ class RuntimeOutbox:
     def _get_chat_connector(self) -> ChatConnector | None:
         memory_service = self._get_memory_service()
         return getattr(memory_service, "chat_connector", None) if memory_service else None
+
+    def _get_connectors(self) -> list[BufferingConnector]:
+        memory_service = self._get_memory_service()
+        return list(getattr(memory_service, "connectors", [])) if memory_service else []
 
     async def get_status(self) -> dict:
         worker_running = self.worker.is_running

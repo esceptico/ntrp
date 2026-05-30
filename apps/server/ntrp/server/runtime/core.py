@@ -105,6 +105,14 @@ class Runtime:
         return self.knowledge.pattern_finder
 
     @property
+    def lens_pass(self):
+        return self.knowledge.lens_pass
+
+    @property
+    def lens_author(self):
+        return self.knowledge.lens_author
+
+    @property
     def search_index(self):
         return self.knowledge.search_index
 
@@ -273,14 +281,15 @@ class Runtime:
             errors["index"] = self.indexer.error
         return errors
 
-    def build_chat_deps(self):
+    def build_chat_deps(self, chat_model: str | None = None):
         if not self.executor or not self.session_service:
             raise RuntimeError("Chat dependencies are not initialized")
         from ntrp.services.chat import ChatDeps
 
+        resolved_model = chat_model or self.config.chat_model
         return ChatDeps(
-            chat_model=self.config.chat_model,
-            agent_config=AgentConfig.from_config(self.config),
+            chat_model=resolved_model,
+            agent_config=AgentConfig.from_config(self.config, model=resolved_model),
             executor=self.executor,
             session_service=self.session_service,
             run_registry=self.run_registry,
@@ -294,6 +303,16 @@ class Runtime:
             skill_registry=self.skill_registry,
             notifier_service=self.notifier_service,
         )
+
+    async def resolve_session_chat_model(self, session_id: str | None) -> str | None:
+        """The session's per-chat model override, or None to fall back to the
+        global default. Resolve this before building deps so a sync
+        deps_factory can close over the result."""
+        if session_id and self.session_service:
+            existing = await self.session_service.load(session_id)
+            if existing is not None:
+                return existing.state.chat_model
+        return None
 
     # --- Background tasks ---
 

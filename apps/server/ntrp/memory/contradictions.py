@@ -76,12 +76,12 @@ class ContradictionWatcher:
             results.extend(await self.scan_for_new_claim(claim.id, scope=claim.scope))
         return results
 
-    async def scan_for_new_claim(self, claim_id: str, *, scope: str) -> list[ContradictionCandidate]:
+    async def scan_for_new_claim(self, claim_id: str, *, scope: str | None = None) -> list[ContradictionCandidate]:
         new_claim = await self._get_item_or_raise(claim_id)
         if new_claim.kind != "claim" or new_claim.status != "active" or not new_claim.tags:
             return []
 
-        candidates = await self._candidate_pool(new_claim, scope=scope)
+        candidates = await self._candidate_pool(new_claim)
         persisted: list[ContradictionCandidate] = []
         for old_claim in candidates:
             if await self._has_contradicts_edge(new_claim.id, old_claim.id):
@@ -147,16 +147,13 @@ class ContradictionWatcher:
             raise
         return {"already_undone": False, "restored": restored, "cross_scope": cross_scope}
 
-    async def _candidate_pool(self, new_claim: MemoryItem, *, scope: str) -> list[MemoryItem]:
-        claims = await self.repo.list_recent_items(kind="claim", window_days=30, limit=500, scope=scope)
-        other_scope_claims: list[MemoryItem] = []
-        if scope != "user":
-            other_scope_claims = await self.repo.list_recent_items(kind="claim", window_days=30, limit=500, scope="user")
+    async def _candidate_pool(self, new_claim: MemoryItem) -> list[MemoryItem]:
+        claims = await self.repo.list_recent_items_all_scopes(kind="claim", window_days=30, limit=500)
 
         new_tags = set(new_claim.tags)
         return [
             claim
-            for claim in claims + other_scope_claims
+            for claim in claims
             if claim.id != new_claim.id
             and claim.kind == "claim"
             and claim.status == "active"

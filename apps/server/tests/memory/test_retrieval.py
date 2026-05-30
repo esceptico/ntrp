@@ -154,6 +154,19 @@ async def test_search_returns_accepted_skill_suggestion(conn: aiosqlite.Connecti
     assert suggestion.selection_role == "advisory"
 
 
+async def test_search_handles_entity_and_directory_kinds(conn: aiosqlite.Connection):
+    # Guards the MemoryItemKind Literal: retrieving entity/directory items must not
+    # raise a pydantic ValidationError when building activation candidates.
+    await _insert_item(conn, "ent-1", "Kevin is a backend engineer at Northwind.", kind="entity", embedding=_vec(0))
+    await _insert_item(conn, "dir-1", "Engineers who work at Northwind.", kind="directory", embedding=_vec(0))
+    retrieval = MemoryRetrieval(conn, FakeEmbedder(default=_vec(0)))
+
+    bundle = await retrieval.search(MemoryActivationRequest(query="Northwind engineer"), now=NOW)
+
+    kinds = {candidate.kind for candidate in bundle.candidates}
+    assert {"entity", "directory"} <= kinds
+
+
 async def test_search_records_activation_usage(conn: aiosqlite.Connection):
     await _insert_item(conn, "claim-usage", "activation usage token", usage={"activated": 2})
     retrieval = MemoryRetrieval(conn, FakeEmbedder())

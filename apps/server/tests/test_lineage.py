@@ -10,6 +10,8 @@ from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger
+from ntrp.context.store import SessionStore
+from ntrp.services.session import SessionService
 
 
 @pytest_asyncio.fixture
@@ -22,9 +24,18 @@ async def store(tmp_path: Path):
 
 
 @pytest_asyncio.fixture
-async def service(store: AutomationStore):
+async def session_service(tmp_path: Path):
+    conn = await database.connect(tmp_path / "sessions.db")
+    store = SessionStore(conn)
+    await store.init_schema()
+    yield SessionService(store)
+    await conn.close()
+
+
+@pytest_asyncio.fixture
+async def service(store: AutomationStore, session_service: SessionService):
     sched = Scheduler(store=store, build_deps=lambda: None)
-    return AutomationService(store=store, scheduler=sched)
+    return AutomationService(store=store, scheduler=sched, session_service=session_service)
 
 
 def _automation(
@@ -45,7 +56,7 @@ def _automation(
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=False,
+        auto_approve=False,
         parent_automation_id=parent_automation_id,
     )
 

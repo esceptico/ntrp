@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
 import { ScrollBlurTop } from "../ScrollBlur";
+import { Badge, type BadgeTone } from "../Badge";
 
 // ─── Pane / list / detail shells ──────────────────────────────────────
 
@@ -64,9 +65,9 @@ export function ListColumn<T>({
 
 export function ListError({ title, message }: { title: string; message: string }) {
   return (
-    <div className="rounded-[10px] border border-[rgba(184,68,43,0.16)] bg-bad-soft px-3 py-2.5">
+    <div className="rounded-[10px] border border-bad/15 bg-bad-soft px-3 py-2.5">
       <div className="text-sm font-semibold text-bad">{title}</div>
-      <div className="mt-0.5 text-sm leading-[1.4] text-[#8a3220]">{message}</div>
+      <div className="mt-0.5 text-sm leading-[1.4] text-bad">{message}</div>
     </div>
   );
 }
@@ -160,42 +161,17 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function ErrorPill({ message }: { message: string }) {
   return (
-    <span
-      className="mr-auto inline-flex items-center max-w-[60%] truncate rounded-md bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-xs px-2 py-[3px]"
-      title={message}
-    >
+    <Badge tone="bad" size="md" shape="rounded" outline title={message} className="mr-auto max-w-[60%] truncate">
       {message}
-    </span>
+    </Badge>
   );
 }
 
-export function Pill({
-  children,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  tone?: "neutral" | "accent" | "ok" | "warn" | "bad";
-}) {
-  const classes = {
-    neutral: "bg-surface-soft text-muted border-line-soft",
-    accent: "bg-accent-soft text-accent-strong border-[rgba(184,92,31,0.16)]",
-    ok: "bg-ok-soft text-ok border-[rgba(79,138,58,0.18)]",
-    warn: "bg-warn-soft text-warn border-[rgba(196,106,20,0.18)]",
-    bad: "bg-bad-soft text-bad border-[rgba(184,68,43,0.18)]",
-  }[tone];
-
+export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone?: BadgeTone }) {
   return (
-    <span className={clsx("inline-flex items-center rounded-md border px-2 py-[3px] text-xs", classes)}>
+    <Badge tone={tone} size="md" shape="rounded" outline>
       {children}
-    </span>
-  );
-}
-
-export function JsonBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="m-0 max-h-[260px] overflow-auto scroll-thin rounded-[8px] border border-line-soft bg-code-bg px-3 py-2 text-xs leading-relaxed text-ink-soft whitespace-pre-wrap">
-      {JSON.stringify(value, null, 2)}
-    </pre>
+    </Badge>
   );
 }
 
@@ -259,7 +235,7 @@ export function DangerBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-[rgba(220,38,38,0.08)] hover:text-[#b42318] transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-colors disabled:opacity-50"
     >
       {children}
     </button>
@@ -293,7 +269,7 @@ export function SearchInput({
         placeholder={placeholder}
         aria-label={ariaLabel}
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-7 rounded-md bg-[rgba(0,0,0,0.04)] focus:bg-[rgba(0,0,0,0.06)] border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-7 rounded-md bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
       />
       {value && (
         <button

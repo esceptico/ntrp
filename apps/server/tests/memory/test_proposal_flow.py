@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import ntrp.database as database
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.skill_inducer import (
     ProposalDraftGone,
@@ -178,6 +179,51 @@ async def test_approve_promotes_proposal_to_skill_file_row_and_edges(conn: aiosq
     assert "proposal-status:approved" in json.loads((await _row(conn, proposal_id))["tags"])
     edges = await MemoryItemsRepository(conn).list_parent_edges(skills[0]["id"])
     assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "evidence")]
+
+
+@pytest.mark.asyncio
+async def test_approve_supersedes_proposal_and_drops_from_open_queue(conn: aiosqlite.Connection, tmp_path: Path):
+    inducer, proposal_id, _ = await _proposal(conn, tmp_path)
+
+    await inducer.approve_proposal(proposal_id, now=NOW)
+
+    row = await _row(conn, proposal_id)
+    assert row["status"] == "superseded"
+    assert row["invalid_at"] == NOW.isoformat()
+    assert await inducer.list_proposals(status="open") == []
+
+
+@pytest.mark.asyncio
+async def test_approved_skill_confidence_is_derived_not_hardcoded(conn: aiosqlite.Connection, tmp_path: Path):
+    inducer, proposal_id, _ = await _proposal(conn, tmp_path)
+
+    await inducer.approve_proposal(proposal_id, now=NOW)
+
+    skill = (await _rows(conn, "skill"))[0]
+    expected = compute_confidence(
+        provenance="user_authored",
+        parent_confidences=[0.8],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+    assert skill["confidence"] == pytest.approx(expected)
+    assert skill["confidence"] != 1.0
+
+
+@pytest.mark.asyncio
+async def test_reject_archives_proposal_and_drops_from_open_queue(conn: aiosqlite.Connection, tmp_path: Path):
+    inducer, proposal_id, _ = await _proposal(conn, tmp_path)
+
+    await inducer.reject_proposal(proposal_id, reason="duplicate", now=NOW)
+
+    row = await _row(conn, proposal_id)
+    assert row["status"] == "archived"
+    assert row["invalid_at"] == NOW.isoformat()
+    assert await inducer.list_proposals(status="open") == []
 
 
 @pytest.mark.asyncio
