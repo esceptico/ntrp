@@ -37,6 +37,7 @@ import {
 } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
+import { IconButton } from "../IconButton";
 
 export function IntegrationsTab() {
   const config = useStore((s) => s.config);
@@ -331,19 +332,18 @@ function GoogleCard({
                       : "Read and calendar access"}
                 </div>
               </div>
-              <button
-                type="button"
+              <IconButton
+                danger
                 aria-label={`Remove ${account.email || account.token_file}`}
                 onClick={() => void onRemove(account)}
                 disabled={pendingId === `gmail:${account.token_file}`}
-                className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface hover:text-bad transition-colors disabled:opacity-50"
               >
                 {pendingId === `gmail:${account.token_file}` ? (
                   <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
                 ) : (
                   <Trash2 size={ICON.MD} strokeWidth={2} />
                 )}
-              </button>
+              </IconButton>
             </div>
           ))}
         </div>
@@ -519,7 +519,7 @@ function ServiceRow({
             onChange={(event) => onKeyChange(event.target.value)}
             placeholder="Token"
             autoFocus
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <button
             type="button"

@@ -9,7 +9,7 @@ import { visibleMessageIds } from "../lib/messageVisibility";
 import { messageSegments } from "../lib/messageSegments";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "../actions";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
@@ -198,8 +198,8 @@ export function Messages() {
             style={{ bottom: "calc(var(--chat-bottom-h, 96px) + 12px)" }}
             className={
               unreadCount > 0
-                ? "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.08),0_6px_18px_rgba(0,0,0,0.12)] text-sm font-medium hover:opacity-90 transition-opacity"
-                : "absolute left-1/2 -translate-x-1/2 z-20 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
+                ? "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-md text-sm font-medium hover:opacity-90 transition-opacity"
+                : "absolute left-1/2 -translate-x-1/2 z-20 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted shadow-md transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft"
             }
           >
             <ChevronDown size={ICON.MD} strokeWidth={2} />

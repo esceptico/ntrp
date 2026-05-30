@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { useStore } from "../store";
-import { MOTION, EASE_OUT } from "../lib/motion";
+import { MOTION, EASE_OUT } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 
 export function CompactionIndicator() {

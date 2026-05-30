@@ -12,7 +12,7 @@ import {
 import clsx from "clsx";
 import { cancelBackgroundTaskApi, listBackgroundTasksApi, type TodoStatus } from "../api";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
-import { EASE_EMPHASIZED, MOTION, originFromEvent } from "../lib/motion";
+import { EASE_EMPHASIZED, MOTION, originFromEvent } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import { ScrollBlurTop } from "./ScrollBlur";

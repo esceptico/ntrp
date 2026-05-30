@@ -15,9 +15,9 @@ export function SettingsConnectionHint({
 
 export function SettingsInlineError({ title, message }: { title: string; message: string }) {
   return (
-    <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
+    <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15">
       <strong className="text-bad text-sm font-semibold">{title}</strong>
-      <span className="text-sm text-[#8a3220] leading-[1.4]">{message}</span>
+      <span className="text-sm text-bad leading-[1.4]">{message}</span>
     </div>
   );
 }

@@ -477,7 +477,7 @@ export function Composer() {
               onClick={() => void stopRun()}
               aria-label="Stop"
               title="Stop (Esc)"
-              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 transition-opacity"
+              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-opacity"
             >
               <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
             </button>
@@ -491,7 +491,7 @@ export function Composer() {
               // covers keyboard Enter (form-submit doesn't fire :active).
               // Both paths look identical to the user.
               className={clsx(
-                "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
+                "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
                 sendPressing && "scale-[0.92]",
               )}
             >
@@ -511,7 +511,7 @@ function GoalProposalCard({ objective }: { objective: string }) {
       <div className="glass-surface glass-radius-md flex items-start gap-2 px-3 py-2">
         <Target size={ICON.MD} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-medium text-muted">Proposed goal</div>
+          <div className="text-2xs font-medium text-muted">Proposed goal</div>
           <div className="max-h-10 overflow-hidden text-sm leading-5 text-ink-soft">{objective}</div>
         </div>
         <button

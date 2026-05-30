@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
+import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 import { formatTransportDiagnostics } from "../lib/transportDiagnostics";
 
@@ -13,15 +14,15 @@ function SidebarToggle() {
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const Icon = sidebarHidden ? PanelLeftOpen : PanelLeftClose;
   return (
-    <button
-      type="button"
+    <IconButton
+      size="xs"
+      className="sidebar-toggle"
       onClick={toggleSidebar}
       title={sidebarHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
-      className="sidebar-toggle grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
       <Icon size={ICON.MD} strokeWidth={2} />
-    </button>
+    </IconButton>
   );
 }
 
@@ -76,7 +77,7 @@ function ChatHeader() {
         )}
         {formattedDiagnostics && (
           <span
-            className="shrink-0 text-[10px] font-mono text-faint truncate"
+            className="shrink-0 text-2xs font-mono text-faint truncate"
             title={formattedDiagnostics.title}
           >
             {formattedDiagnostics.label}

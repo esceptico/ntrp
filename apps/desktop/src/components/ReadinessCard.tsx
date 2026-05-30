@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { Badge } from "./Badge";
 
 interface ReadinessCardProps {
   tone: "ok" | "warn";
@@ -17,14 +18,7 @@ export function ReadinessCard({ tone, label, detail, footnote, className }: Read
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={clsx(
-            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-            tone === "ok" ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
-          )}
-        >
-          {label}
-        </span>
+        <Badge tone={tone} size="md">{label}</Badge>
         <div className="text-sm text-ink-soft">{detail}</div>
       </div>
       {footnote && <div className="mt-1.5 text-xs text-faint">{footnote}</div>}

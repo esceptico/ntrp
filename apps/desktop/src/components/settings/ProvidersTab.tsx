@@ -35,6 +35,7 @@ import {
 } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
+import { IconButton } from "../IconButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 
@@ -445,7 +446,7 @@ function ProviderRow({
             onChange={(event) => onKeyChange(event.target.value)}
             placeholder="API key"
             autoFocus
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <button
             type="button"
@@ -531,19 +532,18 @@ function CustomModelsPanel({
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
+                  <IconButton
+                    danger
                     aria-label={`Delete ${model.id}`}
                     onClick={() => onDelete(model.id)}
                     disabled={deleting}
-                    className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-bad transition-colors disabled:opacity-50"
                   >
                     {deleting ? (
                       <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
                     ) : (
                       <Trash2 size={ICON.MD} strokeWidth={2} />
                     )}
-                  </button>
+                  </IconButton>
                 </div>
               </div>
             );
@@ -557,13 +557,13 @@ function CustomModelsPanel({
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
             placeholder="model id"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <input
             value={draft.base_url}
             onChange={(event) => onDraftChange({ base_url: event.target.value })}
             placeholder="base URL"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
@@ -573,7 +573,7 @@ function CustomModelsPanel({
             value={draft.context_window}
             onChange={(event) => onDraftChange({ context_window: Number(event.target.value) })}
             aria-label="Context window"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <input
             type="number"
@@ -581,14 +581,14 @@ function CustomModelsPanel({
             value={draft.max_output_tokens}
             onChange={(event) => onDraftChange({ max_output_tokens: Number(event.target.value) })}
             aria-label="Max output tokens"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <input
             type="password"
             value={draft.api_key}
             onChange={(event) => onDraftChange({ api_key: event.target.value })}
             placeholder="API key (optional)"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-base text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="input-field"
           />
           <button
             type="button"

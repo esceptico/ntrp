@@ -15,6 +15,7 @@ import { DEFAULT_GLASS_PREFS } from "../../store/prefs";
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
+import { IconButton } from "../IconButton";
 import { GlassToggle } from "../GlassToggle";
 import { GlassSwitch } from "../GlassSwitch";
 
@@ -317,15 +318,16 @@ function ShortcutRecorder() {
           {recording ? "Press chord…" : (value ? formatAccelerator(value) : "Disabled")}
         </button>
         {value !== DEFAULT_QUICK_CAPTURE_SHORTCUT && (
-          <button
-            type="button"
+          <IconButton
+            size="lg"
+            tone="faint"
+            className="rounded-[8px]"
             onClick={() => void reset()}
             aria-label="Reset to default"
             title="Reset to default"
-            className="grid place-items-center w-8 h-8 rounded-[8px] text-faint hover:text-ink hover:bg-surface-soft transition-colors"
           >
             <RotateCcw size={ICON.SM} strokeWidth={2} />
-          </button>
+          </IconButton>
         )}
       </div>
       {error && (
@@ -362,7 +364,7 @@ function PaletteIcon({ swatch }: { swatch: PaletteSwatch }) {
   return (
     <span
       aria-hidden
-      className="grid place-items-center w-[22px] h-[22px] rounded-md text-xs font-semibold shrink-0 border border-[rgba(0,0,0,0.06)]"
+      className="grid place-items-center w-[22px] h-[22px] rounded-md text-xs font-semibold shrink-0 border border-line"
       style={{ background: swatch.bg, color: swatch.accent }}
     >
       Aa

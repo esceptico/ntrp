@@ -4,8 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
-import { modalOriginTransform } from "../lib/motion";
 import {
+  modalOriginTransform,
   ENTRY_GLASS,
   ENTRY_LINEN,
   EASE_DECELERATE,

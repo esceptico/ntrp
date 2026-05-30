@@ -23,8 +23,9 @@ import type { SkillDescriptor, TodoStatus } from "../api";
 import { activityTraceStats } from "../lib/agent";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
+import { IconButton } from "./IconButton";
 import { useTimeoutFlag } from "../lib/hooks";
 import { useSmoothStreamedContent } from "../lib/useSmoothStream";
 
@@ -126,37 +127,30 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
         role === "user" && "justify-end",
       )}
     >
-      <button
-        type="button"
+      <IconButton
+        size="sm"
+        tone="faint"
         onClick={copy}
         title="Copy"
-        className={clsx(
-          "grid place-items-center w-6 h-6 rounded-md transition-colors",
-          copied ? "text-ok" : "text-faint hover:text-ink hover:bg-surface-soft",
-        )}
+        className={clsx(copied && "!text-ok hover:!text-ok")}
       >
         {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={2} />}
-      </button>
+      </IconButton>
       {role === "assistant" && (
-        <button
-          type="button"
+        <IconButton
+          size="sm"
+          tone="faint"
           onClick={() => void branch()}
           disabled={branching}
           title="Branch from this message"
-          className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <GitBranch size={ICON.SM} strokeWidth={2} />
-        </button>
+        </IconButton>
       )}
       {role === "user" && (
-        <button
-          type="button"
-          onClick={edit}
-          title="Edit and resend"
-          className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
-        >
+        <IconButton size="sm" tone="faint" onClick={edit} title="Edit and resend">
           <Pencil size={ICON.SM} strokeWidth={2} />
-        </button>
+        </IconButton>
       )}
       {timeLabel && (
         <span
@@ -229,7 +223,7 @@ function SkillInlineToken({ skill }: { skill: SkillDescriptor }) {
 function GoalMessageBubble({ objective }: { objective: string }) {
   return (
     <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-left">
-      <div className="mb-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted">
+      <div className="mb-1 inline-flex items-center gap-1.5 text-2xs font-medium text-muted">
         <Target size={ICON.XS} strokeWidth={2} />
         <span>Goal</span>
       </div>

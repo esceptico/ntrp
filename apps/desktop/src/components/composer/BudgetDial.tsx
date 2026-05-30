@@ -20,9 +20,9 @@ const OUTER_C = 2 * Math.PI * OUTER_R;
 const INNER_C = 2 * Math.PI * INNER_R;
 
 function ratioColor(ratio: number): string {
-  if (ratio >= 0.9) return "var(--color-bad, #b8442b)";
-  if (ratio >= 0.7) return "var(--color-warn, #c98a2b)";
-  return "var(--color-ink-soft, #2e3338)";
+  if (ratio >= 0.9) return "var(--color-bad)";
+  if (ratio >= 0.7) return "var(--color-warn)";
+  return "var(--color-ink-soft)";
 }
 
 function formatTokens(n: number): string {
@@ -231,7 +231,7 @@ export function BudgetDial() {
                 <span className="text-xs font-medium text-muted">Context budget</span>
                 {serverConfig?.chat_model && (
                   <span
-                    className="text-[11px] text-faint truncate max-w-[170px]"
+                    className="text-2xs text-faint truncate max-w-[170px]"
                     title={serverConfig.chat_model}
                   >
                     {serverConfig.chat_model}
@@ -277,7 +277,7 @@ export function BudgetDial() {
                   </>
                 )}
               </div>
-              <div className="mt-2 text-[11px] text-faint leading-snug">
+              <div className="mt-2 text-2xs text-faint leading-snug">
                 Auto-compacts at {formatTokens(tokenTrigger)} tokens or when messages hit 100%. Tool-agent tokens count toward session totals, not context pressure.
               </div>
             </motion.div>
@@ -319,7 +319,7 @@ function Row({
         </span>
       </div>
       {detail && (
-        <div className="pl-3 text-[11px] text-faint tabular-nums">{detail}</div>
+        <div className="pl-3 text-2xs text-faint tabular-nums">{detail}</div>
       )}
     </div>
   );

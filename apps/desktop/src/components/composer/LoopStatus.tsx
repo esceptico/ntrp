@@ -7,6 +7,7 @@ import { useEscapeKey } from "../../lib/hooks";
 import { ICON } from "../../lib/icons";
 import { formatLoopCountdown } from "../../lib/loops";
 import { Chip } from "../Chip";
+import { IconButton } from "../IconButton";
 import { Markdown } from "../Markdown";
 import { RollingToken } from "../trace/RollingToken";
 
@@ -217,14 +218,9 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
           <div className="ml-auto text-xs text-faint">
             Every {loop.every} · next in {formatLoopCountdown(nextRunMs)}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-6 w-6 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
-          >
+          <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
             <X size={ICON.SM} strokeWidth={2} />
-          </button>
+          </IconButton>
         </div>
         <div className="overflow-y-auto px-4 py-3">
           <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
@@ -233,7 +229,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
           {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
           {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
           {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
-          <span className="ml-auto font-mono text-[11px]">{loop.task_id}</span>
+          <span className="ml-auto font-mono text-2xs">{loop.task_id}</span>
         </div>
       </div>
     </div>

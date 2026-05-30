@@ -17,7 +17,7 @@ export function Field({
 }) {
   return (
     <div className="grid gap-1">
-      <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{label}</label>
+      <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
       <input
         type={type}
         value={value}
@@ -25,7 +25,7 @@ export function Field({
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
-        className="w-full h-9 px-3 border border-line rounded-[9px] bg-surface text-ink text-base outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+        className="input-field w-full"
       />
       {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
     </div>
@@ -53,7 +53,7 @@ export function NumberField({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
         <div className="flex items-baseline gap-1.5">
-          <label className="text-sm font-medium text-ink">{label}</label>
+          <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
           {suffix && <span className="text-xs text-faint">{suffix}</span>}
         </div>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
@@ -96,7 +96,7 @@ export function PercentField({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <label className="text-sm font-medium text-ink">{label}</label>
+        <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
       <div className="relative">

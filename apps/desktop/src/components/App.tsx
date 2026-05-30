@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Chat } from "./Chat";
 import { CommandPalette } from "./commandPalette/CommandPalette";

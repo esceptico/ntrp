@@ -12,6 +12,7 @@ import {
 import { useStore } from "../store";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
+import { IconButton } from "./IconButton";
 
 const RENDER_DEBOUNCE_MS = 400;
 const MIN_ZOOM = 0.1;
@@ -379,15 +380,14 @@ function ToolbarButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="relative grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors [&_*]:pointer-events-none"
+      className="relative [&_*]:pointer-events-none"
     >
       {children}
-    </button>
+    </IconButton>
   );
 }

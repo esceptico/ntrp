@@ -7,7 +7,7 @@ import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
 import { turnHeaderLabel } from "../lib/turnHeader";
-import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 
 const EASE = EASE_EMPHASIZED;

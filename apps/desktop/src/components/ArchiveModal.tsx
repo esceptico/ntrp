@@ -152,7 +152,7 @@ function RowAction({
         busy
           ? "text-faint cursor-wait"
           : danger
-            ? "text-ink-soft hover:bg-[rgba(220,38,38,0.08)] hover:text-[#b42318]"
+            ? "text-ink-soft hover:bg-bad-soft hover:text-bad"
             : "text-ink-soft hover:bg-surface-soft hover:text-ink",
       )}
     >
@@ -190,7 +190,7 @@ function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Filter…"
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-[rgba(0,0,0,0.025)] text-sm text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
       />
     </div>
   );

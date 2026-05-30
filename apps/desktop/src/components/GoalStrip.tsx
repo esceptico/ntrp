@@ -5,6 +5,7 @@ import { clearGoal, updateGoal } from "../actions";
 import { useStore } from "../store";
 import { ICON } from "../lib/icons";
 import { Chip } from "./Chip";
+import { IconButton } from "./IconButton";
 
 export function GoalStatusBar() {
   const sessionId = useStore((s) => s.currentSessionId);
@@ -94,36 +95,34 @@ export function GoalStatusBar() {
           </div>
           <div className="mt-3 flex items-center gap-1">
             {!complete && (
-              <button
-                type="button"
+              <IconButton
+                tone="faint"
                 onClick={() => void updateGoal(paused ? "active" : "paused")}
                 title={paused ? "Resume goal" : "Pause goal"}
                 aria-label={paused ? "Resume goal" : "Pause goal"}
-                className="grid place-items-center w-7 h-7 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
               >
                 {paused ? <Play size={ICON.SM} /> : <Pause size={ICON.SM} />}
-              </button>
+              </IconButton>
             )}
             {!complete && (
-              <button
-                type="button"
+              <IconButton
+                tone="faint"
                 onClick={() => void updateGoal("complete")}
                 title="Mark complete"
                 aria-label="Mark complete"
-                className="grid place-items-center w-7 h-7 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
               >
                 <CheckCircle2 size={ICON.SM} />
-              </button>
+              </IconButton>
             )}
-            <button
-              type="button"
+            <IconButton
+              tone="faint"
+              className="ml-auto"
               onClick={() => void clearGoal()}
               title="Clear goal"
               aria-label="Clear goal"
-              className="ml-auto grid place-items-center w-7 h-7 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
             >
               <Trash2 size={ICON.SM} />
-            </button>
+            </IconButton>
           </div>
         </div>,
         document.body,

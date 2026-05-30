@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "../../store";
-import { EASE_OUT } from "../../lib/motion";
+import { EASE_OUT } from "../../lib/tokens/motion";
 import { PaletteBody } from "./PaletteBody";
 import type { Crumb } from "./types";
 

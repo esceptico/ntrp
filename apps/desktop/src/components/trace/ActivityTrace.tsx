@@ -365,12 +365,12 @@ function AgentButton({
               event.stopPropagation();
               if (item.runId) void cancelSubagent(item.runId, item.id);
             }}
-            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100"
           >
             <Square size={ICON.XS} strokeWidth={2} />
             <span
               aria-hidden
-              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-[11px] font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
+              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-2xs font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
             >
               Stop subagent
             </span>

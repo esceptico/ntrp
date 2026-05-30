@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useStore, type ApprovalState } from "../store";
 import { respondToAllApprovals, respondToApproval } from "../actions";
 import { ICON } from "../lib/icons";
-import { originFromEvent } from "../lib/motion";
+import { originFromEvent } from "../lib/tokens/motion";
 
 // Spring physics — tuned to feel like iOS 17 / Linear / Raycast: the
 // card moves with mass + damping, not a tween. Stiffness ~340 gives a

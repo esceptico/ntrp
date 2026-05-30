@@ -432,11 +432,8 @@ function buildStats(descendants: ActivityItem[]) {
 function CopyButton({ getValue }: { getValue: () => string }) {
   const [copied, flashCopied] = useTimeoutFlag(1200);
   const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(getValue());
+    if (await window.ntrpDesktop?.clipboard?.writeText(getValue())) {
       flashCopied();
-    } catch {
-      /* ignore */
     }
   };
   return (
@@ -499,11 +496,8 @@ function Section({
 
   const onCopy = async () => {
     if (!hasBody) return;
-    try {
-      await navigator.clipboard.writeText(body);
+    if (await window.ntrpDesktop?.clipboard?.writeText(body)) {
       flashCopied();
-    } catch {
-      /* clipboard refused — silently ignore */
     }
   };
 
