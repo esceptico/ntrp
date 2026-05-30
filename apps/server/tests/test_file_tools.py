@@ -13,6 +13,7 @@ from ntrp.tools.files import (
     edit_file_tool,
     find_files_tool,
     list_files_tool,
+    read_file_tool,
     search_text_tool,
     write_file_tool,
 )
@@ -28,6 +29,17 @@ def _make_execution(tool_name: str, *, project_cwd: str | None = None) -> ToolEx
         project=(ProjectContext(project_id="proj-1", name="Project", default_cwd=project_cwd) if project_cwd else None),
     )
     return ToolExecution(tool_id="t1", tool_name=tool_name, ctx=ctx)
+
+
+@pytest.mark.asyncio
+async def test_read_file_self_reports_source_ref(tmp_path):
+    note = tmp_path / "q3.md"
+    note.write_text("dashboard notes", encoding="utf-8")
+
+    result = await read_file_tool.execute(_make_execution("read_file"), path=str(note))
+
+    assert not result.is_error
+    assert result.source_ref == {"kind": "file", "ref": str(note.resolve()), "title": "q3.md"}
 
 
 def test_project_prompt_tells_agent_to_use_relative_paths():

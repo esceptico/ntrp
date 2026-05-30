@@ -358,9 +358,9 @@ class ToolExecution:
         preview: str | None = None,
     ) -> Rejection | None:
         override = self.ctx.registry.get_override(self.tool_name)
-        if override != ToolOverrideDecision.ASK and (
-            self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve
-        ):
+        ui_connected = self.ctx.io.emit is not None and self.ctx.io.pending_approvals is not None
+        ask_must_block = override == ToolOverrideDecision.ASK and ui_connected
+        if not ask_must_block and (self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve):
             return None
 
         tool = self.ctx.registry.get(self.tool_name)

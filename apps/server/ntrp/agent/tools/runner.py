@@ -84,6 +84,7 @@ class ToolRunner:
             display_name=rc.display_name,
             kind=rc.kind,
             model_content=result.model_content,
+            source_ref=result.source_ref,
         )
 
     async def execute_all(self, calls: list[PendingToolCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:

@@ -83,6 +83,15 @@ class RunState:
     # this object only mirrors the active run's execution mode.
     approval_controls: ApprovalControls = field(default_factory=ApprovalControls)
     subagents: dict[str, SubagentHandle] = field(default_factory=dict)
+    # External resources the agent's tools fetched this run (file paths, URLs,
+    # etc.). Folded into the episode's source_refs when the run completes so
+    # memory records what the turn actually touched, not just the chat text.
+    source_refs: list[dict] = field(default_factory=list)
+
+    def add_source_ref(self, ref: dict | None) -> None:
+        if not ref or ref in self.source_refs:
+            return
+        self.source_refs.append(ref)
 
     @property
     def pending_injection_count(self) -> int:

@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from ntrp.agent import Result
+from ntrp.agent.types.events import ToolCompleted
 from ntrp.events.sse import (
     RunCancelledEvent,
     TextMessageContentEvent,
@@ -87,6 +88,8 @@ async def run_agent_loop(
             if ctx.run.backgrounded:
                 await close_open_text()
                 return None, gen
+            if isinstance(item, ToolCompleted):
+                ctx.run.add_source_ref(item.source_ref)
             if isinstance(item, Result):
                 if ctx.run.cancelled:
                     break

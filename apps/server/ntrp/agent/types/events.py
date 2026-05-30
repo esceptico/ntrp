@@ -95,6 +95,7 @@ class ToolCompleted(AgentEventBase):
     display_name: str
     kind: str = "tool"
     model_content: tuple[ContentBlock, ...] = ()
+    source_ref: dict | None = None
 
 
 @dataclass(frozen=True)

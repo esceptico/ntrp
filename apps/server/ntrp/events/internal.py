@@ -12,3 +12,4 @@ class RunCompleted:
     messages: tuple[dict, ...]
     usage: Usage
     result: str | None
+    source_refs: tuple[dict, ...] = ()
