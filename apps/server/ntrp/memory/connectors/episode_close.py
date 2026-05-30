@@ -30,6 +30,7 @@ from ntrp.memory.connectors._constants import (
     TURN_BUDGET,
 )
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository, derive_title
+from ntrp.memory.learnings import LearningsStore
 
 _logger = get_logger(__name__)
 
@@ -112,7 +113,7 @@ Choose exactly one action:
 
 Respond with ONLY a JSON object, no prose, no code fences:
 {{"action": "keep|drop|supersede|merge", "target_id": "<candidate id or null>", "merged_content": "<combined episode text or null>", "reason": "<short>"}}
-
+{learnings}
 New episode:
 {new}
 
@@ -182,6 +183,15 @@ def _format_candidates(candidates: list[DedupCandidate]) -> str:
     )
 
 
+def _dedup_learnings_block(learnings: LearningsStore | None) -> str:
+    if learnings is None:
+        return ""
+    entries = learnings.load_block("dedup")
+    if not entries:
+        return ""
+    return f"\nPast corrections the user made about dedup — honor them:\n{entries}\n"
+
+
 def _parse_decision(raw: str) -> DedupDecision:
     text = raw.strip()
     if text.startswith("```"):
@@ -242,6 +252,7 @@ async def finalize_buffer(
     reason: str,
     config: TriggerConfig = DEFAULT_TRIGGERS,
     dedup_client: DedupAdjudicator | None = None,
+    learnings: LearningsStore | None = None,
 ) -> EpisodeBuffer:
     prompt = _SUMMARY_PROMPT.format(content=buffer.content_so_far)
     summary = (await llm_client(prompt)).strip()
@@ -256,7 +267,12 @@ async def finalize_buffer(
     if not candidates:
         decision = DedupDecision(action="keep")
     elif dedup_client is not None:
-        decision = _parse_decision(await dedup_client(_DEDUP_PROMPT.format(new=summary, candidates=_format_candidates(candidates))))
+        prompt = _DEDUP_PROMPT.format(
+            new=summary,
+            candidates=_format_candidates(candidates),
+            learnings=_dedup_learnings_block(learnings),
+        )
+        decision = _parse_decision(await dedup_client(prompt))
     else:
         decision = _legacy_decision(candidates)
 

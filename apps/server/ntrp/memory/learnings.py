@@ -73,6 +73,13 @@ class LearningsStore:
             return []
         return sorted(p.stem for p in self._base.glob("*.md") if p.stem in ADJUDICATORS)
 
+    def load_block(self, adjudicator: str) -> str:
+        """The recorded entries (everything from the first ``## `` heading), ready to drop
+        into an adjudicator prompt. Empty string when nothing has been recorded yet."""
+        text = self.load(adjudicator)
+        idx = text.find("\n## ")
+        return text[idx:].strip() if idx != -1 else ""
+
 
 def _require(adjudicator: str) -> None:
     if adjudicator not in ADJUDICATORS:

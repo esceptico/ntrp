@@ -6,6 +6,7 @@ from ntrp.memory.connectors.episode_close import CompletionDedupClient, Completi
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
 from ntrp.memory.items_store import MemoryItemsRepository
+from ntrp.memory.learnings import LearningsStore
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.runtime import MemoryDatabase
@@ -132,6 +133,7 @@ class KnowledgeRuntime:
             llm_client=CompletionSummaryClient(self.config.memory_model),
             boundary_classifier=EpisodeBoundaryClassifier(),
             dedup_client=CompletionDedupClient(self.config.memory_model),
+            learnings=LearningsStore(),
         )
         self.memory_service.chat_connector = self.chat_connector  # type: ignore[attr-defined]
 

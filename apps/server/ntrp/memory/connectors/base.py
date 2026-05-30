@@ -17,6 +17,7 @@ from ntrp.memory.connectors.episode_close import (
     finalize_buffer,
 )
 from ntrp.memory.items_store import MemoryItemsRepository
+from ntrp.memory.learnings import LearningsStore
 
 _logger = get_logger(__name__)
 
@@ -42,12 +43,14 @@ class BufferingConnector:
         embedder: Any,
         llm_client: SummaryClient,
         dedup_client: DedupAdjudicator | None = None,
+        learnings: LearningsStore | None = None,
     ):
         self.items = items
         self.buffers = buffers
         self.embedder = embedder
         self.llm_client = llm_client
         self.dedup_client = dedup_client
+        self.learnings = learnings
 
     async def ingest(
         self, *, scope: str, content: str, source_ref: dict, extra_source_refs: list[dict] | None = None
@@ -71,9 +74,7 @@ class BufferingConnector:
 
         should_close, reason = await self._detect_explicit_close(buffer, content)
         if not should_close:
-            should_close, reason = evaluate_triggers(
-                buffer, turn_vec, turn.tokens, datetime.now(UTC), self.triggers
-            )
+            should_close, reason = evaluate_triggers(buffer, turn_vec, turn.tokens, datetime.now(UTC), self.triggers)
 
         if should_close:
             if not await self._embedding_dim_matches():
@@ -88,6 +89,7 @@ class BufferingConnector:
                 reason=reason or "boundary",
                 config=self.triggers,
                 dedup_client=self.dedup_client,
+                learnings=self.learnings,
             )
             await self.buffers.apply_turn(next_buffer.id, turn)
             return
@@ -109,6 +111,7 @@ class BufferingConnector:
                     reason="idle_sweep",
                     config=self.triggers,
                     dedup_client=self.dedup_client,
+                    learnings=self.learnings,
                 )
             except Exception:
                 _logger.warning(

@@ -222,6 +222,31 @@ async def test_merge_updates_target_without_inserting(conn):
 
 
 @pytest.mark.asyncio
+async def test_learnings_injected_into_dedup_prompt(conn, tmp_path):
+    from ntrp.memory.learnings import Correction, LearningsStore
+
+    items = MemoryItemsRepository(conn)
+    buffers = EpisodeBufferRepository(conn)
+    await _seed_episode(items, "timur applies to mats", _vec(0))
+    buffer = await _seed_buffer(buffers)
+
+    learnings = LearningsStore(base_dir=tmp_path / "learnings")
+    learnings.record(Correction(adjudicator="dedup", action="edit", summary="MATS notes are never duplicates"))
+
+    dedup = AsyncMock(return_value=json.dumps({"action": "keep"}))
+    await finalize_buffer(
+        buffer=buffer, items=items, buffers=buffers,
+        embedder=MockEmbedder([_vec(0)]),
+        llm_client=AsyncMock(return_value="timur applies to mats"),
+        reason="idle_gap", dedup_client=dedup, learnings=learnings,
+    )
+
+    prompt = dedup.call_args[0][0]
+    assert "MATS notes are never duplicates" in prompt
+    assert "honor them" in prompt
+
+
+@pytest.mark.asyncio
 async def test_parse_failure_keeps_episode(conn):
     items = MemoryItemsRepository(conn)
     buffers = EpisodeBufferRepository(conn)
