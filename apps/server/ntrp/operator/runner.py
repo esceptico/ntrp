@@ -45,7 +45,7 @@ class OperatorDeps:
 @dataclass(frozen=True)
 class RunRequest:
     prompt: str
-    writable: bool
+    auto_approve: bool
     source_id: str
     prompt_suffix: str = ""
     model: str | None = None
@@ -97,7 +97,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         )
 
     executor = deps.executor
-    tools = executor.get_tools() if request.writable else executor.get_tools(read_only=True)
+    tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)
 
     agent_config = deps.config
     if request.model:

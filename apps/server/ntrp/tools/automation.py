@@ -18,7 +18,7 @@ CREATE_AUTOMATION_DESCRIPTION = (
     f"e.g. '{EVENT_APPROACHING}'). "
     "Time triggers support two modes: schedule ('at' a specific time) or interval ('every' N hours/minutes). "
     "Optional model override per automation (falls back to default chat model when omitted). "
-    "Read-only by default, set writable=true for memory/note writes."
+    "Read-only by default, set auto_approve=true for autonomous memory/note writes (skips approvals)."
 )
 
 LIST_AUTOMATIONS_DESCRIPTION = "List all automations with their trigger, status, and next run."
@@ -134,7 +134,10 @@ class CreateAutomationInput(BaseModel):
         default=None,
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
     )
-    writable: bool = Field(default=False, description="Allow automation to write to memory and connected services")
+    auto_approve: bool = Field(
+        default=False,
+        description="Run autonomously: enable write tools and skip per-tool approvals. False = read-only, no approvals.",
+    )
     thread_id: str | None = Field(
         default=None,
         description=(
@@ -198,7 +201,10 @@ class UpdateAutomationInput(BaseModel):
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",
     )
-    writable: bool | None = Field(default=None, description="Allow writes to memory and connected services")
+    auto_approve: bool | None = Field(
+        default=None,
+        description="Run autonomously: enable write tools and skip per-tool approvals. False = read-only, no approvals.",
+    )
     enabled: bool | None = Field(default=None, description="Enable or disable the automation")
 
 
@@ -234,15 +240,15 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
 
     # Multi-line preview the frontend can render as a structured card.
     # Order is intentional: name first, then schedule (what people scan
-    # for), then writable warning, then the full prompt body so reviewers
+    # for), then auto-approve warning, then the full prompt body so reviewers
     # can read what'll actually run without expanding anything.
     lines: list[str] = [f"Name: {args.name}", f"Schedule: {_triggers_label([trigger])}"]
     if next_run:
         lines.append(f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}")
     if args.model:
         lines.append(f"Model: {args.model}")
-    if args.writable:
-        lines.append("Writable: yes (can write to memory + services)")
+    if args.auto_approve:
+        lines.append("Auto-approve: yes (autonomous writes, skips approvals)")
     if args.thread_id:
         mode = "iteration" if args.read_history else "post"
         lines.append(f"Target session: {args.thread_id} ({mode} mode)")
@@ -292,7 +298,7 @@ async def create_automation(execution: ToolExecution, args: CreateAutomationInpu
             every=args.every,
             event_type=args.event_type,
             lead_minutes=args.lead_minutes,
-            writable=args.writable,
+            auto_approve=args.auto_approve,
             start=args.start,
             end=args.end,
             model=args.model,
@@ -350,7 +356,7 @@ async def approve_update_automation(execution: ToolExecution, args: UpdateAutoma
         "name": args.name,
         "description": args.description,
         "enabled": args.enabled,
-        "writable": args.writable,
+        "auto_approve": args.auto_approve,
         "model": args.model,
         "trigger_type": args.trigger_type,
         "at": args.at,
@@ -375,7 +381,8 @@ async def approve_update_automation(execution: ToolExecution, args: UpdateAutoma
 
 async def update_automation(execution: ToolExecution, args: UpdateAutomationInput) -> ToolResult:
     try:
-        automation = await execution.ctx.services["automation"].update(
+        automation_service = execution.ctx.services["automation"]
+        automation = await automation_service.update(
             args.task_id,
             name=args.name,
             description=args.description,
@@ -388,7 +395,7 @@ async def update_automation(execution: ToolExecution, args: UpdateAutomationInpu
             lead_minutes=args.lead_minutes,
             start=args.start,
             end=args.end,
-            writable=args.writable,
+            auto_approve=args.auto_approve,
             enabled=args.enabled,
         )
     except KeyError:
@@ -777,7 +784,7 @@ async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolRe
     lines = [
         f"Created loop {loop.task_id}",
         f"Every: {args.every}",
-        f"Prompt: {loop.loop_prompt}",
+        f"Prompt: {loop.description}",
     ]
     if loop.max_iterations:
         lines.append(f"Max iterations: {loop.max_iterations}")

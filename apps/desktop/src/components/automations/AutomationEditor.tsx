@@ -15,6 +15,7 @@ import {
 } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
 import { ICON } from "../../lib/icons";
+import { IconButton } from "../IconButton";
 import { GlassToggle } from "../GlassToggle";
 import { Chip } from "../Chip";
 import { GlassSwitch } from "../GlassSwitch";
@@ -54,18 +55,18 @@ interface FormState {
   name: string;
   prompt: string;
   schedule: Schedule;
-  writable: boolean;
+  auto_approve: boolean;
 }
 
 function emptyForm(): FormState {
-  return { name: "", prompt: "", schedule: { ...DEFAULT_SCHEDULE }, writable: false };
+  return { name: "", prompt: "", schedule: { ...DEFAULT_SCHEDULE }, auto_approve: false };
 }
 
 function formFromPreset(p: CreateAutomationPayload): FormState {
   const f = emptyForm();
   f.name = p.name ?? "";
   f.prompt = p.description ?? "";
-  if (p.writable) f.writable = true;
+  if (p.auto_approve) f.auto_approve = true;
   if (p.trigger_type === "event") {
     f.schedule = {
       ...f.schedule,
@@ -93,7 +94,7 @@ function formFromAutomation(a: Automation): FormState {
   const f = emptyForm();
   f.name = a.name;
   f.prompt = a.description;
-  f.writable = a.writable;
+  f.auto_approve = a.auto_approve;
   if (!t) return f;
   if (t.type === "time" && t.every) {
     f.schedule = {
@@ -121,7 +122,7 @@ function buildPayload(f: FormState): CreateAutomationPayload {
   const p: CreateAutomationPayload = {
     name: f.name.trim() || "Untitled automation",
     description: f.prompt.trim(),
-    writable: f.writable,
+    auto_approve: f.auto_approve,
   };
   const s = f.schedule;
   if (s.kind === "at") {
@@ -274,24 +275,12 @@ export function AutomationEditor({
                 className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
               />
               <div className="flex items-center gap-0.5 text-faint">
-                <button
-                  type="button"
-                  onClick={reset}
-                  title="Reset"
-                  aria-label="Reset"
-                  className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-soft hover:text-ink transition-colors"
-                >
+                <IconButton tone="faint" onClick={reset} title="Reset" aria-label="Reset">
                   <RotateCcw size={ICON.MD} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  title="Close"
-                  aria-label="Close"
-                  className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-soft hover:text-ink transition-colors"
-                >
+                </IconButton>
+                <IconButton tone="faint" onClick={onClose} title="Close" aria-label="Close">
                   <X size={ICON.MD} strokeWidth={2} />
-                </button>
+                </IconButton>
               </div>
             </header>
 
@@ -307,9 +296,9 @@ export function AutomationEditor({
             </div>
 
             {error && (
-              <div className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
+              <div className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15">
                 <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
-                <span className="text-sm text-[#8a3220] leading-[1.4]">{error}</span>
+                <span className="text-sm text-bad leading-[1.4]">{error}</span>
               </div>
             )}
 
@@ -323,16 +312,16 @@ export function AutomationEditor({
                   className="inline-flex items-center gap-1.5 px-1 select-none cursor-pointer"
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("button")) return;
-                    setForm((p) => ({ ...p, writable: !p.writable }));
+                    setForm((p) => ({ ...p, auto_approve: !p.auto_approve }));
                   }}
                 >
                   <GlassSwitch
                     size="sm"
-                    checked={form.writable}
-                    onChange={(next) => setForm((p) => ({ ...p, writable: next }))}
-                    aria-label="Writable"
+                    checked={form.auto_approve}
+                    onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
+                    aria-label="Auto-Approve"
                   />
-                  <span className="text-sm text-muted">Writable</span>
+                  <span className="text-sm text-muted">Auto-Approve</span>
                 </div>
               </div>
               <div className="flex items-center gap-1">

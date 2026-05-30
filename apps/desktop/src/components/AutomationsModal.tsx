@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Circle, FileText, Play, Plus, Radio, Trash2, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
-import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } from "../actions";
+import { deleteAutomation, fetchAutomations, runAutomation, switchSession, toggleAutomation } from "../actions";
 import type { Automation, AutomationTrigger } from "../api";
 import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
@@ -11,6 +11,7 @@ import { templatesByCategory, type AutomationTemplate } from "./automations/temp
 import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
+import { IconButton } from "./IconButton";
 import { ScrollBlurTop } from "./ScrollBlur";
 
 type Tab = "active" | "channels" | "system" | "templates";
@@ -313,6 +314,9 @@ function AutomationCard({
   const trigger = automation.triggers.map(formatTrigger).join(" · ") || "—";
   const hasResult = !!automation.last_result?.trim();
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
+  const sessions = useStore((s) => s.sessions);
+  const closeAutomations = useStore((s) => s.closeAutomations);
+  const channel = sessions.find((sx) => sx.origin_automation_id === automation.task_id) ?? null;
   const trustLabel = automationTrustLabel(automation);
   const editable = !automation.builtin;
   const open = () => {
@@ -390,6 +394,16 @@ function AutomationCard({
           </p>
         </div>
         <div className="absolute top-2.5 right-2.5 flex items-center gap-px opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity">
+          {channel && (
+            <CardAction
+              icon={Radio}
+              label="Open channel"
+              onClick={stop(() => {
+                void switchSession(channel.session_id);
+                closeAutomations();
+              })}
+            />
+          )}
           {hasResult && (
             <CardAction
               icon={FileText}
@@ -470,19 +484,17 @@ function CardAction({
   danger?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      size="sm"
+      tone="faint"
+      danger={danger}
       onClick={onClick}
       disabled={disabled || busy}
       aria-label={label}
       title={label}
-      className={clsx(
-        "grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
-        danger && "hover:!text-bad",
-      )}
     >
       <Icon size={ICON.XS} strokeWidth={2} />
-    </button>
+    </IconButton>
   );
 }
 

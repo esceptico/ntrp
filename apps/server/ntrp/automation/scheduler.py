@@ -290,10 +290,10 @@ class Scheduler:
     def _is_session_bound(automation: Automation) -> bool:
         """A session-bound automation targets a specific session, so its
         firing must coordinate with that session's run lifecycle. Identified
-        by thread_id (new) or target_session_id (legacy) — kind-agnostic
-        because channel automations (kind='automation') created via
-        `service.create(thread_id=...)` are also session-bound."""
-        return automation.thread_id is not None or automation.target_session_id is not None
+        by thread_id — kind-agnostic because channel automations
+        (kind='automation') created via `service.create(thread_id=...)` are
+        also session-bound."""
+        return automation.thread_id is not None
 
     def _loop_can_fire(self, automation: Automation) -> bool:
         if self._loop_fire_gate is None:
@@ -392,7 +392,7 @@ class Scheduler:
             await self.store.clear_running(automation.task_id)
             raise
 
-    async def _emit_automation_event(self, event: SSEEvent) -> None:
+    async def emit_automation_event(self, event: SSEEvent) -> None:
         if self._bus_registry:
             try:
                 bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
@@ -407,7 +407,7 @@ class Scheduler:
         event_queue_id: int | None = None,
         event_attempt_count: int = 0,
     ) -> None:
-        await self._emit_automation_event(
+        await self.emit_automation_event(
             AutomationProgressEvent(task_id=automation.task_id, status="starting..."),
         )
         result: str | None = None
@@ -425,7 +425,7 @@ class Scheduler:
             error_message = f"{type(e).__name__}: {e}"
             _logger.exception("Failed to execute automation %s", automation.task_id)
         finally:
-            await self._emit_automation_event(
+            await self.emit_automation_event(
                 AutomationFinishedEvent(task_id=automation.task_id, result=result),
             )
             now = datetime.now(UTC)
@@ -512,10 +512,10 @@ class Scheduler:
         request = RunRequest(
             prompt=prompt,
             prompt_suffix=AUTOMATION_SUFFIX,
-            writable=automation.writable,
+            auto_approve=automation.auto_approve,
             source_id=automation.task_id,
             model=automation.model,
-            skip_approvals=automation.writable,
+            skip_approvals=automation.auto_approve,
             automation_id=automation.task_id,
         )
 
@@ -538,8 +538,8 @@ class Scheduler:
 
         Both modes honor aged_out / max_iterations / iteration_count.
         """
-        if not automation.loop_prompt:
-            raise RuntimeError(f"Loop {automation.task_id} missing loop_prompt")
+        if not automation.description:
+            raise RuntimeError(f"Loop {automation.task_id} missing description")
         # Aged-out check is mode-agnostic — disable before reaching for
         # a dispatcher.
         if automation.aged_out(datetime.now(UTC)):
@@ -552,19 +552,14 @@ class Scheduler:
         if automation.read_history:
             dispatcher = self._iteration_dispatcher
             mode = "iteration"
-            # Iteration mode re-enters via `thread_id` (new) or
-            # `target_session_id` (legacy). Channel-aware rows created via
-            # `service.create(thread_id=X, read_history=True)` only carry
-            # thread_id — accept either.
-            if not (automation.thread_id or automation.target_session_id):
+            # Iteration mode re-enters via `thread_id`.
+            if not automation.thread_id:
                 raise RuntimeError(f"Iteration loop {automation.task_id} missing thread_id")
         else:
             dispatcher = self._post_dispatcher
             mode = "post"
-            # Post mode writes into `thread_id`. Iteration loops migrated
-            # from v4 have thread_id = target_session_id, so either field
-            # works as a target; we just need *something*.
-            if not (automation.thread_id or automation.target_session_id):
+            # Post mode writes into `thread_id`.
+            if not automation.thread_id:
                 raise RuntimeError(f"Post loop {automation.task_id} missing thread_id")
         if dispatcher is None:
             raise RuntimeError(f"{mode} dispatcher not wired")
@@ -574,7 +569,7 @@ class Scheduler:
             mode,
             automation.task_id,
             automation.iteration_count + 1,
-            automation.target_session_id or automation.thread_id,
+            automation.thread_id,
         )
         result = await dispatcher(automation)
         # Disable after max_iterations is hit. iteration_count was already

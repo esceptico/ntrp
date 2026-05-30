@@ -12,8 +12,8 @@ def _loop_to_dict(a: Automation) -> dict:
     every = a.triggers[0].params().get("every") if a.triggers else None
     return {
         "task_id": a.task_id,
-        "session_id": a.target_session_id,
-        "prompt": a.loop_prompt,
+        "session_id": a.thread_id,
+        "prompt": a.description,
         "every": every,
         "enabled": a.enabled,
         "iteration_count": a.iteration_count,
@@ -84,7 +84,6 @@ async def update_loop(
             description=description,
             every=request.every,
             enabled=request.enabled,
-            loop_prompt=request.prompt.strip() if request.prompt is not None else None,
             max_iterations=request.max_iterations,
             stop_when=request.stop_when,
             max_age_days=request.max_age_days,

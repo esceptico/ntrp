@@ -81,7 +81,7 @@ async def test_operator_prepare_passes_run_and_session_ids_to_retrieval(monkeypa
 
     _, _, run_id, session_id = await runner._prepare(
         deps,
-        RunRequest(prompt="audit memory", writable=False, source_id="source-1", automation_id="automation-1"),
+        RunRequest(prompt="audit memory", auto_approve=False, source_id="source-1", automation_id="automation-1"),
     )
 
     assert session_id == "operator-session-1"

@@ -90,13 +90,11 @@ def _row_to_automation(row: dict) -> Automation:
         last_run_at=_parse_dt(row["last_run_at"]),
         last_result=row["last_result"],
         running_since=_parse_dt(row["running_since"]),
-        writable=bool(row["writable"]),
+        auto_approve=bool(row["auto_approve"]),
         handler=row["handler"],
         builtin=bool(row["builtin"]),
         cooldown_minutes=int(row["cooldown_minutes"]) if row["cooldown_minutes"] is not None else None,
         kind=row["kind"] or "automation",
-        target_session_id=row["target_session_id"],
-        loop_prompt=row["loop_prompt"],
         max_iterations=int(row["max_iterations"]) if row["max_iterations"] is not None else None,
         iteration_count=int(row["iteration_count"] or 0),
         stop_when=row["stop_when"],
@@ -127,13 +125,11 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     notifiers TEXT,
     last_result TEXT,
     running_since TEXT,
-    writable INTEGER NOT NULL DEFAULT 0,
+    auto_approve INTEGER NOT NULL DEFAULT 0,
     handler TEXT,
     builtin INTEGER NOT NULL DEFAULT 0,
     cooldown_minutes INTEGER,
     kind TEXT NOT NULL DEFAULT 'automation',
-    target_session_id TEXT,
-    loop_prompt TEXT,
     max_iterations INTEGER,
     iteration_count INTEGER NOT NULL DEFAULT 0,
     stop_when TEXT,
@@ -147,13 +143,11 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_session
-ON scheduled_tasks(kind, target_session_id);
--- v5 indexes (thread_id, parent_automation_id, idempotency_*) are created
--- inside the v5 migration block instead of here, since they reference
--- columns that don't exist on pre-v5 databases. Putting them in _SCHEMA
--- would fail on the upgrade path (CREATE INDEX runs before ALTER TABLE
--- adds the columns).
+-- thread_id-based indexes (idx_scheduled_tasks_kind_thread, thread_kind,
+-- parent, idempotency_*) are created inside the v5 migration block instead
+-- of here, since they reference columns that don't exist on pre-v5
+-- databases. Putting them in _SCHEMA would fail on the upgrade path
+-- (CREATE INDEX runs before ALTER TABLE adds the columns).
 
 CREATE TABLE IF NOT EXISTS automation_event_dedupe (
     task_id TEXT NOT NULL,
@@ -229,14 +223,14 @@ ON automation_idempotency_claims(parent_automation_id);
 _COLUMNS = (
     "task_id, name, description, model, triggers, enabled, "
     "created_at, last_run_at, next_run_at, last_result, running_since, "
-    "writable, handler, builtin, cooldown_minutes, "
-    "kind, target_session_id, loop_prompt, max_iterations, iteration_count, stop_when, max_age_days, "
+    "auto_approve, handler, builtin, cooldown_minutes, "
+    "kind, max_iterations, iteration_count, stop_when, max_age_days, "
     "thread_id, read_history, parent_automation_id, idempotency_key, idempotency_scope"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -304,14 +298,14 @@ UPDATE scheduled_tasks SET enabled = 0
 WHERE parent_automation_id = ? AND enabled = 1
 """
 
-_SQL_SET_WRITABLE = "UPDATE scheduled_tasks SET writable = ? WHERE task_id = ?"
+_SQL_SET_AUTO_APPROVE = "UPDATE scheduled_tasks SET auto_approve = ? WHERE task_id = ?"
 
 _SQL_UPDATE_METADATA = """
 UPDATE scheduled_tasks
 SET name = ?, description = ?, model = ?, triggers = ?,
-    enabled = ?, next_run_at = ?, writable = ?, handler = ?,
+    enabled = ?, next_run_at = ?, auto_approve = ?, handler = ?,
     cooldown_minutes = ?,
-    loop_prompt = ?, max_iterations = ?, stop_when = ?,
+    max_iterations = ?, stop_when = ?,
     max_age_days = ?,
     thread_id = ?, read_history = ?,
     parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?
@@ -320,18 +314,18 @@ WHERE task_id = ?
 
 _SQL_LIST_LOOPS_BY_SESSION = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
-WHERE kind = 'loop' AND target_session_id = ?
+WHERE kind = 'loop' AND thread_id = ?
 ORDER BY created_at
 """
 
 # Kind-agnostic counterpart used by the scheduler's run-completed fast path.
-# A session-bound automation is any row that targets a session via
-# thread_id (new field) or target_session_id (legacy), regardless of kind.
-# Channel automations created via `service.create(thread_id=...)` have
-# kind="automation" and still need to fire through the post dispatcher.
+# A session-bound automation is any row that targets a session via thread_id,
+# regardless of kind. Channel automations created via
+# `service.create(thread_id=...)` have kind="automation" and still need to
+# fire through the post dispatcher.
 _SQL_LIST_SESSION_BOUND_BY_SESSION = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
-WHERE (thread_id = ? OR target_session_id = ?) AND enabled = 1
+WHERE thread_id = ? AND enabled = 1
 ORDER BY created_at
 """
 
@@ -554,7 +548,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 10
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -731,6 +725,8 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
             ON scheduled_tasks(parent_automation_id);
             CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_thread_kind
             ON scheduled_tasks(thread_id, kind);
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_thread
+            ON scheduled_tasks(kind, thread_id);
             CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_idempotency
             ON scheduled_tasks(idempotency_scope, idempotency_key)
             WHERE idempotency_key IS NOT NULL;
@@ -802,6 +798,176 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await conn.commit()
         _logger.info("Migrated automation store to v7 (event dead-letter table)")
 
+    if version < 8:
+        rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+        existing = {row["name"] for row in rows}
+        if "writable" in existing and "auto_approve" not in existing:
+            await conn.execute("ALTER TABLE scheduled_tasks RENAME COLUMN writable TO auto_approve")
+        await _set_schema_version(conn, 8)
+        await conn.commit()
+        _logger.info("Migrated automation store to v8 (writable -> auto_approve)")
+
+    if version < 9:
+        rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+        existing = {row["name"] for row in rows}
+        if "loop_prompt" in existing:
+            await conn.executescript(
+                """
+                CREATE TABLE scheduled_tasks_v9 (
+                    task_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL,
+                    model TEXT,
+                    triggers TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    last_run_at TEXT,
+                    next_run_at TEXT,
+                    notifiers TEXT,
+                    last_result TEXT,
+                    running_since TEXT,
+                    auto_approve INTEGER NOT NULL DEFAULT 0,
+                    handler TEXT,
+                    builtin INTEGER NOT NULL DEFAULT 0,
+                    cooldown_minutes INTEGER,
+                    kind TEXT NOT NULL DEFAULT 'automation',
+                    target_session_id TEXT,
+                    max_iterations INTEGER,
+                    iteration_count INTEGER NOT NULL DEFAULT 0,
+                    stop_when TEXT,
+                    max_age_days INTEGER,
+                    thread_id TEXT,
+                    read_history INTEGER NOT NULL DEFAULT 0,
+                    parent_automation_id TEXT,
+                    idempotency_key TEXT,
+                    idempotency_scope TEXT
+                );
+
+                INSERT INTO scheduled_tasks_v9 (
+                    task_id, name, description, model, triggers, enabled,
+                    created_at, last_run_at, next_run_at, notifiers, last_result,
+                    running_since, auto_approve, handler, builtin, cooldown_minutes,
+                    kind, target_session_id, max_iterations, iteration_count,
+                    stop_when, max_age_days, thread_id, read_history,
+                    parent_automation_id, idempotency_key, idempotency_scope
+                )
+                SELECT
+                    task_id, name, description, model, triggers, enabled,
+                    created_at, last_run_at, next_run_at, notifiers, last_result,
+                    running_since, auto_approve, handler, builtin, cooldown_minutes,
+                    kind, target_session_id, max_iterations, iteration_count,
+                    stop_when, max_age_days, thread_id, read_history,
+                    parent_automation_id, idempotency_key, idempotency_scope
+                FROM scheduled_tasks;
+
+                DROP TABLE scheduled_tasks;
+                ALTER TABLE scheduled_tasks_v9 RENAME TO scheduled_tasks;
+
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run
+                ON scheduled_tasks(next_run_at);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled
+                ON scheduled_tasks(enabled);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_session
+                ON scheduled_tasks(kind, target_session_id);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_parent
+                ON scheduled_tasks(parent_automation_id);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_thread_kind
+                ON scheduled_tasks(thread_id, kind);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_idempotency
+                ON scheduled_tasks(idempotency_scope, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+                """
+            )
+        await _set_schema_version(conn, 9)
+        await conn.commit()
+        _logger.info("Migrated automation store to v9 (dropped loop_prompt column)")
+
+    if version < 10:
+        rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+        existing = {row["name"] for row in rows}
+        if "target_session_id" in existing:
+            # Belt-and-suspenders: backfill thread_id for any rows that were
+            # missed by v5 (e.g. old code inserted between v5 and v10). This
+            # runs and commits before executescript so the backfill lands in
+            # its own transaction.
+            await conn.execute(
+                """
+                UPDATE scheduled_tasks
+                SET thread_id = target_session_id
+                WHERE thread_id IS NULL AND target_session_id IS NOT NULL
+                """
+            )
+            await conn.commit()
+            await conn.executescript(
+                """
+                CREATE TABLE scheduled_tasks_v10 (
+                    task_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL,
+                    model TEXT,
+                    triggers TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    last_run_at TEXT,
+                    next_run_at TEXT,
+                    notifiers TEXT,
+                    last_result TEXT,
+                    running_since TEXT,
+                    auto_approve INTEGER NOT NULL DEFAULT 0,
+                    handler TEXT,
+                    builtin INTEGER NOT NULL DEFAULT 0,
+                    cooldown_minutes INTEGER,
+                    kind TEXT NOT NULL DEFAULT 'automation',
+                    max_iterations INTEGER,
+                    iteration_count INTEGER NOT NULL DEFAULT 0,
+                    stop_when TEXT,
+                    max_age_days INTEGER,
+                    thread_id TEXT,
+                    read_history INTEGER NOT NULL DEFAULT 0,
+                    parent_automation_id TEXT,
+                    idempotency_key TEXT,
+                    idempotency_scope TEXT
+                );
+
+                INSERT INTO scheduled_tasks_v10 (
+                    task_id, name, description, model, triggers, enabled,
+                    created_at, last_run_at, next_run_at, notifiers, last_result,
+                    running_since, auto_approve, handler, builtin, cooldown_minutes,
+                    kind, max_iterations, iteration_count, stop_when, max_age_days,
+                    thread_id, read_history, parent_automation_id, idempotency_key,
+                    idempotency_scope
+                )
+                SELECT
+                    task_id, name, description, model, triggers, enabled,
+                    created_at, last_run_at, next_run_at, notifiers, last_result,
+                    running_since, auto_approve, handler, builtin, cooldown_minutes,
+                    kind, max_iterations, iteration_count, stop_when, max_age_days,
+                    thread_id, read_history, parent_automation_id, idempotency_key,
+                    idempotency_scope
+                FROM scheduled_tasks;
+
+                DROP TABLE scheduled_tasks;
+                ALTER TABLE scheduled_tasks_v10 RENAME TO scheduled_tasks;
+
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run
+                ON scheduled_tasks(next_run_at);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled
+                ON scheduled_tasks(enabled);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_thread
+                ON scheduled_tasks(kind, thread_id);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_parent
+                ON scheduled_tasks(parent_automation_id);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_thread_kind
+                ON scheduled_tasks(thread_id, kind);
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_idempotency
+                ON scheduled_tasks(idempotency_scope, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+                """
+            )
+        await _set_schema_version(conn, 10)
+        await conn.commit()
+        _logger.info("Migrated automation store to v10 (dropped target_session_id, rewrote kind index to thread_id)")
+
 
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -834,13 +1000,11 @@ class AutomationStore:
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
                 automation.last_result,
                 automation.running_since.isoformat() if automation.running_since else None,
-                int(automation.writable),
+                int(automation.auto_approve),
                 automation.handler,
                 int(automation.builtin),
                 automation.cooldown_minutes,
                 automation.kind,
-                automation.target_session_id,
-                automation.loop_prompt,
                 automation.max_iterations,
                 int(automation.iteration_count),
                 automation.stop_when,
@@ -915,8 +1079,8 @@ class AutomationStore:
         await self.conn.commit()
         return cursor.rowcount
 
-    async def set_writable(self, task_id: str, writable: bool) -> None:
-        await self.conn.execute(_SQL_SET_WRITABLE, (int(writable), task_id))
+    async def set_auto_approve(self, task_id: str, auto_approve: bool) -> None:
+        await self.conn.execute(_SQL_SET_AUTO_APPROVE, (int(auto_approve), task_id))
         await self.conn.commit()
 
     async def update_metadata(self, automation: Automation) -> None:
@@ -929,10 +1093,9 @@ class AutomationStore:
                 _serialize_triggers(automation.triggers),
                 int(automation.enabled),
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
-                int(automation.writable),
+                int(automation.auto_approve),
                 automation.handler,
                 automation.cooldown_minutes,
-                automation.loop_prompt,
                 automation.max_iterations,
                 automation.stop_when,
                 automation.max_age_days,
@@ -952,10 +1115,9 @@ class AutomationStore:
 
     async def list_session_bound_by_session(self, session_id: str) -> list[Automation]:
         """Kind-agnostic: any automation that targets `session_id` via
-        thread_id (new) or target_session_id (legacy). Used by the
-        scheduler's run-completed fast path to fire deferred session-bound
-        work the moment the session goes idle."""
-        rows = await self.conn.execute_fetchall(_SQL_LIST_SESSION_BOUND_BY_SESSION, (session_id, session_id))
+        thread_id. Used by the scheduler's run-completed fast path to fire
+        deferred session-bound work the moment the session goes idle."""
+        rows = await self.conn.execute_fetchall(_SQL_LIST_SESSION_BOUND_BY_SESSION, (session_id,))
         return [_row_to_automation(row) for row in rows]
 
     async def list_by_parent(self, parent_automation_id: str) -> list[Automation]:
@@ -1120,13 +1282,11 @@ class AutomationStore:
                     automation.next_run_at.isoformat() if automation.next_run_at else None,
                     automation.last_result,
                     automation.running_since.isoformat() if automation.running_since else None,
-                    int(automation.writable),
+                    int(automation.auto_approve),
                     automation.handler,
                     int(automation.builtin),
                     automation.cooldown_minutes,
                     automation.kind,
-                    automation.target_session_id,
-                    automation.loop_prompt,
                     automation.max_iterations,
                     int(automation.iteration_count),
                     automation.stop_when,

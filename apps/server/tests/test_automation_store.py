@@ -42,7 +42,7 @@ def _automation(
         last_run_at=None,
         last_result=None,
         running_since=running_since,
-        writable=False,
+        auto_approve=False,
         handler=handler,
         builtin=builtin,
     )
@@ -212,10 +212,9 @@ async def test_loop_fields_roundtrip(automation_store: AutomationStore):
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess-1",
-        loop_prompt="check CI",
+        thread_id="sess-1",
         max_iterations=3,
         iteration_count=0,
         stop_when="when green",
@@ -225,8 +224,7 @@ async def test_loop_fields_roundtrip(automation_store: AutomationStore):
     loaded = await automation_store.get("loop-foo")
     assert loaded is not None
     assert loaded.kind == "loop"
-    assert loaded.target_session_id == "sess-1"
-    assert loaded.loop_prompt == "check CI"
+    assert loaded.thread_id == "sess-1"
     assert loaded.max_iterations == 3
     assert loaded.iteration_count == 0
     assert loaded.stop_when == "when green"
@@ -249,10 +247,9 @@ async def test_list_loops_by_session_filters_correctly(automation_store: Automat
             last_run_at=None,
             last_result=None,
             running_since=None,
-            writable=True,
+            auto_approve=True,
             kind="loop",
-            target_session_id=session_id,
-            loop_prompt="x",
+            thread_id=session_id,
         )
 
     await automation_store.save(_loop("loop-a", "sess-1"))
@@ -283,10 +280,9 @@ async def test_increment_iteration_advances_count(automation_store: AutomationSt
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess",
-        loop_prompt="x",
+        thread_id="sess",
     )
     await automation_store.save(loop)
 
@@ -314,7 +310,7 @@ async def test_v5_fields_roundtrip(automation_store: AutomationStore):
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         thread_id="channel-sess-1",
         read_history=False,
         parent_automation_id="watcher-1",
@@ -366,8 +362,9 @@ async def test_update_metadata_persists_v5_identity_fields(automation_store: Aut
 
 
 @pytest.mark.asyncio
-async def test_v5_migration_backfills_loop_rows(tmp_path: Path):
-    """v4 → v5: loop rows get thread_id = target_session_id, read_history = True."""
+async def test_v4_to_v10_migration_backfills_loop_rows(tmp_path: Path):
+    """v4 → v10: loop rows get thread_id = target_session_id, read_history = True,
+    and the legacy target_session_id / loop_prompt columns are dropped."""
     db_path = tmp_path / "v4.db"
     conn = await database.connect(db_path)
 
@@ -438,12 +435,17 @@ async def test_v5_migration_backfills_loop_rows(tmp_path: Path):
     assert loaded_plain.thread_id is None
     assert loaded_plain.read_history is False
 
+    rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+    col_names = {r["name"] for r in rows}
+    assert "loop_prompt" not in col_names
+    assert "target_session_id" not in col_names
+
     await conn.close()
 
 
 @pytest.mark.asyncio
-async def test_v5_migration_is_idempotent(tmp_path: Path):
-    """Running migration twice doesn't double-write or fail."""
+async def test_migration_is_idempotent(tmp_path: Path):
+    """Running migration twice doesn't double-write or fail across v4 → v10."""
     db_path = tmp_path / "v4.db"
     conn = await database.connect(db_path)
     await conn.executescript(
@@ -500,7 +502,7 @@ async def test_v5_migration_is_idempotent(tmp_path: Path):
     )
     await conn.commit()
 
-    # Re-run init_schema; should be a no-op for the backfill since version is now 5.
+    # Re-run init_schema; should be a no-op for the backfill since version is now 10.
     await store.init_schema()
     loaded = await store.get("loop-row")
     assert loaded is not None
@@ -517,6 +519,7 @@ async def test_v5_indexes_created(automation_store: AutomationStore):
     assert "idx_scheduled_tasks_parent" in names
     assert "idx_scheduled_tasks_thread_kind" in names
     assert "idx_scheduled_tasks_idempotency" in names
+    assert "idx_scheduled_tasks_kind_thread" in names
 
 
 def test_scheduler_constructor_has_no_learning_recorder(automation_store: AutomationStore):

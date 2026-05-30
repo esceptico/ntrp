@@ -23,6 +23,18 @@ async def store(tmp_path: Path):
     await conn.close()
 
 
+@pytest_asyncio.fixture
+async def session_service(tmp_path: Path):
+    from ntrp.context.store import SessionStore
+    from ntrp.services.session import SessionService
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    s = SessionStore(conn)
+    await s.init_schema()
+    yield SessionService(s)
+    await conn.close()
+
+
 def _loop(
     task_id: str = "loop-1",
     *,
@@ -49,10 +61,8 @@ def _loop(
         last_run_at=None,
         last_result=None,
         running_since=running_since,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id=session_id,
-        loop_prompt=prompt,
         max_iterations=max_iterations,
         iteration_count=iteration_count,
         read_history=read_history,
@@ -103,7 +113,7 @@ async def test_scheduler_dispatches_due_loop(store: AutomationStore):
 
     assert len(dispatched) == 1
     assert dispatched[0].task_id == "loop-1"
-    assert dispatched[0].loop_prompt == "check CI"
+    assert dispatched[0].description == "check CI"
 
     reloaded = await store.get("loop-1")
     assert reloaded.iteration_count == 1
@@ -365,9 +375,9 @@ async def test_loop_without_dispatcher_raises(store: AutomationStore):
 
 
 @pytest.mark.asyncio
-async def test_create_loop_via_service_stores_correctly(store: AutomationStore):
+async def test_create_loop_via_service_stores_correctly(store: AutomationStore, session_service):
     sched, _ = _make_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
 
     loop = await svc.create_loop(
         session_id="sess-1",
@@ -378,8 +388,8 @@ async def test_create_loop_via_service_stores_correctly(store: AutomationStore):
     )
 
     assert loop.kind == "loop"
-    assert loop.target_session_id == "sess-1"
-    assert loop.loop_prompt == "watch CI"
+    assert loop.thread_id == "sess-1"
+    assert loop.description == "watch CI"
     assert loop.max_iterations == 10
     assert loop.stop_when == "when green"
     assert loop.triggers[0].params()["every"] == "5m"
@@ -389,21 +399,21 @@ async def test_create_loop_via_service_stores_correctly(store: AutomationStore):
 
 
 @pytest.mark.asyncio
-async def test_create_loop_rejects_empty_prompt(store: AutomationStore):
+async def test_create_loop_rejects_empty_prompt(store: AutomationStore, session_service):
     sched, _ = _make_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
 
     with pytest.raises(ValueError, match="prompt"):
         await svc.create_loop(session_id="s", prompt="   ", every="5m")
 
 
 @pytest.mark.asyncio
-async def test_create_loop_sets_next_run_at_to_now(store: AutomationStore):
+async def test_create_loop_sets_next_run_at_to_now(store: AutomationStore, session_service):
     # First fire happens "as soon as session is idle" — next_run_at = now
     # so the scheduler picks it up immediately (or the run-completed
     # fast-path fires it the moment the /loop turn ends).
     sched, _ = _make_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
     before = datetime.now(UTC)
 
     loop = await svc.create_loop(session_id="sess-1", prompt="watch CI", every="5m")
@@ -462,7 +472,7 @@ async def test_handle_run_completed_fires_due_loops_for_session(store: Automatio
         await t
 
     assert len(dispatched) == 1
-    assert dispatched[0].target_session_id == "sess-1"
+    assert dispatched[0].thread_id == "sess-1"
 
 
 @pytest.mark.asyncio
@@ -552,10 +562,9 @@ async def test_aged_out_loop_clears_next_run_at(store: AutomationStore):
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess",
-        loop_prompt="check x",
+        thread_id="sess",
         max_age_days=7,
     )
     await store.save(loop)
@@ -586,10 +595,9 @@ async def test_aged_out_loop_disables_without_firing(store: AutomationStore):
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess",
-        loop_prompt="check x",
+        thread_id="sess",
         max_age_days=7,
     )
     await store.save(loop)
@@ -759,10 +767,8 @@ async def test_post_mode_aged_out_disables_without_firing(store: AutomationStore
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess",
-        loop_prompt="check x",
         max_age_days=7,
         read_history=False,
         thread_id="sess",
@@ -839,8 +845,8 @@ async def test_post_mode_persists_assistant_message_to_target_session(store: Aut
 
 
 # ---------------------------------------------------------------------------
-# Code-review fixes: per-session write lock + fire-gate / dispatcher priority
-# alignment for `thread_id` over the legacy `target_session_id`.
+# Code-review fixes: per-session write lock + fire-gate / dispatcher target
+# resolution via `thread_id`.
 # ---------------------------------------------------------------------------
 
 
@@ -906,44 +912,7 @@ async def test_session_lock_is_per_session_not_global():
     assert overlap["yes"] is True
 
 
-def test_loop_target_id_prefers_thread_id_over_legacy_session_id():
-    """The fire gate and post dispatcher must agree on the target session.
-    `thread_id` (new) wins; `target_session_id` (legacy) is the fallback."""
-    from ntrp.server.app import _loop_target_id
-
-    auto = _loop(session_id="legacy-B", thread_id="new-A")
-    assert auto.thread_id == "new-A"
-    assert auto.target_session_id == "legacy-B"
-    # The write target IS thread_id, so the gate must check thread_id too.
-    assert _loop_target_id(auto) == "new-A"
-
-
-def test_loop_target_id_falls_back_to_target_session_id():
-    from ntrp.server.app import _loop_target_id
-
-    # No thread_id (legacy row) → fall back to target_session_id.
-    auto = Automation(
-        task_id="t",
-        name="x",
-        description="x",
-        model=None,
-        triggers=[TimeTrigger(every="5m")],
-        enabled=True,
-        created_at=datetime.now(UTC),
-        next_run_at=None,
-        last_run_at=None,
-        last_result=None,
-        running_since=None,
-        writable=True,
-        kind="loop",
-        target_session_id="legacy-only",
-        loop_prompt="x",
-        thread_id=None,
-    )
-    assert _loop_target_id(auto) == "legacy-only"
-
-
-def test_loop_target_id_returns_none_when_both_unset():
+def test_loop_target_id_returns_none_when_unset():
     from ntrp.server.app import _loop_target_id
 
     auto = Automation(
@@ -958,10 +927,8 @@ def test_loop_target_id_returns_none_when_both_unset():
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id=None,
-        loop_prompt="x",
         thread_id=None,
     )
     assert _loop_target_id(auto) is None
@@ -976,14 +943,14 @@ def test_loop_target_id_returns_none_when_both_unset():
 
 
 @pytest.mark.asyncio
-async def test_create_with_thread_id_routes_through_post_dispatcher(store: AutomationStore):
+async def test_create_with_thread_id_routes_through_post_dispatcher(store: AutomationStore, session_service):
     """A `kind="automation"` row with thread_id + read_history=False MUST flow
     through the post dispatcher — not _run_agent. This is the bug surfaced by
     the Task 9 e2e test: `service.create(thread_id=X, read_history=False)`
     silently routed to _run_agent because the scheduler discriminator was
     `kind == "loop"`."""
     sched, dispatched, _results = _make_post_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
 
     auto = await svc.create(
         name="channel-watcher",
@@ -996,9 +963,8 @@ async def test_create_with_thread_id_routes_through_post_dispatcher(store: Autom
     assert auto is not None
     assert auto.kind == "automation"  # NOT "loop"
     assert auto.thread_id == "sess-channel"
-    # svc.create populates loop_prompt from description for session-bound
-    # automations so they can flow through the post dispatcher.
-    assert auto.loop_prompt == "post into channel"
+    # description is the authoritative prompt for session-bound automations.
+    assert auto.description == "post into channel"
 
     # Force next_run_at into the past so _tick picks it up immediately.
     await store.set_next_run(auto.task_id, datetime.now(UTC) - timedelta(seconds=1))
@@ -1017,14 +983,14 @@ async def test_handle_run_completed_fires_kind_automation_with_thread_id(
     store: AutomationStore,
 ):
     """The run-completed fast-path must catch session-bound automations
-    regardless of `kind` — they're identified by thread_id/target_session_id."""
+    regardless of `kind` — they're identified by thread_id."""
     from ntrp.events.internal import RunCompleted
 
     now = datetime.now(UTC)
     auto = Automation(
         task_id="channel-auto",
         name="x",
-        description="x",
+        description="post status",
         model=None,
         triggers=[TimeTrigger(every="5m")],
         enabled=True,
@@ -1033,10 +999,8 @@ async def test_handle_run_completed_fires_kind_automation_with_thread_id(
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="automation",
-        target_session_id=None,
-        loop_prompt="post status",
         thread_id="sess-channel",
         read_history=False,
     )
@@ -1056,20 +1020,19 @@ async def test_handle_run_completed_fires_kind_automation_with_thread_id(
 
 # ---------------------------------------------------------------------------
 # Fix coverage: iteration loops created via `svc.create(thread_id=X,
-# read_history=True)` (no legacy target_session_id) must fire through the
-# iteration dispatcher. Pre-fix, the iteration validation rejected them
-# and the dispatcher target resolution returned an empty string.
+# read_history=True)` must fire through the iteration dispatcher. Pre-fix,
+# the iteration validation rejected them and the dispatcher target
+# resolution returned an empty string.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_iteration_loop_with_only_thread_id_fires(store: AutomationStore):
+async def test_iteration_loop_with_only_thread_id_fires(store: AutomationStore, session_service):
     """`svc.create(thread_id=X, read_history=True)` produces a row with
-    thread_id but no target_session_id. The scheduler must accept it as
-    a valid iteration-mode loop and route it through the iteration
-    dispatcher."""
+    thread_id set. The scheduler must accept it as a valid iteration-mode
+    loop and route it through the iteration dispatcher."""
     sched, dispatched = _make_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
 
     auto = await svc.create(
         name="iter-thread-only",
@@ -1081,7 +1044,6 @@ async def test_iteration_loop_with_only_thread_id_fires(store: AutomationStore):
     )
     assert auto is not None
     assert auto.thread_id == "sess-new"
-    assert auto.target_session_id is None
     assert auto.read_history is True
 
     await store.set_next_run(auto.task_id, datetime.now(UTC) - timedelta(seconds=1))
@@ -1096,13 +1058,13 @@ async def test_iteration_loop_with_only_thread_id_fires(store: AutomationStore):
 
 
 @pytest.mark.asyncio
-async def test_create_loop_sets_thread_id_and_read_history(store: AutomationStore):
+async def test_create_loop_sets_thread_id_and_read_history(store: AutomationStore, session_service):
     """`svc.create_loop` must align new rows with the canonical model:
-    thread_id is the new home; target_session_id is legacy backfill.
-    read_history must be True so the row routes through the iteration
-    dispatcher (loops re-enter the session with full history)."""
+    thread_id is the sole session binding. read_history must be True so the
+    row routes through the iteration dispatcher (loops re-enter the session
+    with full history)."""
     sched, _ = _make_scheduler(store)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
 
     loop = await svc.create_loop(
         session_id="sess-canon",
@@ -1112,7 +1074,6 @@ async def test_create_loop_sets_thread_id_and_read_history(store: AutomationStor
 
     assert loop is not None
     assert loop.thread_id == "sess-canon"
-    assert loop.target_session_id == "sess-canon"
     assert loop.read_history is True
 
 

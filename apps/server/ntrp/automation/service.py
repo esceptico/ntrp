@@ -8,7 +8,45 @@ from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger, Trigger, build_trigger, parse_one
+from ntrp.context.models import SessionState
 from ntrp.llm.models import get_models
+from ntrp.services.session import SessionService
+
+
+def _build_trigger_and_next_run(
+    *,
+    trigger_type: str | None,
+    at: str | None,
+    days: str | None,
+    every: str | None,
+    event_type: str | None,
+    lead_minutes: int | str | None,
+    start: str | None,
+    end: str | None,
+    idle_minutes: int | None,
+    every_n: int | None,
+    triggers: list[dict] | None,
+) -> tuple[list[Trigger], datetime | None]:
+    if triggers:
+        parsed_triggers = [trigger for t in triggers if (trigger := parse_one(t)) is not None]
+        time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
+        next_run = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
+        return parsed_triggers, next_run
+    if trigger_type:
+        trigger, next_run = build_trigger(
+            trigger_type,
+            at=at,
+            days=days,
+            every=every,
+            event_type=event_type,
+            lead_minutes=lead_minutes,
+            start=start,
+            end=end,
+            idle_minutes=idle_minutes,
+            every_n=every_n,
+        )
+        return [trigger], next_run
+    raise ValueError("Either 'triggers' list or 'trigger_type' is required")
 
 
 def _normalize_and_validate_model(model: str | None) -> str | None:
@@ -52,9 +90,21 @@ class AutomationService:
         self,
         store: AutomationStore,
         scheduler: Scheduler,
+        session_service: SessionService,
     ):
         self.store = store
         self.scheduler = scheduler
+        self.session_service = session_service
+
+    async def _provision_channel(self, name: str, task_id: str) -> SessionState:
+        """Create the durable channel session that owns an automation's
+        activity. SessionService.provision announces it (SESSION_CREATED) so
+        connected desktops add the sidebar row live instead of after reload."""
+        return await self.session_service.provision(
+            name=name,
+            session_type="channel",
+            origin_automation_id=task_id,
+        )
 
     @property
     def is_running(self) -> bool:
@@ -74,11 +124,11 @@ class AutomationService:
         await self.store.set_enabled(task_id, new_enabled)
         return new_enabled
 
-    async def toggle_writable(self, task_id: str) -> bool:
+    async def toggle_auto_approve(self, task_id: str) -> bool:
         task = await self.get(task_id)
-        new_writable = not task.writable
-        await self.store.set_writable(task_id, new_writable)
-        return new_writable
+        new_auto_approve = not task.auto_approve
+        await self.store.set_auto_approve(task_id, new_auto_approve)
+        return new_auto_approve
 
     async def run_now(self, task_id: str) -> None:
         if not self.scheduler.is_running:
@@ -91,11 +141,10 @@ class AutomationService:
         *,
         name: str | None,
         description: str | None,
-        writable: bool | None,
+        auto_approve: bool | None,
         enabled: bool | None,
         model: str | None,
         cooldown_minutes: int | None = None,
-        loop_prompt: str | None = None,
         max_iterations: int | None = None,
         stop_when: str | None = None,
         max_age_days: int | None = None,
@@ -105,16 +154,14 @@ class AutomationService:
             changes["name"] = name
         if description is not None:
             changes["description"] = description
-        if writable is not None:
-            changes["writable"] = writable
+        if auto_approve is not None:
+            changes["auto_approve"] = auto_approve
         if enabled is not None:
             changes["enabled"] = enabled
         if model is not None:
             changes["model"] = _normalize_and_validate_model(model)
         if cooldown_minutes is not None:
             changes["cooldown_minutes"] = cooldown_minutes
-        if loop_prompt is not None:
-            changes["loop_prompt"] = loop_prompt
         if max_iterations is not None:
             changes["max_iterations"] = max_iterations
         if stop_when is not None:
@@ -169,12 +216,11 @@ class AutomationService:
         every_n: int | None = None,
         start: str | None = None,
         end: str | None = None,
-        writable: bool | None = None,
+        auto_approve: bool | None = None,
         enabled: bool | None = None,
         model: str | None = None,
         triggers: list[dict] | None = None,
         cooldown_minutes: int | None = None,
-        loop_prompt: str | None = None,
         max_iterations: int | None = None,
         stop_when: str | None = None,
         max_age_days: int | None = None,
@@ -183,11 +229,10 @@ class AutomationService:
         changes = self._build_metadata_changes(
             name=name,
             description=description,
-            writable=writable,
+            auto_approve=auto_approve,
             enabled=enabled,
             model=model,
             cooldown_minutes=cooldown_minutes,
-            loop_prompt=loop_prompt,
             max_iterations=max_iterations,
             stop_when=stop_when,
             max_age_days=max_age_days,
@@ -242,7 +287,7 @@ class AutomationService:
         lead_minutes: int | str | None = None,
         idle_minutes: int | None = None,
         every_n: int | None = None,
-        writable: bool = False,
+        auto_approve: bool = False,
         start: str | None = None,
         end: str | None = None,
         model: str | None = None,
@@ -256,26 +301,19 @@ class AutomationService:
         parent_fire_at: str | None = None,
         attempt_n: int | None = None,
     ) -> Automation | None:
-        if triggers:
-            parsed_triggers = [trigger for t in triggers if (trigger := parse_one(t)) is not None]
-            time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
-            next_run = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
-        elif trigger_type:
-            trigger, next_run = build_trigger(
-                trigger_type,
-                at=at,
-                days=days,
-                every=every,
-                event_type=event_type,
-                lead_minutes=lead_minutes,
-                start=start,
-                end=end,
-                idle_minutes=idle_minutes,
-                every_n=every_n,
-            )
-            parsed_triggers = [trigger]
-        else:
-            raise ValueError("Either 'triggers' list or 'trigger_type' is required")
+        parsed_triggers, next_run = _build_trigger_and_next_run(
+            trigger_type=trigger_type,
+            at=at,
+            days=days,
+            every=every,
+            event_type=event_type,
+            lead_minutes=lead_minutes,
+            start=start,
+            end=end,
+            idle_minutes=idle_minutes,
+            every_n=every_n,
+            triggers=triggers,
+        )
 
         now = datetime.now(UTC)
         task_id = generate_slug(2)
@@ -283,11 +321,14 @@ class AutomationService:
         if idempotency_key is not None and idempotency_scope is None:
             raise ValueError("idempotency_scope required when idempotency_key is set")
 
-        # Session-bound automations (thread_id set) flow through the
-        # scheduler's post/iteration dispatcher, which requires loop_prompt.
-        # Use description as the prompt: it's the work-spec the agent runs
-        # on each fire.
-        loop_prompt = description if thread_id is not None else None
+        # Auto-provision a durable "channel" session that owns this
+        # automation's activity. Binding thread_id routes the automation
+        # through the existing session-bound iteration path (no new
+        # execution path), which persists the full turn and emits live SSE.
+        if thread_id is None:
+            channel = await self._provision_channel(name, task_id)
+            thread_id = channel.session_id
+            read_history = True
 
         automation = Automation(
             task_id=task_id,
@@ -301,9 +342,8 @@ class AutomationService:
             last_run_at=None,
             last_result=None,
             running_since=None,
-            writable=writable,
+            auto_approve=auto_approve,
             cooldown_minutes=cooldown_minutes,
-            loop_prompt=loop_prompt,
             thread_id=thread_id,
             read_history=read_history,
             parent_automation_id=parent_automation_id,
@@ -326,6 +366,20 @@ class AutomationService:
         else:
             await self.store.save(automation)
         return automation
+
+    async def backfill_channels(self) -> int:
+        """One-time upgrade: give pre-existing agent automations a bound
+        channel. Skips internal handlers, loops, and already-bound rows.
+        Idempotent — only acts on rows with thread_id is None."""
+        count = 0
+        for task in await self.store.list_all():
+            if task.handler is not None or task.kind == "loop" or task.thread_id is not None:
+                continue
+            channel = await self._provision_channel(task.name, task.task_id)
+            updated = replace(task, thread_id=channel.session_id, read_history=True)
+            await self.store.update_metadata(updated)
+            count += 1
+        return count
 
     async def delete(self, task_id: str) -> int:
         task = await self.get(task_id)
@@ -370,7 +424,19 @@ class AutomationService:
         if not session_id:
             raise ValueError("session_id required")
 
-        trigger, _ = build_trigger("time", every=every)
+        triggers, _ = _build_trigger_and_next_run(
+            trigger_type="time",
+            at=None,
+            days=None,
+            every=every,
+            event_type=None,
+            lead_minutes=None,
+            start=None,
+            end=None,
+            idle_minutes=None,
+            every_n=None,
+            triggers=None,
+        )
         now = datetime.now(UTC)
         task_id = f"loop-{generate_slug(2)}"
 
@@ -387,19 +453,17 @@ class AutomationService:
             name=f"Loop: {prompt[:40]}",
             description=prompt,
             model=None,
-            triggers=[trigger],
+            triggers=triggers,
             enabled=True,
             created_at=now,
             next_run_at=now,
             last_run_at=None,
             last_result=None,
             running_since=None,
-            writable=True,
+            auto_approve=True,
             kind="loop",
-            target_session_id=session_id,
             thread_id=session_id,
             read_history=True,
-            loop_prompt=prompt,
             max_iterations=max_iterations,
             iteration_count=0,
             stop_when=stop_when,

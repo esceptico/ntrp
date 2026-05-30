@@ -41,6 +41,7 @@ class AutomationRuntime:
         self.automation_service = AutomationService(
             store=stores.automations,
             scheduler=self.scheduler,
+            session_service=stores.sessions,
         )
         self.outbox_runtime = RuntimeOutbox(
             outbox_store=stores.outbox,
@@ -68,6 +69,7 @@ class AutomationRuntime:
         )
 
         await seed_builtins(self.stores.automations)
+        await self.automation_service.backfill_channels()
         self.scheduler.start()
         self.outbox_runtime.start()
 

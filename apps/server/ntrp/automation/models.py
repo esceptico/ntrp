@@ -20,13 +20,11 @@ class Automation:
     last_run_at: datetime | None
     last_result: str | None
     running_since: datetime | None
-    writable: bool
+    auto_approve: bool
     handler: str | None = None
     builtin: bool = False
     cooldown_minutes: int | None = None
     kind: AutomationKind = "automation"
-    target_session_id: str | None = None
-    loop_prompt: str | None = None
     max_iterations: int | None = None
     iteration_count: int = 0
     stop_when: str | None = None

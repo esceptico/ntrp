@@ -34,7 +34,7 @@ def _automation_to_dict(a: Automation) -> dict:
         "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
         "next_run_at": a.next_run_at.isoformat() if a.next_run_at else None,
         "last_result": a.last_result,
-        "writable": a.writable,
+        "auto_approve": a.auto_approve,
         "running_since": a.running_since.isoformat() if a.running_since else None,
         "handler": a.handler,
         "builtin": a.builtin,
@@ -61,7 +61,7 @@ async def create_automation(
             lead_minutes=request.lead_minutes,
             idle_minutes=request.idle_minutes,
             every_n=request.every_n,
-            writable=request.writable,
+            auto_approve=request.auto_approve,
             start=request.start,
             end=request.end,
             triggers=request.triggers,
@@ -170,13 +170,13 @@ async def toggle_automation(task_id: str, svc: AutomationService = Depends(requi
     return {"enabled": new_enabled}
 
 
-@router.post("/automations/{task_id}/writable")
-async def toggle_writable(task_id: str, svc: AutomationService = Depends(require_automation_service)):
+@router.post("/automations/{task_id}/auto-approve")
+async def toggle_auto_approve(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
-        new_writable = await svc.toggle_writable(task_id)
+        new_auto_approve = await svc.toggle_auto_approve(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Automation not found")
-    return {"writable": new_writable}
+    return {"auto_approve": new_auto_approve}
 
 
 @router.post("/automations/{task_id}/run")
@@ -210,7 +210,7 @@ async def update_automation(
             every_n=request.every_n,
             start=request.start,
             end=request.end,
-            writable=request.writable,
+            auto_approve=request.auto_approve,
             enabled=request.enabled,
             triggers=request.triggers,
             cooldown_minutes=request.cooldown_minutes,

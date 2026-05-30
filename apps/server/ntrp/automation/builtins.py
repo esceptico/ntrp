@@ -22,7 +22,7 @@ class BuiltinSpec:
     triggers: list[Trigger]
     handler: str
     enabled: bool = True
-    writable: bool = False
+    auto_approve: bool = False
     cooldown_minutes: int | None = None
 
 
@@ -35,7 +35,7 @@ BUILTINS = [
             TimeTrigger(at="04:00", days="daily"),
         ],
         handler="pattern_finder_daily",
-        writable=True,
+        auto_approve=True,
     ),
     BuiltinSpec(
         task_id=BUILTIN_SKILL_INDUCER_DAILY_ID,
@@ -45,7 +45,7 @@ BUILTINS = [
             TimeTrigger(at="06:00", days="daily"),
         ],
         handler="skill_inducer_daily",
-        writable=True,
+        auto_approve=True,
     ),
 ]
 
@@ -73,8 +73,8 @@ async def seed_builtins(store: AutomationStore) -> None:
                 changes["description"] = spec.description
             if existing.handler != spec.handler:
                 changes["handler"] = spec.handler
-            if existing.writable != spec.writable:
-                changes["writable"] = spec.writable
+            if existing.auto_approve != spec.auto_approve:
+                changes["auto_approve"] = spec.auto_approve
             if existing.enabled != spec.enabled:
                 changes["enabled"] = spec.enabled
             if existing.cooldown_minutes is None and spec.cooldown_minutes is not None:
@@ -106,7 +106,7 @@ async def seed_builtins(store: AutomationStore) -> None:
             last_run_at=None,
             last_result=None,
             running_since=None,
-            writable=spec.writable,
+            auto_approve=spec.auto_approve,
             handler=spec.handler,
             builtin=True,
             cooldown_minutes=spec.cooldown_minutes,

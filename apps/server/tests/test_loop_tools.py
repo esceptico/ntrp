@@ -36,16 +36,23 @@ from ntrp.tools.core.registry import ToolRegistry
 
 @pytest_asyncio.fixture
 async def store_and_svc(tmp_path: Path):
+    from ntrp.context.store import SessionStore
+    from ntrp.services.session import SessionService
+
     conn = await database.connect(tmp_path / "automation.db")
     store = AutomationStore(conn)
     await store.init_schema()
+    session_conn = await database.connect(tmp_path / "sessions.db")
+    session_store = SessionStore(session_conn)
+    await session_store.init_schema()
+    session_service = SessionService(session_store)
     sched = Scheduler(store=store, build_deps=lambda: None)
-    svc = AutomationService(store=store, scheduler=sched)
+    svc = AutomationService(store=store, scheduler=sched, session_service=session_service)
     now = datetime.now(UTC)
     loop = Automation(
         task_id="loop-1",
         name="x",
-        description="x",
+        description="watch CI",
         model=None,
         triggers=[TimeTrigger(every="5m")],
         enabled=True,
@@ -54,10 +61,9 @@ async def store_and_svc(tmp_path: Path):
         last_run_at=None,
         last_result=None,
         running_since=None,
-        writable=True,
+        auto_approve=True,
         kind="loop",
-        target_session_id="sess-1",
-        loop_prompt="watch CI",
+        thread_id="sess-1",
     )
     await store.save(loop)
     try:
@@ -226,7 +232,7 @@ async def test_create_loop_infers_parent_from_loop_ctx(store_and_svc):
     assert not result.is_error
 
     rows = await store.list_all()
-    child = next(a for a in rows if a.loop_prompt == "watch CI again")
+    child = next(a for a in rows if a.description == "watch CI again")
     assert child.parent_automation_id == "loop-1"
 
 
@@ -246,7 +252,7 @@ async def test_create_loop_explicit_parent_overrides_ctx(store_and_svc):
     assert not result.is_error
 
     rows = await store.list_all()
-    child = next(a for a in rows if a.loop_prompt == "watch CI yet again")
+    child = next(a for a in rows if a.description == "watch CI yet again")
     assert child.parent_automation_id == "explicit-parent"
 
 

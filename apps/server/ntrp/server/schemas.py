@@ -273,6 +273,7 @@ class SessionResponse(BaseModel):
     integration_errors: dict[str, str]
     name: str | None = None
     project_id: str | None = None
+    chat_model: str | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -303,6 +304,10 @@ class UpdateProjectRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     name: str | None = None
     project_id: str | None = None
+
+
+class UpdateSessionModelRequest(BaseModel):
+    chat_model: str | None = None
 
 
 class BranchRequest(BaseModel):
@@ -439,7 +444,7 @@ class CreateAutomationRequest(BaseModel):
     lead_minutes: int | str | None = None
     idle_minutes: int | None = None
     every_n: int | None = None
-    writable: bool = False
+    auto_approve: bool = False
     start: str | None = None
     end: str | None = None
     triggers: list[dict] | None = None
@@ -460,7 +465,7 @@ class UpdateAutomationRequest(BaseModel):
     every_n: int | None = None
     start: str | None = None
     end: str | None = None
-    writable: bool | None = None
+    auto_approve: bool | None = None
     enabled: bool | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None

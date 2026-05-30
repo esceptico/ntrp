@@ -31,14 +31,8 @@ from ntrp.services.chat import submit_chat_message
 
 
 def _loop_target_id(automation: Automation) -> str | None:
-    """Resolve the session id a loop targets for writes/gating.
-
-    `thread_id` (new field) wins; `target_session_id` is the legacy
-    fallback. Used by both `_dispatch_post` and `_loop_can_fire` so the
-    fire gate always checks the same session the post writer will write
-    into.
-    """
-    return automation.thread_id or automation.target_session_id
+    """Resolve the session id a loop targets for writes/gating."""
+    return automation.thread_id
 
 
 def _get_or_create_session_lock(locks: dict[str, asyncio.Lock], session_id: str) -> asyncio.Lock:
@@ -79,6 +73,17 @@ async def lifespan(app: FastAPI):
     )
     runtime.scheduler.set_bus_registry(bus_registry)
 
+    # Route session lifecycle events (SESSION_CREATED / SESSION_ACTIVITY)
+    # onto the global automation stream so the sidebar reflects sessions
+    # the user didn't open themselves (automation channels, agent spawns)
+    # without a reload.
+    if runtime.session_service:
+
+        async def _publish_session_event(event):
+            await bus_registry.get_or_create(AUTOMATION_BUS_KEY).emit(event)
+
+        runtime.session_service.set_event_sink(_publish_session_event)
+
     # Per-session write locks. The post dispatcher holds one for its full
     # lifetime so two concurrent post-mode dispatches against the same
     # target session can't trample each other's tail-end load→save window.
@@ -90,9 +95,10 @@ async def lifespan(app: FastAPI):
         client_id: str | None = None,
         skip_approvals: bool | None = False,
     ) -> str | None:
+        chat_model = await runtime.resolve_session_chat_model(session_id)
         result = await submit_chat_message(
             runtime.run_registry,
-            lambda: runtime.build_chat_deps(),
+            lambda: runtime.build_chat_deps(chat_model=chat_model),
             bus_registry,
             message=message,
             session_id=session_id,
@@ -106,13 +112,13 @@ async def lifespan(app: FastAPI):
         # Iteration loops are autonomous: the user already approved the
         # loop at creation (via the create_loop approval card), so
         # subsequent iterations should skip per-tool approvals. Matches
-        # the same writable→skip_approvals convention the regular
+        # the same auto_approve→skip_approvals convention the regular
         # automation path uses in scheduler._run_agent.
         return await _dispatch_session_message(
             _loop_target_id(automation) or "",
-            automation.loop_prompt or "",
+            automation.description,
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
-            skip_approvals=automation.writable,
+            skip_approvals=automation.auto_approve,
         )
 
     runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
@@ -136,14 +142,14 @@ async def lifespan(app: FastAPI):
             return None
 
         async with _get_or_create_session_lock(session_write_locks, target_id):
-            prompt = AUTOMATION_PROMPT.render(description=automation.loop_prompt or "", context=None)
+            prompt = AUTOMATION_PROMPT.render(description=automation.description, context=None)
             request = RunRequest(
                 prompt=prompt,
                 prompt_suffix=AUTOMATION_SUFFIX,
-                writable=automation.writable,
+                auto_approve=automation.auto_approve,
                 source_id=automation.task_id,
                 model=automation.model,
-                skip_approvals=automation.writable,
+                skip_approvals=automation.auto_approve,
                 automation_id=automation.task_id,
             )
 
@@ -178,10 +184,8 @@ async def lifespan(app: FastAPI):
         #  • Post would race the in-flight run on session_service writes.
         # handle_run_completed fires deferred loops the moment the
         # session goes idle.
-        # Target priority must match _dispatch_post (via _loop_target_id):
-        # thread_id (new field) wins over target_session_id (legacy
-        # fallback). Otherwise a migrated row with mismatched fields would
-        # be gated on one session while the post writes into another.
+        # Target ID is thread_id — the sole session binding after field
+        # consolidation.
         target_id = _loop_target_id(automation)
         if not target_id:
             return True
