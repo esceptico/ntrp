@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from ntrp.integrations.slack.client import SlackClient
@@ -164,13 +166,60 @@ async def slack_file(execution: ToolExecution, args: SlackFileInput) -> ToolResu
 
 class SlackPostMessageInput(BaseModel):
     channel: str = Field(description="Channel name (e.g. 'general' or '#general') or channel ID (e.g. 'C0123456789')")
-    text: str = Field(description="Slack message text to post. Supports Slack mrkdwn formatting.")
+    text: str = Field(
+        description=(
+            "Plain Slack message text. Use this for simple unstructured messages only. "
+            "For rich layouts, tables, status cards, diagnosis reports, or structured summaries, use slack_post_blocks instead. "
+            "Supports basic Slack mrkdwn: *bold*, _italic_, ~strike~, `code`, ```code block```, <url|label>, mentions, and bullet lines."
+        )
+    )
     thread_ts: str | None = Field(default=None, description="Optional parent message timestamp to post as a thread reply")
 
 
+class SlackPostBlocksInput(BaseModel):
+    channel: str = Field(description="Channel name (e.g. 'general' or '#general') or channel ID (e.g. 'C0123456789')")
+    text: str = Field(
+        description=(
+            "Required fallback text for Slack notifications and accessibility. Keep concise; Slack may show this in previews/search."
+        )
+    )
+    blocks: list[dict[str, Any]] = Field(
+        min_length=1,
+        max_length=50,
+        description=(
+            "Required Slack Block Kit blocks array for rich message layout. Use native JSON objects, not a JSON string. "
+            "Common blocks: header, section, context, divider, actions. "
+            "Text objects are {'type':'mrkdwn','text':'...'} or {'type':'plain_text','text':'...'}. "
+            "Use section.fields for compact key/value cards, max 10 fields. "
+            "Use real newline characters in mrkdwn text, not literal \\n. "
+            "Limits: max 50 blocks, section text 3000 chars, field text 2000 chars."
+        ),
+    )
+    thread_ts: str | None = Field(default=None, description="Optional parent message timestamp to post as a thread reply")
+
+
+SLACK_FORMATTING_GUIDE = (
+    "Slack formatting quick guide: "
+    "mrkdwn supports *bold*, _italic_, ~strike~, `inline code`, ```code blocks```, bullets with - or •, "
+    "links as <https://example.com|label>, user/channel mentions, and real newlines. "
+    "Block Kit supports header, section, fields, context, divider, image, actions. "
+    "Use slack_post_blocks for structured cards/reports; use slack_post_message only for simple text."
+)
+
+
 SLACK_POST_MESSAGE_DESCRIPTION = (
-    "Post a message to Slack using the configured Slack user token (SLACK_USER_TOKEN / xoxp-). "
-    "Use thread_ts to reply in a thread. Returns the posted message timestamp, which can be used as thread_ts for follow-up replies."
+    "Post a simple plain-text Slack message using the configured Slack user token (SLACK_USER_TOKEN / xoxp-). "
+    "Use thread_ts to reply in a thread. "
+    "Do not use this for rich layouts, diagnosis cards, tables, or structured reports; use slack_post_blocks instead. "
+    + SLACK_FORMATTING_GUIDE
+)
+
+
+SLACK_POST_BLOCKS_DESCRIPTION = (
+    "Post a rich Slack Block Kit message using the configured Slack user token (SLACK_USER_TOKEN / xoxp-). "
+    "Use this for formatted reports, alert diagnoses, status cards, field grids, summaries, or anything needing layout. "
+    "Requires both fallback text and a native blocks array. Returns the posted message timestamp. "
+    + SLACK_FORMATTING_GUIDE
 )
 
 
@@ -180,14 +229,31 @@ async def approve_slack_post_message(execution: ToolExecution, args: SlackPostMe
     return ApprovalInfo(description=f"Post Slack message to {location}", preview=preview, diff=None)
 
 
-async def slack_post_message(execution: ToolExecution, args: SlackPostMessageInput) -> ToolResult:
-    source = execution.ctx.get_client("slack", SlackClient)
-    result = await source.post_message(args.channel, args.text, thread_ts=args.thread_ts)
+async def approve_slack_post_blocks(execution: ToolExecution, args: SlackPostBlocksInput) -> ApprovalInfo | None:
+    location = f"{args.channel} thread {args.thread_ts}" if args.thread_ts else args.channel
+    preview = truncate(args.text, 1000)
+    preview += f"\n\n[Block Kit: {len(args.blocks)} block(s)]"
+    return ApprovalInfo(description=f"Post Slack Block Kit message to {location}", preview=preview, diff=None)
+
+
+def _posted_message_result(args: SlackPostMessageInput | SlackPostBlocksInput, result: dict[str, str]) -> ToolResult:
     channel_label = result.get("channel_name") or result.get("channel") or args.channel
     ts = result.get("ts", "")
     thread_ts = result.get("thread_ts", ts)
     content = f"Posted to #{channel_label} at {ts}\nchannel: {result.get('channel', args.channel)}\nthread_ts: {thread_ts}"
     return ToolResult(content=content, preview=f"Posted to #{channel_label}")
+
+
+async def slack_post_message(execution: ToolExecution, args: SlackPostMessageInput) -> ToolResult:
+    source = execution.ctx.get_client("slack", SlackClient)
+    result = await source.post_message(args.channel, args.text, thread_ts=args.thread_ts)
+    return _posted_message_result(args, result)
+
+
+async def slack_post_blocks(execution: ToolExecution, args: SlackPostBlocksInput) -> ToolResult:
+    source = execution.ctx.get_client("slack", SlackClient)
+    result = await source.post_message(args.channel, args.text, thread_ts=args.thread_ts, blocks=args.blocks)
+    return _posted_message_result(args, result)
 
 
 class SlackDmsInput(BaseModel):
@@ -271,6 +337,20 @@ slack_post_message_tool = tool(
     ),
     approval=approve_slack_post_message,
     execute=slack_post_message,
+)
+
+slack_post_blocks_tool = tool(
+    display_name="SlackPostBlocks",
+    description=SLACK_POST_BLOCKS_DESCRIPTION,
+    input_model=SlackPostBlocksInput,
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.EXTERNAL,
+        requires_approval=True,
+        permissions=frozenset({"slack"}),
+    ),
+    approval=approve_slack_post_blocks,
+    execute=slack_post_blocks,
 )
 
 slack_dms_tool = tool(

@@ -7,7 +7,7 @@ from ntrp.context.models import SessionState
 from ntrp.integrations.web import ddgs as ddgs_module
 from ntrp.integrations.web.ddgs import DDGSWebSource
 from ntrp.integrations.web.exceptions import NoSearchResultsException, WebSearchProviderException
-from ntrp.integrations.web.tools import WebSearchInput, web_search
+from ntrp.integrations.web.tools import WebFetchInput, WebSearchInput, web_fetch, web_search
 from ntrp.integrations.web.types import WebContentResult, WebSearchResult
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
@@ -17,9 +17,15 @@ class FakeWebSource:
     name = "web"
     provider = "test"
 
-    def __init__(self, results: list[WebSearchResult] | None = None, error: Exception | None = None):
+    def __init__(
+        self,
+        results: list[WebSearchResult] | None = None,
+        error: Exception | None = None,
+        contents: list[WebContentResult] | None = None,
+    ):
         self.results = results or []
         self.error = error
+        self.contents = contents or []
 
     def search_with_details(
         self,
@@ -32,7 +38,7 @@ class FakeWebSource:
         return self.results
 
     def get_contents(self, urls: list[str]) -> list[WebContentResult]:
-        return []
+        return self.contents
 
 
 def _execution(source: FakeWebSource) -> ToolExecution:
@@ -60,6 +66,17 @@ async def test_web_search_tells_model_to_simplify_empty_queries():
     assert result.preview == "0 results"
     assert "No results" in result.content
     assert "simpler or broader query" in result.content
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_self_reports_source_ref():
+    source = FakeWebSource(
+        contents=[WebContentResult(title="Example Page", url="https://example.com/x", text="body text")]
+    )
+    result = await web_fetch(_execution(source), WebFetchInput(url="https://example.com/x"))
+
+    assert result.is_error is False
+    assert result.source_ref == {"kind": "web", "ref": "https://example.com/x", "title": "Example Page"}
 
 
 @pytest.mark.asyncio

@@ -39,7 +39,12 @@ from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
-from ntrp.tools.sessions import create_session_tool, list_recent_sessions_tool, read_session_tool
+from ntrp.tools.sessions import (
+    create_session_tool,
+    list_recent_sessions_tool,
+    read_session_tool,
+    search_transcripts_tool,
+)
 from ntrp.tools.time import current_time_tool
 from ntrp.tools.todos import update_todos_tool
 
@@ -133,6 +138,7 @@ SESSIONS = Integration(
     tools={
         "list_recent_sessions": list_recent_sessions_tool,
         "read_session": read_session_tool,
+        "search_transcripts": search_transcripts_tool,
         "create_session": create_session_tool,
     },
 )

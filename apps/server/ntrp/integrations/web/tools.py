@@ -124,7 +124,11 @@ async def web_fetch(execution: ToolExecution, args: WebFetchInput) -> ToolResult
             output.append("")
             if text:
                 output.append(text)
-            return ToolResult(content="\n".join(output), preview=f"Fetched {lines} lines")
+            return ToolResult(
+                content="\n".join(output),
+                preview=f"Fetched {lines} lines",
+                source_ref={"kind": "web", "ref": args.url, "title": r.title or None},
+            )
         return ToolResult(content="No content fetched. Page may be empty or require JavaScript.", preview="Empty")
     except Exception as e:
         return ToolResult(content=f"Error fetching URL: {e}", preview="Fetch failed", is_error=True)

@@ -41,6 +41,23 @@ def _format_message(user_name: str, text: str, ts: str, channel_name: str | None
 _USER_TOKEN_METHODS = frozenset({"assistant.search.context", "chat.postMessage"})
 
 
+def _normalize_block_kit(value: Any) -> Any:
+    """Normalize Block Kit payloads before sending to Slack.
+
+    Tool-call arguments can arrive with escaped newlines (`\\n`) inside nested
+    block text fields. Slack then renders the literal characters and mrkdwn gets
+    ugly. Convert those back to real newlines recursively without touching the
+    rest of the payload shape.
+    """
+    if isinstance(value, str):
+        return value.replace("\\n", "\n")
+    if isinstance(value, list):
+        return [_normalize_block_kit(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_block_kit(item) for key, item in value.items()}
+    return value
+
+
 class SlackClient:
     name = "slack"
 
@@ -173,11 +190,19 @@ class SlackClient:
 
     # -- public write methods --
 
-    async def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> dict[str, str]:
+    async def post_message(
+        self,
+        channel: str,
+        text: str,
+        thread_ts: str | None = None,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, str]:
         """Post a Slack message with the configured user token. Returns Slack channel/ts metadata."""
         async with aiohttp.ClientSession() as session:
             channel_id, channel_name = await self._resolve_channel_id(session, channel)
-            payload = {"channel": channel_id, "text": text}
+            payload: dict[str, Any] = {"channel": channel_id, "text": text}
+            if blocks:
+                payload["blocks"] = _normalize_block_kit(blocks[:50])
             if thread_ts:
                 payload["thread_ts"] = thread_ts
             data = await self._post(session, "chat.postMessage", **payload)
