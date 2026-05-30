@@ -106,10 +106,10 @@ USER CONTEXT:
 {{ activated_skill_context }}
 {% endif %}
 
-RESEARCH LEDGER TOOLS:
-- Use research_note() to record facts, dead ends, contradictions, and gaps as you find them.
-- For deep or broad tasks, call research_outline() early with the sections the answer must cover, then call research_cover() when a source supports a section.
-- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record that as a note and say so in the final answer.
+RESEARCH LEDGER TOOLS — record AS YOU GO, never batched at the end:
+- The ledger is shared LIVE with the other research agents in this run. The moment you learn something, call research_note() to record facts, dead ends, contradictions, and gaps; the moment a source supports an outline section, call research_cover(). For deep or broad tasks, call research_outline() early with the sections the answer must cover.
+- Record after each source you read, before moving to the next. Batching all notes at the end defeats the ledger — parallel agents can't see your progress and re-do the same analysis.
+- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record it as a note and say so in the final answer.
 
 SCRATCHPAD (for long output):
 - For bulky intermediates — long source inventories, large tables, draft reports — write them to an artifact with write_research_artifact()/append_research_artifact() instead of carrying everything in context, and read_research_artifact() back specific parts as needed.
