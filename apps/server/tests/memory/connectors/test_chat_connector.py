@@ -174,8 +174,8 @@ async def test_first_msg_creates_buffer(conn: aiosqlite.Connection):
     assert row["scope"] == "user"
     assert row["source_kind"] == "chat_msg"
     assert row["turn_count"] == 1
-    assert row["tokens"] == 3
-    assert row["content_so_far"] == "User: hello"
+    assert row["tokens"] == 7
+    assert row["content_so_far"] == "User: hello\n\nAssistant: done"
     refs = json.loads(row["source_refs_so_far"])
     assert refs[0]["kind"] == "chat_msg"
     assert refs[0]["ref"] == "run-1"
@@ -207,15 +207,16 @@ async def test_tool_source_refs_folded_into_buffer(conn: aiosqlite.Connection):
 
 
 @pytest.mark.asyncio
-async def test_assistant_only_output_is_not_captured_as_user_memory(conn: aiosqlite.Connection):
-    connector, _, embedder = _connector(conn, vectors=[_vec(0)])
+async def test_assistant_only_output_is_captured(conn: aiosqlite.Connection):
+    connector, _, _ = _connector(conn, vectors=[_vec(0)])
 
     await connector.on_run_completed(
         _event(run_id="run-1", user="", assistant="I don't have access to your files", tokens=12)
     )
 
-    assert await _open_buffers(conn) == []
-    embedder.embed_one.assert_not_awaited()
+    rows = await _open_buffers(conn)
+    assert len(rows) == 1
+    assert rows[0]["content_so_far"] == "Assistant: I don't have access to your files"
 
 
 @pytest.mark.asyncio
@@ -229,9 +230,10 @@ async def test_subsequent_msg_updates_buffer(conn: aiosqlite.Connection):
     assert len(rows) == 1
     row = rows[0]
     assert row["turn_count"] == 2
-    assert row["tokens"] == 6
+    assert row["tokens"] == 15
     assert "User: first" in row["content_so_far"]
     assert "User: second" in row["content_so_far"]
+    assert "Assistant: done" in row["content_so_far"]
     refs = json.loads(row["source_refs_so_far"])
     assert [ref["ref"] for ref in refs] == ["run-1", "run-2"]
     centroid = np.frombuffer(row["running_centroid_vec"], dtype=np.float32)
@@ -294,7 +296,10 @@ async def test_idle_gap_close(conn: aiosqlite.Connection):
     assert len(await _closed_buffers(conn)) == 1
     open_rows = await _open_buffers(conn)
     assert len(open_rows) == 1
-    assert open_rows[0]["turn_count"] == 3
+    # The closed buffer had only 2 turns (<= the 5-turn overlap window), so it is
+    # fully contained and carries nothing forward; the fresh buffer holds just
+    # the new turn rather than re-circulating the whole closed buffer.
+    assert open_rows[0]["turn_count"] == 1
     assert json.loads(open_rows[0]["source_refs_so_far"])[-1]["ref"] == "run-idle"
 
 

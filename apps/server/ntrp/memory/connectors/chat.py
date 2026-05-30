@@ -78,10 +78,16 @@ class ChatConnector(BufferingConnector):
 
 
 def _turn_text(event: RunCompleted) -> str:
-    user_text = _last_role_text(event.messages, "user")
-    if not user_text.strip():
+    user_text = _last_role_text(event.messages, "user").strip()
+    assistant_text = (event.result or "").strip() or _last_role_text(event.messages, "assistant").strip()
+    if not user_text and not assistant_text:
         return ""
-    return f"User: {user_text}"
+    parts: list[str] = []
+    if user_text:
+        parts.append(f"User: {user_text}")
+    if assistant_text:
+        parts.append(f"Assistant: {assistant_text}")
+    return "\n\n".join(parts)
 
 
 def _last_role_text(messages: tuple[dict, ...], role: str) -> str:

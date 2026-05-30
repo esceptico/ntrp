@@ -396,7 +396,11 @@ async def _close_and_carry(
 def _overlap_carry(buffer: EpisodeBuffer, overlap_turns: int = OVERLAP_TURNS) -> BufferCarry:
     turns = buffer.content_turns
     refs = buffer.source_refs_so_far
-    keep = min(overlap_turns, len(refs))
+    # Overlap is a one-hop boundary hedge: carry only when the closed buffer is
+    # LARGER than the overlap window. A buffer that fits entirely inside the
+    # window has no boundary to hedge, and carrying it whole would re-circulate
+    # the same turns across many episodes under low traffic.
+    keep = overlap_turns if len(refs) > overlap_turns else 0
     carried_turns = turns[-keep:] if keep else []
     carried_refs = refs[-keep:] if keep else []
     return BufferCarry(
