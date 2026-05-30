@@ -58,36 +58,6 @@
     "last_updated": "2025-10-15"
   },
   {
-    "id": "claude-opus-4-0",
-    "provider": "anthropic",
-    "name": "Claude Opus 4 (latest)",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 200000,
-    "max_output_tokens": 32000,
-    "price_in": 15.0,
-    "price_out": 75.0,
-    "price_cache_read": 1.5,
-    "price_cache_write": 18.75,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high",
-      "max"
-    ],
-    "release_date": "2025-05-22",
-    "last_updated": "2025-05-22"
-  },
-  {
     "id": "claude-opus-4-1",
     "provider": "anthropic",
     "name": "Claude Opus 4.1 (latest)",
@@ -146,36 +116,6 @@
     ],
     "release_date": "2025-08-05",
     "last_updated": "2025-08-05"
-  },
-  {
-    "id": "claude-opus-4-20250514",
-    "provider": "anthropic",
-    "name": "Claude Opus 4",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 200000,
-    "max_output_tokens": 32000,
-    "price_in": 15.0,
-    "price_out": 75.0,
-    "price_cache_read": 1.5,
-    "price_cache_write": 18.75,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high",
-      "max"
-    ],
-    "release_date": "2025-05-22",
-    "last_updated": "2025-05-22"
   },
   {
     "id": "claude-opus-4-5",
@@ -299,9 +239,9 @@
     "last_updated": "2026-04-16"
   },
   {
-    "id": "claude-sonnet-4-0",
+    "id": "claude-opus-4-8",
     "provider": "anthropic",
-    "name": "Claude Sonnet 4 (latest)",
+    "name": "Claude Opus 4.8",
     "tool_call": true,
     "structured_output": false,
     "reasoning": true,
@@ -313,50 +253,20 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 200000,
-    "max_output_tokens": 64000,
-    "price_in": 3.0,
-    "price_out": 15.0,
-    "price_cache_read": 0.3,
-    "price_cache_write": 3.75,
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
     "reasoning_efforts": [
       "low",
       "medium",
       "high",
       "max"
     ],
-    "release_date": "2025-05-22",
-    "last_updated": "2025-05-22"
-  },
-  {
-    "id": "claude-sonnet-4-20250514",
-    "provider": "anthropic",
-    "name": "Claude Sonnet 4",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 200000,
-    "max_output_tokens": 64000,
-    "price_in": 3.0,
-    "price_out": 15.0,
-    "price_cache_read": 0.3,
-    "price_cache_write": 3.75,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high",
-      "max"
-    ],
-    "release_date": "2025-05-22",
-    "last_updated": "2025-05-22"
+    "release_date": "2026-05-28",
+    "last_updated": "2026-05-28"
   },
   {
     "id": "claude-sonnet-4-5",
@@ -482,7 +392,7 @@
   {
     "id": "gemini-2.5-flash-lite",
     "provider": "google",
-    "name": "Gemini 2.5 Flash Lite",
+    "name": "Gemini 2.5 Flash-Lite",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -509,130 +419,6 @@
     ],
     "release_date": "2025-06-17",
     "last_updated": "2025-06-17"
-  },
-  {
-    "id": "gemini-2.5-flash-lite-preview-06-17",
-    "provider": "google",
-    "name": "Gemini 2.5 Flash Lite Preview 06-17",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 65536,
-    "price_in": 0.1,
-    "price_out": 0.4,
-    "price_cache_read": 0.025,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-06-17",
-    "last_updated": "2025-06-17"
-  },
-  {
-    "id": "gemini-2.5-flash-lite-preview-09-2025",
-    "provider": "google",
-    "name": "Gemini 2.5 Flash Lite Preview 09-25",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 65536,
-    "price_in": 0.1,
-    "price_out": 0.4,
-    "price_cache_read": 0.025,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-09-25",
-    "last_updated": "2025-09-25"
-  },
-  {
-    "id": "gemini-2.5-flash-preview-05-20",
-    "provider": "google",
-    "name": "Gemini 2.5 Flash Preview 05-20",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 65536,
-    "price_in": 0.15,
-    "price_out": 0.6,
-    "price_cache_read": 0.0375,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-05-20",
-    "last_updated": "2025-05-20"
-  },
-  {
-    "id": "gemini-2.5-flash-preview-09-2025",
-    "provider": "google",
-    "name": "Gemini 2.5 Flash Preview 09-25",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 65536,
-    "price_in": 0.3,
-    "price_out": 2.5,
-    "price_cache_read": 0.075,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-09-25",
-    "last_updated": "2025-09-25"
   },
   {
     "id": "gemini-2.5-pro",
@@ -663,37 +449,6 @@
       "high"
     ],
     "release_date": "2025-03-20",
-    "last_updated": "2025-06-05"
-  },
-  {
-    "id": "gemini-2.5-pro-preview-06-05",
-    "provider": "google",
-    "name": "Gemini 2.5 Pro Preview 06-05",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 65536,
-    "price_in": 1.25,
-    "price_out": 10.0,
-    "price_cache_read": 0.31,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-06-05",
     "last_updated": "2025-06-05"
   },
   {
@@ -743,8 +498,8 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 1000000,
-    "max_output_tokens": 64000,
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
     "price_in": 2.0,
     "price_out": 12.0,
     "price_cache_read": 0.2,
@@ -882,6 +637,37 @@
     "last_updated": "2026-02-19"
   },
   {
+    "id": "gemini-3.5-flash",
+    "provider": "google",
+    "name": "Gemini 3.5 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "audio",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.5,
+    "price_out": 9.0,
+    "price_cache_read": 0.15,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "release_date": "2026-05-19",
+    "last_updated": "2026-05-19"
+  },
+  {
     "id": "gemini-flash-latest",
     "provider": "google",
     "name": "Gemini Flash Latest",
@@ -944,70 +730,9 @@
     "last_updated": "2025-09-25"
   },
   {
-    "id": "gemini-live-2.5-flash",
-    "provider": "google",
-    "name": "Gemini Live 2.5 Flash",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "audio",
-      "video"
-    ],
-    "output_modalities": [
-      "text",
-      "audio"
-    ],
-    "context_window": 128000,
-    "max_output_tokens": 8000,
-    "price_in": 0.5,
-    "price_out": 2.0,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-09-01",
-    "last_updated": "2025-09-01"
-  },
-  {
-    "id": "gemini-live-2.5-flash-preview-native-audio",
-    "provider": "google",
-    "name": "Gemini Live 2.5 Flash Preview Native Audio",
-    "tool_call": true,
-    "structured_output": false,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "audio",
-      "video"
-    ],
-    "output_modalities": [
-      "text",
-      "audio"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 65536,
-    "price_in": 0.5,
-    "price_out": 2.0,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [
-      "low",
-      "medium",
-      "high"
-    ],
-    "release_date": "2025-06-17",
-    "last_updated": "2025-09-18"
-  },
-  {
     "id": "gemma-4-26b-a4b-it",
     "provider": "google",
-    "name": "Gemma 4 26B",
+    "name": "Gemma 4 26B A4B IT",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1018,8 +743,8 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 256000,
-    "max_output_tokens": 8192,
+    "context_window": 262144,
+    "max_output_tokens": 32768,
     "price_in": 0.0,
     "price_out": 0.0,
     "price_cache_read": 0.0,
@@ -1035,7 +760,7 @@
   {
     "id": "gemma-4-31b-it",
     "provider": "google",
-    "name": "Gemma 4 31B",
+    "name": "Gemma 4 31B IT",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1046,8 +771,8 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 256000,
-    "max_output_tokens": 8192,
+    "context_window": 262144,
+    "max_output_tokens": 32768,
     "price_in": 0.0,
     "price_out": 0.0,
     "price_cache_read": 0.0,
@@ -1218,7 +943,7 @@
     "max_output_tokens": 128000,
     "price_in": 1.25,
     "price_out": 10.0,
-    "price_cache_read": 0.13,
+    "price_cache_read": 0.125,
     "price_cache_write": 0.0,
     "reasoning_efforts": [
       "low",
@@ -1744,32 +1469,9 @@
     "last_updated": "2025-06-10"
   },
   {
-    "id": "alibaba/tongyi-deepresearch-30b-a3b",
-    "provider": "openrouter",
-    "name": "Tongyi DeepResearch 30B A3B",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 131072,
-    "price_in": 0.09,
-    "price_out": 0.45,
-    "price_cache_read": 0.09,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-18",
-    "last_updated": "2025-09-18"
-  },
-  {
     "id": "anthropic/claude-haiku-4.5",
     "provider": "openrouter",
-    "name": "Claude Haiku 4.5",
+    "name": "Claude Haiku 4.5 (latest)",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1794,7 +1496,7 @@
   {
     "id": "anthropic/claude-opus-4.1",
     "provider": "openrouter",
-    "name": "Claude Opus 4.1",
+    "name": "Claude Opus 4.1 (latest)",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1819,7 +1521,7 @@
   {
     "id": "anthropic/claude-opus-4.5",
     "provider": "openrouter",
-    "name": "Claude Opus 4.5",
+    "name": "Claude Opus 4.5 (latest)",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1863,8 +1565,8 @@
     "price_cache_read": 0.5,
     "price_cache_write": 6.25,
     "reasoning_efforts": [],
-    "release_date": "2026-02-04",
-    "last_updated": "2026-02-04"
+    "release_date": "2026-02-05",
+    "last_updated": "2026-03-13"
   },
   {
     "id": "anthropic/claude-opus-4.6-fast",
@@ -1942,9 +1644,59 @@
     "last_updated": "2026-05-12"
   },
   {
+    "id": "anthropic/claude-opus-4.8",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.8",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 5.0,
+    "price_out": 25.0,
+    "price_cache_read": 0.5,
+    "price_cache_write": 6.25,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-28",
+    "last_updated": "2026-05-28"
+  },
+  {
+    "id": "anthropic/claude-opus-4.8-fast",
+    "provider": "openrouter",
+    "name": "Claude Opus 4.8 (Fast)",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "pdf"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "price_in": 10.0,
+    "price_out": 50.0,
+    "price_cache_read": 1.0,
+    "price_cache_write": 12.5,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-27",
+    "last_updated": "2026-05-27"
+  },
+  {
     "id": "anthropic/claude-sonnet-4.5",
     "provider": "openrouter",
-    "name": "Claude Sonnet 4.5",
+    "name": "Claude Sonnet 4.5 (latest)",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -1989,30 +1741,7 @@
     "price_cache_write": 3.75,
     "reasoning_efforts": [],
     "release_date": "2026-02-17",
-    "last_updated": "2026-02-17"
-  },
-  {
-    "id": "arcee-ai/trinity-large-preview",
-    "provider": "openrouter",
-    "name": "Trinity Large Preview",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": false,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131000,
-    "max_output_tokens": 131000,
-    "price_in": 0.15,
-    "price_out": 0.45,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-01-27",
-    "last_updated": "2026-01-27"
+    "last_updated": "2026-03-13"
   },
   {
     "id": "arcee-ai/trinity-large-thinking",
@@ -2161,6 +1890,29 @@
     "last_updated": "2026-02-26"
   },
   {
+    "id": "deepseek/deepseek-chat",
+    "provider": "openrouter",
+    "name": "DeepSeek Chat",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": false,
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 128000,
+    "max_output_tokens": 16000,
+    "price_in": 0.2288,
+    "price_out": 0.9144,
+    "price_cache_read": 0.0,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-12-01",
+    "last_updated": "2026-02-28"
+  },
+  {
     "id": "deepseek/deepseek-chat-v3.1",
     "provider": "openrouter",
     "name": "DeepSeek V3.1",
@@ -2182,29 +1934,6 @@
     "reasoning_efforts": [],
     "release_date": "2025-08-21",
     "last_updated": "2025-08-21"
-  },
-  {
-    "id": "deepseek/deepseek-r1-0528",
-    "provider": "openrouter",
-    "name": "R1 0528",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 163840,
-    "max_output_tokens": 32768,
-    "price_in": 0.5,
-    "price_out": 2.15,
-    "price_cache_read": 0.35,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-05-28",
-    "last_updated": "2025-05-28"
   },
   {
     "id": "deepseek/deepseek-v3.1-terminus",
@@ -2289,10 +2018,10 @@
       "text"
     ],
     "context_window": 1048576,
-    "max_output_tokens": 131072,
-    "price_in": 0.126,
-    "price_out": 0.252,
-    "price_cache_read": 0.0252,
+    "max_output_tokens": 16384,
+    "price_in": 0.1,
+    "price_out": 0.2,
+    "price_cache_read": 0.02,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-04-24",
@@ -2345,13 +2074,13 @@
     "price_cache_read": 0.03,
     "price_cache_write": 0.083333,
     "reasoning_efforts": [],
-    "release_date": "2025-06-17",
-    "last_updated": "2025-06-17"
+    "release_date": "2025-03-20",
+    "last_updated": "2025-06-05"
   },
   {
     "id": "google/gemini-2.5-flash-lite",
     "provider": "openrouter",
-    "name": "Gemini 2.5 Flash Lite",
+    "name": "Gemini 2.5 Flash-Lite",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2372,8 +2101,8 @@
     "price_cache_read": 0.01,
     "price_cache_write": 0.083333,
     "reasoning_efforts": [],
-    "release_date": "2025-07-22",
-    "last_updated": "2025-07-22"
+    "release_date": "2025-06-17",
+    "last_updated": "2025-06-17"
   },
   {
     "id": "google/gemini-2.5-flash-lite-preview-09-2025",
@@ -2426,8 +2155,8 @@
     "price_cache_read": 0.125,
     "price_cache_write": 0.375,
     "reasoning_efforts": [],
-    "release_date": "2025-06-17",
-    "last_updated": "2025-06-17"
+    "release_date": "2025-03-20",
+    "last_updated": "2025-06-05"
   },
   {
     "id": "google/gemini-2.5-pro-preview",
@@ -2587,13 +2316,40 @@
     "price_cache_read": 0.2,
     "price_cache_write": 0.375,
     "reasoning_efforts": [],
-    "release_date": "2026-02-25",
-    "last_updated": "2026-02-25"
+    "release_date": "2026-02-19",
+    "last_updated": "2026-02-19"
+  },
+  {
+    "id": "google/gemini-3.5-flash",
+    "provider": "openrouter",
+    "name": "Gemini 3.5 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video",
+      "pdf",
+      "audio"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 1048576,
+    "max_output_tokens": 65536,
+    "price_in": 1.5,
+    "price_out": 9.0,
+    "price_cache_read": 0.15,
+    "price_cache_write": 0.083333,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-19",
+    "last_updated": "2026-05-19"
   },
   {
     "id": "google/gemma-4-26b-a4b-it",
     "provider": "openrouter",
-    "name": "Gemma 4 26B A4B ",
+    "name": "Gemma 4 26B A4B IT",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2612,38 +2368,13 @@
     "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-03",
-    "last_updated": "2026-04-03"
-  },
-  {
-    "id": "google/gemma-4-26b-a4b-it:free",
-    "provider": "openrouter",
-    "name": "Gemma 4 26B A4B  (free)",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "image",
-      "text",
-      "video"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 32768,
-    "price_in": 0.0,
-    "price_out": 0.0,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-04-03",
-    "last_updated": "2026-04-03"
+    "release_date": "2026-04-02",
+    "last_updated": "2026-04-02"
   },
   {
     "id": "google/gemma-4-31b-it",
     "provider": "openrouter",
-    "name": "Gemma 4 31B",
+    "name": "Gemma 4 31B IT",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2659,31 +2390,6 @@
     "max_output_tokens": 16384,
     "price_in": 0.12,
     "price_out": 0.37,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-04-02",
-    "last_updated": "2026-04-02"
-  },
-  {
-    "id": "google/gemma-4-31b-it:free",
-    "provider": "openrouter",
-    "name": "Gemma 4 31B (free)",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "image",
-      "text",
-      "video"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 32768,
-    "price_in": 0.0,
-    "price_out": 0.0,
     "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
@@ -2751,9 +2457,9 @@
     ],
     "context_window": 262144,
     "max_output_tokens": 32768,
-    "price_in": 0.3,
-    "price_out": 2.5,
-    "price_cache_read": 0.06,
+    "price_in": 0.075,
+    "price_out": 0.625,
+    "price_cache_read": 0.015,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-04-23",
@@ -2808,7 +2514,7 @@
   {
     "id": "minimax/minimax-m2",
     "provider": "openrouter",
-    "name": "MiniMax M2",
+    "name": "MiniMax-M2",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2825,13 +2531,13 @@
     "price_cache_read": 0.03,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2025-10-23",
-    "last_updated": "2025-10-23"
+    "release_date": "2025-10-27",
+    "last_updated": "2025-10-27"
   },
   {
     "id": "minimax/minimax-m2.1",
     "provider": "openrouter",
-    "name": "MiniMax M2.1",
+    "name": "MiniMax-M2.1",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2854,7 +2560,7 @@
   {
     "id": "minimax/minimax-m2.5",
     "provider": "openrouter",
-    "name": "MiniMax M2.5",
+    "name": "MiniMax-M2.5",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2877,7 +2583,7 @@
   {
     "id": "minimax/minimax-m2.7",
     "provider": "openrouter",
-    "name": "MiniMax M2.7",
+    "name": "MiniMax-M2.7",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -2924,7 +2630,7 @@
   {
     "id": "mistralai/devstral-2512",
     "provider": "openrouter",
-    "name": "Devstral 2 2512",
+    "name": "Devstral 2",
     "tool_call": true,
     "structured_output": true,
     "reasoning": false,
@@ -3068,7 +2774,7 @@
   {
     "id": "mistralai/mistral-large-2512",
     "provider": "openrouter",
-    "name": "Mistral Large 3 2512",
+    "name": "Mistral Large 3",
     "tool_call": true,
     "structured_output": true,
     "reasoning": false,
@@ -3087,8 +2793,8 @@
     "price_cache_read": 0.05,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2025-12-01",
-    "last_updated": "2025-12-01"
+    "release_date": "2024-11-01",
+    "last_updated": "2025-12-02"
   },
   {
     "id": "mistralai/mistral-medium-3-5",
@@ -3228,35 +2934,11 @@
     "max_output_tokens": 262144,
     "price_in": 0.6,
     "price_out": 2.5,
-    "price_cache_read": 0.15,
+    "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2025-11-06",
     "last_updated": "2025-11-06"
-  },
-  {
-    "id": "moonshotai/kimi-k2.5",
-    "provider": "openrouter",
-    "name": "Kimi K2.5",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 262144,
-    "price_in": 0.4,
-    "price_out": 1.9,
-    "price_cache_read": 0.09,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-01-27",
-    "last_updated": "2026-01-27"
   },
   {
     "id": "moonshotai/kimi-k2.6",
@@ -3279,8 +2961,8 @@
     "price_cache_read": 0.25,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-20",
-    "last_updated": "2026-04-20"
+    "release_date": "2026-04-21",
+    "last_updated": "2026-04-21"
   },
   {
     "id": "nex-agi/deepseek-v3.1-nex-n1",
@@ -3306,75 +2988,6 @@
     "last_updated": "2025-12-08"
   },
   {
-    "id": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-    "provider": "openrouter",
-    "name": "Llama 3.3 Nemotron Super 49B V1.5",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 16384,
-    "price_in": 0.1,
-    "price_out": 0.4,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-10-10",
-    "last_updated": "2025-10-10"
-  },
-  {
-    "id": "nvidia/nemotron-3-nano-30b-a3b",
-    "provider": "openrouter",
-    "name": "Nemotron 3 Nano 30B A3B",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 228000,
-    "price_in": 0.05,
-    "price_out": 0.2,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-12-14",
-    "last_updated": "2025-12-14"
-  },
-  {
-    "id": "nvidia/nemotron-3-super-120b-a12b",
-    "provider": "openrouter",
-    "name": "Nemotron 3 Super",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 262144,
-    "price_in": 0.09,
-    "price_out": 0.45,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-03-11",
-    "last_updated": "2026-03-11"
-  },
-  {
     "id": "nvidia/nemotron-3-super-120b-a12b:free",
     "provider": "openrouter",
     "name": "Nemotron 3 Super (free)",
@@ -3396,29 +3009,6 @@
     "reasoning_efforts": [],
     "release_date": "2026-03-11",
     "last_updated": "2026-03-11"
-  },
-  {
-    "id": "nvidia/nemotron-nano-9b-v2",
-    "provider": "openrouter",
-    "name": "Nemotron Nano 9B V2",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 16384,
-    "price_in": 0.04,
-    "price_out": 0.16,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-05",
-    "last_updated": "2025-09-05"
   },
   {
     "id": "nvidia/nemotron-nano-9b-v2:free",
@@ -3496,7 +3086,7 @@
   {
     "id": "openai/gpt-5-codex",
     "provider": "openrouter",
-    "name": "GPT-5 Codex",
+    "name": "GPT-5-Codex",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3514,8 +3104,8 @@
     "price_cache_read": 0.125,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2025-09-23",
-    "last_updated": "2025-09-23"
+    "release_date": "2025-09-15",
+    "last_updated": "2025-09-15"
   },
   {
     "id": "openai/gpt-5-mini",
@@ -3633,10 +3223,10 @@
       "text"
     ],
     "context_window": 128000,
-    "max_output_tokens": 16384,
+    "max_output_tokens": 32000,
     "price_in": 1.25,
     "price_out": 10.0,
-    "price_cache_read": 0.125,
+    "price_cache_read": 0.13,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2025-11-13",
@@ -3645,7 +3235,31 @@
   {
     "id": "openai/gpt-5.1-codex",
     "provider": "openrouter",
-    "name": "GPT-5.1-Codex",
+    "name": "GPT-5.1 Codex",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "price_in": 1.25,
+    "price_out": 10.0,
+    "price_cache_read": 0.13,
+    "price_cache_write": 0.0,
+    "reasoning_efforts": [],
+    "release_date": "2025-11-13",
+    "last_updated": "2025-11-13"
+  },
+  {
+    "id": "openai/gpt-5.1-codex-max",
+    "provider": "openrouter",
+    "name": "GPT-5.1 Codex Max",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3667,33 +3281,9 @@
     "last_updated": "2025-11-13"
   },
   {
-    "id": "openai/gpt-5.1-codex-max",
-    "provider": "openrouter",
-    "name": "GPT-5.1-Codex-Max",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 400000,
-    "max_output_tokens": 128000,
-    "price_in": 1.25,
-    "price_out": 10.0,
-    "price_cache_read": 0.125,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-12-04",
-    "last_updated": "2025-12-04"
-  },
-  {
     "id": "openai/gpt-5.1-codex-mini",
     "provider": "openrouter",
-    "name": "GPT-5.1-Codex-Mini",
+    "name": "GPT-5.1 Codex mini",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3705,10 +3295,10 @@
       "text"
     ],
     "context_window": 400000,
-    "max_output_tokens": 128000,
+    "max_output_tokens": 100000,
     "price_in": 0.25,
     "price_out": 2.0,
-    "price_cache_read": 0.03,
+    "price_cache_read": 0.025,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2025-11-13",
@@ -3736,8 +3326,8 @@
     "price_cache_read": 0.175,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2025-12-10",
-    "last_updated": "2025-12-10"
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
   },
   {
     "id": "openai/gpt-5.2-chat",
@@ -3755,7 +3345,7 @@
       "text"
     ],
     "context_window": 128000,
-    "max_output_tokens": 32000,
+    "max_output_tokens": 16384,
     "price_in": 1.75,
     "price_out": 14.0,
     "price_cache_read": 0.175,
@@ -3767,7 +3357,7 @@
   {
     "id": "openai/gpt-5.2-codex",
     "provider": "openrouter",
-    "name": "GPT-5.2-Codex",
+    "name": "GPT-5.2 Codex",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3785,8 +3375,8 @@
     "price_cache_read": 0.175,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-01-14",
-    "last_updated": "2026-01-14"
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
   },
   {
     "id": "openai/gpt-5.2-pro",
@@ -3810,8 +3400,8 @@
     "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2025-12-10",
-    "last_updated": "2025-12-10"
+    "release_date": "2025-12-11",
+    "last_updated": "2025-12-11"
   },
   {
     "id": "openai/gpt-5.3-chat",
@@ -3841,7 +3431,7 @@
   {
     "id": "openai/gpt-5.3-codex",
     "provider": "openrouter",
-    "name": "GPT-5.3-Codex",
+    "name": "GPT-5.3 Codex",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3860,8 +3450,8 @@
     "price_cache_read": 0.175,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-02-24",
-    "last_updated": "2026-02-24"
+    "release_date": "2026-02-05",
+    "last_updated": "2026-02-05"
   },
   {
     "id": "openai/gpt-5.4",
@@ -3891,7 +3481,7 @@
   {
     "id": "openai/gpt-5.4-mini",
     "provider": "openrouter",
-    "name": "GPT-5.4 Mini",
+    "name": "GPT-5.4 mini",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3916,7 +3506,7 @@
   {
     "id": "openai/gpt-5.4-nano",
     "provider": "openrouter",
-    "name": "GPT-5.4 Nano",
+    "name": "GPT-5.4 nano",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -3985,8 +3575,8 @@
     "price_cache_read": 0.5,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-24",
-    "last_updated": "2026-04-24"
+    "release_date": "2026-04-23",
+    "last_updated": "2026-04-23"
   },
   {
     "id": "openai/gpt-5.5-pro",
@@ -4010,8 +3600,8 @@
     "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-24",
-    "last_updated": "2026-04-24"
+    "release_date": "2026-04-23",
+    "last_updated": "2026-04-23"
   },
   {
     "id": "openai/gpt-audio",
@@ -4135,57 +3725,9 @@
     "last_updated": "2025-08-05"
   },
   {
-    "id": "openai/gpt-oss-safeguard-20b",
-    "provider": "openrouter",
-    "name": "gpt-oss-safeguard-20b",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 65536,
-    "price_in": 0.075,
-    "price_out": 0.3,
-    "price_cache_read": 0.037,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-10-29",
-    "last_updated": "2025-10-29"
-  },
-  {
-    "id": "openai/o3-deep-research",
-    "provider": "openrouter",
-    "name": "o3 Deep Research",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "image",
-      "text",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 200000,
-    "max_output_tokens": 100000,
-    "price_in": 10.0,
-    "price_out": 40.0,
-    "price_cache_read": 2.5,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-10-10",
-    "last_updated": "2025-10-10"
-  },
-  {
     "id": "openai/o3-pro",
     "provider": "openrouter",
-    "name": "o3 Pro",
+    "name": "o3-pro",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -4206,31 +3748,6 @@
     "reasoning_efforts": [],
     "release_date": "2025-06-10",
     "last_updated": "2025-06-10"
-  },
-  {
-    "id": "openai/o4-mini-deep-research",
-    "provider": "openrouter",
-    "name": "o4 Mini Deep Research",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "pdf",
-      "image",
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 200000,
-    "max_output_tokens": 100000,
-    "price_in": 2.0,
-    "price_out": 8.0,
-    "price_cache_read": 0.5,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-10-10",
-    "last_updated": "2025-10-10"
   },
   {
     "id": "openrouter/owl-alpha",
@@ -4296,7 +3813,7 @@
     "price_in": 0.26,
     "price_out": 0.78,
     "price_cache_read": 0.0,
-    "price_cache_write": 0.325,
+    "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2025-09-08",
     "last_updated": "2025-09-08"
@@ -4463,29 +3980,6 @@
     "last_updated": "2025-07-31"
   },
   {
-    "id": "qwen/qwen3-coder-flash",
-    "provider": "openrouter",
-    "name": "Qwen3 Coder Flash",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": false,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1000000,
-    "max_output_tokens": 65536,
-    "price_in": 0.195,
-    "price_out": 0.975,
-    "price_cache_read": 0.039,
-    "price_cache_write": 0.24375,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-17",
-    "last_updated": "2025-09-17"
-  },
-  {
     "id": "qwen/qwen3-coder-next",
     "provider": "openrouter",
     "name": "Qwen3 Coder Next",
@@ -4527,29 +4021,6 @@
     "price_out": 3.25,
     "price_cache_read": 0.13,
     "price_cache_write": 0.8125,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-23",
-    "last_updated": "2025-09-23"
-  },
-  {
-    "id": "qwen/qwen3-max",
-    "provider": "openrouter",
-    "name": "Qwen3 Max",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": false,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 32768,
-    "price_in": 0.78,
-    "price_out": 3.9,
-    "price_cache_read": 0.156,
-    "price_cache_write": 0.975,
     "reasoning_efforts": [],
     "release_date": "2025-09-23",
     "last_updated": "2025-09-23"
@@ -4671,30 +4142,6 @@
     "last_updated": "2025-09-23"
   },
   {
-    "id": "qwen/qwen3-vl-235b-a22b-thinking",
-    "provider": "openrouter",
-    "name": "Qwen3 VL 235B A22B Thinking",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 32768,
-    "price_in": 0.26,
-    "price_out": 2.6,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-23",
-    "last_updated": "2025-09-23"
-  },
-  {
     "id": "qwen/qwen3-vl-30b-a3b-instruct",
     "provider": "openrouter",
     "name": "Qwen3 VL 30B A3B Instruct",
@@ -4741,30 +4188,6 @@
     "reasoning_efforts": [],
     "release_date": "2025-10-06",
     "last_updated": "2025-10-06"
-  },
-  {
-    "id": "qwen/qwen3-vl-32b-instruct",
-    "provider": "openrouter",
-    "name": "Qwen3 VL 32B Instruct",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": false,
-    "input_modalities": [
-      "text",
-      "image"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 32768,
-    "price_in": 0.104,
-    "price_out": 0.416,
-    "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-10-23",
-    "last_updated": "2025-10-23"
   },
   {
     "id": "qwen/qwen3-vl-8b-instruct",
@@ -4830,7 +4253,7 @@
       "text"
     ],
     "context_window": 262144,
-    "max_output_tokens": 65536,
+    "max_output_tokens": 262144,
     "price_in": 0.26,
     "price_out": 2.08,
     "price_cache_read": 0.0,
@@ -4881,9 +4304,9 @@
     ],
     "context_window": 262144,
     "max_output_tokens": 81920,
-    "price_in": 0.14,
+    "price_in": 0.139,
     "price_out": 1.0,
-    "price_cache_read": 0.05,
+    "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-02-25",
@@ -4908,7 +4331,7 @@
     "max_output_tokens": 65536,
     "price_in": 0.39,
     "price_out": 2.34,
-    "price_cache_read": 0.195,
+    "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-02-16",
@@ -4959,7 +4382,7 @@
     "price_in": 0.065,
     "price_out": 0.26,
     "price_cache_read": 0.0,
-    "price_cache_write": 0.08125,
+    "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-02-25",
     "last_updated": "2026-02-25"
@@ -4984,7 +4407,7 @@
     "price_in": 0.26,
     "price_out": 1.56,
     "price_cache_read": 0.0,
-    "price_cache_write": 0.325,
+    "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-02-16",
     "last_updated": "2026-02-16"
@@ -5009,7 +4432,7 @@
     "price_in": 0.3,
     "price_out": 1.8,
     "price_cache_read": 0.0,
-    "price_cache_write": 0.0,
+    "price_cache_write": 0.375,
     "reasoning_efforts": [],
     "release_date": "2026-04-27",
     "last_updated": "2026-04-27"
@@ -5029,9 +4452,9 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 262144,
-    "max_output_tokens": 81920,
-    "price_in": 0.32,
+    "context_window": 262140,
+    "max_output_tokens": 262140,
+    "price_in": 0.29,
     "price_out": 3.2,
     "price_cache_read": 0.0,
     "price_cache_write": 0.0,
@@ -5054,11 +4477,11 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 262144,
-    "max_output_tokens": 262144,
-    "price_in": 0.15,
+    "context_window": 262140,
+    "max_output_tokens": 262140,
+    "price_in": 0.14,
     "price_out": 1.0,
-    "price_cache_read": 0.05,
+    "price_cache_read": 0.0,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-04-27",
@@ -5138,9 +4561,9 @@
     "last_updated": "2026-04-02"
   },
   {
-    "id": "stepfun/step-3.5-flash",
+    "id": "qwen/qwen3.7-max",
     "provider": "openrouter",
-    "name": "Step 3.5 Flash",
+    "name": "Qwen3.7 Max",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5150,15 +4573,40 @@
     "output_modalities": [
       "text"
     ],
-    "context_window": 262144,
+    "context_window": 1000000,
     "max_output_tokens": 65536,
-    "price_in": 0.1,
-    "price_out": 0.3,
-    "price_cache_read": 0.0,
+    "price_in": 1.25,
+    "price_out": 3.75,
+    "price_cache_read": 0.25,
+    "price_cache_write": 1.5625,
+    "reasoning_efforts": [],
+    "release_date": "2026-05-21",
+    "last_updated": "2026-05-21"
+  },
+  {
+    "id": "stepfun/step-3.7-flash",
+    "provider": "openrouter",
+    "name": "Step 3.7 Flash",
+    "tool_call": true,
+    "structured_output": true,
+    "reasoning": true,
+    "input_modalities": [
+      "text",
+      "image",
+      "video"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "context_window": 256000,
+    "max_output_tokens": 256000,
+    "price_in": 0.2,
+    "price_out": 1.15,
+    "price_cache_read": 0.04,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-01-29",
-    "last_updated": "2026-01-29"
+    "release_date": "2026-05-28",
+    "last_updated": "2026-05-28"
   },
   {
     "id": "upstage/solar-pro-3",
@@ -5182,81 +4630,6 @@
     "reasoning_efforts": [],
     "release_date": "2026-01-27",
     "last_updated": "2026-01-27"
-  },
-  {
-    "id": "x-ai/grok-4",
-    "provider": "openrouter",
-    "name": "Grok 4",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "image",
-      "text",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 256000,
-    "max_output_tokens": 64000,
-    "price_in": 3.0,
-    "price_out": 15.0,
-    "price_cache_read": 0.75,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-07-09",
-    "last_updated": "2025-07-09"
-  },
-  {
-    "id": "x-ai/grok-4-fast",
-    "provider": "openrouter",
-    "name": "Grok 4 Fast",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 2000000,
-    "max_output_tokens": 30000,
-    "price_in": 0.2,
-    "price_out": 0.5,
-    "price_cache_read": 0.05,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-09-19",
-    "last_updated": "2025-09-19"
-  },
-  {
-    "id": "x-ai/grok-4.1-fast",
-    "provider": "openrouter",
-    "name": "Grok 4.1 Fast",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "image",
-      "pdf"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 2000000,
-    "max_output_tokens": 30000,
-    "price_in": 0.2,
-    "price_out": 0.5,
-    "price_cache_read": 0.05,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-11-19",
-    "last_updated": "2025-11-19"
   },
   {
     "id": "x-ai/grok-4.20",
@@ -5304,106 +4677,32 @@
     "price_cache_read": 0.2,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-30",
-    "last_updated": "2026-04-30"
+    "release_date": "2026-04-17",
+    "last_updated": "2026-04-17"
   },
   {
-    "id": "xiaomi/mimo-v2-flash",
+    "id": "x-ai/grok-build-0.1",
     "provider": "openrouter",
-    "name": "MiMo-V2-Flash",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 262144,
-    "max_output_tokens": 65536,
-    "price_in": 0.1,
-    "price_out": 0.3,
-    "price_cache_read": 0.01,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-12-14",
-    "last_updated": "2025-12-14"
-  },
-  {
-    "id": "xiaomi/mimo-v2-omni",
-    "provider": "openrouter",
-    "name": "MiMo-V2-Omni",
+    "name": "Grok Build 0.1",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
     "input_modalities": [
       "text",
-      "audio",
-      "image",
-      "video"
+      "image"
     ],
     "output_modalities": [
       "text"
     ],
-    "context_window": 262144,
-    "max_output_tokens": 65536,
-    "price_in": 0.4,
-    "price_out": 2.0,
-    "price_cache_read": 0.08,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-03-18",
-    "last_updated": "2026-03-18"
-  },
-  {
-    "id": "xiaomi/mimo-v2-pro",
-    "provider": "openrouter",
-    "name": "MiMo-V2-Pro",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 131072,
+    "context_window": 256000,
+    "max_output_tokens": 256000,
     "price_in": 1.0,
-    "price_out": 3.0,
+    "price_out": 2.0,
     "price_cache_read": 0.2,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-03-18",
-    "last_updated": "2026-03-18"
-  },
-  {
-    "id": "xiaomi/mimo-v2.5",
-    "provider": "openrouter",
-    "name": "MiMo-V2.5",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text",
-      "audio",
-      "image",
-      "video"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 1048576,
-    "max_output_tokens": 131072,
-    "price_in": 0.4,
-    "price_out": 2.0,
-    "price_cache_read": 0.08,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-04-22",
-    "last_updated": "2026-04-22"
+    "release_date": "2026-04-16",
+    "last_updated": "2026-04-16"
   },
   {
     "id": "xiaomi/mimo-v2.5-pro",
@@ -5419,42 +4718,19 @@
       "text"
     ],
     "context_window": 1048576,
-    "max_output_tokens": 16384,
-    "price_in": 1.0,
-    "price_out": 3.0,
-    "price_cache_read": 0.2,
+    "max_output_tokens": 131072,
+    "price_in": 0.435,
+    "price_out": 0.87,
+    "price_cache_read": 0.0036,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
     "release_date": "2026-04-22",
     "last_updated": "2026-04-22"
   },
   {
-    "id": "z-ai/glm-4.5",
-    "provider": "openrouter",
-    "name": "GLM 4.5",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 131072,
-    "max_output_tokens": 98304,
-    "price_in": 0.6,
-    "price_out": 2.2,
-    "price_cache_read": 0.11,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2025-07-25",
-    "last_updated": "2025-07-25"
-  },
-  {
     "id": "z-ai/glm-4.6",
     "provider": "openrouter",
-    "name": "GLM 4.6",
+    "name": "GLM-4.6",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5477,7 +4753,7 @@
   {
     "id": "z-ai/glm-4.7",
     "provider": "openrouter",
-    "name": "GLM 4.7",
+    "name": "GLM-4.7",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5500,7 +4776,7 @@
   {
     "id": "z-ai/glm-4.7-flash",
     "provider": "openrouter",
-    "name": "GLM 4.7 Flash",
+    "name": "GLM-4.7-Flash",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5523,7 +4799,7 @@
   {
     "id": "z-ai/glm-5",
     "provider": "openrouter",
-    "name": "GLM 5",
+    "name": "GLM-5",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5544,32 +4820,9 @@
     "last_updated": "2026-02-11"
   },
   {
-    "id": "z-ai/glm-5-turbo",
-    "provider": "openrouter",
-    "name": "GLM 5 Turbo",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 202752,
-    "max_output_tokens": 131072,
-    "price_in": 1.2,
-    "price_out": 4.0,
-    "price_cache_read": 0.24,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-03-15",
-    "last_updated": "2026-03-15"
-  },
-  {
     "id": "z-ai/glm-5.1",
     "provider": "openrouter",
-    "name": "GLM 5.1",
+    "name": "GLM-5.1",
     "tool_call": true,
     "structured_output": true,
     "reasoning": true,
@@ -5580,38 +4833,13 @@
       "text"
     ],
     "context_window": 202752,
-    "max_output_tokens": 131072,
+    "max_output_tokens": 202800,
     "price_in": 0.98,
     "price_out": 3.08,
     "price_cache_read": 0.182,
     "price_cache_write": 0.0,
     "reasoning_efforts": [],
-    "release_date": "2026-04-07",
-    "last_updated": "2026-04-07"
-  },
-  {
-    "id": "z-ai/glm-5v-turbo",
-    "provider": "openrouter",
-    "name": "GLM 5V Turbo",
-    "tool_call": true,
-    "structured_output": true,
-    "reasoning": true,
-    "input_modalities": [
-      "image",
-      "text",
-      "video"
-    ],
-    "output_modalities": [
-      "text"
-    ],
-    "context_window": 202752,
-    "max_output_tokens": 131072,
-    "price_in": 1.2,
-    "price_out": 4.0,
-    "price_cache_read": 0.24,
-    "price_cache_write": 0.0,
-    "reasoning_efforts": [],
-    "release_date": "2026-04-01",
-    "last_updated": "2026-04-01"
+    "release_date": "2026-03-27",
+    "last_updated": "2026-03-27"
   }
 ]
