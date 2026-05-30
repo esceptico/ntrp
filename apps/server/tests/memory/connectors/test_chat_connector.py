@@ -287,7 +287,7 @@ async def test_token_budget_close(conn: aiosqlite.Connection):
 async def test_idle_gap_close(conn: aiosqlite.Connection):
     connector, buffers, _ = _connector(conn, vectors=[_vec(0), _vec(0)])
     buffer = await _seed_buffer(buffers, count=2)
-    stale = (datetime.now(UTC) - timedelta(minutes=11)).isoformat()
+    stale = (datetime.now(UTC) - timedelta(minutes=50)).isoformat()
     await conn.execute("UPDATE episode_buffers SET last_activity_at = ? WHERE id = ?", (stale, buffer.id))
     await conn.commit()
 
@@ -490,7 +490,7 @@ async def test_idle_sweeper_closes_stale_buffers(conn: aiosqlite.Connection):
             tokens=3,
         ),
     )
-    stale = (datetime.now(UTC) - timedelta(minutes=11)).isoformat()
+    stale = (datetime.now(UTC) - timedelta(minutes=50)).isoformat()
     await conn.execute("UPDATE episode_buffers SET last_activity_at = ?", (stale,))
     await conn.commit()
 

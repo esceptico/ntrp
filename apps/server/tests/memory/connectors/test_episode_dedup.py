@@ -174,7 +174,9 @@ async def test_drop_redundant_episode(conn):
 
 
 @pytest.mark.asyncio
-async def test_supersede_inserts_new_and_retires_old(conn):
+async def test_supersede_response_is_coerced_to_keep_episodes_immutable(conn):
+    # Episodes are immutable raw slices: a legacy "supersede" decision must NOT
+    # retire or chain the prior episode. Both survive active; no supersedes edge.
     items = MemoryItemsRepository(conn)
     buffers = EpisodeBufferRepository(conn)
     old = await _seed_episode(items, "timur applies to mats", _vec(0))
@@ -189,17 +191,16 @@ async def test_supersede_inserts_new_and_retires_old(conn):
     )
 
     rows = {r["id"]: r for r in await _episodes(conn)}
-    assert rows[old]["status"] == "superseded"
-    new_ids = [i for i in rows if i != old]
-    assert len(new_ids) == 1
-    edges = await conn.execute_fetchall(
-        "SELECT role FROM memory_item_parents WHERE child_id=? AND parent_id=?", (new_ids[0], old)
-    )
-    assert [e["role"] for e in edges] == ["supersedes"]
+    assert rows[old]["status"] == "active"  # prior episode untouched
+    assert len(rows) == 2  # new episode stored as its own slice
+    edges = await conn.execute_fetchall("SELECT role FROM memory_item_parents WHERE parent_id=? OR child_id=?", (old, old))
+    assert [e["role"] for e in edges] == []  # never chained
 
 
 @pytest.mark.asyncio
-async def test_merge_updates_target_without_inserting(conn):
+async def test_merge_response_is_coerced_to_keep_no_mutation(conn):
+    # A legacy "merge" decision must NOT mutate the existing episode. The new
+    # episode is stored as its own slice; the target's content is unchanged.
     items = MemoryItemsRepository(conn)
     buffers = EpisodeBufferRepository(conn)
     target = await _seed_episode(items, "timur applies to mats", _vec(0))
@@ -211,14 +212,14 @@ async def test_merge_updates_target_without_inserting(conn):
 
     await finalize_buffer(
         buffer=buffer, items=items, buffers=buffers,
-        embedder=MockEmbedder([_vec(0), _vec(0)]),  # summary embed + merged re-embed
+        embedder=MockEmbedder([_vec(0)]),
         llm_client=AsyncMock(return_value="deadline june 7 form url"),
         reason="idle_gap", dedup_client=dedup,
     )
 
-    rows = await _episodes(conn)
-    assert len(rows) == 1
-    assert rows[0]["content"] == merged
+    rows = {r["id"]: r for r in await _episodes(conn)}
+    assert len(rows) == 2  # new slice stored, nothing merged
+    assert rows[target]["content"] == "timur applies to mats"  # target unchanged
 
 
 @pytest.mark.asyncio

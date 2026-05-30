@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 import aiosqlite
@@ -29,7 +28,7 @@ from ntrp.memory.connectors._constants import (
     TOPIC_SHIFT_THRESHOLD,
     TURN_BUDGET,
 )
-from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository, derive_title
+from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
 
 _logger = get_logger(__name__)
@@ -94,25 +93,22 @@ class CompletionSummaryClient:
         return _summary_from_response(response)
 
 
-_DEDUP_ACTIONS = frozenset({"keep", "drop", "supersede", "merge"})
+_DEDUP_ACTIONS = frozenset({"keep", "drop"})
 
-_DEDUP_PROMPT = """A new memory episode is about to be stored. Decide how it relates to existing
-similar episodes already in memory, so we never store redundant duplicates but never lose information.
+_DEDUP_PROMPT = """A new memory episode is about to be stored. Decide only whether it is a redundant
+restatement of an episode already in memory. Episodes are immutable raw slices; we never rewrite or
+retire an existing one here — we only avoid storing an exact restatement.
 
 For each existing candidate you are given: its id, the embedding cosine to the new episode, and a
 containment score (fraction of the new episode's words already present in that candidate; ~1.0 means
 the new episode is fully contained in it).
 
 Choose exactly one action:
-- "keep": the new episode is genuinely new information. Store it as-is.
-- "drop": the new episode adds nothing beyond an existing candidate (it is a subset/restatement).
-- "supersede": the new episode is a richer/updated version of one candidate; store the new one and
-  retire that candidate. Set target_id to that candidate.
-- "merge": the new episode and one candidate each carry unique details that belong together; provide
-  merged_content combining both into one episode, and set target_id to that candidate.
+- "drop": the new episode adds nothing beyond an existing candidate (a near-exact subset/restatement).
+- "keep": the new episode carries any information not already captured by a candidate. When unsure, keep.
 
 Respond with ONLY a JSON object, no prose, no code fences:
-{{"action": "keep|drop|supersede|merge", "target_id": "<candidate id or null>", "merged_content": "<combined episode text or null>", "reason": "<short>"}}
+{{"action": "keep|drop", "reason": "<short>"}}
 {learnings}
 New episode:
 {new}
@@ -282,8 +278,6 @@ async def finalize_buffer(
         embedding=embedding,
         buffer=buffer,
         items=items,
-        embedder=embedder,
-        candidates=candidates,
         reason=reason,
     )
     return await _close_and_carry(buffers, buffer, config)
@@ -341,39 +335,16 @@ async def _apply_decision(
     embedding: np.ndarray,
     buffer: EpisodeBuffer,
     items: MemoryItemsRepository,
-    embedder: Any,
-    candidates: list[DedupCandidate],
     reason: str,
 ) -> None:
-    targets = {c.item.id: c.item for c in candidates}
-    target = targets.get(decision.target_id) if decision.target_id else None
-
+    # Episodes are immutable raw slices. The only inline action is to skip storing
+    # an exact restatement (`drop`); everything else is stored as its own slice.
+    # We deliberately do NOT supersede or merge episodes here: that chained
+    # near-duplicate episodes into long supersede snakes and is off-spec — episode
+    # redundancy is absorbed downstream by the pattern finder (episode -> observation),
+    # and `supersedes` is reserved for claim contradiction resolution.
     if decision.action == "drop":
         _logger.info("Dedup: dropping redundant episode", scope=buffer.scope, reason=reason, why=decision.reason)
-        return
-
-    if decision.action == "supersede" and target is not None:
-        new_id = await items.insert_item(_new_episode_insert(summary, embedding, buffer), commit=False)
-        await items.insert_parent_edge(new_id, target.id, "supersedes", commit=False)
-        await items.update_status(target.id, "superseded", invalid_at=datetime.now(UTC), commit=True)
-        _logger.info("Dedup: superseded prior episode", scope=buffer.scope, new_id=new_id, old_id=target.id)
-        return
-
-    if decision.action == "merge" and target is not None and decision.merged_content:
-        merged = decision.merged_content.strip()
-        merged_embedding = await embedder.embed_one(merged)
-        await items.update_item(
-            target.id,
-            content=merged,
-            title=derive_title(merged) or None,
-            confidence=target.confidence,
-            tags=target.tags,
-            scope=target.scope,
-            status="active",
-            invalid_at=None,
-            embedding=merged_embedding,
-        )
-        _logger.info("Dedup: merged episode into prior", scope=buffer.scope, target_id=target.id)
         return
 
     await items.insert_item(_new_episode_insert(summary, embedding, buffer))
