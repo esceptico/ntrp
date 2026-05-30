@@ -203,7 +203,28 @@ export const useStore = create<State & Actions>((set) => ({
     })),
   prependSession: (session) =>
     set((s) => {
+      // Dedupe by id: the same session can arrive both from bootstrap's
+      // /sessions load and from a session_created SSE event (or a stream
+      // replay), and we must not render two rows for one session.
+      if (s.sessions.some((existing) => existing.session_id === session.session_id)) {
+        return {};
+      }
       const sessions = [session, ...s.sessions];
+      return {
+        sessions,
+        ...reduceRunStatus(s, { activeRuns: activeRunsFromSessions(sessions) }),
+      };
+    }),
+  patchSession: (session) =>
+    set((s) => {
+      // session_activity delta for a channel that got new content. Merge
+      // over the existing row (preserving poll-maintained runtime fields the
+      // delta omits) and move it to the front — the sidebar renders in array
+      // order, so front = most recent activity.
+      const existing = s.sessions.find((row) => row.session_id === session.session_id);
+      const merged = existing ? { ...existing, ...session } : session;
+      const rest = s.sessions.filter((row) => row.session_id !== session.session_id);
+      const sessions = [merged, ...rest];
       return {
         sessions,
         ...reduceRunStatus(s, { activeRuns: activeRunsFromSessions(sessions) }),

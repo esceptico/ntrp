@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
-import { updateServerConfig, fetchServerConfig } from "../actions";
+import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "../actions";
 import type { ModelGroup } from "../api";
 import { ICON } from "../lib/icons";
 
@@ -223,6 +223,8 @@ export function ModelReasoningPicker({
 export function ModelReasoningChip() {
   const cfg = useStore((s) => s.serverConfig);
   const models = useStore((s) => s.serverModels);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const sessions = useStore((s) => s.sessions);
   const [busy, setBusy] = useState(false);
 
   const groups = useMemo(() => {
@@ -234,10 +236,15 @@ export function ModelReasoningChip() {
 
   if (!cfg) return null;
   if (!Object.prototype.hasOwnProperty.call(cfg, "model_reasoning_efforts")) return null;
-  const currentModel = cfg.chat_model;
-  const efforts = cfg.reasoning_efforts;
-  const currentEffort = cfg.reasoning_effort;
+
+  // Per-chat model: the active session's override, falling back to the
+  // global default (also what new chats inherit). Legacy sessions with no
+  // stored model resolve to the global default too.
+  const session = sessions.find((s) => s.session_id === currentSessionId);
+  const currentModel = session?.chat_model ?? cfg.chat_model;
   const modelReasoningEfforts = cfg.model_reasoning_efforts;
+  const efforts = models?.reasoning_efforts?.[currentModel] ?? cfg.reasoning_efforts;
+  const currentEffort = modelReasoningEfforts[currentModel] ?? cfg.reasoning_effort;
 
   const apply = async (patch: Record<string, unknown>) => {
     if (busy) return;
@@ -251,17 +258,31 @@ export function ModelReasoningChip() {
     }
   };
 
+  const selectModel = async (model: string) => {
+    if (busy || !currentSessionId) return;
+    setBusy(true);
+    try {
+      await updateSessionModelAction(currentSessionId, model);
+    } catch {
+      await refreshSessions();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <ModelReasoningPicker
       currentModel={currentModel}
       currentEffort={currentEffort}
       efforts={efforts}
       groups={groups}
-      disabled={busy || !models}
+      disabled={busy || !models || !currentSessionId}
       modelReasoningEfforts={modelReasoningEfforts}
       placement="above-right"
-      onSelectModel={(model) => void apply({ chat_model: model })}
-      onSelectEffort={(effort) => void apply({ reasoning_effort: effort })}
+      onSelectModel={(model) => void selectModel(model)}
+      onSelectEffort={(effort) =>
+        void apply({ reasoning_model: currentModel, reasoning_effort: effort })
+      }
     />
   );
 }

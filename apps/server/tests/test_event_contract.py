@@ -9,6 +9,7 @@ from ntrp.events.sse import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    SessionCreatedEvent,
     ThinkingEvent,
 )
 from ntrp.server.bus import StreamRecord, stream_record_to_sse_string
@@ -52,6 +53,22 @@ def test_stream_record_uses_sse_id_as_cursor():
 
     assert frame.startswith("id: 44\n")
     assert "event: RUN_FINISHED\n" in frame
+
+
+def test_session_created_nests_session_under_bus_session_id():
+    # SESSION_CREATED rides the global automation bus, whose key overwrites
+    # the top-level `session_id`. The new session's identity must survive
+    # nested under `session` so the client can render the row.
+    bus_key = "automation:events"
+    event = SessionCreatedEvent(session={"session_id": "20260530_120000_001", "name": "scan offers"})
+    record = StreamRecord(session_id=bus_key, seq=7, event=event)
+    payload = json.loads(stream_record_to_sse_string(bus_key, record).split("data: ", 1)[1].strip())
+
+    assert payload["type"] == "session_created"
+    assert payload["session_id"] == "automation:events"  # bus key, not the new session
+    assert payload["session"]["session_id"] == "20260530_120000_001"
+    assert payload["session"]["name"] == "scan offers"
+    assert payload["seq"] == 7
 
 
 def test_desktop_event_unions_cover_backend_event_types():

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, ChevronDown, Folder, FolderPlus, Plus, Search, Settings, X } from "lucide-react";
 import clsx from "clsx";
-import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/motion";
+import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
 import { compactSessionApi } from "../../api";
 import { archiveSession, createProject, createSession, loadHistory, moveSessionToProject } from "../../actions";
@@ -291,7 +291,7 @@ function SessionSearch({
         }}
         placeholder="Filter sessions"
         spellCheck={false}
-        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-sm leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
+        className="w-full h-full pl-[22px] pr-6 rounded-md bg-surface-soft focus:bg-surface-sunken text-sm leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
       />
       <button
         type="button"
@@ -309,7 +309,7 @@ function SessionSearch({
           }
         }}
         aria-label={value ? "Clear filter" : "Close filter"}
-        className="absolute right-1 top-1/2 -translate-y-1/2 grid place-items-center w-4 h-4 rounded-[4px] text-faint hover:text-ink hover:bg-[rgba(0,0,0,0.06)] transition-colors"
+        className="absolute right-1 top-1/2 -translate-y-1/2 grid place-items-center w-4 h-4 rounded-[4px] text-faint hover:text-ink hover:bg-surface-soft transition-colors"
       >
         <X size={ICON.XS} strokeWidth={2} />
       </button>

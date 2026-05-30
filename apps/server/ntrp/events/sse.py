@@ -86,6 +86,8 @@ class EventType(StrEnum):
     GOAL_CLEARED = "goal_cleared"
     TODO_UPDATED = "todo_updated"
     SESSION_UPDATED = "session_updated"
+    SESSION_CREATED = "session_created"
+    SESSION_ACTIVITY = "session_activity"
 
 
 def _now_ms() -> int:
@@ -132,6 +134,26 @@ class SessionUpdatedEvent(SSEEvent):
     type: EventType = field(default=EventType.SESSION_UPDATED, init=False)
     session_id: str = ""
     name: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionCreatedEvent(SSEEvent):
+    type: EventType = field(default=EventType.SESSION_CREATED, init=False)
+    # Full SessionListItem-shaped row so the client can render the new
+    # session without a refetch. Carried nested under `session` because the
+    # bus overwrites a top-level `session_id` with its own channel key
+    # (this rides the global automation bus, not a per-session stream).
+    session: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SessionActivityEvent(SSEEvent):
+    type: EventType = field(default=EventType.SESSION_ACTIVITY, init=False)
+    # Lightweight "this session got new content" delta on the global
+    # automation bus, so the sidebar bumps/re-sorts a channel row the user
+    # isn't currently viewing. Nested under `session` for the same
+    # bus-clobber reason as SessionCreatedEvent.
+    session: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -521,6 +543,8 @@ _EVENT_CLASSES = {
     EventType.GOAL_CLEARED.value: GoalClearedEvent,
     EventType.TODO_UPDATED.value: TodoUpdatedEvent,
     EventType.SESSION_UPDATED.value: SessionUpdatedEvent,
+    EventType.SESSION_CREATED.value: SessionCreatedEvent,
+    EventType.SESSION_ACTIVITY.value: SessionActivityEvent,
 }
 
 

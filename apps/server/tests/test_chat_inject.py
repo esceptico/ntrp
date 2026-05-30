@@ -733,6 +733,9 @@ class _Runtime:
         self.run_registry = RunRegistry()
         self.config = _Config()
 
+    async def resolve_session_chat_model(self, session_id):
+        return None
+
 
 @pytest.fixture
 def client_with_active_run():

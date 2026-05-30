@@ -8,6 +8,7 @@ import {
   moveSessionToProjectApi,
   permanentlyDeleteSessionApi,
   renameSessionApi,
+  updateSessionModelApi,
   restoreSessionApi,
   updateProjectApi,
   type Project,
@@ -73,6 +74,22 @@ export async function moveSessionToProject(sessionId: string, projectId: string 
 export async function refreshProjects(): Promise<void> {
   const s = getState();
   s.setProjects(await listProjectsApi(s.config));
+}
+
+export async function refreshSessions(): Promise<void> {
+  const s = getState();
+  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
+  s.setSessions(sessions);
+}
+
+export async function updateSessionModelAction(sessionId: string, chatModel: string): Promise<void> {
+  const s = getState();
+  s.setSessions(
+    s.sessions.map((sess) =>
+      sess.session_id === sessionId ? { ...sess, chat_model: chatModel } : sess,
+    ),
+  );
+  await updateSessionModelApi(s.config, sessionId, chatModel);
 }
 
 export async function renameSession(sessionId: string, name: string): Promise<void> {

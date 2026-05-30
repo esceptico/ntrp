@@ -52,7 +52,7 @@ async def test_watcher_fanout_dedup_cascade(
     posted: list[tuple[str, str]] = []
 
     async def stub_post(automation: Automation) -> str | None:
-        target_id = automation.thread_id or automation.target_session_id
+        target_id = automation.thread_id
         assert target_id is not None
         text = f"status for {automation.task_id}"
         data = await session_service.load(target_id)
@@ -64,7 +64,7 @@ async def test_watcher_fanout_dedup_cascade(
 
     scheduler = Scheduler(store=store, build_deps=lambda: None)
     scheduler.set_post_dispatcher(stub_post)
-    svc = AutomationService(store=store, scheduler=scheduler)
+    svc = AutomationService(store=store, scheduler=scheduler, session_service=session_service)
 
     # ---- Step 1: create the watcher (parent) ----------------------------
     watcher = await svc.create(
@@ -111,7 +111,7 @@ async def test_watcher_fanout_dedup_cascade(
         assert child.kind == "automation"  # NOT "loop" — agent-tool path
         assert child.parent_automation_id == watcher.task_id
         assert child.read_history is False  # post mode
-        assert child.loop_prompt == f"check {item} every 4h"
+        assert child.description == f"check {item} every 4h"
         children_by_item[item] = child
 
     # ---- Step 3: verify 3 children + 3 channel sessions exist -----------
@@ -122,7 +122,7 @@ async def test_watcher_fanout_dedup_cascade(
     # Each child's target session should be a real channel owned by this
     # watcher.
     for child in children:
-        target_id = child.thread_id or child.target_session_id
+        target_id = child.thread_id
         data = await session_service.load(target_id)
         assert data is not None
         assert data.state.session_type == "channel"

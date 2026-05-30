@@ -66,10 +66,49 @@ export function ModelsTab() {
   return (
     <div className="grid gap-5">
       <div className="rounded-[10px] border border-line-soft bg-surface-soft/45 px-3.5 py-3 text-sm leading-[1.45] text-muted">
-        The chat model and reasoning level live in the composer. These defaults are for background work.
+        Each chat keeps its own model — switch it from the composer. The default below applies to newly created chats. Research and memory models are for background work.
       </div>
 
       <div className="grid divide-y divide-line-soft">
+        <Section
+          title="Default chat (new chats)"
+          description="Model new chats start on. Existing chats keep their own."
+          current={cfg.chat_model}
+          savingModel={saving === "chat_model:model"}
+          savingReasoning={saving === "chat_model:reasoning"}
+          groups={groups}
+          reasoningEfforts={models.reasoning_efforts}
+          currentReasoning={cfg.model_reasoning_efforts[cfg.chat_model] ?? null}
+          onSelect={async (model) => {
+            if (model === cfg.chat_model || saving) return;
+            setSaving("chat_model:model");
+            setError(null);
+            try {
+              await updateServerConfig({ chat_model: model });
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              await fetchServerConfig();
+            } finally {
+              setSaving(null);
+            }
+          }}
+          onSetReasoning={async (effort) => {
+            if (saving) return;
+            setSaving("chat_model:reasoning");
+            setError(null);
+            try {
+              await updateServerConfig({
+                reasoning_model: cfg.chat_model,
+                reasoning_effort: effort,
+              });
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              await fetchServerConfig();
+            } finally {
+              setSaving(null);
+            }
+          }}
+        />
         {SETTINGS_MODEL_KINDS.map((kind) => {
           const current = cfg[kind];
           const meta = KIND_LABELS[kind];

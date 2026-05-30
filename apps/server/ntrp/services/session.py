@@ -1,19 +1,54 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Literal
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import PROJECT_FILTER_UNSET, SessionStore
 from ntrp.core.compactor import compact_messages, compactable_range
+from ntrp.events.sse import SessionActivityEvent, SessionCreatedEvent, SSEEvent
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
+EventSink = Callable[[SSEEvent], Awaitable[None]]
+
+
+def session_row(state: SessionState, message_count: int) -> dict:
+    """SessionListItem-shaped row the desktop sidebar renders directly —
+    mirrors the fields GET /sessions returns, so the client can add or
+    patch a row without a refetch."""
+    return {
+        "session_id": state.session_id,
+        "started_at": state.started_at.isoformat(),
+        "last_activity": state.last_activity.isoformat(),
+        "name": state.name,
+        "message_count": message_count,
+        "session_type": state.session_type,
+        "origin_automation_id": state.origin_automation_id,
+        "project_id": state.project_id,
+        "chat_model": state.chat_model,
+    }
+
 
 class SessionService:
-    def __init__(self, store: SessionStore):
+    def __init__(self, store: SessionStore, event_sink: EventSink | None = None):
         self.store = store
         self._locks: dict[str, asyncio.Lock] = {}
+        # Optional publisher (wired by the runtime to the global automation
+        # bus) so session lifecycle changes reach connected desktops live.
+        self._event_sink = event_sink
+
+    def set_event_sink(self, sink: EventSink) -> None:
+        self._event_sink = sink
+
+    async def _publish(self, event: SSEEvent) -> None:
+        if self._event_sink is None:
+            return
+        try:
+            await self._event_sink(event)
+        except Exception:
+            _logger.debug("Failed to publish session event", exc_info=True)
 
     def _lock_for(self, session_id: str) -> asyncio.Lock:
         lock = self._locks.get(session_id)
@@ -28,6 +63,7 @@ class SessionService:
         session_type: Literal["chat", "channel"] = "chat",
         origin_automation_id: str | None = None,
         project_id: str | None = None,
+        chat_model: str | None = None,
     ) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
@@ -37,7 +73,31 @@ class SessionService:
             session_type=session_type,
             origin_automation_id=origin_automation_id,
             project_id=project_id,
+            chat_model=chat_model,
         )
+
+    async def provision(
+        self,
+        name: str | None = None,
+        session_type: Literal["chat", "channel"] = "chat",
+        origin_automation_id: str | None = None,
+        project_id: str | None = None,
+        chat_model: str | None = None,
+    ) -> SessionState:
+        """Create + persist a session and announce it (SESSION_CREATED) so
+        connected desktops add the sidebar row live. The single creation
+        chokepoint for server-spawned sessions (automations, agent spawn
+        tool) that the user didn't open themselves."""
+        state = self.create(
+            name=name,
+            session_type=session_type,
+            origin_automation_id=origin_automation_id,
+            project_id=project_id,
+            chat_model=chat_model,
+        )
+        await self.save(state, [])
+        await self._publish(SessionCreatedEvent(session=session_row(state, 0)))
+        return state
 
     async def load(self, session_id: str | None = None) -> SessionData | None:
         try:
@@ -62,6 +122,7 @@ class SessionService:
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
             raise
+        await self._announce_activity(session_state, messages)
 
     async def save_progress(self, session_state: SessionState, messages: list[dict]) -> None:
         """Mid-run checkpoint — upserts messages, leaves metadata alone."""
@@ -72,6 +133,17 @@ class SessionService:
         except Exception as e:
             _logger.warning("Failed to save mid-run progress: %s", e)
             raise
+        await self._announce_activity(session_state, messages)
+
+    async def _announce_activity(self, session_state: SessionState, messages: list[dict]) -> None:
+        """Push a row delta for channel sessions so the sidebar bumps/re-sorts
+        a channel the user isn't viewing. Scoped to channels (and non-empty
+        saves) so ordinary chat streaming doesn't flood the global bus —
+        the user is already watching their own chat over its per-session
+        stream."""
+        if session_state.session_type != "channel" or not messages:
+            return
+        await self._publish(SessionActivityEvent(session=session_row(session_state, len(messages))))
 
     async def record_chat_run_started(self, run_id: str, session_id: str, metadata: dict | None = None) -> None:
         try:
@@ -231,6 +303,8 @@ class SessionService:
         after: str | None = None,
         around: str | None = None,
         around_seq: int | None = None,
+        before_seq: int | None = None,
+        after_seq: int | None = None,
     ) -> dict:
         return await self.store.list_session_messages(
             session_id,
@@ -239,6 +313,27 @@ class SessionService:
             after=after,
             around=around,
             around_seq=around_seq,
+            before_seq=before_seq,
+            after_seq=after_seq,
+        )
+
+    async def search_messages(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        session_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> dict:
+        return await self.store.search_messages(
+            query,
+            limit=limit,
+            offset=offset,
+            session_id=session_id,
+            since=since,
+            until=until,
         )
 
     async def list_turns(self, session_id: str, limit: int = 100) -> list[dict]:
@@ -253,6 +348,12 @@ class SessionService:
 
     async def rename_if_empty(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name_if_empty(session_id, name)
+
+    async def update_chat_model(self, session_id: str, chat_model: str | None) -> bool:
+        if await self.store.load_session(session_id) is None:
+            return False
+        await self.store.update_session_chat_model(session_id, chat_model)
+        return True
 
     async def create_project(
         self,

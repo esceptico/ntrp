@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived_at TEXT,
     session_type TEXT NOT NULL DEFAULT 'chat',
     origin_automation_id TEXT,
-    project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL
+    project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL,
+    chat_model TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS session_messages (
     message_json TEXT NOT NULL,
     client_id TEXT,
     created_at TEXT NOT NULL,
+    search_text TEXT,
     PRIMARY KEY (session_id, message_id),
     UNIQUE (session_id, seq)
 );
@@ -272,9 +274,9 @@ CREATE TABLE IF NOT EXISTS session_goals (
 SQL_SAVE_SESSION = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id, project_id
+    session_type, origin_automation_id, project_id, chat_model
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity,
     messages = excluded.messages,
@@ -282,7 +284,8 @@ ON CONFLICT(session_id) DO UPDATE SET
     name = excluded.name,
     session_type = excluded.session_type,
     origin_automation_id = excluded.origin_automation_id,
-    project_id = sessions.project_id
+    project_id = sessions.project_id,
+    chat_model = excluded.chat_model
 """
 
 SQL_GET_LATEST = """
@@ -293,7 +296,7 @@ ORDER BY last_activity DESC LIMIT 1
 
 SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
-       session_type, origin_automation_id, project_id,
+       session_type, origin_automation_id, project_id, chat_model,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL
@@ -303,7 +306,7 @@ LIMIT ?
 
 SQL_LIST_ARCHIVED = """
 SELECT session_id, started_at, last_activity, name, archived_at,
-       session_type, origin_automation_id, project_id,
+       session_type, origin_automation_id, project_id, chat_model,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NOT NULL
@@ -318,9 +321,9 @@ SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
 SQL_UPSERT_PROGRESS = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id, project_id
+    session_type, origin_automation_id, project_id, chat_model
 )
-VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     messages = excluded.messages,
     last_activity = excluded.last_activity,
@@ -329,6 +332,7 @@ ON CONFLICT(session_id) DO UPDATE SET
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_UPDATE_NAME_IF_EMPTY = "UPDATE sessions SET name = ? WHERE session_id = ? AND (name IS NULL OR name = '')"
 SQL_UPDATE_SESSION_PROJECT = "UPDATE sessions SET project_id = ? WHERE session_id = ?"
+SQL_UPDATE_SESSION_CHAT_MODEL = "UPDATE sessions SET chat_model = ? WHERE session_id = ?"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
 SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
 SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL"
@@ -509,6 +513,7 @@ class SessionStore:
             "session_type TEXT NOT NULL DEFAULT 'chat'",
             "origin_automation_id TEXT",
             "project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL",
+            "chat_model TEXT",
         ):
             try:
                 await self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
@@ -519,6 +524,7 @@ class SessionStore:
             "CREATE INDEX IF NOT EXISTS idx_sessions_project_activity ON sessions(project_id, last_activity DESC)"
         )
         await self._migrate_session_turns_schema()
+        await self._migrate_session_messages_fts()
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
         await self._migrate_chat_compactions_schema()
@@ -817,6 +823,109 @@ class SessionStore:
         await self.conn.execute("ALTER TABLE chat_compactions ADD COLUMN rehydration_state TEXT")
         await self.conn.commit()
 
+    _FTS_TRIGGERS = """
+        CREATE TRIGGER IF NOT EXISTS session_messages_ai
+        AFTER INSERT ON session_messages BEGIN
+            INSERT INTO session_messages_fts(rowid, search_text)
+            VALUES (new.rowid, new.search_text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS session_messages_ad
+        AFTER DELETE ON session_messages BEGIN
+            INSERT INTO session_messages_fts(session_messages_fts, rowid, search_text)
+            VALUES ('delete', old.rowid, old.search_text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS session_messages_au
+        AFTER UPDATE ON session_messages BEGIN
+            INSERT INTO session_messages_fts(session_messages_fts, rowid, search_text)
+            VALUES ('delete', old.rowid, old.search_text);
+            INSERT INTO session_messages_fts(rowid, search_text)
+            VALUES (new.rowid, new.search_text);
+        END;
+    """
+
+    async def _migrate_session_messages_fts(self) -> None:
+        """Full-text index over transcript messages. External-content FTS5
+        keyed to session_messages.rowid, kept in sync by triggers so every
+        write path stays correct. Indexes the flattened text projection
+        (search_text), not the JSON envelope.
+
+        Ordering matters: triggers are dropped before the column backfill so
+        the AFTER UPDATE trigger can't issue a 'delete' against rows that were
+        never indexed (which corrupts an external-content index). The index is
+        rebuilt from content after, and a corrupt pre-existing index is healed
+        rather than crashing boot."""
+        # 1. Ensure the search_text column (CREATE TABLE only adds it fresh).
+        cols = await self.conn.execute_fetchall("PRAGMA table_info(session_messages)")
+        if "search_text" not in {c["name"] for c in cols}:
+            await self.conn.execute("ALTER TABLE session_messages ADD COLUMN search_text TEXT")
+            await self.conn.commit()
+
+        # 2. Drop sync triggers so the backfill below runs without touching a
+        #    half-built or corrupt FTS index.
+        await self.conn.executescript(
+            """
+            DROP TRIGGER IF EXISTS session_messages_ai;
+            DROP TRIGGER IF EXISTS session_messages_ad;
+            DROP TRIGGER IF EXISTS session_messages_au;
+            """
+        )
+        await self.conn.commit()
+
+        # 3. Backfill flattened text for legacy rows (no triggers active).
+        legacy = await self.conn.execute_fetchall(
+            "SELECT rowid, message_json FROM session_messages WHERE search_text IS NULL"
+        )
+        for row in legacy:
+            try:
+                msg = json.loads(row["message_json"])
+            except Exception:
+                msg = {}
+            await self.conn.execute(
+                "UPDATE session_messages SET search_text = ? WHERE rowid = ?",
+                (self._flatten_message_text(msg), row["rowid"]),
+            )
+        if legacy:
+            await self.conn.commit()
+
+        # 4. Create the FTS table if absent; heal it if a prior run left it
+        #    corrupt. Either path rebuilds from content.
+        existed = bool(
+            await self.conn.execute_fetchall(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_messages_fts'"
+            )
+        )
+        needs_rebuild = bool(legacy) or not existed
+        if existed:
+            try:
+                await self.conn.execute(
+                    "INSERT INTO session_messages_fts(session_messages_fts) VALUES('integrity-check')"
+                )
+            except Exception:
+                await self.conn.execute("DROP TABLE IF EXISTS session_messages_fts")
+                await self.conn.commit()
+                existed = False
+                needs_rebuild = True
+        if not existed:
+            await self.conn.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+                    search_text,
+                    content='session_messages',
+                    content_rowid='rowid'
+                )
+                """
+            )
+
+        # 5. Recreate triggers, then rebuild the index from content if needed.
+        await self.conn.executescript(self._FTS_TRIGGERS)
+        if needs_rebuild:
+            await self.conn.execute(
+                "INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild')"
+            )
+        await self.conn.commit()
+
     async def _migrate_chat_runs_schema(self) -> None:
         rows = await self.conn.execute_fetchall("PRAGMA table_info(chat_runs)")
         if not rows:
@@ -963,6 +1072,36 @@ class SessionStore:
             msg["message_id"] = message_id
             seen.add(message_id)
 
+    @staticmethod
+    def _flatten_message_text(msg: dict) -> str:
+        """Plain-text projection of a message for full-text search — the same
+        text the agent reads, not the JSON envelope. Flattens content blocks
+        (text/tool_use/tool_result) and drops image/base64 noise."""
+        def walk(raw: Any) -> list[str]:
+            if raw is None:
+                return []
+            if isinstance(raw, str):
+                return [raw]
+            if isinstance(raw, list):
+                out: list[str] = []
+                for block in raw:
+                    if isinstance(block, dict):
+                        t = block.get("type")
+                        if t == "text" and block.get("text"):
+                            out.append(str(block["text"]))
+                        elif t == "tool_use" and block.get("name"):
+                            out.append(str(block["name"]))
+                        elif t == "tool_result":
+                            out.extend(walk(block.get("content")))
+                    elif isinstance(block, str):
+                        out.append(block)
+                return out
+            if isinstance(raw, dict):
+                return walk(raw.get("content"))
+            return [str(raw)]
+
+        return "\n".join(p for p in walk(msg.get("content")) if p).strip()
+
     async def _mirror_session_messages(self, session_id: str, messages: list[dict]) -> None:
         # session_messages is the durable UI/debug transcript, not just a
         # cache of the compacted model context. Rewrites update known rows
@@ -988,24 +1127,25 @@ class SessionStore:
             client_id = msg.get("client_id") if isinstance(msg.get("client_id"), str) else None
             created_at = str(msg.get("created_at") or datetime.now(UTC).isoformat())
             message_json = await asyncio.to_thread(lambda m=msg: json.dumps(m, default=str))
+            search_text = self._flatten_message_text(msg)
 
             if message_id in existing:
                 await self.conn.execute(
                     """
                     UPDATE session_messages
-                    SET role = ?, message_json = ?, client_id = ?, created_at = ?
+                    SET role = ?, message_json = ?, client_id = ?, created_at = ?, search_text = ?
                     WHERE session_id = ? AND message_id = ?
                     """,
-                    (role, message_json, client_id, created_at, session_id, message_id),
+                    (role, message_json, client_id, created_at, search_text, session_id, message_id),
                 )
             else:
                 await self.conn.execute(
                     """
                     INSERT INTO session_messages
-                        (session_id, message_id, seq, role, message_json, client_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                        (session_id, message_id, seq, role, message_json, client_id, created_at, search_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (session_id, message_id, next_seq, role, message_json, client_id, created_at),
+                    (session_id, message_id, next_seq, role, message_json, client_id, created_at, search_text),
                 )
                 next_seq += 1
         await self._rebuild_session_turns(session_id)
@@ -1130,6 +1270,7 @@ class SessionStore:
                     state.session_type,
                     state.origin_automation_id,
                     state.project_id,
+                    state.chat_model,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable)
@@ -2018,6 +2159,7 @@ class SessionStore:
                     state.session_type,
                     state.origin_automation_id,
                     state.project_id,
+                    state.chat_model,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable_messages)
@@ -2047,6 +2189,7 @@ class SessionStore:
             session_type=row["session_type"] or "chat",
             origin_automation_id=row["origin_automation_id"],
             project_id=row["project_id"],
+            chat_model=row["chat_model"] if "chat_model" in row.keys() else None,
         )
 
         raw_messages, raw_metadata = row["messages"], row["metadata"]
@@ -2076,7 +2219,7 @@ class SessionStore:
             rows = await self.read_conn.execute_fetchall(
                 """
                 SELECT session_id, started_at, last_activity, name,
-                       session_type, origin_automation_id, project_id,
+                       session_type, origin_automation_id, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL AND project_id IS NULL
@@ -2089,7 +2232,7 @@ class SessionStore:
             rows = await self.read_conn.execute_fetchall(
                 """
                 SELECT session_id, started_at, last_activity, name,
-                       session_type, origin_automation_id, project_id,
+                       session_type, origin_automation_id, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL AND project_id = ?
@@ -2108,6 +2251,7 @@ class SessionStore:
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
                 "project_id": row["project_id"],
+                "chat_model": row["chat_model"] if "chat_model" in row.keys() else None,
             }
             for row in rows
         ]
@@ -2117,6 +2261,9 @@ class SessionStore:
 
     async def update_session_project(self, session_id: str, project_id: str | None) -> bool:
         return await self._update(SQL_UPDATE_SESSION_PROJECT, (project_id, session_id))
+
+    async def update_session_chat_model(self, session_id: str, chat_model: str | None) -> bool:
+        return await self._update(SQL_UPDATE_SESSION_CHAT_MODEL, (chat_model, session_id))
 
     async def update_session_name_if_empty(self, session_id: str, name: str) -> bool:
         return await self._update(SQL_UPDATE_NAME_IF_EMPTY, (name, session_id))
@@ -2140,6 +2287,7 @@ class SessionStore:
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
                 "project_id": row["project_id"],
+                "chat_model": row["chat_model"] if "chat_model" in row.keys() else None,
             }
             for row in rows
         ]
@@ -2155,6 +2303,8 @@ class SessionStore:
         after: str | None = None,
         around: str | None = None,
         around_seq: int | None = None,
+        before_seq: int | None = None,
+        after_seq: int | None = None,
     ) -> dict:
         await self._ensure_session_messages(session_id)
         limit = max(1, min(limit, 250))
@@ -2174,8 +2324,10 @@ class SessionStore:
 
         rows: list[Any]
         around_at = await seq_for_message(around)
-        before_at = await seq_for_message(before)
-        after_at = await seq_for_message(after)
+        # Raw-int seq cursors (from search hits / prior pages) take precedence
+        # over message-id refs when both are somehow supplied.
+        before_at = before_seq if before_seq is not None else await seq_for_message(before)
+        after_at = after_seq if after_seq is not None else await seq_for_message(after)
         if around_seq is not None:
             start = max(0, around_seq - (limit // 2))
             rows = await self.read_conn.execute_fetchall(
@@ -2260,6 +2412,77 @@ class SessionStore:
             "after": messages[-1]["message_id"] if messages else None,
         }
 
+    async def search_messages(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        session_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> dict:
+        """Full-text search across transcript messages (BM25-ranked).
+
+        Returns {hits, has_more}. Each hit carries session_id + session name,
+        seq, role, created_at, and a trimmed snippet. Scope to one chat with
+        `session_id`; bound by time with ISO `since`/`until`. Empty/whitespace
+        query → no hits (rather than an FTS syntax error)."""
+        q = query.strip()
+        if not q:
+            return {"hits": [], "has_more": False}
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        where = ["session_messages_fts MATCH ?"]
+        params: list[Any] = [q]
+        if session_id is not None:
+            where.append("m.session_id = ?")
+            params.append(session_id)
+        if since is not None:
+            where.append("m.created_at >= ?")
+            params.append(since)
+        if until is not None:
+            where.append("m.created_at <= ?")
+            params.append(until)
+
+        # Fetch limit+1 to detect a further page without a COUNT.
+        sql = f"""
+            SELECT m.session_id AS session_id, s.name AS session_name,
+                   m.seq AS seq, m.role AS role, m.created_at AS created_at,
+                   snippet(session_messages_fts, 0, '[', ']', '…', 16) AS snippet
+            FROM session_messages_fts
+            JOIN session_messages m ON m.rowid = session_messages_fts.rowid
+            LEFT JOIN sessions s ON s.session_id = m.session_id
+            WHERE {" AND ".join(where)}
+            ORDER BY bm25(session_messages_fts), m.created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit + 1, offset])
+
+        try:
+            rows = await self.read_conn.execute_fetchall(sql, tuple(params))
+        except Exception:
+            # Malformed FTS query (stray operators, unbalanced quotes). Retry
+            # as a quoted phrase so user text never surfaces a SQL error.
+            phrase = '"' + q.replace('"', '""') + '"'
+            params[0] = phrase
+            rows = await self.read_conn.execute_fetchall(sql, tuple(params))
+
+        has_more = len(rows) > limit
+        hits = [
+            {
+                "session_id": r["session_id"],
+                "session_name": r["session_name"],
+                "seq": r["seq"],
+                "role": r["role"],
+                "created_at": r["created_at"],
+                "snippet": (r["snippet"] or "").strip(),
+            }
+            for r in rows[:limit]
+        ]
+        return {"hits": hits, "has_more": has_more}
+
     def _row_is_visible_user(self, row: Any) -> bool:
         if row["role"] != "user":
             return False
@@ -2293,7 +2516,13 @@ class SessionStore:
 
         anchor = await self._visible_user_before(session_id, rows[0]["seq"])
         if not anchor:
-            return rows
+            # No visible-user anchor before the window. Automation / channel
+            # sessions drive their turns with meta user messages
+            # (loop:/bg:/goal:), so a tool-heavy active run leaves the newest
+            # window with zero visible anchors. Fall back to the most recent
+            # user turn boundary regardless of meta, so prior turns still load
+            # instead of dead-ending on the active run's tool stream.
+            return await self._expand_from_user_boundary(session_id, rows)
 
         previous_anchor = await self._visible_user_before(session_id, anchor["seq"])
         if previous_anchor:
@@ -2330,6 +2559,36 @@ class SessionStore:
             if self._row_is_visible_user(row):
                 return row
         return None
+
+    async def _user_before(self, session_id: str, before_seq: int) -> Any | None:
+        """Most recent user row before `before_seq`, meta or not — a turn
+        boundary for sessions that have no visible (non-meta) user."""
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq < ? AND role = 'user'
+            ORDER BY seq DESC
+            LIMIT 1
+            """,
+            (session_id, before_seq),
+        )
+        return rows[0] if rows else None
+
+    async def _expand_from_user_boundary(self, session_id: str, rows: list[Any]) -> list[Any]:
+        boundary = await self._user_before(session_id, rows[0]["seq"])
+        if boundary is None:
+            return rows
+        # Reach back one further turn boundary so the previous exchange shows,
+        # not just the active run's own opening line.
+        previous = await self._user_before(session_id, boundary["seq"])
+        start_seq = (previous or boundary)["seq"]
+        expanded = await self._bounded_rows_between(
+            session_id,
+            start_seq,
+            rows[-1]["seq"],
+            max_count=LATEST_VISIBLE_ANCHOR_ROW_LIMIT,
+        )
+        return expanded if expanded is not None else rows
 
     async def _bounded_rows_between(
         self,

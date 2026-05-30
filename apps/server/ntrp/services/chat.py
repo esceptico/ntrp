@@ -8,7 +8,7 @@ from inspect import Parameter, signature
 from uuid import uuid4
 
 from ntrp.agent import Agent, Role
-from ntrp.agent.types.events import Result
+from ntrp.agent.types.events import Result, ToolCompleted
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW
 from ntrp.context.models import ProjectContext, SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
@@ -577,10 +577,15 @@ async def prepare_chat(
     if session_id:
         session_data = await deps.session_service.load(session_id)
         if not session_data:
-            session_data = SessionData(deps.session_service.create(), [])
+            session_data = SessionData(deps.session_service.create(chat_model=deps.chat_model), [])
     else:
         session_data = await _resolve_session(deps)
     session_state = session_data.state
+    # Pin the per-chat model on first use so a later change to the global
+    # default never retroactively moves this chat. deps.chat_model is the
+    # already-resolved effective model (session override or global default).
+    if session_state.chat_model is None:
+        session_state.chat_model = deps.chat_model
     if loop_task_id:
         session_data = await _maybe_precompact_loop_history(deps, session_data, emit=emit)
     messages = session_data.messages
@@ -951,6 +956,8 @@ async def _drain_backgrounded(
     drain_result: Result | None = None
     try:
         async for item in gen:
+            if isinstance(item, ToolCompleted):
+                ctx.run.add_source_ref(item.source_ref)
             if isinstance(item, Result):
                 drain_result = item
                 ctx.run.stop_reason = item.stop_reason.value
@@ -1035,6 +1042,7 @@ async def _drain_backgrounded(
                             messages=tuple(ctx.run.messages),
                             usage=ctx.run.usage,
                             result=drain_result,
+                            source_refs=tuple(ctx.run.source_refs),
                         )
                     )
                 except Exception:
@@ -1492,6 +1500,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                         messages=tuple(run.messages),
                         usage=run.usage,
                         result=result,
+                        source_refs=tuple(run.source_refs),
                     )
                     if run_finished_event is not None:
                         await bus.emit(run_finished_event)

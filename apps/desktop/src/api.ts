@@ -77,6 +77,9 @@ export interface SessionListItem {
   name: string | null;
   message_count: number;
   project_id?: string | null;
+  /** Per-chat model override. null/undefined → falls back to the global
+   *  default (config.chat_model), which is also what new chats inherit. */
+  chat_model?: string | null;
   /** "chat" for normal user conversations; "channel" for agent-spawned
    *  feed sessions (post-mode loop output, push-style updates). */
   session_type?: SessionType;
@@ -545,6 +548,17 @@ export async function moveSessionToProjectApi(
   });
 }
 
+export async function updateSessionModelApi(
+  config: AppConfig,
+  sessionId: string,
+  chatModel: string | null,
+): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/model`, {
+    method: "PUT",
+    body: JSON.stringify({ chat_model: chatModel }),
+  });
+}
+
 export async function archiveSessionApi(config: AppConfig, sessionId: string): Promise<void> {
   await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
@@ -605,7 +619,7 @@ export interface MCPServer {
   tools: MCPTool[];
   enabled: boolean;
   auth: string | null;
-  has_headers?: boolean;
+  header_keys?: string[];
   has_client_credentials: boolean;
   client_id?: string | null;
   redirect_port?: number | null;
@@ -1064,7 +1078,7 @@ export interface Automation {
   /** Textual output from the most recent run (markdown). Null until the
    *  automation has actually run once. */
   last_result: string | null;
-  writable: boolean;
+  auto_approve: boolean;
   running_since: string | null;
   handler: string | null;
   builtin: boolean;
@@ -1090,7 +1104,7 @@ export interface CreateAutomationPayload {
   lead_minutes?: number | string;
   idle_minutes?: number;
   every_n?: number;
-  writable?: boolean;
+  auto_approve?: boolean;
   start?: string;
   end?: string;
   triggers?: AutomationTrigger[];

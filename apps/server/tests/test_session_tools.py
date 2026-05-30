@@ -36,7 +36,7 @@ class _StubSessionService:
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         return list(self._sessions[:limit])
 
-    async def list_messages(self, session_id: str, limit: int = 100) -> dict:
+    async def list_messages(self, session_id: str, limit: int = 100, **kwargs) -> dict:
         msgs = self._messages.get(session_id, [])
         return {"messages": list(msgs[:limit])}
 
@@ -193,6 +193,11 @@ class _CapturingSessionService:
         )
         self.created.append(state)
         return state
+
+    async def provision(self, name=None, session_type="chat", origin_automation_id=None, **kwargs):
+        # Mirrors SessionService.provision: create + persist + announce. The
+        # stub just records the create and skips the bus publish.
+        return self.create(name=name, session_type=session_type, origin_automation_id=origin_automation_id)
 
     async def save(self, state, messages, metadata=None):
         return None

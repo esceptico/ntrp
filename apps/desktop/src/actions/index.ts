@@ -25,10 +25,12 @@ export {
   moveSessionToProject,
   permanentlyDeleteSession,
   refreshProjects,
+  refreshSessions,
   renameSession,
   restoreArchivedSession,
   saveProject,
   switchSession,
+  updateSessionModelAction,
 } from "./sessions";
 export {
   cancelSubagent,

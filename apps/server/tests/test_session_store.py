@@ -109,6 +109,30 @@ async def test_project_schema_migrates_existing_sessions_table(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_chat_model_persists_and_updates(store: SessionStore):
+    state = _make_state(session_id="s-model")
+    state.chat_model = "anthropic/claude-opus"
+    await store.save_session(state, [])
+    loaded = await store.load_session("s-model")
+    assert loaded is not None
+    assert loaded.state.chat_model == "anthropic/claude-opus"
+
+    await store.update_session_chat_model("s-model", "openai/gpt-5")
+    loaded = await store.load_session("s-model")
+    assert loaded.state.chat_model == "openai/gpt-5"
+    rows = await store.list_sessions()
+    assert next(r for r in rows if r["session_id"] == "s-model")["chat_model"] == "openai/gpt-5"
+
+
+@pytest.mark.asyncio
+async def test_chat_model_defaults_none_for_legacy(store: SessionStore):
+    await store.save_session(_make_state(session_id="s-legacy"), [])
+    loaded = await store.load_session("s-legacy")
+    assert loaded is not None
+    assert loaded.state.chat_model is None
+
+
+@pytest.mark.asyncio
 async def test_save_and_load_round_trip(store: SessionStore):
     state = _make_state(name="my chat")
     messages = [
@@ -1109,6 +1133,44 @@ async def test_latest_session_messages_keep_latest_tail_when_adding_visible_user
     assert len(latest["messages"]) == 262
     assert latest["has_more_before"] is False
     assert latest["has_more_after"] is False
+
+
+@pytest.mark.asyncio
+async def test_latest_session_messages_expand_past_meta_only_turns(store: SessionStore):
+    # Channel / automation sessions drive their turns with meta user messages
+    # (loop:/bg:/goal:), so a tool-heavy active run leaves the newest window
+    # with zero VISIBLE user anchors. History must still reach back to prior
+    # turns instead of dead-ending on the active run's tool stream.
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": "loop turn 1", "client_id": "loop:x:1", "is_meta": True},
+        {"role": "assistant", "content": "previous answer", "client_id": "a-prev"},
+        {"role": "user", "content": "loop turn 2", "client_id": "loop:x:2", "is_meta": True},
+    ]
+    for i in range(60):
+        call_id = f"call-{i}"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "client_id": f"a-{i}",
+                    "tool_calls": [
+                        {"id": call_id, "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+                    ],
+                },
+                {"role": "tool", "tool_call_id": call_id, "content": f"result {i}", "client_id": f"t-{i}"},
+            ]
+        )
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=50)
+    ids = [row["message_id"] for row in latest["messages"]]
+
+    # Prior turn content is now included, not dead-ended on the active tail.
+    assert "a-prev" in ids
+    assert "loop:x:1" in ids
+    assert latest["has_more_before"] is False
 
 
 @pytest.mark.asyncio

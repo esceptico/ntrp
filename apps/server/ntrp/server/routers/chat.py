@@ -241,10 +241,11 @@ async def chat_message(
     images = [img.model_dump() for img in request.images] if request.images else None
     context = request.context or None
 
+    chat_model = await runtime.resolve_session_chat_model(session_id)
     try:
         return await submit_chat_message(
             runtime.run_registry,
-            lambda: runtime.build_chat_deps(),
+            lambda: runtime.build_chat_deps(chat_model=chat_model),
             buses,
             message=request.message,
             skip_approvals=request.skip_approvals,

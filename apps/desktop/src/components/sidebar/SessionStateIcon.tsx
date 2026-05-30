@@ -32,7 +32,11 @@ export function SessionStateIcon({
   }
   if (isChannel) {
     return (
-      <span className="grid place-items-center w-4 h-4 text-faint" aria-label="Channel">
+      <span
+        className="grid place-items-center w-4 h-4 text-faint"
+        aria-label="Channel"
+        title="Channel — an automation posts its activity here; you can chat in it too"
+      >
         <Radio size={ICON.SM} strokeWidth={2} />
       </span>
     );

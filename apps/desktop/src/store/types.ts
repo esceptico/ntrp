@@ -373,6 +373,7 @@ export interface Actions {
   setProjects: (projects: Project[]) => void;
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
+  patchSession: (session: SessionListItem) => void;
   syncActiveRuns: (
     runs: { runId?: string | null; sessionId: string; status?: string | null; backgrounded?: boolean }[],
   ) => void;

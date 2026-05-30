@@ -97,7 +97,7 @@ export function SessionRow({
       }}
       data-streaming={streaming ? "true" : undefined}
       data-active={active ? "true" : undefined}
-      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-ink-soft text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-ink-soft text-left cursor-pointer"
     >
       <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} />
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">

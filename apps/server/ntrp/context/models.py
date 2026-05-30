@@ -13,6 +13,7 @@ class SessionState:
     session_type: Literal["chat", "channel"] = "chat"
     origin_automation_id: str | None = None
     project_id: str | None = None
+    chat_model: str | None = None
 
 
 @dataclass(frozen=True)

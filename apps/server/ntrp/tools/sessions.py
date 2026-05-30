@@ -52,6 +52,38 @@ class ListRecentSessionsInput(BaseModel):
     )
 
 
+class SearchTranscriptsInput(BaseModel):
+    query: str = Field(
+        description=(
+            "Full-text query across chat transcripts (FTS5 syntax: bare words "
+            "are AND-ed; quote \"exact phrases\"). Searches the readable message "
+            "text, not JSON. Returns ranked snippets with session_id + seq so "
+            "you can read_session(around_seq=...) for context."
+        )
+    )
+    limit: int = Field(
+        default=_DEFAULT_LIST_LIMIT,
+        ge=1,
+        le=_MAX_LIST_LIMIT,
+        description=f"Max hits to return (default {_DEFAULT_LIST_LIMIT}, max {_MAX_LIST_LIMIT}). Best match first.",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Pagination offset — skip this many hits. Use limit+offset to page through results.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Restrict the search to one session. Omit to search across all transcripts.",
+    )
+    within_days: int | None = Field(
+        default=None,
+        ge=1,
+        le=3650,
+        description="Only match messages from the last N days. Omit for all time.",
+    )
+
+
 class CreateSessionInput(BaseModel):
     name: str = Field(description="Short human-readable label for the new session (e.g. 'ops-alerts').")
     session_type: Literal["chat", "channel"] = Field(
@@ -89,6 +121,29 @@ class ReadSessionInput(BaseModel):
         description=(
             "Comma-separated roles to include, e.g. 'user' for just the "
             "prompts, or 'user,assistant' to drop tool noise. Omit for all."
+        ),
+    )
+    after_seq: int | None = Field(
+        default=None,
+        description=(
+            "Pagination cursor: return messages AFTER this seq (exclusive), "
+            "oldest-first. Use the last seq from the previous page to walk "
+            "forward through a long session. Omit for the most recent page."
+        ),
+    )
+    before_seq: int | None = Field(
+        default=None,
+        description=(
+            "Pagination cursor: return the page of messages ENDING just "
+            "before this seq (exclusive). Use the first seq from the current "
+            "page to walk backward. Mutually exclusive with after_seq."
+        ),
+    )
+    around_seq: int | None = Field(
+        default=None,
+        description=(
+            "Center the page on this seq (e.g. a hit's seq from "
+            "search_transcripts) to read the surrounding context."
         ),
     )
 
@@ -194,8 +249,7 @@ async def create_session(execution: ToolExecution, args: CreateSessionInput) -> 
         return ToolResult(content="Session service unavailable.", preview="Unavailable", is_error=True)
 
     origin = execution.ctx.run.loop_task_id
-    state = svc.create(name=args.name, session_type=args.session_type, origin_automation_id=origin)
-    await svc.save(state, [])
+    state = await svc.provision(name=args.name, session_type=args.session_type, origin_automation_id=origin)
 
     lines = [
         f"Created {args.session_type}: {state.name}",
@@ -215,8 +269,21 @@ async def read_session(execution: ToolExecution, args: ReadSessionInput) -> Tool
     if args.role_filter:
         roles = {r.strip().lower() for r in args.role_filter.split(",") if r.strip()}
 
+    if args.after_seq is not None and args.before_seq is not None:
+        return ToolResult(
+            content="Pass only one of after_seq / before_seq.",
+            preview="Bad cursor",
+            is_error=True,
+        )
+
     try:
-        page = await svc.list_messages(args.session_id, limit=args.limit)
+        page = await svc.list_messages(
+            args.session_id,
+            limit=args.limit,
+            after_seq=args.after_seq,
+            before_seq=args.before_seq,
+            around_seq=args.around_seq,
+        )
     except Exception as e:
         return ToolResult(
             content=f"Failed to read session {args.session_id}: {e}",
@@ -233,19 +300,24 @@ async def read_session(execution: ToolExecution, args: ReadSessionInput) -> Tool
 
     lines: list[str] = []
     kept = 0
-    for msg in raw_messages:
-        role = (msg.get("role") or "").lower()
+    first_seq: int | None = None
+    last_seq: int | None = None
+    for row in raw_messages:
+        # Each row is {seq, role, created_at, message: {...}}. The body lives
+        # in the nested message; role is mirrored at the top level.
+        msg = row.get("message", row) if isinstance(row, dict) else {}
+        seq = row.get("seq") if isinstance(row, dict) else None
+        role = (row.get("role") or msg.get("role") or "").lower()
         if roles is not None and role not in roles:
             continue
         body = _truncate(_content_to_text(msg.get("content")), args.content_chars)
-        # Tool messages carry the tool name on the role/metadata; surface it
-        # so the agent can spot patterns like "always runs gh + bash".
         tool_name = msg.get("name") or msg.get("tool_name")
         prefix = f"{role}" + (f"({tool_name})" if tool_name and role == "tool" else "")
-        if body:
-            lines.append(f"[{prefix}] {body}")
-        else:
-            lines.append(f"[{prefix}]")
+        seq_tag = f"#{seq} " if seq is not None else ""
+        lines.append(f"{seq_tag}[{prefix}] {body}" if body else f"{seq_tag}[{prefix}]")
+        if seq is not None:
+            first_seq = seq if first_seq is None else first_seq
+            last_seq = seq
         kept += 1
 
     if not kept:
@@ -254,9 +326,66 @@ async def read_session(execution: ToolExecution, args: ReadSessionInput) -> Tool
             preview="0 matched",
         )
 
+    footer: list[str] = []
+    if isinstance(page, dict):
+        if page.get("has_more_after") and last_seq is not None:
+            footer.append(f"More after: read_session(after_seq={last_seq})")
+        if page.get("has_more_before") and first_seq is not None:
+            footer.append(f"More before: read_session(before_seq={first_seq})")
+    body_text = "\n".join(lines)
+    if footer:
+        body_text += "\n\n" + "\n".join(footer)
+
     return ToolResult(
-        content="\n".join(lines),
+        content=body_text,
         preview=f"{kept} of {len(raw_messages)} messages",
+    )
+
+
+async def search_transcripts(execution: ToolExecution, args: SearchTranscriptsInput) -> ToolResult:
+    svc = execution.ctx.services.get("session")
+    if svc is None:
+        return ToolResult(content="Session service unavailable.", preview="Unavailable", is_error=True)
+
+    since: str | None = None
+    if args.within_days is not None:
+        since = (datetime.now(UTC) - timedelta(days=args.within_days)).isoformat()
+
+    try:
+        result = await svc.search_messages(
+            args.query,
+            limit=args.limit,
+            offset=args.offset,
+            session_id=args.session_id,
+            since=since,
+        )
+    except Exception as e:
+        return ToolResult(
+            content=f"Search failed: {e}",
+            preview="Search failed",
+            is_error=True,
+        )
+
+    hits = result.get("hits", [])
+    if not hits:
+        return ToolResult(content=f"No matches for {args.query!r}.", preview="0 hits")
+
+    lines: list[str] = []
+    for h in hits:
+        sid = h.get("session_id", "?")
+        name = (h.get("session_name") or "(untitled)").strip()
+        when = _format_when(h.get("created_at"))
+        role = (h.get("role") or "").lower()
+        seq = h.get("seq")
+        snippet = (h.get("snippet") or "").replace("\n", " ").strip()
+        lines.append(f"- {sid} #{seq} · {name} · {when} · [{role}] {snippet}")
+
+    footer = ""
+    if result.get("has_more"):
+        footer = f"\n\nMore results: search_transcripts(offset={args.offset + args.limit})"
+    return ToolResult(
+        content="\n".join(lines) + footer,
+        preview=f"{len(hits)} hit{'s' if len(hits) != 1 else ''}",
     )
 
 
@@ -274,7 +403,10 @@ READ_SESSION_DESCRIPTION = (
     "Read messages from a specific session by session_id. Content is "
     "truncated per message to keep context manageable; raise "
     "content_chars (up to 4000) for fuller bodies. Use role_filter='user' "
-    "to scan only user prompts when looking for patterns. Read-only."
+    "to scan only user prompts when looking for patterns. Each line is "
+    "tagged with its #seq; paginate a long session with after_seq / "
+    "before_seq cursors, or center on a search hit with around_seq. "
+    "Read-only."
 )
 
 
@@ -301,6 +433,22 @@ read_session_tool = tool(
     input_model=ReadSessionInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"session"})),
     execute=read_session,
+)
+
+SEARCH_TRANSCRIPTS_DESCRIPTION = (
+    "Full-text search across chat transcripts, ranked by relevance. Searches "
+    "the readable message text (not JSON/images). Filter to one chat with "
+    "session_id, bound by time with within_days, page with limit+offset. Each "
+    "hit gives session_id + seq — follow up with read_session(session_id, "
+    "around_seq=seq) to read the surrounding conversation. Read-only."
+)
+
+search_transcripts_tool = tool(
+    display_name="SearchTranscripts",
+    description=SEARCH_TRANSCRIPTS_DESCRIPTION,
+    input_model=SearchTranscriptsInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"session"})),
+    execute=search_transcripts,
 )
 
 create_session_tool = tool(

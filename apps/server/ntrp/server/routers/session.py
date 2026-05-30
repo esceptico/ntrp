@@ -28,6 +28,7 @@ from ntrp.server.schemas import (
     SetSessionGoalRequest,
     UpdateProjectRequest,
     UpdateSessionGoalRequest,
+    UpdateSessionModelRequest,
 )
 from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
@@ -491,7 +492,7 @@ async def get_session(
     if data:
         session_state = data.state
     else:
-        session_state = svc.create()
+        session_state = svc.create(chat_model=runtime.config.chat_model)
 
     return SessionResponse(
         session_id=session_state.session_id,
@@ -499,6 +500,7 @@ async def get_session(
         integration_errors=runtime.get_integration_errors(),
         name=session_state.name,
         project_id=session_state.project_id,
+        chat_model=session_state.chat_model,
     )
 
 
@@ -650,12 +652,14 @@ async def branch_session(
 
 @router.post("/sessions")
 async def create_session(
-    svc: SessionService = Depends(require_session_service), req: CreateSessionRequest | None = None
+    runtime: Runtime = Depends(get_runtime),
+    svc: SessionService = Depends(require_session_service),
+    req: CreateSessionRequest | None = None,
 ):
     name = req.name if req else None
     project_id = req.project_id if req else None
     await _require_project(svc, project_id)
-    state = svc.create(name=name, project_id=project_id)
+    state = svc.create(name=name, project_id=project_id, chat_model=runtime.config.chat_model)
     await svc.save(state, [])
     return {
         "session_id": state.session_id,
@@ -664,6 +668,7 @@ async def create_session(
         "last_activity": state.last_activity.isoformat(),
         "message_count": 0,
         "project_id": state.project_id,
+        "chat_model": state.chat_model,
     }
 
 
@@ -716,6 +721,16 @@ async def rename_session(
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "name": req.name}
+
+
+@router.put("/sessions/{session_id}/model")
+async def update_session_model(
+    session_id: str, req: UpdateSessionModelRequest, svc: SessionService = Depends(require_session_service)
+):
+    updated = await svc.update_chat_model(session_id, req.chat_model)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "chat_model": req.chat_model}
 
 
 @router.post("/sessions/{session_id}/project")

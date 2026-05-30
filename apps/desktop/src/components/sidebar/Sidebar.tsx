@@ -1,5 +1,5 @@
 import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
-import { originFromEvent } from "../../lib/motion";
+import { originFromEvent } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
 import { createSession, fetchAutomations } from "../../actions";
 import { ICON } from "../../lib/icons";
