@@ -65,10 +65,12 @@ export function KeyValueEditor({
   entries,
   onChange,
   addLabel,
+  valuePlaceholder = "Value",
 }: {
   entries: KeyVal[];
   onChange: (v: KeyVal[]) => void;
   addLabel: string;
+  valuePlaceholder?: string;
 }) {
   const update = (i: number, patch: Partial<KeyVal>) => {
     const next = entries.slice();
@@ -95,7 +97,7 @@ export function KeyValueEditor({
             type="text"
             value={e.value}
             onChange={(ev) => update(i, { value: ev.target.value })}
-            placeholder="Value"
+            placeholder={valuePlaceholder}
             spellCheck={false}
             className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
           />

@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ICON } from "../../../lib/icons";
+import { IconButton } from "../../IconButton";
 
 export function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -15,14 +16,9 @@ export function AddBtn({ label, onClick }: { label: string; onClick: () => void 
 
 export function RemoveBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Remove"
-      className="grid place-items-center w-8 h-8 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
-    >
+    <IconButton size="lg" tone="faint" onClick={onClick} aria-label="Remove">
       <Trash2 size={ICON.SM} strokeWidth={2} />
-    </button>
+    </IconButton>
   );
 }
 

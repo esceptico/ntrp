@@ -84,11 +84,6 @@ class OAuthOptions:
     client_name: str = "NTRP"
 
 
-def _discovery_base_url(server_url: str) -> str:
-    parsed = urllib.parse.urlparse(server_url)
-    return f"{parsed.scheme}://{parsed.netloc}"
-
-
 def _build_client_metadata(redirect_uri: str, opts: OAuthOptions) -> OAuthClientMetadata:
     auth_method = "client_secret_post" if opts.client_secret else "none"
     kwargs: dict[str, Any] = {
@@ -136,7 +131,7 @@ def create_oauth_provider(server_name: str, server_url: str, opts: OAuthOptions)
     redirect_uri = f"http://127.0.0.1:{opts.redirect_port or 0}/callback"
     _seed_client_info(storage, redirect_uri, opts)
     return OAuthClientProvider(
-        server_url=_discovery_base_url(server_url),
+        server_url=server_url,
         client_metadata=_build_client_metadata(redirect_uri, opts),
         storage=storage,
         redirect_handler=None,
@@ -206,7 +201,7 @@ def run_mcp_oauth(server_name: str, server_url: str, opts: OAuthOptions) -> None
     _seed_client_info(storage, redirect_uri, opts)
 
     provider = OAuthClientProvider(
-        server_url=_discovery_base_url(server_url),
+        server_url=server_url,
         client_metadata=_build_client_metadata(redirect_uri, opts),
         storage=storage,
         redirect_handler=redirect_handler,

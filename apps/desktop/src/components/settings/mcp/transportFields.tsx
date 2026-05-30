@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { LabeledField } from "../Field";
 import { KeyValueEditor, ListEditor, type KeyVal } from "./editors";
 import { GlassToggle } from "../../GlassToggle";
@@ -55,6 +56,8 @@ export function HttpFields({
   onHeaders,
   auth,
   onAuth,
+  hasExistingHeaders,
+  oauthSection,
 }: {
   url: string;
   onUrl: (v: string) => void;
@@ -62,6 +65,8 @@ export function HttpFields({
   onHeaders: (v: KeyVal[]) => void;
   auth: MCPAuthMode;
   onAuth: (v: MCPAuthMode) => void;
+  hasExistingHeaders?: boolean;
+  oauthSection?: ReactNode;
 }) {
   return (
     <>
@@ -76,24 +81,38 @@ export function HttpFields({
         />
       </LabeledField>
 
-      <LabeledField label="Auth">
-        <GlassToggle
-          className="justify-self-start"
-          size="sm"
-          value={auth}
-          onChange={(v) => onAuth(v as MCPAuthMode)}
-          options={[
-            { value: "auto", label: "Auto" },
-            { value: "headers", label: "Headers" },
-          ]}
-        />
-      </LabeledField>
+      {oauthSection ?? (
+        <>
+          <LabeledField label="Auth">
+            <GlassToggle
+              className="justify-self-start"
+              size="sm"
+              value={auth}
+              onChange={(v) => onAuth(v as MCPAuthMode)}
+              options={[
+                { value: "auto", label: "Auto" },
+                { value: "headers", label: "Headers" },
+              ]}
+            />
+          </LabeledField>
 
-      {auth === "headers" ? (
-        <LabeledField label="Headers">
-          <KeyValueEditor entries={headerEntries} onChange={onHeaders} addLabel="Add header" />
-        </LabeledField>
-      ) : null}
+          {auth === "headers" ? (
+            <LabeledField label="Headers">
+              <KeyValueEditor
+                entries={headerEntries}
+                onChange={onHeaders}
+                addLabel="Add header"
+                valuePlaceholder={hasExistingHeaders ? "•••••• unchanged" : "Value"}
+              />
+              {hasExistingHeaders && (
+                <p className="mt-1.5 m-0 text-xs text-faint">
+                  Existing values are hidden. Leave a value blank to keep it.
+                </p>
+              )}
+            </LabeledField>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

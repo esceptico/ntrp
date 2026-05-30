@@ -82,6 +82,27 @@ def test_prepare_mcp_server_config_preserves_hidden_http_secrets():
     assert "headers" not in config
 
 
+def test_prepare_mcp_server_config_merges_masked_headers():
+    # The UI sends header keys with empty (masked) values for untouched headers.
+    # An empty value keeps the existing secret; a non-empty value replaces it;
+    # an omitted key is dropped.
+    config = prepare_mcp_server_config(
+        "figma",
+        {
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"Authorization": "", "X-New": "fresh"},
+        },
+        existing={
+            "transport": "http",
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"Authorization": "Bearer secret", "X-Old": "drop"},
+        },
+    )
+
+    assert config["headers"] == {"Authorization": "Bearer secret", "X-New": "fresh"}
+
+
 def test_prepare_mcp_server_config_preserves_hidden_headers_for_header_auth():
     config = prepare_mcp_server_config(
         "figma",
@@ -105,6 +126,22 @@ def test_oauth_discovery_paths_include_resource_path():
         "/mcp/.well-known/oauth-authorization-server",
         "/.well-known/oauth-authorization-server",
     ]
+
+
+def test_oauth_provider_uses_full_url_as_resource_indicator(monkeypatch, tmp_path):
+    # RFC 8707: the resource indicator must be the canonical MCP server URL
+    # *including its path*. Stripping to the origin makes servers that bind
+    # dynamic clients to the exact MCP resource (e.g. LangSmith) reject the
+    # token request with `invalid_target`.
+    monkeypatch.setattr(oauth, "OAUTH_DIR", tmp_path)
+    provider = oauth.create_oauth_provider(
+        "langsmith",
+        "https://api.smith.langchain.com/mcp",
+        oauth.OAuthOptions(),
+    )
+
+    assert provider.context.server_url == "https://api.smith.langchain.com/mcp"
+    assert provider.context.get_resource_url() == "https://api.smith.langchain.com/mcp"
 
 
 @pytest.mark.asyncio

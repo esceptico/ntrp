@@ -4,6 +4,7 @@ import { useStore } from "../../../store";
 import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "../../../api";
 import { useMountedRef, useMutationState } from "../../../lib/hooks";
 import { ICON } from "../../../lib/icons";
+import { IconButton } from "../../IconButton";
 import { GlassSwitch } from "../../GlassSwitch";
 
 export function ServerRow({
@@ -35,8 +36,9 @@ export function ServerRow({
   const subtitleParts: string[] = [];
   subtitleParts.push(server.transport.toUpperCase());
   if (server.connected) subtitleParts.push(`${server.tool_count} tools`);
-  else if (server.error) subtitleParts.push("error");
   else if (!server.enabled) subtitleParts.push("disabled");
+  else if (needsAuth) subtitleParts.push(server.error ? "tokens expired" : "sign in needed");
+  else if (server.error) subtitleParts.push("error");
   else subtitleParts.push("disconnected");
 
   return (
@@ -57,7 +59,7 @@ export function ServerRow({
         <div className="mt-0.5 ml-3.5 text-xs text-faint tabular-nums">
           {subtitleParts.join(" · ")}
         </div>
-        {(error || server.error) && (
+        {(error || (server.error && !needsAuth)) && (
           <div
             className="mt-1 ml-3.5 text-xs text-bad truncate"
             title={error ?? server.error ?? ""}
@@ -74,17 +76,12 @@ export function ServerRow({
             disabled={busy}
             className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
           >
-            {busy ? "…" : "Sign in"}
+            {busy ? "…" : server.error ? "Re-authenticate" : "Sign in"}
           </button>
         )}
-        <button
-          type="button"
-          onClick={onEdit}
-          aria-label="Configure"
-          className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-        >
+        <IconButton onClick={onEdit} aria-label="Configure">
           <SettingsIcon size={ICON.MD} strokeWidth={2} />
-        </button>
+        </IconButton>
         <GlassSwitch
           size="sm"
           checked={server.enabled}

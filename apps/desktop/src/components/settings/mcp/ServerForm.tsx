@@ -7,6 +7,7 @@ import {
   type MCPTransport,
   addMCPServerApi,
   removeMCPServerApi,
+  startMCPOAuthApi,
   updateMCPServerApi,
 } from "../../../api";
 import { useMountedRef, useMutationState } from "../../../lib/hooks";
@@ -17,6 +18,7 @@ import { LabeledField } from "../Field";
 import { type KeyVal } from "./editors";
 import { buildMCPServerPayload, type MCPAuthMode } from "./payload";
 import { HttpFields, StdioFields } from "./transportFields";
+import { OAuthStatus } from "./OAuthStatus";
 import { ToolsSection } from "./ToolsSection";
 
 export function ServerForm({
@@ -48,9 +50,25 @@ export function ServerForm({
   const [envEntries, setEnvEntries] = useState<KeyVal[]>([{ key: "", value: "" }]);
 
   // http fields
+  const existingHeaderKeys = server?.header_keys ?? [];
   const [url, setUrl] = useState(server?.url ?? "");
-  const [headerEntries, setHeaderEntries] = useState<KeyVal[]>([{ key: "", value: "" }]);
-  const [auth, setAuth] = useState<MCPAuthMode>(server?.has_headers ? "headers" : "auto");
+  const [headerEntries, setHeaderEntries] = useState<KeyVal[]>(
+    existingHeaderKeys.length > 0
+      ? existingHeaderKeys.map((key) => ({ key, value: "" }))
+      : [{ key: "", value: "" }],
+  );
+  const [auth, setAuth] = useState<MCPAuthMode>(
+    existingHeaderKeys.length > 0 ? "headers" : "auto",
+  );
+
+  const isOAuth = mode === "edit" && server?.auth === "oauth";
+
+  const onReauthenticate = () =>
+    void run(async () => {
+      if (!server) return;
+      await startMCPOAuthApi(config, server.name);
+      await onSaved();
+    });
 
   function buildPayload(): MCPServerConfigPayload {
     return buildMCPServerPayload({
@@ -170,6 +188,12 @@ export function ServerForm({
             onHeaders={setHeaderEntries}
             auth={auth}
             onAuth={setAuth}
+            hasExistingHeaders={existingHeaderKeys.length > 0}
+            oauthSection={
+              isOAuth && server ? (
+                <OAuthStatus server={server} busy={busy} onReauthenticate={onReauthenticate} />
+              ) : undefined
+            }
           />
         )}
       </div>

@@ -77,8 +77,20 @@ def prepare_mcp_server_config(name: str, requested: dict, existing: dict | None 
 
     if transport == "stdio" and "env" not in config and "env" in existing:
         config["env"] = existing["env"]
-    if transport == "http" and effective_auth != "oauth" and "headers" not in config and "headers" in existing:
-        config["headers"] = existing["headers"]
+    if transport == "http" and effective_auth != "oauth":
+        existing_headers = existing.get("headers") or {}
+        if "headers" in config:
+            # The UI shows header keys with masked values; an empty value means
+            # "keep the existing secret". Merge per-key so masked headers survive.
+            merged: dict[str, str] = {}
+            for key, value in (config["headers"] or {}).items():
+                if value == "" and key in existing_headers:
+                    merged[key] = existing_headers[key]
+                elif value != "":
+                    merged[key] = value
+            config["headers"] = merged
+        elif existing_headers:
+            config["headers"] = existing_headers
     if effective_auth == "oauth":
         config["auth"] = "oauth"
         config.pop("headers", None)
@@ -148,7 +160,7 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
                 "tools": tools,
                 "enabled": raw.get("enabled", True),
                 "auth": raw.get("auth"),
-                "has_headers": bool(raw.get("headers")),
+                "header_keys": list((raw.get("headers") or {}).keys()),
                 "client_id": raw.get("client_id"),
                 "redirect_port": raw.get("redirect_port"),
                 "scope": raw.get("scope"),
