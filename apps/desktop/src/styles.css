@@ -1,9 +1,4 @@
 @import "tailwindcss";
-/* Streamdown ships Tailwind utility classes on its rendered markdown,
-   code blocks, tables, and Mermaid/KaTeX chrome. Tailwind v4 only compiles
-   classes it can statically see, so point it at streamdown's dist bundle —
-   without this the markdown renders unstyled. */
-@source "../node_modules/streamdown/dist/*.js";
 /* KaTeX styles for math rendering. Loaded once at app start; the
    bundled minified CSS is ~25KB gzip and ships its own font subsets. */
 @import "katex/dist/katex.min.css";
