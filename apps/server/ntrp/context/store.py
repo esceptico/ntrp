@@ -7,7 +7,11 @@ from uuid import uuid4
 import aiosqlite
 from pydantic import BaseModel
 
-from ntrp.constants import SESSION_HANDOFF_MARKER
+from ntrp.constants import (
+    SESSION_EVENT_DURABLE_RETENTION,
+    SESSION_EVENT_PRUNE_INTERVAL,
+    SESSION_HANDOFF_MARKER,
+)
 from ntrp.context.models import SessionData, SessionState
 from ntrp.events.sse import event_from_payload
 from ntrp.server.bus import StreamRecord
@@ -352,6 +356,8 @@ class SessionStore:
         self._background_event_lock = asyncio.Lock()
         self._session_locks_guard = asyncio.Lock()
         self._session_write_locks: dict[str, asyncio.Lock] = {}
+        # Durable-event writes per session since the last retention prune.
+        self._events_since_prune: dict[str, int] = {}
 
     async def _session_write_lock(self, session_id: str) -> asyncio.Lock:
         async with self._session_locks_guard:
@@ -2026,6 +2032,37 @@ class SessionStore:
             ),
         )
         await self.conn.commit()
+
+        # Amortized retention: cap each session's durable event log to the
+        # newest N rows. Trimming the oldest never touches an active run's
+        # tail (its events are the newest), so no checkpoint guard is needed.
+        count = self._events_since_prune.get(record.session_id, 0) + 1
+        if count >= SESSION_EVENT_PRUNE_INTERVAL:
+            self._events_since_prune[record.session_id] = 0
+            await self.prune_session_events(record.session_id, SESSION_EVENT_DURABLE_RETENTION)
+        else:
+            self._events_since_prune[record.session_id] = count
+
+    async def prune_session_events(self, session_id: str, keep: int = SESSION_EVENT_DURABLE_RETENTION) -> int:
+        """Keep only the newest `keep` durable events for a session, deleting
+        older ones (SQLite equivalent of Redis XADD MAXLEN~). The subquery
+        yields the (keep+1)-th newest seq; if the session has <= keep events
+        it returns no row and nothing is deleted."""
+        cursor = await self.conn.execute(
+            """
+            DELETE FROM session_events
+            WHERE session_id = ?
+              AND seq <= (
+                SELECT seq FROM session_events
+                WHERE session_id = ?
+                ORDER BY seq DESC
+                LIMIT 1 OFFSET ?
+              )
+            """,
+            (session_id, session_id, keep),
+        )
+        await self.conn.commit()
+        return cursor.rowcount
 
     async def list_session_events(
         self,

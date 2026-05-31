@@ -1136,6 +1136,41 @@ async def test_latest_session_messages_keep_latest_tail_when_adding_visible_user
 
 
 @pytest.mark.asyncio
+async def test_prune_session_events_keeps_newest_n(store: SessionStore):
+    state = _make_state()
+    await store.save_session(state, [])
+    for seq in range(1, 26):
+        await store.record_session_event(
+            StreamRecord(seq=seq, session_id="test-session", event=ThinkingEvent(status=f"s{seq}"))
+        )
+
+    deleted = await store.prune_session_events("test-session", keep=10)
+    assert deleted == 15
+
+    rows = await store.read_conn.execute_fetchall(
+        "SELECT seq FROM session_events WHERE session_id = 'test-session' ORDER BY seq ASC"
+    )
+    assert [r["seq"] for r in rows] == list(range(16, 26))  # newest 10 retained
+
+
+@pytest.mark.asyncio
+async def test_prune_session_events_noop_when_under_cap(store: SessionStore):
+    state = _make_state()
+    await store.save_session(state, [])
+    for seq in range(1, 6):
+        await store.record_session_event(
+            StreamRecord(seq=seq, session_id="test-session", event=ThinkingEvent(status=f"s{seq}"))
+        )
+
+    deleted = await store.prune_session_events("test-session", keep=10)
+    assert deleted == 0
+    rows = await store.read_conn.execute_fetchall(
+        "SELECT COUNT(*) AS c FROM session_events WHERE session_id = 'test-session'"
+    )
+    assert rows[0]["c"] == 5
+
+
+@pytest.mark.asyncio
 async def test_latest_session_messages_expand_past_meta_only_turns(store: SessionStore):
     # Channel / automation sessions drive their turns with meta user messages
     # (loop:/bg:/goal:), so a tool-heavy active run leaves the newest window

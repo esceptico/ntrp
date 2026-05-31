@@ -90,6 +90,25 @@ class EventType(StrEnum):
     SESSION_ACTIVITY = "session_activity"
 
 
+# Token-level delta events are ephemeral transport: their cumulative content
+# is recoverable from terminal events (TEXT_MESSAGE_END.content,
+# TOOL_CALL_RESULT.content), so they are streamed live and held in the
+# in-memory replay buffer but NOT persisted to the durable session_events
+# table. Every mature streaming server (Letta, Vercel AI SDK, OpenAI,
+# LangGraph) keeps per-token deltas ephemeral and persists only the final
+# message/state; persisting them durably is the high-cardinality, low-value
+# write that bloats the event log without serving any reachable replay path
+# (durable replay is only read for cursors above the per-step checkpoint,
+# which the in-memory buffer already covers).
+EPHEMERAL_EVENT_TYPES: frozenset["EventType"] = frozenset(
+    {
+        EventType.TEXT_MESSAGE_CONTENT,
+        EventType.TOOL_CALL_ARGS,
+        EventType.REASONING_MESSAGE_CONTENT,
+    }
+)
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
 

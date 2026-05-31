@@ -2,7 +2,15 @@ import asyncio
 
 import pytest
 
-from ntrp.events.sse import StreamResetEvent, ThinkingEvent
+from ntrp.events.sse import (
+    EventType,
+    StreamResetEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+    ThinkingEvent,
+    ToolCallArgsEvent,
+)
 from ntrp.server.bus import BusRegistry, SessionBus
 
 
@@ -12,6 +20,33 @@ def _seqs(records):
 
 def _events(records):
     return [record.event for record in records]
+
+
+@pytest.mark.asyncio
+async def test_ephemeral_delta_events_are_not_persisted_durably():
+    persisted: list[EventType] = []
+
+    async def collector(record):
+        persisted.append(record.event.type)
+
+    bus = SessionBus(session_id="sess-1", record_event=collector)
+    await bus.emit(TextMessageStartEvent(message_id="m1"))
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="he"))
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="llo"))
+    await bus.emit(ToolCallArgsEvent(tool_call_id="t1", delta="{}"))
+    await bus.emit(TextMessageEndEvent(message_id="m1", content="hello"))
+    await bus.drain_record_tasks()
+
+    # Token deltas are ephemeral — never written to the durable event log.
+    assert EventType.TEXT_MESSAGE_CONTENT not in persisted
+    assert EventType.TOOL_CALL_ARGS not in persisted
+    # Structural + terminal events persist (terminal carries cumulative text).
+    assert EventType.TEXT_MESSAGE_START in persisted
+    assert EventType.TEXT_MESSAGE_END in persisted
+    # ...but the in-memory buffer keeps everything for live / short-gap replay.
+    buffered = [record.event.type for record in bus._recent]
+    assert EventType.TEXT_MESSAGE_CONTENT in buffered
+    assert EventType.TOOL_CALL_ARGS in buffered
 
 
 @pytest.mark.asyncio

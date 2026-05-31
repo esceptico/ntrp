@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field
 from typing import Protocol
 
-from ntrp.events.sse import SSEEvent, StreamResetEvent
+from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, SSEEvent, StreamResetEvent
 from ntrp.logging import get_logger
 
 SSE_QUEUE_MAXSIZE = 256
@@ -175,6 +175,13 @@ class SessionBus:
                         self._close_slow_subscriber(queue)
 
     def _schedule_record_event(self, record: StreamRecord) -> None:
+        # Token-level deltas live only in the in-memory buffer (appended in
+        # emit() above) for live streaming + short-gap reconnect; they are not
+        # persisted durably. Skipping them here keeps the durable event log
+        # bounded and avoids serializing/writing ~89% of events for no
+        # reachable replay benefit.
+        if record.event.type in EPHEMERAL_EVENT_TYPES:
+            return
         if self._record_writer:
             self._record_writer.submit(record)
 

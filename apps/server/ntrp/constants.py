@@ -54,6 +54,14 @@ OUTBOX_PRUNE_INTERVAL_SECONDS = 3600
 
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history
 
+# Durable session_events retention. Token deltas are never persisted (see
+# EPHEMERAL_EVENT_TYPES); the remaining structural events per session are
+# capped to the newest N rows — the SQLite equivalent of Redis XADD MAXLEN~,
+# sized to mirror the in-memory replay buffer (RECENT_BUFFER_MAX). Trimming the
+# oldest is inherently safe for an active run (its tail is the newest rows).
+SESSION_EVENT_DURABLE_RETENTION = 10000
+SESSION_EVENT_PRUNE_INTERVAL = 500  # prune a session after this many durable writes
+
 # Iteration-mode loops re-enter the target session and would otherwise see
 # the entire prior history. Cap to the last N messages (system row at
 # index 0 is preserved). Runtime-only; disk history is untouched.
