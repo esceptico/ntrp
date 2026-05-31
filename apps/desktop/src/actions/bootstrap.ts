@@ -20,10 +20,14 @@ export function reloadAllCollections(sessionId: string | null): void {
   if (resyncTimer) clearTimeout(resyncTimer);
   resyncTimer = setTimeout(() => {
     resyncTimer = null;
+    // Session-agnostic collections always reflect current truth.
     void refreshSessions();
     void fetchAutomations();
     void fetchServerConfig();
-    if (sessionId) {
+    // Per-session refreshes only if this is STILL the active session — the
+    // debounce can outlive a session switch / unmount, and must not write a
+    // stale session's loops/goal into the store.
+    if (sessionId && getState().currentSessionId === sessionId) {
       void refreshLoops(sessionId);
       void fetchGoal(sessionId).catch(() => {});
     }

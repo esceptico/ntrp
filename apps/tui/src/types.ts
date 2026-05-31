@@ -140,12 +140,6 @@ export interface RunBackgroundedEvent {
   run_id: string;
 }
 
-export interface QuestionEvent {
-  type: "question";
-  question: string;
-  tool_id: string;
-}
-
 export interface TextMessageStartEvent {
   type: "text_message_start";
   message_id: string;
@@ -188,7 +182,6 @@ export type ServerEvent =
   | ToolCallEvent
   | ToolResultEvent
   | ApprovalNeededEvent
-  | QuestionEvent
   | BackgroundTaskEvent
   | RunStartedEvent
   | RunFinishedEvent

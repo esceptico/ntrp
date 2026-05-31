@@ -134,10 +134,6 @@ export function useStreaming({
       });
       return;
     }
-    if (event.type === "question") {
-      getSession(targetId).pendingText = event.question;
-      return;
-    }
     if (event.type === "text_message_start") {
       const s = getSession(targetId);
       s.pendingMessageId = event.message_id;
