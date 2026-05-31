@@ -69,6 +69,15 @@ const sanitizeSchema = {
   },
 };
 
+// NOTE: Vercel's Streamdown (a drop-in react-markdown replacement) was
+// evaluated as a simplification — it would cut this file ~165 lines and ~5
+// deps and improve incomplete-block stabilization while streaming. Rejected
+// for now: it owns the look (Shiki highlighting + its own code-block/mermaid
+// chrome), so matching our minimal aesthetic (corner ticks, streaming sheen,
+// custom copy button) just relocates the complexity into CSS overrides while
+// ceding control of the renderer. This component is already streaming-aware
+// (skips rehype-highlight mid-stream; KaTeX tolerates partial `$$`). Revisit
+// only if streaming-markdown perf becomes a real, profiled problem.
 export function Markdown({
   content,
   className,
