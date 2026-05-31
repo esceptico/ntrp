@@ -78,12 +78,17 @@ class AutomationRuntime:
             pattern_finder = self.get_pattern_finder()
             if not pattern_finder:
                 return None
+            # pass1 (episode -> observation) only. pass2 (observation -> claim via
+            # superset clustering + supersede) is deliberately NOT auto-run: claims
+            # are now born at write-time (connectors/claim_writer.py) with LLM dedup,
+            # so the clustering-based claim writer is a redundant second path that
+            # bypasses write-time dedup and emits supersede edges. The proper
+            # advisory/maintenance consolidation pass is deferred; pass2 stays
+            # callable from the admin endpoint for manual/testing use.
             pass1 = await pattern_finder.run_pass1(window_days=7, scope="user")
-            pass2 = await pattern_finder.run_pass2(window_days=30, scope="user")
             return (
                 f"pass1_clusters={pass1.clusters_found}; observations={pass1.observations_written}; "
-                f"pass1_superseded={pass1.observations_superseded}; pass2_clusters={pass2.clusters_found}; "
-                f"claims={pass2.claims_written}; claims_superseded={pass2.claims_superseded}"
+                f"pass1_superseded={pass1.observations_superseded}"
             )
 
         return handler
