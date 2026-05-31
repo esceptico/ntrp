@@ -67,7 +67,6 @@ class EventType(StrEnum):
     # ─── ntrp-specific events (snake_case, non-canonical) ──────────────
     THINKING = "thinking"
     APPROVAL_NEEDED = "approval_needed"
-    QUESTION = "question"
     BACKGROUND_TASK = "background_task"
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
@@ -353,13 +352,6 @@ class ApprovalNeededEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
-class QuestionEvent(SSEEvent):
-    type: EventType = field(default=EventType.QUESTION, init=False)
-    question: str = ""
-    tool_id: str = ""
-
-
-@dataclass(frozen=True)
 class BackgroundTaskEvent(SSEEvent):
     type: EventType = field(default=EventType.BACKGROUND_TASK, init=False)
     event_id: str | None = None
@@ -543,7 +535,6 @@ _EVENT_CLASSES = {
     EventType.REASONING_END.value: ReasoningEndEvent,
     EventType.THINKING.value: ThinkingEvent,
     EventType.APPROVAL_NEEDED.value: ApprovalNeededEvent,
-    EventType.QUESTION.value: QuestionEvent,
     EventType.BACKGROUND_TASK.value: BackgroundTaskEvent,
     EventType.TASK_STARTED.value: TaskStartedEvent,
     EventType.TASK_PROGRESS.value: TaskProgressEvent,
