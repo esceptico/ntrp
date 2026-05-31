@@ -32,10 +32,6 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
-from ntrp.memory.activation import MemoryActivationRequest
-from ntrp.memory.retrieval import MemoryRetrieval
-from ntrp.memory.runtime import MemoryDatabase
-from ntrp.memory.service import MemoryService
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus, prime_bus_cursor_from_store
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -44,12 +40,6 @@ from ntrp.services.goal_continuation import (
     goal_continuation_prompt,
 )
 from ntrp.services.session import SessionService
-from ntrp.skills.activation import (
-    activated_skill_entries,
-    append_context_block,
-    format_activated_skill_context,
-    record_auto_activated_skill_events,
-)
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
 from ntrp.tools.core.types import ToolAction
@@ -136,9 +126,9 @@ class ChatDeps:
     integration_errors: dict[str, str]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
-    memory: MemoryDatabase | None = None
-    memory_service: MemoryService | None = None
-    memory_retrieval: MemoryRetrieval | None = None
+    memory: object | None = None
+    memory_service: object | None = None
+    memory_retrieval: object | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: NotifierService | None = None
 
@@ -397,37 +387,6 @@ async def _prepare_messages(
     project_context: ProjectContext | None = None,
 ) -> list[dict]:
     memory_context = None
-    if deps.memory_retrieval:
-        activation_scope = project_context.knowledge_scope if project_context else None
-        bundle = await deps.memory_retrieval.search(
-            MemoryActivationRequest(
-                query=user_message,
-                scope=activation_scope or (f"session:{session_id}" if session_id else None),
-                task="chat_prompt",
-                task_id=client_id,
-                session_id=session_id,
-                run_id=run_id,
-                budget_chars=1_500,
-                limit=8,
-                record_access=True,
-            )
-        )
-        selected_skill_entries = activated_skill_entries(bundle, deps.skill_registry)
-        memory_context = append_context_block(
-            bundle.prompt_context,
-            format_activated_skill_context(selected_skill_entries),
-        )
-        await record_auto_activated_skill_events(
-            deps.memory_service,
-            bundle,
-            deps.skill_registry,
-            task="chat_prompt_auto_skill_activation",
-            activation_surface="chat_prompt",
-            task_id=client_id,
-            session_id=session_id,
-            run_id=run_id,
-            entries=selected_skill_entries,
-        )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()

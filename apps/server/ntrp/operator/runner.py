@@ -10,17 +10,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
-from ntrp.memory.activation import MemoryActivationRequest
-from ntrp.memory.retrieval import MemoryRetrieval
-from ntrp.memory.runtime import MemoryDatabase
-from ntrp.memory.service import MemoryService
 from ntrp.server.bus import SessionBus
-from ntrp.skills.activation import (
-    activated_skill_entries,
-    append_context_block,
-    format_activated_skill_context,
-    record_auto_activated_skill_events,
-)
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ApprovalControls
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
@@ -31,15 +21,15 @@ from ntrp.tools.executor import ToolExecutor
 @dataclass(frozen=True)
 class OperatorDeps:
     executor: ToolExecutor
-    memory: MemoryDatabase | None
-    memory_service: MemoryService | None
+    memory: object | None
+    memory_service: object | None
     config: AgentConfig
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
     notifiers: list[dict[str, str]]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     skill_registry: SkillRegistry | None = None
-    memory_retrieval: MemoryRetrieval | None = None
+    memory_retrieval: object | None = None
 
 
 @dataclass(frozen=True)
@@ -65,36 +55,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     session_state = deps.create_session()
 
     memory_context = None
-    if deps.memory_retrieval:
-        bundle = await deps.memory_retrieval.search(
-            MemoryActivationRequest(
-                query=request.prompt,
-                scope=f"source:{request.source_id}",
-                task="operator_prompt",
-                task_id=request.automation_id or request.source_id,
-                session_id=session_state.session_id,
-                run_id=run_id,
-                budget_chars=1_500,
-                limit=8,
-                record_access=True,
-            )
-        )
-        selected_skill_entries = activated_skill_entries(bundle, deps.skill_registry)
-        memory_context = append_context_block(
-            bundle.prompt_context,
-            format_activated_skill_context(selected_skill_entries),
-        )
-        await record_auto_activated_skill_events(
-            deps.memory_service,
-            bundle,
-            deps.skill_registry,
-            task="operator_prompt_auto_skill_activation",
-            activation_surface="operator_prompt",
-            task_id=request.automation_id or request.source_id,
-            session_id=session_state.session_id,
-            run_id=run_id,
-            entries=selected_skill_entries,
-        )
 
     executor = deps.executor
     tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)

@@ -10,7 +10,6 @@ from ntrp.agent import SharedLedger
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.core.spawner import SpawnResult
-from ntrp.memory.activation import MemoryActivationBundle
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.executor import ToolExecutor
@@ -67,16 +66,6 @@ async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_
     assert result.data["artifacts"] == [
         {"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}
     ]
-
-
-class _FakeMemoryRetrieval:
-    def __init__(self, bundle: MemoryActivationBundle):
-        self.bundle = bundle
-        self.requests = []
-
-    async def search(self, request):
-        self.requests.append(request)
-        return self.bundle
 
 
 def _context(
@@ -270,81 +259,3 @@ async def test_research_prompt_names_note_and_coverage_tools():
     assert "research_cover" in prompt
     assert "facts, dead ends, contradictions, and gaps" in prompt
     assert "Do not hide unsupported claims" in prompt
-
-
-@pytest.mark.asyncio
-async def test_research_prompt_memory_activation_records_runtime_context():
-    retrieval = _FakeMemoryRetrieval(
-        MemoryActivationBundle(
-            query="user identity preferences current projects",
-            scope=None,
-            kinds=None,
-            used_chars=0,
-            candidates=[],
-            prompt_context="",
-        )
-    )
-    ctx = _context()
-    ctx.services["memory_retrieval"] = retrieval
-
-    await research_module._build_research_prompt(ctx, depth="quick", remaining_depth=2, tool_id="research-call-1")
-
-    request = retrieval.requests[0]
-    assert request.task == "research_context"
-    assert request.task_id == "research-call-1"
-    assert request.session_id == "test"
-    assert request.run_id == "run-1"
-    assert request.surface == "prompt"
-    assert request.record_access is True
-
-
-@pytest.mark.asyncio
-async def test_research_prompt_injects_memory_context_without_auto_skill_telemetry():
-    class AccessEvents:
-        def __init__(self):
-            self.calls = []
-
-        async def create(self, **kwargs):
-            self.calls.append(kwargs)
-            return kwargs
-
-    class MemoryService:
-        def __init__(self):
-            self.access_events = AccessEvents()
-
-    # Slice 7 will rebuild automatic skill activation. Slice 3 retrieval returns no skills_to_use.
-    retrieval = _FakeMemoryRetrieval(
-        MemoryActivationBundle(
-            query="audit the memory loop research path",
-            scope=None,
-            kinds=None,
-            used_chars=44,
-            candidates=[],
-            usage_event_id=456,
-            prompt_context="<facts>remember source-backed research claims</facts>",
-        )
-    )
-    memory = MemoryService()
-    ctx = _context()
-    ctx.services["memory_retrieval"] = retrieval
-    ctx.services["memory"] = memory
-
-    prompt = await research_module._build_research_prompt(
-        ctx,
-        depth="quick",
-        remaining_depth=2,
-        tool_id="research-call-2",
-        task="audit the memory loop research path",
-    )
-
-    request = retrieval.requests[0]
-    assert request.query == "audit the memory loop research path"
-    assert request.task == "research_context"
-    assert request.task_id == "research-call-2"
-    assert request.session_id == "test"
-    assert request.run_id == "run-1"
-    assert request.surface == "prompt"
-
-    assert "<facts>remember source-backed research claims</facts>" in prompt
-    assert "<activated_skills>" not in prompt
-    assert memory.access_events.calls == []
