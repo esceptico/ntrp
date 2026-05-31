@@ -3,6 +3,7 @@ import { type AppConfig, type ServerEvent } from "../api";
 import { reloadAllCollections } from "../actions/bootstrap";
 import { loadHistory } from "../actions/history";
 import { enqueueMessage } from "../actions/messages";
+import { createSseFrameParser } from "../../electron/sse-frame-parser.cjs";
 import { createAnimationFrameBatcher } from "../lib/eventBatch";
 import { createStallWatchdog } from "../lib/streamWatchdog";
 import { setState, useStore } from "../store";
@@ -325,7 +326,7 @@ export function useEvents(sessionId: string | null) {
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
-          let buffer = "";
+          const parser = createSseFrameParser();
 
           while (!disposed && !controller.signal.aborted) {
             const { done, value } = await reader.read();
@@ -336,17 +337,9 @@ export function useEvents(sessionId: string | null) {
               await sleep(delayMs, controller.signal);
               break;
             }
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              try {
-                reconnectAttempt = 0;
-                ingest(JSON.parse(line.slice(6)) as ServerEvent);
-              } catch {
-                /* keep-alive */
-              }
+            for (const event of parser.push(decoder.decode(value, { stream: true }))) {
+              reconnectAttempt = 0;
+              ingest(event as ServerEvent);
             }
           }
         } catch (error) {

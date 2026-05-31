@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
+const { createSseFrameParser } = require("./sse-frame-parser.cjs");
 
 const isDev = Boolean(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
 const configFileName = "config.json";
@@ -225,23 +226,14 @@ async function streamEvents(connectionId, webContents, configInput, sessionId, a
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = "";
+    const parser = createSseFrameParser();
 
     while (!signal.aborted) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-          if (!webContents.isDestroyed()) {
-            webContents.send("events:data", { connectionId, event });
-          }
-        } catch {
-          // Ignore non-JSON keepalive events.
+      for (const event of parser.push(decoder.decode(value, { stream: true }))) {
+        if (!webContents.isDestroyed()) {
+          webContents.send("events:data", { connectionId, event });
         }
       }
     }
