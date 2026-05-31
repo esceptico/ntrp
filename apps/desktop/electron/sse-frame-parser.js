@@ -1,17 +1,16 @@
-"use strict";
-
 /**
  * Incremental Server-Sent Events frame parser, shared by the two transports
  * that read the chat stream so they parse the wire format identically:
- *   - the Electron main-process reader (electron/main.cjs)
+ *   - the Electron main-process reader (electron/main.cjs, via dynamic import)
  *   - the renderer fetch fallback (src/hooks/useEvents.ts)
  *
- * Pure — no Node or DOM dependencies — so it bundles safely into the renderer
- * too. Each caller owns its own byte reader + TextDecoder and feeds decoded
- * text chunks in; `data:` frames may span chunk boundaries, hence the carried
- * `buffer`.
+ * ESM so Vite/Rollup bundle it straight into the renderer and bun imports it in
+ * tests; the CommonJS main process loads it with `await import()`. Pure — no
+ * Node or DOM dependencies. Each caller owns its own byte reader + TextDecoder
+ * and feeds decoded text chunks in; `data:` frames may span chunk boundaries,
+ * hence the carried `buffer`.
  */
-function createSseFrameParser() {
+export function createSseFrameParser() {
   let buffer = "";
   return {
     /**
@@ -38,5 +37,3 @@ function createSseFrameParser() {
     },
   };
 }
-
-module.exports = { createSseFrameParser };

@@ -3,7 +3,10 @@ const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
-const { createSseFrameParser } = require("./sse-frame-parser.cjs");
+// The parser is an ESM module (shared with the Vite renderer, which can't
+// import CommonJS source). Kick off the import at load; await the cached
+// promise where it's used. CJS can't `require` ESM or top-level await.
+const sseFrameParserModule = import("./sse-frame-parser.js");
 
 const isDev = Boolean(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
 const configFileName = "config.json";
@@ -226,6 +229,7 @@ async function streamEvents(connectionId, webContents, configInput, sessionId, a
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    const { createSseFrameParser } = await sseFrameParserModule;
     const parser = createSseFrameParser();
 
     while (!signal.aborted) {

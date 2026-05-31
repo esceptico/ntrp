@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createSseFrameParser } from "../electron/sse-frame-parser.cjs";
+import { createSseFrameParser } from "../electron/sse-frame-parser.js";
 
 test("parses complete data frames in order", () => {
   const p = createSseFrameParser();

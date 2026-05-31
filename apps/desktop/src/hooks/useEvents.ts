@@ -3,7 +3,7 @@ import { type AppConfig, type ServerEvent } from "../api";
 import { reloadAllCollections } from "../actions/bootstrap";
 import { loadHistory } from "../actions/history";
 import { enqueueMessage } from "../actions/messages";
-import { createSseFrameParser } from "../../electron/sse-frame-parser.cjs";
+import { createSseFrameParser } from "../../electron/sse-frame-parser.js";
 import { createAnimationFrameBatcher } from "../lib/eventBatch";
 import { createStallWatchdog } from "../lib/streamWatchdog";
 import { setState, useStore } from "../store";
