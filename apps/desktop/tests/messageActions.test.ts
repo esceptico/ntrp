@@ -53,8 +53,35 @@ test("stopRun cancels a backgrounded/automation run by session even when current
     expect(requests).toHaveLength(1);
     expect(requests[0].path).toBe("/cancel");
     const body = JSON.parse(requests[0].body ?? "{}");
-    expect(body.session_id).toBe("session-1"); // server can resolve the active run
-    expect(body.run_id).toBe("run-bg"); // resolved from the session's active_run_id
+    // Resolved from the session's active_run_id instead of no-op'ing on the
+    // null currentRunId — this is the Stop-button fix.
+    expect(body.run_id).toBe("run-bg");
+  } finally {
+    restore();
+  }
+});
+
+test("stopRun falls back to session_id when no run id is known at all", async () => {
+  const requests: CapturedRequest[] = [];
+  const restore = mockBridge(requests);
+  try {
+    setState({
+      config: { serverUrl: "http://x", apiKey: "" },
+      currentSessionId: "session-1",
+      currentRunId: null,
+      running: true,
+      sessions: [{ ...SESSION_ROW, active_run_id: null }],
+      activeRunSessionIds: new Set(["session-1"]),
+      messages: new Map(),
+      order: [],
+    });
+
+    await stopRun();
+
+    expect(requests).toHaveLength(1);
+    const body = JSON.parse(requests[0].body ?? "{}");
+    expect(body.session_id).toBe("session-1"); // server resolves the active run
+    expect(body.run_id).toBeUndefined();
   } finally {
     restore();
   }

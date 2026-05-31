@@ -436,11 +436,12 @@ export async function cancelRun(
   runId: string | null,
   sessionId?: string | null,
 ): Promise<void> {
+  // Prefer run_id; fall back to session_id so the server resolves the active
+  // run when the client has no reliable run_id (backgrounded/automation runs).
+  const body = runId ? { run_id: runId } : { session_id: sessionId ?? null };
   await apiWithConfig(config, "/cancel", {
     method: "POST",
-    // Send session_id too so the server can resolve the active run when the
-    // client has no reliable run_id (backgrounded / automation runs).
-    body: JSON.stringify({ run_id: runId, session_id: sessionId ?? null }),
+    body: JSON.stringify(body),
   });
 }
 

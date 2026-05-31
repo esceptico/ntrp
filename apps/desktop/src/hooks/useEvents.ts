@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
+import { reloadAllCollections } from "../actions/bootstrap";
 import { loadHistory } from "../actions/history";
 import { enqueueMessage } from "../actions/messages";
 import { createAnimationFrameBatcher } from "../lib/eventBatch";
@@ -59,6 +60,7 @@ interface DesktopEventStreamLoopOptions {
   getAfterSeq?: () => number | undefined;
   onEvent: (event: ServerEvent) => void | Promise<void>;
   onError: (message: string) => void;
+  onConnect?: () => void;
 }
 
 function errorMessage(error: unknown): string {
@@ -111,6 +113,7 @@ export async function runDesktopEventStreamLoop({
   getAfterSeq,
   onEvent,
   onError,
+  onConnect,
 }: DesktopEventStreamLoopOptions): Promise<void> {
   let connectionId: string | null = null;
   let resolveTerminal: ((reason: string) => void) | null = null;
@@ -145,6 +148,7 @@ export async function runDesktopEventStreamLoop({
         connectionId = await desktopEvents.connect(config, sessionId, afterSeq);
         if (signal.aborted) break;
         markStreamConnected(sessionId);
+        onConnect?.();
 
         await new Promise<void>((resolve) => {
           const finish = () => {
@@ -230,6 +234,42 @@ export function useEvents(sessionId: string | null) {
       watchdog.bump();
       batcher.enqueue(event);
     };
+
+    // Collections with no live delta feed (sessions list, automations, loops,
+    // goal, config) are resynced once per successful (re)connect so a dropped
+    // stream / server restart never leaves them stale until a manual reload.
+    let connected = false;
+    const onConnected = () => {
+      connected = true;
+      reloadAllCollections(sessionId);
+    };
+    const onDropped = () => {
+      connected = false;
+    };
+
+    // Reconnect proactively on lifecycle signals instead of waiting out the
+    // stall watchdog: regaining network or refocusing the window resumes the
+    // cursor immediately. Guarded on `connected` so a healthy stream is never
+    // torn down. Coalesced through the existing reconnectNonce.
+    const requestReconnect = () => {
+      if (!disposed && !connected) setReconnectNonce((n) => n + 1);
+    };
+    const onOnline = () => requestReconnect();
+    const onOffline = () => {
+      connected = false;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") requestReconnect();
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    document.addEventListener("visibilitychange", onVisibility);
+    const removeLifecycleListeners = () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+
     const desktopEvents = window.ntrpDesktop?.events;
     if (desktopEvents) {
       const controller = new AbortController();
@@ -239,7 +279,9 @@ export function useEvents(sessionId: string | null) {
         sessionId,
         signal: controller.signal,
         onEvent: (event) => ingest(event),
+        onConnect: () => onConnected(),
         onError: (message) => {
+          onDropped();
           if (!disposed) setState({ error: message });
         },
       });
@@ -249,6 +291,7 @@ export function useEvents(sessionId: string | null) {
         controller.abort();
         watchdog.dispose();
         batcher.dispose();
+        removeLifecycleListeners();
       };
     }
 
@@ -262,10 +305,23 @@ export function useEvents(sessionId: string | null) {
             headers: headersFor(config),
             signal: controller.signal,
           });
-          if (!response.ok || !response.body) {
+          if (!response.ok) {
+            // 5xx/429 are transient → retry with backoff. Other 4xx (401 stale
+            // token, 404 deleted session) are fatal → surface and stop looping
+            // instead of hammering the server forever.
+            if (response.status < 500 && response.status !== 429) {
+              onDropped();
+              markStreamDisconnected(sessionId, `http_${response.status}`);
+              if (!disposed) setState({ error: `event stream failed: ${response.status}` });
+              return;
+            }
             throw new Error(`event stream failed: ${response.status}`);
           }
+          if (!response.body) {
+            throw new Error("event stream failed: no response body");
+          }
           markStreamConnected(sessionId);
+          onConnected();
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
@@ -274,6 +330,7 @@ export function useEvents(sessionId: string | null) {
           while (!disposed && !controller.signal.aborted) {
             const { done, value } = await reader.read();
             if (done) {
+              onDropped();
               markStreamReconnecting(sessionId, "eof");
               const delayMs = reconnectDelayMs(reconnectAttempt++);
               await sleep(delayMs, controller.signal);
@@ -294,9 +351,12 @@ export function useEvents(sessionId: string | null) {
           }
         } catch (error) {
           if (controller.signal.aborted) return;
+          onDropped();
           const message = errorMessage(error);
           markStreamReconnecting(sessionId, message, message);
-          setState({ error: message });
+          // Suppress the error toast while offline — the 'online' listener
+          // will trigger a clean reconnect once the network is back.
+          if (navigator.onLine) setState({ error: message });
           const delayMs = reconnectDelayMs(reconnectAttempt++);
           await sleep(delayMs, controller.signal);
         }
@@ -308,6 +368,7 @@ export function useEvents(sessionId: string | null) {
       controller.abort();
       watchdog.dispose();
       batcher.dispose();
+      removeLifecycleListeners();
       markStreamDisconnected(sessionId);
     };
   }, [sessionId, config, ready, reconnectNonce]);
