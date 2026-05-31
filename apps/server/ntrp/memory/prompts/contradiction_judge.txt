@@ -4,7 +4,7 @@ Claim A: {claim_a}
 Claim B: {claim_b}
 
 Shared entities: {entities}
-
+{guard}{learnings}
 Answer with exactly ONE word:
 - "opposed" if the claims cannot both be true at the same time for the same context
 - "compatible" if the claims can coexist (different contexts, refinements, or unrelated facets)

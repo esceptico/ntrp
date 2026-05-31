@@ -1,0 +1,21 @@
+From this finalized episode summary, extract the durable CLAIMS worth remembering
+long-term — coarse, whole-exchange facts written in hindsight, not a paraphrase of
+every sentence.
+
+A claim is a single decontextualized statement that stands on its own weeks later:
+- it does NOT depend on the surrounding conversation to be understood
+- it preserves the WHY when the reason is part of what makes it durable
+  ("switched to postgres because sqlite locked under concurrent writes")
+- it captures decisions, stable preferences, commitments, relationships, and
+  durable project facts — the kind of thing you'd want surfaced unprompted later
+
+Be coarse. Prefer 2-5 whole claims that summarize the episode over many fine-grained
+per-sentence facts. Fold related details into one claim rather than splitting them.
+Do not invent anything the summary does not support. Drop transient state,
+acknowledgements, and how-to chatter.
+
+Output one claim per line, plain text, no bullets, no numbering, no preamble.
+If the episode contains no durable claim, respond with exactly: NONE
+
+Episode summary:
+{summary}

@@ -241,6 +241,7 @@ class LensAuthor:
                 query=query,
                 scope=scope if scope != "user" else None,
                 task="lens_author",
+                surface="context",
                 budget_chars=4000,
                 limit=_GROUNDING_LIMIT,
                 record_access=False,

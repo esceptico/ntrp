@@ -161,7 +161,11 @@ async def test_search_handles_entity_and_directory_kinds(conn: aiosqlite.Connect
     await _insert_item(conn, "dir-1", "Engineers who work at Northwind.", kind="directory", embedding=_vec(0))
     retrieval = MemoryRetrieval(conn, FakeEmbedder(default=_vec(0)))
 
-    bundle = await retrieval.search(MemoryActivationRequest(query="Northwind engineer"), now=NOW)
+    # entity/directory are not injected by default; request them explicitly so the
+    # candidate-build path (and its kind Literal) is still exercised.
+    bundle = await retrieval.search(
+        MemoryActivationRequest(query="Northwind engineer", kinds=["entity", "directory"]), now=NOW
+    )
 
     kinds = {candidate.kind for candidate in bundle.candidates}
     assert {"entity", "directory"} <= kinds
@@ -248,6 +252,46 @@ async def test_search_kind_filter_subset(conn: aiosqlite.Connection):
     assert {candidate.item_id for candidate in bundle.candidates} == {"claim", "skill"}
     skill = next(candidate for candidate in bundle.candidates if candidate.item_id == "skill")
     assert "skill_match" in skill.reasons
+
+
+async def test_default_prompt_surface_injects_claim_and_skill_only(conn: aiosqlite.Connection):
+    await _insert_item(conn, "episode", "surface token", kind="episode")
+    await _insert_item(conn, "observation", "surface token", kind="observation")
+    await _insert_item(conn, "claim", "surface token", kind="claim")
+    await _insert_item(conn, "skill", "surface token", kind="skill")
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(MemoryActivationRequest(query="surface token", limit=10), now=NOW)
+
+    assert {candidate.item_id for candidate in bundle.candidates} == {"claim", "skill"}
+
+
+async def test_default_tool_surface_keeps_full_kind_access(conn: aiosqlite.Connection):
+    await _insert_item(conn, "episode", "drill token", kind="episode")
+    await _insert_item(conn, "claim", "drill token", kind="claim")
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(
+        MemoryActivationRequest(query="drill token", surface="tool", limit=10), now=NOW
+    )
+
+    assert {candidate.item_id for candidate in bundle.candidates} == {"episode", "claim"}
+
+
+async def test_candidates_annotated_with_selection_role(conn: aiosqlite.Connection):
+    await _insert_item(conn, "episode", "role token", kind="episode")
+    await _insert_item(conn, "claim", "role token", kind="claim")
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(
+        MemoryActivationRequest(query="role token", surface="tool", limit=10), now=NOW
+    )
+
+    by_id = {candidate.item_id: candidate for candidate in bundle.candidates}
+    assert by_id["episode"].selection_role == "evidence_only"
+    assert by_id["claim"].selection_role == "advisory"
+    assert by_id["episode"].reason
+    assert by_id["claim"].reason
 
 
 async def test_search_validity_window_excludes_future_valid_from(conn: aiosqlite.Connection):
@@ -363,7 +407,10 @@ async def test_prompt_context_format_includes_kind_and_confidence_bucket(conn: a
     await _insert_item(conn, "episode", "bucket token low", kind="episode", confidence=0.2)
     retrieval = MemoryRetrieval(conn, FakeEmbedder())
 
-    bundle = await retrieval.search(MemoryActivationRequest(query="bucket token", limit=3), now=NOW)
+    bundle = await retrieval.search(
+        MemoryActivationRequest(query="bucket token", kinds=["claim", "skill", "episode"], limit=3),
+        now=NOW,
+    )
 
     assert "[claim · conf=high]" in bundle.prompt_context
     assert "[skill · conf=med]" in bundle.prompt_context

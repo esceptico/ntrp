@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 import ntrp.database as database
 from ntrp.memory.activation import MemoryActivationRequest
-from ntrp.memory.contradictions import CROSS_SCOPE_OVERRIDE_TAG, ContradictionWatcher, negation_score
+from ntrp.memory.contradictions import CROSS_SCOPE_OVERRIDE_TAG, ContradictionWatcher
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.pattern_finder import PatternFinder
 from ntrp.memory.retrieval import MemoryRetrieval
@@ -133,19 +133,13 @@ async def _edges(conn: aiosqlite.Connection) -> list[aiosqlite.Row]:
 
 
 def _watcher(conn: aiosqlite.Connection, *, judge: _FakeJudge | None = None) -> ContradictionWatcher:
-    return ContradictionWatcher(repo=MemoryItemsRepository(conn), embedder=_FakeEmbedder(), judge_client=judge)
-
-
-def test_negation_score_detects_prefers_vs_dislikes():
-    assert negation_score("User prefers tea.", "User dislikes tea.") == pytest.approx(0.9)
-
-
-def test_negation_score_returns_zero_for_unrelated_claims():
-    assert negation_score("User likes compact diffs.", "User works on ntrp.") == 0.0
-
-
-def test_negation_score_handles_not_x_pattern():
-    assert negation_score("User does not use staging.", "User uses staging.") == pytest.approx(0.6)
+    # Default to an "opposed" judge: the watcher now defers every persistence decision
+    # to the LLM, so tests that assert a contradiction is written supply that verdict.
+    return ContradictionWatcher(
+        repo=MemoryItemsRepository(conn),
+        embedder=_FakeEmbedder(),
+        judge_client=judge or _FakeJudge("opposed\nThe claims conflict."),
+    )
 
 
 @pytest.mark.asyncio
@@ -301,21 +295,32 @@ async def test_scan_skips_claims_with_no_shared_entities(conn: aiosqlite.Connect
 
 
 @pytest.mark.asyncio
-async def test_scan_calls_judge_only_in_borderline_band(conn: aiosqlite.Connection):
+async def test_judge_is_consulted_for_every_recalled_candidate(conn: aiosqlite.Connection):
     judge = _FakeJudge("opposed\nThe preference values conflict.")
-    await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=3))
-    new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW - timedelta(minutes=2))
-    await _watcher(conn, judge=judge).scan_for_new_claim(new, scope="user")
-    assert judge.prompts == []
-
-    tea = await _insert_claim(conn, "User prefers tea.", tags=["drink"], created_at=NOW - timedelta(minutes=1))
+    tea = await _insert_claim(conn, "User prefers tea.", tags=["drink"], created_at=NOW - timedelta(minutes=2))
+    # No lexical negation and no embedding signal — the judge alone decides this is opposed.
     coffee = await _insert_claim(conn, "User prefers coffee.", embedding=_vec(0), tags=["drink"], created_at=NOW)
-    await _watcher(conn, judge=judge).scan_for_new_claim(coffee, scope="user")
+
+    candidates = await _watcher(conn, judge=judge).scan_for_new_claim(coffee, scope="user")
 
     assert len(judge.prompts) == 1
     assert "User prefers tea." in judge.prompts[0]
     assert "User prefers coffee." in judge.prompts[0]
+    assert [(c.new_claim_id, c.old_claim_id, c.judge_verdict) for c in candidates] == [(coffee, tea, "opposed")]
     assert any(row["child_id"] == coffee and row["parent_id"] == tea for row in await _edges(conn))
+
+
+@pytest.mark.asyncio
+async def test_compatible_verdict_writes_no_edge(conn: aiosqlite.Connection):
+    judge = _FakeJudge("compatible\nDifferent contexts.")
+    old = await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=2))
+    new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW)
+
+    candidates = await _watcher(conn, judge=judge).scan_for_new_claim(new, scope="user")
+
+    assert candidates == []
+    assert await _edges(conn) == []
+    assert (await _row(conn, old))["status"] == "active"
 
 
 @pytest.mark.asyncio

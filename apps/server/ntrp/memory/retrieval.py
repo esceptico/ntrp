@@ -13,11 +13,13 @@ from ntrp.database import serialize_embedding
 from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.memory.activation import (
+    PROMPT_INJECTED_KINDS,
     ActivationSkillSuggestion,
     MemoryActivationBundle,
     MemoryActivationCandidate,
     MemoryActivationRequest,
     MemoryItemKind,
+    selection_role_for_kind,
 )
 from ntrp.memory.contradictions import CROSS_SCOPE_OVERRIDE_TAG
 
@@ -88,6 +90,7 @@ class MemoryRetrieval:
         now: datetime | None = None,
     ) -> MemoryActivationBundle:
         timestamp = _as_utc(now or datetime.now(UTC))
+        request = _resolve_injected_kinds(request)
         fts_rows = await self._fts_candidates(request, timestamp)
         query_embedding = await self._query_embedding(request.query)
         vec_distances = await self._vector_distances(query_embedding)
@@ -283,6 +286,7 @@ class MemoryRetrieval:
                 reasons.append("fts_match")
             if row.vector_distance is not None:
                 reasons.append("vector_match")
+            selection_role = selection_role_for_kind(row.kind)
             candidates.append(
                 MemoryActivationCandidate(
                     item_id=row.item_id,
@@ -298,6 +302,8 @@ class MemoryRetrieval:
                     valid_from=row.valid_from,
                     invalid_at=row.invalid_at,
                     created_at=row.created_at,
+                    selection_role=selection_role,
+                    reason=_selection_reason(row.kind, selection_role),
                 )
             )
         return candidates
@@ -366,6 +372,18 @@ class MemoryRetrieval:
         parts = [f"general ({row['scope']}): {row['content']}" for row in other]
         parts.append(f"in current scope ({item.scope}): {item.content}")
         return "\n".join(parts)
+
+
+def _selection_reason(kind: MemoryItemKind, selection_role: str) -> str:
+    if selection_role == "evidence_only":
+        return f"{kind} is evidence; reachable via provenance drill-down, not auto-injected"
+    return f"{kind} is advisory guidance for the current request"
+
+
+def _resolve_injected_kinds(request: MemoryActivationRequest) -> MemoryActivationRequest:
+    if request.kinds is not None or request.surface != "prompt":
+        return request
+    return request.model_copy(update={"kinds": list(PROMPT_INJECTED_KINDS)})
 
 
 def _sql_filters(

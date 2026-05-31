@@ -8,6 +8,7 @@ import numpy as np
 
 from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBuffer, EpisodeBufferRepository, TurnUpdate
+from ntrp.memory.connectors.claim_writer import AdjudicateClient, ExtractClient
 from ntrp.memory.connectors.episode_close import (
     DEFAULT_TRIGGERS,
     DedupAdjudicator,
@@ -44,6 +45,8 @@ class BufferingConnector:
         llm_client: SummaryClient,
         dedup_client: DedupAdjudicator | None = None,
         learnings: LearningsStore | None = None,
+        claim_extract_client: ExtractClient | None = None,
+        claim_adjudicate_client: AdjudicateClient | None = None,
     ):
         self.items = items
         self.buffers = buffers
@@ -51,6 +54,8 @@ class BufferingConnector:
         self.llm_client = llm_client
         self.dedup_client = dedup_client
         self.learnings = learnings
+        self.claim_extract_client = claim_extract_client
+        self.claim_adjudicate_client = claim_adjudicate_client
 
     async def ingest(
         self, *, scope: str, content: str, source_ref: dict, extra_source_refs: list[dict] | None = None
@@ -90,6 +95,8 @@ class BufferingConnector:
                 config=self.triggers,
                 dedup_client=self.dedup_client,
                 learnings=self.learnings,
+                claim_extract_client=self.claim_extract_client,
+                claim_adjudicate_client=self.claim_adjudicate_client,
             )
             await self.buffers.apply_turn(next_buffer.id, turn)
             return
@@ -112,6 +119,8 @@ class BufferingConnector:
                     config=self.triggers,
                     dedup_client=self.dedup_client,
                     learnings=self.learnings,
+                    claim_extract_client=self.claim_extract_client,
+                    claim_adjudicate_client=self.claim_adjudicate_client,
                 )
             except Exception:
                 _logger.warning(

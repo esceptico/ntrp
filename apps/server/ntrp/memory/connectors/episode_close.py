@@ -28,6 +28,7 @@ from ntrp.memory.connectors._constants import (
     TOPIC_SHIFT_THRESHOLD,
     TURN_BUDGET,
 )
+from ntrp.memory.connectors.claim_writer import AdjudicateClient, ExtractClient, write_claims
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
 
@@ -249,6 +250,8 @@ async def finalize_buffer(
     config: TriggerConfig = DEFAULT_TRIGGERS,
     dedup_client: DedupAdjudicator | None = None,
     learnings: LearningsStore | None = None,
+    claim_extract_client: ExtractClient | None = None,
+    claim_adjudicate_client: AdjudicateClient | None = None,
 ) -> EpisodeBuffer:
     prompt = _SUMMARY_PROMPT.format(content=buffer.content_so_far)
     summary = (await llm_client(prompt)).strip()
@@ -272,7 +275,7 @@ async def finalize_buffer(
     else:
         decision = _legacy_decision(candidates)
 
-    await _apply_decision(
+    episode_id = await _apply_decision(
         decision=decision,
         summary=summary,
         embedding=embedding,
@@ -280,6 +283,22 @@ async def finalize_buffer(
         items=items,
         reason=reason,
     )
+
+    if episode_id is not None and claim_extract_client is not None and claim_adjudicate_client is not None:
+        try:
+            await write_claims(
+                episode_id=episode_id,
+                summary=summary,
+                scope=buffer.scope,
+                items=items,
+                embedder=embedder,
+                extract_client=claim_extract_client,
+                adjudicate_client=claim_adjudicate_client,
+                learnings=learnings,
+            )
+        except Exception:
+            _logger.warning("Claim writer failed", scope=buffer.scope, reason=reason, exc_info=True)
+
     return await _close_and_carry(buffers, buffer, config)
 
 
@@ -336,7 +355,7 @@ async def _apply_decision(
     buffer: EpisodeBuffer,
     items: MemoryItemsRepository,
     reason: str,
-) -> None:
+) -> str | None:
     # Episodes are immutable raw slices. The only inline action is to skip storing
     # an exact restatement (`drop`); everything else is stored as its own slice.
     # We deliberately do NOT supersede or merge episodes here: that chained
@@ -345,9 +364,9 @@ async def _apply_decision(
     # and `supersedes` is reserved for claim contradiction resolution.
     if decision.action == "drop":
         _logger.info("Dedup: dropping redundant episode", scope=buffer.scope, reason=reason, why=decision.reason)
-        return
+        return None
 
-    await items.insert_item(_new_episode_insert(summary, embedding, buffer))
+    return await items.insert_item(_new_episode_insert(summary, embedding, buffer))
 
 
 async def _close_and_carry(

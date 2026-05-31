@@ -8,6 +8,20 @@ MemoryItemKind = Literal[
     "episode", "observation", "claim", "skill", "proposal", "artifact_ref", "entity", "directory"
 ]
 
+SelectionRole = Literal["required", "advisory", "evidence_only"]
+
+# Kinds injected into the default prompt surface. Episodes and other raw kinds
+# stay evidence-only: reachable via provenance drill-down, never auto-injected.
+PROMPT_INJECTED_KINDS: tuple[MemoryItemKind, ...] = ("claim", "skill")
+
+# Raw, low-abstraction kinds that serve as evidence behind claims rather than
+# guidance to act on. Everything else is advisory when surfaced.
+_EVIDENCE_ONLY_KINDS: frozenset[MemoryItemKind] = frozenset({"episode", "observation", "artifact_ref"})
+
+
+def selection_role_for_kind(kind: MemoryItemKind) -> SelectionRole:
+    return "evidence_only" if kind in _EVIDENCE_ONLY_KINDS else "advisory"
+
 
 class MemoryActivationRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=10_000)
@@ -37,6 +51,8 @@ class MemoryActivationCandidate(BaseModel):
     valid_from: str
     invalid_at: str | None
     created_at: str
+    selection_role: SelectionRole = "advisory"
+    reason: str = ""
 
 
 class MemoryActivationSelectionTrace(BaseModel):
@@ -58,7 +74,7 @@ class ActivationSkillSuggestion(BaseModel):
     reason: str = ""
     reasons: list[str] = Field(default_factory=list)
     source_ids: list[str] = Field(default_factory=list)
-    selection_role: Literal["required", "advisory", "evidence_only"] = "advisory"
+    selection_role: SelectionRole = "advisory"
     confidence: float = 0.5
 
 
