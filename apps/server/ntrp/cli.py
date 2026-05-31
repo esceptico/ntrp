@@ -97,6 +97,12 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
         reload=reload,
         log_config=UVICORN_LOG_CONFIG,
         timeout_graceful_shutdown=3,
+        # Long-lived SSE streams: the keep-alive idle timer must stay safely
+        # above the SSE KEEPALIVE_INTERVAL (5s, server/sse_stream.py) or the
+        # socket can idle-close between heartbeats and surface as a spurious
+        # mid-stream disconnect. uvicorn's 5s default is too close to the
+        # heartbeat; 75s gives a wide margin.
+        timeout_keep_alive=75,
     )
 
 
