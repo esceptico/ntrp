@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 MemoryItemKind = Literal[
     "episode", "observation", "claim", "skill", "proposal", "artifact_ref", "entity", "directory"
@@ -23,8 +23,11 @@ def selection_role_for_kind(kind: MemoryItemKind) -> SelectionRole:
     return "evidence_only" if kind in _EVIDENCE_ONLY_KINDS else "advisory"
 
 
+_QUERY_MAX = 10_000
+
+
 class MemoryActivationRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=10_000)
+    query: str = Field(..., min_length=1)
     scope: str | None = Field(default=None, max_length=500)
     kinds: list[MemoryItemKind] | None = None
     limit: int = Field(default=5, ge=1, le=50)
@@ -35,6 +38,15 @@ class MemoryActivationRequest(BaseModel):
     surface: Literal["prompt", "context", "tool", "skill"] = "prompt"
     budget_chars: int = Field(default=1_200, ge=200, le=20_000)
     record_access: bool = False
+
+    @field_validator("query", mode="before")
+    @classmethod
+    def _truncate_query(cls, v: object) -> object:
+        # A long prompt (e.g. a loop/automation instruction) is a valid retrieval
+        # query — truncate it for search instead of crashing activation.
+        if isinstance(v, str) and len(v) > _QUERY_MAX:
+            return v[:_QUERY_MAX]
+        return v
 
 
 class MemoryActivationCandidate(BaseModel):
