@@ -1,6 +1,64 @@
 import { beforeEach, expect, test } from "bun:test";
-import { enqueueMessage } from "../src/actions/messages.ts";
+import { enqueueMessage, stopRun } from "../src/actions/messages.ts";
 import { getState, setState } from "../src/store/index.ts";
+
+type CapturedRequest = { path: string; method: string; body?: string };
+
+function mockBridge(requests: CapturedRequest[]) {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: CapturedRequest) => {
+          requests.push(request);
+          return { ok: true, contentType: "application/json", data: {} };
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  return () => {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  };
+}
+
+const SESSION_ROW = {
+  session_id: "session-1",
+  started_at: "2026-05-30T00:00:00Z",
+  last_activity: "2026-05-30T00:00:00Z",
+  name: "chan",
+  message_count: 3,
+  session_type: "channel" as const,
+  active_run_id: "run-bg",
+};
+
+test("stopRun cancels a backgrounded/automation run by session even when currentRunId is null", async () => {
+  const requests: CapturedRequest[] = [];
+  const restore = mockBridge(requests);
+  try {
+    setState({
+      config: { serverUrl: "http://x", apiKey: "" },
+      currentSessionId: "session-1",
+      currentRunId: null,
+      running: true,
+      sessions: [SESSION_ROW],
+      activeRunSessionIds: new Set(["session-1"]),
+      messages: new Map(),
+      order: [],
+    });
+
+    await stopRun();
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].path).toBe("/cancel");
+    const body = JSON.parse(requests[0].body ?? "{}");
+    expect(body.session_id).toBe("session-1"); // server can resolve the active run
+    expect(body.run_id).toBe("run-bg"); // resolved from the session's active_run_id
+  } finally {
+    restore();
+  }
+});
 
 beforeEach(() => {
   setState({

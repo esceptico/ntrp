@@ -431,10 +431,16 @@ export async function submitToolResult(
   });
 }
 
-export async function cancelRun(config: AppConfig, runId: string): Promise<void> {
+export async function cancelRun(
+  config: AppConfig,
+  runId: string | null,
+  sessionId?: string | null,
+): Promise<void> {
   await apiWithConfig(config, "/cancel", {
     method: "POST",
-    body: JSON.stringify({ run_id: runId }),
+    // Send session_id too so the server can resolve the active run when the
+    // client has no reliable run_id (backgrounded / automation runs).
+    body: JSON.stringify({ run_id: runId, session_id: sessionId ?? null }),
   });
 }
 

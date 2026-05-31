@@ -6,6 +6,35 @@ import pytest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 
 
+@pytest.mark.asyncio
+async def test_cancel_endpoint_resolves_active_run_by_session():
+    from ntrp.server.routers.chat import cancel_run as cancel_run_endpoint
+    from ntrp.server.schemas import CancelRequest
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-x")
+    run.status = RunStatus.RUNNING
+
+    result = await cancel_run_endpoint(CancelRequest(session_id="sess-x"), run_registry=registry)
+
+    assert result["run_id"] == run.run_id
+    assert result["found"] is True
+    assert run.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_endpoint_404_when_no_active_run_for_session():
+    from fastapi import HTTPException
+
+    from ntrp.server.routers.chat import cancel_run as cancel_run_endpoint
+    from ntrp.server.schemas import CancelRequest
+
+    registry = RunRegistry()
+    with pytest.raises(HTTPException) as exc:
+        await cancel_run_endpoint(CancelRequest(session_id="missing"), run_registry=registry)
+    assert exc.value.status_code == 404
+
+
 def test_run_state_owns_injection_queue_lifecycle():
     run = RunState(run_id="run-1", session_id="sess-1")
 

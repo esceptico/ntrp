@@ -31,7 +31,12 @@ class ToolResultRequest(BaseModel):
 
 
 class CancelRequest(BaseModel):
-    run_id: str
+    # run_id is preferred; session_id lets the client say "stop whatever is
+    # running in this session" when it can't reliably name the run (e.g. a
+    # backgrounded / automation run the UI shows as running but never tracked
+    # a foreground run_id). The server resolves the session's active run.
+    run_id: str | None = None
+    session_id: str | None = None
 
 
 class BackgroundRequest(BaseModel):

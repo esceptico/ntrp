@@ -250,11 +250,22 @@ export async function cancelQueuedMessage(clientId: string): Promise<void> {
 
 export async function stopRun(): Promise<void> {
   const s = getState();
-  const runId = s.currentRunId;
   const sessionId = s.currentSessionId;
-  if (!runId) return;
-  setState((state) => reduceRunStopRequested(state, runId));
+  // currentRunId is null for a backgrounded/automation run the user is
+  // viewing (the Stop button is still shown via the `running` flag), so fall
+  // back to the session's active run id from the runs poll. Only bail if no
+  // active run exists anywhere for this session.
+  const runId =
+    s.currentRunId ??
+    (sessionId
+      ? (s.sessions.find((session) => session.session_id === sessionId)?.active_run_id ?? null)
+      : null);
+  // Bail only if we have nothing to target. With a sessionId the server can
+  // resolve the active run even when the client never tracked a run_id.
+  if (!runId && !sessionId) return;
+  if (runId) setState((state) => reduceRunStopRequested(state, runId));
   const clearStoppedRun = () => {
+    if (!runId) return; // no local run to clear; the run_cancelled event/poll will
     setState((state) =>
       reduceRunCompleted(state, {
         runId,
@@ -263,7 +274,7 @@ export async function stopRun(): Promise<void> {
     );
   };
   try {
-    await cancelRun(s.config, runId);
+    await cancelRun(s.config, runId, sessionId);
     clearStoppedRun();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -271,10 +282,12 @@ export async function stopRun(): Promise<void> {
       clearStoppedRun();
       return;
     }
-    setState((state) => ({
-      ...reduceRunStopCleared(state, runId),
-      ...clearCachedStoppingRun(state, sessionId, runId),
-    }));
+    if (runId) {
+      setState((state) => ({
+        ...reduceRunStopCleared(state, runId),
+        ...clearCachedStoppingRun(state, sessionId, runId),
+      }));
+    }
     if (getState().currentSessionId === sessionId) {
       s.appendMessage({
         id: crypto.randomUUID(),
