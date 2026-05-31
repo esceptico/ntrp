@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.lens_pass import LensPass
 from ntrp.memory.store.base import GraphDatabase
@@ -95,6 +96,19 @@ async def test_lens_pass_materializes_directory_entity_and_edges(conn: aiosqlite
     roles = {(p.role, p.parent_id) for p in parents}
     assert ("member_of", directory.id) in roles
     assert ("evidence", obs_id) in roles
+
+    # entity confidence is derived from its source observation, never the old 0.7 literal
+    expected = compute_confidence(
+        provenance="inferred",
+        parent_confidences=[0.7],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+    assert members[0].confidence == pytest.approx(expected)
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import pytest
 import ntrp.tools.memory as memory_tools
 from ntrp.context.models import ProjectContext, SessionState
 from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationCandidate
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 
@@ -148,7 +149,6 @@ async def test_remember_writes_memory_item_as_user_authored_claim():
         fact="user prefers casual tone",
         kind="preference",
         salience=1,
-        confidence=0.9,
         entities=["User"],
         source="session:abc",
     )
@@ -161,7 +161,17 @@ async def test_remember_writes_memory_item_as_user_authored_claim():
     assert rec.kind == "claim"
     assert rec.provenance == "user_authored"
     assert rec.scope == "project:proj-1"
-    assert rec.confidence == 0.9
+    assert rec.confidence == compute_confidence(
+        provenance="user_authored",
+        parent_confidences=[],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+    assert rec.confidence != 1.0
     assert "kind:preference" in rec.tags
     assert "salience:1" in rec.tags
     assert "entity:User" in rec.tags

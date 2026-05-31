@@ -49,6 +49,29 @@ INSERT OR IGNORE INTO memory_item_parents (child_id, parent_id, role, "order")
 VALUES (?, ?, ?, ?)
 """
 
+_SQL_INSERT_USAGE_EVENT = """
+INSERT INTO memory_usage_events (
+    item_id, run_id, session_scope, surface, rank, score,
+    selection_role, reason, bundle_id, created_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+_SQL_INSERT_OUTCOME_EVENT = """
+INSERT INTO memory_outcome_events (
+    item_id, usage_event_id, outcome, source, run_id, created_at
+)
+VALUES (?, ?, ?, ?, ?, ?)
+"""
+
+_OUTCOME_USAGE_KEY = {
+    "helpful": "helped",
+    "harmful": "hurt",
+    "irrelevant": "ignored",
+}
+
+_USAGE_COUNTER_KEYS = {"activated", "helped", "hurt", "ignored"}
+
 _SQL_LIST_PARENT_EDGES = """
 SELECT child_id, parent_id, role, "order", created_at
 FROM memory_item_parents
@@ -62,6 +85,16 @@ FROM memory_item_parents
 WHERE parent_id = ?
 ORDER BY role, "order", child_id
 """
+
+
+_FTS_TERM = re.compile(r"[a-z0-9]+")
+
+
+def _fts_or_query(text: str) -> str:
+    """OR-join the alphanumeric tokens of ``text`` into a quoted FTS5 MATCH expression.
+    Quoting each term sidesteps FTS operator characters in raw input."""
+    terms = _FTS_TERM.findall(text.lower())
+    return " OR ".join(f'"{term}"' for term in terms)
 
 
 def _now() -> datetime:
@@ -113,6 +146,30 @@ class MemoryItem:
     created_at: datetime
     updated_at: datetime
     embedding: np.ndarray | None
+
+
+@dataclass(slots=True)
+class UsageEventInsert:
+    item_id: str
+    bundle_id: str
+    surface: str
+    rank: int
+    score: float
+    selection_role: str
+    reason: str
+    run_id: str | None = None
+    session_scope: str | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class OutcomeEventInsert:
+    item_id: str
+    outcome: str
+    source: str
+    usage_event_id: int | None = None
+    run_id: str | None = None
+    created_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -285,6 +342,74 @@ class MemoryItemsRepository:
         if commit:
             await self.conn.commit()
         return item_id
+
+    async def insert_usage_event(self, event: UsageEventInsert, *, commit: bool = True) -> int:
+        created_at = _format_dt(event.created_at or _now())
+        cursor = await self.conn.execute(
+            _SQL_INSERT_USAGE_EVENT,
+            (
+                event.item_id,
+                event.run_id,
+                event.session_scope,
+                event.surface,
+                event.rank,
+                event.score,
+                event.selection_role,
+                event.reason,
+                event.bundle_id,
+                created_at,
+            ),
+        )
+        if commit:
+            await self.conn.commit()
+        return int(cursor.lastrowid)
+
+    async def insert_outcome_event(self, event: OutcomeEventInsert, *, commit: bool = True) -> int:
+        created_at = _format_dt(event.created_at or _now())
+        cursor = await self.conn.execute(
+            _SQL_INSERT_OUTCOME_EVENT,
+            (
+                event.item_id,
+                event.usage_event_id,
+                event.outcome,
+                event.source,
+                event.run_id,
+                created_at,
+            ),
+        )
+        if commit:
+            await self.conn.commit()
+        return int(cursor.lastrowid)
+
+    async def increment_usage_counter(self, item_id: str, key: str, *, commit: bool = True) -> None:
+        if key not in _USAGE_COUNTER_KEYS:
+            raise ValueError(f"invalid usage counter key: {key}")
+        rows = await self.conn.execute_fetchall(
+            "SELECT usage FROM memory_items WHERE id = ?", (item_id,)
+        )
+        if not rows:
+            raise ValueError(f"memory item not found: {item_id}")
+        usage = _loads_json(rows[0]["usage"], {})
+        usage[key] = int(usage.get(key, 0)) + 1
+        await self.conn.execute(
+            "UPDATE memory_items SET usage = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(usage, sort_keys=True), _format_dt(_now()), item_id),
+        )
+        if commit:
+            await self.conn.commit()
+
+    async def record_outcome(self, event: OutcomeEventInsert) -> int:
+        """Insert an outcome event and atomically bump the matching usage counter.
+
+        helpful→helped, harmful→hurt, irrelevant→ignored; other outcomes are
+        logged without moving a counter. Both writes share one commit so the
+        event row and the counter can never diverge."""
+        event_id = await self.insert_outcome_event(event, commit=False)
+        usage_key = _OUTCOME_USAGE_KEY.get(event.outcome)
+        if usage_key is not None:
+            await self.increment_usage_counter(event.item_id, usage_key, commit=False)
+        await self.conn.commit()
+        return event_id
 
     async def update_status(
         self,
@@ -489,6 +614,73 @@ class MemoryItemsRepository:
             (scope, title),
         )
         return _row_to_item(rows[0]) if rows else None
+
+    async def recall_entities(
+        self,
+        *,
+        query: str,
+        embedding: np.ndarray | None,
+        scope: str,
+        limit: int,
+    ) -> list[MemoryItem]:
+        """Hybrid recall over active ``entity`` nodes in one scope: vector nearest
+        neighbours (when an embedding and the vec sidecar are available) unioned with
+        an FTS match on the query terms. Recall, not precision — the LLM linker judges
+        the candidate set. Unlike :meth:`find_entity_by_title` this is NOT title-exact,
+        so ``Regina`` recalls a stored ``Regina Lin`` entity instead of splitting it."""
+        found: dict[str, MemoryItem] = {}
+        for item in await self._entity_vec_neighbours(embedding, scope, limit):
+            found.setdefault(item.id, item)
+        for item in await self._entity_fts_matches(query, scope, limit):
+            found.setdefault(item.id, item)
+        return list(found.values())[:limit]
+
+    async def _entity_vec_neighbours(
+        self, embedding: np.ndarray | None, scope: str, limit: int
+    ) -> list[MemoryItem]:
+        if embedding is None:
+            return []
+        serialized = serialize_embedding(np.asarray(embedding, dtype=np.float32))
+        if serialized is None:
+            return []
+        try:
+            rows = await self.conn.execute_fetchall(
+                """
+                SELECT m.*, v.embedding
+                FROM memory_items_vec vn
+                JOIN memory_items m ON m.id = vn.item_id
+                LEFT JOIN memory_items_vec v ON v.item_id = m.id
+                WHERE vn.embedding MATCH ? AND vn.k = ?
+                  AND m.kind = 'entity' AND m.status = 'active' AND m.scope = ?
+                ORDER BY vn.distance
+                """,
+                (serialized, limit, scope),
+            )
+        except aiosqlite.OperationalError:
+            return []
+        return [_row_to_item(row) for row in rows]
+
+    async def _entity_fts_matches(self, query: str, scope: str, limit: int) -> list[MemoryItem]:
+        match = _fts_or_query(query)
+        if not match:
+            return []
+        try:
+            rows = await self.conn.execute_fetchall(
+                """
+                SELECT m.*, v.embedding
+                FROM memory_items_fts
+                JOIN memory_items m ON m.id = memory_items_fts.item_id
+                LEFT JOIN memory_items_vec v ON v.item_id = m.id
+                WHERE memory_items_fts MATCH ?
+                  AND m.kind = 'entity' AND m.status = 'active' AND m.scope = ?
+                ORDER BY bm25(memory_items_fts)
+                LIMIT ?
+                """,
+                (match, scope, limit),
+            )
+        except aiosqlite.OperationalError:
+            return []
+        return [_row_to_item(row) for row in rows]
 
     async def list_directory_members(self, directory_id: str) -> list[MemoryItem]:
         rows = await self.conn.execute_fetchall(

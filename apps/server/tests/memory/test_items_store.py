@@ -7,7 +7,12 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
-from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
+from ntrp.memory.items_store import (
+    MemoryItemInsert,
+    MemoryItemsRepository,
+    OutcomeEventInsert,
+    UsageEventInsert,
+)
 from ntrp.memory.store.base import GraphDatabase
 
 if TYPE_CHECKING:
@@ -155,3 +160,102 @@ async def test_delete_item_cascades_edges(conn):
     assert await repo.get_item(parent) is None
     assert await repo.get_item(child) is not None
     assert await repo.list_parent_edges(child) == []
+
+
+async def test_insert_usage_event_persists_row_and_returns_id(conn):
+    repo = MemoryItemsRepository(conn)
+    item_id = await _item(repo, "usage event target")
+
+    event_id = await repo.insert_usage_event(
+        UsageEventInsert(
+            item_id=item_id,
+            bundle_id="bundle-1",
+            surface="prompt",
+            rank=0,
+            score=0.42,
+            selection_role="advisory",
+            reason="claim is advisory guidance",
+            run_id="run-1",
+            session_scope="proj_abc",
+        )
+    )
+
+    assert isinstance(event_id, int)
+    rows = await conn.execute_fetchall(
+        "SELECT * FROM memory_usage_events WHERE id = ?", (event_id,)
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["item_id"] == item_id
+    assert row["bundle_id"] == "bundle-1"
+    assert row["surface"] == "prompt"
+    assert row["rank"] == 0
+    assert row["score"] == pytest.approx(0.42)
+    assert row["selection_role"] == "advisory"
+    assert row["run_id"] == "run-1"
+    assert row["session_scope"] == "proj_abc"
+    assert row["created_at"]
+
+
+@pytest.mark.parametrize(
+    "outcome,usage_key",
+    [("helpful", "helped"), ("harmful", "hurt"), ("irrelevant", "ignored")],
+)
+async def test_record_outcome_increments_usage_counter(conn, outcome, usage_key):
+    repo = MemoryItemsRepository(conn)
+    item_id = await _item(repo, "outcome target")
+
+    event_id = await repo.record_outcome(
+        OutcomeEventInsert(item_id=item_id, outcome=outcome, source="api", run_id="run-1")
+    )
+
+    assert isinstance(event_id, int)
+    rows = await conn.execute_fetchall(
+        "SELECT * FROM memory_outcome_events WHERE id = ?", (event_id,)
+    )
+    assert len(rows) == 1
+    assert rows[0]["item_id"] == item_id
+    assert rows[0]["outcome"] == outcome
+    assert rows[0]["source"] == "api"
+    assert rows[0]["run_id"] == "run-1"
+
+    item = await repo.get_item(item_id)
+    assert item.usage[usage_key] == 1
+    for other in {"helped", "hurt", "ignored"} - {usage_key}:
+        assert item.usage[other] == 0
+
+
+async def test_record_outcome_non_counter_outcome_logs_without_moving_usage(conn):
+    repo = MemoryItemsRepository(conn)
+    item_id = await _item(repo, "non-counter outcome target")
+
+    event_id = await repo.record_outcome(
+        OutcomeEventInsert(item_id=item_id, outcome="task_success", source="run")
+    )
+
+    rows = await conn.execute_fetchall(
+        "SELECT * FROM memory_outcome_events WHERE id = ?", (event_id,)
+    )
+    assert rows[0]["outcome"] == "task_success"
+    item = await repo.get_item(item_id)
+    assert item.usage == {"activated": 0, "helped": 0, "hurt": 0, "ignored": 0}
+
+
+async def test_record_outcome_accumulates_across_calls(conn):
+    repo = MemoryItemsRepository(conn)
+    item_id = await _item(repo, "accumulate target")
+
+    await repo.record_outcome(OutcomeEventInsert(item_id=item_id, outcome="helpful", source="api"))
+    await repo.record_outcome(OutcomeEventInsert(item_id=item_id, outcome="helpful", source="api"))
+    await repo.record_outcome(OutcomeEventInsert(item_id=item_id, outcome="harmful", source="api"))
+
+    item = await repo.get_item(item_id)
+    assert item.usage["helped"] == 2
+    assert item.usage["hurt"] == 1
+
+
+async def test_increment_usage_counter_rejects_unknown_key(conn):
+    repo = MemoryItemsRepository(conn)
+    item_id = await _item(repo, "bad key target")
+    with pytest.raises(ValueError):
+        await repo.increment_usage_counter(item_id, "bogus")

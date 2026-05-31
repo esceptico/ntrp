@@ -4,6 +4,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -40,7 +41,6 @@ class RememberInput(BaseModel):
     kind: str = Field(default="note", description="Knowledge type/scope label (free-form tag, e.g. note, preference, lesson, artifact).")
     lifetime: str = Field(default="durable", description="How long this should remain active: durable or temporary.")
     salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in the stated fact.")
     entities: list[str] | None = Field(default=None, description="Concrete entity names in the fact, including User.")
     source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
     happened_at: str | None = Field(default=None, description="ISO timestamp of when the event occurred.")
@@ -74,11 +74,22 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
         vec = await embedder.embed_one(args.fact)
         embedding = np.asarray(vec, dtype=np.float32) if vec is not None else None
 
+    confidence = compute_confidence(
+        provenance="user_authored",
+        parent_confidences=[],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+
     item_id = await items.insert_item(
         MemoryItemInsert(
             content=args.fact,
             source_refs=source_refs,
-            confidence=args.confidence,
+            confidence=confidence,
             scope=scope,
             kind="claim",
             provenance="user_authored",

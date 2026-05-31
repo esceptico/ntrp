@@ -8,6 +8,7 @@ import pytest_asyncio
 
 import ntrp.database as database
 from ntrp.memory.activation import MemoryActivationBundle
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.lens_author import LensAuthor, LensAuthorError, LensSpec, render_lens_markdown
 from ntrp.memory.lens_pass import LensPass
@@ -39,7 +40,7 @@ class _FakeRetrieval:
     async def search(self, request, *, now=None) -> MemoryActivationBundle:
         return MemoryActivationBundle(
             query=request.query, scope=request.scope, kinds=None,
-            candidates=[], omitted=[], used_chars=0, prompt_context="", skills_to_use=[],
+            candidates=[], used_chars=0, prompt_context="", skills_to_use=[],
         )
 
 
@@ -102,6 +103,19 @@ async def test_propose_creates_open_proposal_with_normalized_slug(conn: aiosqlit
     assert "proposal-status:open" in item.tags
     assert "lens:northwind-engineers" in item.tags
     assert item.content.startswith("---\ndirectory: Northwind engineers")
+    # confidence is computed (no grounding candidates here), never the old 0.6 literal
+    expected = compute_confidence(
+        provenance="inferred",
+        parent_confidences=[],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+    assert item.confidence == pytest.approx(expected)
+    assert item.confidence != 0.6
 
     listed = await author.list_proposals()
     assert [p["proposal_id"] for p in listed] == [proposal.proposal_id]

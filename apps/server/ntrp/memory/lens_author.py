@@ -19,7 +19,8 @@ from pydantic import BaseModel, ValidationError
 
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.lens_pass import LensPass
 from ntrp.memory.lenses import _SLUG_RE, _parse, get_lenses_dir
@@ -124,15 +125,24 @@ class LensAuthor:
         query = query.strip()
         if not query:
             raise LensAuthorError("query is empty")
-        grounding = await self._grounding(query, scope)
-        spec = await self._author(query, grounding)
+        bundle = await self._grounding(query, scope)
+        spec = await self._author(query, _format_grounding(bundle))
         spec.slug = _slugify(spec.slug or spec.directory)
         markdown = render_lens_markdown(spec)
         proposal_id = await self.repo.insert_item(
             MemoryItemInsert(
                 content=markdown,
                 source_refs=[],
-                confidence=0.6,
+                confidence=compute_confidence(
+                    provenance="inferred",
+                    parent_confidences=[c.confidence for c in bundle.candidates],
+                    contradiction_count=0,
+                    age_days=0,
+                    last_used_days=0,
+                    helped=0,
+                    hurt=0,
+                    ignored=0,
+                ),
                 title=spec.directory,
                 scope=scope,
                 kind="proposal",
@@ -235,8 +245,8 @@ class LensAuthor:
             )
         return out
 
-    async def _grounding(self, query: str, scope: str) -> str:
-        bundle = await self.retrieval.search(
+    async def _grounding(self, query: str, scope: str) -> MemoryActivationBundle:
+        return await self.retrieval.search(
             MemoryActivationRequest(
                 query=query,
                 scope=scope if scope != "user" else None,
@@ -247,8 +257,6 @@ class LensAuthor:
                 record_access=False,
             )
         )
-        lines = [f"- [{c.kind}] {c.content[:_GROUNDING_CONTENT_CHARS]}" for c in bundle.candidates]
-        return "\n".join(lines) if lines else "(no matching memory yet)"
 
     async def _author(self, query: str, grounding: str) -> LensSpec:
         prompt = _AUTHOR_PROMPT_PATH.read_text().format(query=query, grounding=grounding)
@@ -279,6 +287,11 @@ class LensAuthor:
             (json.dumps(tags, sort_keys=True), "archived" if archive else item.status, item.id),
         )
         await self.repo.conn.commit()
+
+
+def _format_grounding(bundle: MemoryActivationBundle) -> str:
+    lines = [f"- [{c.kind}] {c.content[:_GROUNDING_CONTENT_CHARS]}" for c in bundle.candidates]
+    return "\n".join(lines) if lines else "(no matching memory yet)"
 
 
 def _tag_value(tags: list[str], prefix: str) -> str:

@@ -49,6 +49,7 @@ class ProposalDraft:
     trigger: str
     skill_body: str
     source_claim_ids: list[str]
+    source_claim_confidences: list[float]
     draft_path: Path
 
 
@@ -370,6 +371,7 @@ class SkillInducer:
             trigger=trigger,
             skill_body=body,
             source_claim_ids=[claim.id for claim in claims],
+            source_claim_confidences=[claim.confidence for claim in claims],
             draft_path=self.draft_dir / slug / "SKILL.md",
         )
 
@@ -388,7 +390,16 @@ class SkillInducer:
                     content=draft.skill_body,
                     provenance="inferred",
                     source_refs=source_refs,
-                    confidence=0.5,
+                    confidence=compute_confidence(
+                        provenance="inferred",
+                        parent_confidences=draft.source_claim_confidences,
+                        contradiction_count=0,
+                        age_days=0,
+                        last_used_days=0,
+                        helped=0,
+                        hurt=0,
+                        ignored=0,
+                    ),
                     status="active",
                     scope=scope,
                     tags=[

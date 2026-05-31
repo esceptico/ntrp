@@ -27,6 +27,7 @@ from ntrp.memory.connectors._constants import (
     DEDUP_SCAN_LIMIT,
     DEDUP_WINDOW_DAYS,
 )
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
 
@@ -126,6 +127,37 @@ class CompletionClaimAdjudicateClient:
             ],
         )
         return _content_from_response(response)
+
+
+def _enforce_not_same(
+    decisions: list[ClaimDecision],
+    candidate_ids: set[str],
+    learnings: LearningsStore | None,
+) -> list[ClaimDecision]:
+    """Hard rule (checked, not advisory): the user has recorded that certain pairs of
+    claims are distinct and must never be merged. If the adjudicator nonetheless asks to
+    UPDATE one member of such a pair while the other member is also a live candidate in
+    this batch, demote that UPDATE to ADD so neither claim is collapsed into the other.
+    Never loses information."""
+    if learnings is None:
+        return decisions
+    pairs = learnings.load_not_same_pairs()
+    if not pairs:
+        return decisions
+    forbidden = {
+        item
+        for pair in pairs
+        if len(pair & candidate_ids) == 2
+        for item in pair
+    }
+    if not forbidden:
+        return decisions
+    return [
+        ClaimDecision(action="ADD", reason="not_same_guard")
+        if d.action == "UPDATE" and d.target_id in forbidden
+        else d
+        for d in decisions
+    ]
 
 
 def _claim_confidence(parent_confidences: list[float]) -> float:
@@ -231,6 +263,7 @@ async def write_claims(
     extract_client: ExtractClient,
     adjudicate_client: AdjudicateClient,
     learnings: LearningsStore | None = None,
+    watcher: ContradictionWatcher | None = None,
 ) -> list[str]:
     """Extract durable claims from a finalized episode summary and upsert them.
 
@@ -264,14 +297,22 @@ async def write_claims(
     else:
         decisions = [ClaimDecision(action="ADD", reason="no_candidates") for _ in claims]
 
+    decisions = _enforce_not_same(decisions, set(all_candidates), learnings)
+
     added: list[str] = []
     for claim, embedding, decision in zip(claims, claim_embeddings, decisions, strict=True):
         if decision.action == "UPDATE" and decision.target_id and decision.target_id in all_candidates:
-            await _update_claim(items, all_candidates[decision.target_id].item, claim, embedding)
+            await _update_claim(items, all_candidates[decision.target_id].item, episode_id, claim, embedding)
         elif decision.action == "NOOP":
             continue
         else:
-            added.append(await _add_claim(items, episode_id, scope, claim, embedding))
+            claim_id = await _add_claim(items, episode_id, scope, claim, embedding)
+            added.append(claim_id)
+            if watcher is not None:
+                try:
+                    await watcher.scan_for_new_claim(claim_id, scope=scope)
+                except Exception:
+                    _logger.warning("Contradiction watcher failed for new claim", scope=scope, exc_info=True)
     return added
 
 
@@ -298,16 +339,38 @@ async def _add_claim(
 
 
 async def _update_claim(
-    items: MemoryItemsRepository, target: MemoryItem, content: str, embedding: np.ndarray
+    items: MemoryItemsRepository,
+    target: MemoryItem,
+    episode_id: str,
+    content: str,
+    embedding: np.ndarray,
 ) -> None:
+    """Refine an existing claim in place with a newly corroborating episode.
+
+    Links the corroborating episode as fresh ``evidence`` (idempotent via
+    ``INSERT OR IGNORE``) so the trust chain stays inspectable, then recomputes
+    confidence from the refreshed parent set — never carries the stale literal."""
+    await items.insert_parent_edge(target.id, episode_id, "evidence")
+    parents = await _parent_confidences(items, target.id)
     await items.update_item(
         target.id,
         content=content,
         title=None,
-        confidence=target.confidence,
+        confidence=_claim_confidence(parents),
         tags=target.tags,
         scope=target.scope,
         status=target.status,
         invalid_at=target.invalid_at,
         embedding=embedding,
     )
+
+
+async def _parent_confidences(items: MemoryItemsRepository, child_id: str) -> list[float]:
+    confidences: list[float] = []
+    for edge in await items.list_parent_edges(child_id):
+        if edge.role != "evidence":
+            continue
+        parent = await items.get_item(edge.parent_id)
+        if parent is not None:
+            confidences.append(parent.confidence)
+    return confidences

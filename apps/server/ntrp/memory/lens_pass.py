@@ -20,11 +20,12 @@ from pydantic import BaseModel, ValidationError
 
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.lenses import Lens, load_lenses
 
 _EXTRACT_PROMPT_PATH = Path(__file__).with_name("prompts") / "lens_extract.txt"
-_CANDIDATE_LIMIT = 60
+_CANDIDATE_PAGE = 200
 _CANDIDATE_CONTENT_CHARS = 600
 _logger = get_logger(__name__)
 
@@ -127,12 +128,23 @@ class LensPass:
         return first or lens.directory
 
     async def _candidates(self, scope: str) -> list[MemoryItem]:
-        return await self.repo.list_items(
-            kinds=["observation", "claim"],
-            statuses=["active"],
-            scope=scope,
-            limit=_CANDIDATE_LIMIT,
-        )
+        # No recency cap: write-time entity linking (recall-bounded) is the scaling
+        # mechanism now, so the lens pass organizes the full active set rather than the
+        # most-recent N. We page only to keep any single query bounded.
+        candidates: list[MemoryItem] = []
+        offset = 0
+        while True:
+            page = await self.repo.list_items(
+                kinds=["observation", "claim"],
+                statuses=["active"],
+                scope=scope,
+                limit=_CANDIDATE_PAGE,
+                offset=offset,
+            )
+            candidates.extend(page)
+            if len(page) < _CANDIDATE_PAGE:
+                return candidates
+            offset += _CANDIDATE_PAGE
 
     async def _extract(self, lens: Lens, candidates: list[MemoryItem]) -> list[_ExtractedEntity]:
         bullets = "\n".join(f"- [{item.id}] {item.content[:_CANDIDATE_CONTENT_CHARS]}" for item in candidates)
@@ -176,11 +188,21 @@ class LensPass:
             )
             wrote_entity = 0
         else:
+            source_confidences = await self._source_confidences(source_ids)
             entity_id = await self.repo.insert_item(
                 MemoryItemInsert(
                     content=profile,
                     source_refs=[{"item_id": sid} for sid in source_ids],
-                    confidence=0.7,
+                    confidence=compute_confidence(
+                        provenance="inferred",
+                        parent_confidences=source_confidences,
+                        contradiction_count=0,
+                        age_days=0,
+                        last_used_days=0,
+                        helped=0,
+                        hurt=0,
+                        ignored=0,
+                    ),
                     title=name,
                     scope=scope,
                     kind="entity",
@@ -192,6 +214,14 @@ class LensPass:
         edges = await self._link(entity_id, directory_id, source_ids)
         await self.repo.conn.commit()
         return wrote_entity, edges
+
+    async def _source_confidences(self, source_ids: list[str]) -> list[float]:
+        confidences: list[float] = []
+        for sid in source_ids:
+            source = await self.repo.get_item(sid)
+            if source is not None:
+                confidences.append(source.confidence)
+        return confidences
 
     async def _link(self, entity_id: str, directory_id: str, source_ids: list[str]) -> int:
         edges = 0

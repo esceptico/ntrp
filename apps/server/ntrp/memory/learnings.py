@@ -9,6 +9,7 @@ and reads the file back to condition the adjudicator's next decision.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 ADJUDICATORS = frozenset({"dedup", "contradiction", "entity_link"})
+
+_NOT_SAME_HEADING = re.compile(r"^##\s.*—\s*not_same\s*$")
+_SUBJECTS_LINE = re.compile(r"^-\s*subjects:\s*(.+)$")
 
 _HEADERS = {
     "dedup": "Learnings: episode dedup",
@@ -79,6 +83,34 @@ class LearningsStore:
         text = self.load(adjudicator)
         idx = text.find("\n## ")
         return text[idx:].strip() if idx != -1 else ""
+
+    def load_not_same_pairs(self) -> frozenset[frozenset[str]]:
+        """Every recorded ``not_same`` correction as an unordered id-pair, across all
+        adjudicators. This is the one sanctioned hard rule: a do-not-merge / never-opposed
+        set checked *before* the LLM is ever asked about the pair. Entries whose
+        ``- subjects:`` line does not name exactly two distinct ids are ignored."""
+        pairs: set[frozenset[str]] = set()
+        for adjudicator in ADJUDICATORS:
+            pairs.update(_parse_not_same_pairs(self.load(adjudicator)))
+        return frozenset(pairs)
+
+
+def _parse_not_same_pairs(text: str) -> set[frozenset[str]]:
+    pairs: set[frozenset[str]] = set()
+    in_not_same = False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            in_not_same = bool(_NOT_SAME_HEADING.match(line.strip()))
+            continue
+        if not in_not_same:
+            continue
+        match = _SUBJECTS_LINE.match(line.strip())
+        if match is None:
+            continue
+        subjects = [s.strip() for s in match.group(1).split(",") if s.strip()]
+        if len(set(subjects)) == 2:
+            pairs.add(frozenset(subjects))
+    return pairs
 
 
 def _require(adjudicator: str) -> None:

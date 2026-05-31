@@ -9,7 +9,9 @@ from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBuffer, EpisodeBufferRepository
 from ntrp.memory.connectors.base import BufferingConnector
 from ntrp.memory.connectors.claim_writer import AdjudicateClient, ExtractClient
+from ntrp.memory.connectors.entity_linker import EntityLinkAdjudicateClient, MentionExtractClient
 from ntrp.memory.connectors.episode_close import DEFAULT_TRIGGERS, DedupAdjudicator, SummaryClient
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier, EpisodeContext
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
@@ -35,6 +37,9 @@ class ChatConnector(BufferingConnector):
         learnings: LearningsStore | None = None,
         claim_extract_client: ExtractClient | None = None,
         claim_adjudicate_client: AdjudicateClient | None = None,
+        mention_extract_client: MentionExtractClient | None = None,
+        entity_link_client: EntityLinkAdjudicateClient | None = None,
+        watcher: ContradictionWatcher | None = None,
     ):
         super().__init__(
             items=items,
@@ -45,6 +50,9 @@ class ChatConnector(BufferingConnector):
             learnings=learnings,
             claim_extract_client=claim_extract_client,
             claim_adjudicate_client=claim_adjudicate_client,
+            mention_extract_client=mention_extract_client,
+            entity_link_client=entity_link_client,
+            watcher=watcher,
         )
         self.boundary_classifier = boundary_classifier
 

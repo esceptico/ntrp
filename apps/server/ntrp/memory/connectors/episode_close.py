@@ -29,6 +29,12 @@ from ntrp.memory.connectors._constants import (
     TURN_BUDGET,
 )
 from ntrp.memory.connectors.claim_writer import AdjudicateClient, ExtractClient, write_claims
+from ntrp.memory.connectors.entity_linker import (
+    EntityLinkAdjudicateClient,
+    MentionExtractClient,
+    link_entities,
+)
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItem, MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
 
@@ -252,6 +258,9 @@ async def finalize_buffer(
     learnings: LearningsStore | None = None,
     claim_extract_client: ExtractClient | None = None,
     claim_adjudicate_client: AdjudicateClient | None = None,
+    mention_extract_client: MentionExtractClient | None = None,
+    entity_link_client: EntityLinkAdjudicateClient | None = None,
+    watcher: ContradictionWatcher | None = None,
 ) -> EpisodeBuffer:
     prompt = _SUMMARY_PROMPT.format(content=buffer.content_so_far)
     summary = (await llm_client(prompt)).strip()
@@ -286,7 +295,7 @@ async def finalize_buffer(
 
     if episode_id is not None and claim_extract_client is not None and claim_adjudicate_client is not None:
         try:
-            await write_claims(
+            added_claims = await write_claims(
                 episode_id=episode_id,
                 summary=summary,
                 scope=buffer.scope,
@@ -295,11 +304,55 @@ async def finalize_buffer(
                 extract_client=claim_extract_client,
                 adjudicate_client=claim_adjudicate_client,
                 learnings=learnings,
+                watcher=watcher,
             )
         except Exception:
+            added_claims = []
             _logger.warning("Claim writer failed", scope=buffer.scope, reason=reason, exc_info=True)
 
+        if added_claims and mention_extract_client is not None and entity_link_client is not None:
+            await _link_claim_entities(
+                claim_ids=added_claims,
+                scope=buffer.scope,
+                items=items,
+                embedder=embedder,
+                mention_client=mention_extract_client,
+                adjudicate_client=entity_link_client,
+                learnings=learnings,
+                reason=reason,
+            )
+
     return await _close_and_carry(buffers, buffer, config)
+
+
+async def _link_claim_entities(
+    *,
+    claim_ids: list[str],
+    scope: str,
+    items: MemoryItemsRepository,
+    embedder: Any,
+    mention_client: MentionExtractClient,
+    adjudicate_client: EntityLinkAdjudicateClient,
+    learnings: LearningsStore | None,
+    reason: str,
+) -> None:
+    for claim_id in claim_ids:
+        claim = await items.get_item(claim_id)
+        if claim is None:
+            continue
+        try:
+            await link_entities(
+                claim_id=claim_id,
+                claim_content=claim.content,
+                scope=scope,
+                items=items,
+                embedder=embedder,
+                mention_client=mention_client,
+                adjudicate_client=adjudicate_client,
+                learnings=learnings,
+            )
+        except Exception:
+            _logger.warning("Entity linker failed", scope=scope, reason=reason, claim_id=claim_id, exc_info=True)
 
 
 async def _recall_candidates(

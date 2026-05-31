@@ -12,7 +12,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-MEMORY_ITEMS_SCHEMA_VERSION = 34
+MEMORY_ITEMS_SCHEMA_VERSION = 35
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS memory_item_parents (
     parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
     role        TEXT NOT NULL CHECK (role IN (
                     'step', 'evidence', 'contradicts',
-                    'supersedes', 'similar_to', 'member_of'
+                    'supersedes', 'similar_to', 'member_of', 'mentions'
                 )),
     "order"     INTEGER,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -105,6 +105,37 @@ CREATE TRIGGER IF NOT EXISTS memory_items_au AFTER UPDATE ON memory_items BEGIN
     DELETE FROM memory_items_fts WHERE item_id = old.id;
     INSERT INTO memory_items_fts(item_id, content) VALUES (new.id, new.content);
 END;
+
+CREATE TABLE IF NOT EXISTS memory_usage_events (
+    id              INTEGER PRIMARY KEY,
+    item_id         TEXT,
+    run_id          TEXT,
+    session_scope   TEXT,
+    surface         TEXT,
+    rank            INTEGER,
+    score           REAL,
+    selection_role  TEXT,
+    reason          TEXT,
+    bundle_id       TEXT,
+    created_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memory_usage_events_item ON memory_usage_events(item_id);
+CREATE INDEX IF NOT EXISTS idx_memory_usage_events_run ON memory_usage_events(run_id);
+
+CREATE TABLE IF NOT EXISTS memory_outcome_events (
+    id              INTEGER PRIMARY KEY,
+    item_id         TEXT,
+    usage_event_id  INTEGER,
+    outcome         TEXT CHECK(outcome IN (
+                        'helpful', 'harmful', 'irrelevant',
+                        'corrected', 'task_success', 'task_failure'
+                    )),
+    source          TEXT,
+    run_id          TEXT,
+    created_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memory_outcome_events_item ON memory_outcome_events(item_id);
+CREATE INDEX IF NOT EXISTS idx_memory_outcome_events_run ON memory_outcome_events(run_id);
 """
 
 # CHECK constraints cannot be ALTERed, so widening `kind` / `role` requires a
@@ -174,7 +205,7 @@ CREATE TABLE memory_item_parents_new (
     parent_id   TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
     role        TEXT NOT NULL CHECK (role IN (
                     'step', 'evidence', 'contradicts',
-                    'supersedes', 'similar_to', 'member_of'
+                    'supersedes', 'similar_to', 'member_of', 'mentions'
                 )),
     "order"     INTEGER,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -220,6 +251,8 @@ class GraphDatabase:
         await self.conn.execute("DELETE FROM memory_item_parents")
         await self.conn.execute("DELETE FROM memory_items")
         await self.conn.execute("DELETE FROM episode_buffers")
+        await self.conn.execute("DELETE FROM memory_usage_events")
+        await self.conn.execute("DELETE FROM memory_outcome_events")
         try:
             await self.conn.execute("DELETE FROM memory_items_vec")
         except sqlite3.OperationalError:
@@ -241,7 +274,7 @@ class GraphDatabase:
         parts: list[str] = []
         if "'entity'" not in sql_by_name.get("memory_items", ""):
             parts.append(_REBUILD_MEMORY_ITEMS)
-        if "'member_of'" not in sql_by_name.get("memory_item_parents", ""):
+        if "'mentions'" not in sql_by_name.get("memory_item_parents", ""):
             parts.append(_REBUILD_MEMORY_ITEM_PARENTS)
         if not parts:
             return

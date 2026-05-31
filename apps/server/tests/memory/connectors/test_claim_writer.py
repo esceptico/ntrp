@@ -9,7 +9,12 @@ import pytest_asyncio
 
 import ntrp.database as database
 from ntrp.memory.buffers_store import EpisodeBufferRepository, TurnUpdate
-from ntrp.memory.connectors.claim_writer import _parse_claims, _parse_decisions, write_claims
+from ntrp.memory.connectors.claim_writer import (
+    _claim_confidence,
+    _parse_claims,
+    _parse_decisions,
+    write_claims,
+)
 from ntrp.memory.connectors.episode_close import finalize_buffer
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.store.base import GraphDatabase
@@ -170,8 +175,13 @@ async def test_update_rewrites_in_place_no_new_row_no_supersedes(conn):
     assert rows[0]["id"] == target
     assert rows[0]["content"] == "timur uses postgres"
     assert added == []
-    edges = await conn.execute_fetchall("SELECT role FROM memory_item_parents")
-    assert [e["role"] for e in edges] == []  # no supersedes edge
+    edges = await conn.execute_fetchall("SELECT parent_id, role FROM memory_item_parents")
+    # the corroborating episode is linked as fresh evidence; never a supersedes edge
+    assert [(e["parent_id"], e["role"]) for e in edges] == [(episode_id, "evidence")]
+    # confidence is recomputed from the refreshed parent set, not the stale 0.5 literal
+    expected = _claim_confidence([0.3])
+    assert rows[0]["confidence"] == pytest.approx(expected)
+    assert rows[0]["confidence"] != 0.5
 
 
 @pytest.mark.asyncio
@@ -229,6 +239,104 @@ async def test_not_same_guard_keeps_distinct_attributes_separate(conn):
     assert len(added) == 2
     prompt = adjudicate.call_args[0][0]
     assert "different attributes" in prompt  # not_same guard present
+
+
+@pytest.mark.asyncio
+async def test_recorded_not_same_pair_demotes_update_to_add(conn, tmp_path):
+    # The user has marked two existing claims as distinct. Both are live candidates for a
+    # new claim; the adjudicator nonetheless asks to UPDATE one of them. The checked hard
+    # rule demotes that UPDATE to ADD so neither existing claim is collapsed.
+    from ntrp.memory.learnings import Correction, LearningsStore
+
+    items = MemoryItemsRepository(conn)
+    episode_id = await _seed_episode(items, "episode body", _vec(0))
+    target = await _seed_claim(items, "timur uses sqlite", _vec(1))
+    partner = await _seed_claim(items, "timur uses postgres", _vec(1))
+
+    learnings = LearningsStore(base_dir=tmp_path / "learnings")
+    learnings.record(
+        Correction(
+            adjudicator="dedup",
+            action="not_same",
+            summary="distinct DBs",
+            subjects=(target, partner),
+        )
+    )
+
+    added = await write_claims(
+        episode_id=episode_id,
+        summary="timur db preference",
+        scope="user",
+        items=items,
+        embedder=MockEmbedder([_vec(1)]),  # recalls both target and partner
+        extract_client=AsyncMock(return_value="timur uses a database"),
+        adjudicate_client=AsyncMock(
+            return_value=json.dumps([{"action": "UPDATE", "target_id": target, "reason": "merge"}])
+        ),
+        learnings=learnings,
+    )
+
+    rows = await _claims(conn)
+    assert len(rows) == 3  # nothing rewritten; the new claim is ADDed instead
+    assert len(added) == 1
+    assert (await items.get_item(target)).content == "timur uses sqlite"  # untouched
+
+
+# ---- contradiction watcher wiring -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_write_claims_scans_each_added_claim(conn):
+    items = MemoryItemsRepository(conn)
+    episode_id = await _seed_episode(items, "episode body", _vec(0))
+
+    class _SpyWatcher:
+        def __init__(self):
+            self.calls: list[tuple[str, str]] = []
+
+        async def scan_for_new_claim(self, claim_id: str, *, scope: str):
+            self.calls.append((claim_id, scope))
+            return []
+
+    watcher = _SpyWatcher()
+    added = await write_claims(
+        episode_id=episode_id,
+        summary="timur switched to postgres",
+        scope="user",
+        items=items,
+        embedder=MockEmbedder([_vec(1)]),
+        extract_client=AsyncMock(return_value="timur uses postgres"),
+        adjudicate_client=AsyncMock(),
+        watcher=watcher,
+    )
+
+    assert len(added) == 1
+    assert watcher.calls == [(added[0], "user")]
+
+
+@pytest.mark.asyncio
+async def test_write_claims_isolates_watcher_failure(conn):
+    items = MemoryItemsRepository(conn)
+    episode_id = await _seed_episode(items, "episode body", _vec(0))
+
+    class _BoomWatcher:
+        async def scan_for_new_claim(self, claim_id: str, *, scope: str):
+            raise RuntimeError("watcher boom")
+
+    added = await write_claims(
+        episode_id=episode_id,
+        summary="timur switched to postgres",
+        scope="user",
+        items=items,
+        embedder=MockEmbedder([_vec(1)]),
+        extract_client=AsyncMock(return_value="timur uses postgres"),
+        adjudicate_client=AsyncMock(),
+        watcher=_BoomWatcher(),
+    )
+
+    # The claim is still written; the watcher error never propagates.
+    assert len(added) == 1
+    assert len(await _claims(conn)) == 1
 
 
 # ---- finalize integration (hermetic) --------------------------------------

@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.memory.connectors._confidence import compute_confidence
 from ntrp.memory.items_store import MemoryItemInsert, MemoryItemsRepository
 from ntrp.memory.skill_inducer import (
     IsToolableGate,
@@ -238,6 +239,19 @@ async def test_inducer_writes_proposal_file_row_and_derivation_edges(conn: aiosq
     assert {"proposal", "skill-draft", "proposal-status:open", "slug:pr-triage"} <= set(json.loads(proposals[0]["tags"]))
     edges = await MemoryItemsRepository(conn).list_parent_edges(proposals[0]["id"])
     assert [(edge.parent_id, edge.role) for edge in edges] == [(claim_id, "evidence")]
+    # proposal confidence is derived from the source claim, never the old 0.5 literal
+    expected = compute_confidence(
+        provenance="inferred",
+        parent_confidences=[0.7],
+        contradiction_count=0,
+        age_days=0,
+        last_used_days=0,
+        helped=0,
+        hurt=0,
+        ignored=0,
+    )
+    assert proposals[0]["confidence"] == pytest.approx(expected)
+    assert proposals[0]["confidence"] != 0.5
 
 
 @pytest.mark.asyncio

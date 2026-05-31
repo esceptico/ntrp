@@ -283,15 +283,30 @@ async def test_scan_idempotent_skips_existing_contradicts_edges(conn: aiosqlite.
 
 
 @pytest.mark.asyncio
-async def test_scan_skips_claims_with_no_shared_entities(conn: aiosqlite.Connection):
-    old = await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=2))
-    new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["adidas"], created_at=NOW)
+async def test_scan_skips_claims_below_embedding_recall(conn: aiosqlite.Connection):
+    # Recall is now embedding-based, not tag-gated: a claim whose vector is far from
+    # the new claim is never recalled, so the judge is never consulted.
+    old = await _insert_claim(conn, "User uses Nike.", embedding=_vec(0), created_at=NOW - timedelta(minutes=2))
+    new = await _insert_claim(conn, "User likes hiking.", embedding=_vec(2), created_at=NOW)
 
     candidates = await _watcher(conn).scan_for_new_claim(new, scope="user")
 
     assert candidates == []
     assert await _edges(conn) == []
     assert (await _row(conn, old))["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_scan_recalls_tagless_claims_by_embedding(conn: aiosqlite.Connection):
+    # Write-time claims are tagless (tags=[]); recall must still find a near-duplicate
+    # subject by embedding alone and let the judge rule it opposed.
+    old = await _insert_claim(conn, "User uses Nike.", tags=[], created_at=NOW - timedelta(minutes=2))
+    new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=[], created_at=NOW)
+
+    candidates = await _watcher(conn).scan_for_new_claim(new, scope="user")
+
+    assert [(c.new_claim_id, c.old_claim_id) for c in candidates] == [(new, old)]
+    assert (new, old, "contradicts") in [(r["child_id"], r["parent_id"], r["role"]) for r in await _edges(conn)]
 
 
 @pytest.mark.asyncio
@@ -332,6 +347,33 @@ async def test_judge_unclear_verdict_is_treated_as_compatible(conn: aiosqlite.Co
     candidates = await _watcher(conn, judge=judge).scan_for_new_claim(new, scope="user")
 
     assert candidates == []
+    assert await _edges(conn) == []
+    assert (await _row(conn, old))["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_recorded_not_same_short_circuits_judge_before_llm(conn: aiosqlite.Connection, tmp_path):
+    from ntrp.memory.learnings import Correction, LearningsStore
+
+    judge = _FakeJudge("opposed\nThe claims conflict.")
+    old = await _insert_claim(conn, "User uses Nike.", tags=["nike"], created_at=NOW - timedelta(minutes=2))
+    new = await _insert_claim(conn, "User avoids Nike.", embedding=_cos_vec(0.95), tags=["nike"], created_at=NOW)
+
+    learnings = LearningsStore(base_dir=tmp_path / "learnings")
+    learnings.record(
+        Correction(adjudicator="contradiction", action="not_same", summary="distinct", subjects=(new, old))
+    )
+    watcher = ContradictionWatcher(
+        repo=MemoryItemsRepository(conn),
+        embedder=_FakeEmbedder(),
+        judge_client=judge,
+        learnings=learnings,
+    )
+
+    candidates = await watcher.scan_for_new_claim(new, scope="user")
+
+    assert candidates == []
+    assert judge.prompts == []  # never asked the LLM
     assert await _edges(conn) == []
     assert (await _row(conn, old))["status"] == "active"
 

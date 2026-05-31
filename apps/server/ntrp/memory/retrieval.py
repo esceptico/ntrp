@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -15,6 +16,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.activation import (
     PROMPT_INJECTED_KINDS,
     ActivationSkillSuggestion,
+    ExcludedMemoryItem,
     MemoryActivationBundle,
     MemoryActivationCandidate,
     MemoryActivationRequest,
@@ -22,6 +24,7 @@ from ntrp.memory.activation import (
     selection_role_for_kind,
 )
 from ntrp.memory.contradictions import CROSS_SCOPE_OVERRIDE_TAG
+from ntrp.memory.items_store import MemoryItemsRepository, UsageEventInsert
 
 if TYPE_CHECKING:
     import aiosqlite
@@ -108,10 +111,24 @@ class MemoryRetrieval:
 
         candidates = self._score_candidates(list(rows_by_id.values()), timestamp)
         candidates.sort(key=lambda candidate: (candidate.score, candidate.created_at, candidate.item_id), reverse=True)
-        selected, omitted, prompt_context, used_chars = await self._fit_budget(candidates, request)
+        selected, blocks_by_id = await self._fit_budget(candidates, request)
 
+        excluded = await self._excluded_or_conflicting(selected)
+        # A claim that is itself superseded or scope-overridden belongs only in the
+        # excluded bucket — never present it as a fact to trust.
+        excluded_ids = {item.item_id for item in excluded}
+        selected = [c for c in selected if c.item_id not in excluded_ids]
+        blocks_by_id = {item_id: block for item_id, block in blocks_by_id.items() if item_id not in excluded_ids}
+
+        facts_to_trust = [c for c in selected if c.kind == "claim"]
+        skills_to_consider = [c for c in selected if c.kind == "skill"]
+        prompt_context = _render_prompt_context(selected, blocks_by_id, excluded)
+        used_chars = len(prompt_context)
+
+        bundle_id = uuid.uuid4().hex
+        first_usage_event_id: int | None = None
         if request.record_access:
-            await self._record_activation(selected, timestamp)
+            first_usage_event_id = await self._record_activation(selected, request, bundle_id, timestamp)
             _logger.info(
                 "memory_activation",
                 query=request.query,
@@ -123,7 +140,9 @@ class MemoryRetrieval:
                 run_id=request.run_id,
                 surface=request.surface,
                 candidate_count=len(selected),
-                omitted_count=len(omitted),
+                facts_count=len(facts_to_trust),
+                skills_count=len(skills_to_consider),
+                excluded_count=len(excluded),
                 used_chars=used_chars,
             )
         skills_to_use = _skill_suggestions(selected)
@@ -133,15 +152,24 @@ class MemoryRetrieval:
             scope=request.scope,
             kinds=request.kinds,
             candidates=selected,
-            omitted=omitted,
+            facts_to_trust=facts_to_trust,
+            skills_to_consider=skills_to_consider,
+            excluded_or_conflicting=excluded,
             used_chars=used_chars,
             prompt_context=prompt_context,
             skills_to_use=skills_to_use,
+            usage_event_id=first_usage_event_id,
         )
 
-    async def _record_activation(self, selected: list[MemoryActivationCandidate], timestamp: datetime) -> None:
+    async def _record_activation(
+        self,
+        selected: list[MemoryActivationCandidate],
+        request: MemoryActivationRequest,
+        bundle_id: str,
+        timestamp: datetime,
+    ) -> int | None:
         if not selected:
-            return
+            return None
         placeholders = ",".join("?" for _ in selected)
         await self.conn.execute(
             f"""
@@ -156,7 +184,28 @@ class MemoryRetrieval:
             """,
             (timestamp.isoformat(), *[candidate.item_id for candidate in selected]),
         )
+        repo = MemoryItemsRepository(self.conn)
+        first_id: int | None = None
+        for rank, candidate in enumerate(selected):
+            event_id = await repo.insert_usage_event(
+                UsageEventInsert(
+                    item_id=candidate.item_id,
+                    bundle_id=bundle_id,
+                    surface=request.surface,
+                    rank=rank,
+                    score=candidate.score,
+                    selection_role=candidate.selection_role,
+                    reason=candidate.reason,
+                    run_id=request.run_id,
+                    session_scope=request.scope,
+                    created_at=timestamp,
+                ),
+                commit=False,
+            )
+            if first_id is None:
+                first_id = event_id
         await self.conn.commit()
+        return first_id
 
     async def _fts_candidates(self, request: MemoryActivationRequest, now: datetime) -> list[_CandidateRow]:
         match = _fts_query(request.query)
@@ -312,39 +361,37 @@ class MemoryRetrieval:
         self,
         candidates: list[MemoryActivationCandidate],
         request: MemoryActivationRequest,
-    ) -> tuple[list[MemoryActivationCandidate], list[MemoryActivationCandidate], str, int]:
+    ) -> tuple[list[MemoryActivationCandidate], dict[str, str]]:
         selected: list[MemoryActivationCandidate] = []
-        omitted: list[MemoryActivationCandidate] = []
-        blocks: list[str] = []
+        blocks_by_id: dict[str, str] = {}
         used_chars = 0
         separator = "\n\n"
         for candidate in candidates:
             if len(selected) >= request.limit:
-                omitted.append(candidate)
                 continue
-            prefix = len(separator) if blocks else 0
+            prefix = len(separator) if selected else 0
             block = await self._candidate_block(candidate)
             remaining = request.budget_chars - used_chars - prefix
             if remaining <= 0:
-                omitted.append(candidate)
                 continue
             if len(block) > remaining:
                 if selected:
-                    omitted.append(candidate)
                     continue
                 block = await self._candidate_block(candidate, max_chars=remaining)
                 if len(block) > remaining:
-                    omitted.append(candidate)
                     continue
             selected.append(candidate)
-            blocks.append(block)
+            blocks_by_id[candidate.item_id] = block
             used_chars += prefix + len(block)
-        omitted.extend(candidates[len(selected) + len(omitted) :])
-        return selected, omitted[:50], separator.join(blocks), used_chars
+        return selected, blocks_by_id
 
     async def _candidate_block(self, candidate: MemoryActivationCandidate, *, max_chars: int | None = None) -> str:
-        header = f"[{candidate.kind} · conf={_confidence_bucket(candidate.confidence)}]"
+        header = (
+            f"[{candidate.kind} · {candidate.selection_role} · conf={_confidence_bucket(candidate.confidence)}]"
+        )
         content = await self._render_cross_scope_annotation(candidate)
+        if candidate.reason:
+            content = f"{content}\n(why: {candidate.reason})"
         if max_chars is None:
             return f"{header}\n{content}"
         content_budget = max_chars - len(header) - 1
@@ -372,6 +419,92 @@ class MemoryRetrieval:
         parts = [f"general ({row['scope']}): {row['content']}" for row in other]
         parts.append(f"in current scope ({item.scope}): {item.content}")
         return "\n".join(parts)
+
+    async def _excluded_or_conflicting(
+        self, selected: list[MemoryActivationCandidate]
+    ) -> list[ExcludedMemoryItem]:
+        claim_ids = [c.item_id for c in selected if c.kind == "claim"]
+        if not claim_ids:
+            return []
+        scope_by_id = {c.item_id: c.scope for c in selected if c.kind == "claim"}
+        placeholders = ",".join("?" for _ in claim_ids)
+        rows = await self.conn.execute_fetchall(
+            f"""
+            SELECT p.child_id, p.role, m.id, m.kind, m.content, m.scope, m.status
+            FROM memory_item_parents p
+            JOIN memory_items m ON m.id = p.parent_id
+            WHERE p.child_id IN ({placeholders})
+              AND p.role IN ('supersedes', 'contradicts')
+            ORDER BY p.child_id, m.scope, m.id
+            """,
+            tuple(claim_ids),
+        )
+        excluded: list[ExcludedMemoryItem] = []
+        seen: set[str] = set()
+        for row in rows:
+            parent_id = str(row["id"])
+            child_id = str(row["child_id"])
+            role = row["role"]
+            if role == "supersedes" and row["status"] == "superseded":
+                key = f"sup:{parent_id}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                excluded.append(
+                    ExcludedMemoryItem(
+                        item_id=parent_id,
+                        kind=row["kind"],
+                        content=str(row["content"]),
+                        scope=str(row["scope"]),
+                        reason="superseded by a newer claim you are trusting",
+                        superseded_by=child_id,
+                    )
+                )
+            elif role == "contradicts" and row["status"] == "active" and row["scope"] != scope_by_id.get(child_id):
+                key = f"xs:{parent_id}:{child_id}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                excluded.append(
+                    ExcludedMemoryItem(
+                        item_id=parent_id,
+                        kind=row["kind"],
+                        content=str(row["content"]),
+                        scope=str(row["scope"]),
+                        reason="general default overridden in the current scope",
+                        overridden_in_scope=scope_by_id.get(child_id),
+                    )
+                )
+        return excluded
+
+
+def _render_prompt_context(
+    selected: list[MemoryActivationCandidate],
+    blocks_by_id: dict[str, str],
+    excluded: list[ExcludedMemoryItem],
+) -> str:
+    facts = [blocks_by_id[c.item_id] for c in selected if c.kind == "claim" and c.item_id in blocks_by_id]
+    skills = [blocks_by_id[c.item_id] for c in selected if c.kind == "skill" and c.item_id in blocks_by_id]
+    other = [
+        blocks_by_id[c.item_id]
+        for c in selected
+        if c.kind not in ("claim", "skill") and c.item_id in blocks_by_id
+    ]
+    sections: list[str] = []
+    if facts:
+        sections.append("### FACTS TO TRUST\n" + "\n\n".join(facts))
+    if skills:
+        sections.append("### SKILLS TO CONSIDER\n" + "\n\n".join(skills))
+    if other:
+        sections.append("### OTHER\n" + "\n\n".join(other))
+    if excluded:
+        lines = [_excluded_line(item) for item in excluded]
+        sections.append("### EXCLUDED OR CONFLICTING\n" + "\n".join(lines))
+    return "\n\n".join(sections)
+
+
+def _excluded_line(item: ExcludedMemoryItem) -> str:
+    return f"- [{item.kind} · {item.scope}] {item.content} (why: {item.reason})"
 
 
 def _selection_reason(kind: MemoryItemKind, selection_role: str) -> str:
@@ -546,16 +679,6 @@ def _float_value(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
-
-
-def _candidate_block(candidate: MemoryActivationCandidate, *, max_chars: int | None = None) -> str:
-    header = f"[{candidate.kind} · conf={_confidence_bucket(candidate.confidence)}]"
-    if max_chars is None:
-        return f"{header}\n{candidate.content}"
-    content_budget = max_chars - len(header) - 1
-    if content_budget <= 0:
-        return header[:max_chars]
-    return f"{header}\n{candidate.content[:content_budget]}"
 
 
 def _confidence_bucket(confidence: float) -> str:

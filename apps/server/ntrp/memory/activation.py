@@ -67,15 +67,21 @@ class MemoryActivationCandidate(BaseModel):
     reason: str = ""
 
 
-class MemoryActivationSelectionTrace(BaseModel):
-    rank: int
+class ExcludedMemoryItem(BaseModel):
+    """A memory item surfaced to the model as conflicting or overridden.
+
+    Either a claim that was superseded by a newer one, or a general-scope claim
+    that a current-scope claim overrides. Carries the reason so the model can see
+    why it is set aside rather than silently dropping it.
+    """
+
     item_id: str
     kind: MemoryItemKind
-    score: float
-    selected: bool
-    injected: bool
-    reasons: list[str] = Field(default_factory=list)
-    chars: int
+    content: str
+    scope: str
+    reason: str
+    superseded_by: str | None = None
+    overridden_in_scope: str | None = None
 
 
 class ActivationSkillSuggestion(BaseModel):
@@ -95,7 +101,9 @@ class MemoryActivationBundle(BaseModel):
     scope: str | None
     kinds: list[MemoryItemKind] | None
     candidates: list[MemoryActivationCandidate]
-    omitted: list[MemoryActivationCandidate] = Field(default_factory=list)
+    facts_to_trust: list[MemoryActivationCandidate] = Field(default_factory=list)
+    skills_to_consider: list[MemoryActivationCandidate] = Field(default_factory=list)
+    excluded_or_conflicting: list[ExcludedMemoryItem] = Field(default_factory=list)
     used_chars: int
     prompt_context: str
     usage_event_id: int | None = None

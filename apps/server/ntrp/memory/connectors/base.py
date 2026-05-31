@@ -9,6 +9,7 @@ import numpy as np
 from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBuffer, EpisodeBufferRepository, TurnUpdate
 from ntrp.memory.connectors.claim_writer import AdjudicateClient, ExtractClient
+from ntrp.memory.connectors.entity_linker import EntityLinkAdjudicateClient, MentionExtractClient
 from ntrp.memory.connectors.episode_close import (
     DEFAULT_TRIGGERS,
     DedupAdjudicator,
@@ -17,6 +18,7 @@ from ntrp.memory.connectors.episode_close import (
     evaluate_triggers,
     finalize_buffer,
 )
+from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.learnings import LearningsStore
 
@@ -47,6 +49,9 @@ class BufferingConnector:
         learnings: LearningsStore | None = None,
         claim_extract_client: ExtractClient | None = None,
         claim_adjudicate_client: AdjudicateClient | None = None,
+        mention_extract_client: MentionExtractClient | None = None,
+        entity_link_client: EntityLinkAdjudicateClient | None = None,
+        watcher: ContradictionWatcher | None = None,
     ):
         self.items = items
         self.buffers = buffers
@@ -56,6 +61,9 @@ class BufferingConnector:
         self.learnings = learnings
         self.claim_extract_client = claim_extract_client
         self.claim_adjudicate_client = claim_adjudicate_client
+        self.mention_extract_client = mention_extract_client
+        self.entity_link_client = entity_link_client
+        self.watcher = watcher
 
     async def ingest(
         self, *, scope: str, content: str, source_ref: dict, extra_source_refs: list[dict] | None = None
@@ -97,6 +105,9 @@ class BufferingConnector:
                 learnings=self.learnings,
                 claim_extract_client=self.claim_extract_client,
                 claim_adjudicate_client=self.claim_adjudicate_client,
+                mention_extract_client=self.mention_extract_client,
+                entity_link_client=self.entity_link_client,
+                watcher=self.watcher,
             )
             await self.buffers.apply_turn(next_buffer.id, turn)
             return
@@ -121,6 +132,8 @@ class BufferingConnector:
                     learnings=self.learnings,
                     claim_extract_client=self.claim_extract_client,
                     claim_adjudicate_client=self.claim_adjudicate_client,
+                    mention_extract_client=self.mention_extract_client,
+                    entity_link_client=self.entity_link_client,
                 )
             except Exception:
                 _logger.warning(

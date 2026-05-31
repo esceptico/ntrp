@@ -6,6 +6,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from ntrp.memory.buffers_store import _normalize
+from ntrp.memory.connectors._constants import (
+    DEDUP_RECALL_SIMILARITY,
+    DEDUP_SCAN_LIMIT,
+    DEDUP_WINDOW_DAYS,
+)
 from ntrp.memory.items_store import MemoryItem, MemoryItemsRepository, _row_to_item
 from ntrp.memory.learnings import LearningsStore
 
@@ -58,7 +66,7 @@ class ContradictionWatcher:
 
     async def scan_for_new_claim(self, claim_id: str, *, scope: str | None = None) -> list[ContradictionCandidate]:
         new_claim = await self._get_item_or_raise(claim_id)
-        if new_claim.kind != "claim" or new_claim.status != "active" or not new_claim.tags:
+        if new_claim.kind != "claim" or new_claim.status != "active":
             return []
 
         candidates = await self._candidate_pool(new_claim)
@@ -134,20 +142,35 @@ class ContradictionWatcher:
         return {"already_undone": False, "restored": restored, "cross_scope": cross_scope}
 
     async def _candidate_pool(self, new_claim: MemoryItem) -> list[MemoryItem]:
-        claims = await self.repo.list_recent_items_all_scopes(kind="claim", window_days=30, limit=500)
+        # Embedding recall over recent active claims (all scopes, so cross-scope
+        # contradictions surface), mirroring dedup's cosine gate. Recency is a
+        # secondary filter; the LLM judge decides what is actually opposed.
+        claims = await self.repo.list_recent_items_all_scopes(
+            kind="claim", window_days=DEDUP_WINDOW_DAYS, limit=DEDUP_SCAN_LIMIT
+        )
+        if new_claim.embedding is None:
+            return []
 
-        new_tags = set(new_claim.tags)
-        return [
-            claim
-            for claim in claims
-            if claim.id != new_claim.id
-            and claim.kind == "claim"
-            and claim.status == "active"
-            and set(claim.tags) & new_tags
-            and _is_older(claim, new_claim)
-        ]
+        query_vec = _normalize(new_claim.embedding.astype(np.float32))
+        scored: list[tuple[float, MemoryItem]] = []
+        for claim in claims:
+            if (
+                claim.id == new_claim.id
+                or claim.kind != "claim"
+                or claim.status != "active"
+                or claim.embedding is None
+                or not _is_older(claim, new_claim)
+            ):
+                continue
+            cosine = float(np.dot(query_vec, _normalize(claim.embedding.astype(np.float32))))
+            if cosine >= DEDUP_RECALL_SIMILARITY:
+                scored.append((cosine, claim))
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [claim for _, claim in scored]
 
     async def _judge(self, new_claim: MemoryItem, old_claim: MemoryItem) -> str:
+        if self._is_not_same(new_claim.id, old_claim.id):
+            return "compatible"
         if self.judge_client is None:
             return "unclear"
         prompt = _PROMPT_PATH.read_text().format(
@@ -160,6 +183,11 @@ class ContradictionWatcher:
         response = (await self.judge_client(prompt)).strip()
         first_line = response.splitlines()[0].strip().lower() if response else "unclear"
         return first_line if first_line in _VERDICTS else "unclear"
+
+    def _is_not_same(self, a: str, b: str) -> bool:
+        if self.learnings is None:
+            return False
+        return frozenset((a, b)) in self.learnings.load_not_same_pairs()
 
     def _learnings_block(self) -> str:
         if self.learnings is None:

@@ -4,6 +4,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ntrp.memory.items_store import OutcomeEventInsert
+from ntrp.memory.learnings import Correction, LearningsStore
 from ntrp.memory.lens_author import LensAuthorError
 from ntrp.memory.lenses import load_lenses
 from ntrp.memory.pattern_finder import PatternFinder
@@ -64,6 +66,16 @@ class ItemUpdateRequest(BaseModel):
 
 class SkillEnabledRequest(BaseModel):
     enabled: bool
+
+
+_ALLOWED_OUTCOMES = {"helpful", "harmful", "irrelevant", "corrected", "task_success", "task_failure"}
+
+
+class ItemOutcomeRequest(BaseModel):
+    outcome: str
+    source: str = Field(default="api", max_length=200)
+    usage_event_id: int | None = None
+    run_id: str | None = Field(default=None, max_length=200)
 
 
 @router.post("/pattern-finder/run")
@@ -185,9 +197,20 @@ async def undo_contradiction(
 ):
     watcher = _require_contradiction_watcher(pattern_finder)
     try:
-        return await watcher.undo(child_id=child_id, parent_id=parent_id)
+        result = await watcher.undo(child_id=child_id, parent_id=parent_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not result.get("already_undone"):
+        LearningsStore().record(
+            Correction(
+                adjudicator="contradiction",
+                action="not_same",
+                summary=f"User undid the contradiction between {child_id} and {parent_id}.",
+                subjects=(child_id, parent_id),
+                reason="contradiction undone via admin",
+            )
+        )
+    return result
 
 
 def _require_contradiction_watcher(pattern_finder: PatternFinder) -> Any:
@@ -579,6 +602,26 @@ async def get_memory_item(item_id: str, memory=Depends(require_memory)):
     }
 
 
+@router.post("/items/{item_id}/outcome")
+async def record_memory_item_outcome(item_id: str, request: ItemOutcomeRequest, memory=Depends(require_memory)):
+    if request.outcome not in _ALLOWED_OUTCOMES:
+        raise HTTPException(status_code=422, detail=f"invalid outcome: {request.outcome}")
+    repo = memory.memory.items
+    item = await repo.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Memory item not found")
+    event_id = await repo.record_outcome(
+        OutcomeEventInsert(
+            item_id=item_id,
+            outcome=request.outcome,
+            source=request.source,
+            usage_event_id=request.usage_event_id,
+            run_id=request.run_id,
+        )
+    )
+    return {"event_id": event_id, "item": _serialize_item(await repo.get_item(item_id))}
+
+
 @router.put("/items/{item_id}")
 async def update_memory_item(item_id: str, request: ItemUpdateRequest, memory=Depends(require_memory)):
     repo = memory.memory.items
@@ -613,7 +656,29 @@ async def update_memory_item(item_id: str, request: ItemUpdateRequest, memory=De
         invalid_at=invalid_at,
         embedding=embedding,
     )
-    return {"item": _serialize_item(await repo.get_item(item_id))}
+    updated = await repo.get_item(item_id)
+    _record_item_edit_learning(item, updated)
+    return {"item": _serialize_item(updated)}
+
+
+_EDIT_ADJUDICATOR_BY_KIND = {"claim": "dedup", "entity": "entity_link"}
+
+
+def _record_item_edit_learning(before: Any, after: Any) -> None:
+    adjudicator = _EDIT_ADJUDICATOR_BY_KIND.get(before.kind)
+    if adjudicator is None or before.content == after.content:
+        return
+    LearningsStore().record(
+        Correction(
+            adjudicator=adjudicator,
+            action="edit",
+            summary=f"User edited {before.kind} {before.id}.",
+            subjects=(before.id,),
+            proposed=before.content,
+            correct=after.content,
+            reason="item edited via admin",
+        )
+    )
 
 
 @router.delete("/items/{item_id}")

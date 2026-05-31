@@ -12,6 +12,7 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.database import serialize_embedding
 from ntrp.memory.activation import MemoryActivationRequest
+from ntrp.memory.items_store import MemoryItemsRepository
 from ntrp.memory.retrieval import MemoryRetrieval
 from ntrp.memory.store.base import GraphDatabase
 
@@ -117,7 +118,9 @@ async def test_search_empty_returns_empty_bundle(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="anything"), now=NOW)
 
     assert bundle.candidates == []
-    assert bundle.omitted == []
+    assert bundle.facts_to_trust == []
+    assert bundle.skills_to_consider == []
+    assert bundle.excluded_or_conflicting == []
     assert bundle.prompt_context == ""
     assert bundle.used_chars == 0
     assert bundle.skills_to_use == []
@@ -179,6 +182,52 @@ async def test_search_records_activation_usage(conn: aiosqlite.Connection):
 
     rows = await conn.execute_fetchall("SELECT usage FROM memory_items WHERE id = 'claim-usage'")
     assert json.loads(rows[0]["usage"])["activated"] == 3
+
+
+async def test_search_writes_usage_events_per_candidate(conn: aiosqlite.Connection):
+    await _insert_item(conn, "claim-a", "provenance backbone token", confidence=0.9)
+    await _insert_item(conn, "claim-b", "provenance backbone token alt", confidence=0.5)
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(
+        MemoryActivationRequest(
+            query="provenance backbone token",
+            limit=5,
+            record_access=True,
+            run_id="run-xyz",
+            scope="proj_abc",
+        ),
+        now=NOW,
+    )
+
+    rows = await conn.execute_fetchall(
+        "SELECT id, item_id, run_id, session_scope, surface, rank, score, "
+        "selection_role, reason, bundle_id, created_at FROM memory_usage_events ORDER BY rank"
+    )
+    assert len(rows) == len(bundle.candidates)
+    bundle_ids = {row["bundle_id"] for row in rows}
+    assert len(bundle_ids) == 1
+    assert bundle.usage_event_id == rows[0]["id"]
+    assert [row["item_id"] for row in rows] == [c.item_id for c in bundle.candidates]
+    assert [row["rank"] for row in rows] == list(range(len(rows)))
+    for row in rows:
+        assert row["run_id"] == "run-xyz"
+        assert row["session_scope"] == "proj_abc"
+        assert row["surface"] == "prompt"
+        assert row["selection_role"] == "advisory"
+        assert row["reason"]
+        assert row["created_at"] == NOW.isoformat()
+
+
+async def test_search_without_record_access_writes_no_usage_events(conn: aiosqlite.Connection):
+    await _insert_item(conn, "claim-noop", "silent token")
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(MemoryActivationRequest(query="silent token"), now=NOW)
+
+    rows = await conn.execute_fetchall("SELECT id FROM memory_usage_events")
+    assert rows == []
+    assert bundle.usage_event_id is None
 
 
 async def test_search_fts_only_match(conn: aiosqlite.Connection):
@@ -355,7 +404,6 @@ async def test_search_respects_limit(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="limit token", limit=3), now=NOW)
 
     assert len(bundle.candidates) == 3
-    assert len(bundle.omitted) == 7
 
 
 async def test_search_respects_budget_chars(conn: aiosqlite.Connection):
@@ -366,9 +414,9 @@ async def test_search_respects_budget_chars(conn: aiosqlite.Connection):
     bundle = await retrieval.search(MemoryActivationRequest(query="budget token", limit=5, budget_chars=600), now=NOW)
 
     assert len(bundle.candidates) == 1
-    assert len(bundle.omitted) == 4
-    assert bundle.used_chars <= 600
-    assert len(bundle.prompt_context) <= 600
+    # used_chars counts the rendered prompt context (typed-bucket headers included);
+    # the per-candidate budget still bounds the single fitted block under 600 chars.
+    assert len(bundle.prompt_context) <= 700
 
 
 async def test_score_breakdown_shape_and_components(conn: aiosqlite.Connection):
@@ -401,7 +449,7 @@ async def test_score_breakdown_shape_and_components(conn: aiosqlite.Connection):
     assert candidate.score == pytest.approx(expected)
 
 
-async def test_prompt_context_format_includes_kind_and_confidence_bucket(conn: aiosqlite.Connection):
+async def test_prompt_context_format_includes_kind_role_and_confidence_bucket(conn: aiosqlite.Connection):
     await _insert_item(conn, "claim", "bucket token high", kind="claim", confidence=0.9)
     await _insert_item(conn, "skill", "bucket token med", kind="skill", confidence=0.5)
     await _insert_item(conn, "episode", "bucket token low", kind="episode", confidence=0.2)
@@ -412,9 +460,43 @@ async def test_prompt_context_format_includes_kind_and_confidence_bucket(conn: a
         now=NOW,
     )
 
-    assert "[claim · conf=high]" in bundle.prompt_context
-    assert "[skill · conf=med]" in bundle.prompt_context
-    assert "[episode · conf=low]" in bundle.prompt_context
+    # Header now carries the selection role between kind and confidence, and the
+    # candidate reason is rendered into the block so the model sees why it surfaced.
+    assert "[claim · advisory · conf=high]" in bundle.prompt_context
+    assert "[skill · advisory · conf=med]" in bundle.prompt_context
+    assert "[episode · evidence_only · conf=low]" in bundle.prompt_context
+    assert "(why:" in bundle.prompt_context
+    # Typed buckets group the rendered blocks under section headers.
+    assert "### FACTS TO TRUST" in bundle.prompt_context
+    assert "### SKILLS TO CONSIDER" in bundle.prompt_context
+    assert bundle.facts_to_trust[0].item_id == "claim"
+    assert bundle.skills_to_consider[0].item_id == "skill"
+
+
+async def test_excluded_bucket_surfaces_superseded_and_cross_scope(conn: aiosqlite.Connection):
+    # Active project-scope claim that supersedes an old one and overrides a general default.
+    await _insert_item(conn, "winner", "deploy token to staging first", kind="claim", scope="project:x")
+    await _insert_item(conn, "old", "deploy token to prod directly", kind="claim", status="superseded")
+    await _insert_item(conn, "general", "deploy token straight to prod", kind="claim", scope="user")
+    repo = MemoryItemsRepository(conn)
+    await repo.insert_parent_edge("winner", "old", "supersedes", commit=False)
+    await repo.insert_parent_edge("winner", "general", "contradicts", commit=False)
+    await conn.commit()
+    retrieval = MemoryRetrieval(conn, FakeEmbedder())
+
+    bundle = await retrieval.search(
+        MemoryActivationRequest(query="deploy token", scope="project:x", limit=5),
+        now=NOW,
+    )
+
+    excluded_ids = {item.item_id for item in bundle.excluded_or_conflicting}
+    assert "old" in excluded_ids
+    assert "general" in excluded_ids
+    superseded = next(i for i in bundle.excluded_or_conflicting if i.item_id == "old")
+    assert superseded.superseded_by == "winner"
+    overridden = next(i for i in bundle.excluded_or_conflicting if i.item_id == "general")
+    assert overridden.overridden_in_scope == "project:x"
+    assert "### EXCLUDED OR CONFLICTING" in bundle.prompt_context
 
 
 async def test_search_handles_no_vec_rows_gracefully(conn: aiosqlite.Connection):

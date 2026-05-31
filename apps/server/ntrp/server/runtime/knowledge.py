@@ -3,6 +3,10 @@ from ntrp.logging import get_logger
 from ntrp.memory.buffers_store import EpisodeBufferRepository
 from ntrp.memory.connectors.chat import ChatConnector
 from ntrp.memory.connectors.claim_writer import CompletionClaimAdjudicateClient, CompletionClaimExtractClient
+from ntrp.memory.connectors.entity_linker import (
+    CompletionEntityLinkAdjudicateClient,
+    CompletionMentionExtractClient,
+)
 from ntrp.memory.connectors.episode_close import CompletionDedupClient, CompletionSummaryClient
 from ntrp.memory.contradictions import ContradictionWatcher
 from ntrp.memory.episodes import EpisodeBoundaryClassifier
@@ -120,16 +124,17 @@ class KnowledgeRuntime:
             draft_client=summary_client,
             embedder=self.memory.embedder,
         )
+        contradiction_watcher = ContradictionWatcher(
+            repo=memory_items,
+            embedder=self.memory.embedder,
+            judge_client=summary_client,
+            learnings=LearningsStore(),
+        )
         self.pattern_finder = PatternFinder(
             repo=memory_items,
             summary_client=summary_client,
             embedder=self.memory.embedder,
-            contradiction_watcher=ContradictionWatcher(
-                repo=memory_items,
-                embedder=self.memory.embedder,
-                judge_client=summary_client,
-                learnings=LearningsStore(),
-            ),
+            contradiction_watcher=contradiction_watcher,
         )
         self.pattern_finder.skill_inducer = skill_inducer
         self.lens_pass = LensPass(repo=memory_items, client=LensExtractionClient(self.config.memory_model))
@@ -149,6 +154,9 @@ class KnowledgeRuntime:
             learnings=LearningsStore(),
             claim_extract_client=CompletionClaimExtractClient(self.config.memory_model),
             claim_adjudicate_client=CompletionClaimAdjudicateClient(self.config.memory_model),
+            mention_extract_client=CompletionMentionExtractClient(self.config.memory_model),
+            entity_link_client=CompletionEntityLinkAdjudicateClient(self.config.memory_model),
+            watcher=contradiction_watcher,
         )
         self.memory_service.chat_connector = self.chat_connector  # type: ignore[attr-defined]
         self.memory_service.register_connector(self.chat_connector)
@@ -184,6 +192,12 @@ class KnowledgeRuntime:
                     self.chat_connector.dedup_client = CompletionDedupClient(self.config.memory_model)
                     self.chat_connector.claim_extract_client = CompletionClaimExtractClient(self.config.memory_model)
                     self.chat_connector.claim_adjudicate_client = CompletionClaimAdjudicateClient(
+                        self.config.memory_model
+                    )
+                    self.chat_connector.mention_extract_client = CompletionMentionExtractClient(
+                        self.config.memory_model
+                    )
+                    self.chat_connector.entity_link_client = CompletionEntityLinkAdjudicateClient(
                         self.config.memory_model
                     )
                 if self.pattern_finder:

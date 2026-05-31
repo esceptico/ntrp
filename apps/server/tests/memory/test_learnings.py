@@ -72,3 +72,32 @@ def test_list_adjudicators(store):
     store.record(Correction(adjudicator="dedup", action="edit", summary="x"))
     store.record(Correction(adjudicator="contradiction", action="undo", summary="y"))
     assert store.list_adjudicators() == ["contradiction", "dedup"]
+
+
+def test_load_not_same_pairs_collects_across_adjudicators(store):
+    store.record(
+        Correction(adjudicator="contradiction", action="not_same", summary="a vs b", subjects=("a", "b")),
+    )
+    store.record(
+        Correction(adjudicator="entity_link", action="not_same", summary="x vs y", subjects=("x", "y")),
+    )
+    pairs = store.load_not_same_pairs()
+    assert pairs == frozenset({frozenset({"a", "b"}), frozenset({"x", "y"})})
+
+
+def test_load_not_same_pairs_ignores_non_not_same_and_malformed(store):
+    store.record(Correction(adjudicator="dedup", action="edit", summary="edit", subjects=("only_one",)))
+    store.record(Correction(adjudicator="dedup", action="not_same", summary="solo", subjects=("solo",)))
+    store.record(Correction(adjudicator="dedup", action="not_same", summary="dupe", subjects=("z", "z")))
+    assert store.load_not_same_pairs() == frozenset()
+
+
+def test_load_not_same_pairs_reads_hand_edited_markdown(store):
+    path = store.path("dedup")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Learnings: episode dedup\n\nintro\n\n"
+        "## 2026-05-30 — not_same\nP and Q are different\n- subjects: p, q\n",
+        encoding="utf-8",
+    )
+    assert store.load_not_same_pairs() == frozenset({frozenset({"p", "q"})})
