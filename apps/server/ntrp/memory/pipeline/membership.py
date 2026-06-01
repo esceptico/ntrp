@@ -201,7 +201,6 @@ class LensMembership:
                 ],
                 model=self.cheap_model,
                 response_format=SynthesizedCriterion,
-                temperature=0.0,
             )
             content = resp.choices[0].message.content
             if not content:
@@ -348,7 +347,6 @@ class LensMembership:
                 ],
                 model=model,
                 response_format=MembershipBatch,
-                temperature=0.0,
             )
             content = resp.choices[0].message.content
             if not content:

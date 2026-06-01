@@ -369,7 +369,6 @@ class LensProjector:
             ],
             model=self.strong_model,
             response_format=PageSynthesis,
-            temperature=0.0,
         )
         content = resp.choices[0].message.content
         if not content:
@@ -462,7 +461,6 @@ class LensProjector:
             ],
             model=self.strong_model,
             response_format=PageSynthesis,
-            temperature=0.0,
         )
         content = resp.choices[0].message.content
         if not content:

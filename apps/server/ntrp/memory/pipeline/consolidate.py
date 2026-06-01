@@ -40,7 +40,6 @@ from ntrp.memory.store import MemoryStore
 
 _logger = get_logger(__name__)
 
-CHEAP_TEMPERATURE = 0.0
 MAX_ITEMS_PER_SWEEP = 200
 NEIGHBORHOOD_LIMIT = 8
 WATERMARK_PREFIX = "consolidate_watermark"
@@ -207,7 +206,6 @@ class ConsolidateLint:
             resp = await self.cheap_llm.completion(
                 messages=messages,
                 model=self.model,
-                temperature=CHEAP_TEMPERATURE,
                 response_format=LintOps,
             )
             raw = resp.choices[0].message.content

@@ -290,7 +290,6 @@ class Reconciler:
             ],
             model=self.cheap_model,
             response_format=SubjectResolution,
-            temperature=0.0,
         )
         decision = _parse(resp, SubjectResolution)
         known = {p.subject for p in profiles}
@@ -385,7 +384,6 @@ class Reconciler:
             ],
             model=self.cheap_model,
             response_format=BatchReconcile,
-            temperature=0.0,
         )
         parsed = _parse(resp, BatchReconcile)
         rows = self._validate_rows(parsed.rows, len(idxs), len(profile))
@@ -468,7 +466,6 @@ class Reconciler:
                 ],
                 model=self.strong_model,
                 response_format=BatchReconcile,
-                temperature=0.0,
             )
             parsed = _parse(resp, BatchReconcile)
         except Exception as e:

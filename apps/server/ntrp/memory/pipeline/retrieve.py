@@ -344,7 +344,6 @@ class Retriever:
                 ],
                 model=self.model,
                 response_format=CompressionResult,
-                temperature=0.0,
             )
             parsed = self._parse_compression(response)
         except Exception as e:

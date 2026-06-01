@@ -986,14 +986,16 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
   return (
     <div className="mt-4 flex flex-col gap-2.5">
       <div className="flex items-center gap-2 text-sm font-medium text-ink">
-        {gen.status === "error" ? (
-          <AlertCircle size={ICON.SM} strokeWidth={2} className="text-bad" />
-        ) : (
-          <Loader2 size={ICON.SM} strokeWidth={2} className="animate-spin text-accent" />
-        )}
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {gen.status === "error" ? (
+            <AlertCircle size={ICON.XS} strokeWidth={2.4} className="text-bad" />
+          ) : (
+            <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
+          )}
+        </span>
         {gen.status === "error" ? "Generation failed" : "Generating view…"}
       </div>
-      <ul className="flex flex-col gap-1.5 pl-0.5">
+      <ul className="flex flex-col gap-1.5">
         {GEN_STEPS.map((step) => {
           const stepOrd = STAGE_ORDER[step.stage];
           const done = cur > stepOrd;
