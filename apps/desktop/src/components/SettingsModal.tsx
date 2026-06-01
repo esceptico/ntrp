@@ -15,6 +15,7 @@ import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 import { ScrollBlurTop } from "./ScrollBlur";
+import { Tab as TabItem, Tabs } from "./ui/Tabs";
 
 type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
 
@@ -74,27 +75,30 @@ export function SettingsModal() {
     >
         <aside className="sidebar glass-surface settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
           <div className="drag-spacer shrink-0 h-[22px]" />
-          <nav className="flex flex-col gap-px px-2.5 pt-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom">
+          <Tabs
+            value={active}
+            onChange={(v) => setActive(v as TabId)}
+            variant="pill"
+            orientation="vertical"
+            indicatorClassName="bg-[color-mix(in_oklab,var(--color-ink)_4%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-ink)_10%,transparent)]"
+            className="gap-px px-2.5 pt-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom"
+          >
             {TABS.map((tab) => {
               const Icon = tab.icon;
-              const isActive = active === tab.id;
               return (
-                <button
+                <TabItem
                   key={tab.id}
-                  type="button"
-                  onClick={() => setActive(tab.id)}
-                  data-active={isActive ? "true" : undefined}
-                  title={tab.label}
-                  className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-base font-medium text-ink-soft text-left tracking-[-0.005em]"
+                  value={tab.id}
+                  className="grid w-full grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2 py-1 rounded-lg text-base font-medium text-left tracking-[-0.005em] text-ink-soft transition-colors hover:text-ink data-[active=true]:text-ink"
                 >
-                  <span className="grid place-items-center w-4 h-4 shrink-0">
+                  <span className="grid h-4 w-4 shrink-0 place-items-center">
                     <Icon size={ICON.LG} strokeWidth={2} />
                   </span>
                   <span className="truncate">{tab.label}</span>
-                </button>
+                </TabItem>
               );
             })}
-          </nav>
+          </Tabs>
         </aside>
 
         <div className="relative min-h-0 min-w-0">
