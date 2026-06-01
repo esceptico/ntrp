@@ -504,8 +504,16 @@ class LensProjector:
     # --- blocks (the write-back spine) -------------------------------
 
     async def _blocks_for(self, claim_ids: list[str]) -> list[RenderedClaim]:
+        # Dedupe by claim id, first occurrence wins. A synthesized profile cites the
+        # SAME claim across several lines (intro + each Profile-shape field), so its
+        # anchors repeat that id — without this, one claim renders as N identical
+        # blocks under the profile.
         blocks: list[RenderedClaim] = []
+        seen: set[str] = set()
         for cid in claim_ids:
+            if cid in seen:
+                continue
+            seen.add(cid)
             m = await self.store.get(cid)
             if m is not None and m.status is Status.ACTIVE:
                 blocks.append(self._to_block(m))
