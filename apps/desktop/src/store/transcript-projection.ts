@@ -18,7 +18,6 @@ export type TranscriptProjectionEffect =
 export interface PendingToolCall {
   name: string;
   displayName?: string;
-  description: string;
   argsBuffer: string;
   depth: number;
   parentId: string | null;
@@ -293,7 +292,6 @@ export function applyChatEventToTranscript(
       const pending: PendingToolCall = {
         name: event.tool_call_name,
         displayName: event.display_name,
-        description: event.description ?? "",
         argsBuffer: "",
         depth: event.depth ?? 0,
         parentId: event.parent_id ?? null,
@@ -320,7 +318,7 @@ export function applyChatEventToTranscript(
       context.update({ ...context.state, pendingToolCalls });
       s.mergeActivityItem(event.tool_call_id, {
         args: argsBuffer,
-        target: pending.description || formatCallTarget(pending.name, argsBuffer || "{}"),
+        target: formatCallTarget(pending.name, argsBuffer || "{}", pending.displayName),
       });
       break;
     }
@@ -802,7 +800,7 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
     kind: pending.name,
     semanticKind: pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
     displayName: pending.displayName,
-    target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
+    target: formatCallTarget(pending.name, pending.argsBuffer || "{}", pending.displayName),
     args: pending.argsBuffer,
     status: "ongoing",
     depth: pending.depth || undefined,
@@ -812,7 +810,7 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
 
 function activityPatchFromPending(pending: PendingToolCall): Partial<ActivityItem> {
   const patch: Partial<ActivityItem> = {
-    target: pending.description || formatCallTarget(pending.name, pending.argsBuffer || "{}"),
+    target: formatCallTarget(pending.name, pending.argsBuffer || "{}", pending.displayName),
     args: pending.argsBuffer,
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
@@ -958,21 +956,50 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
   }
 }
 
-function formatCallTarget(name: string, argsJson: string): string {
+// Args whose value IS the call's target — render it directly (e.g. bash →
+// the command, file tools → the path, web → the query) instead of the raw
+// `name(key="value")` serialization that reads like debug output. Ordered
+// by salience; first match wins.
+const PRIMARY_TARGET_ARG_KEYS = [
+  "command",
+  "cmd",
+  "file_path",
+  "path",
+  "filename",
+  "url",
+  "query",
+  "q",
+  "pattern",
+  "expression",
+];
+
+function collapseTarget(text: string, max = 120): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
+}
+
+function formatCallTarget(name: string, argsJson: string, displayName?: string): string {
+  const label = displayName || name;
   try {
     const parsed = JSON.parse(argsJson || "{}");
     if (parsed && typeof parsed === "object") {
-      const entries = Object.entries(parsed as Record<string, unknown>);
-      if (entries.length === 0) return `${name}()`;
+      const args = parsed as Record<string, unknown>;
+      const entries = Object.entries(args);
+      if (entries.length === 0) return label;
+      for (const key of PRIMARY_TARGET_ARG_KEYS) {
+        const value = args[key];
+        if (typeof value === "string" && value.trim()) {
+          return `${label}(${collapseTarget(value, 100)})`;
+        }
+      }
       const parts = entries.map(([key, value]) => {
         const rendered = typeof value === "string" ? `"${value}"` : JSON.stringify(value);
         return `${key}=${rendered}`;
       });
-      const full = `${name}(${parts.join(", ")})`;
-      return full.length > 120 ? `${full.slice(0, 117)}...` : full;
+      return collapseTarget(`${label}(${parts.join(", ")})`);
     }
   } catch {
-    // Fall through to the raw tool name.
+    // Fall through to the display label.
   }
-  return name;
+  return label;
 }

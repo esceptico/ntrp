@@ -45,8 +45,8 @@ test("continues assistant content by message id without moving prior text below 
     type: "TOOL_CALL_START",
     tool_call_id: "tool-1",
     tool_call_name: "ReadFile",
-    description: "read app",
   });
+  handleServerEvent({ type: "TOOL_CALL_ARGS", tool_call_id: "tool-1", delta: '{"path":"app"}' });
   handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-1" });
   handleServerEvent({ type: "TEXT_MESSAGE_CONTENT", message_id: "assistant-1", delta: " world" });
 
@@ -57,7 +57,9 @@ test("continues assistant content by message id without moving prior text below 
   expect(assistantIds).toEqual(["assistant-1"]);
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
   expect(roles).toEqual(["assistant", "activity"]);
-  expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("read app");
+  // Label derives from the call itself (name + primary arg), not a
+  // server-sent description — so live and replayed transcripts always agree.
+  expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("ReadFile(app)");
 });
 
 test("live goal meta run stays visually hidden", () => {
@@ -183,7 +185,7 @@ test("live tool target matches persisted history formatting without description"
   handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-live-target" });
 
   const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
-  expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe('ReadFile(path="a")');
+  expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe("ReadFile(a)");
 });
 
 test("todo update stays hidden in chat but available to sidebar", () => {
@@ -538,7 +540,7 @@ test("rebuilds persisted transcript without replay animation marker", async () =
     expect(getState().order).toEqual(["user-1", "assistant-1", "assistant-1-activity"]);
     expect([...getState().messages.values()].every((message) => message.suppressEntryMotion)).toBe(true);
     expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].result).toBe("ok");
-    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe('ReadFile(path="a")');
+    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe("ReadFile(a)");
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
     (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
