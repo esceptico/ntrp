@@ -80,12 +80,12 @@ export function AutomationsModal() {
         </Tabs>
 
         <div className="relative min-h-0 overflow-hidden">
-          <ScrollBlurTop />
           <TabPanels
             value={tab}
             direction={direction}
             className="h-full overflow-y-auto scroll-thin px-6 py-5"
           >
+            <ScrollBlurTop />
             {tab === "active" ? (
               <ActiveList
                 automations={automationGroups?.user ?? null}
