@@ -35,8 +35,15 @@ Decide one of:
 Rules:
 - Match only on identity, never on mere topical similarity. "my therapist" and "my
   doctor" are different people unless context proves they are one.
+- A RELATIONAL or POSSESSIVE subject is a DISTINCT referent from the entity it refers to.
+  "the user's wife", "the user's project", "Regina's company" are NOT the same referent as
+  "the user" or "Regina" — never collapse "<X>'s <relation>" into "<X>". A fact being
+  phrased relative to X (mentioning X, owned by X, about X's situation) does NOT make its
+  subject X. Judge who/what the fact is ABOUT, not who it mentions.
 - Use the profile gist to settle identity: a name variant, nickname, or role label that
-  the accumulated facts show is the same person/thing is a MATCH, not a NEW subject.
+  the accumulated facts show is the same person/thing is a MATCH (e.g. "Tim Ganiev" and
+  "Timur Ganiev" are one person). That is identity of the SAME entity — different from the
+  relational case above.
 - When genuinely uncertain between a match and a new subject, choose NEW. A wrong NEW is
   cheaply repaired by background cleanup; a wrong MATCH poisons a profile.
 - canonical_subject MUST be copied verbatim from the EXISTING list when MATCH; otherwise
