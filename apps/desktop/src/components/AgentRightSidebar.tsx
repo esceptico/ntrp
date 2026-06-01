@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   CheckCircle2,
   Circle,
@@ -12,7 +12,7 @@ import {
 import clsx from "clsx";
 import { cancelBackgroundTaskApi, listBackgroundTasksApi, type TodoStatus } from "../api";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
-import { EASE_EMPHASIZED, MOTION, originFromEvent } from "../lib/tokens/motion";
+import { EASE_EMPHASIZED, MOTION, originFromEvent, SPRING_ROW_ENTRY } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import { ScrollBlurTop } from "./ScrollBlur";
@@ -285,21 +285,36 @@ function TodoSidebarSection({ todo }: { todo: TodoListState }) {
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
-          {todo.items.map((item, index) => (
-            <div key={`${item.status}-${index}-${item.content}`} className="flex min-w-0 items-start gap-1.5">
-              {todoStatusIcon(item.status)}
-              <span
-                className={clsx(
-                  "min-w-0 flex-1 break-words text-xs leading-[1.35]",
-                  item.status === "completed" && "text-faint line-through",
-                  item.status === "in_progress" && "font-medium text-ink-soft",
-                  item.status === "pending" && "text-muted",
-                )}
+          <AnimatePresence initial={false}>
+            {todo.items.map((item, index) => (
+              <motion.div
+                key={`${index}-${item.content}`}
+                layout
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{
+                  layout: SPRING_ROW_ENTRY,
+                  opacity: { duration: MOTION.row },
+                  y: { duration: MOTION.fast },
+                  height: { duration: MOTION.row },
+                }}
+                className="flex min-w-0 items-start gap-1.5 overflow-hidden"
               >
-                {item.content}
-              </span>
-            </div>
-          ))}
+                {todoStatusIcon(item.status)}
+                <span
+                  className={clsx(
+                    "min-w-0 flex-1 break-words text-xs leading-[1.35] transition-colors",
+                    item.status === "completed" && "text-faint line-through",
+                    item.status === "in_progress" && "font-medium text-ink-soft",
+                    item.status === "pending" && "text-muted",
+                  )}
+                >
+                  {item.content}
+                </span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       </div>
     </section>

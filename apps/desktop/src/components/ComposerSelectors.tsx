@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "../actions";
 import type { ModelGroup } from "../api";
 import { ICON } from "../lib/icons";
+import { DURATION_POPOVER, EASE_DECELERATE } from "../lib/tokens/motion";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -134,9 +136,15 @@ export function ModelReasoningPicker({
         <ChevronDown size={ICON.SM} strokeWidth={2} className="shrink-0 opacity-70" />
       </button>
 
-      {open && coords && createPortal(
-        <div
+      {createPortal(
+        <AnimatePresence>
+          {open && coords && (
+        <motion.div
           ref={popoverRef}
+          initial={{ opacity: 0, y: 4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
           style={{ position: "fixed", ...coords, zIndex: 60 }}
           className="glass-surface surface-popover w-[300px] overflow-hidden"
         >
@@ -212,7 +220,9 @@ export function ModelReasoningPicker({
               ))}
             </div>
           </div>
-        </div>,
+        </motion.div>
+          )}
+        </AnimatePresence>,
         document.body
       )}
     </div>

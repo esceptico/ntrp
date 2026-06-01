@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "../../store";
-import { EASE_OUT } from "../../lib/tokens/motion";
+import { EASE_OUT, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { PaletteBody } from "./PaletteBody";
 import type { Crumb } from "./types";
 
@@ -60,11 +60,12 @@ export function CommandPalette() {
           onClick={close}
         >
           <motion.div
+            layout
             className="glass-surface glass-radius-md w-[min(660px,calc(100vw-80px))] max-h-[62vh] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden origin-top"
             initial={{ opacity: 0, scale: 0.96, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -6 }}
-            transition={{ duration: PANEL_DURATION, ease: EASE }}
+            transition={{ duration: PANEL_DURATION, ease: EASE, layout: SPRING_POPOVER }}
             onClick={(e) => e.stopPropagation()}
           >
             <PaletteBody

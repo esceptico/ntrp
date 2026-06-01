@@ -33,6 +33,7 @@ export function ListColumn<T>({
   error,
   empty,
   totalLabel,
+  wrapItems,
 }: {
   toolbar: ReactNode;
   items: T[];
@@ -41,7 +42,9 @@ export function ListColumn<T>({
   error?: ReactNode;
   empty?: string;
   totalLabel: string | null;
+  wrapItems?: (children: ReactNode) => ReactNode;
 }) {
+  const mapped = items.map(renderItem);
   return (
     <>
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">{toolbar}</div>
@@ -53,7 +56,7 @@ export function ListColumn<T>({
         ) : items.length === 0 ? (
           <Empty>{empty ?? "No matches."}</Empty>
         ) : (
-          <ul className="flex flex-col gap-px">{items.map(renderItem)}</ul>
+          <ul className="flex flex-col gap-px">{wrapItems ? wrapItems(mapped) : mapped}</ul>
         )}
       </div>
       {totalLabel && (

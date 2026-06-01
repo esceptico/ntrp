@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { SPRING_MODAL } from "../../lib/tokens/motion";
+import {
+  DURATION_PANEL,
+  EASE_DECELERATE,
+  EASE_EMPHASIZED,
+  MOTION,
+  SPRING_LAYOUT,
+  SPRING_MODAL,
+} from "../../lib/tokens/motion";
 import {
   approveLensProposal,
   approveMemoryProposal,
@@ -155,16 +162,27 @@ export function MemoryItemsPane() {
               </>
             }
             detail={
-              <ItemDetail
-                config={config}
-                detail={detail}
-                error={detailError}
-                onOpenGraph={(item) => selectItem(item, "graph")}
-                onSkillChanged={reloadDetail}
-                onChanged={reloadDetail}
-                onDeleted={() => { clearSelection(); reloadDetail(); }}
-                onNavigate={(item) => selectItem(item)}
-              />
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={detail?.item.id ?? "empty"}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: MOTION.palette, ease: EASE_DECELERATE }}
+                  className="h-full"
+                >
+                  <ItemDetail
+                    config={config}
+                    detail={detail}
+                    error={detailError}
+                    onOpenGraph={(item) => selectItem(item, "graph")}
+                    onSkillChanged={reloadDetail}
+                    onChanged={reloadDetail}
+                    onDeleted={() => { clearSelection(); reloadDetail(); }}
+                    onNavigate={(item) => selectItem(item)}
+                  />
+                </motion.div>
+              </AnimatePresence>
             }
           />
         )}
@@ -231,6 +249,7 @@ function TodayList({
       error={error ? <ListError title="Could not load Today" message={error} /> : null}
       empty="Nothing to review — memory is quiet."
       totalLabel={today ? `${rows.length} review items` : null}
+      wrapItems={(children) => <AnimatePresence mode="popLayout">{children}</AnimatePresence>}
       renderItem={(row) => (
         <TodayCard
           key={`${row.section}:${row.item.id}`}
@@ -291,7 +310,12 @@ function TodayCard({
 }) {
   const meta = SECTION_LABEL[section] ?? { label: section, tone: "neutral" as const };
   return (
-    <li>
+    <motion.li
+      layout
+      exit={{ opacity: 0, scale: 0.97, height: 0 }}
+      transition={{ layout: SPRING_LAYOUT, duration: DURATION_PANEL, ease: EASE_EMPHASIZED }}
+      className="overflow-hidden"
+    >
       <div
         className={[
           "rounded-[12px] border px-3 py-2.5 transition-colors",
@@ -322,7 +346,7 @@ function TodayCard({
           </div>
         )}
       </div>
-    </li>
+    </motion.li>
   );
 }
 

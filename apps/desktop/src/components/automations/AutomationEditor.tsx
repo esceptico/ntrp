@@ -12,6 +12,7 @@ import {
   ENTRY_GLASS,
   ENTRY_LINEN,
   EASE_DECELERATE,
+  SPRING_LAYOUT,
 } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
 import { ICON } from "../../lib/icons";
@@ -386,10 +387,15 @@ function ScheduleChip({
       <AnimatePresence>
         {open && (
           <motion.div
+            layout
             initial={{ opacity: 0, y: 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
-            transition={{ duration: 0.16, ease: EASE_DECELERATE }}
+            transition={{
+              duration: 0.16,
+              ease: EASE_DECELERATE,
+              layout: SPRING_LAYOUT,
+            }}
             className="glass-surface surface-popover absolute bottom-[calc(100%+6px)] left-0 z-10 w-[300px] grid gap-3 p-3"
           >
             <GlassToggle
@@ -403,93 +409,104 @@ function ScheduleChip({
               ]}
             />
 
-            {schedule.kind === "at" && (
-              <div className="grid grid-cols-2 gap-2">
-                <ScheduleField label="At">
-                  <input
-                    type="time"
-                    value={schedule.at}
-                    onChange={(e) => onChange({ ...schedule, at: e.target.value })}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-                <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
-                  <input
-                    value={schedule.days}
-                    onChange={(e) => onChange({ ...schedule, days: e.target.value })}
-                    placeholder="daily"
-                    spellCheck={false}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-              </div>
-            )}
-
-            {schedule.kind === "every" && (
-              <div className="grid grid-cols-2 gap-2">
-                <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
-                  <input
-                    value={schedule.every}
-                    onChange={(e) => onChange({ ...schedule, every: e.target.value })}
-                    placeholder="30m"
-                    spellCheck={false}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-                <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
-                  <input
-                    value={schedule.days}
-                    onChange={(e) => onChange({ ...schedule, days: e.target.value })}
-                    placeholder="weekdays"
-                    spellCheck={false}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-                <ScheduleField label="Start">
-                  <input
-                    type="time"
-                    value={schedule.start}
-                    onChange={(e) => onChange({ ...schedule, start: e.target.value })}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-                <ScheduleField label="End">
-                  <input
-                    type="time"
-                    value={schedule.end}
-                    onChange={(e) => onChange({ ...schedule, end: e.target.value })}
-                    className={schedFieldCls}
-                  />
-                </ScheduleField>
-              </div>
-            )}
-
-            {schedule.kind === "event" && (
-              <div className="grid grid-cols-2 gap-2">
-                <ScheduleField label="Event">
-                  <select
-                    value={schedule.event}
-                    onChange={(e) => onChange({ ...schedule, event: e.target.value as EventType })}
-                    className={schedFieldCls}
-                  >
-                    <option value="starts">starts</option>
-                    <option value="ends">ends</option>
-                    <option value="approaching">approaching</option>
-                  </select>
-                </ScheduleField>
-                {schedule.event === "approaching" && (
-                  <ScheduleField label="Lead (m)">
-                    <input
-                      value={schedule.lead}
-                      onChange={(e) => onChange({ ...schedule, lead: e.target.value })}
-                      placeholder="15"
-                      spellCheck={false}
-                      className={schedFieldCls}
-                    />
-                  </ScheduleField>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={schedule.kind}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.1, ease: EASE_DECELERATE }}
+                className="grid grid-cols-2 gap-2"
+              >
+                {schedule.kind === "at" && (
+                  <>
+                    <ScheduleField label="At">
+                      <input
+                        type="time"
+                        value={schedule.at}
+                        onChange={(e) => onChange({ ...schedule, at: e.target.value })}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                    <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
+                      <input
+                        value={schedule.days}
+                        onChange={(e) => onChange({ ...schedule, days: e.target.value })}
+                        placeholder="daily"
+                        spellCheck={false}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                  </>
                 )}
-              </div>
-            )}
+
+                {schedule.kind === "every" && (
+                  <>
+                    <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
+                      <input
+                        value={schedule.every}
+                        onChange={(e) => onChange({ ...schedule, every: e.target.value })}
+                        placeholder="30m"
+                        spellCheck={false}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                    <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
+                      <input
+                        value={schedule.days}
+                        onChange={(e) => onChange({ ...schedule, days: e.target.value })}
+                        placeholder="weekdays"
+                        spellCheck={false}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                    <ScheduleField label="Start">
+                      <input
+                        type="time"
+                        value={schedule.start}
+                        onChange={(e) => onChange({ ...schedule, start: e.target.value })}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                    <ScheduleField label="End">
+                      <input
+                        type="time"
+                        value={schedule.end}
+                        onChange={(e) => onChange({ ...schedule, end: e.target.value })}
+                        className={schedFieldCls}
+                      />
+                    </ScheduleField>
+                  </>
+                )}
+
+                {schedule.kind === "event" && (
+                  <>
+                    <ScheduleField label="Event">
+                      <select
+                        value={schedule.event}
+                        onChange={(e) => onChange({ ...schedule, event: e.target.value as EventType })}
+                        className={schedFieldCls}
+                      >
+                        <option value="starts">starts</option>
+                        <option value="ends">ends</option>
+                        <option value="approaching">approaching</option>
+                      </select>
+                    </ScheduleField>
+                    {schedule.event === "approaching" && (
+                      <ScheduleField label="Lead (m)">
+                        <input
+                          value={schedule.lead}
+                          onChange={(e) => onChange({ ...schedule, lead: e.target.value })}
+                          placeholder="15"
+                          spellCheck={false}
+                          className={schedFieldCls}
+                        />
+                      </ScheduleField>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
 
             <div className="flex items-center gap-1 pt-1 text-xs text-faint">
               <CalendarClock size={ICON.XS} strokeWidth={2} />

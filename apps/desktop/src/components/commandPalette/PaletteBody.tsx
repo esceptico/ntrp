@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Search } from "lucide-react";
 import { ICON } from "../../lib/icons";
 import { useListNav } from "../../lib/hooks";
+import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { Row } from "./Row";
 import { filterEntries, groupBySection } from "./filter";
 import { useEntries } from "./useEntries";
 import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
 import { ScrollBlurTop } from "../ScrollBlur";
+
+// Directional page swap between hierarchy levels: pushing into a sub-view
+// enters from the right (+1), popping back enters from the left (-1). Mirrors
+// TabPanels' offset/curve so the palette and the rest of the app speak one
+// motion language.
+const PAGE_VARIANTS = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 16 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -16 }),
+};
 
 export function PaletteBody({
   query,
@@ -125,6 +137,17 @@ export function PaletteBody({
 
   const grouped = useMemo(() => groupBySection(filtered), [filtered]);
 
+  // Page identity = the crumb path. Drives the AnimatePresence swap so each
+  // hierarchy level mounts as a fresh panel. `depth` alone would be ambiguous
+  // if two sibling sub-views ever shared a depth; the joined id chain is exact.
+  const pageKey = crumbs.length === 0 ? "root" : crumbs.map((c) => c.id).join("/");
+  const depth = crumbs.length;
+  const prevDepth = useRef(depth);
+  const direction = depth >= prevDepth.current ? 1 : -1;
+  useEffect(() => {
+    prevDepth.current = depth;
+  }, [depth]);
+
   return (
     <>
       <div className="relative px-4 pt-3 pb-2.5">
@@ -156,36 +179,59 @@ export function PaletteBody({
         </div>
       </div>
 
-      <div ref={listRef} className="overflow-y-auto scroll-thin pb-2">
+      {/* Scroll viewport is unchanged — keyboard nav, scrollIntoView, and
+          ScrollBlur (which reads parentElement) all keep seeing this div as
+          the scroller. The height MORPH happens on the panel itself (see
+          CommandPalette.tsx `layout`): as the page content below changes
+          height, the panel's box animates to match. Inside, page content is
+          swapped directionally via AnimatePresence (mode="wait" so the two
+          pages never overlap inside the scroll area). overflow-x-hidden keeps
+          the x-slide from spawning a horizontal scrollbar. */}
+      <div
+        ref={listRef}
+        className="overflow-y-auto overflow-x-hidden scroll-thin pb-2"
+      >
         <ScrollBlurTop />
-        {filtered.length === 0 ? (
-          <div className="grid place-items-center min-h-[120px] text-sm italic text-faint">
-            Nothing matches.
-          </div>
-        ) : (
-          grouped.map(({ section, items }) => (
-            <div key={section}>
-              <div className="px-4 pt-3 pb-1 text-2xs font-medium uppercase tracking-[0.10em] text-faint">
-                {SECTION_LABEL[section]}
+        <AnimatePresence mode="wait" custom={direction} initial={false}>
+          <motion.div
+            key={pageKey}
+            custom={direction}
+            variants={PAGE_VARIANTS}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: MOTION.palette, ease: EASE_EMPHASIZED }}
+          >
+            {filtered.length === 0 ? (
+              <div className="grid place-items-center min-h-[120px] text-sm italic text-faint">
+                Nothing matches.
               </div>
-              <ul className="m-0 px-1.5 list-none">
-                {items.map((entry) => {
-                  const isActive = entry === filtered[safe];
-                  return (
-                    <Row
-                      key={entry.id}
-                      entry={entry}
-                      active={isActive}
-                      activeRef={isActive ? activeRowRef : undefined}
-                      onHover={() => setIndex(filtered.indexOf(entry))}
-                      onClick={() => activate(entry)}
-                    />
-                  );
-                })}
-              </ul>
-            </div>
-          ))
-        )}
+            ) : (
+              grouped.map(({ section, items }) => (
+                <div key={section}>
+                  <div className="px-4 pt-3 pb-1 text-2xs font-medium uppercase tracking-[0.10em] text-faint">
+                    {SECTION_LABEL[section]}
+                  </div>
+                  <ul className="m-0 px-1.5 list-none">
+                    {items.map((entry) => {
+                      const isActive = entry === filtered[safe];
+                      return (
+                        <Row
+                          key={entry.id}
+                          entry={entry}
+                          active={isActive}
+                          activeRef={isActive ? activeRowRef : undefined}
+                          onHover={() => setIndex(filtered.indexOf(entry))}
+                          onClick={() => activate(entry)}
+                        />
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </>
   );

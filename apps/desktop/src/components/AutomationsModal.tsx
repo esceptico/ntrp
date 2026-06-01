@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Circle, FileText, Play, Plus, Radio, Trash2, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
+import { SPRING_LAYOUT } from "../lib/tokens/motion";
 import { useStore } from "../store";
 import { deleteAutomation, fetchAutomations, runAutomation, switchSession, toggleAutomation } from "../actions";
 import type { Automation, AutomationTrigger } from "../api";
@@ -178,13 +180,15 @@ function ActiveList({
   }
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-      {automations.map((automation) => (
-        <AutomationCard
-          key={automation.task_id}
-          automation={automation}
-          onEdit={() => onEdit(automation)}
-        />
-      ))}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {automations.map((automation) => (
+          <AutomationCard
+            key={automation.task_id}
+            automation={automation}
+            onEdit={() => onEdit(automation)}
+          />
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -207,13 +211,15 @@ function ChannelList({ automations }: { automations: Automation[] | null }) {
   }
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-      {automations.map((automation) => (
-        <AutomationCard
-          key={automation.task_id}
-          automation={automation}
-          onEdit={() => undefined}
-        />
-      ))}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {automations.map((automation) => (
+          <AutomationCard
+            key={automation.task_id}
+            automation={automation}
+            onEdit={() => undefined}
+          />
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -238,13 +244,15 @@ function SystemList({ automations }: { automations: Automation[] | null }) {
         Background knowledge work is automatic. Power controls are limited to pause, run now, and inspect last result.
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-        {automations.map((automation) => (
-          <AutomationCard
-            key={automation.task_id}
-            automation={automation}
-            onEdit={() => undefined}
-          />
-        ))}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {automations.map((automation) => (
+            <AutomationCard
+              key={automation.task_id}
+              automation={automation}
+              onEdit={() => undefined}
+            />
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -323,7 +331,12 @@ function AutomationCard({
   };
 
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={SPRING_LAYOUT}
       role={editable ? "button" : undefined}
       tabIndex={editable ? 0 : -1}
       onClick={editable ? open : undefined}
@@ -457,7 +470,7 @@ function AutomationCard({
         )}
         </div>
       </div>
-    </article>
+    </motion.article>
   );
 }
 
