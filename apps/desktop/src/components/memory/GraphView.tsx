@@ -27,7 +27,7 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
   }, [focusId]);
 
   const load = useCallback(
-    (id: string | null) => {
+    (id: string | null, alive: () => boolean) => {
       setLoading(true);
       // No root → whole-graph (default). A root → click-to-focus BFS.
       const req = id
@@ -35,17 +35,29 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
         : getWholeGraph(config);
       req
         .then((g) => {
+          // Drop a stale response: rootId may have changed (and a newer request
+          // resolved) before this one returned — applying it would overwrite the
+          // current graph with the wrong one.
+          if (!alive()) return;
           setGraph({ nodes: g.nodes, edges: g.edges });
           setError(null);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-        .finally(() => setLoading(false));
+        .catch((e) => {
+          if (alive()) setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (alive()) setLoading(false);
+        });
     },
     [config],
   );
 
   useEffect(() => {
-    load(rootId);
+    let alive = true;
+    load(rootId, () => alive);
+    return () => {
+      alive = false;
+    };
   }, [rootId, load]);
 
   const onSelect = useCallback((item: MemoryItem) => {
