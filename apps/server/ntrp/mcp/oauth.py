@@ -11,8 +11,20 @@ from threading import Event
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth.utils import (
+    build_oauth_authorization_server_metadata_discovery_urls,
+    build_protected_resource_metadata_discovery_urls,
+    create_oauth_metadata_request,
+    handle_auth_metadata_response,
+    handle_protected_resource_response,
+)
 from mcp.client.streamable_http import create_mcp_http_client
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.auth import (
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthMetadata,
+    OAuthToken,
+)
 
 from ntrp.logging import get_logger
 
@@ -57,6 +69,16 @@ class MCPTokenStorage:
         data["tokens"] = dumped
         if tokens.expires_in:
             data["expires_at"] = time.time() + tokens.expires_in
+        self._write(data)
+
+    def get_metadata(self) -> OAuthMetadata | None:
+        if meta := self._read().get("oauth_metadata"):
+            return OAuthMetadata.model_validate(meta)
+        return None
+
+    def set_metadata(self, metadata: OAuthMetadata) -> None:
+        data = self._read()
+        data["oauth_metadata"] = metadata.model_dump(mode="json", exclude_none=True)
         self._write(data)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
@@ -130,13 +152,51 @@ def create_oauth_provider(server_name: str, server_url: str, opts: OAuthOptions)
     storage = MCPTokenStorage(server_name)
     redirect_uri = f"http://127.0.0.1:{opts.redirect_port or 0}/callback"
     _seed_client_info(storage, redirect_uri, opts)
-    return OAuthClientProvider(
+    provider = OAuthClientProvider(
         server_url=server_url,
         client_metadata=_build_client_metadata(redirect_uri, opts),
         storage=storage,
         redirect_handler=None,
         callback_handler=None,
     )
+    # The SDK only persists tokens + client_info; the discovered authorization
+    # server metadata (with the real token_endpoint) lives in memory and is lost
+    # on reload. Without it, token refresh guesses {host}/token and 404s. Seed it
+    # so refresh targets the correct endpoint. _initialize() leaves it untouched.
+    if metadata := storage.get_metadata():
+        provider.context.oauth_metadata = metadata
+    return provider
+
+
+async def _discover_oauth_metadata(server_url: str) -> OAuthMetadata | None:
+    """Replicate the SDK's discovery (steps 1-2 of its 401 flow) over the public
+    well-known endpoints so we can persist the token endpoint ahead of time."""
+    async with create_mcp_http_client() as client:
+        auth_server_url: str | None = None
+        for url in build_protected_resource_metadata_discovery_urls(None, server_url):
+            prm = await handle_protected_resource_response(await client.send(create_oauth_metadata_request(url)))
+            if prm:
+                auth_server_url = str(prm.authorization_servers[0])
+                break
+
+        for url in build_oauth_authorization_server_metadata_discovery_urls(auth_server_url, server_url):
+            ok, asm = await handle_auth_metadata_response(await client.send(create_oauth_metadata_request(url)))
+            if not ok:
+                break
+            if asm:
+                return asm
+    return None
+
+
+async def ensure_oauth_metadata(server_name: str, server_url: str) -> None:
+    """Self-heal connections authenticated before metadata was persisted: if we
+    hold tokens but no metadata, discover and store it so the next refresh works."""
+    storage = MCPTokenStorage(server_name)
+    data = storage._read()
+    if not data.get("tokens") or data.get("oauth_metadata"):
+        return
+    if metadata := await _discover_oauth_metadata(server_url):
+        storage.set_metadata(metadata)
 
 
 def run_mcp_oauth(server_name: str, server_url: str, opts: OAuthOptions) -> None:
@@ -218,6 +278,8 @@ def run_mcp_oauth(server_name: str, server_url: str, opts: OAuthOptions) -> None
                 _logger.info("MCP OAuth completed for %r (status=%d)", server_name, resp.status_code)
 
         loop.run_until_complete(_run())
+        if provider.context.oauth_metadata:
+            storage.set_metadata(provider.context.oauth_metadata)
     finally:
         loop.close()
 
