@@ -43,7 +43,6 @@ from ntrp.events.sse import (
     TextMessageEndEvent,
     TextMessageStartEvent,
     TokenUsageEvent,
-    ToolCallArgsEvent,
     agent_events_to_sse,
 )
 from ntrp.llm.models import get_model
@@ -77,18 +76,22 @@ _logger = get_logger(__name__)
 
 _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, ReasoningEnded)
 
-# A sub-agent forwards its events to the PARENT stream. Its token text and raw
-# tool args are pure overload there: the desktop never renders nested (depth>0)
-# message text, nested tool rows label from the tool's description (not args),
-# and the sub-agent's final text reaches the caller via Result — not the
-# deltas. Suppress them so a ~1.5k-event sub-agent run collapses to the coarse
-# "tool ran" lifecycle the activity tree actually shows (mirrors Letta/Claude
-# Code: parent sees the sub-agent's tool calls + result, not its inner stream).
+# A sub-agent forwards its events to the PARENT stream, where its token text is
+# pure overload: every TEXT_MESSAGE_* handler on the desktop is gated on
+# `!event.depth`, so nested (depth>0) message text is dropped on arrival, and
+# the sub-agent's final text reaches the caller via Result — not the deltas.
+# Suppressing it at the source collapses the firehose (token deltas are the
+# bulk of a ~1.5k-event sub-agent run) to the coarse tool-call/result lifecycle
+# the activity tree actually shows — mirroring Letta/Claude Code, which send the
+# parent the sub-agent's tool calls + result, not its inner stream.
+#
+# Tool-call ARGS are deliberately NOT suppressed: TOOL_CALL_ARGS has no depth
+# gate on the client and feeds the nested row's label (formatCallTarget), so
+# dropping it would blank out every sub-agent tool row's target.
 _SUPPRESSED_NESTED_SSE = (
     TextMessageStartEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
-    ToolCallArgsEvent,
 )
 
 # Salvage tunables — used when the inner agent's LLM call fails and we
