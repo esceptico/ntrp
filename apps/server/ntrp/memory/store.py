@@ -123,6 +123,13 @@ class MemoryStore:
         self.conn = conn
         self._has_fts = False
 
+    @property
+    def has_fts(self) -> bool:
+        """Whether FTS5 is available. Read-only view over the private flag so a
+        consumer can distinguish 'FTS matched nothing' from 'FTS unavailable'.
+        Adds no state, no schema, no invariant change."""
+        return self._has_fts
+
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         try:

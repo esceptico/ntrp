@@ -36,6 +36,7 @@ from ntrp.tools.files import (
     write_file_tool,
 )
 from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
+from ntrp.tools.memory import recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
 from ntrp.tools.sessions import (
@@ -139,6 +140,15 @@ SESSIONS = Integration(
     },
 )
 
+# remember()/recall() stay hidden until the knowledge runtime wires the
+# memory_write / memory_read services (each tool's permission), so they never
+# appear when memory is off.
+MEMORY = Integration(
+    id="_memory",
+    label="Memory",
+    tools={"remember": remember_tool, "recall": recall_tool},
+)
+
 CORE_INTEGRATIONS = [
     SYSTEM,
     GOALS,
@@ -149,4 +159,5 @@ CORE_INTEGRATIONS = [
     TASK_TRACKING,
     SKILLS,
     SESSIONS,
+    MEMORY,
 ]

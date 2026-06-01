@@ -50,11 +50,42 @@ class RunResult:
     usage: Usage
 
 
+# Below this many chars of prompt there is nothing worth a scoped recall.
+_MEMORY_RECALL_FLOOR = 12
+_MEMORY_TOKEN_BUDGET = 1500
+
+
+async def _retrieve_memory_context(memory_retrieval: object | None, prompt: str) -> str | None:
+    """Cost-aware USER-scoped recall for an operator/automation run.
+
+    Automation runs act on behalf of the principal, so they recall the USER
+    scope (the durable, cross-session memory) rather than the ephemeral SESSION
+    scope they write into. Skips on trivial input; no LLM unless over budget.
+    """
+    if memory_retrieval is None or not prompt or len(prompt.strip()) < _MEMORY_RECALL_FLOOR:
+        return None
+
+    from ntrp.memory.models import Scope, ScopeKind
+    from ntrp.memory.pipeline.types import Retrieval
+
+    try:
+        result = await memory_retrieval.retrieve(
+            Retrieval(
+                goal=prompt.strip(),
+                scope=Scope(kind=ScopeKind.USER),
+                token_budget=_MEMORY_TOKEN_BUDGET,
+            )
+        )
+    except Exception:
+        return None
+    return result.rendered or None
+
+
 async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list[dict], str, str]:
     run_id = generate_slug(2)
     session_state = deps.create_session()
 
-    memory_context = None
+    memory_context = await _retrieve_memory_context(deps.memory_retrieval, request.prompt)
 
     executor = deps.executor
     tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)

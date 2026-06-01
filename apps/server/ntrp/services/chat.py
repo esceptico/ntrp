@@ -372,6 +372,54 @@ def _is_meta_client_id(client_id: str | None) -> bool:
     return bool(client_id and client_id.startswith(("loop:", "bg:", "goal:")))
 
 
+# Below this many chars of user input there is nothing worth a scoped recall
+# (a bare "ok"/"thanks"). A routing floor, not a worth gate.
+_MEMORY_RECALL_FLOOR = 12
+# Token budget for the injected memory block — small by design (CONTRACTS §9).
+_MEMORY_TOKEN_BUDGET = 1500
+
+
+async def _retrieve_memory_context(
+    memory_retrieval: object | None,
+    user_message: str,
+    project_context: ProjectContext | None,
+) -> str | None:
+    """Scope-filtered, cost-aware memory recall for the system prompt.
+
+    Scoped to the active project (else USER) and bounded by a small token
+    budget. Skips entirely on trivial/empty input so the hot path pays nothing.
+    The Retriever runs no LLM unless the recalled pool overflows the budget.
+    """
+    if memory_retrieval is None:
+        return None
+    if not user_message or len(user_message.strip()) < _MEMORY_RECALL_FLOOR:
+        return None
+
+    from ntrp.memory.models import Scope, ScopeKind
+    from ntrp.memory.pipeline.types import Retrieval
+
+    if project_context is not None and project_context.project_id:
+        scope = Scope(kind=ScopeKind.PROJECT, key=str(project_context.project_id))
+        also = [Scope(kind=ScopeKind.USER)]
+    else:
+        scope = Scope(kind=ScopeKind.USER)
+        also = []
+
+    try:
+        result = await memory_retrieval.retrieve(
+            Retrieval(
+                goal=user_message.strip(),
+                scope=scope,
+                also_scopes=also,
+                token_budget=_MEMORY_TOKEN_BUDGET,
+            )
+        )
+    except Exception:
+        _logger.warning("memory retrieval failed", exc_info=True)
+        return None
+    return result.rendered or None
+
+
 async def _prepare_messages(
     deps: ChatDeps,
     messages: list[dict],
@@ -386,7 +434,9 @@ async def _prepare_messages(
     goal_context: dict | None = None,
     project_context: ProjectContext | None = None,
 ) -> list[dict]:
-    memory_context = None
+    memory_context = await _retrieve_memory_context(
+        deps.memory_retrieval, user_message, project_context
+    )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
