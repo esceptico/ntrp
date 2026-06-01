@@ -30,10 +30,10 @@ and a NUMBERED list of member claims, each tagged [0], [1], [2], ….
 
 Write a proper markdown document, not a flat dump:
 - Open with a 1–2 sentence synthesis of what this view captures (no heading).
-- Organize the claims into a few themed `##` sections with short, plain headings.
-  Within a section write tight prose and/or bullets — group related claims, merge
-  near-duplicates, and note contradictions inline. Order sections most-important
-  first so the page reads well.
+- If the lens criterion includes a "## Profile shape" with fields, use those fields
+  as the page's `##` section headings and organize the claims under them. Otherwise
+  pick a few themed `##` sections yourself. Within a section write tight prose and/or
+  bullets — group related claims, merge near-duplicates, note contradictions inline.
 - Render ONLY the claims given. Never add a fact that is not in the list.
 - Cite the source claim wherever you use it by appending its index tag inline, e.g.
   "Runs 5k every morning [0]." or "- Lives in Lisbon [3]". A merged statement cites
@@ -64,8 +64,9 @@ each tagged [0], [1], ….
 Write a tight, well-formed profile:
 - Lead with a 1–3 sentence synthesis of who/what this subject is and how they relate
   to the user, drawn only from the claims.
-- Then, if useful, a few grouped bullets for specifics. Merge near-duplicates and
-  note contradictions inline.
+- If the lens criterion includes a "## Profile shape" with fields, capture those
+  fields (as a short labelled bullet each). Otherwise a few grouped bullets for
+  specifics. Merge near-duplicates and note contradictions inline.
 - Render ONLY the claims given. Never add a fact not in the list.
 - Cite each claim inline by its index tag where you use it, e.g. "CEO of ThirdLayer
   [0]." A merged statement cites every index it covers. EVERY index given MUST appear

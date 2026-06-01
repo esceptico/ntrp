@@ -363,7 +363,9 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
     cheap = FakeCompletionClient(
         queue=[
             SynthesizedCriterion(
-                criterion="this item describes the user's running", render_mode="flat"
+                belongs="Claims describing the user's running training and races.",
+                profile_shape=["Distance / pace", "Goal races"],
+                render_mode="flat",
             )
         ]
     )
@@ -371,7 +373,11 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
 
     crit, mode = await m.synthesize_criterion("Running")
 
-    assert crit == "this item describes the user's running"
+    # The criterion is composed markdown: a Belongs section + a Profile shape section.
+    assert "## Belongs" in crit
+    assert "running training" in crit
+    assert "## Profile shape" in crit
+    assert "- Distance / pace" in crit
     assert mode == "flat"
     assert len(cheap.calls) == 1
     assert cheap.calls[0]["model"] == "cheap"
@@ -383,7 +389,8 @@ async def test_synthesize_criterion_groups_people_lens(store):
     cheap = FakeCompletionClient(
         queue=[
             SynthesizedCriterion(
-                criterion="this item is about a specific individual or relationship",
+                belongs="A specific individual the user knows, or a relationship between people.",
+                profile_shape=["Role", "Relationship to the user"],
                 render_mode="grouped_by_subject",
             )
         ]
@@ -393,6 +400,7 @@ async def test_synthesize_criterion_groups_people_lens(store):
     crit, mode = await m.synthesize_criterion("People")
 
     assert mode == "grouped_by_subject"
+    assert "## Profile shape" in crit
 
 
 async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
@@ -401,7 +409,8 @@ async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
 
     crit, mode = await m.synthesize_criterion("Regina Volkov")
 
-    assert crit == "this item is about Regina Volkov"
+    assert "## Belongs" in crit
+    assert "Regina Volkov" in crit
     assert mode == "flat"
 
 

@@ -12,37 +12,31 @@ keyword/regex/threshold gate.
 from pydantic import BaseModel, Field
 
 CRITERION_SYNTH_SYSTEM = """\
-You author the inclusion criterion for a "lens" — a named, criterion-defined view
-over a personal knowledge base — and decide how the view is laid out. You are given
-a lens NAME (the user's seed) and an optional INTENT.
+You design a "lens" — a named directory over a personal knowledge base that groups
+related memory claims and defines how each member's profile is shaped. You are given
+a lens NAME (the user's seed) and an optional INTENT. Produce:
 
-Produce two things:
-1) criterion — ONE natural-language sentence an LLM judge applies to a single memory
-   claim to decide membership. It must be a PRECISE, complete definition of what
-   belongs, not a vague restatement of the name.
-2) render_mode — "grouped_by_subject" when the lens is about PEOPLE or other distinct
-   ENTITIES (so the view shows one profile card per individual); otherwise "flat".
+- belongs: 1-3 sentences defining who/what BELONGS in this lens AND what to exclude.
+  Be concrete. For a PEOPLE lens, scope to specific individuals or relationships and
+  EXCLUDE the user's own generic preferences, habits, settings, health, or work
+  style — a claim merely mentioning the user is not "about a person".
+- profile_shape: 2-4 short fields each member's profile should capture. For a person
+  lens e.g. "Role / what they own", "How the user works with them", "Key facts". For
+  a topic lens, the facets worth tracking per item.
+- render_mode: "grouped_by_subject" when the lens groups distinct PEOPLE or ENTITIES
+  (so the view shows one profile per individual); otherwise "flat".
 
-Rules for the criterion:
-- Exactly ONE sentence. No examples, lists, numbers, scores, or percentages.
-- If the lens is about PEOPLE / individuals / relationships, scope it to claims that
-  are about a SPECIFIC individual (a named contact, colleague, family member) or a
-  relationship between people — and EXCLUDE the user's own generic preferences,
-  habits, settings, health, or work style. A claim merely mentioning the user is NOT
-  "about a person".
-- If the lens is a TOPIC (bugs, preferences, health, decisions…), define that topic
-  precisely.
-- Stay faithful to the name; do not invent unrelated scope.
-
-Rules for render_mode:
-- "grouped_by_subject" ONLY for people/entity lenses where one card per subject makes
-  sense ("people", "contacts", "team", a family). Every topic lens is "flat".
+No numbers, scores, or percentages anywhere. Stay faithful to the name; do not invent
+unrelated scope.
 """
 
 
 class SynthesizedCriterion(BaseModel):
-    criterion: str = Field(description="one-sentence natural-language inclusion criterion")
+    belongs: str = Field(description="1-3 sentences: who/what belongs + what to exclude")
+    profile_shape: list[str] = Field(
+        default_factory=list, description="2-4 short fields each member's profile captures"
+    )
     render_mode: str = Field(
         default="flat",
-        description='"grouped_by_subject" for people/entity lenses (one card per individual), else "flat"',
+        description='"grouped_by_subject" for people/entity lenses (one profile per individual), else "flat"',
     )

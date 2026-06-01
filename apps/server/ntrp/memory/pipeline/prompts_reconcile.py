@@ -130,6 +130,9 @@ For each item choose exactly one decision:
   re-decide it.
 
 Rules:
+- The criterion is markdown. Judge membership ONLY against its "## Belongs" section
+  (who/what belongs + exclusions). A "## Profile shape" section, if present, only
+  describes how members are rendered — it is NOT a membership rule; ignore it here.
 - Judge ONLY against the criterion as written. Topical adjacency is not membership: an
   item that is merely related to the lens's theme is `out` unless the criterion actually
   covers it.

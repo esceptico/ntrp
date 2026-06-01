@@ -62,6 +62,19 @@ _PAGE_GIST_LIMIT = 600
 _NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
 
 
+def _compose_criterion(belongs: str, profile_shape: list[str]) -> str:
+    """Build the lens's editable markdown criterion from its parts: a `## Belongs`
+    section (the membership definition + exclusions) and an optional `## Profile
+    shape` section (the fields each member's profile should capture). This is the
+    structured-file format lenses use — the membership judge reads Belongs; page
+    synthesis reads Profile shape."""
+    parts = [f"## Belongs\n{belongs.strip()}"]
+    fields = [f.strip() for f in profile_shape if f and f.strip()]
+    if fields:
+        parts.append("## Profile shape\n" + "\n".join(f"- {f}" for f in fields))
+    return "\n\n".join(parts)
+
+
 def _decision(raw: str) -> MembershipDecision:
     """Coerce a model vote to a decision, defaulting OUT on anything unexpected."""
     try:
@@ -210,14 +223,15 @@ class LensMembership:
             if not content:
                 raise ValueError("empty criterion-synthesis response")
             parsed = SynthesizedCriterion.model_validate_json(content)
-            criterion = parsed.criterion.strip()
-            if not criterion:
+            belongs = parsed.belongs.strip()
+            if not belongs:
                 raise ValueError("blank synthesized criterion")
+            criterion = _compose_criterion(belongs, parsed.profile_shape)
             mode = parsed.render_mode if parsed.render_mode in ("grouped_by_subject", "flat") else "flat"
             return criterion, mode
         except Exception as e:
             _logger.warning("lens: criterion synthesis failed for %r, echoing: %s", name, e)
-            return f"this item is about {name}", "flat"
+            return f"## Belongs\nThis item is about {name}.", "flat"
 
     # --- generic guard: advisory coverage ratio ---------------------
 
