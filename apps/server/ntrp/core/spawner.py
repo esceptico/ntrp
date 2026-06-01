@@ -39,7 +39,11 @@ from ntrp.events.sse import (
     TaskFinishedEvent,
     TaskProgressEvent,
     TaskStartedEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
     TokenUsageEvent,
+    ToolCallArgsEvent,
     agent_events_to_sse,
 )
 from ntrp.llm.models import get_model
@@ -72,6 +76,20 @@ class SpawnResult:
 _logger = get_logger(__name__)
 
 _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, ReasoningEnded)
+
+# A sub-agent forwards its events to the PARENT stream. Its token text and raw
+# tool args are pure overload there: the desktop never renders nested (depth>0)
+# message text, nested tool rows label from the tool's description (not args),
+# and the sub-agent's final text reaches the caller via Result — not the
+# deltas. Suppress them so a ~1.5k-event sub-agent run collapses to the coarse
+# "tool ran" lifecycle the activity tree actually shows (mirrors Letta/Claude
+# Code: parent sees the sub-agent's tool calls + result, not its inner stream).
+_SUPPRESSED_NESTED_SSE = (
+    TextMessageStartEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    ToolCallArgsEvent,
+)
 
 # Salvage tunables — used when the inner agent's LLM call fails and we
 # try to summarize whatever tool results were gathered before the error.
@@ -441,7 +459,7 @@ def create_spawn_fn(
         def _foreground_child_events(event) -> tuple[SSEEvent, ...]:
             if isinstance(event, _REASONING_EVENTS):
                 return ()
-            return agent_events_to_sse(event)
+            return tuple(e for e in agent_events_to_sse(event) if not isinstance(e, _SUPPRESSED_NESTED_SSE))
 
         stream_failed = False
 
