@@ -250,7 +250,9 @@ async def test_foreground_subagent_emits_generated_name_while_running(monkeypatc
         if isinstance(event, (TaskStartedEvent, TaskProgressEvent, TaskFinishedEvent))
     ]
     assert [event.type.value for event in task_events] == ["task_started", "task_progress", "task_finished"]
-    assert task_events[0].name == ""
+    # task_started carries a distinct slug initially (not empty, not yet the
+    # generated label); task_progress/finished carry the generated label.
+    assert task_events[0].name and task_events[0].name != "Web Release Scout"
     assert task_events[1].name == "Web Release Scout"
     assert task_events[1].parent_tool_call_id == "call-research"
     assert task_events[2].name == "Web Release Scout"

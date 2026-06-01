@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from inspect import isawaitable
 from uuid import uuid4
 
+from coolname import generate_slug
+
 from ntrp.agent import (
     Agent,
     ReasoningBlock,
@@ -336,6 +338,11 @@ def create_spawn_fn(
         )
         task_summary = task[:120]
         task_depth = current_depth + 1
+        # A distinct slug names the agent immediately, so concurrent sub-agents
+        # render as separate rows from the first event instead of N identical
+        # generic "Research" rows. The async-generated descriptive label (if it
+        # arrives) replaces it via task_progress.
+        agent_slug = generate_slug(2)
 
         # Sub-agents reuse the parent's compactor so a long-running tool
         # sweep doesn't blow past the model's context window mid-run. The
@@ -524,7 +531,7 @@ def create_spawn_fn(
 
             def _event_agent_label() -> str:
                 agent_label = _current_agent_label()
-                return agent_label if agent_label != "Agent" else ""
+                return agent_label if agent_label != "Agent" else agent_slug
 
             async def _run_foreground() -> tuple[str, str]:
                 nonlocal label_update_task
@@ -534,10 +541,11 @@ def create_spawn_fn(
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
-                            # The actual generated label is produced asynchronously. Do not send
-                            # the placeholder "Agent" here; it would overwrite the tool display
-                            # name (for example, "Research") before the generated label is ready.
-                            name="",
+                            # Name with the slug initially (distinct per agent) instead of the
+                            # placeholder "Agent" — the async-generated descriptive label
+                            # replaces it via task_progress when ready. Avoids N identical
+                            # generic rows for concurrent sub-agents.
+                            name=agent_slug,
                             summary=task_summary,
                             depth=task_depth,
                         )
