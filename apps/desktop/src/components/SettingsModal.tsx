@@ -16,6 +16,7 @@ import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 import { ScrollBlurTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
+import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
 type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
 
@@ -37,6 +38,8 @@ const TABS: Tab[] = [
   { id: "appearance", label: "Appearance", icon: Palette },
 ];
 
+const SETTINGS_TAB_IDS = TABS.map((t) => t.id);
+
 export function SettingsModal() {
   const open = useStore((s) => s.settingsOpen);
   const closeSettings = useStore((s) => s.closeSettings);
@@ -48,6 +51,7 @@ export function SettingsModal() {
   const formRef = useRef<HTMLFormElement>(null);
 
   const [active, setActive] = useState<TabId>("connection");
+  const direction = useTabDirection(SETTINGS_TAB_IDS, active);
 
   useEffect(() => {
     if (!open) return;
@@ -111,9 +115,9 @@ export function SettingsModal() {
             </IconButton>
           </header>
 
-          <div className="absolute inset-0 overflow-y-auto scroll-thin px-5 pt-[56px] pb-4">
+          <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-[56px] pb-4">
             <ScrollBlurTop />
-            <div className="pt-1">
+            <TabPanels value={active} direction={direction} className="pt-1">
               {active === "connection" && (
                 <ConnectionTab
                   formRef={formRef}
@@ -132,7 +136,7 @@ export function SettingsModal() {
               {active === "tools" && <ToolsTab />}
               {active === "mcp" && <MCPTab />}
               {active === "appearance" && <AppearanceTab />}
-            </div>
+            </TabPanels>
           </div>
         </div>
     </PageModal>

@@ -14,8 +14,11 @@ import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
 import { ScrollBlurTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
+import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
 type Tab = "active" | "channels" | "system" | "templates";
+
+const TAB_ORDER: Tab[] = ["active", "channels", "system", "templates"];
 
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
@@ -40,6 +43,8 @@ export function AutomationsModal() {
   const activeCount = automationGroups?.user.length ?? 0;
   const channelCount = automationGroups?.channels.length ?? 0;
   const systemCount = automationGroups?.internal.length ?? 0;
+
+  const direction = useTabDirection(TAB_ORDER, tab);
 
   return (
     <>
@@ -74,24 +79,30 @@ export function AutomationsModal() {
           <AutomationTab value="templates" label="Templates" />
         </Tabs>
 
-        <div className="overflow-y-auto scroll-thin px-6 py-5">
+        <div className="relative min-h-0 overflow-hidden">
           <ScrollBlurTop />
-          {tab === "active" ? (
-            <ActiveList
-              automations={automationGroups?.user ?? null}
-              onEdit={(automation) => setEditor({ kind: "edit", automation })}
-              onPickTemplate={() => setTab("templates")}
-              onCreate={() => setEditor({ kind: "create" })}
-            />
-          ) : tab === "channels" ? (
-            <ChannelList automations={automationGroups?.channels ?? null} />
-          ) : tab === "system" ? (
-            <SystemList automations={automationGroups?.internal ?? null} />
-          ) : (
-            <TemplatesList
-              onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
-            />
-          )}
+          <TabPanels
+            value={tab}
+            direction={direction}
+            className="h-full overflow-y-auto scroll-thin px-6 py-5"
+          >
+            {tab === "active" ? (
+              <ActiveList
+                automations={automationGroups?.user ?? null}
+                onEdit={(automation) => setEditor({ kind: "edit", automation })}
+                onPickTemplate={() => setTab("templates")}
+                onCreate={() => setEditor({ kind: "create" })}
+              />
+            ) : tab === "channels" ? (
+              <ChannelList automations={automationGroups?.channels ?? null} />
+            ) : tab === "system" ? (
+              <SystemList automations={automationGroups?.internal ?? null} />
+            ) : (
+              <TemplatesList
+                onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
+              />
+            )}
+          </TabPanels>
         </div>
       </PageModal>
       <AutomationEditor seed={editor} onClose={() => setEditor(null)} />
