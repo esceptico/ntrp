@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Slash, X } from "lucide-react";
 import { useStore } from "../store";
 import { switchSession } from "../actions";
-import { EASE_DECELERATE, MOTION, SPRING_LAYOUT } from "../lib/tokens/motion";
+import { EASE_DECELERATE, MOTION, SPRING_LAYOUT, originFromEvent } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import type { Toast } from "../lib/taskToast";
 
@@ -13,7 +13,11 @@ const STATUS_ICON = { completed: Check, failed: X, cancelled: Slash } as const;
 export function Toaster() {
   const toasts = useStore((s) => s.toasts);
   return (
-    <div className="fixed top-3 right-3 z-50 flex w-[min(360px,calc(100vw-24px))] flex-col gap-2 pointer-events-none">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-3 right-3 z-50 flex w-[min(360px,calc(100vw-24px))] flex-col gap-2 pointer-events-none"
+    >
       <AnimatePresence initial={false}>
         {toasts.map((toast) => (
           <ToastCard key={toast.id} toast={toast} />
@@ -27,15 +31,19 @@ function ToastCard({ toast }: { toast: Toast }) {
   const dismissToast = useStore((s) => s.dismissToast);
   const openAutomations = useStore((s) => s.openAutomations);
   const Icon = STATUS_ICON[toast.status];
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => dismissToast(toast.id), DISMISS_MS);
-    return () => clearTimeout(timer);
+    timerRef.current = setTimeout(() => dismissToast(toast.id), DISMISS_MS);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [toast.id, dismissToast]);
 
-  function onClick() {
+  function onClick(e: React.MouseEvent<HTMLButtonElement>) {
+    if (timerRef.current) clearTimeout(timerRef.current);
     if (toast.target.kind === "session") void switchSession(toast.target.sessionId);
-    else openAutomations();
+    else openAutomations(originFromEvent(e.currentTarget));
     dismissToast(toast.id);
   }
 
