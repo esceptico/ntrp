@@ -57,6 +57,7 @@ import {
   Sep,
 } from "./shared";
 import { Markdown } from "../Markdown";
+import { Tab as TabItem, Tabs } from "../ui/Tabs";
 
 type Tab = "today" | "graph" | "directories" | "skills" | "search";
 
@@ -111,24 +112,23 @@ export function MemoryItemsPane() {
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-      <nav className="flex flex-wrap items-center gap-1 border-b border-line-soft px-3 pb-2" aria-label="Memory sections">
+      <Tabs
+        value={tab}
+        onChange={(v) => setTab(v as Tab)}
+        variant="pill"
+        className="flex-wrap items-center gap-1 border-b border-line-soft px-3 pb-2"
+      >
         {TABS.map((entry) => (
-          <button
+          <TabItem
             key={entry.id}
-            type="button"
-            onClick={() => setTab(entry.id)}
-            className={[
-              "rounded-lg px-3 py-2 text-left transition-colors",
-              tab === entry.id
-                ? "bg-surface-soft text-ink shadow-[inset_0_0_0_1px_var(--color-line-soft)]"
-                : "text-muted hover:bg-surface-soft hover:text-ink",
-            ].join(" ")}
+            value={entry.id}
+            className="rounded-lg px-3 py-2 text-left text-muted transition-colors hover:text-ink data-[active=true]:text-ink"
           >
             <div className="text-sm font-semibold tracking-[-0.01em]">{entry.label}</div>
             <div className="text-2xs text-faint">{entry.hint}</div>
-          </button>
+          </TabItem>
         ))}
-      </nav>
+      </Tabs>
 
       {tab === "graph" ? (
         <GraphView
