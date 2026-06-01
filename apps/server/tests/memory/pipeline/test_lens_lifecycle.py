@@ -64,11 +64,12 @@ class FakeMembership:
         self.refreshed.append(lens_id)
         return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
-    async def synthesize_criterion(self, name: str, intent: str | None = None) -> str:
+    async def synthesize_criterion(self, name: str, intent: str | None = None) -> tuple[str, str]:
         # Stand-in for the LLM criterion author: deterministic, records nothing
-        # about membership (this is text authoring only).
+        # about membership (this is text authoring only). Returns (criterion, mode).
         self.synth_calls.append(name)
-        return f"this item is about {name}"
+        mode = "grouped_by_subject" if name.lower() in ("people", "persons", "contacts") else "flat"
+        return f"this item is about {name}", mode
 
     async def coverage(self, lens_id: str, scope: Scope) -> CoverageAdvisory:
         self.coverage_calls.append(lens_id)

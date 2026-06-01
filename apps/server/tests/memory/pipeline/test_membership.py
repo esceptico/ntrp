@@ -361,24 +361,48 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
     from ntrp.memory.pipeline.prompts_criterion import SynthesizedCriterion
 
     cheap = FakeCompletionClient(
-        queue=[SynthesizedCriterion(criterion="this item is about the user's running")]
+        queue=[
+            SynthesizedCriterion(
+                criterion="this item describes the user's running", render_mode="flat"
+            )
+        ]
     )
     m = _membership(store, cheap)
 
-    crit = await m.synthesize_criterion("Running")
+    crit, mode = await m.synthesize_criterion("Running")
 
-    assert crit == "this item is about the user's running"
+    assert crit == "this item describes the user's running"
+    assert mode == "flat"
     assert len(cheap.calls) == 1
     assert cheap.calls[0]["model"] == "cheap"
+
+
+async def test_synthesize_criterion_groups_people_lens(store):
+    from ntrp.memory.pipeline.prompts_criterion import SynthesizedCriterion
+
+    cheap = FakeCompletionClient(
+        queue=[
+            SynthesizedCriterion(
+                criterion="this item is about a specific individual or relationship",
+                render_mode="grouped_by_subject",
+            )
+        ]
+    )
+    m = _membership(store, cheap)
+
+    crit, mode = await m.synthesize_criterion("People")
+
+    assert mode == "grouped_by_subject"
 
 
 async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
     cheap = FakeCompletionClient(default="not json at all")  # parse fail
     m = _membership(store, cheap)
 
-    crit = await m.synthesize_criterion("Regina Volkov")
+    crit, mode = await m.synthesize_criterion("Regina Volkov")
 
     assert crit == "this item is about Regina Volkov"
+    assert mode == "flat"
 
 
 # --- §7 coverage: advisory only, mutates nothing ---------------------

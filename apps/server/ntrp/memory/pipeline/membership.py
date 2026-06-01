@@ -185,12 +185,16 @@ class LensMembership:
 
     # --- criterion authoring (text only; no membership decision) -----
 
-    async def synthesize_criterion(self, name: str, intent: str | None = None) -> str:
-        """Draft a one-sentence inclusion criterion from a lens NAME (LLooM seed).
+    async def synthesize_criterion(
+        self, name: str, intent: str | None = None
+    ) -> tuple[str, str]:
+        """Draft a one-sentence inclusion criterion + a render mode from a lens NAME.
 
         One cheap structured call. Authors TEXT only — makes no membership call.
-        On empty/parse failure, degrade to a faithful echo criterion (still not a
-        keyword gate; it decides no membership, just gives the user editable text).
+        Returns (criterion, render_mode) where render_mode is "grouped_by_subject"
+        for people/entity lenses else "flat". On empty/parse failure, degrade to a
+        faithful echo criterion + flat (still not a keyword gate; decides no
+        membership, just gives the user editable text).
         """
         user = f"LENS_NAME: {name!r}\nINTENT: {intent!r}"
         try:
@@ -205,13 +209,15 @@ class LensMembership:
             content = resp.choices[0].message.content
             if not content:
                 raise ValueError("empty criterion-synthesis response")
-            criterion = SynthesizedCriterion.model_validate_json(content).criterion.strip()
+            parsed = SynthesizedCriterion.model_validate_json(content)
+            criterion = parsed.criterion.strip()
             if not criterion:
                 raise ValueError("blank synthesized criterion")
-            return criterion
+            mode = parsed.render_mode if parsed.render_mode in ("grouped_by_subject", "flat") else "flat"
+            return criterion, mode
         except Exception as e:
             _logger.warning("lens: criterion synthesis failed for %r, echoing: %s", name, e)
-            return f"this item is about {name}"
+            return f"this item is about {name}", "flat"
 
     # --- generic guard: advisory coverage ratio ---------------------
 

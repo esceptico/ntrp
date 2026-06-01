@@ -44,7 +44,7 @@ class _Membership(Protocol):
 
     async def refresh_lens_cache(self, lens_id: str) -> BackfillReport: ...
 
-    async def synthesize_criterion(self, name: str, intent: str | None = ...) -> str: ...
+    async def synthesize_criterion(self, name: str, intent: str | None = ...) -> tuple[str, str]: ...
 
 
 class LensRegistry:
@@ -76,7 +76,10 @@ class LensRegistry:
         if scope is None:
             raise ValueError("create_lens requires a scope")
         if not (criterion or "").strip():
-            criterion = await self.membership.synthesize_criterion(name)
+            # The synth decides both the criterion AND the layout (people/entity
+            # lenses → grouped cards), so a "people" lens is born grouped, not flat.
+            criterion, synth_mode = await self.membership.synthesize_criterion(name)
+            render_mode = LensRenderMode(synth_mode)
         lens = LensRow(
             id=uuid.uuid4().hex,
             name=name,
