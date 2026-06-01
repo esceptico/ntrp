@@ -223,6 +223,15 @@ function Composer({
     nameRef.current?.focus();
   }, []);
 
+  // Auto-grow the criterion box to its content so the generated text is never
+  // clipped (it can be several lines) and stays fully readable/editable.
+  useEffect(() => {
+    const el = critRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
+  }, [criterion, created]);
+
   const create = () => {
     if (!name.trim() || busy) return;
     setBusy(true);
@@ -296,9 +305,9 @@ function Composer({
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) finish();
         }}
-        rows={2}
+        rows={3}
         spellCheck={false}
-        className="input-field resize-none py-1.5 text-sm leading-snug"
+        className="input-field resize-none overflow-y-auto py-1.5 text-sm leading-relaxed"
       />
       {err && <span className="text-xs text-bad">{err}</span>}
       <div className="flex items-center justify-between">
@@ -661,6 +670,14 @@ function CriterionRow({
     }
   }, [editing, lens.criterion]);
 
+  // Grow to fit the criterion so it never clips while reading/editing.
+  useEffect(() => {
+    const el = taRef.current;
+    if (!editing || !el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
+  }, [editing, text]);
+
   if (!editing) {
     return (
       <button
@@ -693,9 +710,9 @@ function CriterionRow({
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
           if (e.key === "Escape") onDone(false);
         }}
-        rows={2}
+        rows={3}
         spellCheck={false}
-        className="w-full resize-none bg-transparent text-sm leading-snug text-ink outline-none"
+        className="w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-ink outline-none"
       />
       <div className="mt-1.5">
         <CoverageMeter coverage={coverage} />

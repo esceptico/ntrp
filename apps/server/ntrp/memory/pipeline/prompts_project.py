@@ -24,28 +24,30 @@ from pydantic import BaseModel, Field
 
 PAGE_SYNTH_SYSTEM = """\
 You render one "lens" — a named, criterion-defined view over a personal knowledge
-base — into a single readable markdown page. You are given the lens name, its
-membership criterion, a target detail level, and a NUMBERED list of member claims.
-Each claim is tagged with a short index like [0], [1], [2].
+base — into a single, well-structured markdown PAGE that reads like a hand-kept wiki
+note. You are given the lens name, its membership criterion, a target detail level,
+and a NUMBERED list of member claims, each tagged [0], [1], [2], ….
 
-Write the page as markdown. Group and order the claims so they read well; reword
-for flow and merge near-duplicates into one line; note contradictions inline. But:
-
+Write a proper markdown document, not a flat dump:
+- Open with a 1–2 sentence synthesis of what this view captures (no heading).
+- Organize the claims into a few themed `##` sections with short, plain headings.
+  Within a section write tight prose and/or bullets — group related claims, merge
+  near-duplicates, and note contradictions inline. Order sections most-important
+  first so the page reads well.
 - Render ONLY the claims given. Never add a fact that is not in the list.
-- Every claim you render MUST cite its index tag at the END of its line, e.g.
-  `- Runs 5k every morning. [0]`. One claim per bullet line under the body
-  sections. Cite the index verbatim — copy the bracketed number you were given.
-- If two claims say the same thing, render one bullet and cite BOTH indexes on
-  that line, e.g. `- Runs daily. [0] [3]`. Every index you were given must appear
-  on exactly one rendered line.
+- Cite the source claim wherever you use it by appending its index tag inline, e.g.
+  "Runs 5k every morning [0]." or "- Lives in Lisbon [3]". A merged statement cites
+  every index it covers, e.g. "Runs daily [0] [3]." EVERY index you were given MUST
+  appear at least once somewhere on the page.
 - Do not echo the criterion text as a fact. Do not write a "members" count.
-- detail=gist: a single short synthesized paragraph, no bullets, no index tags.
-- detail=structured: a "## Profile" section of cited bullet lines (the default).
-- detail=dossier: the structured bullets PLUS a "## Evidence" section; keep the
-  index tags on the profile bullets.
 
-Reason only over the content shown. Output the full markdown page as a single
-string field.
+Detail levels:
+- gist: a single short synthesized paragraph — no sections, no index tags.
+- structured: the full structured document above (the default).
+- dossier: the structured document PLUS a final "## Evidence" section listing each
+  claim with its index tag.
+
+Reason only over the content shown. Output the full markdown page as one string.
 """
 
 
@@ -54,17 +56,20 @@ class PageSynthesis(BaseModel):
 
 
 PROFILE_SYNTH_SYSTEM = """\
-You render ONE subject's profile inside a grouped lens view. You are given the
-subject name, the lens criterion, a detail level, and a NUMBERED list of the
-claims about THIS subject. Each claim is tagged with a short index like [0], [1].
+You render ONE subject's profile inside a grouped lens view — a compact, readable
+note about a single person or thing. You are given the subject name, the lens
+criterion, a detail level, and a NUMBERED list of the claims about THIS subject,
+each tagged [0], [1], ….
 
-Write a compact profile (a few sentences or a short bullet list) about this one
-subject. Same contract as page synthesis:
-
+Write a tight, well-formed profile:
+- Lead with a 1–3 sentence synthesis of who/what this subject is and how they relate
+  to the user, drawn only from the claims.
+- Then, if useful, a few grouped bullets for specifics. Merge near-duplicates and
+  note contradictions inline.
 - Render ONLY the claims given. Never add a fact not in the list.
-- Every claim you render MUST cite its index tag at the END of its line, e.g.
-  `- CEO of ThirdLayer. [0]`. One claim per bullet line.
-- If two claims say the same thing, render one bullet and cite BOTH indexes.
+- Cite each claim inline by its index tag where you use it, e.g. "CEO of ThirdLayer
+  [0]." A merged statement cites every index it covers. EVERY index given MUST appear
+  at least once.
 - Do NOT write a "## <subject>" heading — the caller adds it. Do not echo the
   criterion as a fact. Do not write a count.
 
