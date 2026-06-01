@@ -270,8 +270,78 @@ async def test_grouped_projection_buckets_by_canonical_subject(store):
     # Concatenated page markdown carries per-subject headings + all anchors.
     assert "## Regina" in page.markdown and "## Kevin" in page.markdown
     assert set(parse_anchors(page.markdown)) == {r1.id, r2.id, k1.id}
-    # Grouped output is NOT cached into the flat page slot.
-    assert (await store.get_lens(lens.id)).page is None
+    # Grouped output is cached into the `page` slot as markdown (Lens spec §6).
+    cached = (await store.get_lens(lens.id)).page
+    assert cached == page.markdown
+
+
+async def test_grouped_cache_hit_costs_zero_synthesis(store):
+    """A grouped lens with a materialized page re-derives its groups from the cached
+    markdown alone — no re-validation judge call, no profile synthesis (Lens spec §6).
+    """
+    from ntrp.memory.models import LensRenderMode
+
+    r1 = await _claim(store, "Regina is CEO", canonical_subject="Regina")
+    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
+    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
+    page_md = (
+        "# People\n*Lens · criterion: claims about people*\n\n"
+        f"## Regina\n- CEO. <!--claim:{r1.id}-->\n- Judged a hackathon. <!--claim:{r2.id}-->\n\n"
+        f"## Kevin\n- An engineer. <!--claim:{k1.id}-->"
+    )
+    lens = await _lens(
+        store,
+        name="People",
+        criterion="claims about people",
+        page=page_md,
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    for c in (r1, r2, k1):
+        await _member(store, lens.id, c)
+
+    cheap = FakeCompletionClient()
+    strong = FakeCompletionClient()
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    # Cache hit: no judge call, no synthesis call.
+    assert cheap.calls == []
+    assert strong.calls == []
+    assert page.synthesized is True
+    assert page.markdown == page_md
+    # Groups + blocks reconstructed from the cached markdown's `## {subject}` sections.
+    assert [g.subject for g in page.groups] == ["Regina", "Kevin"]
+    assert {b.claim_id for b in page.groups[0].blocks} == {r1.id, r2.id}
+    assert {b.claim_id for b in page.groups[1].blocks} == {k1.id}
+    assert {b.claim_id for b in page.blocks} == {r1.id, r2.id, k1.id}
+
+
+async def test_grouped_cache_skips_negative_examples_section(store):
+    """The write-back REJECT negative-examples section is not a subject group; the
+    cached-grouped reconstruction must ignore it (it carries no anchors anyway)."""
+    from ntrp.memory.models import LensRenderMode
+
+    r1 = await _claim(store, "Regina is CEO", canonical_subject="Regina")
+    page_md = (
+        "# People\n*Lens · criterion: claims about people*\n\n"
+        f"## Regina\n- CEO. <!--claim:{r1.id}-->\n\n"
+        f"{NEGATIVE_EXAMPLES_HEADER}\n- user drives a tesla\n"
+    )
+    lens = await _lens(
+        store,
+        name="People",
+        criterion="claims about people",
+        page=page_md,
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    await _member(store, lens.id, r1)
+
+    proj = _projector(store, cheap=FakeCompletionClient(), strong=FakeCompletionClient())
+    page = await proj.project(lens.id)
+
+    assert [g.subject for g in page.groups] == ["Regina"]
+    assert {b.claim_id for b in page.blocks} == {r1.id}
 
 
 async def test_grouped_profile_synthesis_failure_degrades_that_bucket(store):

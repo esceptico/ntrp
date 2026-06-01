@@ -15,8 +15,16 @@ You name the canonical subject a new fact is about, in a personal knowledge base
 Subjects are not stored as records — a subject is just a stable string attached to each
 claim (its `canonical_subject`). Two claims are about the same referent iff they carry
 the same canonical_subject string. Your job: given a new fact's proposed SUBJECT and
-CONTENT, plus a list of EXISTING canonical subjects already used by nearby claims, return
-the canonical subject string to assign this fact.
+CONTENT, plus a list of EXISTING subjects each shown with a PROFILE GIST (how many claims
+have accumulated under it and a few sample facts), return the canonical subject string to
+assign this fact.
+
+You resolve against each candidate's FULL PROFILE, not its name alone. A new fact like
+"the user is also called Tim Ganiev" should MATCH an existing subject whose profile gist
+shows it is the user (e.g. "Timur Ganiev", or "the user" with 42 personal facts) — the
+sample facts are there precisely so a shallow or differently-worded name does not look
+like a different person. Names, nicknames, role labels ("the user"), and full names that
+describe the same person are the SAME referent.
 
 Decide one of:
 - MATCH: this fact is about the SAME real-world referent as one of the existing subjects.
@@ -27,6 +35,8 @@ Decide one of:
 Rules:
 - Match only on identity, never on mere topical similarity. "my therapist" and "my
   doctor" are different people unless context proves they are one.
+- Use the profile gist to settle identity: a name variant, nickname, or role label that
+  the accumulated facts show is the same person/thing is a MATCH, not a NEW subject.
 - When genuinely uncertain between a match and a new subject, choose NEW. A wrong NEW is
   cheaply repaired by background cleanup; a wrong MATCH poisons a profile.
 - canonical_subject MUST be copied verbatim from the EXISTING list when MATCH; otherwise

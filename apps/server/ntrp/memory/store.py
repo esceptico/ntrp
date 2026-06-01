@@ -450,6 +450,37 @@ class MemoryStore:
         rows = await self.conn.execute_fetchall(sql, (match, limit))
         return [self._row_to_item(r) for r in rows]
 
+    async def search_subjects(
+        self, query: str, *, limit: int = 20, include_inactive: bool = False
+    ) -> list[MemoryItem]:
+        """FTS5 search restricted to the `canonical_subject` column.
+
+        A name/alias recall channel for coreference: orders existing claims by how
+        well their SUBJECT STRING matches the query (a name or observed surface),
+        independent of the claim's body. Subject coreference is a claim attribute, so
+        this needs no entity table — it ranks over the subjects already on claims.
+        Signals only: it ORDERS candidates for the LLM judge, it never gates identity.
+        """
+        if not self._has_fts:
+            return []
+        terms = [t for t in query.split() if t]
+        if not terms:
+            return []
+        match = "canonical_subject : (" + " OR ".join(
+            DQ + t.replace(DQ, DQ + DQ) + DQ for t in terms
+        ) + ")"
+        status_clause = "" if include_inactive else " AND i.status = 'active'"
+        sql = f"""
+            SELECT {','.join('i.' + c for c in _COLUMNS.split(', '))}
+            FROM memory_items_fts f
+            JOIN memory_items i ON i.rowid = f.rowid
+            WHERE memory_items_fts MATCH ?{status_clause}
+            ORDER BY f.rank
+            LIMIT ?
+        """
+        rows = await self.conn.execute_fetchall(sql, (match, limit))
+        return [self._row_to_item(r) for r in rows]
+
     # --- lens registry (views over claims; never memory) ---
 
     async def create_lens_row(self, lens: LensRow, *, commit: bool = True) -> LensRow:

@@ -117,6 +117,11 @@ BACKFILL_SCAN_CAP = 500
 MEMBERSHIP_BATCH = 20
 GENERIC_RATIO = 0.5
 
+# Structural heading for the write-back REJECT section appended to a lens page.
+# Shared by writeback (appends it) and project (skips it when reconstructing a
+# cached grouped page). A page-layout label only — never a membership decision.
+NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
+
 # --- Context Compression (Summarizer) ---
 
 SUMMARY_MAX_TOKENS = 1500

@@ -350,6 +350,19 @@ async def test_knowledge_runtime_boots_memory_pipeline(tmp_path, monkeypatch):
         assert (tmp_path / "memory.db").exists()
         assert isinstance(knowledge.memory_service, WriteSeam)
         assert knowledge.memory_retrieval is not None
+
+        # WIRING CONTRACT: `memory_retrieval` is the whole MemoryPipeline, NOT
+        # the bare Retriever. routers/memory.py reads the lens VIEW surface off
+        # this same handle (.lens_registry / .lens_projector / .lens_writeback —
+        # see routers/memory.py:249,274,448,468) alongside the read egress
+        # `.retrieve()`. A Retriever exposes only `.retrieve`, so collapsing this
+        # to `pipeline.retriever` would AttributeError every lens endpoint at
+        # runtime while leaving the suite green. Pin both surfaces here.
+        assert knowledge.memory_retrieval is knowledge._memory_pipeline
+        assert callable(knowledge.memory_retrieval.retrieve)
+        for view_attr in ("lens_registry", "lens_projector", "lens_writeback"):
+            assert hasattr(knowledge.memory_retrieval, view_attr), view_attr
+
         # The remember() permission service is exposed so the tool un-hides.
         assert MEMORY_WRITE_SERVICE in knowledge.tool_services()
     finally:

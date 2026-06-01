@@ -24,6 +24,7 @@ evidence section).
 
 import re
 
+from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
 from ntrp.embedder import Embedder
 from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
@@ -52,6 +53,10 @@ _logger = get_logger(__name__)
 
 _ANCHOR_RE = re.compile(r"<!--\s*claim:([0-9a-fA-F]+)\s*-->")
 
+# NEGATIVE_EXAMPLES_HEADER (ntrp.constants): the write-back REJECT section label.
+# Parsing-only here — it is NOT a subject group, so the cached-grouped
+# reconstruction skips it. Decides no membership.
+
 
 def _anchor(claim_id: str) -> str:
     return f"<!--claim:{claim_id}-->"
@@ -60,6 +65,30 @@ def _anchor(claim_id: str) -> str:
 def parse_anchors(markdown: str) -> list[str]:
     """Extract claim ids from a page's anchors, in document order."""
     return _ANCHOR_RE.findall(markdown)
+
+
+def _split_subject_sections(markdown: str) -> list[tuple[str, str]]:
+    """Split a grouped page's markdown into (subject, body) per `## {subject}` section.
+
+    The leading `# {name}` header is dropped (it precedes the first `## `). The
+    write-back negative-examples section is not a subject group and is excluded.
+    Structural parse of the page layout only — no meaning rule, no decision.
+    """
+    sections: list[tuple[str, str]] = []
+    subject: str | None = None
+    body: list[str] = []
+    for line in markdown.splitlines():
+        if line.startswith("## "):
+            if subject is not None:
+                sections.append((subject, "\n".join(body).strip()))
+            heading = line[3:].strip()
+            subject = None if heading == NEGATIVE_EXAMPLES_HEADER[3:] else heading
+            body = []
+        elif subject is not None:
+            body.append(line)
+    if subject is not None:
+        sections.append((subject, "\n".join(body).strip()))
+    return sections
 
 
 class LensProjector:
@@ -110,15 +139,19 @@ class LensProjector:
         dirty = lens.page is None
         grouped = lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
 
-        # Cache hit (flat only): structured page materialized, not dirty, no refresh.
-        # Grouped pages are per-subject and never cached into the flat `page` slot.
+        # Cache hit: structured page materialized, not dirty, no refresh. The cached
+        # `page` is markdown for BOTH render modes (FTS-clean, judge-readable). For a
+        # grouped lens the per-subject groups are reconstructed from the cached
+        # markdown's `## {subject}` sections + their anchors — zero synthesis, zero
+        # judge calls (Lens spec §6: materialize lazily, cache, re-derive on change).
         if (
-            not grouped
-            and level is LensDetailLevel.STRUCTURED
+            level is LensDetailLevel.STRUCTURED
             and lens.page
             and not refresh
             and not dirty
         ):
+            if grouped:
+                return await self._cached_grouped(lens, level)
             blocks = await self._blocks_for(parse_anchors(lens.page))
             coverage = await self.membership.coverage(lens_id, lens.scope)
             return ProjectedPage(
@@ -130,8 +163,8 @@ class LensProjector:
                 coverage=coverage,
             )
 
-        # Miss / dirty / refresh / grouped: load members from the cache (recompute on
-        # empty), re-validate against the CURRENT criterion, render only still-`in`.
+        # Miss / dirty / refresh: load members from the cache (recompute on empty),
+        # re-validate against the CURRENT criterion, render only still-`in`.
         members = await self._members(lens, refresh=refresh or dirty)
         valid = await self._revalidate(members, lens)
         coverage = await self.membership.coverage(lens_id, lens.scope)
@@ -139,7 +172,11 @@ class LensProjector:
 
         if grouped:
             markdown, synthesized, groups = await self._render_grouped(lens, valid, level)
-            # Grouped output is not cached into the flat `page` slot.
+            # Cache the concatenated markdown (same `page` slot as flat). It is the
+            # human surface AND fully reconstructs the groups on the next read. Only a
+            # fully-synthesized structured page is cached, mirroring the flat path.
+            if synthesized and level is LensDetailLevel.STRUCTURED and markdown != lens.page:
+                await self.store.update_lens(lens_id, page=markdown)
             return ProjectedPage(
                 lens_id=lens_id,
                 detail=level,
@@ -163,6 +200,42 @@ class LensProjector:
             blocks=blocks,
             synthesized=synthesized,
             coverage=coverage,
+        )
+
+    async def _cached_grouped(self, lens: LensRow, level: LensDetailLevel) -> ProjectedPage:
+        """Reconstruct a grouped page from its cached markdown — no LLM, no judge.
+
+        The cached `page` is the same concatenated markdown `_render_grouped` returns:
+        a header followed by `## {subject}` sections. Each section's anchors recover
+        that subject's claims, so groups + blocks rebuild from the cache alone. A
+        section whose claims are no longer all active is skipped (re-derive on change
+        is the caller's job via refresh); the negative-examples section written by
+        write-back REJECT is not a subject section and is ignored.
+        """
+        groups: list[ProjectedGroup] = []
+        blocks: list[RenderedClaim] = []
+        for subject, body in _split_subject_sections(lens.page):
+            section_blocks = await self._blocks_for(parse_anchors(body))
+            if not section_blocks:
+                continue
+            groups.append(
+                ProjectedGroup(
+                    subject=subject,
+                    markdown=body,
+                    blocks=section_blocks,
+                    synthesized=True,
+                )
+            )
+            blocks.extend(section_blocks)
+        coverage = await self.membership.coverage(lens.id, lens.scope)
+        return ProjectedPage(
+            lens_id=lens.id,
+            detail=level,
+            markdown=lens.page,
+            blocks=blocks,
+            synthesized=True,
+            coverage=coverage,
+            groups=groups,
         )
 
     # --- members from the cache (recompute on miss) ------------------

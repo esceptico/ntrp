@@ -254,6 +254,21 @@ async def test_search_excludes_invalidated_by_default(store: MemoryStore):
 
 
 @pytest.mark.asyncio
+async def test_search_subjects_ranks_by_subject_name(store: MemoryStore):
+    # A name/alias recall channel: matches the canonical_subject column, not the body.
+    target = _claim("did unrelated work today", Scope(ScopeKind.USER), canonical_subject="Timur Ganiev")
+    noise = _claim("Timur Ganiev was mentioned in passing", Scope(ScopeKind.USER), canonical_subject="Regina")
+    await store.create_item(target)
+    await store.create_item(noise)
+
+    hits = await store.search_subjects("Timur Ganiev")
+    subjects = {h.canonical_subject for h in hits}
+    assert "Timur Ganiev" in subjects
+    # The body-only mention under a different subject is not a subject-name match.
+    assert "Regina" not in subjects
+
+
+@pytest.mark.asyncio
 async def test_feedback_and_corroboration(store: MemoryStore):
     item = _claim("x", Scope(ScopeKind.USER))
     await store.create_item(item)

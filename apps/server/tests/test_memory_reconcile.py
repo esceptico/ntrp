@@ -61,6 +61,7 @@ class StubLLM:
         self.batch_queue: list[BatchReconcile] = []
         self.subject_calls = 0
         self.batch_calls = 0
+        self.last_subject_user: str | None = None
 
     @property
     def calls(self) -> int:
@@ -69,6 +70,7 @@ class StubLLM:
     async def completion(self, *, response_format, **kwargs) -> CompletionResponse:
         if response_format is SubjectResolution:
             self.subject_calls += 1
+            self.last_subject_user = kwargs["messages"][-1]["content"]
             return _response(self.subject_queue.pop(0).model_dump_json())
         if response_format is BatchReconcile:
             self.batch_calls += 1
@@ -380,6 +382,54 @@ async def test_subject_batching_one_batch_per_group(store):
     assert {r.canonical_subject for r in results} == {"Timur"}  # grouped to one subject
     # One batch call for the single subject group, regardless of claim count.
     assert cheap.batch_calls == 1
+
+
+async def test_shallow_canonical_subject_reaches_judge_despite_busy_generic(store):
+    # The User != Timur fragmentation root cause: a shallow canonical subject
+    # ("Timur Ganiev", 1 claim) must still reach the identity judge even when a busy
+    # generic subject ("the user", many claims) dominates every recall signal. The
+    # roster guarantees it; the judge then MATCHes the incoming name fact onto it.
+    await _existing_claim(store, "The user's name is Timur Ganiev", subject="Timur Ganiev")
+    for n in range(20):
+        await _existing_claim(store, f"The user did unrelated thing {n}", subject="the user")
+
+    cheap = StubLLM()
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur Ganiev", reason="same person")
+    )
+    cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
+    rec = _reconciler(store, cheap)
+
+    results = await rec.reconcile(
+        [_candidate("Tim Ganiev is a nickname for the user", subject="Tim Ganiev", surfaces=["Tim"])],
+        USER_SCOPE,
+    )
+
+    # The shallow canonical subject was offered to the judge (not trimmed by a cutoff)
+    # and the judge resolved identity onto it.
+    assert "Timur Ganiev" in cheap.last_subject_user
+    assert results[0].canonical_subject == "Timur Ganiev"
+    assert results[0].subject_is_new is False
+
+
+async def test_identity_judge_receives_profile_gist_not_raw_claim(store):
+    # The judge must see a profile gist (claim count + sample facts), not a single raw
+    # example claim, so it can reason over accumulation (spec §4.4 / Lens §4 line 56).
+    await _existing_claim(store, "The user prefers raw SQL", subject="the user")
+    await _existing_claim(store, "The user lives in Lisbon", subject="the user")
+    cheap = StubLLM()
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="the user", reason="same")
+    )
+    cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
+    rec = _reconciler(store, cheap)
+
+    await rec.reconcile([_candidate("The user is Timur", subject="the user")], USER_SCOPE)
+
+    seen = cheap.last_subject_user
+    assert "claims=2" in seen  # accumulation count surfaced
+    assert "sample_facts=" in seen
+    assert "prefers raw SQL" in seen  # a real sample fact, not just the name
 
 
 async def test_escalation_uses_strong_model(store):

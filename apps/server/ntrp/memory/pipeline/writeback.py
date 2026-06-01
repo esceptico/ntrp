@@ -25,6 +25,7 @@ anchor is a no-op + `rejected`, never a silent write to a dead row.
 
 import uuid
 
+from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
 from ntrp.logging import get_logger
 from ntrp.memory.models import (
     Feedback,
@@ -45,10 +46,10 @@ from ntrp.memory.store import MemoryStore
 
 _logger = get_logger(__name__)
 
-# The lens-scoped negative-example section appended to the lens page on REJECT.
-# The membership judge reads everything under this header as worked examples; it is
-# LLM-read prose, NEVER a keyword/stopword filter and NEVER a gate.
-NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
+# NEGATIVE_EXAMPLES_HEADER (ntrp.constants): the lens-scoped negative-example
+# section appended to the lens page on REJECT. The membership judge reads
+# everything under it as worked examples; LLM-read prose, NEVER a keyword filter
+# and NEVER a gate.
 
 _APPLY_ORDER = {
     PageEditKind.ACCEPT: 0,

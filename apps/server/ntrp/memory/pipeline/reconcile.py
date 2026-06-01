@@ -23,6 +23,7 @@ entirely above its public API.
 """
 
 import uuid
+from dataclasses import dataclass
 
 from ntrp.constants import RRF_K
 from ntrp.embedder import Embedder
@@ -53,7 +54,14 @@ _logger = get_logger(__name__)
 
 # Routing signals (signals route, they never gate an outcome).
 SUBJECT_RECALL_K = 8
+# The full distinct-subject roster offered to the identity judge. The cap bounds
+# cost; it does NOT gate identity — within it, signals only ORDER the subjects.
+# Larger than SUBJECT_RECALL_K so a shallow canonical subject is never dropped by
+# an FTS/embedding rank cutoff (the User != Timur fragmentation root cause).
+SUBJECT_ROSTER_CAP = 40
 PROFILE_MEMBER_CAP = 30
+# Sample claims shown per candidate subject in the identity-judge profile gist.
+SUBJECT_PROFILE_SAMPLE = 3
 
 _PROVENANCE_ORD = {
     Provenance.USER_AUTHORED: 3,
@@ -61,6 +69,18 @@ _PROVENANCE_ORD = {
     Provenance.INFERRED: 1,
     Provenance.EXTERNAL: 0,
 }
+
+
+@dataclass
+class SubjectProfile:
+    """A candidate existing subject offered to the identity judge: the subject
+    string plus a profile gist (how many claims accumulated, a few sample facts).
+    The judge reasons over accumulation, not a single raw claim (spec §4.4 / Lens
+    §4: resolve against the full profile, not a name match)."""
+
+    subject: str
+    claim_count: int
+    samples: list[str]
 
 
 def _parse[T](response, model: type[T]) -> T:
@@ -140,23 +160,30 @@ class Reconciler:
         keep the extractor's subject as NEW). Every non-empty set goes to the LLM
         judge — no cosine shortcut, no lexical rule decides identity.
         """
-        recalled = await self._recall_subject_claims(cand, scope, prior_candidates)
+        recalled = await self._recall_subject_profiles(cand, scope, prior_candidates)
         if not recalled:
             return cand.canonical_subject, True
         return await self._resolve_subject_llm(cand, recalled)
 
-    async def _recall_subject_claims(
+    async def _recall_subject_profiles(
         self,
         cand: ClaimCandidate,
         scope: Scope,
         prior_candidates: list[MemoryItem] | None,
-    ) -> list[MemoryItem]:
-        """Recall existing active claims that might share the subject.
+    ) -> list[SubjectProfile]:
+        """Recall existing subjects that might be the same referent, as profiles.
 
-        Channels over the LLM-emitted canonical_subject (+ surfaces) and content:
-        subject/content FTS + embedding cosine, RRF-merged, scope-filtered. Returns
-        one representative claim per distinct existing canonical_subject (the judge
-        decides on subject strings, not individual claims).
+        The bug lives in recall, not scoring (Lens spec §4): User != Timur fragments
+        when the existing canonical subject is never surfaced to the judge. So the
+        candidate set is the FULL distinct-subject roster in scope (capped for cost
+        only), ORDERED by fused signals — never trimmed by an FTS/embedding cutoff.
+
+        Recall channels (signals ORDER, they never gate):
+          - subject-name/alias FTS over canonical_subject (names + observed surfaces),
+          - body FTS over the claim content,
+          - embedding cosine over subject+content,
+        RRF-merged to rank distinct subjects; the roster then guarantees every
+        distinct subject reaches the judge with a profile gist (count + samples).
         """
         scoped = await self.store.query(scope=scope, status=Status.ACTIVE, limit=500)
         for it in prior_candidates or []:
@@ -168,37 +195,56 @@ class Reconciler:
         by_id = {it.id: it for it in scoped}
         id_list = list(by_id)
         id_index = {iid: n for n, iid in enumerate(id_list)}
+
+        # Per-subject accumulation: claim count + a few sample facts for the gist.
+        by_subject: dict[str, list[MemoryItem]] = {}
+        for it in scoped:
+            by_subject.setdefault(it.canonical_subject, []).append(it)
+
         rankings: list[list[tuple[int, float]]] = []
 
-        subject_query = " ".join([cand.canonical_subject, *cand.subject_surfaces]).strip()
-        if subject_query:
-            hits = await self.store.search(subject_query, limit=SUBJECT_RECALL_K * 2)
-            rankings.append(self._rank(hits, by_id, id_index))
+        name_query = " ".join([cand.canonical_subject, *cand.subject_surfaces]).strip()
+        if name_query:
+            name_hits = await self.store.search_subjects(name_query, limit=SUBJECT_RECALL_K * 4)
+            rankings.append(self._rank(name_hits, by_id, id_index))
+            body_hits = await self.store.search(name_query, limit=SUBJECT_RECALL_K * 2)
+            rankings.append(self._rank(body_hits, by_id, id_index))
 
-        hits = await self.store.search(_salient_tokens(cand.content), limit=SUBJECT_RECALL_K * 2)
-        rankings.append(self._rank(hits, by_id, id_index))
+        content_hits = await self.store.search(
+            _salient_tokens(cand.content), limit=SUBJECT_RECALL_K * 2
+        )
+        rankings.append(self._rank(content_hits, by_id, id_index))
 
         margins = await self._embedding_margins(cand, by_id)
         if margins:
             emb_ranking = sorted(margins.items(), key=lambda kv: kv[1], reverse=True)
             rankings.append([(id_index[iid], s) for iid, s in emb_ranking])
 
-        if not any(rankings):
-            return []
+        # Fuse signals into a per-subject order; a subject's best-ranked claim wins.
+        fused = rrf_merge(rankings, k=RRF_K) if any(rankings) else {}
+        subject_score: dict[str, float] = {}
+        for idx, score in fused.items():
+            subj = by_id[id_list[idx]].canonical_subject
+            if score > subject_score.get(subj, float("-inf")):
+                subject_score[subj] = score
 
-        fused = rrf_merge(rankings, k=RRF_K)
-        ordered = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)
-        # One representative per distinct existing subject, capped.
-        seen_subjects: set[str] = set()
-        out: list[MemoryItem] = []
-        for idx, _ in ordered:
-            claim = by_id[id_list[idx]]
-            if claim.canonical_subject in seen_subjects:
-                continue
-            seen_subjects.add(claim.canonical_subject)
-            out.append(claim)
-            if len(out) >= SUBJECT_RECALL_K:
-                break
+        # Order: signal-scored subjects first (by score), then the remaining roster
+        # by claim count. The cap bounds cost; it never excludes a subject by score.
+        def sort_key(subj: str) -> tuple[float, int]:
+            return (subject_score.get(subj, float("-inf")), len(by_subject[subj]))
+
+        ordered_subjects = sorted(by_subject, key=sort_key, reverse=True)[:SUBJECT_ROSTER_CAP]
+
+        out: list[SubjectProfile] = []
+        for subj in ordered_subjects:
+            claims = by_subject[subj]
+            out.append(
+                SubjectProfile(
+                    subject=subj,
+                    claim_count=len(claims),
+                    samples=[c.content[:160] for c in claims[:SUBJECT_PROFILE_SAMPLE]],
+                )
+            )
         return out
 
     def _rank(
@@ -227,18 +273,15 @@ class Reconciler:
         return {it.id: float(s) for it, s in zip(by_id.values(), sims)}
 
     async def _resolve_subject_llm(
-        self, cand: ClaimCandidate, candidates: list[MemoryItem]
+        self, cand: ClaimCandidate, profiles: list[SubjectProfile]
     ) -> tuple[str, bool]:
-        cards = "\n".join(
-            f"- subject={c.canonical_subject!r} example_claim={c.content[:160]!r}"
-            for c in candidates
-        )
+        cards = "\n".join(self._render_profile(p) for p in profiles)
         surfaces = ", ".join(cand.subject_surfaces) if cand.subject_surfaces else ""
         user = (
             f"NEW SUBJECT: {cand.canonical_subject!r}\n"
             f"SURFACES: {surfaces!r}\n"
             f"NEW CONTENT: {cand.content!r}\n\n"
-            f"EXISTING SUBJECTS:\n{cards}"
+            f"EXISTING SUBJECTS (with profile gist):\n{cards}"
         )
         resp = await self.cheap_llm.completion(
             messages=[
@@ -250,11 +293,16 @@ class Reconciler:
             temperature=0.0,
         )
         decision = _parse(resp, SubjectResolution)
-        known = {c.canonical_subject for c in candidates}
+        known = {p.subject for p in profiles}
         if decision.decision.upper() == "MATCH" and decision.canonical_subject in known:
             return decision.canonical_subject, False
         # NEW, or a hallucinated subject -> keep the extractor's (self-correcting).
         return cand.canonical_subject, True
+
+    @staticmethod
+    def _render_profile(p: SubjectProfile) -> str:
+        samples = "; ".join(repr(s) for s in p.samples)
+        return f"- subject={p.subject!r} claims={p.claim_count} sample_facts=[{samples}]"
 
     # --- Phase 3 + 4 -------------------------------------------------
 
