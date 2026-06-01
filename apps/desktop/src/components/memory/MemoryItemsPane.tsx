@@ -34,6 +34,7 @@ import {
 import type { AppConfig } from "../../api";
 import { useStore } from "../../store";
 import { KIND_COLOR, MemoryGraph, type CenterRequest } from "./MemoryGraph";
+import { TabPanels, useTabDirection } from "../ui/TabPanels";
 
 export interface Connection {
   item: MemoryItemSummary;
@@ -68,6 +69,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "skills", label: "Skills", hint: "procedures" },
   { id: "search", label: "Search", hint: "hybrid" },
 ];
+const MEMORY_TAB_IDS = TABS.map((t) => t.id);
 const KINDS: MemoryItemKind[] = ["episode", "observation", "claim", "skill", "proposal", "artifact_ref", "entity", "directory"];
 const STATUSES: MemoryItemStatus[] = ["active", "superseded", "archived"];
 const VALIDITY_FILTERS: MemoryValidityFilter[] = ["all", "current", "future", "expired"];
@@ -75,6 +77,7 @@ const VALIDITY_FILTERS: MemoryValidityFilter[] = ["all", "current", "future", "e
 export function MemoryItemsPane() {
   const config = useStore((s) => s.config);
   const [tab, setTab] = useState<Tab>("today");
+  const direction = useTabDirection(MEMORY_TAB_IDS, tab);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MemoryItemDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -130,40 +133,42 @@ export function MemoryItemsPane() {
         ))}
       </Tabs>
 
-      {tab === "graph" ? (
-        <GraphView
-          config={config}
-          rootId={selectedId}
-          onSelect={selectItem}
-          clearSelection={clearSelection}
-          detail={detail}
-          detailError={detailError}
-          onSkillChanged={reloadDetail}
-        />
-      ) : (
-        <PaneShell
-          list={
-            <>
-              {tab === "today" && <TodayList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} onMutate={reloadDetail} />}
-              {tab === "directories" && <DirectoriesList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
-              {tab === "skills" && <SkillsList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
-              {tab === "search" && <SearchList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
-            </>
-          }
-          detail={
-            <ItemDetail
-              config={config}
-              detail={detail}
-              error={detailError}
-              onOpenGraph={(item) => selectItem(item, "graph")}
-              onSkillChanged={reloadDetail}
-              onChanged={reloadDetail}
-              onDeleted={() => { clearSelection(); reloadDetail(); }}
-              onNavigate={(item) => selectItem(item)}
-            />
-          }
-        />
-      )}
+      <TabPanels value={tab} direction={direction} className="h-full min-h-0 overflow-hidden">
+        {tab === "graph" ? (
+          <GraphView
+            config={config}
+            rootId={selectedId}
+            onSelect={selectItem}
+            clearSelection={clearSelection}
+            detail={detail}
+            detailError={detailError}
+            onSkillChanged={reloadDetail}
+          />
+        ) : (
+          <PaneShell
+            list={
+              <>
+                {tab === "today" && <TodayList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} onMutate={reloadDetail} />}
+                {tab === "directories" && <DirectoriesList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
+                {tab === "skills" && <SkillsList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
+                {tab === "search" && <SearchList config={config} onSelect={selectItem} selectedId={selectedId} refreshKey={refreshKey} />}
+              </>
+            }
+            detail={
+              <ItemDetail
+                config={config}
+                detail={detail}
+                error={detailError}
+                onOpenGraph={(item) => selectItem(item, "graph")}
+                onSkillChanged={reloadDetail}
+                onChanged={reloadDetail}
+                onDeleted={() => { clearSelection(); reloadDetail(); }}
+                onNavigate={(item) => selectItem(item)}
+              />
+            }
+          />
+        )}
+      </TabPanels>
     </div>
   );
 }

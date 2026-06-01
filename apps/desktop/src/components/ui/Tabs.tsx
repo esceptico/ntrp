@@ -92,7 +92,7 @@ export function Tab({
           )}
         />
       )}
-      <span className="relative z-10">{children}</span>
+      {children}
       {active && ctx.variant === "underline" && (
         <motion.span
           layoutId={`${ctx.layoutId}-indicator`}
