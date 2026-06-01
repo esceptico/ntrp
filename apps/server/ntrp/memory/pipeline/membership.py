@@ -152,6 +152,13 @@ class LensMembership:
         pool = await self.store.query(
             scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1
         )
+        # Honor durable user REJECTions: a rejected claim is never a member, full
+        # stop. This is a user override (explicit feedback), not a heuristic gate —
+        # it removes the claim from the judge's pool so it can't re-enter on re-derive.
+        rejected = await self.store.get_rejections(lens_id)
+        if rejected:
+            pool = [c for c in pool if c.id not in rejected]
+
         capped = len(pool) > BACKFILL_SCAN_CAP
         if capped:
             pool = await self._rank_to_cap(lens, pool, BACKFILL_SCAN_CAP)

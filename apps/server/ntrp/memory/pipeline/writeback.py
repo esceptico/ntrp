@@ -25,7 +25,6 @@ anchor is a no-op + `rejected`, never a silent write to a dead row.
 
 import uuid
 
-from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
 from ntrp.logging import get_logger
 from ntrp.memory.models import (
     Feedback,
@@ -45,11 +44,6 @@ from ntrp.memory.pipeline.types import (
 from ntrp.memory.store import MemoryStore
 
 _logger = get_logger(__name__)
-
-# NEGATIVE_EXAMPLES_HEADER (ntrp.constants): the lens-scoped negative-example
-# section appended to the lens page on REJECT. The membership judge reads
-# everything under it as worked examples; LLM-read prose, NEVER a keyword filter
-# and NEVER a gate.
 
 _APPLY_ORDER = {
     PageEditKind.ACCEPT: 0,
@@ -147,12 +141,19 @@ class LensWriteBack:
         return True, successor.id, True
 
     async def _reject(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
-        """Append a lens-scoped negative example + null the page + invalidate cache.
-        Re-validate-at-read renders the claim `out`. The claim survives globally."""
+        """Durably reject the claim from this lens, then force a re-derive.
+
+        Records a lens_rejection (survives cache purges; membership keeps it OUT),
+        nulls the cached page so the next read re-derives without it, and clears the
+        membership cache. The claim survives globally — it is only removed from THIS
+        view. (The previous version appended a 'negative example' to the page but
+        left the page non-None, so the read served the stale page and the rejected
+        claim kept re-rendering.)"""
         m = await self.store.get(op.claim_id) if op.claim_id else None
         if m is None:
             return False, "claim moved; re-open the page", False
-        await self._append_negative_example(lens, m.content)
+        await self.store.add_rejection(lens.id, m.id)
+        await self.store.update_lens(lens.id, page=None)
         await self.store.invalidate_lens_membership(lens.id)
         return True, m.id, True
 
@@ -183,14 +184,3 @@ class LensWriteBack:
         await self.store.update_lens(lens.id, criterion=op.new_text.strip(), page=None)
         return True, lens.id, True
 
-    # --- lens-page helper (registry UPDATE; not a memory write) ------
-
-    async def _append_negative_example(self, lens: LensRow, content: str) -> None:
-        page = lens.page or ""
-        if NEGATIVE_EXAMPLES_HEADER not in page:
-            page = f"{page.rstrip()}\n\n{NEGATIVE_EXAMPLES_HEADER}\n".lstrip("\n")
-        marker = f"- {content}"
-        if marker in page:
-            return
-        page = f"{page.rstrip()}\n{marker}\n"
-        await self.store.update_lens(lens.id, page=page)

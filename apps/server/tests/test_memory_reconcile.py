@@ -293,7 +293,13 @@ async def test_contradict_supersedes_and_links_edge(store):
     assert old.id in {e.parent_id for e in contradicts}
 
 
-async def test_user_authored_never_noops_over_inferred(store):
+async def test_user_authored_noop_over_inferred_confirms_not_supersedes(store):
+    # The judge's NOOP is honored verbatim — a prior heuristic flipped it to UPDATE
+    # when the incoming claim out-ranked the target on provenance, destructively
+    # superseding an identical claim. Higher-provenance corroboration is recorded by
+    # bumping corroboration + setting CONFIRMED feedback, NOT by rewriting the claim.
+    from ntrp.memory.models import Feedback
+
     inferred = await _existing_claim(
         store, "Timur probably likes jazz", subject="Timur", prov=Provenance.INFERRED
     )
@@ -301,7 +307,6 @@ async def test_user_authored_never_noops_over_inferred(store):
     cheap.subject_queue.append(
         SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
     )
-    # Model says NOOP, but incoming is user-authored over inferred -> coerced UPDATE.
     cheap.batch_queue.append(
         BatchReconcile(rows=[{"claim_index": 0, "op": "noop", "target_idx": 0}])
     )
@@ -311,8 +316,11 @@ async def test_user_authored_never_noops_over_inferred(store):
         [_candidate("Timur likes jazz", prov=Provenance.USER_AUTHORED)], USER_SCOPE
     )
 
-    assert results[0].op is Op.UPDATE
-    assert (await store.get(inferred.id)).status is Status.SUPERSEDED
+    assert results[0].op is Op.NOOP
+    target = await store.get(inferred.id)
+    assert target.status is Status.ACTIVE  # never destroyed
+    assert target.corroboration == 1  # the provenance signal is recorded as corroboration
+    assert target.feedback is Feedback.CONFIRMED  # user-authored confirms the inferred claim
 
 
 async def test_invalid_target_idx_coerced_to_add(store):

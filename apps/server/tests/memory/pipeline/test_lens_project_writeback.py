@@ -41,7 +41,8 @@ from ntrp.memory.pipeline.project import LensProjector, parse_anchors
 from ntrp.memory.pipeline.prompts_project import PageSynthesis
 from ntrp.memory.pipeline.prompts_reconcile import MembershipBatch, MembershipVote
 from ntrp.memory.pipeline.types import PageEditKind, PageEditOp
-from ntrp.memory.pipeline.writeback import NEGATIVE_EXAMPLES_HEADER, LensWriteBack
+from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
+from ntrp.memory.pipeline.writeback import LensWriteBack
 from ntrp.memory.store import MemoryStore
 from tests.conftest import FakeCompletionClient, FakeEmbedder
 
@@ -609,17 +610,17 @@ async def test_reject_records_correction_keeps_claim(store):
     assert res.rederive_triggered is True
     # the claim survives active (a lens owns no claims).
     assert (await store.get(c1.id)).status is Status.ACTIVE
-    # the negative example is appended to the lens page (a registry update).
-    active_lens = await store.get_lens(lens.id)
-    assert NEGATIVE_EXAMPLES_HEADER in active_lens.page
-    assert "user drives a tesla" in active_lens.page
+    # the rejection is recorded DURABLY (survives cache purges).
+    assert c1.id in await store.get_rejections(lens.id)
+    # the page cache is nulled so the next read re-derives without the claim.
+    assert (await store.get_lens(lens.id)).page is None
     # the membership cache was invalidated so it re-derives on next read.
     assert await _member_ids(store, lens.id) == set()
 
 
 async def test_reject_then_project_hides_claim(store):
-    """Full loop: REJECT -> correction + cache invalidated -> next project
-    re-validates the claim `out` (the membership judge reads the negative example)
+    """Full loop: REJECT -> durable rejection + caches nulled -> next project
+    excludes the rejected claim from the membership pool entirely (user override)
     -> page hides it; the claim survives globally."""
     lens = await _lens(store, name="Health", criterion="health", page="# Health\n")
     keep = await _claim(store, "user runs 5k every morning")

@@ -97,6 +97,16 @@ CREATE TABLE IF NOT EXISTS lens_membership_cache (
     PRIMARY KEY (lens_id, claim_id)
 );
 
+-- Durable user REJECTions of a claim from a lens. Unlike the membership cache
+-- (purged on re-derive), a rejection is an explicit user override that must
+-- survive: the projector always keeps a rejected claim OUT of the lens.
+CREATE TABLE IF NOT EXISTS lens_rejection (
+    lens_id TEXT NOT NULL,
+    claim_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (lens_id, claim_id)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -151,6 +161,10 @@ SQL_UPSERT_MEMBERSHIP = (
     "VALUES (?, ?, ?, ?, ?)"
 )
 SQL_INVALIDATE_MEMBERSHIP = "DELETE FROM lens_membership_cache WHERE lens_id = ?"
+SQL_ADD_REJECTION = (
+    "INSERT OR IGNORE INTO lens_rejection (lens_id, claim_id, created_at) VALUES (?, ?, ?)"
+)
+SQL_GET_REJECTIONS = "SELECT claim_id FROM lens_rejection WHERE lens_id = ?"
 
 
 def _default_lenses_dir() -> Path:
@@ -574,3 +588,12 @@ class MemoryStore:
     async def invalidate_lens_membership(self, lens_id: str) -> None:
         await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
         await self.conn.commit()
+
+    async def add_rejection(self, lens_id: str, claim_id: str) -> None:
+        """Record a durable user REJECT of a claim from a lens (survives re-derive)."""
+        await self.conn.execute(SQL_ADD_REJECTION, (lens_id, claim_id, now_iso()))
+        await self.conn.commit()
+
+    async def get_rejections(self, lens_id: str) -> set[str]:
+        rows = await self.conn.execute_fetchall(SQL_GET_REJECTIONS, (lens_id,))
+        return {r["claim_id"] for r in rows}

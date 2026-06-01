@@ -89,7 +89,11 @@ def render_lens_markdown(lens: LensRow) -> str:
     }
     if lens.scope.key:
         front["scope_key"] = lens.scope.key
-    frontmatter = "".join(f"{k}: {v}\n" for k, v in front.items())
+    # Serialize with yaml.dump, NOT string concat: a free-text directory/name
+    # containing ":" or a newline (e.g. "Project X: Q3 goals") would otherwise
+    # produce invalid YAML, and the read path silently drops an unparseable file —
+    # the lens would vanish on next load. yaml.dump quotes/escapes such values.
+    frontmatter = yaml.dump(front, default_flow_style=False, allow_unicode=True, sort_keys=False)
     return f"---\n{frontmatter}---\n{lens.criterion.strip()}\n"
 
 

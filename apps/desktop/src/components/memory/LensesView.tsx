@@ -356,10 +356,17 @@ function LensPage({
   // A generation poll in flight — cancelled on unmount/reload so a stale loop
   // never writes into a remounted page (lens switch keys remount LensPage).
   const pollRef = useRef<{ alive: boolean } | null>(null);
+  // Exit-animation timer for a write-back op; tracked so a lens switch within the
+  // 240ms window can't fire load()/re-arm a poll on the unmounted page.
+  const exitTimerRef = useRef<number | null>(null);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) pollRef.current.alive = false;
     pollRef.current = null;
+    if (exitTimerRef.current !== null) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    }
   }, []);
 
   const load = useCallback(
@@ -446,8 +453,10 @@ function LensPage({
         setRunNote(parts.join(" · ") || "no change");
         if (hint && res.applied.length) {
           setExiting(hint);
-          // let the exit animation play, then re-fetch the spine
-          setTimeout(() => {
+          // let the exit animation play, then re-fetch the spine. Tracked so an
+          // unmount (lens switch) within the window cancels it (see stopPoll).
+          exitTimerRef.current = window.setTimeout(() => {
+            exitTimerRef.current = null;
             setExiting(null);
             load({ detail, refresh: res.rederive_triggered });
             onListChanged();

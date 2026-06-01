@@ -54,21 +54,9 @@ _logger = get_logger(__name__)
 
 # Routing signals (signals route, they never gate an outcome).
 SUBJECT_RECALL_K = 8
-# The full distinct-subject roster offered to the identity judge. The cap bounds
-# cost; it does NOT gate identity — within it, signals only ORDER the subjects.
-# Larger than SUBJECT_RECALL_K so a shallow canonical subject is never dropped by
-# an FTS/embedding rank cutoff (the User != Timur fragmentation root cause).
-SUBJECT_ROSTER_CAP = 40
 PROFILE_MEMBER_CAP = 30
 # Sample claims shown per candidate subject in the identity-judge profile gist.
 SUBJECT_PROFILE_SAMPLE = 3
-
-_PROVENANCE_ORD = {
-    Provenance.USER_AUTHORED: 3,
-    Provenance.RECORDED: 2,
-    Provenance.INFERRED: 1,
-    Provenance.EXTERNAL: 0,
-}
 
 
 @dataclass
@@ -228,12 +216,15 @@ class Reconciler:
             if score > subject_score.get(subj, float("-inf")):
                 subject_score[subj] = score
 
-        # Order: signal-scored subjects first (by score), then the remaining roster
-        # by claim count. The cap bounds cost; it never excludes a subject by score.
+        # Order: signal-scored subjects first (by score), then by claim count — this
+        # only ORDERS the prompt for readability. EVERY distinct subject in scope
+        # reaches the judge; we never truncate the roster (a cutoff here would be a
+        # threshold silently gating identity — exactly what fragments User != Timur).
+        # The roster is bounded by the scoped claim query, not by claim volume.
         def sort_key(subj: str) -> tuple[float, int]:
             return (subject_score.get(subj, float("-inf")), len(by_subject[subj]))
 
-        ordered_subjects = sorted(by_subject, key=sort_key, reverse=True)[:SUBJECT_ROSTER_CAP]
+        ordered_subjects = sorted(by_subject, key=sort_key, reverse=True)
 
         out: list[SubjectProfile] = []
         for subj in ordered_subjects:
@@ -495,13 +486,12 @@ class Reconciler:
         target: MemoryItem | None,
         res: ReconcileResult,
     ) -> None:
+        # Honor the LLM's op verbatim. A prior heuristic here flipped NOOP -> UPDATE
+        # whenever the incoming claim out-ranked the target on provenance — a rule
+        # silently overriding the judge and superseding (destroying) an identical
+        # claim. Higher-provenance corroboration is already recorded by _do_noop
+        # (bump_corroboration + CONFIRMED feedback) without rewriting the claim.
         op = row.op
-        if (
-            op == "noop"
-            and target is not None
-            and _PROVENANCE_ORD[cand.provenance] > _PROVENANCE_ORD[target.provenance]
-        ):
-            op = "update"
 
         if op == "add" or target is None:
             await self._do_add(cand, subject, res)
