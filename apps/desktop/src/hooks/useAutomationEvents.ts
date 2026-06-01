@@ -3,6 +3,7 @@ import { useStore } from "../store";
 import { fetchAutomations, refreshLoops } from "../actions";
 import { type AppConfig, type SessionListItem } from "../api";
 import { createStallWatchdog } from "../lib/streamWatchdog";
+import { automationToast } from "../lib/taskToast";
 
 // The automation stream keepalives every 5s; treat ~3x silence as stalled.
 const AUTOMATION_STALL_MS = 15_000;
@@ -115,6 +116,16 @@ export function useAutomationEvents(): void {
                   }
                 } else if (event.type === "automation_finished") {
                   store().automationFinished(event.task_id);
+                  const st = store();
+                  const auto =
+                    st.automations?.find((a) => a.task_id === event.task_id) ?? null;
+                  const toast = automationToast({
+                    taskId: event.task_id,
+                    name: auto?.name ?? null,
+                    result: event.result,
+                    automationsOpen: st.automationsOpen,
+                  });
+                  if (toast) st.pushToast(toast);
                   // Refresh the automations list so the row leaves the
                   // sidebar card immediately rather than after the next
                   // 20s poll catches up to running_since going null.
