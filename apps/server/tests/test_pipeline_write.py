@@ -17,6 +17,8 @@ from ntrp.memory.models import Provenance, Scope, ScopeKind, SourceRef
 from ntrp.memory.pipeline.types import (
     AdmitResult,
     CaptureUnit,
+    ClaimCandidate,
+    ExtractResult,
     Op,
     ReconcileResult,
     Verdict,
@@ -82,8 +84,42 @@ class StubReconciler:
         return [self.result]
 
 
+class StubExtractor:
+    """Atomize stand-in: by default emits one claim mirroring the admitted text,
+    with a RESOLVED canonical_subject (the real Extractor's job). Tests that need
+    no-extraction pass candidates=[]."""
+
+    def __init__(self, *, candidates=None, subject="the user"):
+        self.candidates = candidates
+        self.subject = subject
+        self.calls: list = []
+
+    async def extract(self, admitted, *, model) -> ExtractResult:
+        self.calls.append(admitted)
+        if self.candidates is not None:
+            return ExtractResult(candidates=self.candidates, dropped=[])
+        ex = admitted.unit.exchanges[0]
+        return ExtractResult(
+            candidates=[
+                ClaimCandidate(
+                    content=ex.text.strip(),
+                    source_refs=[ex.source_ref],
+                    provenance=Provenance.USER_AUTHORED,
+                    scope=admitted.unit.scope,
+                    canonical_subject=self.subject,
+                    subject_surfaces=[],
+                )
+            ],
+            dropped=[],
+        )
+
+
 USER_SCOPE = Scope(kind=ScopeKind.USER)
 REF = SourceRef(kind="chat_turn", ref="run-1")
+
+
+def _seam(store, rec, admit, *, extractor=None):
+    return WriteSeam(store, rec, admit, extractor or StubExtractor(), model="test-cheap")
 
 
 def _req(content="I switched to Linux", *, bypass_admit=True, scope=USER_SCOPE):
@@ -102,7 +138,7 @@ async def test_add_returns_written_outcome(store):
             claim_index=0, op=Op.ADD, canonical_subject="lens-1", written_id="claim-1"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     out = await seam.admit_and_write(_req())
     assert out == WriteOutcome(written=True, item_id="claim-1", reason="Remembered.")
 
@@ -116,7 +152,7 @@ async def test_noop_reports_not_written_but_keeps_target(store):
             target_claim_id="claim-old",
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     out = await seam.admit_and_write(_req())
     assert out.written is False
     assert out.item_id == "claim-old"
@@ -133,7 +169,7 @@ async def test_contradict_reports_supersede(store):
             target_claim_id="claim-old",
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     out = await seam.admit_and_write(_req())
     assert out.written is True
     assert out.item_id == "claim-new"
@@ -149,7 +185,7 @@ async def test_bypass_admit_always_reaches_reconcile_even_on_reject_verdict(stor
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, admit)
+    seam = _seam(store, rec, admit)
     out = await seam.admit_and_write(_req(bypass_admit=True))
     assert out.written is True
     assert len(rec.calls) == 1
@@ -162,7 +198,7 @@ async def test_non_bypass_reject_skips_reconcile(store):
     # reach Reconcile and must not write.
     admit = StubAdmit(verdict=Verdict.REJECT, reason="predictable")
     rec = StubReconciler(result=None)
-    seam = WriteSeam(store, rec, admit)
+    seam = _seam(store, rec, admit)
     out = await seam.admit_and_write(_req(bypass_admit=False))
     assert out.written is False
     assert "not admitted" in out.reason
@@ -185,7 +221,7 @@ async def test_non_bypass_admit_passes_candidates_as_prior(store):
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, admit)
+    seam = _seam(store, rec, admit)
     await seam.admit_and_write(_req(bypass_admit=False))
     assert rec.calls[0]["prior_candidates"] == [incumbent]
 
@@ -193,7 +229,7 @@ async def test_non_bypass_admit_passes_candidates_as_prior(store):
 async def test_reconcile_failure_does_not_fabricate_id(store):
     admit = StubAdmit()
     rec = StubReconciler(raise_exc=RuntimeError("llm down"))
-    seam = WriteSeam(store, rec, admit)
+    seam = _seam(store, rec, admit)
     out = await seam.admit_and_write(_req())
     assert out.written is False
     assert out.item_id is None
@@ -202,7 +238,7 @@ async def test_reconcile_failure_does_not_fabricate_id(store):
 
 async def test_empty_content_short_circuits(store):
     rec = StubReconciler()
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     out = await seam.admit_and_write(_req(content="   "))
     assert out.written is False
     assert out.reason == "empty content"
@@ -215,7 +251,7 @@ async def test_candidate_carries_request_fields(store):
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     await seam.admit_and_write(_req(content="  I run marathons  "))
     cand = rec.calls[0]["candidates"][0]
     assert cand.content == "I run marathons"  # stripped
@@ -226,7 +262,7 @@ async def test_candidate_carries_request_fields(store):
 
 async def test_empty_reconcile_list_reports_no_result(store):
     rec = StubReconciler(result=None)  # returns []
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     out = await seam.admit_and_write(_req())
     assert out.written is False
     assert "no result" in out.reason
@@ -272,7 +308,7 @@ async def test_remember_tool_writes_via_seam_with_user_scope(store):
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     res = await remember(_execution(seam), RememberInput(fact="I switched to Linux"))
     assert res.is_error is False
     assert "Remembered" in res.content
@@ -292,7 +328,7 @@ async def test_remember_tool_uses_project_scope_when_present(store):
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     await remember(_execution(seam, project=_Project()), RememberInput(fact="ships Friday"))
     assert rec.calls[0]["scope"] == Scope(kind=ScopeKind.PROJECT, key="proj-42")
 
@@ -305,7 +341,7 @@ async def test_remember_tool_noop_is_not_an_error(store):
             claim_index=0, op=Op.NOOP, canonical_subject="l", target_claim_id="old"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     res = await remember(_execution(seam), RememberInput(fact="I use vim"))
     assert res.is_error is False
     assert "Already known" in res.content
@@ -323,7 +359,7 @@ async def test_remember_tool_reconcile_failure_is_error(store):
     from ntrp.tools.memory import RememberInput, remember
 
     rec = StubReconciler(raise_exc=RuntimeError("llm down"))
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     res = await remember(_execution(seam), RememberInput(fact="something"))
     assert res.is_error is True
     assert "reconcile failed" in res.content
@@ -337,7 +373,7 @@ async def test_remember_tool_source_ref_points_at_chat_turn(store):
             claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
-    seam = WriteSeam(store, rec, StubAdmit())
+    seam = _seam(store, rec, StubAdmit())
     await remember(_execution(seam), RememberInput(fact="I like espresso"))
     cand = rec.calls[0]["candidates"][0]
     assert cand.source_refs[0].kind == "chat_turn"

@@ -262,9 +262,23 @@ async def test_remember_seam_adds_a_user_authored_claim(store):
     from ntrp.memory.pipeline.write import WriteRequest
 
     llm = StubLLM()
-    # remember() is forced (bypass_admit): admit short-circuits, extract is NOT
-    # run by the seam (it reconciles the request content directly). Only the
-    # subject + batch judges fire.
+    # remember() is forced (bypass_admit): admit short-circuits to ADMIT, then the
+    # seam runs the SAME extract->reconcile path as every other ingest (vision
+    # §1.7). Extract is what resolves the canonical subject — the seam no longer
+    # dumps raw content as the subject. The extracted claim must be grounded in the
+    # remember unit's synthetic turn id ("w0").
+    llm.extract = ExtractOutput(
+        claims=[
+            ExtractedClaim(
+                content="Timur lives in Berlin",
+                source_turn_id="w0",
+                provenance="user_authored",
+                canonical_subject="Timur",
+                subject_surfaces=["I", "Timur"],
+                grounded=True,
+            )
+        ]
+    )
     pipe = _pipeline(store, llm)
 
     outcome = await pipe.write_seam.admit_and_write(
@@ -279,9 +293,13 @@ async def test_remember_seam_adds_a_user_authored_claim(store):
 
     assert outcome.written is True
     assert outcome.item_id is not None
+    assert llm.calls["extract"] == 1  # the seam ran Extract, not a content shortcut
     claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert any("Berlin" in c.content for c in claims)
-    assert claims[0].provenance is Provenance.USER_AUTHORED
+    # subject was RESOLVED by extract, not set to the raw sentence
+    berlin = next(c for c in claims if "Berlin" in c.content)
+    assert berlin.canonical_subject == "Timur"
+    assert berlin.provenance is Provenance.USER_AUTHORED
 
 
 # --- background consolidate loop is constructible + runs one sweep ---

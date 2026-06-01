@@ -2,18 +2,22 @@
 
 `remember()` and any future programmatic writer enter the pipeline here. The
 seam is deliberately thin: it owns scope resolution + SourceRef construction +
-the `bypass_admit` asymmetry, then hands the single user-authored claim to the
-ONE reconcile implementation (Reconciler). There is no second, parallel
-reconcile/judge here (CONTRACTS §10 RESOLUTION) — the seam maps Reconcile's
-result onto a truthful WriteOutcome and nothing more.
+the `bypass_admit` asymmetry, then runs the SAME admit->extract->reconcile path
+as every other ingest (vision §1.7: `remember()` "carries no special pipeline;
+it enters the same admit->write path as everything else"). There is no parallel
+reconcile/judge here — the seam maps Reconcile's results onto a truthful
+WriteOutcome and nothing more.
 
 Flow:
-  1. Build a one-element ClaimCandidate from the request (no translation layer).
-  2. Gate (skipped when bypass_admit): wrap as a forced CaptureUnit, run
-     AdmitGate.admit. `forced` units always ADMIT but still carry the recalled
-     candidates downstream, so Reconcile reuses Admit's view of memory.
-  3. Reconcile the single candidate, seeding prior_candidates from the recall.
-  4. Map the single ReconcileResult -> WriteOutcome.
+  1. Wrap the request as a forced (remember) / judged (programmatic) CaptureUnit.
+  2. Admit: `forced` units always ADMIT but still carry the recalled candidates
+     downstream, so Extract+Reconcile reuse Admit's view of memory.
+  3. Extract: atomize the admitted text into self-contained claims, each with a
+     model-RESOLVED `canonical_subject` (§4.3). This is the step the old shortcut
+     skipped — without it the subject was just the raw sentence and coreference
+     never merged.
+  4. Reconcile the extracted candidates, seeding prior_candidates from the recall.
+  5. Map the ReconcileResults -> WriteOutcome (primary = first written/target).
 
 The seam never writes to the store directly — Reconcile is the only claim
 writer (CONTRACTS §7). On Reconcile failure with a user assertion
@@ -28,7 +32,6 @@ from ntrp.memory.models import Provenance, Scope, SourceRef, now_iso
 from ntrp.memory.pipeline.types import (
     BoundaryKind,
     CaptureUnit,
-    ClaimCandidate,
     ExchangeRole,
     Op,
     RawExchange,
@@ -66,41 +69,39 @@ _OUTCOME_REASON = {
 
 
 class WriteSeam:
-    def __init__(self, store, reconciler, admit):
+    def __init__(self, store, reconciler, admit, extractor, *, model: str):
         self.store = store
         self.reconciler = reconciler
         self.admit = admit
+        self.extractor = extractor
+        self.model = model
 
     async def admit_and_write(self, request: WriteRequest) -> WriteOutcome:
         if not request.content or not request.content.strip():
             return WriteOutcome(written=False, item_id=None, reason="empty content")
 
-        candidate = ClaimCandidate(
-            content=request.content.strip(),
-            source_refs=list(request.source_refs),
-            provenance=request.provenance,
-            canonical_subject=request.content.strip(),
-            scope=request.scope,
-        )
+        # 1+2. Admit. remember()/programmatic writers are `forced` (a user
+        # assertion is maximal-novelty) but still run the gate so the recalled
+        # candidates flow downstream; a non-bypass writer is actually judged.
+        forced = request.bypass_admit
+        admitted = await self.admit.admit(self._as_unit(request, forced=forced))
+        if admitted.verdict is Verdict.REJECT:
+            return WriteOutcome(
+                written=False, item_id=None, reason="not admitted: " + admitted.reason
+            )
 
-        prior_candidates: list = []
-        if not request.bypass_admit:
-            result = await self.admit.admit(self._as_unit(request, forced=False))
-            prior_candidates = result.candidates
-            if result.verdict is Verdict.REJECT:
-                return WriteOutcome(
-                    written=False, item_id=None, reason="not admitted: " + result.reason
-                )
-        else:
-            # bypass the worth-gate, but still build a consistent recall view so
-            # Reconcile can corroborate/supersede (CONTRACTS §10 asymmetry). A
-            # forced unit ADMITs deterministically and carries the candidates.
-            forced = await self.admit.admit(self._as_unit(request, forced=True))
-            prior_candidates = forced.candidates
+        # 3. Extract — atomize + resolve canonical_subject (the step the old
+        # shortcut skipped). No subject is fabricated from raw content here.
+        extracted = await self.extractor.extract(admitted, model=self.model)
+        if not extracted.candidates:
+            return WriteOutcome(
+                written=False, item_id=None, reason="nothing durable to extract"
+            )
 
+        # 4. Reconcile the extracted claims against the recalled view.
         try:
             results = await self.reconciler.reconcile(
-                [candidate], request.scope, prior_candidates=prior_candidates
+                extracted.candidates, request.scope, prior_candidates=admitted.candidates
             )
         except Exception as e:
             # Never lose a user assertion silently: report the failure truthfully
@@ -115,7 +116,15 @@ class WriteSeam:
                 written=False, item_id=None, reason="reconcile produced no result"
             )
 
-        return self._to_outcome(results[0])
+        # 5. Primary outcome = first claim that wrote a row, else the first NOOP.
+        return self._to_outcome(self._primary(results))
+
+    @staticmethod
+    def _primary(results):
+        for r in results:
+            if r.written_id:
+                return r
+        return results[0]
 
     def _as_unit(self, request: WriteRequest, *, forced: bool) -> CaptureUnit:
         """Wrap a single write request as a one-exchange, forced CaptureUnit so

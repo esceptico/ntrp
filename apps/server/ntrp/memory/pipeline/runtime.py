@@ -132,7 +132,9 @@ class MemoryPipeline:
             model=config.cheap_model,
             lens_expander=self.lens_expander,
         )
-        self.write_seam = WriteSeam(store, self.reconcile, self.admit)
+        self.write_seam = WriteSeam(
+            store, self.reconcile, self.admit, self.extract, model=config.cheap_model
+        )
         self.lens_membership = LensMembership(
             store,
             cheap_llm,
