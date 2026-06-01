@@ -14,6 +14,8 @@ export interface Toast {
   target: ToastTarget;
 }
 
+/** Terminal states that warrant a toast. Deliberately excludes "interrupted"
+ *  and "cancel_requested" — those are mid-cancel, not user-facing completions. */
 export function isTerminalStatus(status: string): status is ToastStatus {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
@@ -29,7 +31,7 @@ export function backgroundAgentToast(
   if (agent.sessionId === currentSessionId) return null;
   return {
     id: `bg:${agent.sessionId}:${agent.taskId}`,
-    title: agent.command || "Background task",
+    title: agent.command,
     detail: agent.detail,
     status: agent.status,
     target: { kind: "session", sessionId: agent.sessionId },
