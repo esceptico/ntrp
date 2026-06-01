@@ -6,6 +6,7 @@ belong to an Integration, including the ones ntrp ships out of the box.
 """
 
 from ntrp.integrations.base import Integration
+from ntrp.memory.lens import lens_tool
 from ntrp.skills.tool import create_skill_tool, use_skill_tool
 from ntrp.tools.automation import (
     create_automation_tool,
@@ -140,13 +141,14 @@ SESSIONS = Integration(
     },
 )
 
-# remember()/recall() stay hidden until the knowledge runtime wires the
-# memory_write / memory_read services (each tool's permission), so they never
-# appear when memory is off.
+# remember()/recall()/lens() stay hidden until the knowledge runtime wires the
+# memory_write / memory_read / memory_lens services (each tool's permission), so
+# they never appear when memory is off. lens() is the single Stage-4 surface
+# (define/show/edit/delete/split/merge/list), gated by MEMORY_LENS_SERVICE.
 MEMORY = Integration(
     id="_memory",
     label="Memory",
-    tools={"remember": remember_tool, "recall": recall_tool},
+    tools={"remember": remember_tool, "recall": recall_tool, "lens": lens_tool},
 )
 
 CORE_INTEGRATIONS = [

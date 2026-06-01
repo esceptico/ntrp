@@ -52,6 +52,7 @@ class KnowledgeRuntime:
         self.memory_retrieval = None
         self.memory_items = None
         self.pattern_finder = None
+        self.lens_service = None
         self.lens_pass = None
         self.lens_author = None
         self.chat_connector = None
@@ -96,6 +97,10 @@ class KnowledgeRuntime:
             from ntrp.tools.memory import MEMORY_READ_SERVICE
 
             services[MEMORY_READ_SERVICE] = self.memory_reader
+        if self.lens_service is not None:
+            from ntrp.memory.lens import MEMORY_LENS_SERVICE
+
+            services[MEMORY_LENS_SERVICE] = self.lens_service
         return services
 
     def start_indexing(self) -> None:
@@ -174,6 +179,7 @@ class KnowledgeRuntime:
         self.memory_service = pipeline.write_seam
         self.memory_reader = pipeline.retriever
         self.memory_retrieval = pipeline
+        self.lens_service = pipeline.lens_service
         _logger.info("memory pipeline ready", db=str(self.config.memory_db_path))
 
     def _eligible_scopes(self) -> list[Scope]:

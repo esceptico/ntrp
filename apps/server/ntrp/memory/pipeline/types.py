@@ -7,9 +7,17 @@ field-copy onto a `MemoryItem(kind=CLAIM, …)` at write time.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 
-from ntrp.memory.models import Kind, MemoryItem, Provenance, Scope, SourceRef
+from ntrp.memory.models import (
+    Feedback,
+    Kind,
+    LensDetailLevel,
+    MemoryItem,
+    Provenance,
+    Scope,
+    SourceRef,
+)
 
 __all__ = [
     "Scope",
@@ -31,6 +39,15 @@ __all__ = [
     "Retrieval",
     "RankedItem",
     "RetrievedContext",
+    "MembershipDecision",
+    "MembershipVerdict",
+    "BackfillReport",
+    "CoverageAdvisory",
+    "RenderedClaim",
+    "ProjectedPage",
+    "PageEditKind",
+    "PageEditOp",
+    "WriteBackResult",
 ]
 
 
@@ -181,3 +198,93 @@ class RetrievedContext:
     items: list[RankedItem]
     degraded: bool
     diagnostics: dict
+
+
+# --- Lens (Stage-4) transient shapes --------------------------------
+# LENS_CONTRACTS §1.2. No rows, no columns; reuse the frozen Stage-2 store.
+# NOTE (scope boundary): only the shapes the membership scorer
+# (pipeline/membership.py LensMembership) produces are defined here —
+# MembershipDecision + MembershipVerdict (score/score_into_active_lenses output),
+# BackfillReport (backfill_lens result), CoverageAdvisory (coverage result). The
+# remaining §1.2 shapes (RenderedClaim, ProjectedPage, PageEditKind, PageEditOp,
+# WriteBackResult) belong to the project/writeback/lens components and are added
+# by those builds, not here.
+class MembershipDecision(StrEnum):
+    IN = "in"
+    OUT = "out"
+    DEFER = "defer"
+
+
+@dataclass
+class MembershipVerdict:
+    claim_id: str
+    lens_id: str
+    decision: MembershipDecision
+    rationale: str
+
+
+@dataclass
+class BackfillReport:
+    lens_id: str
+    scanned: int
+    members_added: int
+    capped: bool
+
+
+@dataclass
+class CoverageAdvisory:
+    lens_id: str
+    scope_pool: int  # active claims in scope
+    member_count: int  # active member_of members
+    ratio: float  # member_count / scope_pool (0.0 if pool == 0)
+    generic: bool  # ratio >= GENERIC_RATIO — ADVISORY ONLY, never a gate
+    suggestion: str  # "split" | "narrow" prose for the user
+
+
+# --- Lens page projection + write-back shapes (LENS_CONTRACTS §1.2) --
+# Owned by pipeline/project.py (LensProjector) and pipeline/writeback.py
+# (LensWriteBack). `RenderedClaim.claim_id` is the load-bearing token: the page
+# is human prose, but every editable unit carries its stable id, so write-back is
+# structured BY CLAIM ID — never by reparsing prose position (§3).
+@dataclass
+class RenderedClaim:
+    """The structured spine behind the page prose; write-back diffs against this."""
+
+    claim_id: str  # stable anchor — the entire write-back contract
+    content: str
+    provenance: Provenance
+    corroboration: int
+    feedback: Feedback
+    source_refs: list[SourceRef]
+
+
+@dataclass
+class ProjectedPage:
+    lens_id: str
+    detail: LensDetailLevel
+    markdown: str  # what the user reads / edits
+    blocks: list[RenderedClaim]  # served spine; write-back diffs against this
+    synthesized: bool  # False = degraded raw-list fallback (never blank)
+    coverage: CoverageAdvisory | None
+
+
+class PageEditKind(StrEnum):
+    EDIT = "edit"
+    REJECT = "reject"
+    ACCEPT = "accept"
+    ADD = "add"
+    EDIT_CRITERION = "edit_criterion"
+
+
+@dataclass
+class PageEditOp:
+    kind: PageEditKind
+    claim_id: str | None = None  # required for edit/reject/accept; None for add/criterion
+    new_text: str | None = None  # edit: successor; add: new claim; criterion: new criterion
+
+
+@dataclass
+class WriteBackResult:
+    applied: list[tuple[PageEditKind, str]]
+    rejected: list[tuple[PageEditOp, str]]  # op + reason
+    rederive_triggered: bool

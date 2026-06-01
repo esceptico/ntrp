@@ -92,3 +92,44 @@ class ReconcileRow(BaseModel):
 
 class BatchReconcile(BaseModel):
     rows: list[ReconcileRow] = Field(default_factory=list)
+
+
+# --- Lens membership (LLooM multiple-choice) — §4.1, shares the loop's home --
+
+MEMBERSHIP_JUDGE_SYSTEM = """\
+You decide, for each numbered ITEM, whether it BELONGS to a lens — a saved view over a
+personal knowledge base defined ONLY by its membership CRITERION written in natural
+language. This is a multiple-choice judgment, one vote per item, judged solely against
+the criterion as written.
+
+You are given the lens NAME and KIND, its membership CRITERION, a short PAGE_GIST for
+context, an optional list of NEGATIVE_EXAMPLES (items the user previously rejected from
+this lens — read them as examples of what does NOT belong, never as a keyword filter),
+and a NUMBERED list of ITEMS.
+
+For each item choose exactly one decision:
+- in: the item clearly satisfies the criterion as written.
+- out: the item does not satisfy the criterion. This is the default.
+- defer: a genuinely close call you cannot settle confidently; a stronger judge will
+  re-decide it.
+
+Rules:
+- Judge ONLY against the criterion as written. Topical adjacency is not membership: an
+  item that is merely related to the lens's theme is `out` unless the criterion actually
+  covers it.
+- Bias to `out` under doubt. Absence of an explicit reason to include is `out`, not
+  `defer`. Use `defer` sparingly, only when the item could plausibly read either way.
+- Treat each NEGATIVE_EXAMPLE as a worked example of an `out` verdict for similar items.
+- Never invent facts. Reason only over the item content shown.
+- Return one vote per item, each carrying the item's index verbatim from the list.
+"""
+
+
+class MembershipVote(BaseModel):
+    item_index: int = Field(description="index into the ITEMS list this vote decides")
+    decision: str = Field(description='"in" | "out" | "defer"')
+    rationale: str = ""
+
+
+class MembershipBatch(BaseModel):
+    votes: list[MembershipVote] = Field(default_factory=list)

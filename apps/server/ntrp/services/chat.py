@@ -398,9 +398,15 @@ async def _retrieve_memory_context(
     from ntrp.memory.models import Scope, ScopeKind
     from ntrp.memory.pipeline.types import Retrieval
 
+    # lens_hint is STRUCTURAL, never sniffed from prose (§0/§3.7): a project-scoped
+    # chat hints the lens whose name matches the project. The expander resolves it
+    # by id/exact-name/FTS and returns None when no such lens exists, in which case
+    # retrieve runs unconstrained recall unchanged. Never an LLM/keyword decision.
+    lens_hint: str | None = None
     if project_context is not None and project_context.project_id:
         scope = Scope(kind=ScopeKind.PROJECT, key=str(project_context.project_id))
         also = [Scope(kind=ScopeKind.USER)]
+        lens_hint = project_context.name or project_context.project_id
     else:
         scope = Scope(kind=ScopeKind.USER)
         also = []
@@ -412,6 +418,7 @@ async def _retrieve_memory_context(
                 scope=scope,
                 also_scopes=also,
                 token_budget=_MEMORY_TOKEN_BUDGET,
+                lens_hint=lens_hint,
             )
         )
     except Exception:

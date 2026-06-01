@@ -63,7 +63,13 @@ _CHARS_PER_TOKEN = 4
 
 class Retriever:
     def __init__(
-        self, store, embed: Embedder, cheap_llm: CompletionClient, *, model: str | None = None
+        self,
+        store,
+        embed: Embedder,
+        cheap_llm: CompletionClient,
+        *,
+        model: str | None = None,
+        lens_expander=None,
     ):
         # CONTRACTS §3 freezes the positional signature (store, embed, cheap_llm).
         # `model` is an additive keyword: the cheap model id for the optional
@@ -71,20 +77,49 @@ class Retriever:
         # signature supplies none (see CONTRACT ISSUE in the report). When model
         # is None, compression is skipped and the no-LLM verbatim budget pass is
         # used — Retrieve stays fully functional.
+        #
+        # `lens_expander` is the additive read-only Stage-4 egress (LENS_CONTRACTS
+        # §3.7). When present and the request carries a `lens_hint`, retrieve first
+        # tries the lens path: inject the cached lens_page verbatim (0 LLM), else
+        # pre-filter the candidate pool to the lens's active member_of members and
+        # rank as usual (orders, never gates). None -> unconstrained recall, unchanged.
         self.store = store
         self.embed = embed
         self.cheap_llm = cheap_llm
         self.model = model
+        self.lens_expander = lens_expander
 
     async def retrieve(self, req: Retrieval) -> RetrievedContext:
         scopes = [req.scope, *req.also_scopes]
         valid_at = req.valid_at or now_iso()
 
+        # Stage-4 lens egress (read-only, §3.7). Resolve a lens from the hint; if
+        # its cached page is present, inject it verbatim (the cheapest recall path).
+        # Otherwise carry its active member set forward to pre-filter the pool.
+        member_filter: frozenset[str] | None = None
+        if self.lens_expander is not None and req.lens_hint:
+            expansion = await self._expand_lens(req, scopes, valid_at)
+            if expansion is not None:
+                if expansion.page:
+                    return RetrievedContext(
+                        rendered=expansion.page,
+                        items=[],
+                        degraded=False,
+                        diagnostics={"lens_id": expansion.lens.id, "lens_page_inject": True},
+                    )
+                member_filter = expansion.member_ids
+
         allowed = await self._scoped_active_ids(req, scopes, valid_at)
+        if member_filter is not None:
+            # Member-constrained fallback: keep only the lens's active members. A
+            # categorical edge-existence predicate (identical to the scope/validity
+            # filter), NEVER a similarity/length gate on meaning (§0/§3.7).
+            allowed = {i: it for i, it in allowed.items() if i in member_filter}
         diagnostics: dict = {
             "has_fts": bool(self.store.has_fts),
             "scoped_pool": len(allowed),
             "scopes": len(scopes),
+            "lens_member_filter": member_filter is not None,
         }
 
         if not allowed:
@@ -110,6 +145,21 @@ class Retriever:
         return RetrievedContext(
             rendered=rendered, items=ranked, degraded=degraded, diagnostics=diagnostics
         )
+
+    # --- lens egress (read-only, §3.7) ----------------------------------
+
+    async def _expand_lens(self, req: Retrieval, scopes: list, valid_at: str):
+        """Resolve req.lens_hint to a lens via the expander (read-only).
+
+        Returns a LensExpansion or None. Failures degrade to unconstrained recall
+        (None) — the lens path is a fast lane, never a hard dependency."""
+        try:
+            return await self.lens_expander.expand(
+                hint=req.lens_hint, goal=req.goal, scopes=scopes, valid_at=valid_at
+            )
+        except Exception as e:
+            _logger.warning("memory retrieve lens expansion failed: %s", e)
+            return None
 
     # --- recall predicate: scope + validity + status + kind -------------
 

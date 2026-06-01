@@ -21,11 +21,15 @@ from dataclasses import dataclass
 from ntrp.embedder import Embedder
 from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
+from ntrp.memory.lens.expand import LensExpander
 from ntrp.memory.models import Scope, SourceRef
 from ntrp.memory.pipeline.admit import AdmitGate
 from ntrp.memory.pipeline.capture import CaptureConfig, CaptureService
 from ntrp.memory.pipeline.consolidate import ConsolidateConfig, ConsolidateLint
 from ntrp.memory.pipeline.extract import Extractor
+from ntrp.memory.pipeline.lens import LensService
+from ntrp.memory.pipeline.membership import LensMembership
+from ntrp.memory.pipeline.project import LensProjector
 from ntrp.memory.pipeline.prompts_capture import SemanticBoundary
 from ntrp.memory.pipeline.reconcile import Reconciler
 from ntrp.memory.pipeline.retrieve import Retriever
@@ -38,6 +42,7 @@ from ntrp.memory.pipeline.types import (
     Verdict,
 )
 from ntrp.memory.pipeline.write import WriteSeam
+from ntrp.memory.pipeline.writeback import LensWriteBack
 from ntrp.memory.store import MemoryStore
 
 _logger = get_logger(__name__)
@@ -116,8 +121,41 @@ class MemoryPipeline:
             cheap_model=config.cheap_model,
             strong_model=config.strong_model,
         )
-        self.retriever = Retriever(store, embed, cheap_llm, model=config.cheap_model)
+        # Stage-4 lenses (LENS_CONTRACTS §3). One mechanism, two constraint
+        # settings: reconcile owns the entity axis inline; these own topic/user.
+        # Purely additive — no store-invariant change. The expander gives retrieve
+        # its read-only lens egress (§3.7); membership runs Mode-1 in ingest_unit.
+        self.lens_expander = LensExpander(store, embed)
+        self.retriever = Retriever(
+            store,
+            embed,
+            cheap_llm,
+            model=config.cheap_model,
+            lens_expander=self.lens_expander,
+        )
         self.write_seam = WriteSeam(store, self.reconcile, self.admit)
+        self.lens_membership = LensMembership(
+            store,
+            cheap_llm,
+            strong_llm,
+            embed,
+            cheap_model=config.cheap_model,
+            strong_model=config.strong_model,
+        )
+        self.lens_projector = LensProjector(
+            store,
+            embed,
+            cheap_llm,
+            strong_llm,
+            cheap_model=config.cheap_model,
+            strong_model=config.strong_model,
+        )
+        self.lens_writeback = LensWriteBack(
+            store, self.write_seam, self.lens_membership, self.lens_projector
+        )
+        self.lens_service = LensService(
+            store, self.lens_membership, self.lens_projector, self.lens_writeback
+        )
         self.consolidate = ConsolidateLint(
             store,
             cheap_llm,
@@ -151,6 +189,19 @@ class MemoryPipeline:
         results = await self.reconcile.reconcile(
             extracted.candidates, unit.scope, prior_candidates=admitted.candidates
         )
+
+        # Mode 1 (LENS_CONTRACTS §3.6): score the freshly written/updated claims
+        # into the scope's active topic/user lenses. O(new x K), bounded by the
+        # candidate recall fan-out — never O(corpus). Entity membership stays
+        # inline in reconcile (the axis split, §2). Best-effort: a lens scoring
+        # failure never sinks the ingest (the claims are already durably written).
+        written = [r.written_id for r in results if r.written_id]
+        if written:
+            try:
+                await self.lens_membership.score_into_active_lenses(written, unit.scope)
+            except Exception:
+                _logger.exception("lens membership scoring failed for unit %s", unit.watermark)
+
         await self.capture.commit_watermark(unit.watermark)
         return results
 
