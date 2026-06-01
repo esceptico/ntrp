@@ -89,6 +89,10 @@ def render_lens_markdown(lens: LensRow) -> str:
     }
     if lens.scope.key:
         front["scope_key"] = lens.scope.key
+    # Persist timestamps so created_at is stable across edits (mtime would make it
+    # jump to the last edit and reshuffle the lens list).
+    front["created_at"] = lens.created_at
+    front["updated_at"] = lens.updated_at
     # Serialize with yaml.dump, NOT string concat: a free-text directory/name
     # containing ":" or a newline (e.g. "Project X: Q3 goals") would otherwise
     # produce invalid YAML, and the read path silently drops an unparseable file —
@@ -177,7 +181,12 @@ class LensFileStore:
 
         body = content[m.end():].strip()
         scope = self._scope(front)
-        created = self._mtime_iso(path)
+        # Prefer persisted timestamps; fall back to mtime only for legacy files that
+        # predate timestamp persistence. (mtime alone makes created_at jump to the
+        # last edit and reshuffles the lens list — fixed by writing them out.)
+        mtime = self._mtime_iso(path)
+        created = front.get("created_at") if isinstance(front.get("created_at"), str) else mtime
+        updated = front.get("updated_at") if isinstance(front.get("updated_at"), str) else mtime
         return LensRow(
             id=slug,
             name=directory.strip(),
@@ -190,7 +199,7 @@ class LensFileStore:
             status=LensStatus.ACTIVE,
             page=None,
             created_at=created,
-            updated_at=created,
+            updated_at=updated,
         )
 
     @staticmethod

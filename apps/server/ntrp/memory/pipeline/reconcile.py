@@ -282,7 +282,14 @@ class Reconciler:
             model=self.cheap_model,
             response_format=SubjectResolution,
         )
-        decision = _parse(resp, SubjectResolution)
+        try:
+            decision = _parse(resp, SubjectResolution)
+        except Exception as e:
+            # Malformed/empty cheap-model output must not crash the write; degrade to
+            # NEW (keep the extractor's subject), the same conservative default used
+            # when recall is empty.
+            _logger.warning("reconcile: subject-resolution parse failed -> NEW: %s", e)
+            return cand.canonical_subject, True
         known = {p.subject for p in profiles}
         if decision.decision.upper() == "MATCH" and decision.canonical_subject in known:
             return decision.canonical_subject, False
@@ -376,8 +383,16 @@ class Reconciler:
             model=self.cheap_model,
             response_format=BatchReconcile,
         )
-        parsed = _parse(resp, BatchReconcile)
-        rows = self._validate_rows(parsed.rows, len(idxs), len(profile))
+        try:
+            parsed = _parse(resp, BatchReconcile)
+            rows = self._validate_rows(parsed.rows, len(idxs), len(profile))
+        except Exception as e:
+            # A malformed/empty cheap-model batch response must not crash the whole
+            # reconcile (which would leave every claim in the call unwritten). Degrade
+            # to all-ADD — never merges/supersedes blindly; a later consolidate pass
+            # cleans any duplicate this creates. Mirrors the escalation fallback.
+            _logger.warning("reconcile: batch parse failed -> all-ADD: %s", e)
+            return [ReconcileRow(claim_index=i, op="add") for i in range(len(idxs))], set()
 
         escalated_idxs: set[int] = set()
         for row in rows:
