@@ -41,6 +41,10 @@ from ntrp.memory.models import (
     Scope,
     Status,
 )
+from ntrp.memory.pipeline.prompts_criterion import (
+    CRITERION_SYNTH_SYSTEM,
+    SynthesizedCriterion,
+)
 from ntrp.memory.pipeline.prompts_reconcile import (
     MEMBERSHIP_JUDGE_SYSTEM,
     MembershipBatch,
@@ -178,6 +182,37 @@ class LensMembership:
                 )
             )
         return verdicts
+
+    # --- criterion authoring (text only; no membership decision) -----
+
+    async def synthesize_criterion(self, name: str, intent: str | None = None) -> str:
+        """Draft a one-sentence inclusion criterion from a lens NAME (LLooM seed).
+
+        One cheap structured call. Authors TEXT only — makes no membership call.
+        On empty/parse failure, degrade to a faithful echo criterion (still not a
+        keyword gate; it decides no membership, just gives the user editable text).
+        """
+        user = f"LENS_NAME: {name!r}\nINTENT: {intent!r}"
+        try:
+            resp = await self.cheap_llm.completion(
+                messages=[
+                    {"role": "system", "content": CRITERION_SYNTH_SYSTEM},
+                    {"role": "user", "content": user},
+                ],
+                model=self.cheap_model,
+                response_format=SynthesizedCriterion,
+                temperature=0.0,
+            )
+            content = resp.choices[0].message.content
+            if not content:
+                raise ValueError("empty criterion-synthesis response")
+            criterion = SynthesizedCriterion.model_validate_json(content).criterion.strip()
+            if not criterion:
+                raise ValueError("blank synthesized criterion")
+            return criterion
+        except Exception as e:
+            _logger.warning("lens: criterion synthesis failed for %r, echoing: %s", name, e)
+            return f"this item is about {name}"
 
     # --- generic guard: advisory coverage ratio ---------------------
 

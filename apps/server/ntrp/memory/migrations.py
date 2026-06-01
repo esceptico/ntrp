@@ -11,7 +11,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 
 async def _get_schema_version(conn: aiosqlite.Connection) -> int:
@@ -34,7 +34,17 @@ async def _migrate_v1(_conn: aiosqlite.Connection) -> None:
     pass
 
 
-_MIGRATIONS = ((1, _migrate_v1),)
+async def _migrate_v2(conn: aiosqlite.Connection) -> None:
+    # Lens render-mode: presentation dial (flat | grouped_by_subject). Nullable
+    # default keeps every existing lens flat; touches no claim.
+    cols = await conn.execute_fetchall("PRAGMA table_info(lenses)")
+    if not any(c["name"] == "render_mode" for c in cols):
+        await conn.execute(
+            "ALTER TABLE lenses ADD COLUMN render_mode TEXT NOT NULL DEFAULT 'flat'"
+        )
+
+
+_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2))
 
 
 async def run_migrations(conn: aiosqlite.Connection) -> None:

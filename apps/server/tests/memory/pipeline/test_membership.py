@@ -354,6 +354,33 @@ async def test_refresh_caps_oversized_pool(store):
     assert report.scanned == 3  # ranked down to the cap
 
 
+# --- criterion synthesis: text only, no membership decision ----------
+
+
+async def test_synthesize_criterion_uses_cheap_llm(store):
+    from ntrp.memory.pipeline.prompts_criterion import SynthesizedCriterion
+
+    cheap = FakeCompletionClient(
+        queue=[SynthesizedCriterion(criterion="this item is about the user's running")]
+    )
+    m = _membership(store, cheap)
+
+    crit = await m.synthesize_criterion("Running")
+
+    assert crit == "this item is about the user's running"
+    assert len(cheap.calls) == 1
+    assert cheap.calls[0]["model"] == "cheap"
+
+
+async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
+    cheap = FakeCompletionClient(default="not json at all")  # parse fail
+    m = _membership(store, cheap)
+
+    crit = await m.synthesize_criterion("Regina Volkov")
+
+    assert crit == "this item is about Regina Volkov"
+
+
 # --- §7 coverage: advisory only, mutates nothing ---------------------
 
 

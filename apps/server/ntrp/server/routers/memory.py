@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ntrp.memory.models import (
     EdgeRole,
     LensDetailLevel,
+    LensRenderMode,
     LensRow,
     MemoryEdge,
     MemoryItem,
@@ -29,6 +30,7 @@ from ntrp.memory.pipeline.types import (
     CoverageAdvisory,
     PageEditKind,
     PageEditOp,
+    ProjectedGroup,
     ProjectedPage,
     RankedItem,
     RenderedClaim,
@@ -42,6 +44,7 @@ from ntrp.server.schemas import (
     CreateLensBody,
     EditCriterionBody,
     MergeLensBody,
+    SetLensRenderModeBody,
     SplitLensBody,
     WriteBackOpsBody,
 )
@@ -97,6 +100,7 @@ def lens_json(lens: LensRow) -> dict:
         "criterion": lens.criterion,
         "scope": _scope_json(lens.scope),
         "detail_level": lens.detail_level.value,
+        "render_mode": lens.render_mode.value,
         "provenance": lens.provenance.value,
         "status": lens.status.value,
         "created_at": lens.created_at,
@@ -136,6 +140,15 @@ def claim_block_json(b: RenderedClaim) -> dict:
     }
 
 
+def group_json(g: ProjectedGroup) -> dict:
+    return {
+        "subject": g.subject,
+        "markdown": g.markdown,
+        "synthesized": g.synthesized,
+        "blocks": [claim_block_json(b) for b in g.blocks],
+    }
+
+
 def page_json(p: ProjectedPage) -> dict:
     return {
         "lens_id": p.lens_id,
@@ -144,6 +157,7 @@ def page_json(p: ProjectedPage) -> dict:
         "blocks": [claim_block_json(b) for b in p.blocks],
         "synthesized": p.synthesized,
         "coverage": coverage_json(p.coverage) if p.coverage else None,
+        "groups": [group_json(g) for g in p.groups] if p.groups is not None else None,
     }
 
 
@@ -452,8 +466,26 @@ async def writeback(
 async def create_lens(body: CreateLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
     scope = _scope(body.scope_kind, body.scope_key)
     lens = await knowledge.memory_retrieval.lens_registry.create_lens(
-        body.name, body.criterion, scope
+        body.name,
+        body.criterion,
+        scope,
+        render_mode=LensRenderMode(body.render_mode),
     )
+    return {"lens": lens_json(lens)}
+
+
+@router.put("/lenses/{lens_id}/render_mode")
+async def set_render_mode(
+    lens_id: str,
+    body: SetLensRenderModeBody,
+    knowledge: KnowledgeRuntime = Depends(_knowledge),
+):
+    try:
+        lens = await knowledge.memory_retrieval.lens_registry.set_render_mode(
+            lens_id, LensRenderMode(body.render_mode)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return {"lens": lens_json(lens)}
 
 

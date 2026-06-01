@@ -117,7 +117,17 @@ async def _claim(store, content, **kw):
     return await store.create_item(c)
 
 
-async def _lens(store, *, name, criterion, page=None, detail=LensDetailLevel.STRUCTURED):
+async def _lens(
+    store,
+    *,
+    name,
+    criterion,
+    page=None,
+    detail=LensDetailLevel.STRUCTURED,
+    render_mode=None,
+):
+    from ntrp.memory.models import LensRenderMode
+
     le = LensRow(
         id=uuid.uuid4().hex,
         name=name,
@@ -125,6 +135,7 @@ async def _lens(store, *, name, criterion, page=None, detail=LensDetailLevel.STR
         scope=USER,
         provenance=LensProvenance.USER_AUTHORED,
         detail_level=detail,
+        render_mode=render_mode or LensRenderMode.FLAT,
         page=page,
     )
     return await store.create_lens_row(le)
@@ -220,6 +231,72 @@ async def test_project_cache_hit_costs_zero_synthesis(store):
     assert cheap.calls == []
     assert strong.calls == []
     assert {b.claim_id for b in page.blocks} == {c1.id}
+
+
+# --- grouped-by-subject projection (presentation only) ---------------
+
+
+async def test_grouped_projection_buckets_by_canonical_subject(store):
+    from ntrp.memory.models import LensRenderMode
+
+    lens = await _lens(
+        store,
+        name="People",
+        criterion="claims about people",
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    # Regina has two claims, Kevin one -> Regina bucket leads (largest first).
+    r1 = await _claim(store, "Regina is CEO of ThirdLayer", canonical_subject="Regina")
+    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
+    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
+    for c in (r1, r2, k1):
+        await _member(store, lens.id, c)
+
+    cheap = KeywordJudge("regina", "kevin")  # all three stay `in`
+    # One profile-synthesis call per subject bucket; echo that bucket's anchors.
+    regina_md = f"- CEO of ThirdLayer. <!--claim:{r1.id}-->\n- Judged a hackathon. <!--claim:{r2.id}-->"
+    kevin_md = f"- An engineer. <!--claim:{k1.id}-->"
+    strong = FakeCompletionClient(queue=[_synth(regina_md), _synth(kevin_md)])
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert page.groups is not None
+    subjects = [g.subject for g in page.groups]
+    assert subjects == ["Regina", "Kevin"]  # largest bucket first
+    regina = page.groups[0]
+    assert {b.claim_id for b in regina.blocks} == {r1.id, r2.id}
+    assert regina.synthesized is True
+    # Concatenated page markdown carries per-subject headings + all anchors.
+    assert "## Regina" in page.markdown and "## Kevin" in page.markdown
+    assert set(parse_anchors(page.markdown)) == {r1.id, r2.id, k1.id}
+    # Grouped output is NOT cached into the flat page slot.
+    assert (await store.get_lens(lens.id)).page is None
+
+
+async def test_grouped_profile_synthesis_failure_degrades_that_bucket(store):
+    from ntrp.memory.models import LensRenderMode
+
+    lens = await _lens(
+        store,
+        name="People",
+        criterion="claims about people",
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    c = await _claim(store, "Regina runs the company", canonical_subject="Regina")
+    await _member(store, lens.id, c)
+
+    cheap = KeywordJudge("regina")
+    strong = FakeCompletionClient(queue=[""])  # empty -> profile synth raises
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert page.groups is not None and len(page.groups) == 1
+    grp = page.groups[0]
+    assert grp.synthesized is False  # degraded to raw anchored list
+    assert c.id in set(parse_anchors(grp.markdown))
+    assert "Regina runs the company" in grp.markdown
 
 
 # --- §9.5 synthesis failure -> raw anchored list ---------------------

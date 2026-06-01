@@ -58,10 +58,17 @@ class FakeMembership:
         self.ratio = ratio
         self.refreshed: list[str] = []
         self.coverage_calls: list[str] = []
+        self.synth_calls: list[str] = []
 
     async def refresh_lens_cache(self, lens_id: str) -> BackfillReport:
         self.refreshed.append(lens_id)
         return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
+
+    async def synthesize_criterion(self, name: str, intent: str | None = None) -> str:
+        # Stand-in for the LLM criterion author: deterministic, records nothing
+        # about membership (this is text authoring only).
+        self.synth_calls.append(name)
+        return f"this item is about {name}"
 
     async def coverage(self, lens_id: str, scope: Scope) -> CoverageAdvisory:
         self.coverage_calls.append(lens_id)
@@ -111,6 +118,67 @@ async def test_create_lens_inserts_registry_row_and_touches_zero_claims(store):
 
     persisted = await store.get_lens(lens.id)
     assert persisted is not None and persisted.id == lens.id
+
+
+# --- create without a criterion: synthesize from the name -----------
+
+
+@pytest.mark.asyncio
+async def test_create_lens_without_criterion_synthesizes_from_name(store):
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+
+    lens = await reg.create_lens("Regina Volkov", scope=USER)
+
+    assert mem.synth_calls == ["Regina Volkov"]
+    assert lens.criterion == "this item is about Regina Volkov"
+    # Still a view: no claims written.
+    assert await store.query(scope=USER) == []
+    persisted = await store.get_lens(lens.id)
+    assert persisted is not None and persisted.criterion == lens.criterion
+
+
+@pytest.mark.asyncio
+async def test_create_lens_with_criterion_skips_synthesis(store):
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+
+    lens = await reg.create_lens("Bugs", "this item describes a software bug", USER)
+
+    assert mem.synth_calls == []  # explicit criterion -> no synthesis
+    assert lens.criterion == "this item describes a software bug"
+
+
+# --- render mode: presentation dial, no membership impact -----------
+
+
+@pytest.mark.asyncio
+async def test_set_render_mode_flips_layout_without_touching_membership(store):
+    from ntrp.memory.models import LensRenderMode
+
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    c1 = await _claim(store, "alice climbs")
+    lens = await reg.create_lens("People", "about people", USER)
+    assert lens.render_mode is LensRenderMode.FLAT
+
+    updated = await reg.set_render_mode(lens.id, LensRenderMode.GROUPED_BY_SUBJECT)
+
+    assert updated.id == lens.id
+    assert updated.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
+    # Membership cache untouched (no refresh), claims untouched.
+    assert mem.refreshed == []
+    assert (await store.get(c1.id)) is not None
+
+
+@pytest.mark.asyncio
+async def test_set_render_mode_rejects_unknown_lens(store):
+    from ntrp.memory.models import LensRenderMode
+
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    with pytest.raises(ValueError):
+        await reg.set_render_mode(uuid.uuid4().hex, LensRenderMode.GROUPED_BY_SUBJECT)
 
 
 # --- list with advisory ----------------------------------------------

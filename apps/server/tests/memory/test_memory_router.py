@@ -24,6 +24,7 @@ from ntrp.memory.models import (
     Feedback,
     LensDetailLevel,
     LensProvenance,
+    LensRenderMode,
     LensRow,
     LensStatus,
     MemoryEdge,
@@ -79,8 +80,8 @@ class _FakeLensRegistry:
             for lens in lenses
         ]
 
-    async def create_lens(self, name, criterion, scope):
-        self.calls.append(("create_lens", name, criterion, scope))
+    async def create_lens(self, name, criterion, scope, *, render_mode=None):
+        self.calls.append(("create_lens", name, criterion, scope, render_mode))
         lens = LensRow(
             id=uuid.uuid4().hex,
             name=name,
@@ -615,7 +616,13 @@ async def test_create_lens(store, client, pipeline):
     lens = resp.json()["lens"]
     assert lens["name"] == "Cooking"
     assert lens["criterion"] == "about cooking"
-    assert pipeline.lens_registry.calls[-1] == ("create_lens", "Cooking", "about cooking", USER)
+    assert pipeline.lens_registry.calls[-1] == (
+        "create_lens",
+        "Cooking",
+        "about cooking",
+        USER,
+        LensRenderMode.FLAT,
+    )
 
 
 @pytest.mark.asyncio

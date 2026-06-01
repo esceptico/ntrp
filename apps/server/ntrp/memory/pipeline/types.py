@@ -45,6 +45,7 @@ __all__ = [
     "BackfillReport",
     "CoverageAdvisory",
     "RenderedClaim",
+    "ProjectedGroup",
     "ProjectedPage",
     "PageEditKind",
     "PageEditOp",
@@ -244,6 +245,21 @@ class RenderedClaim:
 
 
 @dataclass
+class ProjectedGroup:
+    """One subject bucket of a grouped-by-subject page (presentation only).
+
+    Buckets the page's `in`-claims by the `canonical_subject` claim attribute — a
+    profile per subject (e.g. a person). Grouping is post-membership presentation;
+    it reads only the claim attribute, never an entity row.
+    """
+
+    subject: str  # canonical_subject value
+    markdown: str  # synthesized profile for this subject
+    blocks: list[RenderedClaim]  # this subject's claims; write-back diffs by id
+    synthesized: bool  # False = degraded raw-list fallback for this bucket
+
+
+@dataclass
 class ProjectedPage:
     lens_id: str
     detail: LensDetailLevel
@@ -251,6 +267,7 @@ class ProjectedPage:
     blocks: list[RenderedClaim]  # served spine; write-back diffs against this
     synthesized: bool  # False = degraded raw-list fallback (never blank)
     coverage: CoverageAdvisory | None
+    groups: list[ProjectedGroup] | None = None  # set only when render_mode groups
 
 
 class PageEditKind(StrEnum):

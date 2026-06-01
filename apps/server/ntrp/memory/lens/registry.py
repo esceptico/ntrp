@@ -22,6 +22,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import (
     LensDetailLevel,
     LensProvenance,
+    LensRenderMode,
     LensRow,
     Scope,
 )
@@ -43,6 +44,8 @@ class _Membership(Protocol):
 
     async def refresh_lens_cache(self, lens_id: str) -> BackfillReport: ...
 
+    async def synthesize_criterion(self, name: str, intent: str | None = ...) -> str: ...
+
 
 class LensRegistry:
     def __init__(self, store: MemoryStore, membership: _Membership, projector=None):
@@ -57,27 +60,47 @@ class LensRegistry:
     async def create_lens(
         self,
         name: str,
-        criterion: str,
-        scope: Scope,
+        criterion: str | None = None,
+        scope: Scope | None = None,
         *,
+        render_mode: LensRenderMode = LensRenderMode.FLAT,
         detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED,
         provenance: LensProvenance = LensProvenance.USER_AUTHORED,
     ) -> LensRow:
         """Insert one registry row. NO backfill, NO edges, NO claim writes (C7).
 
-        The page is None; membership/page are computed lazily on first projection.
+        When no criterion is given, the LLM synthesizes one from the name (a pure
+        text call — still touches zero claims, makes no membership decision). The
+        page is None; membership/page are computed lazily on first projection.
         """
+        if scope is None:
+            raise ValueError("create_lens requires a scope")
+        if not (criterion or "").strip():
+            criterion = await self.membership.synthesize_criterion(name)
         lens = LensRow(
             id=uuid.uuid4().hex,
             name=name,
             criterion=criterion,
             scope=scope,
+            render_mode=render_mode,
             detail_level=detail_level,
             provenance=provenance,
         )
         await self.store.create_lens_row(lens)
         _logger.info("lens created %s name=%r (view; zero claims touched)", lens.id, name)
         return lens
+
+    # --- render mode (presentation dial; no membership impact) ------
+
+    async def set_render_mode(self, lens_id: str, render_mode: LensRenderMode) -> LensRow:
+        """Flip a lens between flat and grouped-by-subject layout. Presentation
+        only: membership is unchanged, so no cache invalidation."""
+        lens = await self.store.get_lens(lens_id)
+        if lens is None:
+            raise ValueError(f"not a lens: {lens_id}")
+        updated = await self.store.update_lens(lens_id, render_mode=render_mode)
+        assert updated is not None
+        return updated
 
     # --- list (with advisory coverage) ------------------------------
 

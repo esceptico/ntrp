@@ -55,7 +55,9 @@ class ProjectorProtocol(Protocol):
 class LensServiceProtocol(Protocol):
     projector: ProjectorProtocol
 
-    async def create_lens(self, name: str, criterion: str, scope: Scope) -> LensRow: ...
+    async def create_lens(
+        self, name: str, criterion: str | None = ..., scope: Scope | None = ...
+    ) -> LensRow: ...
 
     async def list_lenses(self, scope: Scope) -> list[tuple[LensRow, object]]: ...
 
@@ -94,7 +96,8 @@ class LensInput(BaseModel):
         description=(
             "Natural-language membership criterion — the canonical truth of the "
             "lens (e.g. 'anything about the user's marathon training'). Required "
-            "for 'define'/'edit'/'merge'; membership is judged against it."
+            "for 'edit'/'merge'; membership is judged against it. Optional for "
+            "'define' — omit to let the system synthesize it from the name."
         ),
     )
     lens_id: str | None = Field(
@@ -104,8 +107,8 @@ class LensInput(BaseModel):
     detail: str | None = Field(
         default=None,
         description=(
-            "For 'show': zoom level — 'gist' (one paragraph), 'structured' (the "
-            "editable bullet list, default), or 'dossier' (structured + evidence)."
+            "For 'show': zoom level — 'summary' (one paragraph), 'list' (the "
+            "editable bullet list, default), or 'full' (list + evidence)."
         ),
     )
     into: list[str] | None = Field(
@@ -130,11 +133,16 @@ def _resolve_scope(execution: ToolExecution) -> Scope:
     return Scope(kind=ScopeKind.USER)
 
 
+# Plain display aliases → canonical enum (alias map only; gates nothing).
+_DETAIL_ALIASES = {"summary": "gist", "list": "structured", "full": "dossier"}
+
+
 def _detail(value: str | None) -> LensDetailLevel | None:
     if value is None:
         return None
+    canonical = _DETAIL_ALIASES.get(value, value)
     try:
-        return LensDetailLevel(value)
+        return LensDetailLevel(canonical)
     except ValueError:
         return None
 
@@ -153,11 +161,14 @@ def _coverage_note(advisory: object) -> str:
 
 
 async def _do_define(svc: LensServiceProtocol, args: LensInput, scope: Scope) -> ToolResult:
-    if not args.name or not args.criterion:
-        return ToolResult.error("define requires both 'name' and 'criterion'.")
+    if not args.name:
+        return ToolResult.error("define requires 'name'.")
     lens = await svc.create_lens(args.name, args.criterion, scope)
     return ToolResult(
-        content=f"Created lens '{lens.name}' ({lens.id}). It collects matching claims on demand.",
+        content=(
+            f"Created lens '{lens.name}' ({lens.id}). Criterion: {lens.criterion!r}. "
+            f"It collects matching claims on demand."
+        ),
         preview=f"Lens '{lens.name}'",
         data={"lens_id": lens.id},
     )

@@ -23,6 +23,7 @@ from ntrp.memory.models import (
     Feedback,
     LensDetailLevel,
     LensProvenance,
+    LensRenderMode,
     LensRow,
     LensStatus,
     MembershipDecision,
@@ -82,6 +83,7 @@ CREATE TABLE IF NOT EXISTS lenses (
     scope_kind TEXT NOT NULL,
     scope_key TEXT,
     detail_level TEXT NOT NULL DEFAULT 'structured',
+    render_mode TEXT NOT NULL DEFAULT 'flat',
     provenance TEXT NOT NULL DEFAULT 'user_authored',
     status TEXT NOT NULL DEFAULT 'active',
     page TEXT,
@@ -121,8 +123,8 @@ _COLUMNS = (
 _N_COLUMNS = len(_COLUMNS.split(", "))
 
 _LENS_COLUMNS = (
-    "id, name, criterion, scope_kind, scope_key, detail_level, provenance, status, page, "
-    "created_at, updated_at"
+    "id, name, criterion, scope_kind, scope_key, detail_level, render_mode, provenance, status, "
+    "page, created_at, updated_at"
 )
 _N_LENS_COLUMNS = len(_LENS_COLUMNS.split(", "))
 
@@ -272,6 +274,7 @@ class MemoryStore:
             criterion=row["criterion"],
             scope=Scope(kind=ScopeKind(row["scope_kind"]), key=row["scope_key"]),
             detail_level=LensDetailLevel(row["detail_level"]),
+            render_mode=LensRenderMode(row["render_mode"]),
             provenance=LensProvenance(row["provenance"]),
             status=LensStatus(row["status"]),
             page=row["page"],
@@ -459,6 +462,7 @@ class MemoryStore:
                 str(lens.scope.kind),
                 lens.scope.key,
                 str(lens.detail_level),
+                str(lens.render_mode),
                 str(lens.provenance),
                 str(lens.status),
                 lens.page,
@@ -478,16 +482,20 @@ class MemoryStore:
         """In-place registry UPDATE. A lens is not a memory participant: it has no
         provenance DAG, so edits are plain UPDATEs (no supersede chain).
 
-        Accepts: name, criterion, detail_level, provenance, status, page.
+        Accepts: name, criterion, detail_level, render_mode, provenance, status, page.
         """
-        allowed = {"name", "criterion", "detail_level", "provenance", "status", "page"}
+        allowed = {"name", "criterion", "detail_level", "render_mode", "provenance", "status", "page"}
         sets: list[str] = []
         params: list = []
         for key, value in fields.items():
             if key not in allowed:
                 raise ValueError(f"update_lens: unknown field {key!r}")
             sets.append(f"{key} = ?")
-            params.append(str(value) if isinstance(value, LensProvenance | LensDetailLevel | LensStatus) else value)
+            params.append(
+                str(value)
+                if isinstance(value, LensProvenance | LensDetailLevel | LensRenderMode | LensStatus)
+                else value
+            )
         if not sets:
             return await self.get_lens(lens_id)
         sets.append("updated_at = ?")

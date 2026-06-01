@@ -181,6 +181,20 @@ export function MemoryGraph({
     [focusId, adjacency],
   );
 
+  // Hubs: the highest-degree nodes carry a standing label even with no focus, so
+  // the whole-graph view is legible without every node shouting. Degree threshold
+  // scales with graph size; cap the set so labels never pile up at scale.
+  const hubIds = useMemo(() => {
+    const degree = (id: string) => adjacency.get(id)?.size ?? 0;
+    const ranked = [...nodesRef.current.keys()]
+      .map((id) => ({ id, d: degree(id) }))
+      .filter((n) => n.d >= 2)
+      .sort((a, b) => b.d - a.d);
+    return new Set(ranked.slice(0, 8).map((n) => n.id));
+    // graph identity drives adjacency; recompute when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjacency, graph]);
+
   // ── Pan & zoom ───────────────────────────────────────────────────────
   const panState = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const dragState = useRef<{ node: SimNode; startX: number; startY: number; moved: boolean } | null>(null);
@@ -288,6 +302,37 @@ export function MemoryGraph({
   const nodes = [...nodesRef.current.values()];
   const links = linksRef.current;
 
+  // Which nodes show a label this frame, collision-avoided in screen space.
+  // Priority: the focus node + its lit neighbours (on hover/selection), then
+  // hubs (standing labels). A label is dropped if its screen box overlaps one
+  // already placed, so labels never pile up at whole-graph scale.
+  const labelledIds = (() => {
+    const candidates: { id: string; pri: number; n: SimNode }[] = [];
+    for (const n of nodes) {
+      const lit = isLit(n.id);
+      if (focusId != null && lit) candidates.push({ id: n.id, pri: n.id === focusId ? 0 : 1, n });
+      else if (focusId == null && hubIds.has(n.id)) candidates.push({ id: n.id, pri: 2, n });
+    }
+    candidates.sort((a, b) => a.pri - b.pri);
+    const placed: { x: number; y: number; w: number; h: number }[] = [];
+    const accepted = new Set<string>();
+    const charW = 6.2; // ~10px label glyph advance in screen px
+    for (const c of candidates) {
+      const r = nodeRadius(c.n.item);
+      const text = truncate(nodeLabel(c.n.item), 28);
+      const sx = transform.x + (c.n.x + r + 5) * transform.k;
+      const sy = transform.y + c.n.y * transform.k;
+      const box = { x: sx, y: sy - 7, w: text.length * charW + 6, h: 14 };
+      const hit = placed.some(
+        (p) => box.x < p.x + p.w && box.x + box.w > p.x && box.y < p.y + p.h && box.y + box.h > p.y,
+      );
+      if (hit) continue;
+      placed.push(box);
+      accepted.add(c.id);
+    }
+    return accepted;
+  })();
+
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
       <svg
@@ -349,9 +394,9 @@ export function MemoryGraph({
             const isSelected = n.id === selectedId;
             const color = nodeColor(n.item);
             const dim = n.item.status !== "active";
-            // De-clutter: label only the focused/hovered node and its lit
-            // neighbours, never every node at zoom (locked model §4).
-            const labelled = focusId != null && lit;
+            // De-clutter: label the focused/hovered node + lit neighbours, plus
+            // standing hub labels — all collision-avoided (locked model §4).
+            const labelled = labelledIds.has(n.id);
             return (
               <g
                 key={n.id}

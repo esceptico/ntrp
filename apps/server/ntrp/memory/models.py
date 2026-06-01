@@ -156,6 +156,19 @@ class LensDetailLevel(StrEnum):
     DOSSIER = "dossier"
 
 
+class LensRenderMode(StrEnum):
+    """How a lens page is laid out. A presentation dial, never a membership gate.
+
+    FLAT renders all `in`-claims as one synthesized page; GROUPED_BY_SUBJECT
+    buckets them by the `canonical_subject` claim attribute into per-subject
+    profiles (e.g. a "persons" lens → a profile per person). Grouping reads only
+    the claim attribute — no entity rows, no new query.
+    """
+
+    FLAT = "flat"
+    GROUPED_BY_SUBJECT = "grouped_by_subject"
+
+
 class LensProvenance(StrEnum):
     USER_AUTHORED = "user_authored"
     INDUCED = "induced"
@@ -182,6 +195,7 @@ class LensRow:
     scope: Scope
 
     detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED
+    render_mode: LensRenderMode = LensRenderMode.FLAT
     provenance: LensProvenance = LensProvenance.USER_AUTHORED
     status: LensStatus = LensStatus.ACTIVE
     page: str | None = None

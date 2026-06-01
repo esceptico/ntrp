@@ -67,9 +67,9 @@ class FakeLensService:
         self.projector = FakeProjector()
         self.calls: list[tuple] = []
 
-    async def create_lens(self, name, criterion, scope, *, lens_kind="topic"):
+    async def create_lens(self, name, criterion=None, scope=None, *, lens_kind="topic"):
         self.calls.append(("create_lens", name, criterion, scope, lens_kind))
-        return _lens(name, criterion, scope)
+        return _lens(name, criterion or f"this item is about {name}", scope)
 
     async def list_lenses(self, scope):
         self.calls.append(("list_lenses", scope))
@@ -202,7 +202,7 @@ async def test_list_surfaces_coverage_advisory_as_prose():
 async def test_missing_args_are_tool_errors_not_exceptions():
     svc = FakeLensService()
     for args in (
-        LensInput(action="define", name="x"),  # missing criterion
+        LensInput(action="define"),  # missing name
         LensInput(action="show"),  # missing lens_id
         LensInput(action="edit", lens_id="l"),  # missing criterion
         LensInput(action="delete"),  # missing lens_id

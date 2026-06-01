@@ -436,13 +436,19 @@ class WriteBackOpsBody(BaseModel):
 
 class CreateLensBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=500)
-    criterion: str = Field(..., min_length=1, max_length=10_000)
+    # Optional: when omitted the criterion is synthesized server-side from the name.
+    criterion: str | None = Field(default=None, max_length=10_000)
+    render_mode: Literal["flat", "grouped_by_subject"] = "flat"
     scope_kind: Literal["user", "project", "session"] = "user"
     scope_key: str | None = None
 
 
 class EditCriterionBody(BaseModel):
     criterion: str = Field(..., min_length=1, max_length=10_000)
+
+
+class SetLensRenderModeBody(BaseModel):
+    render_mode: Literal["flat", "grouped_by_subject"]
 
 
 class SplitChildBody(BaseModel):

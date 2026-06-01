@@ -59,6 +59,7 @@ page. It owns no claims.
 | `criterion` | one-sentence natural-language membership test |
 | `scope_kind` / `scope_key` | inherits the scoping rule |
 | `detail_level` | default render zoom: `gist` \| `structured` \| `dossier` |
+| `render_mode` | page layout: `flat` \| `grouped_by_subject` (bucket by `canonical_subject`) |
 | `provenance` | `user_authored` \| `induced` (system-proposed) |
 | `status` | `active` \| `archived` |
 | `page` | cached synthesized markdown projection; `NULL` = dirty / not yet computed |

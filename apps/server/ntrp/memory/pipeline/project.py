@@ -29,14 +29,20 @@ from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
 from ntrp.memory.models import (
     LensDetailLevel,
+    LensRenderMode,
     LensRow,
     MembershipDecision,
     MemoryItem,
     Status,
 )
 from ntrp.memory.pipeline.membership import LensMembership
-from ntrp.memory.pipeline.prompts_project import PAGE_SYNTH_SYSTEM, PageSynthesis
+from ntrp.memory.pipeline.prompts_project import (
+    PAGE_SYNTH_SYSTEM,
+    PROFILE_SYNTH_SYSTEM,
+    PageSynthesis,
+)
 from ntrp.memory.pipeline.types import (
+    ProjectedGroup,
     ProjectedPage,
     RenderedClaim,
 )
@@ -102,9 +108,17 @@ class LensProjector:
 
         level = detail or lens.detail_level or LensDetailLevel.STRUCTURED
         dirty = lens.page is None
+        grouped = lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
 
-        # Cache hit: structured page materialized, lens not dirty, no refresh forced.
-        if level is LensDetailLevel.STRUCTURED and lens.page and not refresh and not dirty:
+        # Cache hit (flat only): structured page materialized, not dirty, no refresh.
+        # Grouped pages are per-subject and never cached into the flat `page` slot.
+        if (
+            not grouped
+            and level is LensDetailLevel.STRUCTURED
+            and lens.page
+            and not refresh
+            and not dirty
+        ):
             blocks = await self._blocks_for(parse_anchors(lens.page))
             coverage = await self.membership.coverage(lens_id, lens.scope)
             return ProjectedPage(
@@ -116,16 +130,29 @@ class LensProjector:
                 coverage=coverage,
             )
 
-        # Miss / dirty / refresh: load members from the cache (recompute on empty),
-        # re-validate against the CURRENT criterion, render only still-`in` claims.
+        # Miss / dirty / refresh / grouped: load members from the cache (recompute on
+        # empty), re-validate against the CURRENT criterion, render only still-`in`.
         members = await self._members(lens, refresh=refresh or dirty)
         valid = await self._revalidate(members, lens)
         coverage = await self.membership.coverage(lens_id, lens.scope)
         blocks = [self._to_block(m) for m in valid]
 
+        if grouped:
+            markdown, synthesized, groups = await self._render_grouped(lens, valid, level)
+            # Grouped output is not cached into the flat `page` slot.
+            return ProjectedPage(
+                lens_id=lens_id,
+                detail=level,
+                markdown=markdown,
+                blocks=blocks,
+                synthesized=synthesized,
+                coverage=coverage,
+                groups=groups,
+            )
+
         markdown, synthesized = await self._render(lens, valid, level)
 
-        # Only `structured` is cached into the registry page.
+        # Only flat `structured` is cached into the registry page.
         if synthesized and level is LensDetailLevel.STRUCTURED and markdown != lens.page:
             await self.store.update_lens(lens_id, page=markdown)
 
@@ -220,6 +247,94 @@ class LensProjector:
         if not text:
             raise ValueError("blank synthesized markdown")
         return text
+
+    # --- grouped-by-subject rendering (presentation only) ------------
+
+    async def _render_grouped(
+        self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel
+    ) -> tuple[str, bool, list[ProjectedGroup]]:
+        """Bucket members by `canonical_subject`, synthesize a profile per bucket.
+
+        Grouping reads only the claim attribute (no entity rows). Each bucket is a
+        ProjectedGroup; the page markdown concatenates `## {subject}` sections so the
+        flat markdown/tool path still works. Per-subject synthesis failure degrades
+        that one bucket to an anchored raw list (synthesized=False for the bucket).
+        """
+        buckets: dict[str, list[MemoryItem]] = {}
+        for m in members:
+            buckets.setdefault(m.canonical_subject, []).append(m)
+        # Largest buckets first — the most-supported subjects lead the page.
+        ordered = sorted(buckets.items(), key=lambda kv: len(kv[1]), reverse=True)
+
+        groups: list[ProjectedGroup] = []
+        sections: list[str] = [self._header(lens)]
+        all_synth = True
+        for subject, claims in ordered:
+            body, synthesized = await self._render_profile(lens, subject, claims, level)
+            all_synth = all_synth and synthesized
+            groups.append(
+                ProjectedGroup(
+                    subject=subject,
+                    markdown=body,
+                    blocks=[self._to_block(m) for m in claims],
+                    synthesized=synthesized,
+                )
+            )
+            sections.append(f"## {subject}\n{body}")
+
+        if not groups:
+            return self._empty_page(lens, level), True, []
+        return "\n\n".join(sections), all_synth, groups
+
+    async def _render_profile(
+        self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel
+    ) -> tuple[str, bool]:
+        try:
+            markdown = await self._synthesize_profile(lens, subject, claims, level)
+        except Exception as e:
+            _logger.warning("lens project: profile synthesis failed for %s/%r: %s", lens.id, subject, e)
+            return self._raw_profile(claims), False
+        echoed = set(parse_anchors(markdown))
+        if not {m.id for m in claims}.issubset(echoed):
+            _logger.warning("lens project: profile dropped anchors for %s/%r; raw fallback", lens.id, subject)
+            return self._raw_profile(claims), False
+        return markdown, True
+
+    async def _synthesize_profile(
+        self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel
+    ) -> str:
+        numbered = "\n".join(
+            f"[{n}] claim:{m.id} content={m.content!r} prov={m.provenance} "
+            f"corrob={m.corroboration} feedback={m.feedback}"
+            for n, m in enumerate(claims)
+        )
+        user = (
+            f"SUBJECT: {subject!r}\n"
+            f"LENS: name={lens.name!r}\n"
+            f"CRITERION: {lens.criterion}\n"
+            f"DETAIL: {level}\n\n"
+            f"CLAIMS:\n{numbered}"
+        )
+        resp = await self.strong_llm.completion(
+            messages=[
+                {"role": "system", "content": PROFILE_SYNTH_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+            model=self.strong_model,
+            response_format=PageSynthesis,
+            temperature=0.0,
+        )
+        content = resp.choices[0].message.content
+        if not content:
+            raise ValueError("empty profile-synthesis response")
+        text = (PageSynthesis.model_validate_json(content).markdown or "").strip()
+        if not text:
+            raise ValueError("blank synthesized profile")
+        return text
+
+    @staticmethod
+    def _raw_profile(claims: list[MemoryItem]) -> str:
+        return "\n".join(f"- {m.content} {_anchor(m.id)}" for m in claims)
 
     def _header(self, lens: LensRow) -> str:
         return f"# {lens.name}\n*Lens · criterion: {lens.criterion}*\n"

@@ -18,6 +18,7 @@ export type MemoryStatus = "active" | "superseded" | "archived";
 export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external";
 export type MemoryFeedback = "none" | "confirmed" | "corrected";
 export type LensDetailLevel = "gist" | "structured" | "dossier";
+export type LensRenderMode = "flat" | "grouped_by_subject";
 export type LensProvenance = "user_authored" | "induced";
 export type LensStatus = "active" | "archived";
 
@@ -51,6 +52,7 @@ export interface Lens {
   criterion: string;
   scope: MemoryScope;
   detail_level: LensDetailLevel;
+  render_mode: LensRenderMode;
   provenance: LensProvenance;
   status: LensStatus;
   created_at: string;
@@ -156,6 +158,12 @@ export function listMemoryLenses(config: AppConfig, params: ScopeParams = {}) {
 }
 
 // ── 4 — Get a lens page ─────────────────────────────────────────────────────
+export interface ProjectedGroup {
+  subject: string;
+  markdown: string;
+  synthesized: boolean;
+  blocks: RenderedClaim[];
+}
 export interface ProjectedPage {
   lens_id: string;
   detail: LensDetailLevel;
@@ -163,6 +171,7 @@ export interface ProjectedPage {
   blocks: RenderedClaim[];
   synthesized: boolean;
   coverage: CoverageAdvisory | null;
+  groups: ProjectedGroup[] | null;
 }
 export interface LensPageParams {
   detail?: LensDetailLevel;
@@ -304,11 +313,20 @@ export function writebackLens(config: AppConfig, lensId: string, ops: PageEditOp
 // ── 8 — Lens lifecycle (admin) ──────────────────────────────────────────────
 export interface CreateLensBody extends ScopeParams {
   name: string;
-  criterion: string;
+  criterion?: string; // optional — synthesized server-side from the name when omitted
+  render_mode?: LensRenderMode;
 }
 
 export function createLens(config: AppConfig, body: CreateLensBody) {
   return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses", jsonBody(body));
+}
+
+export function setLensRenderMode(config: AppConfig, lensId: string, render_mode: LensRenderMode) {
+  return apiWithConfig<{ lens: Lens }>(
+    config,
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/render_mode`,
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ render_mode }) },
+  );
 }
 
 export function editLensCriterion(config: AppConfig, lensId: string, criterion: string) {

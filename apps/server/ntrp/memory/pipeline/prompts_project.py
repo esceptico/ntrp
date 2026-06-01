@@ -43,3 +43,23 @@ string field.
 
 class PageSynthesis(BaseModel):
     markdown: str = Field(description="the full markdown page, anchors echoed verbatim")
+
+
+PROFILE_SYNTH_SYSTEM = """\
+You render ONE subject's profile inside a grouped lens view. You are given the
+subject name, the lens criterion, a detail level, and a NUMBERED list of the
+claims about THIS subject. Each claim carries a stable anchor id.
+
+Write a compact profile (a few sentences or a short bullet list) about this one
+subject. Same contract as page synthesis:
+
+- Render ONLY the claims given. Never add a fact not in the list. Never invent or
+  drop an anchor.
+- Every claim you render MUST end its line with its anchor, copied verbatim, as an
+  HTML comment: `- <your wording> <!--claim:THE_ID-->`. One claim per bullet line.
+- If two claims say the same thing, render one bullet and append BOTH anchors.
+- Do NOT write a "## <subject>" heading — the caller adds it. Do not echo the
+  criterion as a fact. Do not write a count.
+
+Reason only over the content shown. Output the markdown profile as one string.
+"""

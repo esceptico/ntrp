@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { GitFork, Plus, RefreshCw } from "lucide-react";
+import { ChevronRight, GitFork, Plus, RefreshCw, Users } from "lucide-react";
 import type { AppConfig } from "../../api";
 import {
   createLens,
@@ -8,12 +8,14 @@ import {
   editLensCriterion,
   getLensPage,
   listMemoryLenses,
+  setLensRenderMode,
   writebackLens,
   type CoverageAdvisory,
   type Lens,
   type LensDetailLevel,
   type LensWithCoverage,
   type PageEditOp,
+  type ProjectedGroup,
   type ProjectedPage,
 } from "../../api/memoryItems";
 import { SPRING_LAYOUT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
@@ -35,9 +37,9 @@ import { lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLab
 
 const DETAILS: LensDetailLevel[] = ["gist", "structured", "dossier"];
 const DETAIL_LABEL: Record<LensDetailLevel, string> = {
-  gist: "Gist",
+  gist: "Summary",
   structured: "List",
-  dossier: "Dossier",
+  dossier: "Full",
 };
 
 export function LensesView({
@@ -210,60 +212,103 @@ function Composer({
   onCreated: (lens: Lens) => void;
   onCancel: () => void;
 }) {
+  // Phase A: name only → create (criterion synthesized server-side).
+  // Phase B: the generated criterion, prefilled + editable, before finishing.
   const [name, setName] = useState("");
+  const [created, setCreated] = useState<Lens | null>(null);
   const [criterion, setCriterion] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  const critRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
 
-  const submit = () => {
-    if (!name.trim() || !criterion.trim() || busy) return;
+  const create = () => {
+    if (!name.trim() || busy) return;
     setBusy(true);
     setErr(null);
-    createLens(config, { name: name.trim(), criterion: criterion.trim() })
-      .then((r) => onCreated(r.lens))
+    createLens(config, { name: name.trim() })
+      .then((r) => {
+        setCreated(r.lens);
+        setCriterion(r.lens.criterion);
+        setBusy(false);
+        requestAnimationFrame(() => critRef.current?.focus());
+      })
       .catch((e) => {
         setErr(e instanceof Error ? e.message : String(e));
         setBusy(false);
       });
   };
 
+  const finish = () => {
+    if (!created || busy) return;
+    const next = criterion.trim();
+    if (next && next !== created.criterion.trim()) {
+      setBusy(true);
+      editLensCriterion(config, created.id, next)
+        .then((r) => onCreated(r.lens))
+        .catch((e) => {
+          setErr(e instanceof Error ? e.message : String(e));
+          setBusy(false);
+        });
+    } else {
+      onCreated(created);
+    }
+  };
+
+  if (!created) {
+    return (
+      <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
+        <input
+          ref={nameRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") create();
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="Lens name (e.g. People)"
+          spellCheck={false}
+          className="input-field h-7 text-sm"
+        />
+        {err && <span className="text-xs text-bad">{err}</span>}
+        <div className="flex items-center justify-between">
+          <span className="text-2xs text-faint">Name it — we'll draft the criterion.</span>
+          <div className="flex items-center gap-1">
+            <GhostBtn onClick={onCancel} disabled={busy}>
+              Cancel
+            </GhostBtn>
+            <PrimaryBtn onClick={create} disabled={busy || !name.trim()}>
+              {busy ? "Creating…" : "Create"}
+            </PrimaryBtn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
-      <input
-        ref={nameRef}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Lens name (e.g. People)"
-        spellCheck={false}
-        className="input-field h-7 text-sm"
-      />
       <textarea
+        ref={critRef}
         value={criterion}
         onChange={(e) => setCriterion(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) finish();
         }}
-        placeholder="Describe what this view collects…"
         rows={2}
         spellCheck={false}
         className="input-field resize-none py-1.5 text-sm leading-snug"
       />
       {err && <span className="text-xs text-bad">{err}</span>}
       <div className="flex items-center justify-between">
-        <span className="text-2xs text-faint">Collects matching claims on demand.</span>
-        <div className="flex items-center gap-1">
-          <GhostBtn onClick={onCancel} disabled={busy}>
-            Cancel
-          </GhostBtn>
-          <PrimaryBtn onClick={submit} disabled={busy || !name.trim() || !criterion.trim()}>
-            {busy ? "Creating…" : "Create"}
-          </PrimaryBtn>
-        </div>
+        <span className="text-2xs text-faint">Generated criterion — edit if needed.</span>
+        <PrimaryBtn onClick={finish} disabled={busy || !criterion.trim()}>
+          {busy ? "Saving…" : "Done"}
+        </PrimaryBtn>
       </div>
     </div>
   );
@@ -289,6 +334,7 @@ function LensPage({
   onArchived: () => void;
 }) {
   const [detail, setDetail] = useState<LensDetailLevel>(lens.detail_level);
+  const [grouped, setGrouped] = useState(lens.render_mode === "grouped_by_subject");
   const [page, setPage] = useState<ProjectedPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -355,6 +401,14 @@ function LensPage({
     void applyOps([op], how ? { id: op.claim_id, how } : null);
   };
 
+  const toggleGroup = useCallback(() => {
+    const next = grouped ? "flat" : "grouped_by_subject";
+    setGrouped(!grouped);
+    setLensRenderMode(config, lens.id, next)
+      .then(() => load({ detail, refresh: true }))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [grouped, config, lens.id, load, detail]);
+
   return (
     <DetailShell
       header={
@@ -365,6 +419,8 @@ function LensPage({
           onProvenance={onProvenance}
           onRefresh={() => load({ detail, refresh: true })}
           refreshing={loading}
+          grouped={grouped}
+          onToggleGroup={toggleGroup}
         />
       }
       body={
@@ -392,6 +448,17 @@ function LensPage({
             </div>
           ) : page && page.blocks.length === 0 ? (
             <Empty>Nothing matches this criterion yet. New memories appear here as they're admitted.</Empty>
+          ) : page?.groups ? (
+            <GroupedProfiles
+              groups={page.groups}
+              editingId={editingId}
+              busyId={busyId}
+              exiting={exiting}
+              onOpen={setEditingId}
+              onClose={() => setEditingId(null)}
+              onCommit={onClaimCommit}
+              onPeek={onPeekClaim}
+            />
           ) : (
             <div className="mt-3 flex flex-col gap-0.5">
               <AnimatePresence initial={false}>
@@ -467,6 +534,8 @@ function LensHeader({
   onProvenance,
   onRefresh,
   refreshing,
+  grouped,
+  onToggleGroup,
 }: {
   lens: Lens;
   detail: LensDetailLevel;
@@ -474,6 +543,8 @@ function LensHeader({
   onProvenance: () => void;
   onRefresh: () => void;
   refreshing: boolean;
+  grouped: boolean;
+  onToggleGroup: () => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -499,6 +570,16 @@ function LensHeader({
             </Tab>
           ))}
         </Tabs>
+        <IconButton
+          onClick={onToggleGroup}
+          aria-label="Group by subject"
+          aria-pressed={grouped}
+          size="md"
+          title={grouped ? "Grouping by subject" : "Group by subject"}
+          className={grouped ? "text-accent" : undefined}
+        >
+          <Users size={ICON.SM} strokeWidth={2} />
+        </IconButton>
         <IconButton onClick={onProvenance} aria-label="Provenance graph" size="md" title="Provenance graph">
           <GitFork size={ICON.SM} strokeWidth={2} />
         </IconButton>
@@ -684,6 +765,98 @@ function CoverageMeter({ coverage, compact }: { coverage: CoverageAdvisory; comp
         transition={SPRING_LAYOUT}
         className={coverage.generic ? "h-full rounded-full bg-warn" : "h-full rounded-full bg-accent"}
       />
+    </div>
+  );
+}
+
+// ── Grouped-by-subject profiles ──────────────────────────────────────────────
+// A grouped lens (e.g. "persons") renders one collapsible profile per subject,
+// straight off the claim `canonical_subject` attribute. Expanding drills into the
+// subject's underlying claims through the same ClaimBlock / peek wiring.
+
+function GroupedProfiles({
+  groups,
+  editingId,
+  busyId,
+  exiting,
+  onOpen,
+  onClose,
+  onCommit,
+  onPeek,
+}: {
+  groups: ProjectedGroup[];
+  editingId: string | null;
+  busyId: string | null;
+  exiting: { id: string; how: "supersede" | "reject" } | null;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+  onCommit: (op: ClaimOp) => void;
+  onPeek: (claimId: string) => void;
+}) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set(groups[0] ? [groups[0].subject] : []));
+  const toggle = (subject: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      next.has(subject) ? next.delete(subject) : next.add(subject);
+      return next;
+    });
+
+  return (
+    <div className="mt-3 flex flex-col gap-1">
+      {groups.map((g) => {
+        const isOpen = open.has(g.subject);
+        return (
+          <div key={g.subject} className="rounded-lg">
+            <button
+              type="button"
+              onClick={() => toggle(g.subject)}
+              aria-expanded={isOpen}
+              className="app-row group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
+            >
+              <ChevronRight
+                size={ICON.SM}
+                strokeWidth={2}
+                className="shrink-0 text-faint transition-transform"
+                style={{ transform: isOpen ? "rotate(90deg)" : undefined }}
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{g.subject}</span>
+              <Badge tone="neutral" size="sm" className="tabular-nums">
+                {g.blocks.length}
+              </Badge>
+            </button>
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={SPRING_LAYOUT}
+                  className="overflow-hidden pl-6"
+                >
+                  <div className="flex flex-col gap-0.5 py-0.5">
+                    <AnimatePresence initial={false}>
+                      {g.blocks.map((b) => (
+                        <ClaimBlock
+                          key={b.claim_id}
+                          block={b}
+                          editing={editingId === b.claim_id}
+                          busy={busyId === b.claim_id}
+                          exiting={exiting?.id === b.claim_id ? exiting.how : null}
+                          onOpen={() => onOpen(b.claim_id)}
+                          onClose={onClose}
+                          onCommit={onCommit}
+                          onPeek={() => onPeek(b.claim_id)}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })}
     </div>
   );
 }
