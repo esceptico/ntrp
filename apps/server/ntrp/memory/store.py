@@ -1,11 +1,15 @@
 """SQLite store for the Stage-2 memory schema.
 
-Two tables: `memory_items` (claims-only, subject-keyed) and `lenses` (a registry
-of views), plus a `lens_membership_cache` that is a cache, not graph truth (drop
-it and nothing breaks except projection latency). Edges in `memory_item_parents`
-are claim->claim only. FTS5 over claim content/subject and (separately) over
-lens text. Storage only: CRUD, scope/validity queries, edges, invalidate/
-supersede (never a hard delete), and registry CRUD. No pipeline, no ranking.
+Claims live in `memory_items` (claims-only, subject-keyed); edges in
+`memory_item_parents` are claim->claim only. Lens DEFINITIONS are NOT in the DB:
+they are editable markdown FILES on disk (see ntrp.memory.lens.file_store), and
+this store delegates lens definition CRUD to an injected LensFileStore. The DB
+keeps only DERIVED lens data keyed by the lens SLUG: `lens_membership_cache` (the
+membership projection — drop it and nothing breaks except latency) and
+`lens_page_cache` (the synthesized page). FTS5 over claim content/subject; lens
+text search runs over the loaded files in-memory. Storage only: CRUD, scope/
+validity queries, edges, invalidate/supersede (never a hard delete). No pipeline,
+no ranking.
 
 Conventions match search/automation stores: injected connection, async API,
 meta-table schema-version ladder, ISO-8601 UTC TEXT timestamps, JSON TEXT for
@@ -13,17 +17,16 @@ structured fields, commit after every write.
 """
 
 import json
+from pathlib import Path
 
 import aiosqlite
 
 from ntrp.logging import get_logger
+from ntrp.memory.lens.file_store import LensFileStore
 from ntrp.memory.migrations import run_migrations
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    LensDetailLevel,
-    LensProvenance,
-    LensRenderMode,
     LensRow,
     LensStatus,
     MembershipDecision,
@@ -37,6 +40,7 @@ from ntrp.memory.models import (
     Status,
     now_iso,
 )
+from ntrp.settings import NTRP_DIR
 
 _logger = get_logger(__name__)
 
@@ -76,18 +80,11 @@ CREATE TABLE IF NOT EXISTS memory_item_parents (
     FOREIGN KEY (parent_id) REFERENCES memory_items(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS lenses (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    criterion TEXT NOT NULL,
-    scope_kind TEXT NOT NULL,
-    scope_key TEXT,
-    detail_level TEXT NOT NULL DEFAULT 'structured',
-    render_mode TEXT NOT NULL DEFAULT 'flat',
-    provenance TEXT NOT NULL DEFAULT 'user_authored',
-    status TEXT NOT NULL DEFAULT 'active',
+-- Derived lens data, keyed by the lens SLUG (the file stem). Lens DEFINITIONS
+-- live as files on disk; these tables hold only the computed projection cache.
+CREATE TABLE IF NOT EXISTS lens_page_cache (
+    lens_id TEXT PRIMARY KEY,
     page TEXT,
-    created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 
@@ -112,7 +109,6 @@ CREATE INDEX IF NOT EXISTS idx_items_status_scope
 CREATE INDEX IF NOT EXISTS idx_items_subject ON memory_items(canonical_subject);
 CREATE INDEX IF NOT EXISTS idx_edges_child ON memory_item_parents(child_id, role);
 CREATE INDEX IF NOT EXISTS idx_edges_parent ON memory_item_parents(parent_id, role);
-CREATE INDEX IF NOT EXISTS idx_lenses_scope ON lenses(status, scope_kind, scope_key);
 CREATE INDEX IF NOT EXISTS idx_lmc_lens ON lens_membership_cache(lens_id, decision);
 """
 
@@ -121,12 +117,6 @@ _COLUMNS = (
     "invalid_at, source_refs, corroboration, last_relevant_at, feedback, created_at, updated_at"
 )
 _N_COLUMNS = len(_COLUMNS.split(", "))
-
-_LENS_COLUMNS = (
-    "id, name, criterion, scope_kind, scope_key, detail_level, render_mode, provenance, status, "
-    "page, created_at, updated_at"
-)
-_N_LENS_COLUMNS = len(_LENS_COLUMNS.split(", "))
 
 SQL_INSERT = f"INSERT INTO memory_items ({_COLUMNS}) VALUES ({','.join('?' * _N_COLUMNS)})"
 SQL_GET = f"SELECT {_COLUMNS} FROM memory_items WHERE id = ?"
@@ -151,9 +141,11 @@ SQL_BUMP_CORROBORATION = (
     "UPDATE memory_items SET corroboration = corroboration + 1, updated_at = ? WHERE id = ?"
 )
 
-SQL_INSERT_LENS = f"INSERT INTO lenses ({_LENS_COLUMNS}) VALUES ({','.join('?' * _N_LENS_COLUMNS)})"
-SQL_GET_LENS = f"SELECT {_LENS_COLUMNS} FROM lenses WHERE id = ?"
-SQL_DELETE_LENS = "DELETE FROM lenses WHERE id = ?"
+SQL_GET_PAGE = "SELECT page FROM lens_page_cache WHERE lens_id = ?"
+SQL_UPSERT_PAGE = (
+    "INSERT OR REPLACE INTO lens_page_cache (lens_id, page, updated_at) VALUES (?, ?, ?)"
+)
+SQL_DELETE_PAGE = "DELETE FROM lens_page_cache WHERE lens_id = ?"
 SQL_UPSERT_MEMBERSHIP = (
     "INSERT OR REPLACE INTO lens_membership_cache (lens_id, claim_id, decision, rationale, scored_at) "
     "VALUES (?, ?, ?, ?, ?)"
@@ -161,10 +153,21 @@ SQL_UPSERT_MEMBERSHIP = (
 SQL_INVALIDATE_MEMBERSHIP = "DELETE FROM lens_membership_cache WHERE lens_id = ?"
 
 
+def _default_lenses_dir() -> Path:
+    return NTRP_DIR / "memory" / "lenses"
+
+
+def _scope_match(lens_scope: Scope, want: Scope) -> bool:
+    return lens_scope.kind == want.kind and lens_scope.key == want.key
+
+
 class MemoryStore:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, *, lenses_dir: Path | None = None):
         self.conn = conn
         self._has_fts = False
+        # Lens DEFINITIONS are files on disk. The dir is injected so tests use a
+        # tmp dir and never touch ~/.ntrp/memory/lenses.
+        self.lens_files = LensFileStore(lenses_dir or _default_lenses_dir())
 
     @property
     def has_fts(self) -> bool:
@@ -203,33 +206,6 @@ class MemoryStore:
                 END;
                 """
             )
-            await self.conn.execute(
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS lenses_fts USING fts5(
-                    name, criterion, page,
-                    content='lenses',
-                    content_rowid='rowid'
-                );
-                """
-            )
-            await self.conn.executescript(
-                """
-                CREATE TRIGGER IF NOT EXISTS lenses_ai AFTER INSERT ON lenses BEGIN
-                    INSERT INTO lenses_fts(rowid, name, criterion, page)
-                    VALUES (new.rowid, new.name, new.criterion, new.page);
-                END;
-                CREATE TRIGGER IF NOT EXISTS lenses_ad AFTER DELETE ON lenses BEGIN
-                    INSERT INTO lenses_fts(lenses_fts, rowid, name, criterion, page)
-                    VALUES ('delete', old.rowid, old.name, old.criterion, old.page);
-                END;
-                CREATE TRIGGER IF NOT EXISTS lenses_au AFTER UPDATE ON lenses BEGIN
-                    INSERT INTO lenses_fts(lenses_fts, rowid, name, criterion, page)
-                    VALUES ('delete', old.rowid, old.name, old.criterion, old.page);
-                    INSERT INTO lenses_fts(rowid, name, criterion, page)
-                    VALUES (new.rowid, new.name, new.criterion, new.page);
-                END;
-                """
-            )
             self._has_fts = True
         except Exception as e:
             _logger.warning("memory FTS5 unavailable: %s", e)
@@ -265,21 +241,6 @@ class MemoryStore:
             role=EdgeRole(row["role"]),
             position=row["position"],
             created_at=row["created_at"],
-        )
-
-    def _row_to_lens(self, row: aiosqlite.Row) -> LensRow:
-        return LensRow(
-            id=row["id"],
-            name=row["name"],
-            criterion=row["criterion"],
-            scope=Scope(kind=ScopeKind(row["scope_kind"]), key=row["scope_key"]),
-            detail_level=LensDetailLevel(row["detail_level"]),
-            render_mode=LensRenderMode(row["render_mode"]),
-            provenance=LensProvenance(row["provenance"]),
-            status=LensStatus(row["status"]),
-            page=row["page"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
         )
 
     # --- claim writes ---
@@ -481,108 +442,97 @@ class MemoryStore:
         rows = await self.conn.execute_fetchall(sql, (match, limit))
         return [self._row_to_item(r) for r in rows]
 
-    # --- lens registry (views over claims; never memory) ---
+    # --- lens DEFINITIONS (files on disk) + page cache (DB, keyed by slug) ---
+
+    async def _attach_page(self, lens: LensRow) -> LensRow:
+        """Attach the cached synthesized page (if any) onto a file-loaded lens.
+
+        Definitions come from the file; the `page` is the only DB-cached field, so
+        a fresh file read carries the latest page without re-synthesis."""
+        rows = await self.conn.execute_fetchall(SQL_GET_PAGE, (lens.id,))
+        lens.page = rows[0]["page"] if rows else None
+        return lens
 
     async def create_lens_row(self, lens: LensRow, *, commit: bool = True) -> LensRow:
-        await self.conn.execute(
-            SQL_INSERT_LENS,
-            (
-                lens.id,
-                lens.name,
-                lens.criterion,
-                str(lens.scope.kind),
-                lens.scope.key,
-                str(lens.detail_level),
-                str(lens.render_mode),
-                str(lens.provenance),
-                str(lens.status),
-                lens.page,
-                lens.created_at,
-                lens.updated_at,
-            ),
-        )
-        if commit:
-            await self.conn.commit()
+        """Write the lens DEFINITION to its markdown file. Zero DB definition rows.
+
+        `commit` is accepted for call-site symmetry; a file write has no transaction.
+        """
+        self.lens_files.write(lens)
         return lens
 
     async def get_lens(self, lens_id: str) -> LensRow | None:
-        rows = await self.conn.execute_fetchall(SQL_GET_LENS, (lens_id,))
-        return self._row_to_lens(rows[0]) if rows else None
+        lens = self.lens_files.read(lens_id)
+        return await self._attach_page(lens) if lens is not None else None
 
     async def update_lens(self, lens_id: str, **fields) -> LensRow | None:
-        """In-place registry UPDATE. A lens is not a memory participant: it has no
-        provenance DAG, so edits are plain UPDATEs (no supersede chain).
+        """Apply a definition or page edit.
 
-        Accepts: name, criterion, detail_level, render_mode, provenance, status, page.
+        Definition fields (name/criterion/render_mode/detail_level/provenance) are
+        written back to the FILE; `page` is the DB cache. `status` is not a file
+        concept — archiving is a file delete, so status updates are rejected.
         """
-        allowed = {"name", "criterion", "detail_level", "render_mode", "provenance", "status", "page"}
-        sets: list[str] = []
-        params: list = []
+        lens = await self.get_lens(lens_id)
+        if lens is None:
+            return None
+
+        if "page" in fields:
+            page = fields.pop("page")
+            if page is None:
+                await self.conn.execute(SQL_DELETE_PAGE, (lens_id,))
+            else:
+                await self.conn.execute(SQL_UPSERT_PAGE, (lens_id, page, now_iso()))
+            await self.conn.commit()
+            lens.page = page
+
+        allowed = {"name", "criterion", "detail_level", "render_mode", "provenance"}
+        dirty = False
         for key, value in fields.items():
             if key not in allowed:
                 raise ValueError(f"update_lens: unknown field {key!r}")
-            sets.append(f"{key} = ?")
-            params.append(
-                str(value)
-                if isinstance(value, LensProvenance | LensDetailLevel | LensRenderMode | LensStatus)
-                else value
-            )
-        if not sets:
-            return await self.get_lens(lens_id)
-        sets.append("updated_at = ?")
-        params.append(now_iso())
-        params.append(lens_id)
-        await self.conn.execute(f"UPDATE lenses SET {', '.join(sets)} WHERE id = ?", tuple(params))
-        await self.conn.commit()
-        return await self.get_lens(lens_id)
+            setattr(lens, key, value)
+            dirty = True
+        if dirty:
+            lens.updated_at = now_iso()
+            self.lens_files.write(lens)
+        return lens
 
     async def list_lenses(
         self, *, scope: Scope | None = None, status: LensStatus | None = LensStatus.ACTIVE
     ) -> list[LensRow]:
-        clauses: list[str] = []
-        params: list = []
-        if scope is not None:
-            clauses.append("scope_kind = ?")
-            params.append(str(scope.kind))
-            if scope.key is None:
-                clauses.append("scope_key IS NULL")
-            else:
-                clauses.append("scope_key = ?")
-                params.append(scope.key)
-        if status is not None:
-            clauses.append("status = ?")
-            params.append(str(status))
-        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        sql = f"SELECT {_LENS_COLUMNS} FROM lenses {where} ORDER BY created_at DESC"
-        rows = await self.conn.execute_fetchall(sql, tuple(params))
-        return [self._row_to_lens(r) for r in rows]
+        """List lens definitions from the files dir, filtered by scope. `status` is
+        accepted for API symmetry; files are always active (archive == delete)."""
+        out: list[LensRow] = []
+        for lens in self.lens_files.list():
+            if scope is not None and not _scope_match(lens.scope, scope):
+                continue
+            out.append(await self._attach_page(lens))
+        out.sort(key=lambda le: le.created_at, reverse=True)
+        return out
 
     async def delete_lens(self, lens_id: str) -> bool:
-        """Hard-delete a lens row + its membership cache. A lens owns no data, so
-        deleting it touches zero claims and zero edges."""
-        cursor = await self.conn.execute(SQL_DELETE_LENS, (lens_id,))
+        """Delete the lens FILE + its derived caches. Claims/edges untouched."""
+        removed = self.lens_files.delete(lens_id)
+        await self.conn.execute(SQL_DELETE_PAGE, (lens_id,))
         await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
         await self.conn.commit()
-        return cursor.rowcount > 0
+        return removed
 
     async def search_lenses(self, query: str, *, limit: int = 20) -> list[LensRow]:
-        """FTS5 search over lens name/criterion/page (registry-name recall)."""
-        if not self._has_fts:
-            return []
-        terms = [t for t in query.split() if t]
+        """Lexical recall over the loaded lens files (name/criterion/page). Orders
+        candidates for the membership judge; it gates nothing. Matches any query
+        term against the lens text, ranked by term-hit count."""
+        terms = [t.casefold() for t in query.split() if t]
         if not terms:
             return []
-        match = " OR ".join(DQ + t.replace(DQ, DQ + DQ) + DQ for t in terms)
-        sql = f"""
-            SELECT {','.join('l.' + c for c in _LENS_COLUMNS.split(', '))}
-            FROM lenses_fts f
-            JOIN lenses l ON l.rowid = f.rowid
-            WHERE lenses_fts MATCH ? AND l.status = 'active'
-            ORDER BY f.rank
-            LIMIT ?
-        """
-        rows = await self.conn.execute_fetchall(sql, (match, limit))
-        return [self._row_to_lens(r) for r in rows]
+        scored: list[tuple[int, LensRow]] = []
+        for lens in await self.list_lenses(scope=None):
+            text = " ".join(t for t in (lens.name, lens.criterion, lens.page) if t).casefold()
+            hits = sum(text.count(t) for t in terms)
+            if hits:
+                scored.append((hits, lens))
+        scored.sort(key=lambda hl: hl[0], reverse=True)
+        return [lens for _, lens in scored[:limit]]
 
     # --- membership cache (a cache, not graph truth) ---
 

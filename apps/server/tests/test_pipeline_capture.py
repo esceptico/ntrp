@@ -77,10 +77,13 @@ async def _close_conns():
 
 
 async def _store() -> MemoryStore:
+    import tempfile
+    from pathlib import Path
+
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
     _OPEN_CONNS.append(conn)
-    store = MemoryStore(conn)
+    store = MemoryStore(conn, lenses_dir=Path(tempfile.mkdtemp()) / "lenses")
     await store.init_schema()
     return store
 

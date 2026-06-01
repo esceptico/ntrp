@@ -12,10 +12,10 @@ from ntrp.memory import (
     LensProvenance,
     LensRow,
     LensStatus,
-    MemoryEdge,
-    MemoryItem,
     MembershipDecision,
     MembershipVerdict,
+    MemoryEdge,
+    MemoryItem,
     MemoryStore,
     Provenance,
     Scope,
@@ -28,7 +28,7 @@ from ntrp.memory import (
 @pytest_asyncio.fixture
 async def store(tmp_path: Path):
     conn = await database.connect(tmp_path / "memory.db")
-    store = MemoryStore(conn)
+    store = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await store.init_schema()
     yield store
     await conn.close()
@@ -48,19 +48,26 @@ def _claim(content: str, scope: Scope, **kw) -> MemoryItem:
 
 
 def _lens(scope: Scope, **kw) -> LensRow:
+    name = kw.pop("name", "Bugs")
     return LensRow(
-        id=str(uuid.uuid4()),
-        name=kw.pop("name", "Bugs"),
+        id=kw.pop("id", _slug(name)),
+        name=name,
         criterion=kw.pop("criterion", "this item describes a software bug"),
         scope=scope,
         **kw,
     )
 
 
+def _slug(name: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "lens"
+
+
 @pytest.mark.asyncio
 async def test_schema_creates_and_init_is_idempotent(tmp_path: Path):
     conn = await database.connect(tmp_path / "m.db")
-    store = MemoryStore(conn)
+    store = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await store.init_schema()
     await store.init_schema()  # idempotent
     names = {
@@ -70,7 +77,9 @@ async def test_schema_creates_and_init_is_idempotent(tmp_path: Path):
         )
     }
     assert "memory_items" in names
-    assert "lenses" in names
+    # Lens definitions are files on disk, not a DB table.
+    assert "lenses" not in names
+    assert "lens_page_cache" in names
     assert "lens_membership_cache" in names
     # memory_items is claims-only: no kind / lens_* columns
     cols = {
@@ -290,12 +299,16 @@ async def test_lens_round_trips_in_registry(store: MemoryStore):
         criterion="this item is about Regina Volkov",
         detail_level=LensDetailLevel.DOSSIER,
         provenance=LensProvenance.INDUCED,
-        page="# Regina\n...",
+        entity_type="person",
     )
     await store.create_lens_row(lens)
+    # The page is a derived cache (kept in the DB keyed by slug), not part of the
+    # definition file — set it via update_lens.
+    await store.update_lens(lens.id, page="# Regina\n...")
     got = await store.get_lens(lens.id)
     assert got is not None
     assert got.name == "Regina Volkov"
+    assert got.entity_type == "person"
     assert got.detail_level is LensDetailLevel.DOSSIER
     assert got.provenance is LensProvenance.INDUCED
     assert got.status is LensStatus.ACTIVE
@@ -322,8 +335,9 @@ async def test_create_lens_touches_zero_claims_and_edges(store: MemoryStore):
 
 @pytest.mark.asyncio
 async def test_update_lens_in_place_nulls_page(store: MemoryStore):
-    lens = _lens(Scope(ScopeKind.USER), page="# stale")
+    lens = _lens(Scope(ScopeKind.USER))
     await store.create_lens_row(lens)
+    await store.update_lens(lens.id, page="# stale")
     updated = await store.update_lens(
         lens.id, criterion="bugs in the ntrp repo only", page=None
     )

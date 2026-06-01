@@ -181,12 +181,17 @@ class LensStatus(StrEnum):
 
 @dataclass
 class LensRow:
-    """A row in the separate `lenses` registry — a view, not a memory item.
+    """A lens DEFINITION — a view, not a memory item.
 
     A lens is a named, criterion-defined projection over claims. It owns no
-    claims, is never a graph node, and is never edge-linked. `page` is the cached
-    synthesized markdown projection (None until first computed). Membership is a
-    computed projection cached in `lens_membership_cache`, never an edge.
+    claims, is never a graph node, and is never edge-linked. The definition lives
+    as an editable markdown FILE at ``NTRP_DIR/memory/lenses/<slug>.md`` (NOT a DB
+    row): `id` is the file slug, `name` is the frontmatter `directory`, and
+    `criterion` is the file body (a ``## Belongs`` section + optional ``## Profile
+    shape`` list — the membership judge reads Belongs, the projector shapes profiles
+    from Profile shape). `page` is the cached synthesized markdown projection (None
+    until first computed). Membership is a computed projection cached in
+    `lens_membership_cache` keyed by the slug, never an edge.
     """
 
     id: str
@@ -194,6 +199,7 @@ class LensRow:
     criterion: str
     scope: Scope
 
+    entity_type: str = "thing"
     detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED
     render_mode: LensRenderMode = LensRenderMode.FLAT
     provenance: LensProvenance = LensProvenance.USER_AUTHORED

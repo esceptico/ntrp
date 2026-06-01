@@ -37,7 +37,7 @@ PROJECT = Scope(ScopeKind.PROJECT, "proj-1")
 @pytest_asyncio.fixture
 async def store(tmp_path: Path):
     conn = await database.connect(tmp_path / "memory.db")  # tmp only
-    store = MemoryStore(conn)
+    store = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await store.init_schema()
     yield store
     await conn.close()

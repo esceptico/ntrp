@@ -200,11 +200,12 @@ class LensMembership:
 
     async def synthesize_criterion(
         self, name: str, intent: str | None = None
-    ) -> tuple[str, str]:
-        """Draft a one-sentence inclusion criterion + a render mode from a lens NAME.
+    ) -> tuple[str, str, str]:
+        """Draft a criterion body + render mode + entity_type from a lens NAME.
 
         One cheap structured call. Authors TEXT only — makes no membership call.
-        Returns (criterion, render_mode) where render_mode is "grouped_by_subject"
+        Returns (criterion, render_mode, entity_type): the criterion is the file
+        body (## Belongs [+ ## Profile shape]); render_mode is "grouped_by_subject"
         for people/entity lenses else "flat". On empty/parse failure, degrade to a
         faithful echo criterion + flat (still not a keyword gate; decides no
         membership, just gives the user editable text).
@@ -228,10 +229,11 @@ class LensMembership:
                 raise ValueError("blank synthesized criterion")
             criterion = _compose_criterion(belongs, parsed.profile_shape)
             mode = parsed.render_mode if parsed.render_mode in ("grouped_by_subject", "flat") else "flat"
-            return criterion, mode
+            entity_type = parsed.entity_type.strip() or "thing"
+            return criterion, mode, entity_type
         except Exception as e:
             _logger.warning("lens: criterion synthesis failed for %r, echoing: %s", name, e)
-            return f"## Belongs\nThis item is about {name}.", "flat"
+            return f"## Belongs\nThis item is about {name}.", "flat", "thing"
 
     # --- generic guard: advisory coverage ratio ---------------------
 

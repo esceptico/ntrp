@@ -79,7 +79,7 @@ class FakeEmbedder:
 @pytest_asyncio.fixture
 async def store(tmp_path: Path):
     conn = await database.connect(tmp_path / "memory.db")
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()

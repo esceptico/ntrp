@@ -1,9 +1,11 @@
-"""LensRegistry — the lens VIEW layer (registry CRUD + computed projection).
+"""LensRegistry — the lens VIEW layer (file-backed CRUD + computed projection).
 
 A lens is a VIEW, not memory: a named, criterion-defined projection over claims.
-This module owns the registry lifecycle (create / list / edit-criterion / delete /
-split / merge) over the separate `lenses` table. It NEVER writes to `memory_items`
-and NEVER writes an edge. Creating or deleting a lens touches zero claims.
+The DEFINITION lives as an editable markdown FILE at
+``NTRP_DIR/memory/lenses/<slug>.md`` — this module owns the lifecycle (create /
+list / edit-criterion / set-render-mode / delete / split / merge) over those files
+(delegated through MemoryStore.lens_files). It NEVER writes to `memory_items` and
+NEVER writes an edge. Creating or deleting a lens touches zero claims.
 
 Membership is a COMPUTED PROJECTION: the criterion is run over candidate claims by
 the LLM judge (LensMembership), cached in `lens_membership_cache`. The cache is not
@@ -15,10 +17,10 @@ Every membership question is delegated to LensMembership (the LLM judge). No
 keyword/regex/threshold gate decides anything here.
 """
 
-import uuid
 from typing import Protocol
 
 from ntrp.logging import get_logger
+from ntrp.memory.lens.file_store import slugify
 from ntrp.memory.models import (
     LensDetailLevel,
     LensProvenance,
@@ -44,7 +46,9 @@ class _Membership(Protocol):
 
     async def refresh_lens_cache(self, lens_id: str) -> BackfillReport: ...
 
-    async def synthesize_criterion(self, name: str, intent: str | None = ...) -> tuple[str, str]: ...
+    async def synthesize_criterion(
+        self, name: str, intent: str | None = ...
+    ) -> tuple[str, str, str]: ...
 
 
 class LensRegistry:
@@ -66,38 +70,53 @@ class LensRegistry:
         render_mode: LensRenderMode = LensRenderMode.FLAT,
         detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED,
         provenance: LensProvenance = LensProvenance.USER_AUTHORED,
+        entity_type: str = "thing",
     ) -> LensRow:
-        """Insert one registry row. NO backfill, NO edges, NO claim writes (C7).
+        """Write one lens DEFINITION file. NO backfill, NO edges, NO claim writes (C7).
 
-        When no criterion is given, the LLM synthesizes one from the name (a pure
-        text call — still touches zero claims, makes no membership decision). The
-        page is None; membership/page are computed lazily on first projection.
+        When no criterion is given, the LLM synthesizes the body (## Belongs [+
+        ## Profile shape]), the render mode AND the entity_type from the name (a
+        pure text call — still touches zero claims, makes no membership decision).
+        The page is None; membership/page are computed lazily on first projection.
         """
         if scope is None:
             raise ValueError("create_lens requires a scope")
         if not (criterion or "").strip():
-            # The synth decides both the criterion AND the layout (people/entity
-            # lenses → grouped cards), so a "people" lens is born grouped, not flat.
-            criterion, synth_mode = await self.membership.synthesize_criterion(name)
+            # The synth decides the criterion body, the layout (people/entity lenses
+            # → grouped cards) AND the entity_type, so a "people" lens is born grouped.
+            criterion, synth_mode, entity_type = await self.membership.synthesize_criterion(name)
             render_mode = LensRenderMode(synth_mode)
         lens = LensRow(
-            id=uuid.uuid4().hex,
+            id=self._unique_slug(name),
             name=name,
             criterion=criterion,
             scope=scope,
+            entity_type=entity_type,
             render_mode=render_mode,
             detail_level=detail_level,
             provenance=provenance,
         )
         await self.store.create_lens_row(lens)
-        _logger.info("lens created %s name=%r (view; zero claims touched)", lens.id, name)
+        _logger.info("lens created %s name=%r (file; zero claims touched)", lens.id, name)
         return lens
+
+    def _unique_slug(self, name: str) -> str:
+        """Derive a file slug from the name, suffixing on collision so two lenses
+        with the same name get distinct files."""
+        base = slugify(name)
+        slug = base
+        n = 2
+        while self.store.lens_files.read(slug) is not None:
+            slug = f"{base}-{n}"
+            n += 1
+        return slug
 
     # --- render mode (presentation dial; no membership impact) ------
 
     async def set_render_mode(self, lens_id: str, render_mode: LensRenderMode) -> LensRow:
-        """Flip a lens between flat and grouped-by-subject layout. Presentation
-        only: membership is unchanged, so no cache invalidation."""
+        """Flip a lens between flat and grouped-by-subject layout by editing the
+        file's frontmatter. Presentation only: membership is unchanged, so no cache
+        invalidation."""
         lens = await self.store.get_lens(lens_id)
         if lens is None:
             raise ValueError(f"not a lens: {lens_id}")

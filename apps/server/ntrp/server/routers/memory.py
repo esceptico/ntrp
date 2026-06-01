@@ -98,6 +98,7 @@ def lens_json(lens: LensRow) -> dict:
         "id": lens.id,
         "name": lens.name,
         "criterion": lens.criterion,
+        "entity_type": lens.entity_type,
         "scope": _scope_json(lens.scope),
         "detail_level": lens.detail_level.value,
         "render_mode": lens.render_mode.value,

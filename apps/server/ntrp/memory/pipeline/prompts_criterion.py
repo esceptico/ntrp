@@ -25,6 +25,8 @@ a lens NAME (the user's seed) and an optional INTENT. Produce:
   a topic lens, the facets worth tracking per item.
 - render_mode: "grouped_by_subject" when the lens groups distinct PEOPLE or ENTITIES
   (so the view shows one profile per individual); otherwise "flat".
+- entity_type: the kind of thing this lens groups, e.g. "person", "project",
+  "library", "decision", "topic". One short noun.
 
 No numbers, scores, or percentages anywhere. Stay faithful to the name; do not invent
 unrelated scope.
@@ -39,4 +41,8 @@ class SynthesizedCriterion(BaseModel):
     render_mode: str = Field(
         default="flat",
         description='"grouped_by_subject" for people/entity lenses (one profile per individual), else "flat"',
+    )
+    entity_type: str = Field(
+        default="thing",
+        description='the kind of thing grouped, e.g. "person", "project", "topic"',
     )

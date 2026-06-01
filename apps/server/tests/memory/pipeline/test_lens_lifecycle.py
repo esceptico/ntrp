@@ -35,10 +35,10 @@ USER = Scope(kind=ScopeKind.USER)
 
 
 @pytest_asyncio.fixture
-async def store():
+async def store(tmp_path):
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()
@@ -64,12 +64,17 @@ class FakeMembership:
         self.refreshed.append(lens_id)
         return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
-    async def synthesize_criterion(self, name: str, intent: str | None = None) -> tuple[str, str]:
+    async def synthesize_criterion(
+        self, name: str, intent: str | None = None
+    ) -> tuple[str, str, str]:
         # Stand-in for the LLM criterion author: deterministic, records nothing
-        # about membership (this is text authoring only). Returns (criterion, mode).
+        # about membership (this is text authoring only). Returns
+        # (criterion, mode, entity_type).
         self.synth_calls.append(name)
-        mode = "grouped_by_subject" if name.lower() in ("people", "persons", "contacts") else "flat"
-        return f"this item is about {name}", mode
+        is_people = name.lower() in ("people", "persons", "contacts")
+        mode = "grouped_by_subject" if is_people else "flat"
+        entity_type = "person" if is_people else "thing"
+        return f"this item is about {name}", mode, entity_type
 
     async def coverage(self, lens_id: str, scope: Scope) -> CoverageAdvisory:
         self.coverage_calls.append(lens_id)

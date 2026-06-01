@@ -44,13 +44,22 @@ USER = Scope(kind=ScopeKind.USER)
 
 
 @pytest_asyncio.fixture
-async def store():
+async def store(tmp_path):
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()
+
+
+_slug_n = 0
+
+
+def _lens_slug() -> str:
+    global _slug_n
+    _slug_n += 1
+    return f"lens-{_slug_n}"
 
 
 async def _claim(store, content, **kw):
@@ -67,16 +76,18 @@ async def _claim(store, content, **kw):
 
 async def _lens(store, *, name, criterion, page=None, render_mode=None):
     le = LensRow(
-        id=uuid.uuid4().hex,
+        id=_lens_slug(),
         name=name,
         criterion=criterion,
         scope=USER,
         provenance=LensProvenance.USER_AUTHORED,
         detail_level=LensDetailLevel.STRUCTURED,
         render_mode=render_mode or LensRenderMode.FLAT,
-        page=page,
     )
-    return await store.create_lens_row(le)
+    await store.create_lens_row(le)
+    if page is not None:
+        await store.update_lens(le.id, page=page)
+    return await store.get_lens(le.id)
 
 
 async def _member(store, lens_id, claim):

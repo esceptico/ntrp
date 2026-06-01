@@ -42,13 +42,22 @@ USER = Scope(kind=ScopeKind.USER)
 
 
 @pytest_asyncio.fixture
-async def store():
+async def store(tmp_path):
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()
+
+
+_slug_n = 0
+
+
+def _lens_slug() -> str:
+    global _slug_n
+    _slug_n += 1
+    return f"lens-{_slug_n}"
 
 
 def _vote(i, decision):
@@ -73,14 +82,16 @@ async def _claim(store, content, **kw):
 
 async def _lens(store, *, name, criterion, page=None):
     le = LensRow(
-        id=uuid.uuid4().hex,
+        id=_lens_slug(),
         name=name,
         criterion=criterion,
         scope=USER,
         provenance=LensProvenance.USER_AUTHORED,
-        page=page,
     )
-    return await store.create_lens_row(le)
+    await store.create_lens_row(le)
+    if page is not None:
+        await store.update_lens(le.id, page=page)
+    return await store.get_lens(le.id)
 
 
 def _membership(store, cheap, strong=None, embed=None):
@@ -371,7 +382,7 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
     )
     m = _membership(store, cheap)
 
-    crit, mode = await m.synthesize_criterion("Running")
+    crit, mode, _entity_type = await m.synthesize_criterion("Running")
 
     # The criterion is composed markdown: a Belongs section + a Profile shape section.
     assert "## Belongs" in crit
@@ -397,7 +408,7 @@ async def test_synthesize_criterion_groups_people_lens(store):
     )
     m = _membership(store, cheap)
 
-    crit, mode = await m.synthesize_criterion("People")
+    crit, mode, _entity_type = await m.synthesize_criterion("People")
 
     assert mode == "grouped_by_subject"
     assert "## Profile shape" in crit
@@ -407,7 +418,7 @@ async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
     cheap = FakeCompletionClient(default="not json at all")  # parse fail
     m = _membership(store, cheap)
 
-    crit, mode = await m.synthesize_criterion("Regina Volkov")
+    crit, mode, _entity_type = await m.synthesize_criterion("Regina Volkov")
 
     assert "## Belongs" in crit
     assert "Regina Volkov" in crit

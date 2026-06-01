@@ -100,10 +100,10 @@ class StubEmbedder:
 
 
 @pytest_asyncio.fixture
-async def store():
+async def store(tmp_path):
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()

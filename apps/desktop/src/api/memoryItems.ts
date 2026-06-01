@@ -45,11 +45,16 @@ export interface MemoryItem {
   updated_at: string;
 }
 
-// A lens registry row — a view over claims, never a memory item, never a graph node.
+// A lens DEFINITION — a view over claims, never a memory item, never a graph node.
+// The definition lives as an editable markdown file at NTRP_DIR/memory/lenses/<slug>.md:
+// `id` is the file slug, `name` is the frontmatter directory, `criterion` is the file
+// body (## Belongs + optional ## Profile shape). The JSON shape is unchanged here; the
+// server reads/writes the file behind these same fields.
 export interface Lens {
   id: string;
   name: string;
   criterion: string;
+  entity_type?: string;
   scope: MemoryScope;
   detail_level: LensDetailLevel;
   render_mode: LensRenderMode;

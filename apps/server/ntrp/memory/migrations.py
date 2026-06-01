@@ -11,7 +11,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 async def _get_schema_version(conn: aiosqlite.Connection) -> int:
@@ -34,17 +34,30 @@ async def _migrate_v1(_conn: aiosqlite.Connection) -> None:
     pass
 
 
-async def _migrate_v2(conn: aiosqlite.Connection) -> None:
-    # Lens render-mode: presentation dial (flat | grouped_by_subject). Nullable
-    # default keeps every existing lens flat; touches no claim.
-    cols = await conn.execute_fetchall("PRAGMA table_info(lenses)")
-    if not any(c["name"] == "render_mode" for c in cols):
-        await conn.execute(
-            "ALTER TABLE lenses ADD COLUMN render_mode TEXT NOT NULL DEFAULT 'flat'"
-        )
+async def _migrate_v2(_conn: aiosqlite.Connection) -> None:
+    # Historical: added lenses.render_mode. The `lenses` definition table no longer
+    # exists (lens definitions are files on disk), so this is now a no-op for any
+    # store created at v3+. Kept only to preserve the version ladder.
+    pass
 
 
-_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2))
+async def _migrate_v3(conn: aiosqlite.Connection) -> None:
+    # Lens definitions moved from the `lenses` DB table to editable markdown files
+    # on disk. Drop the obsolete definition table + its FTS index/triggers; the
+    # page cache + membership cache (derived, slug-keyed) stay. No claim is touched.
+    await conn.executescript(
+        """
+        DROP TRIGGER IF EXISTS lenses_ai;
+        DROP TRIGGER IF EXISTS lenses_ad;
+        DROP TRIGGER IF EXISTS lenses_au;
+        DROP TABLE IF EXISTS lenses_fts;
+        DROP TABLE IF EXISTS lenses;
+        DROP INDEX IF EXISTS idx_lenses_scope;
+        """
+    )
+
+
+_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3))
 
 
 async def run_migrations(conn: aiosqlite.Connection) -> None:

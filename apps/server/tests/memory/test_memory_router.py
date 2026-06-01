@@ -84,7 +84,7 @@ class _FakeLensRegistry:
     async def create_lens(self, name, criterion, scope, *, render_mode=None):
         self.calls.append(("create_lens", name, criterion, scope, render_mode))
         lens = LensRow(
-            id=uuid.uuid4().hex,
+            id=_lens_slug(),
             name=name,
             criterion=criterion,
             scope=scope,
@@ -208,10 +208,19 @@ class _FakeKnowledge:
 async def store(tmp_path):
     conn = await aiosqlite.connect(str(tmp_path / "mem.db"))
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()
+
+
+_slug_n = 0
+
+
+def _lens_slug() -> str:
+    global _slug_n
+    _slug_n += 1
+    return f"lens-{_slug_n}"
 
 
 @pytest.fixture
@@ -244,7 +253,7 @@ async def _claim(store, content, **kw):
 
 async def _lens(store, name, criterion):
     lens = LensRow(
-        id=uuid.uuid4().hex,
+        id=_lens_slug(),
         name=name,
         criterion=criterion,
         scope=USER,
@@ -612,9 +621,9 @@ def test_writeback_404_on_missing_lens(client):
 
 
 @pytest.mark.asyncio
-async def test_writeback_404_on_archived_lens(store, client):
+async def test_writeback_404_on_deleted_lens(store, client):
     lens = await _lens(store, "L", "c")
-    await store.update_lens(lens.id, status=LensStatus.ARCHIVED)
+    await store.delete_lens(lens.id)  # deleting the file removes the view
     assert client.post(
         f"/admin/memory/lenses/{lens.id}/writeback",
         json={"ops": [{"kind": "accept", "claim_id": "c1"}]},

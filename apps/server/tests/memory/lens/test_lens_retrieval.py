@@ -25,7 +25,6 @@ from ntrp.memory.lens.expand import LensExpander
 from ntrp.memory.models import (
     LensProvenance,
     LensRow,
-    LensStatus,
     MembershipDecision,
     MembershipVerdict,
     MemoryItem,
@@ -40,13 +39,22 @@ USER = Scope(kind=ScopeKind.USER)
 
 
 @pytest_asyncio.fixture
-async def store():
+async def store(tmp_path):
     conn = await aiosqlite.connect(":memory:")
     conn.row_factory = aiosqlite.Row
-    s = MemoryStore(conn)
+    s = MemoryStore(conn, lenses_dir=tmp_path / "lenses")
     await s.init_schema()
     yield s
     await conn.close()
+
+
+_slug_n = 0
+
+
+def _lens_slug() -> str:
+    global _slug_n
+    _slug_n += 1
+    return f"lens-{_slug_n}"
 
 
 def _claim(content: str, *, scope: Scope = USER) -> MemoryItem:
@@ -59,15 +67,25 @@ def _claim(content: str, *, scope: Scope = USER) -> MemoryItem:
     )
 
 
-def _lens(name: str, criterion: str, *, page: str | None = None, scope: Scope = USER) -> LensRow:
-    return LensRow(
-        id=str(uuid.uuid4()),
+async def _lens(
+    store: MemoryStore,
+    name: str,
+    criterion: str,
+    *,
+    page: str | None = None,
+    scope: Scope = USER,
+) -> LensRow:
+    le = LensRow(
+        id=_lens_slug(),
         name=name,
         criterion=criterion,
         scope=scope,
         provenance=LensProvenance.USER_AUTHORED,
-        page=page,
     )
+    await store.create_lens_row(le)
+    if page is not None:
+        await store.update_lens(le.id, page=page)
+    return await store.get_lens(le.id)
 
 
 async def _member(store: MemoryStore, claim: MemoryItem, lens: LensRow) -> None:
@@ -79,9 +97,8 @@ async def _member(store: MemoryStore, claim: MemoryItem, lens: LensRow) -> None:
 
 @pytest.mark.asyncio
 async def test_hint_resolves_by_exact_name_and_injects_page(store, fake_embedder):
-    lens = _lens("Marathon Training", "anything about the user's marathon training",
-                 page="# Marathon Training\n- Runs 5x a week. <!--claim:abc-->")
-    await store.create_lens_row(lens)
+    lens = await _lens(store, "Marathon Training", "anything about the user's marathon training",
+                       page="# Marathon Training\n- Runs 5x a week. <!--claim:abc-->")
 
     expander = LensExpander(store, fake_embedder)
     out = await expander.expand(hint="Marathon Training", goal="how is training going", scopes=[USER])
@@ -94,8 +111,7 @@ async def test_hint_resolves_by_exact_name_and_injects_page(store, fake_embedder
 @pytest.mark.asyncio
 async def test_member_constrained_pool_is_active_members_only(store, fake_embedder):
     """Member pre-filter returns active members; cache rows to dead claims drop."""
-    lens = _lens("Marathon Training", "marathon training")
-    await store.create_lens_row(lens)
+    lens = await _lens(store, "Marathon Training", "marathon training")
 
     live = _claim("Ran a 20-miler on Sunday.")
     stale = _claim("Old plan that was replaced.")
@@ -114,7 +130,7 @@ async def test_member_constrained_pool_is_active_members_only(store, fake_embedd
 
 @pytest.mark.asyncio
 async def test_no_hint_returns_none(store, fake_embedder):
-    await store.create_lens_row(_lens("Marathon Training", "marathon training"))
+    await _lens(store, "Marathon Training", "marathon training")
     expander = LensExpander(store, fake_embedder)
     # No structural hint → we never guess a lens from goal prose (no lexical decision).
     assert await expander.expand(hint=None, goal="marathon training plan", scopes=[USER]) is None
@@ -122,17 +138,16 @@ async def test_no_hint_returns_none(store, fake_embedder):
 
 @pytest.mark.asyncio
 async def test_unmatched_hint_returns_none(store, fake_embedder):
-    await store.create_lens_row(_lens("Marathon Training", "marathon training"))
+    await _lens(store, "Marathon Training", "marathon training")
     expander = LensExpander(store, fake_embedder)
     out = await expander.expand(hint="Quantum Chromodynamics", goal="qcd", scopes=[USER])
     assert out is None
 
 
 @pytest.mark.asyncio
-async def test_archived_lens_not_resolved(store, fake_embedder):
-    lens = _lens("Marathon Training", "marathon training")
-    await store.create_lens_row(lens)
-    await store.update_lens(lens.id, status=LensStatus.ARCHIVED)  # deleted view
+async def test_deleted_lens_not_resolved(store, fake_embedder):
+    lens = await _lens(store, "Marathon Training", "marathon training")
+    await store.delete_lens(lens.id)  # deleting the file removes the view
 
     expander = LensExpander(store, fake_embedder)
     assert await expander.expand(hint=lens.id, goal="x", scopes=[USER]) is None
@@ -143,8 +158,7 @@ async def test_fts_recall_channel_resolves_when_no_exact_match(store, fake_embed
     """Channel B: FTS over lens text resolves a hint that is not the exact name."""
     if not store.has_fts:
         pytest.skip("FTS5 unavailable")
-    lens = _lens("Running Log", "the user's marathon training and weekly mileage")
-    await store.create_lens_row(lens)
+    lens = await _lens(store, "Running Log", "the user's marathon training and weekly mileage")
 
     expander = LensExpander(store, fake_embedder)
     out = await expander.expand(hint="marathon training", goal="x", scopes=[USER])
@@ -154,8 +168,7 @@ async def test_fts_recall_channel_resolves_when_no_exact_match(store, fake_embed
 @pytest.mark.asyncio
 async def test_expander_is_read_only(store, fake_embedder):
     """No writes: the active claim + lens sets are unchanged after an expand call."""
-    lens = _lens("Marathon Training", "marathon training", page="# page")
-    await store.create_lens_row(lens)
+    lens = await _lens(store, "Marathon Training", "marathon training", page="# page")
     claim = _claim("Ran today.")
     await _member(store, claim, lens)
 
