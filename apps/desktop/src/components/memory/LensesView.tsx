@@ -519,7 +519,10 @@ function LensPage({
             </div>
           ) : page && page.blocks.length === 0 ? (
             <Empty>Nothing matches this criterion yet. New memories appear here as they're admitted.</Empty>
-          ) : page?.groups ? (
+          ) : page?.groups && page.groups.length > 1 ? (
+            // Per-person cards only when there's genuinely more than one subject.
+            // A single-subject "group" (e.g. a topic lens where everything is about
+            // the user) renders flat — no pointless "the user" card.
             <GroupedProfiles
               groups={page.groups}
               editingId={editingId}
@@ -821,7 +824,7 @@ function CoverageStrip({ coverage }: { coverage: CoverageAdvisory }) {
     <div className="flex min-w-0 items-center gap-2">
       <CoverageMeter coverage={coverage} compact />
       <span className="shrink-0 tabular-nums">
-        {coverage.member_count}/{coverage.scope_pool} in scope
+        {coverage.member_count} of {coverage.scope_pool} claims match
       </span>
       {coverage.generic && (
         <span className="truncate text-warn" title={coverage.suggestion}>
@@ -919,23 +922,30 @@ function GroupedProfiles({
                         className="text-sm leading-relaxed"
                       />
                     )}
-                    <div className="flex flex-col gap-0.5">
-                    <AnimatePresence initial={false}>
-                      {g.blocks.map((b) => (
-                        <ClaimBlock
-                          key={b.claim_id}
-                          block={b}
-                          editing={editingId === b.claim_id}
-                          busy={busyId === b.claim_id}
-                          exiting={exiting?.id === b.claim_id ? exiting.how : null}
-                          onOpen={() => onOpen(b.claim_id)}
-                          onClose={onClose}
-                          onCommit={onCommit}
-                          onPeek={() => onPeek(b.claim_id)}
-                        />
-                      ))}
-                    </AnimatePresence>
-                    </div>
+                    {g.blocks.length > 0 && (
+                      <div className="mt-1 border-t border-line-soft/50 pt-1.5">
+                        <div className="mb-1 text-2xs font-medium uppercase tracking-wide text-faint">
+                          {g.blocks.length === 1 ? "Source claim" : "Source claims"}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <AnimatePresence initial={false}>
+                            {g.blocks.map((b) => (
+                              <ClaimBlock
+                                key={b.claim_id}
+                                block={b}
+                                editing={editingId === b.claim_id}
+                                busy={busyId === b.claim_id}
+                                exiting={exiting?.id === b.claim_id ? exiting.how : null}
+                                onOpen={() => onOpen(b.claim_id)}
+                                onClose={onClose}
+                                onCommit={onCommit}
+                                onPeek={() => onPeek(b.claim_id)}
+                              />
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -984,22 +994,29 @@ function FlatPage({
   return (
     <div className="mt-3 flex flex-col gap-3">
       {prose && <Markdown content={prose} className="text-sm leading-relaxed" />}
-      <div className="flex flex-col gap-0.5">
-        <AnimatePresence initial={false}>
-          {page.blocks.map((b) => (
-            <ClaimBlock
-              key={b.claim_id}
-              block={b}
-              editing={editingId === b.claim_id}
-              busy={busyId === b.claim_id}
-              exiting={exiting?.id === b.claim_id ? exiting.how : null}
-              onOpen={() => onOpen(b.claim_id)}
-              onClose={onClose}
-              onCommit={onCommit}
-              onPeek={() => onPeek(b.claim_id)}
-            />
-          ))}
-        </AnimatePresence>
+      <div className={prose ? "border-t border-line-soft/50 pt-2" : ""}>
+        {prose && (
+          <div className="mb-1 text-2xs font-medium uppercase tracking-wide text-faint">
+            {page.blocks.length === 1 ? "Source claim" : "Source claims"}
+          </div>
+        )}
+        <div className="flex flex-col gap-0.5">
+          <AnimatePresence initial={false}>
+            {page.blocks.map((b) => (
+              <ClaimBlock
+                key={b.claim_id}
+                block={b}
+                editing={editingId === b.claim_id}
+                busy={busyId === b.claim_id}
+                exiting={exiting?.id === b.claim_id ? exiting.how : null}
+                onOpen={() => onOpen(b.claim_id)}
+                onClose={onClose}
+                onCommit={onCommit}
+                onPeek={() => onPeek(b.claim_id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
@@ -1010,8 +1027,8 @@ function FlatPage({
 // reports stage/subject/"i/n" through the poll target — surfaced here as an
 // ordered checklist instead of a frozen spinner that times out.
 const GEN_STEPS: { stage: "scoring" | "synthesizing"; label: string }[] = [
-  { stage: "scoring", label: "Scoring members" },
-  { stage: "synthesizing", label: "Synthesizing page" },
+  { stage: "scoring", label: "Finding matching claims" },
+  { stage: "synthesizing", label: "Writing the summary" },
 ];
 const STAGE_ORDER: Record<string, number> = { creating: 0, scoring: 1, synthesizing: 2, ready: 3 };
 
@@ -1025,7 +1042,7 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
         {gen.status === "error" && (
           <AlertCircle size={ICON.XS} strokeWidth={2.4} className="shrink-0 text-bad" />
         )}
-        {gen.status === "error" ? "Generation failed" : "Generating lens…"}
+        {gen.status === "error" ? "Couldn't build this view" : "Building this view…"}
       </div>
       <ul className="flex flex-col gap-1.5">
         {GEN_STEPS.map((step) => {
