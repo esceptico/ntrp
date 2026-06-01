@@ -87,7 +87,9 @@ _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, Reasoning
 #
 # Tool-call ARGS are deliberately NOT suppressed: TOOL_CALL_ARGS has no depth
 # gate on the client and feeds the nested row's label (formatCallTarget), so
-# dropping it would blank out every sub-agent tool row's target.
+# dropping it would blank out every sub-agent tool row's target. (Streaming
+# providers emit args as several small deltas the client accumulates — still
+# orders of magnitude less volume than the token text, which is the firehose.)
 _SUPPRESSED_NESTED_SSE = (
     TextMessageStartEvent,
     TextMessageContentEvent,
