@@ -21,7 +21,6 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    Kind,
     MemoryEdge,
     MemoryItem,
     Provenance,
@@ -47,14 +46,12 @@ NEIGHBORHOOD_LIMIT = 8
 WATERMARK_PREFIX = "consolidate_watermark"
 
 # Provenance trust ordinal, high → low. Used to pick a merge survivor and to cap
-# the survivor's provenance at INFERRED (lint may never raise trust). INDUCED is
-# lens-only; claims never carry it, but it is mapped low for safety.
+# the survivor's provenance at INFERRED (lint may never raise trust).
 _PROVENANCE_ORDINAL = {
-    Provenance.USER_AUTHORED: 4,
-    Provenance.RECORDED: 3,
-    Provenance.INFERRED: 2,
-    Provenance.EXTERNAL: 1,
-    Provenance.INDUCED: 0,
+    Provenance.USER_AUTHORED: 3,
+    Provenance.RECORDED: 2,
+    Provenance.INFERRED: 1,
+    Provenance.EXTERNAL: 0,
 }
 
 
@@ -138,7 +135,6 @@ class ConsolidateLint:
         self, scope: Scope, watermark: str | None
     ) -> tuple[list[MemoryItem], bool, str | None]:
         rows = await self.store.query(
-            kind=Kind.CLAIM,
             scope=scope,
             status=Status.ACTIVE,
             limit=self.config.max_items_per_sweep + 1,
@@ -177,7 +173,7 @@ class ConsolidateLint:
                     claim.content, limit=self.config.neighborhood_limit
                 )
                 for h in hits:
-                    if h.kind is not Kind.CLAIM or h.id not in scope_ids:
+                    if h.id not in scope_ids:
                         continue
                     members.setdefault(h.id, h)
             key = frozenset(members)
@@ -189,9 +185,7 @@ class ConsolidateLint:
         return hoods
 
     async def _scope_active_claim_ids(self, scope: Scope) -> set[str]:
-        rows = await self.store.query(
-            kind=Kind.CLAIM, scope=scope, status=Status.ACTIVE, limit=10_000
-        )
+        rows = await self.store.query(scope=scope, status=Status.ACTIVE, limit=10_000)
         return {r.id for r in rows}
 
     # --- LLM judgment -----------------------------------------------------
@@ -312,9 +306,10 @@ class ConsolidateLint:
         # as superseded, links SUPERSEDES, one transaction). Then fold every loser
         # onto the new survivor: close the loser (superseded) and link it. Losers
         # cannot reuse store.supersede() (that would mint a row per loser), so we
-        # invalidate + add the SUPERSEDES edge by hand — same end state.
+        # invalidate + add the SUPERSEDES edge by hand — same end state. The
+        # successor keeps the survivor's canonical_subject; lens membership
+        # recomputes (claims carry no membership edge).
         await self.store.supersede(old_id=survivor.id, new_item=new_survivor)
-        await self._inherit_members(survivor.id, new_survivor.id)
 
         for loser in losers:
             await self.store.invalidate(loser.id, status=Status.SUPERSEDED)
@@ -323,16 +318,9 @@ class ConsolidateLint:
                     child_id=new_survivor.id, parent_id=loser.id, role=EdgeRole.SUPERSEDES
                 )
             )
-            await self._inherit_members(loser.id, new_survivor.id)
 
         await self.store.bump_corroboration(new_survivor.id)
         return len(losers)
-
-    async def _inherit_members(self, from_id: str, to_id: str) -> None:
-        for edge in await self.store.list_edges(from_id, direction="from", role=EdgeRole.MEMBER_OF):
-            await self.store.add_edge(
-                MemoryEdge(child_id=to_id, parent_id=edge.parent_id, role=EdgeRole.MEMBER_OF)
-            )
 
     async def _apply_invalidate(self, op: InvalidateOp, live: dict[str, MemoryItem]) -> str:
         target = live.get(op.claim_id)
@@ -429,8 +417,8 @@ class ConsolidateLint:
         now = now_iso()
         return MemoryItem(
             id=str(uuid.uuid4()),
-            kind=Kind.CLAIM,
             content=content,
+            canonical_subject=base.canonical_subject,
             scope=base.scope,
             provenance=provenance,
             status=Status.ACTIVE,

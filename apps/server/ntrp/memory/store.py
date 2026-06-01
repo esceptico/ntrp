@@ -1,8 +1,11 @@
 """SQLite store for the Stage-2 memory schema.
 
-Single object table + role-typed edge table + FTS5 over claim content and lens
-text. Storage only: CRUD, scope/validity queries, edges, and invalidate/
-supersede (never a hard delete). No pipeline, no ranking.
+Two tables: `memory_items` (claims-only, subject-keyed) and `lenses` (a registry
+of views), plus a `lens_membership_cache` that is a cache, not graph truth (drop
+it and nothing breaks except projection latency). Edges in `memory_item_parents`
+are claim->claim only. FTS5 over claim content/subject and (separately) over
+lens text. Storage only: CRUD, scope/validity queries, edges, invalidate/
+supersede (never a hard delete), and registry CRUD. No pipeline, no ranking.
 
 Conventions match search/automation stores: injected connection, async API,
 meta-table schema-version ladder, ISO-8601 UTC TEXT timestamps, JSON TEXT for
@@ -18,8 +21,12 @@ from ntrp.memory.migrations import run_migrations
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    Kind,
     LensDetailLevel,
+    LensProvenance,
+    LensRow,
+    LensStatus,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryEdge,
     MemoryItem,
     Provenance,
@@ -37,8 +44,8 @@ DQ = '"'
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memory_items (
     id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL,
     content TEXT NOT NULL,
+    canonical_subject TEXT NOT NULL,
     scope_kind TEXT NOT NULL,
     scope_key TEXT,
     provenance TEXT NOT NULL,
@@ -52,13 +59,6 @@ CREATE TABLE IF NOT EXISTS memory_items (
     corroboration INTEGER NOT NULL DEFAULT 0,
     last_relevant_at TEXT,
     feedback TEXT NOT NULL DEFAULT 'none',
-
-    lens_name TEXT,
-    lens_criterion TEXT,
-    lens_kind TEXT,
-    lens_page TEXT,
-    lens_detail_level TEXT,
-    lens_exclusive INTEGER NOT NULL DEFAULT 0,
 
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -75,26 +75,58 @@ CREATE TABLE IF NOT EXISTS memory_item_parents (
     FOREIGN KEY (parent_id) REFERENCES memory_items(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS lenses (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    criterion TEXT NOT NULL,
+    scope_kind TEXT NOT NULL,
+    scope_key TEXT,
+    detail_level TEXT NOT NULL DEFAULT 'structured',
+    provenance TEXT NOT NULL DEFAULT 'user_authored',
+    status TEXT NOT NULL DEFAULT 'active',
+    page TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lens_membership_cache (
+    lens_id TEXT NOT NULL,
+    claim_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    rationale TEXT,
+    scored_at TEXT NOT NULL,
+    PRIMARY KEY (lens_id, claim_id)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
 
--- Hot path: active items filtered by scope + kind.
-CREATE INDEX IF NOT EXISTS idx_items_status_scope_kind
-    ON memory_items(status, scope_kind, scope_key, kind);
-CREATE INDEX IF NOT EXISTS idx_items_kind ON memory_items(kind);
+-- Hot path: active claims filtered by scope.
+CREATE INDEX IF NOT EXISTS idx_items_status_scope
+    ON memory_items(status, scope_kind, scope_key);
+-- Subject recall channel (coreference grouping).
+CREATE INDEX IF NOT EXISTS idx_items_subject ON memory_items(canonical_subject);
 CREATE INDEX IF NOT EXISTS idx_edges_child ON memory_item_parents(child_id, role);
 CREATE INDEX IF NOT EXISTS idx_edges_parent ON memory_item_parents(parent_id, role);
+CREATE INDEX IF NOT EXISTS idx_lenses_scope ON lenses(status, scope_kind, scope_key);
+CREATE INDEX IF NOT EXISTS idx_lmc_lens ON lens_membership_cache(lens_id, decision);
 """
 
 _COLUMNS = (
-    "id, kind, content, scope_kind, scope_key, provenance, status, valid_from, invalid_at, "
-    "source_refs, corroboration, last_relevant_at, feedback, lens_name, lens_criterion, "
-    "lens_kind, lens_page, lens_detail_level, lens_exclusive, created_at, updated_at"
+    "id, content, canonical_subject, scope_kind, scope_key, provenance, status, valid_from, "
+    "invalid_at, source_refs, corroboration, last_relevant_at, feedback, created_at, updated_at"
 )
+_N_COLUMNS = len(_COLUMNS.split(", "))
 
-SQL_INSERT = f"INSERT INTO memory_items ({_COLUMNS}) VALUES ({','.join('?' * 21)})"
+_LENS_COLUMNS = (
+    "id, name, criterion, scope_kind, scope_key, detail_level, provenance, status, page, "
+    "created_at, updated_at"
+)
+_N_LENS_COLUMNS = len(_LENS_COLUMNS.split(", "))
+
+SQL_INSERT = f"INSERT INTO memory_items ({_COLUMNS}) VALUES ({','.join('?' * _N_COLUMNS)})"
 SQL_GET = f"SELECT {_COLUMNS} FROM memory_items WHERE id = ?"
 SQL_INSERT_EDGE = (
     "INSERT OR IGNORE INTO memory_item_parents (child_id, parent_id, role, position, created_at) "
@@ -117,6 +149,15 @@ SQL_BUMP_CORROBORATION = (
     "UPDATE memory_items SET corroboration = corroboration + 1, updated_at = ? WHERE id = ?"
 )
 
+SQL_INSERT_LENS = f"INSERT INTO lenses ({_LENS_COLUMNS}) VALUES ({','.join('?' * _N_LENS_COLUMNS)})"
+SQL_GET_LENS = f"SELECT {_LENS_COLUMNS} FROM lenses WHERE id = ?"
+SQL_DELETE_LENS = "DELETE FROM lenses WHERE id = ?"
+SQL_UPSERT_MEMBERSHIP = (
+    "INSERT OR REPLACE INTO lens_membership_cache (lens_id, claim_id, decision, rationale, scored_at) "
+    "VALUES (?, ?, ?, ?, ?)"
+)
+SQL_INVALIDATE_MEMBERSHIP = "DELETE FROM lens_membership_cache WHERE lens_id = ?"
+
 
 class MemoryStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -136,7 +177,7 @@ class MemoryStore:
             await self.conn.execute(
                 """
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_items_fts USING fts5(
-                    content, lens_name, lens_criterion, lens_page,
+                    content, canonical_subject,
                     content='memory_items',
                     content_rowid='rowid'
                 );
@@ -145,18 +186,45 @@ class MemoryStore:
             await self.conn.executescript(
                 """
                 CREATE TRIGGER IF NOT EXISTS memory_items_ai AFTER INSERT ON memory_items BEGIN
-                    INSERT INTO memory_items_fts(rowid, content, lens_name, lens_criterion, lens_page)
-                    VALUES (new.rowid, new.content, new.lens_name, new.lens_criterion, new.lens_page);
+                    INSERT INTO memory_items_fts(rowid, content, canonical_subject)
+                    VALUES (new.rowid, new.content, new.canonical_subject);
                 END;
                 CREATE TRIGGER IF NOT EXISTS memory_items_ad AFTER DELETE ON memory_items BEGIN
-                    INSERT INTO memory_items_fts(memory_items_fts, rowid, content, lens_name, lens_criterion, lens_page)
-                    VALUES ('delete', old.rowid, old.content, old.lens_name, old.lens_criterion, old.lens_page);
+                    INSERT INTO memory_items_fts(memory_items_fts, rowid, content, canonical_subject)
+                    VALUES ('delete', old.rowid, old.content, old.canonical_subject);
                 END;
                 CREATE TRIGGER IF NOT EXISTS memory_items_au AFTER UPDATE ON memory_items BEGIN
-                    INSERT INTO memory_items_fts(memory_items_fts, rowid, content, lens_name, lens_criterion, lens_page)
-                    VALUES ('delete', old.rowid, old.content, old.lens_name, old.lens_criterion, old.lens_page);
-                    INSERT INTO memory_items_fts(rowid, content, lens_name, lens_criterion, lens_page)
-                    VALUES (new.rowid, new.content, new.lens_name, new.lens_criterion, new.lens_page);
+                    INSERT INTO memory_items_fts(memory_items_fts, rowid, content, canonical_subject)
+                    VALUES ('delete', old.rowid, old.content, old.canonical_subject);
+                    INSERT INTO memory_items_fts(rowid, content, canonical_subject)
+                    VALUES (new.rowid, new.content, new.canonical_subject);
+                END;
+                """
+            )
+            await self.conn.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS lenses_fts USING fts5(
+                    name, criterion, page,
+                    content='lenses',
+                    content_rowid='rowid'
+                );
+                """
+            )
+            await self.conn.executescript(
+                """
+                CREATE TRIGGER IF NOT EXISTS lenses_ai AFTER INSERT ON lenses BEGIN
+                    INSERT INTO lenses_fts(rowid, name, criterion, page)
+                    VALUES (new.rowid, new.name, new.criterion, new.page);
+                END;
+                CREATE TRIGGER IF NOT EXISTS lenses_ad AFTER DELETE ON lenses BEGIN
+                    INSERT INTO lenses_fts(lenses_fts, rowid, name, criterion, page)
+                    VALUES ('delete', old.rowid, old.name, old.criterion, old.page);
+                END;
+                CREATE TRIGGER IF NOT EXISTS lenses_au AFTER UPDATE ON lenses BEGIN
+                    INSERT INTO lenses_fts(lenses_fts, rowid, name, criterion, page)
+                    VALUES ('delete', old.rowid, old.name, old.criterion, old.page);
+                    INSERT INTO lenses_fts(rowid, name, criterion, page)
+                    VALUES (new.rowid, new.name, new.criterion, new.page);
                 END;
                 """
             )
@@ -173,8 +241,8 @@ class MemoryStore:
     def _row_to_item(self, row: aiosqlite.Row) -> MemoryItem:
         return MemoryItem(
             id=row["id"],
-            kind=Kind(row["kind"]),
             content=row["content"],
+            canonical_subject=row["canonical_subject"],
             scope=Scope(kind=ScopeKind(row["scope_kind"]), key=row["scope_key"]),
             provenance=Provenance(row["provenance"]),
             status=Status(row["status"]),
@@ -184,14 +252,6 @@ class MemoryStore:
             corroboration=row["corroboration"],
             last_relevant_at=row["last_relevant_at"],
             feedback=Feedback(row["feedback"]),
-            lens_name=row["lens_name"],
-            lens_criterion=row["lens_criterion"],
-            lens_kind=row["lens_kind"],
-            lens_page=row["lens_page"],
-            lens_detail_level=(
-                LensDetailLevel(row["lens_detail_level"]) if row["lens_detail_level"] else None
-            ),
-            lens_exclusive=bool(row["lens_exclusive"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -205,15 +265,29 @@ class MemoryStore:
             created_at=row["created_at"],
         )
 
-    # --- writes ---
+    def _row_to_lens(self, row: aiosqlite.Row) -> LensRow:
+        return LensRow(
+            id=row["id"],
+            name=row["name"],
+            criterion=row["criterion"],
+            scope=Scope(kind=ScopeKind(row["scope_kind"]), key=row["scope_key"]),
+            detail_level=LensDetailLevel(row["detail_level"]),
+            provenance=LensProvenance(row["provenance"]),
+            status=LensStatus(row["status"]),
+            page=row["page"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    # --- claim writes ---
 
     async def create_item(self, item: MemoryItem, *, commit: bool = True) -> MemoryItem:
         await self.conn.execute(
             SQL_INSERT,
             (
                 item.id,
-                str(item.kind),
                 item.content,
+                item.canonical_subject,
                 str(item.scope.kind),
                 item.scope.key,
                 str(item.provenance),
@@ -224,12 +298,6 @@ class MemoryStore:
                 item.corroboration,
                 item.last_relevant_at,
                 str(item.feedback),
-                item.lens_name,
-                item.lens_criterion,
-                item.lens_kind,
-                item.lens_page,
-                str(item.lens_detail_level) if item.lens_detail_level else None,
-                1 if item.lens_exclusive else 0,
                 item.created_at,
                 item.updated_at,
             ),
@@ -286,7 +354,7 @@ class MemoryStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    # --- reads ---
+    # --- claim reads ---
 
     async def get(self, item_id: str) -> MemoryItem | None:
         rows = await self.conn.execute_fetchall(SQL_GET, (item_id,))
@@ -295,23 +363,21 @@ class MemoryStore:
     async def query(
         self,
         *,
-        kind: Kind | None = None,
         scope: Scope | None = None,
         status: Status | None = Status.ACTIVE,
+        subject: str | None = None,
         valid_at: str | None = None,
         limit: int = 100,
     ) -> list[MemoryItem]:
-        """Query items by kind, scope, status, and an optional validity instant.
+        """Query claims by scope, status, optional subject, and validity instant.
 
+        `subject`: exact `canonical_subject` match (coreference grouping).
         `valid_at` (ISO-8601): keep items whose validity window contains it
         (valid_from <= valid_at and (invalid_at is null or invalid_at > valid_at)).
         `status=None` returns all statuses.
         """
         clauses: list[str] = []
         params: list = []
-        if kind is not None:
-            clauses.append("kind = ?")
-            params.append(str(kind))
         if scope is not None:
             clauses.append("scope_kind = ?")
             params.append(str(scope.kind))
@@ -323,6 +389,9 @@ class MemoryStore:
         if status is not None:
             clauses.append("status = ?")
             params.append(str(status))
+        if subject is not None:
+            clauses.append("canonical_subject = ?")
+            params.append(subject)
         if valid_at is not None:
             clauses.append("(valid_from IS NULL OR valid_from <= ?)")
             params.append(valid_at)
@@ -338,10 +407,10 @@ class MemoryStore:
     async def list_edges(
         self, item_id: str, *, direction: str = "from", role: EdgeRole | None = None
     ) -> list[MemoryEdge]:
-        """List edges touching an item.
+        """List claim->claim edges touching an item.
 
         direction='from': edges where item is the child (its parents/provenance).
-        direction='to': edges where item is the parent (its dependents/members).
+        direction='to': edges where item is the parent (its dependents).
         """
         sql = SQL_EDGES_FROM if direction == "from" else SQL_EDGES_TO
         rows = await self.conn.execute_fetchall(sql, (item_id,))
@@ -353,7 +422,7 @@ class MemoryStore:
     async def search(
         self, query: str, *, limit: int = 20, include_inactive: bool = False
     ) -> list[MemoryItem]:
-        """FTS5 search over claim content and lens text.
+        """FTS5 search over claim content and canonical_subject.
 
         Active-only by default — superseded/archived rows are indexed by FTS but
         excluded here so invalidated items never surface as live. Pass
@@ -377,3 +446,142 @@ class MemoryStore:
         """
         rows = await self.conn.execute_fetchall(sql, (match, limit))
         return [self._row_to_item(r) for r in rows]
+
+    # --- lens registry (views over claims; never memory) ---
+
+    async def create_lens_row(self, lens: LensRow, *, commit: bool = True) -> LensRow:
+        await self.conn.execute(
+            SQL_INSERT_LENS,
+            (
+                lens.id,
+                lens.name,
+                lens.criterion,
+                str(lens.scope.kind),
+                lens.scope.key,
+                str(lens.detail_level),
+                str(lens.provenance),
+                str(lens.status),
+                lens.page,
+                lens.created_at,
+                lens.updated_at,
+            ),
+        )
+        if commit:
+            await self.conn.commit()
+        return lens
+
+    async def get_lens(self, lens_id: str) -> LensRow | None:
+        rows = await self.conn.execute_fetchall(SQL_GET_LENS, (lens_id,))
+        return self._row_to_lens(rows[0]) if rows else None
+
+    async def update_lens(self, lens_id: str, **fields) -> LensRow | None:
+        """In-place registry UPDATE. A lens is not a memory participant: it has no
+        provenance DAG, so edits are plain UPDATEs (no supersede chain).
+
+        Accepts: name, criterion, detail_level, provenance, status, page.
+        """
+        allowed = {"name", "criterion", "detail_level", "provenance", "status", "page"}
+        sets: list[str] = []
+        params: list = []
+        for key, value in fields.items():
+            if key not in allowed:
+                raise ValueError(f"update_lens: unknown field {key!r}")
+            sets.append(f"{key} = ?")
+            params.append(str(value) if isinstance(value, LensProvenance | LensDetailLevel | LensStatus) else value)
+        if not sets:
+            return await self.get_lens(lens_id)
+        sets.append("updated_at = ?")
+        params.append(now_iso())
+        params.append(lens_id)
+        await self.conn.execute(f"UPDATE lenses SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        await self.conn.commit()
+        return await self.get_lens(lens_id)
+
+    async def list_lenses(
+        self, *, scope: Scope | None = None, status: LensStatus | None = LensStatus.ACTIVE
+    ) -> list[LensRow]:
+        clauses: list[str] = []
+        params: list = []
+        if scope is not None:
+            clauses.append("scope_kind = ?")
+            params.append(str(scope.kind))
+            if scope.key is None:
+                clauses.append("scope_key IS NULL")
+            else:
+                clauses.append("scope_key = ?")
+                params.append(scope.key)
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(str(status))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"SELECT {_LENS_COLUMNS} FROM lenses {where} ORDER BY created_at DESC"
+        rows = await self.conn.execute_fetchall(sql, tuple(params))
+        return [self._row_to_lens(r) for r in rows]
+
+    async def delete_lens(self, lens_id: str) -> bool:
+        """Hard-delete a lens row + its membership cache. A lens owns no data, so
+        deleting it touches zero claims and zero edges."""
+        cursor = await self.conn.execute(SQL_DELETE_LENS, (lens_id,))
+        await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def search_lenses(self, query: str, *, limit: int = 20) -> list[LensRow]:
+        """FTS5 search over lens name/criterion/page (registry-name recall)."""
+        if not self._has_fts:
+            return []
+        terms = [t for t in query.split() if t]
+        if not terms:
+            return []
+        match = " OR ".join(DQ + t.replace(DQ, DQ + DQ) + DQ for t in terms)
+        sql = f"""
+            SELECT {','.join('l.' + c for c in _LENS_COLUMNS.split(', '))}
+            FROM lenses_fts f
+            JOIN lenses l ON l.rowid = f.rowid
+            WHERE lenses_fts MATCH ? AND l.status = 'active'
+            ORDER BY f.rank
+            LIMIT ?
+        """
+        rows = await self.conn.execute_fetchall(sql, (match, limit))
+        return [self._row_to_lens(r) for r in rows]
+
+    # --- membership cache (a cache, not graph truth) ---
+
+    async def put_membership(
+        self, verdicts: list[MembershipVerdict], *, commit: bool = True
+    ) -> None:
+        for v in verdicts:
+            await self.conn.execute(
+                SQL_UPSERT_MEMBERSHIP,
+                (v.lens_id, v.claim_id, str(v.decision), v.rationale, v.scored_at),
+            )
+        if commit:
+            await self.conn.commit()
+
+    async def get_membership(
+        self, lens_id: str, *, decision: MembershipDecision | None = None
+    ) -> list[MembershipVerdict]:
+        clauses = ["lens_id = ?"]
+        params: list = [lens_id]
+        if decision is not None:
+            clauses.append("decision = ?")
+            params.append(str(decision))
+        sql = (
+            "SELECT lens_id, claim_id, decision, rationale, scored_at FROM lens_membership_cache "
+            f"WHERE {' AND '.join(clauses)}"
+        )
+        rows = await self.conn.execute_fetchall(sql, tuple(params))
+        return [
+            MembershipVerdict(
+                lens_id=r["lens_id"],
+                claim_id=r["claim_id"],
+                decision=MembershipDecision(r["decision"]),
+                rationale=r["rationale"],
+                scored_at=r["scored_at"],
+            )
+            for r in rows
+        ]
+
+    async def invalidate_lens_membership(self, lens_id: str) -> None:
+        await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
+        await self.conn.commit()

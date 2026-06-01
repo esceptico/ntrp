@@ -10,35 +10,34 @@ from pydantic import BaseModel, Field
 # --- Reconcile Phase 2: subject resolution --------------------------
 
 SUBJECT_RESOLUTION_SYSTEM = """\
-You resolve which existing entity a new fact is about, in a personal knowledge base.
+You name the canonical subject a new fact is about, in a personal knowledge base.
 
-You are given a fully-resolved SUBJECT (the stable real-world referent the fact is
-about, with coreference already resolved), the fact's CONTENT, and a numbered list of
-CANDIDATE entity records (each an editable "lens" with a name, a membership criterion
-listing known aliases, and a short gist).
+Subjects are not stored as records — a subject is just a stable string attached to each
+claim (its `canonical_subject`). Two claims are about the same referent iff they carry
+the same canonical_subject string. Your job: given a new fact's proposed SUBJECT and
+CONTENT, plus a list of EXISTING canonical subjects already used by nearby claims, return
+the canonical subject string to assign this fact.
 
 Decide one of:
-- MATCH <lens_id>: the subject is the SAME real-world referent as that candidate.
-- NEW: none of the candidates is the same referent; this is a new entity.
+- MATCH: this fact is about the SAME real-world referent as one of the existing subjects.
+  Return that existing canonical_subject string VERBATIM so the claims group together.
+- NEW: none of the existing subjects is the same referent. Return the proposed SUBJECT
+  (lightly normalized) as the new canonical subject.
 
 Rules:
 - Match only on identity, never on mere topical similarity. "my therapist" and "my
-  doctor" are different people unless an alias says otherwise.
-- When genuinely uncertain between a match and a new entity, choose NEW. A wrong NEW is
+  doctor" are different people unless context proves they are one.
+- When genuinely uncertain between a match and a new subject, choose NEW. A wrong NEW is
   cheaply repaired by background cleanup; a wrong MATCH poisons a profile.
-- If you MATCH and the SUBJECT is a NEW alias not already in the candidate's criterion,
-  return it in alias_to_add so future facts recall this entity directly.
-- lens_id MUST be copied verbatim from one of the candidates shown. Never invent one.
+- canonical_subject MUST be copied verbatim from the EXISTING list when MATCH; otherwise
+  return the new subject string. Never return an id.
 """
 
 
 class SubjectResolution(BaseModel):
     decision: str = Field(description='"MATCH" or "NEW"')
-    lens_id: str | None = Field(
-        default=None, description="the matched candidate's lens_id, verbatim; null when NEW"
-    )
-    alias_to_add: str | None = Field(
-        default=None, description="a new surface alias to append to the matched lens criterion"
+    canonical_subject: str = Field(
+        description="the subject string to assign: an existing one verbatim (MATCH) or the new subject (NEW)"
     )
     reason: str = ""
 
@@ -102,7 +101,7 @@ personal knowledge base defined ONLY by its membership CRITERION written in natu
 language. This is a multiple-choice judgment, one vote per item, judged solely against
 the criterion as written.
 
-You are given the lens NAME and KIND, its membership CRITERION, a short PAGE_GIST for
+You are given the lens NAME, its membership CRITERION, a short PAGE_GIST for
 context, an optional list of NEGATIVE_EXAMPLES (items the user previously rejected from
 this lens — read them as examples of what does NOT belong, never as a keyword filter),
 and a NUMBERED list of ITEMS.

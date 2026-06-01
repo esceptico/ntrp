@@ -1,23 +1,25 @@
-"""Reconcile — resolve subject, then ADD/UPDATE/NOOP/CONTRADICT (CONTRACTS §7).
+"""Reconcile — resolve a claim's subject, then ADD/UPDATE/NOOP/CONTRADICT.
 
-The ONLY claim writer in the pipeline. Four phases per call:
+The ONLY claim writer in the pipeline. Subject coreference is a claim ATTRIBUTE
+(`canonical_subject`), not an entity row. Four phases per call:
 
-  1. Subject candidate recall (no LLM): embedding + alias/name-FTS + content-FTS
-     over the extractor's LLM-emitted canonical_subject (+ surfaces), RRF-merged,
-     scope-intersected to entity lenses. Signals only — they order candidates,
-     they never gate.
-  2. Subject identity (LLM judge): 0 candidates -> NEW (categorical empty set,
-     no call); >=1 candidate -> exactly one cheap MATCH/NEW judge call (no margin
-     shortcut). Group claims by resolved subject.
-  3. Profile recall (no LLM): the subject's active MEMBER_OF claims.
+  1. Subject candidate recall (no LLM): embedding + FTS over existing claims'
+     canonical_subject + content, RRF-merged, scope-filtered. Signals only — they
+     order candidate claims, they never gate.
+  2. Subject identity (LLM judge): 0 candidates -> keep the extractor's subject
+     (NEW); >=1 candidate -> one cheap MATCH/NEW judge that returns the canonical
+     subject STRING to assign (reuse an existing one verbatim, or keep NEW). Group
+     the batch by resolved canonical_subject string. There is NO row to mint.
+  3. Profile recall (no LLM): the subject's existing active claims
+     (store.query(subject=...)), capped/topic-sliced.
   4. Batch reconcile (LLM, one cheap call per subject): per-claim
      ADD/UPDATE/NOOP/CONTRADICT, with strong-model escalation on contested or
      high-trust targets.
 
 Identity is decided by the LLM judge, never by a lexical rule, a pronoun list, a
-proper-noun regex, or a cosine threshold (the ABSOLUTE BAN). The store is frozen;
-this module lives entirely above its public API. NOOP does NOT touch
-last_relevant_at (no setter exists — CONTRACTS §11).
+proper-noun regex, or a cosine threshold (the ABSOLUTE BAN). No lens rows, no
+member_of edges are ever written here. The store is frozen; this module lives
+entirely above its public API.
 """
 
 import uuid
@@ -29,7 +31,6 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    Kind,
     MemoryEdge,
     MemoryItem,
     Provenance,
@@ -50,7 +51,7 @@ from ntrp.search.retrieval import rrf_merge
 
 _logger = get_logger(__name__)
 
-# Routing signals (CONTRACTS §2: signals route, they never gate an outcome).
+# Routing signals (signals route, they never gate an outcome).
 SUBJECT_RECALL_K = 8
 PROFILE_MEMBER_CAP = 30
 
@@ -59,7 +60,6 @@ _PROVENANCE_ORD = {
     Provenance.RECORDED: 2,
     Provenance.INFERRED: 1,
     Provenance.EXTERNAL: 0,
-    Provenance.INDUCED: 0,
 }
 
 
@@ -72,8 +72,7 @@ def _parse[T](response, model: type[T]) -> T:
 
 def _salient_tokens(text: str, limit: int = 12) -> str:
     """Length-based FTS slice — drop short tokens, cap count. Orders the FTS query;
-    it carries no meaning rule (CONTRACTS §0.2-legal: a length floor that routes,
-    never a word/keyword set that decides)."""
+    it carries no meaning rule (a length floor that routes, never a keyword set)."""
     toks = [t for t in text.split() if len(t) > 2]
     return " ".join(toks[:limit])
 
@@ -108,90 +107,78 @@ class Reconciler:
 
         results: list[ReconcileResult | None] = [None] * len(candidates)
 
-        # Phase 1+2: resolve each claim's subject, then group by resolved lens.
+        # Phase 1+2: resolve each claim's canonical subject, then group by subject.
         groups: dict[str, list[int]] = {}
         for i, cand in enumerate(candidates):
-            lens, created = await self._resolve_subject(cand, scope, prior_candidates)
+            subject, is_new = await self._resolve_subject(cand, scope, prior_candidates)
             results[i] = ReconcileResult(
                 claim_index=i,
                 op=Op.ADD,  # provisional; overwritten in Phase 4
-                subject_lens_id=lens.id,
-                subject_created=created,
+                canonical_subject=subject,
+                subject_is_new=is_new,
             )
-            groups.setdefault(lens.id, []).append(i)
+            groups.setdefault(subject, []).append(i)
 
         # Phase 3+4: per resolved subject, recall profile and batch-reconcile.
-        for lens_id, idxs in groups.items():
-            subject = await self.store.get(lens_id)
-            if subject is None:  # mint failed / hallucinated id guard
-                _logger.warning("reconcile: subject lens %s missing; ADDing claims", lens_id)
-            await self._reconcile_group(
-                lens_id, subject, idxs, candidates, results, scope
-            )
+        for subject, idxs in groups.items():
+            await self._reconcile_group(subject, idxs, candidates, results, scope)
 
         return [r for r in results if r is not None]
 
-    # --- Phase 1 + 2 -------------------------------------------------
+    # --- Phase 1 + 2: subject coreference (a claim attribute) --------
 
     async def _resolve_subject(
         self,
         cand: ClaimCandidate,
         scope: Scope,
         prior_candidates: list[MemoryItem] | None,
-    ) -> tuple[MemoryItem, bool]:
-        """Return (entity_lens, created). Recall by embedding+FTS, judge by LLM.
+    ) -> tuple[str, bool]:
+        """Return (canonical_subject, is_new). Recall claims that might share the
+        subject, judge by LLM which existing subject (if any) is the same referent.
 
         The only categorical branch is the empty recalled set (0 candidates ->
-        NEW). Every non-empty set goes to the LLM judge — no cosine shortcut, no
-        lexical rule decides identity. Bias-to-NEW under doubt lives in the judge.
+        keep the extractor's subject as NEW). Every non-empty set goes to the LLM
+        judge — no cosine shortcut, no lexical rule decides identity.
         """
-        recalled = await self._recall_subjects(cand, scope, prior_candidates)
+        recalled = await self._recall_subject_claims(cand, scope, prior_candidates)
         if not recalled:
-            return await self._mint_subject(cand.canonical_subject, scope), True
-        return await self._resolve_subject_llm(cand, scope, [r[0] for r in recalled])
+            return cand.canonical_subject, True
+        return await self._resolve_subject_llm(cand, recalled)
 
-    async def _recall_subjects(
+    async def _recall_subject_claims(
         self,
         cand: ClaimCandidate,
         scope: Scope,
         prior_candidates: list[MemoryItem] | None,
-    ) -> list[tuple[MemoryItem, float]]:
-        """Union the recall channels, RRF-merge, scope+kind filter to entity lenses.
+    ) -> list[MemoryItem]:
+        """Recall existing active claims that might share the subject.
 
-        Three signal-only channels over the LLM-emitted canonical_subject (+ its
-        observed surfaces) and the claim content: alias/name FTS, embedding cosine,
-        content FTS. Returns [(lens, embedding_cosine)] ordered by RRF; the cosine
-        is a ranking signal that orders candidates into the judge — it NEVER gates.
+        Channels over the LLM-emitted canonical_subject (+ surfaces) and content:
+        subject/content FTS + embedding cosine, RRF-merged, scope-filtered. Returns
+        one representative claim per distinct existing canonical_subject (the judge
+        decides on subject strings, not individual claims).
         """
-        scoped_lenses = await self.store.query(
-            kind=Kind.LENS, scope=scope, status=Status.ACTIVE, limit=200
-        )
-        scoped = {le.id: le for le in scoped_lenses if le.lens_kind == "entity"}
-        # Seed from Admit's prior_candidates that happen to be entity lenses in scope.
+        scoped = await self.store.query(scope=scope, status=Status.ACTIVE, limit=500)
         for it in prior_candidates or []:
-            if it.kind is Kind.LENS and it.lens_kind == "entity" and it.id in scoped:
-                scoped.setdefault(it.id, it)
+            if it.status is Status.ACTIVE and it.id not in {s.id for s in scoped}:
+                scoped.append(it)
         if not scoped:
             return []
 
-        id_list = list(scoped)
+        by_id = {it.id: it for it in scoped}
+        id_list = list(by_id)
         id_index = {iid: n for n, iid in enumerate(id_list)}
-
         rankings: list[list[tuple[int, float]]] = []
 
-        # Channel 1: alias/name FTS keyed on the canonical subject + every observed
-        # surface (the accrued lens_criterion alias text IS the alias index).
         subject_query = " ".join([cand.canonical_subject, *cand.subject_surfaces]).strip()
         if subject_query:
             hits = await self.store.search(subject_query, limit=SUBJECT_RECALL_K * 2)
-            rankings.append(self._rank(hits, scoped, id_index))
+            rankings.append(self._rank(hits, by_id, id_index))
 
-        # Channel 3: content-FTS.
         hits = await self.store.search(_salient_tokens(cand.content), limit=SUBJECT_RECALL_K * 2)
-        rankings.append(self._rank(hits, scoped, id_index))
+        rankings.append(self._rank(hits, by_id, id_index))
 
-        # Channel 2: embedding cosine over lens name/page (ranking signal only).
-        margins = await self._embedding_margins(cand, scoped)
+        margins = await self._embedding_margins(cand, by_id)
         if margins:
             emb_ranking = sorted(margins.items(), key=lambda kv: kv[1], reverse=True)
             rankings.append([(id_index[iid], s) for iid, s in emb_ranking])
@@ -200,57 +187,58 @@ class Reconciler:
             return []
 
         fused = rrf_merge(rankings, k=RRF_K)
-        ordered = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:SUBJECT_RECALL_K]
-        out: list[tuple[MemoryItem, float]] = []
+        ordered = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)
+        # One representative per distinct existing subject, capped.
+        seen_subjects: set[str] = set()
+        out: list[MemoryItem] = []
         for idx, _ in ordered:
-            iid = id_list[idx]
-            out.append((scoped[iid], margins.get(iid, 0.0)))
+            claim = by_id[id_list[idx]]
+            if claim.canonical_subject in seen_subjects:
+                continue
+            seen_subjects.add(claim.canonical_subject)
+            out.append(claim)
+            if len(out) >= SUBJECT_RECALL_K:
+                break
         return out
 
     def _rank(
-        self, hits: list[MemoryItem], scoped: dict[str, MemoryItem], id_index: dict[str, int]
+        self, hits: list[MemoryItem], by_id: dict[str, MemoryItem], id_index: dict[str, int]
     ) -> list[tuple[int, float]]:
-        """Project FTS hits to scoped-lens indices, preserving FTS order."""
         ranked: list[tuple[int, float]] = []
         for rank, h in enumerate(hits):
-            if h.id in scoped:
+            if h.id in by_id:
                 ranked.append((id_index[h.id], 1.0 / (rank + 1)))
         return ranked
 
     async def _embedding_margins(
-        self, cand: ClaimCandidate, scoped: dict[str, MemoryItem]
+        self, cand: ClaimCandidate, by_id: dict[str, MemoryItem]
     ) -> dict[str, float]:
         query = f"{cand.canonical_subject} {cand.content}".strip()
-        lens_texts = [
-            f"{le.lens_name or ''} {le.lens_page or le.lens_criterion or ''}".strip()
-            for le in scoped.values()
-        ]
-        if not lens_texts:
+        texts = [f"{it.canonical_subject} {it.content}".strip() for it in by_id.values()]
+        if not texts:
             return {}
         try:
             q = await self.embed.embed_one(query)
-            mat = await self.embed.embed(lens_texts)
+            mat = await self.embed.embed(texts)
         except Exception as e:
             _logger.warning("reconcile: embedding recall failed: %s", e)
             return {}
         sims = (mat @ q).tolist()  # both L2-normalized -> cosine
-        return {le.id: float(s) for le, s in zip(scoped.values(), sims)}
+        return {it.id: float(s) for it, s in zip(by_id.values(), sims)}
 
     async def _resolve_subject_llm(
-        self, cand: ClaimCandidate, scope: Scope, cands: list[MemoryItem]
-    ) -> tuple[MemoryItem, bool]:
+        self, cand: ClaimCandidate, candidates: list[MemoryItem]
+    ) -> tuple[str, bool]:
         cards = "\n".join(
-            f"- lens_id={le.id} name={le.lens_name!r} "
-            f"criterion={(le.lens_criterion or '')!r} "
-            f"gist={(le.lens_page or '')[:200]!r}"
-            for le in cands
+            f"- subject={c.canonical_subject!r} example_claim={c.content[:160]!r}"
+            for c in candidates
         )
         surfaces = ", ".join(cand.subject_surfaces) if cand.subject_surfaces else ""
         user = (
-            f"SUBJECT: {cand.canonical_subject!r}\n"
+            f"NEW SUBJECT: {cand.canonical_subject!r}\n"
             f"SURFACES: {surfaces!r}\n"
-            f"CONTENT: {cand.content!r}\n\n"
-            f"CANDIDATES:\n{cards}"
+            f"NEW CONTENT: {cand.content!r}\n\n"
+            f"EXISTING SUBJECTS:\n{cards}"
         )
         resp = await self.cheap_llm.completion(
             messages=[
@@ -262,67 +250,23 @@ class Reconciler:
             temperature=0.0,
         )
         decision = _parse(resp, SubjectResolution)
-        valid = {le.id: le for le in cands}
-        if decision.decision.upper() == "MATCH" and decision.lens_id in valid:
-            matched = valid[decision.lens_id]
-            if decision.alias_to_add:
-                await self._append_alias(matched, decision.alias_to_add)
-            return matched, False
-        # NEW, or a hallucinated lens_id -> bias to NEW (self-correcting; repairable by lint).
-        return await self._mint_subject(cand.canonical_subject, scope), True
-
-    async def _mint_subject(self, subject: str, scope: Scope) -> MemoryItem:
-        lens = MemoryItem(
-            id=uuid.uuid4().hex,
-            kind=Kind.LENS,
-            content=subject,
-            scope=scope,
-            provenance=Provenance.INDUCED,
-            lens_kind="entity",
-            lens_name=subject,
-            lens_criterion=f"this item is about {subject}",
-            lens_exclusive=True,
-        )
-        return await self.store.create_item(lens)
-
-    async def _append_alias(self, lens: MemoryItem, alias: str) -> None:
-        existing = lens.lens_criterion or ""
-        if alias.lower() in existing.lower():
-            return
-        merged = MemoryItem(
-            id=uuid.uuid4().hex,
-            kind=Kind.LENS,
-            content=lens.content,
-            scope=lens.scope,
-            provenance=lens.provenance,
-            valid_from=lens.valid_from,
-            source_refs=lens.source_refs,
-            corroboration=lens.corroboration,
-            feedback=lens.feedback,
-            lens_name=lens.lens_name,
-            lens_criterion=f"{existing}; also known as {alias}".strip("; "),
-            lens_kind=lens.lens_kind,
-            lens_page=lens.lens_page,
-            lens_detail_level=lens.lens_detail_level,
-            lens_exclusive=lens.lens_exclusive,
-        )
-        await self.store.supersede(old_id=lens.id, new_item=merged)
+        known = {c.canonical_subject for c in candidates}
+        if decision.decision.upper() == "MATCH" and decision.canonical_subject in known:
+            return decision.canonical_subject, False
+        # NEW, or a hallucinated subject -> keep the extractor's (self-correcting).
+        return cand.canonical_subject, True
 
     # --- Phase 3 + 4 -------------------------------------------------
 
     async def _reconcile_group(
         self,
-        lens_id: str,
-        subject: MemoryItem | None,
+        subject: str,
         idxs: list[int],
         candidates: list[ClaimCandidate],
         results: list[ReconcileResult | None],
         scope: Scope,
     ) -> None:
-        # Phase 3: profile recall — the subject's active MEMBER_OF claims.
-        profile = await self._recall_profile(lens_id, idxs, candidates)
-
-        # Phase 4: one batch call per subject.
+        profile = await self._recall_profile(subject, idxs, candidates, scope)
         rows, escalated = await self._batch_reconcile(subject, profile, idxs, candidates)
 
         for row in rows:
@@ -336,20 +280,16 @@ class Reconciler:
             assert res is not None
             res.escalated = local in escalated
             target = self._resolve_target(row, profile)
-            await self._apply(row, cand, lens_id, target, res)
+            await self._apply(row, cand, subject, target, res)
 
     async def _recall_profile(
-        self, lens_id: str, idxs: list[int], candidates: list[ClaimCandidate]
+        self, subject: str, idxs: list[int], candidates: list[ClaimCandidate], scope: Scope
     ) -> list[MemoryItem]:
-        edges = await self.store.list_edges(lens_id, direction="to", role=EdgeRole.MEMBER_OF)
-        members: list[MemoryItem] = []
-        for e in edges:
-            m = await self.store.get(e.child_id)
-            if m is not None and m.status is Status.ACTIVE and m.kind is Kind.CLAIM:
-                members.append(m)
+        members = await self.store.query(
+            scope=scope, status=Status.ACTIVE, subject=subject, limit=PROFILE_MEMBER_CAP * 4
+        )
         if len(members) <= PROFILE_MEMBER_CAP:
             return members
-        # Large-subject guard: topic-slice members by relevance to this group's claims.
         return await self._topic_slice(members, idxs, candidates)
 
     async def _topic_slice(
@@ -368,16 +308,14 @@ class Reconciler:
 
     async def _batch_reconcile(
         self,
-        subject: MemoryItem | None,
+        subject: str,
         profile: list[MemoryItem],
         idxs: list[int],
         candidates: list[ClaimCandidate],
     ) -> tuple[list[ReconcileRow], set[int]]:
         if not profile:
-            # No existing claims -> every new claim is an ADD; no LLM needed.
             return [ReconcileRow(claim_index=i, op="add") for i in range(len(idxs))], set()
 
-        page = (subject.lens_page or subject.lens_criterion or "") if subject else ""
         profile_lines = "\n".join(
             f"[{n}] {m.content!r} prov={m.provenance} corrob={m.corroboration} "
             f"feedback={m.feedback} valid_from={m.valid_from}"
@@ -388,7 +326,7 @@ class Reconciler:
             for n, gi in enumerate(idxs)
         )
         user = (
-            f"SUBJECT PROFILE: {page[:600]!r}\n\n"
+            f"SUBJECT: {subject!r}\n\n"
             f"EXISTING CLAIMS:\n{profile_lines}\n\n"
             f"NEW FACTS:\n{new_lines}"
         )
@@ -404,7 +342,6 @@ class Reconciler:
         parsed = _parse(resp, BatchReconcile)
         rows = self._validate_rows(parsed.rows, len(idxs), len(profile))
 
-        # Escalate contested / high-trust-target rows to the strong model.
         escalated_idxs: set[int] = set()
         for row in rows:
             if self._needs_escalation(row, profile):
@@ -436,7 +373,6 @@ class Reconciler:
                     row.op = "add"
                     row.target_idx = None
             out.append(row)
-        # Any new claim the model skipped defaults to ADD.
         for i in range(n_new):
             if i not in seen:
                 out.append(ReconcileRow(claim_index=i, op="add"))
@@ -455,7 +391,7 @@ class Reconciler:
 
     async def _escalate(
         self,
-        subject: MemoryItem | None,
+        subject: str,
         profile: list[MemoryItem],
         idxs: list[int],
         candidates: list[ClaimCandidate],
@@ -468,6 +404,7 @@ class Reconciler:
         target_corrob = target.corroboration if target else None
         user = (
             f"Re-judge ONE reconciliation decision carefully.\n"
+            f"SUBJECT: {subject!r}\n"
             f"NEW FACT: {candidates[gi].content!r} (prov={candidates[gi].provenance})\n"
             f"TARGET EXISTING CLAIM: {target_content} "
             f"(prov={target_prov}, corrob={target_corrob})\n"
@@ -509,12 +446,11 @@ class Reconciler:
         self,
         row: ReconcileRow,
         cand: ClaimCandidate,
-        lens_id: str,
+        subject: str,
         target: MemoryItem | None,
         res: ReconcileResult,
     ) -> None:
         op = row.op
-        # Provenance guard: a user-authored fact never NOOPs against a weaker claim.
         if (
             op == "noop"
             and target is not None
@@ -523,33 +459,30 @@ class Reconciler:
             op = "update"
 
         if op == "add" or target is None:
-            await self._do_add(cand, lens_id, res)
+            await self._do_add(cand, subject, res)
         elif op == "update":
-            await self._do_update(row, cand, lens_id, target, res)
+            await self._do_update(row, cand, subject, target, res)
         elif op == "contradict":
-            await self._do_contradict(row, cand, lens_id, target, res)
+            await self._do_contradict(row, cand, subject, target, res)
         elif op == "noop":
             await self._do_noop(cand, target, res)
         else:
-            await self._do_add(cand, lens_id, res)
+            await self._do_add(cand, subject, res)
 
-    def _new_claim(self, content: str, cand: ClaimCandidate) -> MemoryItem:
+    def _new_claim(self, content: str, subject: str, cand: ClaimCandidate) -> MemoryItem:
         return MemoryItem(
             id=uuid.uuid4().hex,
-            kind=Kind.CLAIM,
             content=content,
+            canonical_subject=subject,
             scope=cand.scope,
             provenance=cand.provenance,
             valid_from=now_iso(),
             source_refs=list(cand.source_refs),
         )
 
-    async def _do_add(self, cand: ClaimCandidate, lens_id: str, res: ReconcileResult) -> None:
-        claim = self._new_claim(cand.content, cand)
+    async def _do_add(self, cand: ClaimCandidate, subject: str, res: ReconcileResult) -> None:
+        claim = self._new_claim(cand.content, subject, cand)
         await self.store.create_item(claim)
-        await self.store.add_edge(
-            MemoryEdge(child_id=claim.id, parent_id=lens_id, role=EdgeRole.MEMBER_OF)
-        )
         res.op = Op.ADD
         res.written_id = claim.id
 
@@ -557,17 +490,13 @@ class Reconciler:
         self,
         row: ReconcileRow,
         cand: ClaimCandidate,
-        lens_id: str,
+        subject: str,
         target: MemoryItem,
         res: ReconcileResult,
     ) -> None:
-        successor = self._new_claim(row.merged_text or cand.content, cand)
-        # Successor unions the predecessor's evidence so re-grounding stays possible.
+        successor = self._new_claim(row.merged_text or cand.content, subject, cand)
         successor.source_refs = self._union_refs(target.source_refs, cand.source_refs)
         await self.store.supersede(old_id=target.id, new_item=successor)
-        await self.store.add_edge(
-            MemoryEdge(child_id=successor.id, parent_id=lens_id, role=EdgeRole.MEMBER_OF)
-        )
         res.op = Op.UPDATE
         res.written_id = successor.id
         res.target_claim_id = target.id
@@ -576,18 +505,15 @@ class Reconciler:
         self,
         row: ReconcileRow,
         cand: ClaimCandidate,
-        lens_id: str,
+        subject: str,
         target: MemoryItem,
         res: ReconcileResult,
     ) -> None:
-        successor = self._new_claim(row.merged_text or cand.content, cand)
+        successor = self._new_claim(row.merged_text or cand.content, subject, cand)
         successor.source_refs = list(cand.source_refs)
         await self.store.supersede(old_id=target.id, new_item=successor)
         await self.store.add_edge(
             MemoryEdge(child_id=successor.id, parent_id=target.id, role=EdgeRole.CONTRADICTS)
-        )
-        await self.store.add_edge(
-            MemoryEdge(child_id=successor.id, parent_id=lens_id, role=EdgeRole.MEMBER_OF)
         )
         res.op = Op.CONTRADICT
         res.written_id = successor.id
@@ -597,7 +523,6 @@ class Reconciler:
         self, cand: ClaimCandidate, target: MemoryItem, res: ReconcileResult
     ) -> None:
         await self.store.bump_corroboration(target.id)
-        # User assertion confirming an inferred claim stamps CONFIRMED.
         if (
             cand.provenance is Provenance.USER_AUTHORED
             and target.provenance is Provenance.INFERRED
@@ -605,7 +530,6 @@ class Reconciler:
             await self.store.set_feedback(target.id, Feedback.CONFIRMED)
         res.op = Op.NOOP
         res.target_claim_id = target.id
-        # NOTE: cannot freshen last_relevant_at — no store setter (CONTRACTS §11).
 
     @staticmethod
     def _union_refs(a, b):

@@ -19,7 +19,7 @@ import pytest_asyncio
 
 from ntrp.agent.types.llm import Choice, CompletionResponse, FinishReason, Message, Role
 from ntrp.agent.types.usage import Usage
-from ntrp.memory.models import Kind, Provenance, Scope, ScopeKind, SourceRef, Status
+from ntrp.memory.models import Provenance, Scope, ScopeKind, SourceRef, Status
 from ntrp.memory.pipeline.prompts import AdmitDecision
 from ntrp.memory.pipeline.prompts_extract import ExtractedClaim, ExtractOutput
 from ntrp.memory.pipeline.prompts_reconcile import (
@@ -49,7 +49,7 @@ class StubLLM:
     """Routes by response_format; returns scripted structured outputs.
 
     Defaults model the common path: ADMIT everything, extract one claim about
-    Timur, mint a NEW subject lens, ADD the claim. Tests can override the
+    Timur, resolve a NEW canonical subject, ADD the claim. Tests can override the
     queues for other branches.
     """
 
@@ -69,7 +69,7 @@ class StubLLM:
                 )
             ]
         )
-        self.subject = SubjectResolution(decision="NEW", lens_id=None, alias_to_add=None, reason="new")
+        self.subject = SubjectResolution(decision="NEW", canonical_subject="Timur", reason="new")
         self.batch = BatchReconcile(rows=[ReconcileRow(claim_index=0, op="add")])
         self.calls = {"admit": 0, "extract": 0, "subject": 0, "batch": 0}
 
@@ -167,7 +167,7 @@ def _unit(text="I prefer dark mode") -> CaptureUnit:
 # --- ingest: capture -> admit -> extract -> reconcile ----------------
 
 
-async def test_ingest_unit_mints_subject_and_adds_claim(store):
+async def test_ingest_unit_resolves_subject_and_adds_claim(store):
     llm = StubLLM()
     pipe = _pipeline(store, llm)
 
@@ -175,16 +175,19 @@ async def test_ingest_unit_mints_subject_and_adds_claim(store):
 
     assert len(results) == 1
     assert results[0].op.value == "add"
-    # The claim was written and is the lone active CLAIM in USER scope.
-    claims = await store.query(kind=Kind.CLAIM, scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    # The claim was written, is the lone active claim in USER scope, and carries
+    # its subject as an attribute (no entity row).
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert len(claims) == 1
     assert "dark mode" in claims[0].content.lower()
-    # A NEW entity lens was minted for the subject.
-    lenses = await store.query(kind=Kind.LENS, scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
-    assert any(le.lens_kind == "entity" for le in lenses)
+    assert claims[0].canonical_subject == "Timur"
+    # Reconcile mints NO lens rows: lenses are a separate view layer, never
+    # written by ingest.
+    lenses = await store.list_lenses(scope=USER_SCOPE)
+    assert lenses == []
     # admit + extract each fire once. Reconcile makes ZERO judge calls here: the
-    # subject recall set is empty (0 entity lenses) -> categorical NEW (no subject
-    # call), and a freshly-minted subject has no prior members -> all-ADD (no batch
+    # subject recall set is empty (no prior claims) -> categorical NEW (no subject
+    # call), and a brand-new subject has no prior claims -> all-ADD (no batch
     # call). This is the documented heuristic-free fast path, not a skipped stage.
     assert llm.calls == {"admit": 1, "extract": 1, "subject": 0, "batch": 0}
 
@@ -207,7 +210,7 @@ async def test_rejected_unit_writes_nothing_but_advances(store):
 
     results = await pipe.ingest_unit(_unit())
     assert results == []
-    claims = await store.query(kind=Kind.CLAIM, scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert claims == []
     # Rejected but processed -> watermark advanced so it is not re-swept.
     wm = await pipe.capture._read_watermark("session:s1")
@@ -248,7 +251,7 @@ async def test_close_session_ingests_from_raw(store):
 
     results = await pipe.close_session("s1", BoundaryKind.SESSION)
     assert len(results) == 1
-    claims = await store.query(kind=Kind.CLAIM, scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert len(claims) == 1
 
 
@@ -276,7 +279,7 @@ async def test_remember_seam_adds_a_user_authored_claim(store):
 
     assert outcome.written is True
     assert outcome.item_id is not None
-    claims = await store.query(kind=Kind.CLAIM, scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert any("Berlin" in c.content for c in claims)
     assert claims[0].provenance is Provenance.USER_AUTHORED
 

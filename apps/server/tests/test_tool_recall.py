@@ -15,7 +15,6 @@ import pytest_asyncio
 
 import ntrp.database as database
 from ntrp.memory import (
-    Kind,
     MemoryItem,
     Provenance,
     Scope,
@@ -46,8 +45,8 @@ async def _add(store, content, scope, item_id):
     await store.create_item(
         MemoryItem(
             id=item_id,
-            kind=Kind.CLAIM,
             content=content,
+            canonical_subject="Timur",
             scope=scope,
             provenance=Provenance.USER_AUTHORED,
         )

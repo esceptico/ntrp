@@ -99,7 +99,7 @@ def _req(content="I switched to Linux", *, bypass_admit=True, scope=USER_SCOPE):
 async def test_add_returns_written_outcome(store):
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="lens-1", written_id="claim-1"
+            claim_index=0, op=Op.ADD, canonical_subject="lens-1", written_id="claim-1"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())
@@ -112,7 +112,7 @@ async def test_noop_reports_not_written_but_keeps_target(store):
         result=ReconcileResult(
             claim_index=0,
             op=Op.NOOP,
-            subject_lens_id="lens-1",
+            canonical_subject="lens-1",
             target_claim_id="claim-old",
         )
     )
@@ -128,7 +128,7 @@ async def test_contradict_reports_supersede(store):
         result=ReconcileResult(
             claim_index=0,
             op=Op.CONTRADICT,
-            subject_lens_id="lens-1",
+            canonical_subject="lens-1",
             written_id="claim-new",
             target_claim_id="claim-old",
         )
@@ -146,7 +146,7 @@ async def test_bypass_admit_always_reaches_reconcile_even_on_reject_verdict(stor
     admit = StubAdmit(verdict=Verdict.REJECT)
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, admit)
@@ -170,19 +170,19 @@ async def test_non_bypass_reject_skips_reconcile(store):
 
 
 async def test_non_bypass_admit_passes_candidates_as_prior(store):
-    from ntrp.memory.models import Kind, MemoryItem
+    from ntrp.memory.models import MemoryItem
 
     incumbent = MemoryItem(
         id="prior-1",
-        kind=Kind.CLAIM,
         content="prior fact",
+        canonical_subject="user",
         scope=USER_SCOPE,
         provenance=Provenance.RECORDED,
     )
     admit = StubAdmit(verdict=Verdict.ADMIT, candidates=[incumbent])
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, admit)
@@ -212,7 +212,7 @@ async def test_empty_content_short_circuits(store):
 async def test_candidate_carries_request_fields(store):
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())
@@ -269,7 +269,7 @@ async def test_remember_tool_writes_via_seam_with_user_scope(store):
 
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())
@@ -289,7 +289,7 @@ async def test_remember_tool_uses_project_scope_when_present(store):
 
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())
@@ -302,7 +302,7 @@ async def test_remember_tool_noop_is_not_an_error(store):
 
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.NOOP, subject_lens_id="l", target_claim_id="old"
+            claim_index=0, op=Op.NOOP, canonical_subject="l", target_claim_id="old"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())
@@ -334,7 +334,7 @@ async def test_remember_tool_source_ref_points_at_chat_turn(store):
 
     rec = StubReconciler(
         result=ReconcileResult(
-            claim_index=0, op=Op.ADD, subject_lens_id="l", written_id="c-1"
+            claim_index=0, op=Op.ADD, canonical_subject="l", written_id="c-1"
         )
     )
     seam = WriteSeam(store, rec, StubAdmit())

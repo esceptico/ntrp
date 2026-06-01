@@ -1,17 +1,20 @@
-"""Unit tests for LensProjector + LensWriteBack (LENS_CONTRACTS §3.2, §3.3, §6, §10).
+"""Unit tests for LensProjector + LensWriteBack (the VIEW-layer page surface).
 
 Tmp in-memory SQLite ONLY — never ~/.ntrp/memory.db, never the network. The
 cheap/strong LLMs are the shared FakeCompletionClient (queue the exact
 MembershipBatch the re-validation judge returns + the PageSynthesis the strong
 synth returns; assert `.calls` for the cost ceiling). The embedder is FakeEmbedder.
 
-Load-bearing invariants asserted here:
-  §3.2  — page bullets carry a `<!--claim:ID-->` anchor; structured page cached.
-  §3.3  — EDIT -> supersede (+ re-add MEMBER_OF); ACCEPT -> feedback + corrob;
-          ADD -> WriteSeam (the one prose->claim path); REJECT -> lens-scoped
-          negative-example correction, NO edge dropped, claim survives, page hides it.
-  §6/§1.1 — re-validate-at-read: after a criterion edit, project returns only still-`in`
-          members though the stale member_of edges persist (never removed).
+A lens is a VIEW: membership lives in `lens_membership_cache`, NEVER in a
+member_of edge. Load-bearing invariants asserted here:
+  projection — page bullets carry a `<!--claim:ID-->` anchor; structured page cached
+               into the registry row; cache hit costs zero synthesis.
+  re-validate-at-read — after a criterion change, project returns only still-`in`
+               members; the cache is just a cache (nothing is destroyed).
+  write-back — EDIT -> supersede the claim; ACCEPT -> feedback + corrob; ADD ->
+               WriteSeam (the one prose->claim path); REJECT -> lens-scoped
+               negative-example correction, claim survives, page hides it next read;
+               EDIT_CRITERION -> in-place criterion update + page nulled (dirty).
   §9.5  — synthesis failure -> synthesized=False raw anchored list, never blank.
   §0    — membership flips with the LLM verdict only; nothing lexical gates the page.
 """
@@ -19,26 +22,26 @@ Load-bearing invariants asserted here:
 import uuid
 
 import aiosqlite
-import pytest
 import pytest_asyncio
 
 from ntrp.memory.models import (
-    EdgeRole,
     Feedback,
-    Kind,
     LensDetailLevel,
-    MemoryEdge,
+    LensProvenance,
+    LensRow,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryItem,
     Provenance,
     Scope,
     ScopeKind,
     Status,
 )
-from ntrp.memory.pipeline.prompts_reconcile import MembershipBatch, MembershipVote
+from ntrp.memory.pipeline.project import LensProjector, parse_anchors
 from ntrp.memory.pipeline.prompts_project import PageSynthesis
-from ntrp.memory.pipeline.project import LensProjector, mark_lens_dirty, parse_anchors
+from ntrp.memory.pipeline.prompts_reconcile import MembershipBatch, MembershipVote
 from ntrp.memory.pipeline.types import PageEditKind, PageEditOp
-from ntrp.memory.pipeline.writeback import LensWriteBack, NEGATIVE_EXAMPLES_HEADER
+from ntrp.memory.pipeline.writeback import NEGATIVE_EXAMPLES_HEADER, LensWriteBack
 from ntrp.memory.store import MemoryStore
 from tests.conftest import FakeCompletionClient, FakeEmbedder
 
@@ -70,11 +73,42 @@ def _synth(markdown: str) -> PageSynthesis:
     return PageSynthesis(markdown=markdown)
 
 
+class KeywordJudge:
+    """Content-aware membership judge stub: votes `in` for any ITEM whose content
+    contains one of `keywords`, else `out`. Parses the numbered ITEMS straight out
+    of the prompt so the verdict tracks content, never call/queue order (the judge
+    is consulted both by refresh_lens_cache and re-validate-at-read).
+    """
+
+    def __init__(self, *keywords: str):
+        self.keywords = [k.lower() for k in keywords]
+        self.calls: list[dict] = []
+
+    async def completion(self, *, messages, model, response_format=None, **kwargs):
+        from tests.conftest import completion_response
+
+        self.calls.append({"messages": messages, "model": model})
+        user = messages[-1]["content"]
+        votes = []
+        for line in user.splitlines():
+            stripped = line.strip()
+            if not (stripped.startswith("[") and "]" in stripped):
+                continue
+            try:
+                idx = int(stripped[1 : stripped.index("]")])
+            except ValueError:
+                continue
+            body = stripped.lower()
+            decision = "in" if any(k in body for k in self.keywords) else "out"
+            votes.append(MembershipVote(item_index=idx, decision=decision, rationale=""))
+        return completion_response(MembershipBatch(votes=votes).model_dump_json())
+
+
 async def _claim(store, content, **kw):
     c = MemoryItem(
         id=uuid.uuid4().hex,
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=kw.pop("canonical_subject", "Tim"),
         scope=USER,
         provenance=kw.pop("provenance", Provenance.RECORDED),
         valid_from=kw.pop("valid_from", None),
@@ -83,31 +117,29 @@ async def _claim(store, content, **kw):
     return await store.create_item(c)
 
 
-async def _lens(store, *, name, criterion, page=None, detail=None):
-    le = MemoryItem(
+async def _lens(store, *, name, criterion, page=None, detail=LensDetailLevel.STRUCTURED):
+    le = LensRow(
         id=uuid.uuid4().hex,
-        kind=Kind.LENS,
-        content=name,
+        name=name,
+        criterion=criterion,
         scope=USER,
-        provenance=Provenance.USER_AUTHORED,
-        lens_kind="topic",
-        lens_name=name,
-        lens_criterion=criterion,
-        lens_page=page,
-        lens_detail_level=detail,
+        provenance=LensProvenance.USER_AUTHORED,
+        detail_level=detail,
+        page=page,
     )
-    return await store.create_item(le)
+    return await store.create_lens_row(le)
 
 
 async def _member(store, lens_id, claim):
-    await store.add_edge(
-        MemoryEdge(child_id=claim.id, parent_id=lens_id, role=EdgeRole.MEMBER_OF)
+    """Seed an `in` membership-cache row — the projection's member set."""
+    await store.put_membership(
+        [MembershipVerdict(lens_id=lens_id, claim_id=claim.id, decision=MembershipDecision.IN)]
     )
 
 
 async def _member_ids(store, lens_id):
-    edges = await store.list_edges(lens_id, direction="to", role=EdgeRole.MEMBER_OF)
-    return {e.child_id for e in edges}
+    cached = await store.get_membership(lens_id, decision=MembershipDecision.IN)
+    return {v.claim_id for v in cached}
 
 
 def _projector(store, cheap=None, strong=None, embed=None):
@@ -121,8 +153,8 @@ def _projector(store, cheap=None, strong=None, embed=None):
     )
 
 
-# A duck-typed WriteSeam: ADD routes through it (§3.3/§4.4). The unit test only needs
-# to prove delegation, so a fake records the request and returns a WriteOutcome.
+# A duck-typed WriteSeam: ADD routes through it. The unit test only needs to prove
+# delegation, so a fake records the request and returns a WriteOutcome.
 class FakeWriteSeam:
     def __init__(self, store):
         self.store = store
@@ -136,7 +168,7 @@ class FakeWriteSeam:
         return WriteOutcome(written=True, item_id=claim.id, reason="Remembered.")
 
 
-# --- §3.2 projection: anchors + cache + active members ---------------
+# --- projection: anchors + cache + active members --------------------
 
 
 async def test_project_renders_anchored_bullets_and_caches(store):
@@ -146,9 +178,10 @@ async def test_project_renders_anchored_bullets_and_caches(store):
     await _member(store, lens.id, c1)
     await _member(store, lens.id, c2)
 
-    cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "in"))])
+    # re-validation judge (cheap) keeps both; synthesis (strong) renders the page.
+    cheap = KeywordJudge("user")  # both claims mention "user"
     synth_md = (
-        "# Health\n*Lens · topic · criterion: claims about the user's health*\n\n"
+        "# Health\n*Lens · criterion: claims about the user's health*\n\n"
         "## Profile\n"
         f"- Runs 5k every morning. <!--claim:{c1.id}-->\n"
         f"- Takes vitamin D. <!--claim:{c2.id}-->\n"
@@ -161,10 +194,10 @@ async def test_project_renders_anchored_bullets_and_caches(store):
     assert page.synthesized is True
     assert set(parse_anchors(page.markdown)) == {c1.id, c2.id}
     assert {b.claim_id for b in page.blocks} == {c1.id, c2.id}
-    # structured page is cached into a superseded lens row -> next read is a cache hit.
-    refreshed = await _active_lens(store, lens.id)
-    assert refreshed.lens_page is not None
-    assert c1.id in refreshed.lens_page
+    # structured page is cached into the registry row -> next read is a cache hit.
+    refreshed = await store.get_lens(lens.id)
+    assert refreshed.page is not None
+    assert c1.id in refreshed.page
 
 
 async def test_project_cache_hit_costs_zero_synthesis(store):
@@ -183,7 +216,7 @@ async def test_project_cache_hit_costs_zero_synthesis(store):
 
     assert page.synthesized is True
     assert page.markdown == page_md
-    # Cache hit: no re-validation judge call, no synthesis call (§5).
+    # Cache hit: no re-validation judge call, no synthesis call.
     assert cheap.calls == []
     assert strong.calls == []
     assert {b.claim_id for b in page.blocks} == {c1.id}
@@ -197,7 +230,7 @@ async def test_project_synthesis_failure_degrades_to_raw_list(store):
     c1 = await _claim(store, "user runs 5k every morning")
     await _member(store, lens.id, c1)
 
-    cheap = FakeCompletionClient(queue=[_batch((0, "in"))])
+    cheap = KeywordJudge("user")
     # strong returns empty content -> synthesis raises -> raw fallback.
     strong = FakeCompletionClient(queue=[""])
     proj = _projector(store, cheap=cheap, strong=strong)
@@ -210,18 +243,18 @@ async def test_project_synthesis_failure_degrades_to_raw_list(store):
     assert "user runs 5k every morning" in page.markdown
 
 
-# --- §6 / §1.1 re-validate-at-read after criterion edit --------------
+# --- re-validate-at-read after criterion narrows --------------------
 
 
-async def test_revalidate_hides_now_out_member_but_edge_persists(store):
+async def test_revalidate_hides_now_out_member(store):
     lens = await _lens(store, name="Health", criterion="health")
     keep = await _claim(store, "user runs 5k every morning")
     drop = await _claim(store, "user drives a tesla")
     await _member(store, lens.id, keep)
     await _member(store, lens.id, drop)
 
-    # criterion narrowed -> re-validation votes the car claim `out`.
-    cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "out"))])
+    # criterion narrowed -> re-validation keeps only the running claim, drops the car.
+    cheap = KeywordJudge("runs")  # "user runs 5k" -> in; "user drives a tesla" -> out
     synth_md = f"# Health\n## Profile\n- Runs 5k. <!--claim:{keep.id}-->\n"
     strong = FakeCompletionClient(queue=[_synth(synth_md)])
     proj = _projector(store, cheap=cheap, strong=strong)
@@ -231,9 +264,9 @@ async def test_revalidate_hides_now_out_member_but_edge_persists(store):
     # only still-`in` renders...
     assert set(parse_anchors(page.markdown)) == {keep.id}
     assert {b.claim_id for b in page.blocks} == {keep.id}
-    # ...but the stale member_of edge is NEVER removed (§1.1): both edges persist.
-    assert await _member_ids(store, lens.id) == {keep.id, drop.id}
-    # the rejected claim itself survives, active.
+    # ...the now-`out` member is no longer a cached `in` member...
+    assert await _member_ids(store, lens.id) == {keep.id}
+    # ...and the dropped claim itself survives, active (a lens owns no claims).
     assert (await store.get(drop.id)).status is Status.ACTIVE
 
 
@@ -252,7 +285,7 @@ async def test_empty_members_no_judge_no_synth(store):
     assert page.markdown  # header + "no members" placeholder, never blank
 
 
-# --- §3.3 write-back: ACCEPT ----------------------------------------
+# --- write-back: ACCEPT ----------------------------------------------
 
 
 async def test_accept_sets_feedback_and_bumps_corroboration(store):
@@ -269,10 +302,10 @@ async def test_accept_sets_feedback_and_bumps_corroboration(store):
     assert refreshed.corroboration == 1
 
 
-# --- §3.3 write-back: EDIT -> supersede + re-add MEMBER_OF -----------
+# --- write-back: EDIT -> supersede the claim -------------------------
 
 
-async def test_edit_supersedes_and_readds_membership(store):
+async def test_edit_supersedes_claim(store):
     lens = await _lens(store, name="Health", criterion="health")
     c1 = await _claim(store, "user runs 3k")
     await _member(store, lens.id, c1)
@@ -284,20 +317,21 @@ async def test_edit_supersedes_and_readds_membership(store):
     )
 
     assert any(k is PageEditKind.EDIT for k, _ in res.applied)
-    # predecessor superseded, successor active + a member of the lens.
+    # predecessor superseded, successor active with the new text.
     assert (await store.get(c1.id)).status is Status.SUPERSEDED
-    members = await _member_ids(store, lens.id)
     successor_id = next(k_id for k, k_id in res.applied if k is PageEditKind.EDIT)
-    assert successor_id in members
     succ = await store.get(successor_id)
     assert succ.content == "user runs 5k every morning"
     assert succ.status is Status.ACTIVE
+    assert succ.canonical_subject == c1.canonical_subject  # subject carried over
+    # EDIT triggers a re-derive (membership recomputes on the next projection).
+    assert res.rederive_triggered is True
 
 
-# --- §3.3 write-back: REJECT -> correction, no edge dropped ----------
+# --- write-back: REJECT -> correction, claim + cache survive ---------
 
 
-async def test_reject_records_correction_keeps_edge_and_claim(store):
+async def test_reject_records_correction_keeps_claim(store):
     lens = await _lens(store, name="Health", criterion="health", page="# Health\n")
     c1 = await _claim(store, "user drives a tesla")
     await _member(store, lens.id, c1)
@@ -307,19 +341,20 @@ async def test_reject_records_correction_keeps_edge_and_claim(store):
 
     assert (PageEditKind.REJECT, c1.id) in res.applied
     assert res.rederive_triggered is True
-    # §1.1: the edge is NOT removed; the claim survives active.
-    assert c1.id in await _member_ids(store, lens.id)
+    # the claim survives active (a lens owns no claims).
     assert (await store.get(c1.id)).status is Status.ACTIVE
-    # the negative example is appended to the (superseded -> new active) lens page.
-    active_lens = await _active_lens(store, lens.id)
-    assert NEGATIVE_EXAMPLES_HEADER in active_lens.lens_page
-    assert "user drives a tesla" in active_lens.lens_page
+    # the negative example is appended to the lens page (a registry update).
+    active_lens = await store.get_lens(lens.id)
+    assert NEGATIVE_EXAMPLES_HEADER in active_lens.page
+    assert "user drives a tesla" in active_lens.page
+    # the membership cache was invalidated so it re-derives on next read.
+    assert await _member_ids(store, lens.id) == set()
 
 
 async def test_reject_then_project_hides_claim(store):
-    """Full §3.3 loop: REJECT -> correction + dirty -> next project re-validates the
-    claim `out` (the membership judge reads the negative example) -> page hides it,
-    edge still dangles."""
+    """Full loop: REJECT -> correction + cache invalidated -> next project
+    re-validates the claim `out` (the membership judge reads the negative example)
+    -> page hides it; the claim survives globally."""
     lens = await _lens(store, name="Health", criterion="health", page="# Health\n")
     keep = await _claim(store, "user runs 5k every morning")
     rejected = await _claim(store, "user drives a tesla")
@@ -329,23 +364,21 @@ async def test_reject_then_project_hides_claim(store):
     wb = _writeback(store)
     await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.REJECT, claim_id=rejected.id)])
 
-    # the lens row was superseded by the correction; resolve the active head.
-    active_lens = await _active_lens(store, lens.id)
-    cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "out"))])
+    # next projection: refresh re-derives the cache, then re-validation keeps only
+    # the running claim; the rejected car claim votes `out` at both judge passes.
+    cheap = KeywordJudge("runs")
     synth_md = f"# Health\n## Profile\n- Runs 5k. <!--claim:{keep.id}-->\n"
     strong = FakeCompletionClient(queue=[_synth(synth_md)])
     proj = _projector(store, cheap=cheap, strong=strong)
 
-    page = await proj.project(active_lens.id, refresh=True)
+    page = await proj.project(lens.id, refresh=True)
 
     assert set(parse_anchors(page.markdown)) == {keep.id}
-    # edge persists (on the ORIGINAL lens id — supersede mints a new id but never
-    # moves an edge, §1.1); claim survives active.
-    assert rejected.id in await _member_ids(store, lens.id)
+    # claim survives active.
     assert (await store.get(rejected.id)).status is Status.ACTIVE
 
 
-# --- §3.3 write-back: ADD -> WriteSeam (the one prose->claim path) ---
+# --- write-back: ADD -> WriteSeam (the one prose->claim path) --------
 
 
 async def test_add_routes_through_write_seam(store):
@@ -364,11 +397,12 @@ async def test_add_routes_through_write_seam(store):
     assert seam.requests[0].scope == lens.scope
 
 
-# --- §3.3 write-back: EDIT_CRITERION -> lens supersede + dirty -------
+# --- write-back: EDIT_CRITERION -> in-place criterion update + dirty -
 
 
-async def test_edit_criterion_supersedes_lens_and_marks_dirty(store):
-    lens = await _lens(store, name="Health", criterion="health")
+async def test_edit_criterion_updates_in_place_and_marks_dirty(store):
+    page_md = "# Health\n## Profile\n_cached_\n"
+    lens = await _lens(store, name="Health", criterion="health", page=page_md)
     wb = _writeback(store)
 
     res = await wb.apply(
@@ -377,15 +411,13 @@ async def test_edit_criterion_supersedes_lens_and_marks_dirty(store):
     )
 
     assert any(k is PageEditKind.EDIT_CRITERION for k, _ in res.applied)
-    assert (await store.get(lens.id)).status is Status.SUPERSEDED
-    active_lens = await _active_lens(store, lens.id)
-    assert active_lens.lens_criterion == "cardiovascular health only"
-    # the successor lens is marked dirty -> next project re-derives (§6).
-    proj = _projector(store)
-    assert await proj._is_dirty(active_lens.id) is True
+    # in-place update: same row id, new criterion, page nulled (dirty -> re-derive).
+    updated = await store.get_lens(lens.id)
+    assert updated.criterion == "cardiovascular health only"
+    assert updated.page is None  # dirty signal
 
 
-# --- §3.3 stale anchor -> rejected, no silent write ------------------
+# --- stale anchor -> rejected, no silent write -----------------------
 
 
 async def test_stale_anchor_op_is_rejected(store):
@@ -406,7 +438,7 @@ async def test_stale_anchor_op_is_rejected(store):
     assert "re-open" in reason
 
 
-# --- §3.3 apply order + partial failure ------------------------------
+# --- apply order + partial failure -----------------------------------
 
 
 async def test_failed_op_lands_in_rejected_rest_apply(store):
@@ -433,23 +465,3 @@ async def test_failed_op_lands_in_rejected_rest_apply(store):
 
 def _writeback(store):
     return LensWriteBack(store, FakeWriteSeam(store), membership=None, projector=_projector(store))
-
-
-async def _active_lens(store, original_id):
-    """Resolve the active head of a lens whose row may have been superseded.
-
-    Walk the supersedes chain forward from the original id. A small read-only helper
-    for the tests; the store keeps history walkable (no row is deleted)."""
-    current = original_id
-    seen = set()
-    while current not in seen:
-        seen.add(current)
-        item = await store.get(current)
-        if item is not None and item.status is Status.ACTIVE:
-            return item
-        # find a successor: an edge child --SUPERSEDES--> current
-        succ = await store.list_edges(current, direction="to", role=EdgeRole.SUPERSEDES)
-        if not succ:
-            return item
-        current = succ[0].child_id
-    return await store.get(original_id)

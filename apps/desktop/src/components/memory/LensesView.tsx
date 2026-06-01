@@ -10,9 +10,9 @@ import {
   listMemoryLenses,
   writebackLens,
   type CoverageAdvisory,
+  type Lens,
   type LensDetailLevel,
   type LensWithCoverage,
-  type MemoryItem,
   type PageEditOp,
   type ProjectedPage,
 } from "../../api/memoryItems";
@@ -31,7 +31,7 @@ import {
   PrimaryBtn,
   SearchInput,
 } from "./shared";
-import { lensColor, lensTitle, provenanceLabel, provenanceTone, scopeLabel } from "./lens";
+import { lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
 
 const DETAILS: LensDetailLevel[] = ["gist", "structured", "dossier"];
 const DETAIL_LABEL: Record<LensDetailLevel, string> = {
@@ -76,13 +76,13 @@ export function LensesView({
     const q = filter.trim().toLowerCase();
     if (!q) return lenses;
     return lenses.filter(({ lens }) =>
-      `${lensTitle(lens)} ${lens.lens_criterion ?? ""}`.toLowerCase().includes(q),
+      `${lensTitle(lens)} ${lens.criterion}`.toLowerCase().includes(q),
     );
   }, [lenses, filter]);
 
   const selected = lenses.find((l) => l.lens.id === selectedId) ?? null;
 
-  const onCreated = (lens: MemoryItem) => {
+  const onCreated = (lens: Lens) => {
     setComposing(false);
     setSelectedId(lens.id);
     reloadList();
@@ -169,7 +169,7 @@ function LensRow({
   active,
   onSelect,
 }: {
-  lens: MemoryItem;
+  lens: Lens;
   coverage: CoverageAdvisory;
   active: boolean;
   onSelect: () => void;
@@ -184,13 +184,13 @@ function LensRow({
       >
         <span
           aria-hidden
-          className="mt-px size-2 shrink-0 rounded-[3px]"
+          className="mt-px size-2 shrink-0 rounded-full"
           style={{ backgroundColor: lensColor(lens) }}
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">{lensTitle(lens)}</span>
-          {lens.lens_criterion && (
-            <span className="block truncate text-xs text-faint">{lens.lens_criterion}</span>
+          {lens.criterion && (
+            <span className="block truncate text-xs text-faint">{lens.criterion}</span>
           )}
         </span>
         <Badge tone={coverage.generic ? "warn" : "neutral"} size="sm" className="tabular-nums">
@@ -207,7 +207,7 @@ function Composer({
   onCancel,
 }: {
   config: AppConfig;
-  onCreated: (lens: MemoryItem) => void;
+  onCreated: (lens: Lens) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
@@ -255,7 +255,7 @@ function Composer({
       />
       {err && <span className="text-xs text-bad">{err}</span>}
       <div className="flex items-center justify-between">
-        <span className="text-2xs text-faint">Backfills once on create.</span>
+        <span className="text-2xs text-faint">Collects matching claims on demand.</span>
         <div className="flex items-center gap-1">
           <GhostBtn onClick={onCancel} disabled={busy}>
             Cancel
@@ -281,14 +281,14 @@ function LensPage({
   onArchived,
 }: {
   config: AppConfig;
-  lens: MemoryItem;
+  lens: Lens;
   coverage: CoverageAdvisory;
   onPeekClaim: (claimId: string) => void;
   onProvenance: () => void;
   onListChanged: () => void;
   onArchived: () => void;
 }) {
-  const [detail, setDetail] = useState<LensDetailLevel>(lens.lens_detail_level ?? "structured");
+  const [detail, setDetail] = useState<LensDetailLevel>(lens.detail_level);
   const [page, setPage] = useState<ProjectedPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -447,12 +447,12 @@ function LensPage({
           <GhostBtn onClick={() => setEditingCriterion(true)}>Edit criterion</GhostBtn>
           <GhostBtn
             onClick={() => {
-              if (window.confirm(`Archive the "${lensTitle(lens)}" view? Claims are untouched.`)) {
+              if (window.confirm(`Delete the "${lensTitle(lens)}" view? Claims are untouched.`)) {
                 void deleteLens(config, lens.id).then(onArchived);
               }
             }}
           >
-            Archive view
+            Delete view
           </GhostBtn>
         </>
       }
@@ -468,7 +468,7 @@ function LensHeader({
   onRefresh,
   refreshing,
 }: {
-  lens: MemoryItem;
+  lens: Lens;
   detail: LensDetailLevel;
   onDetail: (d: LensDetailLevel) => void;
   onProvenance: () => void;
@@ -479,18 +479,15 @@ function LensHeader({
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-xl font-semibold tracking-[-0.012em] text-ink">
-          <span aria-hidden className="size-2.5 rounded-[3px]" style={{ backgroundColor: lensColor(lens) }} />
+          <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: lensColor(lens) }} />
           <span className="truncate">{lensTitle(lens)}</span>
         </h2>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <Badge tone="neutral" size="sm">
-            {lens.lens_kind ?? "topic"}
-          </Badge>
-          <Badge tone="neutral" size="sm">
             {scopeLabel(lens.scope)}
           </Badge>
-          <Badge tone={provenanceTone(lens.provenance)} size="sm">
-            {provenanceLabel(lens.provenance)}
+          <Badge tone={lensProvenanceTone(lens.provenance)} size="sm">
+            {lensProvenanceLabel(lens.provenance)}
           </Badge>
         </div>
       </div>
@@ -522,22 +519,22 @@ function CriterionRow({
   onDone,
 }: {
   config: AppConfig;
-  lens: MemoryItem;
+  lens: Lens;
   coverage: CoverageAdvisory;
   editing: boolean;
   onEdit: () => void;
   onDone: (changed: boolean) => void;
 }) {
-  const [text, setText] = useState(lens.lens_criterion ?? "");
+  const [text, setText] = useState(lens.criterion);
   const [busy, setBusy] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (editing) {
-      setText(lens.lens_criterion ?? "");
+      setText(lens.criterion);
       requestAnimationFrame(() => taRef.current?.focus());
     }
-  }, [editing, lens.lens_criterion]);
+  }, [editing, lens.criterion]);
 
   if (!editing) {
     return (
@@ -546,12 +543,12 @@ function CriterionRow({
         onClick={onEdit}
         className="group/crit -mx-1 block w-full rounded-md px-1 py-1 text-left text-sm italic text-faint transition-colors hover:bg-surface-soft/50 hover:text-muted"
       >
-        {lens.lens_criterion || "No criterion — click to describe what this view collects."}
+        {lens.criterion || "No criterion — click to describe what this view collects."}
       </button>
     );
   }
 
-  const dirty = text.trim() !== (lens.lens_criterion ?? "").trim() && text.trim().length > 0;
+  const dirty = text.trim() !== lens.criterion.trim() && text.trim().length > 0;
   const save = () => {
     if (!dirty || busy) return;
     setBusy(true);

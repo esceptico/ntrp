@@ -13,7 +13,6 @@ import pytest_asyncio
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    Kind,
     MemoryItem,
     Provenance,
     Scope,
@@ -82,8 +81,8 @@ def _claim(content, *, provenance=Provenance.RECORDED, feedback=Feedback.NONE,
     import uuid
     return MemoryItem(
         id=str(uuid.uuid4()),
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject="Tim",
         scope=USER,
         provenance=provenance,
         feedback=feedback,
@@ -125,7 +124,7 @@ async def test_merge_collapses_duplicates_and_keeps_best_survivor(store):
     report = await lint.run_once(scope=USER)
 
     assert report.merged == 1
-    active = await store.query(kind=Kind.CLAIM, scope=USER, status=Status.ACTIVE)
+    active = await store.query(scope=USER, status=Status.ACTIVE)
     assert len(active) == 1
     survivor = active[0]
     # Survivor is a fresh row (supersede minted it) carrying the unioned refs.
@@ -149,7 +148,7 @@ async def test_merge_caps_survivor_provenance_at_inferred(store):
     cheap = FakeLLM([LintOps(merges=[MergeOp(member_ids=[a.id, b.id])])])
     report = await _lint(store, cheap).run_once(scope=USER)
     assert report.merged == 1
-    active = await store.query(kind=Kind.CLAIM, scope=USER, status=Status.ACTIVE)
+    active = await store.query(scope=USER, status=Status.ACTIVE)
     assert len(active) == 1
     assert active[0].provenance is Provenance.INFERRED
 

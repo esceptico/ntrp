@@ -9,32 +9,33 @@ import {
   forceY,
   type Simulation,
 } from "d3-force";
-import type { MemoryEdge, MemoryEdgeRole, MemoryItem, MemoryKind } from "../../api/memoryItems";
-import { lensTitle, nodeColor, truncate } from "./lens";
+import type { MemoryEdge, MemoryEdgeRole, MemoryItem } from "../../api/memoryItems";
+import { nodeColor, provenanceLabel, truncate } from "./lens";
 
 export interface GraphPayload {
   nodes: MemoryItem[];
   edges: MemoryEdge[];
 }
 
-const KIND_RADIUS: Record<MemoryKind, number> = {
-  claim: 9,
-  lens: 13,
-};
+// Every node is a claim → every node is a circle (locked model §5: no squares,
+// differentiate by color/size only). Size grows mildly with corroboration so a
+// well-supported claim reads larger; it never encodes a different shape.
+const BASE_RADIUS = 9;
+function nodeRadius(item: MemoryItem): number {
+  return BASE_RADIUS + Math.min(5, item.corroboration);
+}
 
 // Dashed for the "tension" roles so they read as caveats, not structure.
 const ROLE_DASH: Record<MemoryEdgeRole, string | undefined> = {
   evidence: undefined,
   supersedes: "5 4",
   contradicts: "2 4",
-  member_of: undefined,
 };
 
 const ROLE_LABEL: Record<MemoryEdgeRole, string> = {
   evidence: "evidence",
   supersedes: "supersedes",
   contradicts: "contradicts",
-  member_of: "member",
 };
 
 interface SimNode {
@@ -66,7 +67,7 @@ export interface CenterRequest {
 }
 
 function nodeLabel(item: MemoryItem): string {
-  return item.kind === "lens" ? lensTitle(item) : item.content;
+  return item.content;
 }
 
 function roleStroke(role: MemoryEdgeRole): string {
@@ -141,7 +142,7 @@ export function MemoryGraph({
       .force("charge", forceManyBody().strength(-340).distanceMax(420))
       .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(96).strength(0.55))
       .force("center", forceCenter(size.w / 2, size.h / 2).strength(0.06))
-      .force("collide", forceCollide<SimNode>((d) => KIND_RADIUS[d.item.kind] + 14))
+      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d.item) + 14))
       .force("x", forceX(size.w / 2).strength(0.03))
       .force("y", forceY(size.h / 2).strength(0.03))
       .alpha(0.9)
@@ -286,7 +287,6 @@ export function MemoryGraph({
 
   const nodes = [...nodesRef.current.values()];
   const links = linksRef.current;
-  const labelsVisible = transform.k > 0.7;
 
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
@@ -343,12 +343,15 @@ export function MemoryGraph({
                 );
               })}
           {nodes.map((n) => {
-            const r = KIND_RADIUS[n.item.kind];
+            const r = nodeRadius(n.item);
             const lit = isLit(n.id);
             const isRoot = n.id === rootId;
             const isSelected = n.id === selectedId;
             const color = nodeColor(n.item);
             const dim = n.item.status !== "active";
+            // De-clutter: label only the focused/hovered node and its lit
+            // neighbours, never every node at zoom (locked model §4).
+            const labelled = focusId != null && lit;
             return (
               <g
                 key={n.id}
@@ -367,28 +370,16 @@ export function MemoryGraph({
                 {(isSelected || isRoot) && (
                   <circle r={r + 5} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
                 )}
-                {/* Lens nodes are rounded squares (a "view"); claims are circles (a fact). */}
-                {n.item.kind === "lens" ? (
-                  <rect
-                    x={-r}
-                    y={-r}
-                    width={r * 2}
-                    height={r * 2}
-                    rx={4}
-                    fill={dim ? "var(--color-surface)" : color}
-                    stroke={color}
-                    strokeWidth={dim ? 1.5 : 0}
-                  />
-                ) : (
-                  <circle
-                    r={r}
-                    fill={dim ? "var(--color-surface)" : color}
-                    stroke={color}
-                    strokeWidth={dim ? 1.5 : 0}
-                    strokeDasharray={n.item.status === "superseded" ? "3 2" : undefined}
-                  />
-                )}
-                {labelsVisible && lit && (
+                {/* All nodes are claims → all circles. Color = provenance, size =
+                    corroboration; shape never varies (locked model §5). */}
+                <circle
+                  r={r}
+                  fill={dim ? "var(--color-surface)" : color}
+                  stroke={color}
+                  strokeWidth={dim ? 1.5 : 0}
+                  strokeDasharray={n.item.status === "superseded" ? "3 2" : undefined}
+                />
+                {labelled && (
                   <text
                     x={r + 5}
                     y={3}
@@ -422,22 +413,26 @@ export function MemoryGraph({
   );
 }
 
-const LEGEND_ROLES: MemoryEdgeRole[] = ["evidence", "member_of", "supersedes", "contradicts"];
+const LEGEND_ROLES: MemoryEdgeRole[] = ["evidence", "supersedes", "contradicts"];
+const LEGEND_PROVENANCE: MemoryItem["provenance"][] = [
+  "user_authored",
+  "recorded",
+  "inferred",
+  "external",
+];
 
 function Legend() {
   return (
     <div className="pointer-events-none flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line-soft bg-surface/80 px-3 py-2 backdrop-blur-sm">
-      <span className="flex items-center gap-1.5 text-2xs text-muted">
-        <span className="size-2 rounded-full" style={{ backgroundColor: nodeColor({ kind: "claim" } as MemoryItem) }} />
-        claim
-      </span>
-      <span className="flex items-center gap-1.5 text-2xs text-muted">
-        <span
-          className="size-2 rounded-[2px]"
-          style={{ backgroundColor: nodeColor({ kind: "lens", lens_exclusive: false } as MemoryItem) }}
-        />
-        lens
-      </span>
+      {LEGEND_PROVENANCE.map((p) => (
+        <span key={p} className="flex items-center gap-1.5 text-2xs text-muted">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: nodeColor({ provenance: p } as MemoryItem) }}
+          />
+          {provenanceLabel(p)}
+        </span>
+      ))}
       {LEGEND_ROLES.map((role) => (
         <span key={role} className="flex items-center gap-1.5 text-2xs text-muted">
           <span

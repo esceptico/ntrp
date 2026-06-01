@@ -1,9 +1,15 @@
 """Stage-2 memory schema models.
 
-Storage layer only. One object table (`memory_items`) holds every durable
-knowledge unit (claims) and the editable lens objects, discriminated by `kind`.
-Relationships are role-typed edges in `memory_item_parents`, forming a walkable
-provenance DAG.
+Storage layer only. `memory_items` is claims-only: every row is a claim, an
+atomic self-contained proposition. Subject coreference is the `canonical_subject`
+attribute on the claim — there are no entity rows. Relationships are role-typed
+claim->claim edges in `memory_item_parents` (evidence / supersedes / contradicts),
+forming a walkable provenance DAG.
+
+Lenses are NOT memory. A lens is a view (a named, criterion-defined projection
+over claims). Lenses live in a separate `lenses` registry table (`LensRow`),
+never in `memory_items`, never as a graph node, never edge-linked. Membership is
+a computed projection (cached, not authoritative).
 
 No pipeline, no retrieval ranking, no LLM judgment lives here.
 """
@@ -19,11 +25,6 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-class Kind(StrEnum):
-    CLAIM = "claim"
-    LENS = "lens"
-
-
 class Status(StrEnum):
     ACTIVE = "active"
     SUPERSEDED = "superseded"
@@ -37,18 +38,12 @@ class ScopeKind(StrEnum):
 
 
 class Provenance(StrEnum):
-    """Ordinal trust source, most-trusted first.
-
-    For claims: user_authored > recorded > inferred > external.
-    For lenses only `induced` / `user_authored` are meaningful, but the column
-    is shared; the schema does not branch on the distinction.
-    """
+    """Ordinal trust source for a claim, most-trusted first."""
 
     USER_AUTHORED = "user_authored"
     RECORDED = "recorded"
     INFERRED = "inferred"
     EXTERNAL = "external"
-    INDUCED = "induced"
 
 
 class Feedback(StrEnum):
@@ -58,16 +53,11 @@ class Feedback(StrEnum):
 
 
 class EdgeRole(StrEnum):
+    """Claim->claim edge roles. There is no membership edge; lenses are views."""
+
     EVIDENCE = "evidence"
     SUPERSEDES = "supersedes"
     CONTRADICTS = "contradicts"
-    MEMBER_OF = "member_of"
-
-
-class LensDetailLevel(StrEnum):
-    GIST = "gist"
-    STRUCTURED = "structured"
-    DOSSIER = "dossier"
 
 
 @dataclass(frozen=True)
@@ -112,17 +102,17 @@ class Scope:
 
 @dataclass
 class MemoryItem:
-    """A row in the single object table.
+    """A claim row.
 
-    Claims carry validity + source_refs + trust signals. Lenses carry
-    criterion/page/detail_level. Shared columns (id, kind, content, scope,
-    provenance, timestamps) apply to both. Lens-only and claim-only columns are
-    nullable (fork F1 resolved to a polymorphic table — see SCHEMA.md).
+    Every row is a claim: an atomic, self-contained proposition. Subject
+    coreference is the `canonical_subject` attribute — the merge key reconcile
+    resolves; there are no entity rows. Claims carry validity + source_refs +
+    transparent trust signals.
     """
 
     id: str
-    kind: Kind
     content: str
+    canonical_subject: str
     scope: Scope
     provenance: Provenance
 
@@ -137,23 +127,17 @@ class MemoryItem:
     last_relevant_at: str | None = None
     feedback: Feedback = Feedback.NONE
 
-    # Lens-only fields (NULL for claims).
-    lens_name: str | None = None
-    lens_criterion: str | None = None
-    lens_kind: str | None = None
-    lens_page: str | None = None
-    lens_detail_level: LensDetailLevel | None = None
-    lens_exclusive: bool = False
-
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
 
 @dataclass
 class MemoryEdge:
-    """A role-typed edge: child --role--> parent.
+    """A role-typed claim->claim edge: child --role--> parent.
 
-    Forms the walkable provenance DAG. `position` orders multi-parent edges.
+    Forms the walkable provenance/contradiction DAG (evidence / supersedes /
+    contradicts). `position` orders multi-parent edges. Lenses are never edge
+    participants.
     """
 
     child_id: str
@@ -161,3 +145,64 @@ class MemoryEdge:
     role: EdgeRole
     position: int = 0
     created_at: str = field(default_factory=now_iso)
+
+
+# --- Lens registry (views over claims; NOT memory) ---
+
+
+class LensDetailLevel(StrEnum):
+    GIST = "gist"
+    STRUCTURED = "structured"
+    DOSSIER = "dossier"
+
+
+class LensProvenance(StrEnum):
+    USER_AUTHORED = "user_authored"
+    INDUCED = "induced"
+
+
+class LensStatus(StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+@dataclass
+class LensRow:
+    """A row in the separate `lenses` registry — a view, not a memory item.
+
+    A lens is a named, criterion-defined projection over claims. It owns no
+    claims, is never a graph node, and is never edge-linked. `page` is the cached
+    synthesized markdown projection (None until first computed). Membership is a
+    computed projection cached in `lens_membership_cache`, never an edge.
+    """
+
+    id: str
+    name: str
+    criterion: str
+    scope: Scope
+
+    detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED
+    provenance: LensProvenance = LensProvenance.USER_AUTHORED
+    status: LensStatus = LensStatus.ACTIVE
+    page: str | None = None
+
+    created_at: str = field(default_factory=now_iso)
+    updated_at: str = field(default_factory=now_iso)
+
+
+class MembershipDecision(StrEnum):
+    IN = "in"
+    OUT = "out"
+    DEFER = "defer"
+
+
+@dataclass
+class MembershipVerdict:
+    """A cached membership decision for (lens, claim). A cache, not graph truth:
+    drop the whole cache and nothing breaks except projection latency."""
+
+    lens_id: str
+    claim_id: str
+    decision: MembershipDecision
+    rationale: str | None = None
+    scored_at: str = field(default_factory=now_iso)

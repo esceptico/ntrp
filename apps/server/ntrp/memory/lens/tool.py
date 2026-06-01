@@ -5,15 +5,15 @@ agent specializations are not tools). Everyday recall stays the `recall` tool,
 which transparently uses `lens_hint`; this tool is the deliberate, user-invoked
 surface for materialized views over the knowledge graph.
 
-It delegates to the frozen `LensService` (§3.4) + `LensProjector` (§3.2)
-interfaces, surfaced together behind one service slot (`MEMORY_LENS_SERVICE`).
-The slot is wired by the knowledge runtime only inside the `memory_ready` branch
-(integration phase), so the server boots unchanged with memory off (§10).
+It delegates to the `LensRegistry` (registry CRUD over the `lenses` table) + the
+`LensProjector` (read-only projected page), surfaced together behind one service
+slot (`MEMORY_LENS_SERVICE`). The slot is wired by the knowledge runtime only
+inside the `memory_ready` branch, so the server boots unchanged with memory off.
 
 The absolute ban (§0) does not arise here: this tool makes no membership
-decisions. `define`/`split`/`merge` mint lenses and let the membership scorer
-backfill; `show` reads the re-validated projected page; the coverage advisory it
-surfaces is a pure COUNT ratio (§7), never a word list and never a gate.
+decisions. `define`/`split`/`merge` create registry rows (zero claims touched) and
+the membership projection collects matching claims on demand; `show` reads the
+projected page; the coverage advisory is a pure COUNT ratio, never a gate.
 """
 
 from typing import Protocol, runtime_checkable
@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ntrp.logging import get_logger
 from ntrp.memory.models import (
     LensDetailLevel,
-    MemoryItem,
+    LensRow,
     Scope,
     ScopeKind,
 )
@@ -55,23 +55,21 @@ class ProjectorProtocol(Protocol):
 class LensServiceProtocol(Protocol):
     projector: ProjectorProtocol
 
-    async def create_lens(
-        self, name: str, criterion: str, scope: Scope, *, lens_kind: str = ...
-    ) -> MemoryItem: ...
+    async def create_lens(self, name: str, criterion: str, scope: Scope) -> LensRow: ...
 
-    async def list_lenses(self, scope: Scope) -> list[tuple[MemoryItem, object]]: ...
+    async def list_lenses(self, scope: Scope) -> list[tuple[LensRow, object]]: ...
 
-    async def edit_criterion(self, lens_id: str, new_criterion: str) -> MemoryItem: ...
+    async def edit_criterion(self, lens_id: str, new_criterion: str) -> LensRow: ...
 
     async def delete_lens(self, lens_id: str) -> bool: ...
 
     async def split_lens(
         self, lens_id: str, into: list[tuple[str, str]]
-    ) -> list[MemoryItem]: ...
+    ) -> list[LensRow]: ...
 
     async def merge_lenses(
         self, lens_ids: list[str], name: str, criterion: str
-    ) -> MemoryItem: ...
+    ) -> LensRow: ...
 
 
 # --- tool input ----------------------------------------------------------
@@ -159,8 +157,8 @@ async def _do_define(svc: LensServiceProtocol, args: LensInput, scope: Scope) ->
         return ToolResult.error("define requires both 'name' and 'criterion'.")
     lens = await svc.create_lens(args.name, args.criterion, scope)
     return ToolResult(
-        content=f"Created lens '{lens.lens_name}' ({lens.id}).",
-        preview=f"Lens '{lens.lens_name}'",
+        content=f"Created lens '{lens.name}' ({lens.id}). It collects matching claims on demand.",
+        preview=f"Lens '{lens.name}'",
         data={"lens_id": lens.id},
     )
 
@@ -182,7 +180,7 @@ async def _do_edit(svc: LensServiceProtocol, args: LensInput) -> ToolResult:
         return ToolResult.error("edit requires 'lens_id' and the new 'criterion'.")
     lens = await svc.edit_criterion(args.lens_id, args.criterion)
     return ToolResult(
-        content=f"Rewrote criterion of '{lens.lens_name}'. Membership re-derives at next view.",
+        content=f"Rewrote criterion of '{lens.name}'. Membership re-derives at next view.",
         preview="Criterion updated",
         data={"lens_id": lens.id},
     )
@@ -217,8 +215,8 @@ async def _do_merge(svc: LensServiceProtocol, args: LensInput) -> ToolResult:
         return ToolResult.error("merge requires 'lens_ids', 'name', and 'criterion'.")
     lens = await svc.merge_lenses(args.lens_ids, args.name, args.criterion)
     return ToolResult(
-        content=f"Merged into '{lens.lens_name}' ({lens.id}); members re-derived.",
-        preview=f"Merged into '{lens.lens_name}'",
+        content=f"Merged into '{lens.name}' ({lens.id}); members re-derived.",
+        preview=f"Merged into '{lens.name}'",
         data={"lens_id": lens.id},
     )
 
@@ -229,7 +227,7 @@ async def _do_list(svc: LensServiceProtocol, scope: Scope) -> ToolResult:
         return ToolResult(content="No lenses in this scope.", preview="No lenses")
     lines = []
     for lens, advisory in rows:
-        lines.append(f"- {lens.lens_name} ({lens.id}): {lens.lens_criterion}{_coverage_note(advisory)}")
+        lines.append(f"- {lens.name} ({lens.id}): {lens.criterion}{_coverage_note(advisory)}")
     return ToolResult(content="\n".join(lines), preview=f"{len(rows)} lens(es)")
 
 

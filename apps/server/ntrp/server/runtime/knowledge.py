@@ -179,7 +179,7 @@ class KnowledgeRuntime:
         self.memory_service = pipeline.write_seam
         self.memory_reader = pipeline.retriever
         self.memory_retrieval = pipeline
-        self.lens_service = pipeline.lens_service
+        self.lens_service = pipeline.lens_registry
         _logger.info("memory pipeline ready", db=str(self.config.memory_db_path))
 
     def _eligible_scopes(self) -> list[Scope]:

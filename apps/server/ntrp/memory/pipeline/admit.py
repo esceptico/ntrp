@@ -11,7 +11,7 @@ Store usage is strictly read-only.
 from ntrp.embedder import Embedder
 from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
-from ntrp.memory.models import Kind, MemoryItem, Status, now_iso
+from ntrp.memory.models import MemoryItem, Status, now_iso
 from ntrp.memory.pipeline.prompts import (
     ADMIT_AUTOMATION_SUFFIX,
     ADMIT_SYSTEM,
@@ -135,7 +135,6 @@ class AdmitGate:
         back to the scoped query() pool alone (judge then biases toward ADMIT).
         """
         scoped = await self.store.query(
-            kind=Kind.CLAIM,
             scope=unit.scope,
             status=Status.ACTIVE,
             valid_at=now_iso(),

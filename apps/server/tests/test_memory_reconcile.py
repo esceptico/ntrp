@@ -3,10 +3,12 @@
 In-memory tmp DBs ONLY (never ~/.ntrp/memory.db). LLM + embedder are stubbed so
 the store calls and the op mapping are exercised deterministically.
 
-Identity is decided by the LLM judge over the embedding+FTS-recalled candidate
-set — never by a pronoun list, a proper-noun regex, or a cosine threshold. These
-tests assert that contract: recall opens the candidate set, the judge closes it.
-The only categorical branch is the empty recalled set (0 candidates -> NEW).
+Subject coreference is a claim ATTRIBUTE (`canonical_subject`), not an entity
+row: there are no lens rows, no member_of edges. Identity is decided by the LLM
+judge over the embedding+FTS-recalled candidate set — never by a pronoun list, a
+proper-noun regex, or a cosine threshold. These tests assert that contract:
+recall opens the candidate set, the judge closes it. The only categorical branch
+is the empty recalled set (0 candidates -> NEW, no judge call).
 """
 
 import hashlib
@@ -21,14 +23,13 @@ from ntrp.agent.types.llm import Choice, CompletionResponse, FinishReason, Messa
 from ntrp.agent.types.usage import Usage
 from ntrp.memory.models import (
     EdgeRole,
-    Kind,
-    MemoryEdge,
     MemoryItem,
     Provenance,
     Scope,
     ScopeKind,
     SourceRef,
     Status,
+    now_iso,
 )
 from ntrp.memory.pipeline.prompts_reconcile import BatchReconcile, SubjectResolution
 from ntrp.memory.pipeline.reconcile import Reconciler
@@ -135,40 +136,28 @@ def _candidate(
     )
 
 
-async def _entity_lens(store, name="Timur", criterion=None, scope=USER_SCOPE) -> MemoryItem:
-    lens = MemoryItem(
-        id=uuid.uuid4().hex,
-        kind=Kind.LENS,
-        content=name,
-        scope=scope,
-        provenance=Provenance.INDUCED,
-        lens_kind="entity",
-        lens_name=name,
-        lens_criterion=criterion or f"this item is about {name}",
-        lens_exclusive=True,
-    )
-    return await store.create_item(lens)
-
-
-async def _member_claim(store, lens, content, *, prov=Provenance.RECORDED, refs=None) -> MemoryItem:
+async def _existing_claim(
+    store, content, *, subject="Timur", prov=Provenance.RECORDED, refs=None, scope=USER_SCOPE
+) -> MemoryItem:
+    """Seed an existing active claim for a subject. Subject is just an attribute;
+    there is no entity row and no member_of edge to create."""
     claim = MemoryItem(
         id=uuid.uuid4().hex,
-        kind=Kind.CLAIM,
         content=content,
-        scope=USER_SCOPE,
+        canonical_subject=subject,
+        scope=scope,
         provenance=prov,
+        valid_from=now_iso(),
         source_refs=refs or [],
     )
-    await store.create_item(claim)
-    await store.add_edge(MemoryEdge(child_id=claim.id, parent_id=lens.id, role=EdgeRole.MEMBER_OF))
-    return claim
+    return await store.create_item(claim)
 
 
 # --- tests ----------------------------------------------------------
 
 
-async def test_new_subject_minted_when_no_candidates(store):
-    # 0 recalled candidates is the only categorical branch: mint NEW, no judge call.
+async def test_new_subject_kept_when_no_candidates(store):
+    # 0 recalled candidates is the only categorical branch: keep NEW, no judge call.
     cheap = StubLLM()
     rec = _reconciler(store, cheap)
 
@@ -178,31 +167,27 @@ async def test_new_subject_minted_when_no_candidates(store):
     assert len(results) == 1
     r = results[0]
     assert r.op is Op.ADD
-    assert r.subject_created is True
+    assert r.subject_is_new is True
+    assert r.canonical_subject == "Timur"
     assert r.written_id is not None
 
     claim = await store.get(r.written_id)
-    assert claim is not None and claim.kind is Kind.CLAIM
+    assert claim is not None
+    assert claim.canonical_subject == "Timur"
     assert claim.provenance is Provenance.RECORDED
     assert claim.source_refs  # grounding preserved
-
-    lens = await store.get(r.subject_lens_id)
-    assert lens.kind is Kind.LENS and lens.lens_kind == "entity"
-    # Minted from the LLM-resolved canonical subject — never from raw content.
-    assert lens.lens_name == "Timur"
-    edges = await store.list_edges(r.written_id, direction="from", role=EdgeRole.MEMBER_OF)
-    assert [e.parent_id for e in edges] == [r.subject_lens_id]
 
 
 async def test_recalled_candidate_goes_to_judge_who_matches(store):
     # A recalled candidate is decided by the LLM judge, not a heuristic. The judge
-    # MATCHes the existing lens — identity closes via the extractor's
-    # canonical_subject + the judge, never a pronoun list. A pre-existing member
-    # claim means Phase 4 actually runs its batch call.
-    lens = await _entity_lens(store, name="Timur", criterion="this item is about Timur")
-    await _member_claim(store, lens, "Timur drinks tea")
+    # MATCHes the existing subject string — identity closes via the extractor's
+    # canonical_subject + the judge, never a pronoun list. The pre-existing claim
+    # means Phase 4 actually runs its batch call.
+    await _existing_claim(store, "Timur drinks tea", subject="Timur")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
     rec = _reconciler(store, cheap)
 
@@ -210,8 +195,8 @@ async def test_recalled_candidate_goes_to_judge_who_matches(store):
         [_candidate("Timur likes espresso", subject="Timur", surfaces=["I"])], USER_SCOPE
     )
 
-    assert results[0].subject_created is False
-    assert results[0].subject_lens_id == lens.id
+    assert results[0].subject_is_new is False
+    assert results[0].canonical_subject == "Timur"
     # The identity judge fired (>=1 recalled candidate) and a Phase-4 batch ran.
     assert cheap.subject_calls == 1
     assert cheap.batch_calls == 1
@@ -219,27 +204,30 @@ async def test_recalled_candidate_goes_to_judge_who_matches(store):
 
 async def test_lone_candidate_still_goes_to_judge_no_margin_shortcut(store):
     # A single recalled candidate must NOT auto-match: the judge always decides.
-    lens = await _entity_lens(store, name="Espresso", criterion="this item is about Espresso")
+    await _existing_claim(store, "Espresso is a coffee drink", subject="Espresso")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Espresso", reason="same")
+    )
     cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
     rec = _reconciler(store, cheap)
 
     results = await rec.reconcile([_candidate("Espresso is great", subject="Espresso")], USER_SCOPE)
 
-    assert results[0].subject_lens_id == lens.id
+    assert results[0].canonical_subject == "Espresso"
     assert results[0].op is Op.ADD
     # The judge call fired even with one candidate — no cosine threshold shortcut.
     assert cheap.subject_calls == 1
 
 
 async def test_update_supersedes_target(store):
-    lens = await _entity_lens(store)
-    old = await _member_claim(
-        store, lens, "Timur lives in Berlin", refs=[SourceRef(kind="chat_turn", ref="old")]
+    old = await _existing_claim(
+        store, "Timur lives in Berlin", subject="Timur", refs=[SourceRef(kind="chat_turn", ref="old")]
     )
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(
         BatchReconcile(
             rows=[
@@ -262,10 +250,11 @@ async def test_update_supersedes_target(store):
 
 
 async def test_noop_bumps_corroboration(store):
-    lens = await _entity_lens(store)
-    existing = await _member_claim(store, lens, "Timur likes coffee")
+    existing = await _existing_claim(store, "Timur likes coffee", subject="Timur")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(
         BatchReconcile(rows=[{"claim_index": 0, "op": "noop", "target_idx": 0}])
     )
@@ -280,10 +269,11 @@ async def test_noop_bumps_corroboration(store):
 
 
 async def test_contradict_supersedes_and_links_edge(store):
-    lens = await _entity_lens(store)
-    old = await _member_claim(store, lens, "Timur is vegetarian")
+    old = await _existing_claim(store, "Timur is vegetarian", subject="Timur")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(
         BatchReconcile(
             rows=[{"claim_index": 0, "op": "contradict", "target_idx": 0,
@@ -302,12 +292,13 @@ async def test_contradict_supersedes_and_links_edge(store):
 
 
 async def test_user_authored_never_noops_over_inferred(store):
-    lens = await _entity_lens(store)
-    inferred = await _member_claim(
-        store, lens, "Timur probably likes jazz", prov=Provenance.INFERRED
+    inferred = await _existing_claim(
+        store, "Timur probably likes jazz", subject="Timur", prov=Provenance.INFERRED
     )
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     # Model says NOOP, but incoming is user-authored over inferred -> coerced UPDATE.
     cheap.batch_queue.append(
         BatchReconcile(rows=[{"claim_index": 0, "op": "noop", "target_idx": 0}])
@@ -323,10 +314,11 @@ async def test_user_authored_never_noops_over_inferred(store):
 
 
 async def test_invalid_target_idx_coerced_to_add(store):
-    lens = await _entity_lens(store)
-    existing = await _member_claim(store, lens, "Timur lives in Berlin")
+    existing = await _existing_claim(store, "Timur lives in Berlin", subject="Timur")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(
         BatchReconcile(rows=[{"claim_index": 0, "op": "update", "target_idx": 99}])
     )
@@ -338,54 +330,38 @@ async def test_invalid_target_idx_coerced_to_add(store):
     assert (await store.get(existing.id)).status is Status.ACTIVE
 
 
-async def test_hallucinated_match_lens_id_biases_to_new(store):
-    await _entity_lens(store, name="Timur")
+async def test_hallucinated_match_subject_biases_to_new(store):
+    # The judge MATCHes onto a canonical_subject that is not in the recalled set ->
+    # self-correcting: keep the extractor's subject as NEW rather than trust it.
+    await _existing_claim(store, "Timur plays chess", subject="Timur")
     cheap = StubLLM()
     cheap.subject_queue.append(
-        SubjectResolution(decision="MATCH", lens_id="does-not-exist", reason="oops")
-    )
-    cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
-    rec = _reconciler(store, cheap)
-
-    results = await rec.reconcile([_candidate("Timur plays tennis")], USER_SCOPE)
-
-    r = results[0]
-    assert r.subject_created is True  # invalid lens_id -> self-correcting NEW
-    assert (await store.get(r.subject_lens_id)).lens_kind == "entity"
-
-
-async def test_alias_added_on_match_feeds_the_lens(store):
-    lens = await _entity_lens(store, name="Timur", criterion="this item is about Timur")
-    cheap = StubLLM()
-    cheap.subject_queue.append(
-        SubjectResolution(decision="MATCH", lens_id=lens.id, alias_to_add="TG", reason="same")
+        SubjectResolution(decision="MATCH", canonical_subject="Someone Else", reason="oops")
     )
     cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
     rec = _reconciler(store, cheap)
 
     results = await rec.reconcile(
-        [_candidate("Timur prefers espresso", subject="Timur", surfaces=["TG"])], USER_SCOPE
+        [_candidate("Tennis is a sport", subject="Tennis")], USER_SCOPE
     )
 
-    assert results[0].subject_lens_id == lens.id
-    # A genuinely new alias supersedes the lens with the surface appended to the
-    # successor's criterion so the next recall is an exact FTS hit
-    # (correction-feeds-the-lens). The old row persists (status=SUPERSEDED).
-    assert (await store.get(lens.id)).status is Status.SUPERSEDED
-    active = await store.query(kind=Kind.LENS, scope=USER_SCOPE, status=Status.ACTIVE)
-    timur = [le for le in active if le.lens_name == "Timur"][0]
-    assert "TG" in timur.lens_criterion
+    r = results[0]
+    assert r.subject_is_new is True  # hallucinated subject -> self-correcting NEW
+    assert r.canonical_subject == "Tennis"
 
 
 async def test_subject_batching_one_batch_per_group(store):
-    # Two claims share one canonical subject and recall the same lens: they group
-    # to ONE subject and a single Phase-4 batch call covers both (cost is
-    # O(distinct subjects), not O(claims)).
-    lens = await _entity_lens(store, name="Timur", criterion="this item is about Timur")
-    await _member_claim(store, lens, "Timur lives in Berlin")
+    # Two claims share one canonical subject and recall the same existing subject:
+    # they group to ONE subject and a single Phase-4 batch call covers both (cost
+    # is O(distinct subjects), not O(claims)).
+    await _existing_claim(store, "Timur lives in Berlin", subject="Timur")
     cheap = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     cheap.batch_queue.append(
         BatchReconcile(rows=[{"claim_index": 0, "op": "add"}, {"claim_index": 1, "op": "add"}])
     )
@@ -401,19 +377,20 @@ async def test_subject_batching_one_batch_per_group(store):
 
     assert len(results) == 2
     assert all(r.op is Op.ADD for r in results)
-    assert {r.subject_lens_id for r in results} == {lens.id}  # grouped to one subject
+    assert {r.canonical_subject for r in results} == {"Timur"}  # grouped to one subject
     # One batch call for the single subject group, regardless of claim count.
     assert cheap.batch_calls == 1
 
 
 async def test_escalation_uses_strong_model(store):
-    lens = await _entity_lens(store, name="Timur", criterion="this item is about Timur")
-    high_trust = await _member_claim(
-        store, lens, "Timur is allergic to peanuts", prov=Provenance.USER_AUTHORED
+    high_trust = await _existing_claim(
+        store, "Timur is allergic to peanuts", subject="Timur", prov=Provenance.USER_AUTHORED
     )
     cheap = StubLLM()
     strong = StubLLM()
-    cheap.subject_queue.append(SubjectResolution(decision="MATCH", lens_id=lens.id, reason="same"))
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same")
+    )
     # cheap proposes CONTRADICT against a user_authored target -> escalation
     cheap.batch_queue.append(
         BatchReconcile(

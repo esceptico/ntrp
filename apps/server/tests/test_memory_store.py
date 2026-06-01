@@ -8,10 +8,14 @@ import ntrp.database as database
 from ntrp.memory import (
     EdgeRole,
     Feedback,
-    Kind,
     LensDetailLevel,
+    LensProvenance,
+    LensRow,
+    LensStatus,
     MemoryEdge,
     MemoryItem,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryStore,
     Provenance,
     Scope,
@@ -33,14 +37,22 @@ async def store(tmp_path: Path):
 def _claim(content: str, scope: Scope, **kw) -> MemoryItem:
     return MemoryItem(
         id=str(uuid.uuid4()),
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=kw.pop("canonical_subject", "Tim"),
         scope=scope,
         provenance=kw.pop("provenance", Provenance.RECORDED),
         valid_from=kw.pop("valid_from", "2026-01-01T00:00:00+00:00"),
-        source_refs=kw.pop(
-            "source_refs", [SourceRef(kind="chat_turn", ref="turn-1")]
-        ),
+        source_refs=kw.pop("source_refs", [SourceRef(kind="chat_turn", ref="turn-1")]),
+        **kw,
+    )
+
+
+def _lens(scope: Scope, **kw) -> LensRow:
+    return LensRow(
+        id=str(uuid.uuid4()),
+        name=kw.pop("name", "Bugs"),
+        criterion=kw.pop("criterion", "this item describes a software bug"),
+        scope=scope,
         **kw,
     )
 
@@ -51,50 +63,40 @@ async def test_schema_creates_and_init_is_idempotent(tmp_path: Path):
     store = MemoryStore(conn)
     await store.init_schema()
     await store.init_schema()  # idempotent
-    rows = await conn.execute_fetchall(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_items'"
-    )
-    assert rows
+    names = {
+        r["name"]
+        for r in await conn.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    assert "memory_items" in names
+    assert "lenses" in names
+    assert "lens_membership_cache" in names
+    # memory_items is claims-only: no kind / lens_* columns
+    cols = {
+        r["name"]
+        for r in await conn.execute_fetchall("PRAGMA table_info(memory_items)")
+    }
+    assert "canonical_subject" in cols
+    assert "kind" not in cols
+    assert not any(c.startswith("lens_") for c in cols)
     await conn.close()
 
 
 @pytest.mark.asyncio
 async def test_claim_round_trips(store: MemoryStore):
-    item = _claim("Tim prefers raw SQL", Scope(ScopeKind.USER))
+    item = _claim("Tim prefers raw SQL", Scope(ScopeKind.USER), canonical_subject="Tim")
     await store.create_item(item)
     got = await store.get(item.id)
     assert got is not None
     assert got.content == "Tim prefers raw SQL"
+    assert got.canonical_subject == "Tim"
     assert got.scope.kind is ScopeKind.USER
     assert got.scope.key is None
     assert got.provenance is Provenance.RECORDED
     assert got.status is Status.ACTIVE
     assert got.source_refs[0].kind == "chat_turn"
     assert got.source_refs[0].ref == "turn-1"
-
-
-@pytest.mark.asyncio
-async def test_lens_round_trips(store: MemoryStore):
-    lens = MemoryItem(
-        id=str(uuid.uuid4()),
-        kind=Kind.LENS,
-        content="Things about Tim",
-        scope=Scope(ScopeKind.USER),
-        provenance=Provenance.INDUCED,
-        lens_name="Tim",
-        lens_criterion="claims whose subject is the person Tim",
-        lens_kind="entity",
-        lens_page="# Tim\n...",
-        lens_detail_level=LensDetailLevel.DOSSIER,
-        lens_exclusive=True,
-    )
-    await store.create_item(lens)
-    got = await store.get(lens.id)
-    assert got.kind is Kind.LENS
-    assert got.lens_name == "Tim"
-    assert got.lens_detail_level is LensDetailLevel.DOSSIER
-    assert got.lens_exclusive is True
-    assert got.source_refs == []
 
 
 @pytest.mark.asyncio
@@ -134,31 +136,23 @@ async def test_supersede_closes_predecessor_and_links_edge(store: MemoryStore):
 
 
 @pytest.mark.asyncio
-async def test_role_typed_edges(store: MemoryStore):
-    claim = _claim("Tim prefers raw SQL", Scope(ScopeKind.USER))
-    lens = MemoryItem(
-        id=str(uuid.uuid4()),
-        kind=Kind.LENS,
-        content="Tim",
-        scope=Scope(ScopeKind.USER),
-        provenance=Provenance.INDUCED,
-        lens_name="Tim",
-        lens_criterion="about Tim",
-    )
-    await store.create_item(claim)
-    await store.create_item(lens)
+async def test_claim_to_claim_edges(store: MemoryStore):
+    a = _claim("Tim shipped a fix", Scope(ScopeKind.USER))
+    b = _claim("The bug is resolved", Scope(ScopeKind.USER))
+    await store.create_item(a)
+    await store.create_item(b)
 
     assert await store.add_edge(
-        MemoryEdge(child_id=claim.id, parent_id=lens.id, role=EdgeRole.MEMBER_OF)
+        MemoryEdge(child_id=b.id, parent_id=a.id, role=EdgeRole.EVIDENCE)
     ) is True
     # duplicate ignored
     assert await store.add_edge(
-        MemoryEdge(child_id=claim.id, parent_id=lens.id, role=EdgeRole.MEMBER_OF)
+        MemoryEdge(child_id=b.id, parent_id=a.id, role=EdgeRole.EVIDENCE)
     ) is False
 
-    members = await store.list_edges(lens.id, direction="to", role=EdgeRole.MEMBER_OF)
-    assert len(members) == 1
-    assert members[0].child_id == claim.id
+    deps = await store.list_edges(a.id, direction="to", role=EdgeRole.EVIDENCE)
+    assert len(deps) == 1
+    assert deps[0].child_id == b.id
 
 
 @pytest.mark.asyncio
@@ -167,11 +161,30 @@ async def test_scope_filtering(store: MemoryStore):
     await store.create_item(_claim("proj fact", Scope(ScopeKind.PROJECT, "p1")))
     await store.create_item(_claim("other proj", Scope(ScopeKind.PROJECT, "p2")))
 
-    user = await store.query(scope=Scope(ScopeKind.USER), kind=Kind.CLAIM)
+    user = await store.query(scope=Scope(ScopeKind.USER))
     assert {i.content for i in user} == {"user fact"}
 
-    p1 = await store.query(scope=Scope(ScopeKind.PROJECT, "p1"), kind=Kind.CLAIM)
+    p1 = await store.query(scope=Scope(ScopeKind.PROJECT, "p1"))
     assert {i.content for i in p1} == {"proj fact"}
+
+
+@pytest.mark.asyncio
+async def test_subject_filtering(store: MemoryStore):
+    await store.create_item(
+        _claim("Tim prefers raw SQL", Scope(ScopeKind.USER), canonical_subject="Tim")
+    )
+    await store.create_item(
+        _claim("Tim takes venlafaxine", Scope(ScopeKind.USER), canonical_subject="Tim")
+    )
+    await store.create_item(
+        _claim("Regina is CEO", Scope(ScopeKind.USER), canonical_subject="Regina")
+    )
+
+    tim = await store.query(scope=Scope(ScopeKind.USER), subject="Tim")
+    assert {i.content for i in tim} == {"Tim prefers raw SQL", "Tim takes venlafaxine"}
+
+    regina = await store.query(scope=Scope(ScopeKind.USER), subject="Regina")
+    assert {i.content for i in regina} == {"Regina is CEO"}
 
 
 @pytest.mark.asyncio
@@ -215,6 +228,15 @@ async def test_fts_search(store: MemoryStore):
 
 
 @pytest.mark.asyncio
+async def test_fts_search_by_subject(store: MemoryStore):
+    await store.create_item(
+        _claim("prefers raw SQL", Scope(ScopeKind.USER), canonical_subject="Regina Volkov")
+    )
+    hits = await store.search("Regina")
+    assert any(i.canonical_subject == "Regina Volkov" for i in hits)
+
+
+@pytest.mark.asyncio
 async def test_search_excludes_invalidated_by_default(store: MemoryStore):
     live = _claim("Tim prefers raw SQL over ORMs", Scope(ScopeKind.USER))
     stale = _claim("Tim prefers SQL stored procedures", Scope(ScopeKind.USER))
@@ -222,13 +244,11 @@ async def test_search_excludes_invalidated_by_default(store: MemoryStore):
     await store.create_item(stale)
     await store.invalidate(stale.id)  # archived
 
-    # default: invalidated rows must not surface as live
     hits = await store.search("SQL")
     contents = {i.content for i in hits}
     assert live.content in contents
     assert stale.content not in contents
 
-    # forensic mode can still reach them
     all_hits = await store.search("SQL", include_inactive=True)
     assert stale.content in {i.content for i in all_hits}
 
@@ -242,3 +262,107 @@ async def test_feedback_and_corroboration(store: MemoryStore):
     got = await store.get(item.id)
     assert got.feedback is Feedback.CONFIRMED
     assert got.corroboration == 1
+
+
+# --- lens registry (views; never memory) ---
+
+
+@pytest.mark.asyncio
+async def test_lens_round_trips_in_registry(store: MemoryStore):
+    lens = _lens(
+        Scope(ScopeKind.USER),
+        name="Regina Volkov",
+        criterion="this item is about Regina Volkov",
+        detail_level=LensDetailLevel.DOSSIER,
+        provenance=LensProvenance.INDUCED,
+        page="# Regina\n...",
+    )
+    await store.create_lens_row(lens)
+    got = await store.get_lens(lens.id)
+    assert got is not None
+    assert got.name == "Regina Volkov"
+    assert got.detail_level is LensDetailLevel.DOSSIER
+    assert got.provenance is LensProvenance.INDUCED
+    assert got.status is LensStatus.ACTIVE
+    assert got.page == "# Regina\n..."
+
+
+@pytest.mark.asyncio
+async def test_create_lens_touches_zero_claims_and_edges(store: MemoryStore):
+    await store.create_item(_claim("Tim prefers raw SQL", Scope(ScopeKind.USER)))
+    before_items = await store.query(scope=Scope(ScopeKind.USER), status=None)
+    before_edges = await store.conn.execute_fetchall(
+        "SELECT COUNT(*) AS n FROM memory_item_parents"
+    )
+
+    await store.create_lens_row(_lens(Scope(ScopeKind.USER)))
+
+    after_items = await store.query(scope=Scope(ScopeKind.USER), status=None)
+    after_edges = await store.conn.execute_fetchall(
+        "SELECT COUNT(*) AS n FROM memory_item_parents"
+    )
+    assert len(after_items) == len(before_items)
+    assert after_edges[0]["n"] == before_edges[0]["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_update_lens_in_place_nulls_page(store: MemoryStore):
+    lens = _lens(Scope(ScopeKind.USER), page="# stale")
+    await store.create_lens_row(lens)
+    updated = await store.update_lens(
+        lens.id, criterion="bugs in the ntrp repo only", page=None
+    )
+    assert updated.criterion == "bugs in the ntrp repo only"
+    assert updated.page is None
+
+
+@pytest.mark.asyncio
+async def test_list_and_delete_lens_leaves_claims_untouched(store: MemoryStore):
+    claim = _claim("Tim prefers raw SQL", Scope(ScopeKind.USER))
+    await store.create_item(claim)
+    lens = _lens(Scope(ScopeKind.USER))
+    await store.create_lens_row(lens)
+
+    assert {ln.id for ln in await store.list_lenses(scope=Scope(ScopeKind.USER))} == {lens.id}
+
+    assert await store.delete_lens(lens.id) is True
+    assert await store.get_lens(lens.id) is None
+    # claim survives
+    assert await store.get(claim.id) is not None
+
+
+@pytest.mark.asyncio
+async def test_search_lenses(store: MemoryStore):
+    await store.create_lens_row(
+        _lens(Scope(ScopeKind.USER), name="Bugs", criterion="software bugs")
+    )
+    await store.create_lens_row(
+        _lens(Scope(ScopeKind.USER), name="People", criterion="a person")
+    )
+    hits = await store.search_lenses("Bugs")
+    assert any(ln.name == "Bugs" for ln in hits)
+
+
+@pytest.mark.asyncio
+async def test_membership_cache_is_a_cache(store: MemoryStore):
+    claim = _claim("Tim prefers raw SQL", Scope(ScopeKind.USER))
+    await store.create_item(claim)
+    lens = _lens(Scope(ScopeKind.USER))
+    await store.create_lens_row(lens)
+
+    await store.put_membership(
+        [
+            MembershipVerdict(lens.id, claim.id, MembershipDecision.IN, rationale="matches"),
+        ]
+    )
+    members = await store.get_membership(lens.id, decision=MembershipDecision.IN)
+    assert [v.claim_id for v in members] == [claim.id]
+
+    # cache is not an edge — no member_of rows anywhere
+    edges = await store.conn.execute_fetchall("SELECT COUNT(*) AS n FROM memory_item_parents")
+    assert edges[0]["n"] == 0
+
+    # invalidation drops verdicts; claim is untouched
+    await store.invalidate_lens_membership(lens.id)
+    assert await store.get_membership(lens.id) == []
+    assert await store.get(claim.id) is not None

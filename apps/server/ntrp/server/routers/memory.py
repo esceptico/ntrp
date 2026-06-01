@@ -1,14 +1,14 @@
 """Memory UI router (Stage-5) — read + structured write-back over the frozen store.
 
-Thin HTTP surface over `MemoryStore` (reads), `LensProjector`/`LensService`
-(lens page + lifecycle), `LensWriteBack` (anchored page edits), and
-`MemoryPipeline.retrieve` (ranked egress). No new store methods, no invariant
-change: every route is a composition of existing pipeline/store calls. The full
-contract lives in routers/MEMORY_UI_CONTRACT.md.
+Thin HTTP surface over `MemoryStore` (claim reads + the `lenses` registry),
+`LensRegistry`/`LensProjector` (lens lifecycle + projected page), `LensWriteBack`
+(anchored page edits), and `MemoryPipeline.retrieve` (ranked egress). Memory is
+claims-only; lenses are a separate registry of views (never graph nodes). The
+graph is claims + claim↔claim edges only.
 
 Wiring: `require_knowledge_runtime` → `KnowledgeRuntime`. Reads use
 `knowledge.memory` (the store); lens/page/writeback/retrieve use
-`knowledge.memory_retrieval` (the pipeline, exposing `.lens_service`,
+`knowledge.memory_retrieval` (the pipeline, exposing `.lens_registry`,
 `.lens_projector`, `.lens_writeback`, `.retrieve`). Every route guards
 `knowledge.memory_ready` → 503 when the pipeline is not up.
 """
@@ -17,8 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.models import (
     EdgeRole,
-    Kind,
     LensDetailLevel,
+    LensRow,
     MemoryEdge,
     MemoryItem,
     Scope,
@@ -74,8 +74,8 @@ def _scope_json(scope: Scope) -> dict:
 def item_json(m: MemoryItem) -> dict:
     return {
         "id": m.id,
-        "kind": m.kind.value,
         "content": m.content,
+        "canonical_subject": m.canonical_subject,
         "scope": _scope_json(m.scope),
         "provenance": m.provenance.value,
         "status": m.status.value,
@@ -85,13 +85,22 @@ def item_json(m: MemoryItem) -> dict:
         "corroboration": m.corroboration,
         "last_relevant_at": m.last_relevant_at,
         "feedback": m.feedback.value,
-        "lens_name": m.lens_name,
-        "lens_criterion": m.lens_criterion,
-        "lens_kind": m.lens_kind,
-        "lens_detail_level": m.lens_detail_level.value if m.lens_detail_level else None,
-        "lens_exclusive": m.lens_exclusive,
         "created_at": m.created_at,
         "updated_at": m.updated_at,
+    }
+
+
+def lens_json(lens: LensRow) -> dict:
+    return {
+        "id": lens.id,
+        "name": lens.name,
+        "criterion": lens.criterion,
+        "scope": _scope_json(lens.scope),
+        "detail_level": lens.detail_level.value,
+        "provenance": lens.provenance.value,
+        "status": lens.status.value,
+        "created_at": lens.created_at,
+        "updated_at": lens.updated_at,
     }
 
 
@@ -149,9 +158,19 @@ def ranked_json(r: RankedItem) -> dict:
     }
 
 
-async def _require_active_lens(store, lens_id: str) -> MemoryItem:
-    lens = await store.get(lens_id)
-    if lens is None or lens.kind is not Kind.LENS or lens.status is not Status.ACTIVE:
+def _parse_roles(roles: str | None) -> set[EdgeRole] | None:
+    if not roles:
+        return None
+    try:
+        parsed = {EdgeRole(r) for r in roles.split(",") if r}
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"invalid roles: {roles}")
+    return parsed or None
+
+
+async def _require_active_lens(store, lens_id: str) -> LensRow:
+    lens = await store.get_lens(lens_id)
+    if lens is None or lens.status.value != "active":
         raise HTTPException(status_code=404, detail="lens not found or inactive")
     return lens
 
@@ -164,16 +183,12 @@ async def list_items(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
     scope_kind: str = "user",
     scope_key: str | None = None,
-    kind: str = "claim",
+    subject: str | None = None,
     status: str = "active",
     valid_at: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
 ):
     scope = _scope(scope_kind, scope_key)
-    try:
-        kind_enum = Kind(kind)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"invalid kind: {kind}")
     # Empty status string => all statuses (store.query(status=None)).
     if status == "":
         status_enum: Status | None = None
@@ -184,7 +199,7 @@ async def list_items(
             raise HTTPException(status_code=422, detail=f"invalid status: {status}")
 
     items = await knowledge.memory.query(
-        kind=kind_enum, scope=scope, status=status_enum, valid_at=valid_at, limit=limit
+        scope=scope, status=status_enum, subject=subject, valid_at=valid_at, limit=limit
     )
     return {"items": [item_json(m) for m in items], "limit": limit}
 
@@ -217,10 +232,10 @@ async def list_lenses(
     scope_key: str | None = None,
 ):
     scope = _scope(scope_kind, scope_key)
-    rows = await knowledge.memory_retrieval.lens_service.list_lenses(scope)
+    rows = await knowledge.memory_retrieval.lens_registry.list_lenses(scope)
     return {
         "lenses": [
-            {"lens": item_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows
+            {"lens": lens_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows
         ]
     }
 
@@ -249,9 +264,54 @@ async def get_lens_page(
     # store.get is None -> 404. An active lens with zero members returns a
     # non-empty header markdown and is NOT a 404.
     if not page.markdown and not page.blocks:
-        if await knowledge.memory.get(lens_id) is None:
+        if await knowledge.memory.get_lens(lens_id) is None:
             raise HTTPException(status_code=404, detail="lens not found")
     return page_json(page)
+
+
+# --- 5a: whole claim-graph (default view) ----------------------------
+
+
+@router.get("/graph")
+async def get_whole_graph(
+    knowledge: KnowledgeRuntime = Depends(_knowledge),
+    scope_kind: str = "user",
+    scope_key: str | None = None,
+    subject: str | None = None,
+    roles: str | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+):
+    """All in-scope active claims + claim↔claim edges among them.
+
+    The default graph the UI loads (locked model §4). Lenses are never nodes.
+    """
+    scope = _scope(scope_kind, scope_key)
+    store = knowledge.memory
+
+    role_filter = _parse_roles(roles)
+    claims = await store.query(scope=scope, status=Status.ACTIVE, subject=subject, limit=limit)
+    nodes = {c.id: c for c in claims}
+
+    edge_keys: set[tuple] = set()
+    edges: list[MemoryEdge] = []
+    for cid in nodes:
+        for e in await store.list_edges(cid, direction="from"):
+            if role_filter is not None and e.role not in role_filter:
+                continue
+            # Claim↔claim edges only; keep edges whose both endpoints are in-scope.
+            if e.parent_id not in nodes:
+                continue
+            key = (e.child_id, e.parent_id, e.role.value)
+            if key in edge_keys:
+                continue
+            edge_keys.add(key)
+            edges.append(e)
+
+    return {
+        "nodes": [item_json(m) for m in nodes.values()],
+        "edges": [edge_json(e) for e in edges],
+        "scope": _scope_json(scope),
+    }
 
 
 # --- 5: provenance graph (router-side BFS over edges) ----------------
@@ -272,14 +332,7 @@ async def get_graph(
     if root is None:
         raise HTTPException(status_code=404, detail="item not found")
 
-    role_filter: set[EdgeRole] | None = None
-    if roles:
-        try:
-            role_filter = {EdgeRole(r) for r in roles.split(",") if r}
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"invalid roles: {roles}")
-        if not role_filter:
-            role_filter = None
+    role_filter = _parse_roles(roles)
 
     depth = max(0, min(depth, _MAX_GRAPH_DEPTH))
     dirs = (
@@ -345,7 +398,7 @@ async def search(
     if mode == "retrieve":
         scope = _scope(scope_kind, scope_key)
         ctx: RetrievedContext = await knowledge.memory_retrieval.retrieve(
-            Retrieval(goal=q, scope=scope, kinds=(Kind.CLAIM,))
+            Retrieval(goal=q, scope=scope)
         )
         return {
             "mode": "retrieve",
@@ -398,10 +451,10 @@ async def writeback(
 @router.post("/lenses")
 async def create_lens(body: CreateLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
     scope = _scope(body.scope_kind, body.scope_key)
-    lens = await knowledge.memory_retrieval.lens_service.create_lens(
-        body.name, body.criterion, scope, lens_kind=body.lens_kind
+    lens = await knowledge.memory_retrieval.lens_registry.create_lens(
+        body.name, body.criterion, scope
     )
-    return {"lens": item_json(lens)}
+    return {"lens": lens_json(lens)}
 
 
 @router.put("/lenses/{lens_id}/criterion")
@@ -411,10 +464,12 @@ async def edit_criterion(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
 ):
     try:
-        lens = await knowledge.memory_retrieval.lens_service.edit_criterion(lens_id, body.criterion)
+        lens = await knowledge.memory_retrieval.lens_registry.edit_criterion(
+            lens_id, body.criterion
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"lens": item_json(lens)}
+    return {"lens": lens_json(lens)}
 
 
 @router.post("/lenses/{lens_id}/split")
@@ -425,12 +480,12 @@ async def split_lens(
 ):
     into = [(c.name, c.criterion) for c in body.into]
     try:
-        children = await knowledge.memory_retrieval.lens_service.split_lens(
+        children = await knowledge.memory_retrieval.lens_registry.split_lens(
             lens_id, into, archive_parent=body.archive_parent
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"children": [item_json(c) for c in children]}
+    return {"children": [lens_json(c) for c in children]}
 
 
 @router.post("/lenses/merge")
@@ -438,17 +493,17 @@ async def merge_lenses(body: MergeLensBody, knowledge: KnowledgeRuntime = Depend
     # scope is validated for symmetry; merge re-derives scope from the inputs.
     _scope(body.scope_kind, body.scope_key)
     try:
-        lens = await knowledge.memory_retrieval.lens_service.merge_lenses(
+        lens = await knowledge.memory_retrieval.lens_registry.merge_lenses(
             body.lens_ids, body.name, body.criterion
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"lens": item_json(lens)}
+    return {"lens": lens_json(lens)}
 
 
 @router.delete("/lenses/{lens_id}")
 async def delete_lens(lens_id: str, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    archived = await knowledge.memory_retrieval.lens_service.delete_lens(lens_id)
-    if not archived:
-        raise HTTPException(status_code=404, detail="lens not found or already inactive")
-    return {"archived": archived}
+    deleted = await knowledge.memory_retrieval.lens_registry.delete_lens(lens_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="lens not found")
+    return {"deleted": deleted}

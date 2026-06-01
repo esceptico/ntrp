@@ -11,8 +11,9 @@ from enum import Enum, StrEnum
 
 from ntrp.memory.models import (
     Feedback,
-    Kind,
     LensDetailLevel,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryItem,
     Provenance,
     Scope,
@@ -143,10 +144,10 @@ class Op(Enum):
 class ReconcileResult:
     claim_index: int
     op: Op
-    subject_lens_id: str | None
+    canonical_subject: str
     written_id: str | None = None
     target_claim_id: str | None = None
-    subject_created: bool = False
+    subject_is_new: bool = False
     escalated: bool = False
 
 
@@ -176,7 +177,6 @@ class Retrieval:  # input config object (>5 fields per CLAUDE.md)
     also_scopes: list[Scope] = field(default_factory=list)
     valid_at: str | None = None
     token_budget: int = 2000
-    kinds: tuple[Kind, ...] = (Kind.CLAIM,)
     lens_hint: str | None = None
 
 
@@ -201,33 +201,18 @@ class RetrievedContext:
 
 
 # --- Lens (Stage-4) transient shapes --------------------------------
-# LENS_CONTRACTS §1.2. No rows, no columns; reuse the frozen Stage-2 store.
-# NOTE (scope boundary): only the shapes the membership scorer
-# (pipeline/membership.py LensMembership) produces are defined here —
-# MembershipDecision + MembershipVerdict (score/score_into_active_lenses output),
-# BackfillReport (backfill_lens result), CoverageAdvisory (coverage result). The
-# remaining §1.2 shapes (RenderedClaim, ProjectedPage, PageEditKind, PageEditOp,
-# WriteBackResult) belong to the project/writeback/lens components and are added
-# by those builds, not here.
-class MembershipDecision(StrEnum):
-    IN = "in"
-    OUT = "out"
-    DEFER = "defer"
-
-
-@dataclass
-class MembershipVerdict:
-    claim_id: str
-    lens_id: str
-    decision: MembershipDecision
-    rationale: str
+# A lens is a VIEW: membership is a COMPUTED PROJECTION cached in
+# lens_membership_cache (a cache, not graph truth). MembershipDecision +
+# MembershipVerdict are the cache-row shapes, defined in models.py and re-exported
+# here for the pipeline. BackfillReport (cache-refresh result) + CoverageAdvisory
+# (a pure COUNT advisory) describe the projection.
 
 
 @dataclass
 class BackfillReport:
     lens_id: str
     scanned: int
-    members_added: int
+    members_added: int  # `in` verdicts written to the cache
     capped: bool
 
 
@@ -235,7 +220,7 @@ class BackfillReport:
 class CoverageAdvisory:
     lens_id: str
     scope_pool: int  # active claims in scope
-    member_count: int  # active member_of members
+    member_count: int  # `in`-decision claims in the membership cache
     ratio: float  # member_count / scope_pool (0.0 if pool == 0)
     generic: bool  # ratio >= GENERIC_RATIO — ADVISORY ONLY, never a gate
     suggestion: str  # "split" | "narrow" prose for the user

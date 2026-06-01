@@ -47,11 +47,10 @@ W_PROVENANCE = 0.10
 W_CORROBORATION = 0.08
 # Provenance ordinal, high→low (CONTRACTS §1.3).
 _PROVENANCE_ORD = {
-    Provenance.USER_AUTHORED: 4,
-    Provenance.RECORDED: 3,
-    Provenance.INFERRED: 2,
-    Provenance.EXTERNAL: 1,
-    Provenance.INDUCED: 0,
+    Provenance.USER_AUTHORED: 3,
+    Provenance.RECORDED: 2,
+    Provenance.INFERRED: 1,
+    Provenance.EXTERNAL: 0,
 }
 # Freshness half-life in days — monotone recency, NOT a decay gate.
 _FRESHNESS_HALFLIFE_DAYS = 90.0
@@ -80,9 +79,9 @@ class Retriever:
         #
         # `lens_expander` is the additive read-only Stage-4 egress (LENS_CONTRACTS
         # §3.7). When present and the request carries a `lens_hint`, retrieve first
-        # tries the lens path: inject the cached lens_page verbatim (0 LLM), else
-        # pre-filter the candidate pool to the lens's active member_of members and
-        # rank as usual (orders, never gates). None -> unconstrained recall, unchanged.
+        # tries the lens path: inject the cached lens page verbatim (0 LLM), else
+        # pre-filter the candidate pool to the lens's cached `in` members and rank
+        # as usual (orders, never gates). None -> unconstrained recall, unchanged.
         self.store = store
         self.embed = embed
         self.cheap_llm = cheap_llm
@@ -168,21 +167,19 @@ class Retriever:
     ) -> dict[str, MemoryItem]:
         """The hard categorical filter as a recall predicate.
 
-        Union over requested scopes of active, in-validity items of the requested
-        kinds. This is the ONLY exclusion gate; everything past it is ordering.
+        Union over requested scopes of active, in-validity claims. This is the ONLY
+        exclusion gate; everything past it is ordering.
         """
         allowed: dict[str, MemoryItem] = {}
         for scope in scopes:
-            for kind in req.kinds:
-                items = await self.store.query(
-                    kind=kind,
-                    scope=scope,
-                    status=Status.ACTIVE,
-                    valid_at=valid_at,
-                    limit=500,
-                )
-                for it in items:
-                    allowed[it.id] = it
+            items = await self.store.query(
+                scope=scope,
+                status=Status.ACTIVE,
+                valid_at=valid_at,
+                limit=500,
+            )
+            for it in items:
+                allowed[it.id] = it
         return allowed
 
     # --- candidate recall (hybrid, FTS-leaning) -------------------------

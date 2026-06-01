@@ -19,7 +19,6 @@ import pytest_asyncio
 
 import ntrp.database as database
 from ntrp.memory import (
-    Kind,
     MemoryItem,
     Provenance,
     Scope,
@@ -101,8 +100,8 @@ def _vocab(*phrases: str) -> list[str]:
 async def _add(store, content, scope, **kw):
     item = MemoryItem(
         id=kw.get("id", str(uuid.uuid4())),
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=kw.get("canonical_subject", "Timur"),
         scope=scope,
         provenance=kw.get("provenance", Provenance.RECORDED),
         status=kw.get("status", Status.ACTIVE),

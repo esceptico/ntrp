@@ -22,12 +22,12 @@ from ntrp.embedder import Embedder
 from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
 from ntrp.memory.lens.expand import LensExpander
+from ntrp.memory.lens.registry import LensRegistry
 from ntrp.memory.models import Scope, SourceRef
 from ntrp.memory.pipeline.admit import AdmitGate
 from ntrp.memory.pipeline.capture import CaptureConfig, CaptureService
 from ntrp.memory.pipeline.consolidate import ConsolidateConfig, ConsolidateLint
 from ntrp.memory.pipeline.extract import Extractor
-from ntrp.memory.pipeline.lens import LensService
 from ntrp.memory.pipeline.membership import LensMembership
 from ntrp.memory.pipeline.project import LensProjector
 from ntrp.memory.pipeline.prompts_capture import SemanticBoundary
@@ -121,10 +121,9 @@ class MemoryPipeline:
             cheap_model=config.cheap_model,
             strong_model=config.strong_model,
         )
-        # Stage-4 lenses (LENS_CONTRACTS §3). One mechanism, two constraint
-        # settings: reconcile owns the entity axis inline; these own topic/user.
-        # Purely additive — no store-invariant change. The expander gives retrieve
-        # its read-only lens egress (§3.7); membership runs Mode-1 in ingest_unit.
+        # Lenses are VIEWS (a separate registry + computed-projection cache), not
+        # memory rows. The expander gives retrieve its read-only lens egress;
+        # membership runs Mode-1 cache-warming in ingest_unit.
         self.lens_expander = LensExpander(store, embed)
         self.retriever = Retriever(
             store,
@@ -153,8 +152,8 @@ class MemoryPipeline:
         self.lens_writeback = LensWriteBack(
             store, self.write_seam, self.lens_membership, self.lens_projector
         )
-        self.lens_service = LensService(
-            store, self.lens_membership, self.lens_projector, self.lens_writeback
+        self.lens_registry = LensRegistry(
+            store, self.lens_membership, projector=self.lens_projector
         )
         self.consolidate = ConsolidateLint(
             store,
@@ -190,11 +189,10 @@ class MemoryPipeline:
             extracted.candidates, unit.scope, prior_candidates=admitted.candidates
         )
 
-        # Mode 1 (LENS_CONTRACTS §3.6): score the freshly written/updated claims
-        # into the scope's active topic/user lenses. O(new x K), bounded by the
-        # candidate recall fan-out — never O(corpus). Entity membership stays
-        # inline in reconcile (the axis split, §2). Best-effort: a lens scoring
-        # failure never sinks the ingest (the claims are already durably written).
+        # Mode 1: cache-warm the membership projection for freshly written claims
+        # against the scope's active lenses. O(new x K), bounded by the candidate
+        # recall fan-out — never O(corpus). Best-effort: correctness does not depend
+        # on it (the projector recomputes on a cache miss).
         written = [r.written_id for r in results if r.written_id]
         if written:
             try:

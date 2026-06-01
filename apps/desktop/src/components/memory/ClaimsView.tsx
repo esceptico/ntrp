@@ -50,7 +50,7 @@ export function ClaimsView({
 
   const runDefault = useCallback(() => {
     setLoading(true);
-    listMemoryItems(config, { kind: "claim", limit: 100 })
+    listMemoryItems(config, { limit: 100 })
       .then((r) => {
         setItems(r.items);
         setDegraded(false);
@@ -175,7 +175,6 @@ function ClaimDetail({
       .finally(() => setLoading(false));
   }, [config, claimId]);
 
-  const lensMemberships = useMemo(() => parents.filter((e) => e.role === "member_of"), [parents]);
   const contradicts = useMemo(
     () => [...parents, ...children].filter((e) => e.role === "contradicts"),
     [parents, children],
@@ -222,15 +221,9 @@ function ClaimDetail({
             <Stat label="feedback" value={item.feedback} />
           </div>
 
-          {lensMemberships.length > 0 && (
-            <Section title="In lenses">
-              <div className="flex flex-wrap gap-1.5">
-                {lensMemberships.map((e) => (
-                  <Pill key={e.parent_id} tone="accent">
-                    {truncate(e.parent_id, 10)}
-                  </Pill>
-                ))}
-              </div>
+          {item.canonical_subject && (
+            <Section title="Subject">
+              <Pill tone="accent">{truncate(item.canonical_subject, 32)}</Pill>
             </Section>
           )}
 

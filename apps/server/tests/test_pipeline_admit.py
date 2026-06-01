@@ -14,7 +14,6 @@ import ntrp.database as database
 from ntrp.agent.types.llm import Choice, CompletionResponse, FinishReason, Message, Role
 from ntrp.agent.types.usage import Usage
 from ntrp.memory import (
-    Kind,
     MemoryItem,
     Provenance,
     Scope,
@@ -102,11 +101,11 @@ def _unit(text, *, role=ExchangeRole.LIVE_CHAT, forced=False, scope=USER_SCOPE):
     )
 
 
-async def _seed_claim(store, content, *, scope=USER_SCOPE, id="c1"):
+async def _seed_claim(store, content, *, scope=USER_SCOPE, id="c1", subject="Timur"):
     item = MemoryItem(
         id=id,
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=subject,
         scope=scope,
         provenance=Provenance.RECORDED,
         source_refs=[SourceRef(kind="chat_turn", ref="seed")],

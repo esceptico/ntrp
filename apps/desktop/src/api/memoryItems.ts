@@ -13,11 +13,13 @@ export interface MemoryScope {
 }
 
 // ── Shared value objects ────────────────────────────────────────────────────
-export type MemoryKind = "claim" | "lens";
+// Memory is claims only. Lenses are a separate registry of views (see `Lens`).
 export type MemoryStatus = "active" | "superseded" | "archived";
-export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external" | "induced";
+export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external";
 export type MemoryFeedback = "none" | "confirmed" | "corrected";
 export type LensDetailLevel = "gist" | "structured" | "dossier";
+export type LensProvenance = "user_authored" | "induced";
+export type LensStatus = "active" | "archived";
 
 export interface MemorySourceRef {
   kind: string;
@@ -27,8 +29,8 @@ export interface MemorySourceRef {
 
 export interface MemoryItem {
   id: string;
-  kind: MemoryKind;
   content: string;
+  canonical_subject: string;
   scope: MemoryScope;
   provenance: MemoryProvenance;
   status: MemoryStatus;
@@ -38,16 +40,24 @@ export interface MemoryItem {
   corroboration: number;
   last_relevant_at: string | null;
   feedback: MemoryFeedback;
-  lens_name: string | null;
-  lens_criterion: string | null;
-  lens_kind: string | null;
-  lens_detail_level: LensDetailLevel | null;
-  lens_exclusive: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts" | "member_of";
+// A lens registry row — a view over claims, never a memory item, never a graph node.
+export interface Lens {
+  id: string;
+  name: string;
+  criterion: string;
+  scope: MemoryScope;
+  detail_level: LensDetailLevel;
+  provenance: LensProvenance;
+  status: LensStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts";
 export interface MemoryEdge {
   child_id: string;
   parent_id: string;
@@ -98,7 +108,7 @@ export interface MemoryItemsResponse {
   limit: number;
 }
 export interface ListMemoryItemsParams extends ScopeParams {
-  kind?: MemoryKind;
+  subject?: string;
   status?: MemoryStatus | ""; // "" => all statuses
   valid_at?: string;
   limit?: number;
@@ -110,7 +120,7 @@ export function listMemoryItems(config: AppConfig, params: ListMemoryItemsParams
     `/admin/memory/items${queryString({
       scope_kind: params.scope_kind,
       scope_key: params.scope_key,
-      kind: params.kind,
+      subject: params.subject,
       status: params.status,
       valid_at: params.valid_at,
       limit: params.limit,
@@ -131,7 +141,7 @@ export function getMemoryItem(config: AppConfig, itemId: string) {
 
 // ── 3 — List lenses (with coverage advisory) ────────────────────────────────
 export interface LensWithCoverage {
-  lens: MemoryItem;
+  lens: Lens;
   coverage: CoverageAdvisory;
 }
 export interface LensesResponse {
@@ -190,6 +200,31 @@ export function getMemoryGraph(config: AppConfig, itemId: string, params: Memory
       direction: params.direction,
       depth: params.depth,
       roles: params.roles?.join(","),
+    })}`,
+  );
+}
+
+// ── 5a — Whole claim-graph (default view) ────────────────────────────────────
+export interface WholeGraph {
+  nodes: MemoryItem[];
+  edges: MemoryEdge[];
+  scope: MemoryScope;
+}
+export interface WholeGraphParams extends ScopeParams {
+  subject?: string;
+  roles?: MemoryEdgeRole[];
+  limit?: number;
+}
+
+export function getWholeGraph(config: AppConfig, params: WholeGraphParams = {}) {
+  return apiWithConfig<WholeGraph>(
+    config,
+    `/admin/memory/graph${queryString({
+      scope_kind: params.scope_kind,
+      scope_key: params.scope_key,
+      subject: params.subject,
+      roles: params.roles?.join(","),
+      limit: params.limit,
     })}`,
   );
 }
@@ -270,15 +305,14 @@ export function writebackLens(config: AppConfig, lensId: string, ops: PageEditOp
 export interface CreateLensBody extends ScopeParams {
   name: string;
   criterion: string;
-  lens_kind?: string; // default "topic"
 }
 
 export function createLens(config: AppConfig, body: CreateLensBody) {
-  return apiWithConfig<{ lens: MemoryItem }>(config, "/admin/memory/lenses", jsonBody(body));
+  return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses", jsonBody(body));
 }
 
 export function editLensCriterion(config: AppConfig, lensId: string, criterion: string) {
-  return apiWithConfig<{ lens: MemoryItem }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}/criterion`, {
+  return apiWithConfig<{ lens: Lens }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}/criterion`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ criterion }),
@@ -295,7 +329,7 @@ export interface SplitLensBody {
 }
 
 export function splitLens(config: AppConfig, lensId: string, body: SplitLensBody) {
-  return apiWithConfig<{ children: MemoryItem[] }>(
+  return apiWithConfig<{ children: Lens[] }>(
     config,
     `/admin/memory/lenses/${encodeURIComponent(lensId)}/split`,
     jsonBody(body),
@@ -309,11 +343,11 @@ export interface MergeLensBody extends ScopeParams {
 }
 
 export function mergeLenses(config: AppConfig, body: MergeLensBody) {
-  return apiWithConfig<{ lens: MemoryItem }>(config, "/admin/memory/lenses/merge", jsonBody(body));
+  return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses/merge", jsonBody(body));
 }
 
 export function deleteLens(config: AppConfig, lensId: string) {
-  return apiWithConfig<{ archived: boolean }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}`, {
+  return apiWithConfig<{ deleted: boolean }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}`, {
     method: "DELETE",
   });
 }

@@ -1,18 +1,18 @@
-"""Unit tests for LensMembership — the scale-orchestration engine (LENS_CONTRACTS
-§3.1, §3.6, §10).
+"""Unit tests for LensMembership — the computed-projection engine (a cache, not edges).
 
 Tmp in-memory SQLite ONLY — never ~/.ntrp/memory.db, never the network. The
 cheap/strong LLMs are the shared FakeCompletionClient: each test queues the exact
 MembershipBatch the model would return and asserts `.calls` for the cost ceiling.
 The embedder is the shared FakeEmbedder.
 
-The load-bearing invariants asserted here:
+A lens is a VIEW; membership is a COMPUTED PROJECTION cached in
+`lens_membership_cache`, NEVER a graph edge. The load-bearing invariants:
   §0 ban    — membership flips with the LLM verdict ONLY; identical embeddings +
               opposite verdicts are both honored; a degraded embedder still decides.
-  §1.1      — edges are written only on `in`; `out`/`defer` write nothing.
+  cache     — `in` verdicts land in the cache; `out`/`defer` cache no member.
   §3.6      — candidate-K bound: judge calls <= touched lenses, never O(corpus).
-  §4.2      — `defer` escalates to the strong model; still-`defer` stays unwritten.
-  §7        — coverage is a pure COUNT ratio, advisory only, mutates no edges.
+  §4.2      — `defer` escalates to the strong model; still-`defer` stays a non-member.
+  §7        — coverage is a pure COUNT ratio, advisory only, mutates nothing.
 """
 
 import uuid
@@ -22,9 +22,9 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.models import (
-    EdgeRole,
-    Kind,
-    MemoryEdge,
+    LensProvenance,
+    LensRow,
+    MembershipDecision,
     MemoryItem,
     Provenance,
     Scope,
@@ -32,7 +32,6 @@ from ntrp.memory.models import (
 )
 from ntrp.memory.pipeline.membership import LensMembership
 from ntrp.memory.pipeline.prompts_reconcile import MembershipBatch, MembershipVote
-from ntrp.memory.pipeline.types import MembershipDecision
 from ntrp.memory.store import MemoryStore
 from tests.conftest import FakeCompletionClient, FakeEmbedder
 
@@ -63,8 +62,8 @@ def _batch(*pairs):
 async def _claim(store, content, **kw):
     c = MemoryItem(
         id=uuid.uuid4().hex,
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=kw.pop("canonical_subject", "Tim"),
         scope=USER,
         provenance=kw.pop("provenance", Provenance.RECORDED),
         **kw,
@@ -72,19 +71,16 @@ async def _claim(store, content, **kw):
     return await store.create_item(c)
 
 
-async def _lens(store, *, name, criterion, lens_kind="topic", page=None):
-    le = MemoryItem(
+async def _lens(store, *, name, criterion, page=None):
+    le = LensRow(
         id=uuid.uuid4().hex,
-        kind=Kind.LENS,
-        content=name,
+        name=name,
+        criterion=criterion,
         scope=USER,
-        provenance=Provenance.USER_AUTHORED,
-        lens_kind=lens_kind,
-        lens_name=name,
-        lens_criterion=criterion,
-        lens_page=page,
+        provenance=LensProvenance.USER_AUTHORED,
+        page=page,
     )
-    return await store.create_item(le)
+    return await store.create_lens_row(le)
 
 
 def _membership(store, cheap, strong=None, embed=None):
@@ -99,56 +95,57 @@ def _membership(store, cheap, strong=None, embed=None):
 
 
 async def _members(store, lens_id):
-    edges = await store.list_edges(lens_id, direction="to", role=EdgeRole.MEMBER_OF)
-    return {e.child_id for e in edges}
+    """The lens's `in`-cache members (the projection), not a graph edge set."""
+    cached = await store.get_membership(lens_id, decision=MembershipDecision.IN)
+    return {v.claim_id for v in cached}
 
 
-# --- score: edges only on `in` (§1.1, §3.1) --------------------------
+# --- score + cache: members only on `in` -----------------------------
 
 
-async def test_score_writes_edge_only_on_in(store):
+async def test_score_caches_member_only_on_in(store):
     lens = await _lens(store, name="Health", criterion="claims about the user's health")
     c_in = await _claim(store, "user runs 5k every morning")
     c_out = await _claim(store, "user uses a macbook")
     cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "out"))])
 
     m = _membership(store, cheap)
-    verdicts = await m._judge_and_write([c_in, c_out], lens)
+    verdicts = await m._judge_and_cache([c_in, c_out], lens)
 
     assert {v.claim_id: v.decision for v in verdicts} == {
         c_in.id: MembershipDecision.IN,
         c_out.id: MembershipDecision.OUT,
     }
-    assert await _members(store, lens.id) == {c_in.id}  # only `in` got an edge
+    assert await _members(store, lens.id) == {c_in.id}  # only `in` is a member
 
 
-async def test_out_and_defer_write_no_edge(store):
+async def test_out_and_defer_cache_no_member(store):
     lens = await _lens(store, name="Work", criterion="claims about the user's job")
     c0 = await _claim(store, "alpha")
     c1 = await _claim(store, "beta")
-    # cheap defers c1; strong (escalation) also defers -> stays unwritten.
+    # cheap defers c1; strong (escalation) also defers -> stays a non-member.
     cheap = FakeCompletionClient(queue=[_batch((0, "out"), (1, "defer"))])
     strong = FakeCompletionClient(queue=[_batch((0, "defer"))])
 
     m = _membership(store, cheap, strong)
-    verdicts = await m._judge_and_write([c0, c1], lens)
+    verdicts = await m._judge_and_cache([c0, c1], lens)
 
     decisions = {v.claim_id: v.decision for v in verdicts}
     assert decisions[c1.id] is MembershipDecision.DEFER
-    assert await _members(store, lens.id) == set()  # nothing written
+    assert await _members(store, lens.id) == set()  # no member cached
 
 
-# --- §4.2 escalation: defer -> strong --------------------------------
+# --- escalation: defer -> strong -------------------------------------
 
 
-async def test_defer_escalates_to_strong_and_in_writes_edge(store):
+async def test_defer_escalates_to_strong_and_in_becomes_member(store):
     lens = await _lens(store, name="Travel", criterion="claims about user travel")
     c = await _claim(store, "user flew to Tokyo last week")
     cheap = FakeCompletionClient(queue=[_batch((0, "defer"))])
     strong = FakeCompletionClient(queue=[_batch((0, "in"))])
 
     m = _membership(store, cheap, strong)
-    verdicts = await m._judge_and_write([c], lens)
+    verdicts = await m._judge_and_cache([c], lens)
 
     assert verdicts[0].decision is MembershipDecision.IN
     assert len(strong.calls) == 1  # exactly one escalation call for the one defer
@@ -164,7 +161,7 @@ async def test_only_defers_escalate_not_every_item(store):
     strong = FakeCompletionClient(queue=[_batch((0, "out"))])
 
     m = _membership(store, cheap, strong)
-    await m._judge_and_write(cs, lens)
+    await m._judge_and_cache(cs, lens)
 
     assert len(strong.calls) == 1  # one defer -> one strong call, not four
 
@@ -187,17 +184,17 @@ async def test_incremental_judge_calls_bounded_by_touched_lenses(store):
     m = _membership(store, cheap)
     await m.score_into_active_lenses([c.id for c in claims], USER)
 
-    active = await m._active_topic_user_lenses(USER)
+    active = await m._active_lenses(USER)
     assert len(cheap.calls) <= len(active)
     assert len(cheap.calls) <= len(lenses)
 
 
-async def test_incremental_writes_edges_only_for_in_verdicts(store):
+async def test_incremental_caches_members_only_for_in_verdicts(store):
     lens_a = await _lens(store, name="A", criterion="claims about apples")
     lens_b = await _lens(store, name="B", criterion="claims about bananas")
     c = await _claim(store, "apples bananas fruit basket")
     # Each recalled lens gets one batched judge call; default says the (single)
-    # recall-subset item is `in`. Assert edges land only on lenses that voted `in`.
+    # recall-subset item is `in`. Assert members land only on lenses that voted `in`.
     cheap = FakeCompletionClient(default=_batch((0, "in")))
 
     m = _membership(store, cheap)
@@ -206,7 +203,7 @@ async def test_incremental_writes_edges_only_for_in_verdicts(store):
     in_lenses = {v.lens_id for v in verdicts if v.decision is MembershipDecision.IN}
     for lid in in_lenses:
         assert c.id in await _members(store, lid)
-    # No edge to any lens that wasn't recalled/`in`.
+    # No member cached on any lens that wasn't recalled/`in`.
     for lid in (lens_a.id, lens_b.id):
         members = await _members(store, lid)
         if lid not in in_lenses:
@@ -237,7 +234,7 @@ async def test_identical_embeddings_opposite_verdicts_both_honored(store):
 async def test_degraded_embedder_still_decides_from_fts(store):
     # Embedder raises on every call; recall degrades to FTS, but the LLM still
     # decides over the surfaced candidates — degraded recall, never a degraded
-    # decision (§9.8).
+    # decision.
     class _BrokenEmbedder(FakeEmbedder):
         async def embed(self, texts):
             raise RuntimeError("embedder down")
@@ -257,7 +254,7 @@ async def test_degraded_embedder_still_decides_from_fts(store):
     assert c.id in await _members(store, lens.id)
 
 
-# --- §4.1 parse/index robustness -------------------------------------
+# --- parse/index robustness ------------------------------------------
 
 
 async def test_parse_failure_treats_batch_as_all_out(store):
@@ -266,7 +263,7 @@ async def test_parse_failure_treats_batch_as_all_out(store):
     cheap = FakeCompletionClient(default="not json at all")  # parse fail
 
     m = _membership(store, cheap)
-    verdicts = await m._judge_and_write(cs, lens)
+    verdicts = await m._judge_and_cache(cs, lens)
 
     assert all(v.decision is MembershipDecision.OUT for v in verdicts)
     assert await _members(store, lens.id) == set()
@@ -298,10 +295,10 @@ async def test_unknown_decision_string_defaults_out(store):
     assert verdicts[0].decision is MembershipDecision.OUT
 
 
-# --- Mode 3 backfill --------------------------------------------------
+# --- Mode 3 lazy backfill --------------------------------------------
 
 
-async def test_backfill_scans_pool_and_writes_only_in(store):
+async def test_refresh_scans_pool_and_caches_only_in(store):
     lens = await _lens(store, name="Books", criterion="claims about books the user read")
     c0 = await _claim(store, "user read Dune")
     await _claim(store, "user drives a Tesla")  # out — never a member
@@ -309,7 +306,7 @@ async def test_backfill_scans_pool_and_writes_only_in(store):
     cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "out"), (2, "in"))])
 
     m = _membership(store, cheap)
-    report = await m.backfill_lens(lens.id)
+    report = await m.refresh_lens_cache(lens.id)
 
     assert report.scanned == 3
     assert report.members_added == 2
@@ -318,10 +315,10 @@ async def test_backfill_scans_pool_and_writes_only_in(store):
     assert members == {c0.id, c2.id}
 
 
-async def test_backfill_batches_the_scan(store):
+async def test_refresh_batches_the_scan(store):
     # More claims than MEMBERSHIP_BATCH -> multiple cheap calls; cost still
-    # bounded (one pass, not per-query). Use default-out so the batch size of the
-    # queue does not matter.
+    # bounded (one pass, not per-query). Use default-out so the queued batch shape
+    # does not matter.
     from ntrp.constants import MEMBERSHIP_BATCH
 
     lens = await _lens(store, name="All", criterion="claims about anything")
@@ -330,13 +327,13 @@ async def test_backfill_batches_the_scan(store):
     cheap = FakeCompletionClient(default=MembershipBatch())
 
     m = _membership(store, cheap)
-    report = await m.backfill_lens(lens.id)
+    report = await m.refresh_lens_cache(lens.id)
 
     assert report.scanned == MEMBERSHIP_BATCH + 5
     assert len(cheap.calls) == 2  # ceil((B+5)/B) batches
 
 
-async def test_backfill_caps_oversized_pool(store):
+async def test_refresh_caps_oversized_pool(store):
     # Patch the cap small to keep the test cheap, proving capped scan + ranking.
     import ntrp.memory.pipeline.membership as mem_mod
 
@@ -349,7 +346,7 @@ async def test_backfill_caps_oversized_pool(store):
     orig = mem_mod.BACKFILL_SCAN_CAP
     mem_mod.BACKFILL_SCAN_CAP = 3
     try:
-        report = await m.backfill_lens(lens.id)
+        report = await m.refresh_lens_cache(lens.id)
     finally:
         mem_mod.BACKFILL_SCAN_CAP = orig
 
@@ -364,12 +361,11 @@ async def test_coverage_ratio_and_generic_flag(store):
     lens = await _lens(store, name="Gen", criterion="claims about anything at all")
     members = [await _claim(store, f"covered fact {i}") for i in range(3)]
     await _claim(store, "uncovered fact")  # pool=4, members=3 -> ratio 0.75
-    for c in members:
-        await store.add_edge(
-            MemoryEdge(child_id=c.id, parent_id=lens.id, role=EdgeRole.MEMBER_OF)
-        )
+    cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "in"), (2, "in"))])
+    m = _membership(store, cheap)
+    # Seed the cache with three `in` verdicts (the projection's members).
+    await m._judge_and_cache(members, lens)
 
-    m = _membership(store, FakeCompletionClient())
     before = await _members(store, lens.id)
     adv = await m.coverage(lens.id, USER)
     after = await _members(store, lens.id)
@@ -379,7 +375,7 @@ async def test_coverage_ratio_and_generic_flag(store):
     assert adv.ratio == pytest.approx(0.75)
     assert adv.generic is True  # >= 0.5
     assert adv.suggestion == "split"
-    assert before == after  # advisory only — NO edge mutated, no member dropped
+    assert before == after  # advisory only — cache untouched, no member dropped
 
 
 async def test_coverage_empty_pool_no_divide_by_zero(store):
@@ -399,11 +395,10 @@ async def test_coverage_below_band_not_generic(store):
     member = await _claim(store, "the one covered fact")
     for i in range(9):
         await _claim(store, f"other fact {i}")  # pool=10, members=1 -> 0.1
-    await store.add_edge(
-        MemoryEdge(child_id=member.id, parent_id=lens.id, role=EdgeRole.MEMBER_OF)
-    )
+    cheap = FakeCompletionClient(default=_batch((0, "in")))
+    m = _membership(store, cheap)
+    await m._judge_and_cache([member], lens)
 
-    m = _membership(store, FakeCompletionClient())
     adv = await m.coverage(lens.id, USER)
 
     assert adv.ratio == pytest.approx(0.1)

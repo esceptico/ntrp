@@ -1,30 +1,26 @@
-"""Lens membership — the scale-orchestration engine (LENS_CONTRACTS §3.1, §3.6).
+"""Lens membership — the computed-projection engine (a cache, not edges).
 
-`LensMembership` is the generalization of reconcile's recall+judge with the two
-entity-specific narrowings relaxed (criterion is arbitrary, recall is filtered to
-`lens_kind in {"topic","user"}` instead of `"entity"`). It is the SOLE membership
-decision channel for topic/user lenses; reconcile keeps owning the entity axis
-inline, so the two never score the same (claim, lens) pair (§2 axis split).
+A lens is a VIEW. Membership is a COMPUTED PROJECTION: the LLM judges each claim
+against the lens criterion; `in` verdicts are written to `lens_membership_cache`,
+never to a graph edge. Drop the cache and nothing breaks except latency — the
+projector recomputes on miss.
 
-Three modes keep membership cheap across the corpus (§3.6):
+Three modes keep membership cheap across the corpus:
 
   Mode 1  score_into_active_lenses  — incremental, per write: RRF-recall the top-K
-          topic/user lenses for the new claims, batch the claims per lens into ONE
-          cheap judge call, add_edge on `in`. O(new x K), never O(corpus).
-  Mode 3  backfill_lens             — once per new lens: bounded scan of the scoped
-          active claim pool, embedding-rank to the cap (orders the scan, never
-          gates), batched judge, add_edge on `in`.
+          active lenses for the new claims, batch the claims per lens into ONE
+          cheap judge call, write verdicts to the CACHE. Cache-warming only;
+          correctness does not depend on it (the projector recomputes on miss).
+  Mode 3  refresh_lens_cache        — lazy backfill (cache miss/dirty): bounded scan
+          of the scoped active claim pool, embedding-rank to the cap (orders the
+          scan, never gates), batched judge, write verdicts to the cache.
   (decider) score                   — N claims vs ONE lens, one cheap structured
-          call (LLooM multiple-choice). `defer` escalates one item to the strong
-          model; still `defer` leaves it unwritten (surfaced to the user).
+          call. `defer` escalates one item to the strong model.
 
 THE ABSOLUTE BAN (§0): membership is ALWAYS an LLM judgment against the criterion.
 Embeddings/FTS/RRF/length floors only ORDER candidates into the judge — they never
-gate a keep/drop/membership verdict. `in` -> add_edge; `out` -> nothing (absence is
-OUT, no negative rows); `defer` -> escalate, never a numeric cutoff. The store is
-frozen and add-only: there is no edge delete (§1.1); a claim leaves a lens only via
-re-validate-at-read in the projector, never here. `coverage` is a pure COUNT ratio,
-advisory only (§7) — never a gate, never a word list.
+gate a keep/drop verdict. `coverage` is a pure COUNT over the cache, advisory only.
+No member_of edge is ever written; lenses are never graph participants.
 """
 
 from ntrp.constants import (
@@ -38,9 +34,9 @@ from ntrp.embedder import Embedder
 from ntrp.llm.base import CompletionClient
 from ntrp.logging import get_logger
 from ntrp.memory.models import (
-    EdgeRole,
-    Kind,
-    MemoryEdge,
+    LensRow,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryItem,
     Scope,
     Status,
@@ -52,23 +48,18 @@ from ntrp.memory.pipeline.prompts_reconcile import (
 from ntrp.memory.pipeline.types import (
     BackfillReport,
     CoverageAdvisory,
-    MembershipDecision,
-    MembershipVerdict,
 )
 from ntrp.memory.store import MemoryStore
 from ntrp.search.retrieval import rrf_merge
 
 _logger = get_logger(__name__)
 
-# Topic/user is the unconstrained axis LensMembership owns; entity stays inline in
-# reconcile (§2). The split is by lens_kind, never by a lexical rule.
-_TOPIC_USER = ("topic", "user")
 _PAGE_GIST_LIMIT = 600
+_NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
 
 
 def _decision(raw: str) -> MembershipDecision:
-    """Coerce a model vote to a decision, defaulting OUT on anything unexpected
-    (§4.1: hallucinated/empty -> out)."""
+    """Coerce a model vote to a decision, defaulting OUT on anything unexpected."""
     try:
         return MembershipDecision((raw or "").strip().lower())
     except ValueError:
@@ -76,8 +67,8 @@ def _decision(raw: str) -> MembershipDecision:
 
 
 def _salient_tokens(text: str, limit: int = 12) -> str:
-    """Length-floor FTS slice (LENS_CONTRACTS §0-legal): drop short tokens, cap
-    count. Orders the FTS query; carries no meaning rule, decides nothing."""
+    """Length-floor FTS slice: drop short tokens, cap count. Orders the FTS query;
+    carries no meaning rule, decides nothing."""
     toks = [t for t in text.split() if len(t) > 2]
     return " ".join(toks[:limit])
 
@@ -100,30 +91,25 @@ class LensMembership:
         self.cheap_model = cheap_model
         self.strong_model = strong_model
 
-    # --- Mode 1: incremental (hot, per write) ------------------------
+    # --- Mode 1: incremental cache-warming (hot, per write) ----------
 
     async def score_into_active_lenses(
         self, claim_ids: list[str], scope: Scope
     ) -> list[MembershipVerdict]:
-        """Score freshly-written claims into the scope's active topic/user lenses.
+        """Score freshly-written claims into the scope's active lenses (cache-warming).
 
-        Called from runtime.ingest_unit right after reconcile. Per the recalled
-        candidate lenses (top-K, ordered by RRF — never gated), batch the claims
-        into ONE cheap judge call and add_edge on `in`. The fan-out is bounded by
-        MEMBERSHIP_CANDIDATE_K, so cost is O(new x K), never O(corpus) (§3.6).
+        Best-effort: writes verdicts to the cache. Correctness does not depend on
+        this — the projector recomputes on a cache miss. O(new x K), never O(corpus).
         """
         claims = [c for c in await self._load_claims(claim_ids) if c is not None]
         if not claims:
             return []
 
-        lenses = await self._active_topic_user_lenses(scope)
+        lenses = await self._active_lenses(scope)
         if not lenses:
             return []
 
-        # Per lens, collect the claims that recalled it; one judge call per such
-        # lens over exactly its recall subset. At most one call per touched lens, so
-        # cost stays O(new x K) — the K-bound the test asserts (§3.6).
-        touched: dict[str, MemoryItem] = {}
+        touched: dict[str, LensRow] = {}
         batches: dict[str, list[MemoryItem]] = {}
         for claim in claims:
             for lens in await self._recall_lenses(claim, lenses):
@@ -132,26 +118,22 @@ class LensMembership:
 
         verdicts: list[MembershipVerdict] = []
         for lens_id, lens in touched.items():
-            verdicts.extend(await self._judge_and_write(batches[lens_id], lens))
+            verdicts.extend(await self._judge_and_cache(batches[lens_id], lens))
         return verdicts
 
-    # --- Mode 3: backfill (cold, once per new lens) ------------------
+    # --- Mode 3: lazy backfill (cold, on cache miss / dirty) ---------
 
-    async def backfill_lens(self, lens_id: str) -> BackfillReport:
-        """One bounded pass over the scoped active claim pool for a new lens.
-
-        Scan is capped at BACKFILL_SCAN_CAP and embedding-ranked to the cap
-        (ordering only — never a gate); the capped set is batched into cheap judge
-        calls (MEMBERSHIP_BATCH each) and `in` claims get a MEMBER_OF edge. The
-        single expensive pass per lens; thereafter Mode 1 maintains it (§3.6).
-        """
-        lens = await self.store.get(lens_id)
-        if lens is None or lens.kind is not Kind.LENS or lens.status is not Status.ACTIVE:
-            _logger.warning("backfill_lens: %s missing/inactive/non-lens", lens_id)
+    async def refresh_lens_cache(self, lens_id: str) -> BackfillReport:
+        """One bounded pass over the scoped active claim pool, writing the membership
+        cache. Called lazily by the projector on cache-miss/dirty — NOT eagerly at
+        create_lens (creating a lens touches zero claims)."""
+        lens = await self.store.get_lens(lens_id)
+        if lens is None:
+            _logger.warning("refresh_lens_cache: %s missing", lens_id)
             return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
         pool = await self.store.query(
-            kind=Kind.CLAIM, scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1
+            scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1
         )
         capped = len(pool) > BACKFILL_SCAN_CAP
         if capped:
@@ -160,7 +142,7 @@ class LensMembership:
         added = 0
         for start in range(0, len(pool), MEMBERSHIP_BATCH):
             batch = pool[start : start + MEMBERSHIP_BATCH]
-            verdicts = await self._judge_and_write(batch, lens)
+            verdicts = await self._judge_and_cache(batch, lens)
             added += sum(1 for v in verdicts if v.decision is MembershipDecision.IN)
         return BackfillReport(
             lens_id=lens_id, scanned=len(pool), members_added=added, capped=capped
@@ -169,16 +151,13 @@ class LensMembership:
     # --- the decider -------------------------------------------------
 
     async def score(
-        self, claims: list[MemoryItem], lens: MemoryItem
+        self, claims: list[MemoryItem], lens: LensRow
     ) -> list[MembershipVerdict]:
-        """Judge N claims against ONE lens criterion (LLooM multiple-choice).
+        """Judge N claims against ONE lens criterion. One cheap structured call.
 
-        One cheap structured call. Out-of-range index -> ignored, default `out`.
-        Parse failure / empty output -> the whole batch is `out` (§4.1; lint
-        re-scores later). `defer` escalates that single item to the strong model;
-        if still `defer`, the verdict stays DEFER (left unwritten, surfaced to the
-        user). No numeric cutoff ever decides keep/drop — the band only routes who
-        re-judges (§0).
+        Parse failure / empty output -> the whole batch is `out`. `defer` escalates
+        that single item to the strong model. No numeric cutoff ever decides; the
+        band only routes who re-judges.
         """
         if not claims:
             return []
@@ -192,33 +171,23 @@ class LensMembership:
                 decision, rationale = await self._escalate(claim, lens, rationale)
             verdicts.append(
                 MembershipVerdict(
-                    claim_id=claim.id,
                     lens_id=lens.id,
+                    claim_id=claim.id,
                     decision=decision,
                     rationale=rationale,
                 )
             )
         return verdicts
 
-    # --- generic guard: advisory coverage ratio (§7) -----------------
+    # --- generic guard: advisory coverage ratio ---------------------
 
     async def coverage(self, lens_id: str, scope: Scope) -> CoverageAdvisory:
-        """Pure COUNT(member_of) / COUNT(scoped active claims). No LLM, no lexical
-        anything. `generic = ratio >= GENERIC_RATIO`; advisory only — never a gate,
-        never an auto-split/drop (§0, §7). scope_pool == 0 -> ratio 0.0, no banner.
-        """
-        edges = await self.store.list_edges(
-            lens_id, direction="to", role=EdgeRole.MEMBER_OF
-        )
-        member_count = 0
-        for e in edges:
-            m = await self.store.get(e.child_id)
-            if m is not None and m.status is Status.ACTIVE and m.kind is Kind.CLAIM:
-                member_count += 1
+        """Pure COUNT(`in` cache rows) / COUNT(scoped active claims). No LLM, no
+        lexical anything. `generic = ratio >= GENERIC_RATIO`; advisory only."""
+        cached = await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
+        member_count = len(cached)
 
-        pool = await self.store.query(
-            kind=Kind.CLAIM, scope=scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP
-        )
+        pool = await self.store.query(scope=scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP)
         scope_pool = len(pool)
         ratio = member_count / scope_pool if scope_pool else 0.0
         generic = scope_pool > 0 and ratio >= GENERIC_RATIO
@@ -231,24 +200,20 @@ class LensMembership:
             suggestion="split" if generic else "",
         )
 
-    # --- recall (legal: orders candidates, never gates) --------------
+    # --- recall (legal: orders candidates, never gates) -------------
 
-    async def _active_topic_user_lenses(self, scope: Scope) -> dict[str, MemoryItem]:
-        scoped = await self.store.query(
-            kind=Kind.LENS, scope=scope, status=Status.ACTIVE, limit=200
-        )
-        return {le.id: le for le in scoped if le.lens_kind in _TOPIC_USER}
+    async def _active_lenses(self, scope: Scope) -> dict[str, LensRow]:
+        scoped = await self.store.list_lenses(scope=scope)
+        return {le.id: le for le in scoped}
 
     async def _recall_lenses(
-        self, claim: MemoryItem, scoped: dict[str, MemoryItem]
-    ) -> list[MemoryItem]:
-        """RRF-merge the recall channels for one claim, capped at the candidate-K.
+        self, claim: MemoryItem, scoped: dict[str, LensRow]
+    ) -> list[LensRow]:
+        """RRF-merge recall channels for one claim, capped at the candidate-K.
 
-        Three signal-only channels over the claim content + the lens
-        name/page/criterion text: content FTS, lens-text FTS, embedding cosine.
-        RRF-fused, scope-filtered, capped. Every channel ORDERS candidates into the
-        judge; none gates membership (§0). With FTS or the embedder down, recall
-        degrades to the surviving channels — never the decision (§9.8)."""
+        Channels over the claim content + the lens name/criterion/page text: lens-
+        registry FTS, embedding cosine. Every channel ORDERS candidates into the
+        judge; none gates membership."""
         if not scoped:
             return []
 
@@ -256,14 +221,11 @@ class LensMembership:
         id_index = {iid: n for n, iid in enumerate(id_list)}
         rankings: list[list[tuple[int, float]]] = []
 
-        # Channel 1+2: FTS over claim content, projected onto the scoped lenses
-        # (matches against lens_name/criterion/page indexed columns).
-        hits = await self.store.search(
+        hits = await self.store.search_lenses(
             _salient_tokens(claim.content), limit=MEMBERSHIP_CANDIDATE_K * 2
         )
         rankings.append(self._rank(hits, scoped, id_index))
 
-        # Channel 3: embedding cosine over lens text (ranking signal only).
         margins = await self._embedding_margins(claim, scoped)
         if margins:
             ordered = sorted(margins.items(), key=lambda kv: kv[1], reverse=True)
@@ -273,15 +235,13 @@ class LensMembership:
             return []
 
         fused = rrf_merge(rankings, k=RRF_K)
-        top = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[
-            :MEMBERSHIP_CANDIDATE_K
-        ]
+        top = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:MEMBERSHIP_CANDIDATE_K]
         return [scoped[id_list[idx]] for idx, _ in top]
 
     def _rank(
         self,
-        hits: list[MemoryItem],
-        scoped: dict[str, MemoryItem],
+        hits: list[LensRow],
+        scoped: dict[str, LensRow],
         id_index: dict[str, int],
     ) -> list[tuple[int, float]]:
         ranked: list[tuple[int, float]] = []
@@ -291,7 +251,7 @@ class LensMembership:
         return ranked
 
     async def _embedding_margins(
-        self, claim: MemoryItem, scoped: dict[str, MemoryItem]
+        self, claim: MemoryItem, scoped: dict[str, LensRow]
     ) -> dict[str, float]:
         lens_texts = [self._lens_text(le) for le in scoped.values()]
         if not lens_texts:
@@ -306,11 +266,10 @@ class LensMembership:
         return {le.id: float(s) for le, s in zip(scoped.values(), sims)}
 
     async def _rank_to_cap(
-        self, lens: MemoryItem, pool: list[MemoryItem], cap: int
+        self, lens: LensRow, pool: list[MemoryItem], cap: int
     ) -> list[MemoryItem]:
-        """Embedding-rank the over-cap pool to the cap (orders the scan, never
-        gates — the judge still decides every survivor). Embedder down -> keep the
-        first `cap` by recency (the query already returns created_at DESC)."""
+        """Embedding-rank the over-cap pool to the cap (orders the scan, never gates).
+        Embedder down -> keep the first `cap` by recency."""
         try:
             q = await self.embed.embed_one(self._lens_text(lens))
             mat = await self.embed.embed([c.content for c in pool])
@@ -322,46 +281,29 @@ class LensMembership:
         return [c for c, _ in ranked[:cap]]
 
     @staticmethod
-    def _lens_text(lens: MemoryItem) -> str:
-        return " ".join(
-            t
-            for t in (
-                lens.lens_name,
-                lens.lens_criterion,
-                lens.lens_page,
-            )
-            if t
-        ).strip()
+    def _lens_text(lens: LensRow) -> str:
+        return " ".join(t for t in (lens.name, lens.criterion, lens.page) if t).strip()
 
-    # --- judge + write -----------------------------------------------
+    # --- judge + cache -----------------------------------------------
 
-    async def _judge_and_write(
-        self, claims: list[MemoryItem], lens: MemoryItem
+    async def _judge_and_cache(
+        self, claims: list[MemoryItem], lens: LensRow
     ) -> list[MembershipVerdict]:
         verdicts = await self.score(claims, lens)
-        for v in verdicts:
-            if v.decision is MembershipDecision.IN:
-                # add_edge is INSERT OR IGNORE: duplicate is a no-op (§9.9).
-                # `out`/`defer` write nothing — absence is OUT (§3.1).
-                await self.store.add_edge(
-                    MemoryEdge(
-                        child_id=v.claim_id, parent_id=lens.id, role=EdgeRole.MEMBER_OF
-                    )
-                )
+        # Write every verdict to the cache (in/out/defer) so the projector can read
+        # a cached decision without re-judging. The cache is not graph truth.
+        if verdicts:
+            await self.store.put_membership(verdicts)
         return verdicts
 
     async def _judge(
         self,
         claims: list[MemoryItem],
-        lens: MemoryItem,
+        lens: LensRow,
         llm: CompletionClient,
         model: str,
     ) -> dict[int, tuple[MembershipDecision, str]]:
-        """One structured judge call -> {item_index: (decision, rationale)}.
-
-        Out-of-range / duplicate indices are dropped; any item with no in-range
-        vote defaults OUT (resolved by the caller via .get). Parse failure / empty
-        output -> {} so every item falls through to OUT (§4.1)."""
+        """One structured judge call -> {item_index: (decision, rationale)}."""
         user = self._judge_prompt(claims, lens)
         try:
             resp = await llm.completion(
@@ -390,34 +332,31 @@ class LensMembership:
             out[vote.item_index] = (_decision(vote.decision), vote.rationale)
         return out
 
-    def _judge_prompt(self, claims: list[MemoryItem], lens: MemoryItem) -> str:
-        gist = (lens.lens_page or lens.lens_criterion or "")[:_PAGE_GIST_LIMIT]
+    def _judge_prompt(self, claims: list[MemoryItem], lens: LensRow) -> str:
+        gist = (lens.page or lens.criterion or "")[:_PAGE_GIST_LIMIT]
         negatives = self._negative_examples(lens)
         items = "\n".join(f"  [{i}] {c.content!r}" for i, c in enumerate(claims))
         return (
-            f"LENS: name={lens.lens_name!r} kind={lens.lens_kind!r}\n"
-            f"CRITERION: {(lens.lens_criterion or '')!r}\n"
+            f"LENS: name={lens.name!r}\n"
+            f"CRITERION: {lens.criterion!r}\n"
             f"PAGE_GIST: {gist!r}\n"
             f"NEGATIVE_EXAMPLES: {negatives!r}\n"
             f"ITEMS:\n{items}"
         )
 
     @staticmethod
-    def _negative_examples(lens: MemoryItem) -> str:
-        """Lens-scoped REJECT corrections live in a section of lens_page, appended
-        by write-back (§3.3). Read as worked examples by the judge, NEVER parsed as
-        a keyword filter (§0). Returns the raw section text or '' if none."""
-        page = lens.lens_page or ""
-        marker = "## Negative examples"
-        idx = page.find(marker)
-        return page[idx + len(marker) :].strip() if idx >= 0 else ""
+    def _negative_examples(lens: LensRow) -> str:
+        """Lens-scoped REJECT corrections live in a section of the lens page,
+        appended by write-back. Read as worked examples, NEVER as a keyword filter."""
+        page = lens.page or ""
+        idx = page.find(_NEGATIVE_EXAMPLES_HEADER)
+        return page[idx + len(_NEGATIVE_EXAMPLES_HEADER) :].strip() if idx >= 0 else ""
 
     async def _escalate(
-        self, claim: MemoryItem, lens: MemoryItem, prior_rationale: str
+        self, claim: MemoryItem, lens: LensRow, prior_rationale: str
     ) -> tuple[MembershipDecision, str]:
-        """Re-judge one `defer` item on the strong model (§4.2). Still `defer` ->
-        stays DEFER (left unwritten, surfaced to the user). The band routes who
-        decides; it never applies a numeric cutoff to the outcome (§0)."""
+        """Re-judge one `defer` item on the strong model. Still `defer` -> stays
+        DEFER (left out of the projection). The band routes who decides."""
         votes = await self._judge([claim], lens, self.strong_llm, self.strong_model)
         decision, rationale = votes.get(0, (MembershipDecision.DEFER, prior_rationale))
         return decision, rationale or prior_rationale
@@ -428,6 +367,6 @@ class LensMembership:
         loaded: list[MemoryItem | None] = []
         for cid in claim_ids:
             m = await self.store.get(cid)
-            if m is not None and m.status is Status.ACTIVE and m.kind is Kind.CLAIM:
+            if m is not None and m.status is Status.ACTIVE:
                 loaded.append(m)
         return loaded

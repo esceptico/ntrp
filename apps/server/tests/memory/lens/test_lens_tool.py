@@ -12,17 +12,16 @@ What these tests pin:
     memory off — §10).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
 
-from ntrp.memory.lens.tool import LensInput, MEMORY_LENS_SERVICE, lens_action
+from ntrp.memory.lens.tool import MEMORY_LENS_SERVICE, LensInput, lens_action
 from ntrp.memory.models import (
-    Kind,
     LensDetailLevel,
-    MemoryItem,
-    Provenance,
+    LensProvenance,
+    LensRow,
     Scope,
     ScopeKind,
 )
@@ -53,16 +52,13 @@ class FakeProjector:
         return self._page
 
 
-def _lens(name="Marathon", criterion="marathon training", scope=USER) -> MemoryItem:
-    return MemoryItem(
+def _lens(name="Marathon", criterion="marathon training", scope=USER) -> LensRow:
+    return LensRow(
         id="lens-1",
-        kind=Kind.LENS,
-        content=name,
+        name=name,
+        criterion=criterion,
         scope=scope,
-        provenance=Provenance.USER_AUTHORED,
-        lens_name=name,
-        lens_criterion=criterion,
-        lens_kind="topic",
+        provenance=LensProvenance.USER_AUTHORED,
     )
 
 

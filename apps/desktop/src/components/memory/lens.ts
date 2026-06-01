@@ -1,34 +1,43 @@
 import type {
+  Lens,
+  LensProvenance,
   MemoryFeedback,
   MemoryItem,
-  MemoryKind,
   MemoryProvenance,
 } from "../../api/memoryItems";
 import type { BadgeTone } from "../Badge";
 
-// ── Kind palette ──────────────────────────────────────────────────────────
-// The single color ramp shared by rail glyphs, claim subject badges, and the
-// provenance graph nodes — one claim, three faces, one color. Flexoki
-// mid-tones that read on warm-light + dark.
-export const KIND_COLOR: Record<MemoryKind, string> = {
-  claim: "#da702c", // flexoki orange
-  lens: "#8b7ec8", // flexoki violet
+// ── Claim color ramp ────────────────────────────────────────────────────────
+// The graph has no lens nodes — every node is a claim. Differentiate claims by
+// provenance (never by shape). Flexoki mid-tones that read on warm-light + dark.
+const PROVENANCE_COLOR: Record<MemoryProvenance, string> = {
+  user_authored: "#3aa99f", // flexoki cyan — you wrote it
+  recorded: "#da702c", // flexoki orange — captured
+  inferred: "#8b7ec8", // flexoki violet — inferred
+  external: "#879a39", // flexoki green — external
 };
 
-// An entity lens (lens_exclusive) gets its own gold so the rail reads the
-// difference between a topic view and a named subject.
-export const ENTITY_COLOR = "#d0a215"; // flexoki yellow
-export const USER_COLOR = "#3aa99f"; // flexoki cyan — user-authored
-
-/** The dot color for a lens row / node, accounting for entity + user lenses. */
-export function lensColor(item: MemoryItem): string {
-  if (item.lens_exclusive) return ENTITY_COLOR;
-  if (item.provenance === "user_authored") return USER_COLOR;
-  return KIND_COLOR.lens;
+/** Node color for a claim, keyed on provenance (not kind — there are no kinds). */
+export function nodeColor(item: MemoryItem): string {
+  return PROVENANCE_COLOR[item.provenance] ?? PROVENANCE_COLOR.recorded;
 }
 
-export function nodeColor(item: MemoryItem): string {
-  return item.kind === "lens" ? lensColor(item) : KIND_COLOR.claim;
+// A lens rail dot color, keyed on the view's provenance (user-authored vs induced).
+const LENS_COLOR: Record<LensProvenance, string> = {
+  user_authored: "#3aa99f", // flexoki cyan
+  induced: "#8b7ec8", // flexoki violet
+};
+
+export function lensColor(lens: Lens): string {
+  return LENS_COLOR[lens.provenance] ?? LENS_COLOR.user_authored;
+}
+
+export function lensProvenanceTone(p: LensProvenance): BadgeTone {
+  return p === "induced" ? "warn" : "accent";
+}
+
+export function lensProvenanceLabel(p: LensProvenance): string {
+  return p === "induced" ? "induced" : "you wrote";
 }
 
 // ── Provenance / feedback tone mapping ──────────────────────────────────────
@@ -37,7 +46,6 @@ const PROVENANCE_TONE: Record<MemoryProvenance, BadgeTone> = {
   recorded: "neutral",
   inferred: "neutral",
   external: "neutral",
-  induced: "warn",
 };
 
 export function provenanceTone(p: MemoryProvenance): BadgeTone {
@@ -49,7 +57,6 @@ const PROVENANCE_LABEL: Record<MemoryProvenance, string> = {
   recorded: "recorded",
   inferred: "inferred",
   external: "external",
-  induced: "induced",
 };
 
 export function provenanceLabel(p: MemoryProvenance): string {
@@ -63,8 +70,8 @@ export function feedbackTone(f: MemoryFeedback): BadgeTone {
 }
 
 // ── Display helpers ─────────────────────────────────────────────────────────
-export function lensTitle(item: MemoryItem): string {
-  return item.lens_name ?? item.content ?? "Untitled lens";
+export function lensTitle(lens: Lens): string {
+  return lens.name || "Untitled lens";
 }
 
 export function scopeLabel(scope: { kind: string; key: string | null }): string {

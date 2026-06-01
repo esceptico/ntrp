@@ -2,18 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import type { AppConfig } from "../../api";
-import { getMemoryGraph, listMemoryLenses, type MemoryItem } from "../../api/memoryItems";
+import { getMemoryGraph, getWholeGraph, type MemoryItem } from "../../api/memoryItems";
 import { SPRING_MODAL } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
 import { MemoryGraph, type CenterRequest, type GraphPayload } from "./MemoryGraph";
 import { DetailPlaceholder, Empty, ListError } from "./shared";
-import { lensTitle, provenanceLabel, provenanceTone, relativeTime, scopeLabel } from "./lens";
+import { provenanceLabel, provenanceTone, relativeTime, scopeLabel } from "./lens";
 
-/** Provenance underside. Seeds the BFS from a focused item (peel-in from a
- *  lens header or a claim); with no focus it picks the first lens so the
- *  graph is never empty on the global tab. */
+/** The claim graph. By default the whole in-scope graph (all claims + claim↔claim
+ *  edges); click-to-focus re-roots a bounded BFS on a claim. Lenses are never
+ *  nodes (the locked model: memory is claims only). */
 export function GraphView({ config, focusId }: { config: AppConfig; focusId: string | null }) {
   const [rootId, setRootId] = useState<string | null>(focusId);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
@@ -22,22 +22,18 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
   const [selected, setSelected] = useState<MemoryItem | null>(null);
   const [center, setCenter] = useState<CenterRequest | null>(null);
 
-  // Resolve a seed: explicit focus, else the first lens in scope.
   useEffect(() => {
-    if (focusId) {
-      setRootId(focusId);
-      return;
-    }
-    if (rootId) return;
-    listMemoryLenses(config)
-      .then((r) => setRootId(r.lenses[0]?.lens.id ?? null))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [focusId, config, rootId]);
+    setRootId(focusId);
+  }, [focusId]);
 
   const load = useCallback(
-    (id: string) => {
+    (id: string | null) => {
       setLoading(true);
-      getMemoryGraph(config, id, { direction: "both", depth: 3 })
+      // No root → whole-graph (default). A root → click-to-focus BFS.
+      const req = id
+        ? getMemoryGraph(config, id, { direction: "both", depth: 3 })
+        : getWholeGraph(config);
+      req
         .then((g) => {
           setGraph({ nodes: g.nodes, edges: g.edges });
           setError(null);
@@ -49,8 +45,7 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
   );
 
   useEffect(() => {
-    if (rootId) load(rootId);
-    else setLoading(false);
+    load(rootId);
   }, [rootId, load]);
 
   const onSelect = useCallback((item: MemoryItem) => {
@@ -65,8 +60,8 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
     );
   }
 
-  if (!loading && !rootId) {
-    return <Empty>No memory to map yet. Create a lens to see its provenance.</Empty>;
+  if (!loading && graph.nodes.length === 0) {
+    return <Empty>No claims yet.</Empty>;
   }
 
   return (
@@ -89,19 +84,14 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
             className="glass-surface surface-popover absolute right-3 top-3 bottom-3 z-10 flex w-[300px] flex-col p-4"
           >
             <div className="flex items-start justify-between gap-2">
-              <Badge tone={selected.kind === "lens" ? "accent" : "neutral"} size="sm">
-                {selected.kind}
+              <Badge tone="neutral" size="sm">
+                {selected.canonical_subject}
               </Badge>
               <IconButton onClick={() => setSelected(null)} aria-label="Close" size="sm">
                 <X size={ICON.SM} strokeWidth={2} />
               </IconButton>
             </div>
-            <p className="mt-3 text-sm leading-[1.5] text-ink">
-              {selected.kind === "lens" ? lensTitle(selected) : selected.content}
-            </p>
-            {selected.kind === "lens" && selected.lens_criterion && (
-              <p className="mt-1.5 text-xs italic text-faint">{selected.lens_criterion}</p>
-            )}
+            <p className="mt-3 text-sm leading-[1.5] text-ink">{selected.content}</p>
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <Badge tone={provenanceTone(selected.provenance)} size="sm">
                 {provenanceLabel(selected.provenance)}

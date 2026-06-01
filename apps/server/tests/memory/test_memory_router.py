@@ -6,7 +6,8 @@ MemoryStore over a tmp_path SQLite DB. The lens/page/writeback/retrieve routes
 that records calls and returns scripted pipeline dataclasses — no LLM, no
 embedder, never ~/.ntrp/memory.db.
 
-The router is exercised end-to-end through FastAPI's TestClient with
+Memory is claims-only; lenses are a separate registry of VIEWS (never graph
+nodes). The router is exercised end-to-end through FastAPI's TestClient with
 `require_knowledge_runtime` overridden to a fake KnowledgeRuntime, so this
 asserts the real serialization, validation, and 404 mapping the contract pins.
 """
@@ -21,8 +22,10 @@ from fastapi.testclient import TestClient
 from ntrp.memory.models import (
     EdgeRole,
     Feedback,
-    Kind,
     LensDetailLevel,
+    LensProvenance,
+    LensRow,
+    LensStatus,
     MemoryEdge,
     MemoryItem,
     Provenance,
@@ -31,7 +34,6 @@ from ntrp.memory.models import (
     SourceRef,
     Status,
 )
-from ntrp.memory.store import MemoryStore
 from ntrp.memory.pipeline.types import (
     CoverageAdvisory,
     PageEditKind,
@@ -41,6 +43,7 @@ from ntrp.memory.pipeline.types import (
     RetrievedContext,
     WriteBackResult,
 )
+from ntrp.memory.store import MemoryStore
 from ntrp.server.app import app
 from ntrp.server.deps import require_knowledge_runtime
 
@@ -50,14 +53,17 @@ USER = Scope(kind=ScopeKind.USER)
 # --- fakes -----------------------------------------------------------
 
 
-class _FakeLensService:
+class _FakeLensRegistry:
+    """Stands in for LensRegistry (the view layer). Backed by the real store's
+    `lenses` registry so lifecycle persistence is exercised end-to-end."""
+
     def __init__(self, store):
         self.store = store
         self.calls: list[tuple] = []
 
     async def list_lenses(self, scope):
         self.calls.append(("list_lenses", scope))
-        lenses = await self.store.query(kind=Kind.LENS, scope=scope, status=Status.ACTIVE)
+        lenses = await self.store.list_lenses(scope=scope)
         return [
             (
                 lens,
@@ -73,67 +79,55 @@ class _FakeLensService:
             for lens in lenses
         ]
 
-    async def create_lens(self, name, criterion, scope, *, lens_kind="topic"):
-        self.calls.append(("create_lens", name, criterion, scope, lens_kind))
-        lens = MemoryItem(
+    async def create_lens(self, name, criterion, scope):
+        self.calls.append(("create_lens", name, criterion, scope))
+        lens = LensRow(
             id=uuid.uuid4().hex,
-            kind=Kind.LENS,
-            content=name,
+            name=name,
+            criterion=criterion,
             scope=scope,
-            provenance=Provenance.USER_AUTHORED,
-            lens_name=name,
-            lens_criterion=criterion,
-            lens_kind=lens_kind,
+            provenance=LensProvenance.USER_AUTHORED,
         )
-        await self.store.create_item(lens)
+        await self.store.create_lens_row(lens)
         return lens
 
     async def edit_criterion(self, lens_id, new_criterion):
         self.calls.append(("edit_criterion", lens_id, new_criterion))
-        lens = await self.store.get(lens_id)
-        if lens is None or lens.kind is not Kind.LENS or lens.status is not Status.ACTIVE:
+        lens = await self.store.get_lens(lens_id)
+        if lens is None:
             raise ValueError(f"not a lens: {lens_id}")
-        successor = MemoryItem(
-            id=uuid.uuid4().hex,
-            kind=Kind.LENS,
-            content=lens.content,
-            scope=lens.scope,
-            provenance=lens.provenance,
-            lens_name=lens.lens_name,
-            lens_criterion=new_criterion,
-            lens_kind=lens.lens_kind,
-        )
-        await self.store.supersede(old_id=lens.id, new_item=successor)
-        return successor
+        await self.store.invalidate_lens_membership(lens_id)
+        updated = await self.store.update_lens(lens_id, criterion=new_criterion, page=None)
+        return updated
 
     async def split_lens(self, lens_id, into, *, archive_parent=True):
         self.calls.append(("split_lens", lens_id, into, archive_parent))
-        parent = await self.store.get(lens_id)
-        if parent is None or parent.kind is not Kind.LENS:
+        parent = await self.store.get_lens(lens_id)
+        if parent is None:
             raise ValueError(f"not a lens: {lens_id}")
         children = []
         for name, criterion in into:
             children.append(await self.create_lens(name, criterion, parent.scope))
         if archive_parent:
-            await self.store.invalidate(parent.id, status=Status.ARCHIVED)
+            await self.store.delete_lens(parent.id)
         return children
 
     async def merge_lenses(self, lens_ids, name, criterion):
         self.calls.append(("merge_lenses", lens_ids, name, criterion))
         inputs = []
         for lid in lens_ids:
-            lens = await self.store.get(lid)
-            if lens is None or lens.kind is not Kind.LENS:
+            lens = await self.store.get_lens(lid)
+            if lens is None:
                 raise ValueError(f"not a lens: {lid}")
             inputs.append(lens)
         union = await self.create_lens(name, criterion, inputs[0].scope)
         for lens in inputs:
-            await self.store.invalidate(lens.id, status=Status.ARCHIVED)
+            await self.store.delete_lens(lens.id)
         return union
 
     async def delete_lens(self, lens_id):
         self.calls.append(("delete_lens", lens_id))
-        return await self.store.invalidate(lens_id, status=Status.ARCHIVED)
+        return await self.store.delete_lens(lens_id)
 
 
 class _FakeProjector:
@@ -168,7 +162,7 @@ class _FakeWriteBack:
 class _FakePipeline:
     def __init__(self, store, *, ctx: RetrievedContext | None = None):
         self.store = store
-        self.lens_service = _FakeLensService(store)
+        self.lens_registry = _FakeLensRegistry(store)
         self.lens_projector = _FakeProjector()
         self.lens_writeback = _FakeWriteBack(
             WriteBackResult(applied=[], rejected=[], rederive_triggered=False)
@@ -225,8 +219,8 @@ def client(store, pipeline):
 async def _claim(store, content, **kw):
     item = MemoryItem(
         id=uuid.uuid4().hex,
-        kind=Kind.CLAIM,
         content=content,
+        canonical_subject=kw.pop("canonical_subject", "Tim"),
         scope=USER,
         provenance=kw.pop("provenance", Provenance.RECORDED),
         **kw,
@@ -236,17 +230,14 @@ async def _claim(store, content, **kw):
 
 
 async def _lens(store, name, criterion):
-    lens = MemoryItem(
+    lens = LensRow(
         id=uuid.uuid4().hex,
-        kind=Kind.LENS,
-        content=name,
+        name=name,
+        criterion=criterion,
         scope=USER,
-        provenance=Provenance.USER_AUTHORED,
-        lens_name=name,
-        lens_criterion=criterion,
-        lens_kind="topic",
+        provenance=LensProvenance.USER_AUTHORED,
     )
-    await store.create_item(lens)
+    await store.create_lens_row(lens)
     return lens
 
 
@@ -293,13 +284,14 @@ async def test_list_items_serializes_claims(store, client):
     assert body["limit"] == 100
     assert len(body["items"]) == 1
     m = body["items"][0]
-    assert m["kind"] == "claim"
     assert m["content"] == "alice climbs"
+    assert m["canonical_subject"] == "Tim"
     assert m["scope"] == {"kind": "user", "key": None}
     assert m["feedback"] == "confirmed"
     assert m["corroboration"] == 2
-    # No confidence/title/tags in the new model.
+    # No confidence/title/tags/kind in the new claims-only model.
     assert "confidence" not in m and "title" not in m and "tags" not in m
+    assert "kind" not in m
 
 
 @pytest.mark.asyncio
@@ -312,11 +304,6 @@ async def test_list_items_empty_status_returns_all(store, client):
     body = client.get("/admin/memory/items", params={"status": ""}).json()
     assert len(body["items"]) == 1
     assert body["items"][0]["status"] == "archived"
-
-
-@pytest.mark.asyncio
-async def test_list_items_invalid_kind_422(client):
-    assert client.get("/admin/memory/items", params={"kind": "episode"}).status_code == 422
 
 
 def test_list_items_project_scope_missing_key_422(client):
@@ -371,7 +358,7 @@ async def test_list_lenses_with_coverage(store, client, pipeline):
     rows = resp.json()["lenses"]
     assert len(rows) == 1
     assert rows[0]["lens"]["id"] == lens.id
-    assert rows[0]["lens"]["lens_name"] == "Climbing"
+    assert rows[0]["lens"]["name"] == "Climbing"
     assert rows[0]["coverage"]["lens_id"] == lens.id
     assert rows[0]["coverage"]["ratio"] == 0.3
     assert rows[0]["coverage"]["generic"] is False
@@ -608,7 +595,7 @@ def test_writeback_404_on_missing_lens(client):
 @pytest.mark.asyncio
 async def test_writeback_404_on_archived_lens(store, client):
     lens = await _lens(store, "L", "c")
-    await store.invalidate(lens.id, status=Status.ARCHIVED)
+    await store.update_lens(lens.id, status=LensStatus.ARCHIVED)
     assert client.post(
         f"/admin/memory/lenses/{lens.id}/writeback",
         json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
@@ -622,13 +609,13 @@ async def test_writeback_404_on_archived_lens(store, client):
 async def test_create_lens(store, client, pipeline):
     resp = client.post(
         "/admin/memory/lenses",
-        json={"name": "Cooking", "criterion": "about cooking", "lens_kind": "topic"},
+        json={"name": "Cooking", "criterion": "about cooking"},
     )
     assert resp.status_code == 200
     lens = resp.json()["lens"]
-    assert lens["lens_name"] == "Cooking"
-    assert lens["lens_kind"] == "topic"
-    assert ("create_lens", "Cooking", "about cooking", USER, "topic") == pipeline.lens_service.calls[-1]
+    assert lens["name"] == "Cooking"
+    assert lens["criterion"] == "about cooking"
+    assert pipeline.lens_registry.calls[-1] == ("create_lens", "Cooking", "about cooking", USER)
 
 
 @pytest.mark.asyncio
@@ -639,9 +626,11 @@ async def test_edit_criterion(store, client):
         json={"criterion": "new criterion"},
     )
     assert resp.status_code == 200
-    assert resp.json()["lens"]["lens_criterion"] == "new criterion"
-    old = await store.get(lens.id)
-    assert old.status is Status.SUPERSEDED
+    assert resp.json()["lens"]["criterion"] == "new criterion"
+    # in-place update keeps the same id, active.
+    updated = await store.get_lens(lens.id)
+    assert updated.criterion == "new criterion"
+    assert updated.status is LensStatus.ACTIVE
 
 
 def test_edit_criterion_404_on_non_lens(client):
@@ -664,8 +653,9 @@ async def test_split_lens(store, client):
     )
     assert resp.status_code == 200
     children = resp.json()["children"]
-    assert [c["lens_name"] for c in children] == ["Climbing", "Running"]
-    assert (await store.get(parent.id)).status is Status.ARCHIVED
+    assert [c["name"] for c in children] == ["Climbing", "Running"]
+    # parent dropped by default.
+    assert await store.get_lens(parent.id) is None
 
 
 @pytest.mark.asyncio
@@ -678,7 +668,7 @@ async def test_split_lens_keep_parent(store, client):
             "archive_parent": False,
         },
     )
-    assert (await store.get(parent.id)).status is Status.ACTIVE
+    assert await store.get_lens(parent.id) is not None
 
 
 @pytest.mark.asyncio
@@ -690,9 +680,9 @@ async def test_merge_lenses(store, client):
         json={"lens_ids": [a.id, b.id], "name": "AB", "criterion": "a or b"},
     )
     assert resp.status_code == 200
-    assert resp.json()["lens"]["lens_name"] == "AB"
+    assert resp.json()["lens"]["name"] == "AB"
     for lid in (a.id, b.id):
-        assert (await store.get(lid)).status is Status.ARCHIVED
+        assert await store.get_lens(lid) is None
 
 
 def test_merge_requires_two(client):
@@ -707,9 +697,10 @@ async def test_delete_lens(store, client):
     lens = await _lens(store, "L", "c")
     resp = client.delete(f"/admin/memory/lenses/{lens.id}")
     assert resp.status_code == 200
-    assert resp.json() == {"archived": True}
-    assert (await store.get(lens.id)).status is Status.ARCHIVED
+    assert resp.json() == {"deleted": True}
+    # the view is gone; claims (none here) would be untouched.
+    assert await store.get_lens(lens.id) is None
 
 
-def test_delete_lens_404_when_nothing_archived(client):
+def test_delete_lens_404_when_nothing_deleted(client):
     assert client.delete("/admin/memory/lenses/ghost").status_code == 404
