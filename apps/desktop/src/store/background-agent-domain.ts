@@ -1,5 +1,7 @@
 import type { BackgroundAgent, BackgroundAgentStatus } from "./types";
 
+export type { BackgroundAgent } from "./types";
+
 export type BackgroundAgentRefreshStatus =
   | "idle"
   | "refreshing"
