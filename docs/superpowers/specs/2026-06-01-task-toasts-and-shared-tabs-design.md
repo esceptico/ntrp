@@ -33,53 +33,77 @@ would fork the timing language.
 - Stacking hard-cap (toasts stack unbounded — see Risk below)
 - Failure-persistence (failures auto-dismiss like successes)
 - The other six motion.dev candidates (accordion, number-trend, dots-morph
-  button, skeleton shimmer, scroll-track-in-viewport, tab-select pill variant)
+  button, skeleton shimmer, scroll-track-in-viewport)
 
 ---
 
-## Part 1 — Shared Tabs Primitive
+## Part 1 — Shared Tabs Primitive (dual-variant)
 
 ### Goal
 
-One reusable `<Tabs>` primitive with a 2px underline indicator that slides
-between active tabs via motion shared-layout. Replaces the hand-rolled tab rows
-in three places, which are currently inconsistent:
+One reusable `<Tabs>` primitive whose active indicator **slides** between tabs
+via motion shared-layout. Reading the three target surfaces showed they are NOT
+all underline tab rows — they use three different shapes, so the primitive must
+support two indicator variants and two orientations:
 
-- `SettingsModal` — active tab marked by text color only, no indicator
-- `AutomationsModal` — static 2px underline that jumps instantly
-- `MemoryItemsPane` — `transition-colors` only, no indicator
+| Surface | Shape today | Variant / orientation |
+|---|---|---|
+| `AutomationsModal` | Horizontal row, static 2px underline + count badges | `underline`, horizontal |
+| `MemoryItemsPane` | `flex-wrap` row of filled pills, two-line (label + hint) | `pill`, horizontal (wraps) |
+| `SettingsModal` | Vertical icon sidebar, active = filled background | `pill`, vertical |
+
+A single sliding-underline primitive would not fit a vertical sidebar or a
+wrapping two-line pill row, so the primitive is built dual-variant from the
+start. This is what earns the abstraction across all three.
 
 ### Component
 
-`apps/desktop/src/components/ui/Tabs.tsx`
+`apps/desktop/src/components/ui/Tabs.tsx` — a compound component.
 
 ```
-<Tabs value={active} onChange={setActive}>
-  <Tab value="general">General</Tab>
-  <Tab value="models">Models</Tab>
+<Tabs value={active} onChange={setActive} variant="underline" orientation="horizontal">
+  <Tab value="active">Active <Badge/></Tab>
+  <Tab value="channels">Channels</Tab>
 </Tabs>
 ```
 
-- Active tab renders a `motion.div` underline with `layoutId="tab-underline"`
-  (a single shared-layout id per Tabs instance so the bar slides between tabs).
-- Animated with `SPRING_LAYOUT` — consistent with the existing shared-layout
-  usage in `RollingToken` and `TurnGroup`.
-- Indicator style: **sliding underline** (the motion.dev `smooth-tabs` pattern).
-  The pill/`tab-select` variant is explicitly not built.
-- Tabs own only selection presentation; panel content stays with the caller.
+- Props: `value`, `onChange`, `variant: "underline" | "pill"`,
+  `orientation: "horizontal" | "vertical"` (default horizontal),
+  `className` for the nav container. `<Tab value>` takes arbitrary children
+  (label, icon, badge, two-line content) so each surface keeps its exact
+  content/styling.
+- The active indicator is a `motion.div` with a `layoutId` **unique per Tabs
+  instance** (derived from React `useId()`, so multiple Tabs mounted at once —
+  e.g. settings sidebar plus another modal — don't share a layout group).
+  - `underline`: absolutely-positioned 2px bar at the bottom edge of the active
+    tab (`bg-ink rounded-full`).
+  - `pill`: absolutely-positioned inset background behind the active tab's
+    content (`bg-surface-soft` + inset ring), `z` below the label.
+- Animated with `SPRING_LAYOUT` — consistent with `RollingToken`/`TurnGroup`
+  shared-layout usage.
+- Respects reduced motion: when `useReducedMotion()` is true, the indicator
+  jumps (no `layout` transition) instead of sliding.
+- `<Tab>` renders a `<button type="button">`; the indicator is injected by the
+  primitive. Panel content stays with the caller (Tabs owns selection
+  presentation only).
 
 ### Migration
 
-Replace the bespoke tab rows in the three surfaces with `<Tabs>`/`<Tab>`,
-deleting the per-surface underline/color markup. Three deletions, one primitive.
-No backend, no new dependencies.
+Replace the bespoke tab markup in all three surfaces with `<Tabs>`/`<Tab>`,
+preserving each surface's existing content (badges in Automations, icon+label in
+Settings sidebar, two-line label+hint in Memory) and passing the matching
+`variant`/`orientation`. Delete the per-surface indicator markup
+(`AutomationsModal`'s `TabButton` underline span, `MemoryItemsPane`'s
+`bg-surface-soft` active classes, `SettingsModal`'s sidebar `data-active`
+indicator). No backend, no new dependencies.
 
 ### Testing
 
-- Visual/behavioral: indicator slides between tabs, lands on the active tab on
-  mount, and respects `prefers-reduced-motion` (no slide → instant position).
-- Each migrated surface still switches panels correctly and the keyboard/active
-  states are preserved.
+- Indicator lands on the active tab on mount, slides on change, and is present
+  exactly once per Tabs instance.
+- `underline` vs `pill` variant each render their indicator element.
+- `prefers-reduced-motion` → indicator positions without a slide transition.
+- Each migrated surface still switches panels and preserves badges/icons/hints.
 
 ---
 
@@ -189,9 +213,9 @@ soft cap (~3 visible, older ones collapse) is a follow-up — not built now.
 - `apps/desktop/src/components/Toaster.tsx`
 
 **Modified**
-- `apps/desktop/src/components/SettingsModal.tsx` (use `<Tabs>`)
-- `apps/desktop/src/components/AutomationsModal.tsx` (use `<Tabs>`)
-- `apps/desktop/src/components/memory/MemoryItemsPane.tsx` (use `<Tabs>`)
+- `apps/desktop/src/components/SettingsModal.tsx` (use `<Tabs variant="pill" orientation="vertical">`)
+- `apps/desktop/src/components/AutomationsModal.tsx` (use `<Tabs variant="underline">`)
+- `apps/desktop/src/components/memory/MemoryItemsPane.tsx` (use `<Tabs variant="pill">`)
 - `apps/desktop/src/components/App.tsx` (mount `<Toaster>`, run `useTaskResultToasts`)
 
 **No changes**
