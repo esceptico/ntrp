@@ -165,14 +165,21 @@ export function MemoryGraph({
         : [];
 
     const sim = forceSimulation<SimNode>(nodes)
-      .force("charge", forceManyBody().strength(-300).distanceMax(380))
-      .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(80).strength(0.6))
-      .force("center", forceCenter(size.w / 2, size.h / 2).strength(0.02))
-      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d.item) + 12))
-      .force("x", forceX<SimNode>((d) => anchorOf(d).x).strength(0.16))
-      .force("y", forceY<SimNode>((d) => anchorOf(d).y).strength(0.16))
+      .force("charge", forceManyBody().strength(-90).distanceMax(260))
+      .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(64).strength(0.6))
+      .force("center", forceCenter(size.w / 2, size.h / 2).strength(0.01))
+      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d.item) + 9))
+      // Strong pull to the subject anchor so claims pack into a clear pod under
+      // their label, not a loose scatter the charge force wins.
+      .force("x", forceX<SimNode>((d) => anchorOf(d).x).strength(0.5))
+      .force("y", forceY<SimNode>((d) => anchorOf(d).y).strength(0.5))
       .alpha(0.9)
-      .alphaDecay(0.035);
+      .alphaDecay(0.04);
+    // Pre-settle synchronously: run the layout to rest BEFORE first paint so the
+    // graph loads already arranged — no fly-in or jitter on mount, and the auto-fit
+    // measures final positions. Drag reheats on demand (alphaTarget().restart()),
+    // so starting at rest is safe.
+    sim.tick(300);
     sim.on("tick", tick);
     simRef.current = sim;
     tick();
