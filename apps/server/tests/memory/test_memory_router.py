@@ -35,6 +35,7 @@ from ntrp.memory.models import (
     SourceRef,
     Status,
 )
+from ntrp.memory.pipeline.lens_generation import LensPageGenerator
 from ntrp.memory.pipeline.types import (
     CoverageAdvisory,
     PageEditKind,
@@ -132,12 +133,15 @@ class _FakeLensRegistry:
 
 
 class _FakeProjector:
+    """A projector whose page is whatever `self.page` is set to. `cached_page`
+    serves it synchronously (the cache-hit fast path); `project` also serves it and
+    records the call (the background-generation path drives this one)."""
+
     def __init__(self, page: ProjectedPage | None = None):
         self.page = page
         self.calls: list[tuple] = []
 
-    async def project(self, lens_id, *, detail=None, refresh=False):
-        self.calls.append((lens_id, detail, refresh))
+    def _page(self, lens_id, detail) -> ProjectedPage:
         if self.page is not None:
             return self.page
         return ProjectedPage(
@@ -148,6 +152,13 @@ class _FakeProjector:
             synthesized=False,
             coverage=None,
         )
+
+    async def cached_page(self, lens_id, *, detail=None):
+        return self._page(lens_id, detail) if self.page is not None else None
+
+    async def project(self, lens_id, *, detail=None, refresh=False, progress=None):
+        self.calls.append((lens_id, detail, refresh))
+        return self._page(lens_id, detail)
 
 
 class _FakeWriteBack:
@@ -165,6 +176,7 @@ class _FakePipeline:
         self.store = store
         self.lens_registry = _FakeLensRegistry(store)
         self.lens_projector = _FakeProjector()
+        self.lens_generator = LensPageGenerator(self.lens_projector)
         self.lens_writeback = _FakeWriteBack(
             WriteBackResult(applied=[], rejected=[], rederive_triggered=False)
         )
@@ -401,9 +413,15 @@ async def test_lens_page_serializes_blocks(store, client, pipeline):
 @pytest.mark.asyncio
 async def test_lens_page_passes_detail_and_refresh(store, client, pipeline):
     lens = await _lens(store, "T", "c")
-    client.get(
+    # No cached page -> 202 + background generation; the GET does not block on it.
+    resp = client.get(
         f"/admin/memory/lenses/{lens.id}/page", params={"detail": "gist", "refresh": "true"}
     )
+    assert resp.status_code == 202
+    assert resp.json()["status"] in ("creating", "scoring", "synthesizing", "ready")
+    # Generation runs in the background; drain it, then assert it drove the projector
+    # with the requested detail + refresh.
+    await pipeline.lens_generator.drain()
     assert pipeline.lens_projector.calls[-1] == (lens.id, LensDetailLevel.GIST, True)
 
 

@@ -13,7 +13,7 @@ Wiring: `require_knowledge_runtime` → `KnowledgeRuntime`. Reads use
 `knowledge.memory_ready` → 503 when the pipeline is not up.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from ntrp.memory.models import (
     EdgeRole,
@@ -172,6 +172,15 @@ def ranked_json(r: RankedItem) -> dict:
     }
 
 
+def _parse_detail(detail: str | None) -> LensDetailLevel | None:
+    if detail is None:
+        return None
+    try:
+        return LensDetailLevel(detail)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"invalid detail: {detail}")
+
+
 def _parse_roles(roles: str | None) -> set[EdgeRole] | None:
     if not roles:
         return None
@@ -260,27 +269,49 @@ async def list_lenses(
 @router.get("/lenses/{lens_id}/page")
 async def get_lens_page(
     lens_id: str,
+    response: Response,
     knowledge: KnowledgeRuntime = Depends(_knowledge),
     detail: str | None = None,
     refresh: bool = False,
 ):
-    detail_level: LensDetailLevel | None = None
-    if detail is not None:
-        try:
-            detail_level = LensDetailLevel(detail)
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"invalid detail: {detail}")
+    """Non-blocking lens page.
 
-    page = await knowledge.memory_retrieval.lens_projector.project(
+    A clean cache hit returns the materialized page immediately (200). A
+    miss/dirty/refresh does NOT run synthesis on the request — it kicks off a
+    background generation and returns the live status with HTTP 202 (Accepted) so
+    the request never blocks on multi-call synthesis (Lens spec §6; the timeout
+    fix). The UI polls `/lenses/{id}/page/status` for progress and re-GETs when
+    ready. A missing lens -> 404.
+    """
+    detail_level = _parse_detail(detail)
+    if await knowledge.memory.get_lens(lens_id) is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+
+    result = await knowledge.memory_retrieval.lens_generator.ensure(
         lens_id, detail=detail_level, refresh=refresh
     )
-    # project() returns an empty page for missing/inactive lenses; map empty +
-    # store.get is None -> 404. An active lens with zero members returns a
-    # non-empty header markdown and is NOT a 404.
-    if not page.markdown and not page.blocks:
-        if await knowledge.memory.get_lens(lens_id) is None:
-            raise HTTPException(status_code=404, detail="lens not found")
-    return page_json(page)
+    if isinstance(result, ProjectedPage):
+        return page_json(result)
+    response.status_code = 202
+    return result.to_json()
+
+
+@router.get("/lenses/{lens_id}/page/status")
+async def get_lens_page_status(
+    lens_id: str,
+    knowledge: KnowledgeRuntime = Depends(_knowledge),
+):
+    """Live generation status for a lens page (poll target for the UI progress).
+
+    Returns the current stage (creating/scoring/synthesizing/ready/error), the
+    subject + "i/n" while synthesizing, and any error. `status: "idle"` when no
+    generation has run (the page is either cached or never requested)."""
+    if await knowledge.memory.get_lens(lens_id) is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+    status = knowledge.memory_retrieval.lens_generator.status(lens_id)
+    if status is None:
+        return {"lens_id": lens_id, "status": "idle"}
+    return status.to_json()
 
 
 # --- 5a: whole claim-graph (default view) ----------------------------

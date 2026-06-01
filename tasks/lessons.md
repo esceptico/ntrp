@@ -19,6 +19,16 @@ Rule: **every decision AND every recall channel is LLM/embedding/FTS — never a
 
 Prevention: workflow build prompts MUST say this explicitly (not just "no opaque gate"); a verify step MUST grep the pipeline for `frozenset`/`_WORDS`/`_TERMS`/`_HINTS`/`re.compile`/keyword-`in {`-sets and fail on any decision/recall use. Watch capture's idle/time boundary — a mechanical chunking trigger is OK; a *semantic* gate is not.
 
+## Lens page: don't make the model reproduce opaque ids; don't block the GET on synthesis (Jun 2026)
+
+Two coupled bugs shipped because the test stub was too friendly:
+
+1. **Raw-list fallback fired on every faithful render.** `project.py` required the synthesizer to echo `<!--claim:ID-->` anchors verbatim and fell back to raw bullets if any were missing. Real models drop opaque ids (lessons above), so the page was never the synthesized markdown. Fix: the model cites claims by the numbered `[n]` tag it was given (it never sees the id); the projector injects anchors deterministically post-synthesis (`_inject_anchors`, index→id substitution — structural, not a heuristic). Raw fallback now means genuine failure only (blank output / cites no claim at all).
+
+2. **The page GET ran multi-call synthesis synchronously and timed out.** Membership refresh + re-validate + one strong-model synthesis per subject = 6–14s on the request path. Fix: `LensPageGenerator.ensure` — cache hit returns the page (200); miss/dirty/refresh starts ONE deduped background `asyncio.create_task` and returns a `generating` status (HTTP 202); the projector reports stage/subject/i-n progress through a callback; a `/page/status` endpoint is the UI poll target. New fast-path `LensProjector.cached_page()` reads the materialized page with zero synthesis/judge.
+
+Anti-stub testing rule (this is WHY the bugs hid): the existing tests passed with a stub that echoed anchors instantly. New tests MUST defeat that — a synth stub that cites by `[n]` and provably emits NO `<!--claim:` (prove injection, not echo), and a GATED/slow synth stub awaited via `httpx.ASGITransport` (so the route's background task runs in the test loop) to prove the GET returns 202 fast and never blocks. A `TestClient` runs its own loop in a worker thread and orphans the `create_task`, so use `AsyncClient(ASGITransport)` + `gen.drain()` when asserting background completion.
+
 
 ## Design-system tokens (May 2026)
 

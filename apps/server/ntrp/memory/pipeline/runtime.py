@@ -29,6 +29,7 @@ from ntrp.memory.pipeline.capture import CaptureConfig, CaptureService
 from ntrp.memory.pipeline.consolidate import ConsolidateConfig, ConsolidateLint
 from ntrp.memory.pipeline.extract import Extractor
 from ntrp.memory.pipeline.membership import LensMembership
+from ntrp.memory.pipeline.lens_generation import LensPageGenerator
 from ntrp.memory.pipeline.project import LensProjector
 from ntrp.memory.pipeline.prompts_capture import SemanticBoundary
 from ntrp.memory.pipeline.reconcile import Reconciler
@@ -151,6 +152,7 @@ class MemoryPipeline:
             cheap_model=config.cheap_model,
             strong_model=config.strong_model,
         )
+        self.lens_generator = LensPageGenerator(self.lens_projector)
         self.lens_writeback = LensWriteBack(
             store, self.write_seam, self.lens_membership, self.lens_projector
         )
@@ -244,6 +246,7 @@ class MemoryPipeline:
         task.add_done_callback(self._tasks.discard)
 
     async def stop(self) -> None:
+        await self.lens_generator.drain()
         for task in list(self._tasks):
             task.cancel()
         for task in list(self._tasks):

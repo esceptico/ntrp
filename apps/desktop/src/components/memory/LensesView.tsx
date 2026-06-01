@@ -1,23 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, GitFork, Plus, RefreshCw, Users } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, GitFork, Loader2, Plus, RefreshCw, Users } from "lucide-react";
 import type { AppConfig } from "../../api";
 import {
   createLens,
   deleteLens,
   editLensCriterion,
   getLensPage,
+  getLensPageStatus,
+  isLensGenStatus,
   listMemoryLenses,
   setLensRenderMode,
   writebackLens,
   type CoverageAdvisory,
   type Lens,
   type LensDetailLevel,
+  type LensGenStatus,
   type LensWithCoverage,
   type PageEditOp,
   type ProjectedGroup,
   type ProjectedPage,
 } from "../../api/memoryItems";
+import { Markdown } from "../Markdown";
 import { SPRING_LAYOUT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
@@ -336,6 +340,7 @@ function LensPage({
   const [detail, setDetail] = useState<LensDetailLevel>(lens.detail_level);
   const [grouped, setGrouped] = useState(lens.render_mode === "grouped_by_subject");
   const [page, setPage] = useState<ProjectedPage | null>(null);
+  const [gen, setGen] = useState<LensGenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -345,23 +350,86 @@ function LensPage({
   const [editingCriterion, setEditingCriterion] = useState(false);
   const [adding, setAdding] = useState(false);
 
+  // A generation poll in flight — cancelled on unmount/reload so a stale loop
+  // never writes into a remounted page (lens switch keys remount LensPage).
+  const pollRef = useRef<{ alive: boolean } | null>(null);
+
+  const stopPoll = useCallback(() => {
+    if (pollRef.current) pollRef.current.alive = false;
+    pollRef.current = null;
+  }, []);
+
   const load = useCallback(
     (opts: { detail: LensDetailLevel; refresh?: boolean }) => {
+      stopPoll();
       setLoading(true);
+      setError(null);
+      // A refresh re-runs synthesis — clear the stale page so the progress
+      // checklist (not the old prose) is what the user watches.
+      if (opts.refresh) setPage(null);
       getLensPage(config, lens.id, { detail: opts.detail, refresh: opts.refresh })
-        .then((p) => {
-          setPage(p);
-          setError(null);
+        .then((result) => {
+          // Clean cache hit → the materialized page. Otherwise the GET returned
+          // a generation status (HTTP 202): show live progress and poll
+          // `/page/status` until ready, never blocking the request on synthesis.
+          if (!isLensGenStatus(result)) {
+            setPage(result);
+            setGen(null);
+            setLoading(false);
+            return;
+          }
+          setGen(result);
+          const token = { alive: true };
+          pollRef.current = token;
+          const tick = () => {
+            if (!token.alive) return;
+            getLensPageStatus(config, lens.id)
+              .then((s) => {
+                if (!token.alive) return;
+                setGen(s);
+                if (s.status === "ready") {
+                  // Page materialized — re-GET hits the cache (no synthesis).
+                  getLensPage(config, lens.id, { detail: opts.detail })
+                    .then((p) => {
+                      if (!token.alive) return;
+                      if (!isLensGenStatus(p)) {
+                        setPage(p);
+                        setGen(null);
+                      }
+                      setLoading(false);
+                    })
+                    .catch((e) => {
+                      if (!token.alive) return;
+                      setError(e instanceof Error ? e.message : String(e));
+                      setLoading(false);
+                    });
+                } else if (s.status === "error") {
+                  setError(s.error || "Lens generation failed.");
+                  setLoading(false);
+                } else {
+                  window.setTimeout(tick, 700);
+                }
+              })
+              .catch((e) => {
+                if (!token.alive) return;
+                setError(e instanceof Error ? e.message : String(e));
+                setLoading(false);
+              });
+          };
+          window.setTimeout(tick, 350);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-        .finally(() => setLoading(false));
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : String(e));
+          setLoading(false);
+        });
     },
-    [config, lens.id],
+    [config, lens.id, stopPoll],
   );
 
   useEffect(() => {
     load({ detail });
-  }, [load, detail]);
+    return stopPoll;
+  }, [load, detail, stopPoll]);
 
   const applyOps = useCallback(
     async (ops: PageEditOp[], hint: { id: string; how: "supersede" | "reject" } | null) => {
@@ -440,7 +508,9 @@ function LensPage({
             }}
           />
 
-          {loading && !page ? (
+          {gen && !page ? (
+            <GenerationProgress gen={gen} grouped={grouped} />
+          ) : loading && !page ? (
             <PageSkeleton />
           ) : error ? (
             <div className="mt-4">
@@ -459,25 +529,18 @@ function LensPage({
               onCommit={onClaimCommit}
               onPeek={onPeekClaim}
             />
-          ) : (
-            <div className="mt-3 flex flex-col gap-0.5">
-              <AnimatePresence initial={false}>
-                {page?.blocks.map((b) => (
-                  <ClaimBlock
-                    key={b.claim_id}
-                    block={b}
-                    editing={editingId === b.claim_id}
-                    busy={busyId === b.claim_id}
-                    exiting={exiting?.id === b.claim_id ? exiting.how : null}
-                    onOpen={() => setEditingId(b.claim_id)}
-                    onClose={() => setEditingId(null)}
-                    onCommit={onClaimCommit}
-                    onPeek={() => onPeekClaim(b.claim_id)}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
+          ) : page ? (
+            <FlatPage
+              page={page}
+              editingId={editingId}
+              busyId={busyId}
+              exiting={exiting}
+              onOpen={setEditingId}
+              onClose={() => setEditingId(null)}
+              onCommit={onClaimCommit}
+              onPeek={onPeekClaim}
+            />
+          ) : null}
 
           <AddClaim
             open={adding}
@@ -834,7 +897,14 @@ function GroupedProfiles({
                   transition={SPRING_LAYOUT}
                   className="overflow-hidden pl-6"
                 >
-                  <div className="flex flex-col gap-0.5 py-0.5">
+                  <div className="flex flex-col gap-2 py-0.5">
+                    {g.synthesized && stripAnchors(g.markdown).trim() && (
+                      <Markdown
+                        content={stripAnchors(g.markdown).trim()}
+                        className="text-sm leading-relaxed"
+                      />
+                    )}
+                    <div className="flex flex-col gap-0.5">
                     <AnimatePresence initial={false}>
                       {g.blocks.map((b) => (
                         <ClaimBlock
@@ -850,6 +920,7 @@ function GroupedProfiles({
                         />
                       ))}
                     </AnimatePresence>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -857,6 +928,119 @@ function GroupedProfiles({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// The synthesized page carries deterministic `<!--claim:ID-->` anchors so the
+// substrate can map prose back to claims on write-back. They're HTML comments —
+// rehype-sanitize already drops them — but strip first so a partial/edge render
+// never leaks the marker. The prose itself is the human reading surface (spec §5).
+const CLAIM_ANCHOR = /<!--\s*claim:[^>]*-->/g;
+function stripAnchors(md: string): string {
+  return md.replace(CLAIM_ANCHOR, "");
+}
+
+// A flat (non-grouped) lens page. The synthesized markdown is the primary
+// reading surface (Fork A: the page IS the editable projection); the claim
+// blocks sit beneath as the evidence/drill-down + edit affordance. On a genuine
+// synthesis failure (`synthesized === false`) there is no prose to show, so the
+// blocks stand alone.
+function FlatPage({
+  page,
+  editingId,
+  busyId,
+  exiting,
+  onOpen,
+  onClose,
+  onCommit,
+  onPeek,
+}: {
+  page: ProjectedPage;
+  editingId: string | null;
+  busyId: string | null;
+  exiting: { id: string; how: "supersede" | "reject" } | null;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+  onCommit: (op: ClaimOp) => void;
+  onPeek: (claimId: string) => void;
+}) {
+  const prose = page.synthesized ? stripAnchors(page.markdown).trim() : "";
+  return (
+    <div className="mt-3 flex flex-col gap-3">
+      {prose && <Markdown content={prose} className="text-sm leading-relaxed" />}
+      <div className="flex flex-col gap-0.5">
+        <AnimatePresence initial={false}>
+          {page.blocks.map((b) => (
+            <ClaimBlock
+              key={b.claim_id}
+              block={b}
+              editing={editingId === b.claim_id}
+              busy={busyId === b.claim_id}
+              exiting={exiting?.id === b.claim_id ? exiting.how : null}
+              onOpen={() => onOpen(b.claim_id)}
+              onClose={onClose}
+              onCommit={onCommit}
+              onPeek={() => onPeek(b.claim_id)}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// Live generation progress (ask: "i can't see what's happening when i create a
+// lens"). The async page GET returns a status (HTTP 202) and the projector
+// reports stage/subject/"i/n" through the poll target — surfaced here as an
+// ordered checklist instead of a frozen spinner that times out.
+const GEN_STEPS: { stage: "scoring" | "synthesizing"; label: string }[] = [
+  { stage: "scoring", label: "Scoring members" },
+  { stage: "synthesizing", label: "Synthesizing page" },
+];
+const STAGE_ORDER: Record<string, number> = { creating: 0, scoring: 1, synthesizing: 2, ready: 3 };
+
+function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boolean }) {
+  const cur = STAGE_ORDER[gen.status] ?? 0;
+  return (
+    <div className="mt-4 flex flex-col gap-2.5">
+      <div className="flex items-center gap-2 text-sm font-medium text-ink">
+        {gen.status === "error" ? (
+          <AlertCircle size={ICON.SM} strokeWidth={2} className="text-bad" />
+        ) : (
+          <Loader2 size={ICON.SM} strokeWidth={2} className="animate-spin text-accent" />
+        )}
+        {gen.status === "error" ? "Generation failed" : "Generating view…"}
+      </div>
+      <ul className="flex flex-col gap-1.5 pl-0.5">
+        {GEN_STEPS.map((step) => {
+          const stepOrd = STAGE_ORDER[step.stage];
+          const done = cur > stepOrd;
+          const active = cur === stepOrd;
+          const detail =
+            active && step.stage === "synthesizing"
+              ? [grouped && gen.subject, gen.progress].filter(Boolean).join(" · ")
+              : "";
+          return (
+            <li key={step.stage} className="flex items-center gap-2 text-sm">
+              <span className="flex size-4 shrink-0 items-center justify-center">
+                {done ? (
+                  <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
+                ) : active ? (
+                  <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
+                ) : (
+                  <span className="size-1.5 rounded-full bg-line" aria-hidden />
+                )}
+              </span>
+              <span className={done || active ? "text-ink" : "text-faint"}>{step.label}</span>
+              {detail && <span className="text-xs tabular-nums text-faint">{detail}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {gen.status === "error" && gen.error && (
+        <span className="text-xs text-bad">{gen.error}</span>
+      )}
     </div>
   );
 }

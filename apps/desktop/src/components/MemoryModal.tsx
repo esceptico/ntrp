@@ -5,12 +5,13 @@ import { Tab, Tabs } from "./ui/Tabs";
 import { PageModal } from "./PageModal";
 
 /** Memory views host. Title-row header with an inset-border tab strip below;
- *  the three destinations (Lenses · Claims · Graph) are one woven sheet, swapped
- *  by the shared-element pill indicator. Lenses is home. */
+ *  the three destinations (Claims · Lenses · Graph) are one woven sheet, swapped
+ *  by the shared-element pill indicator. Claims is home — claims ARE the memory;
+ *  lenses are a view layer over them. */
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
-  const [tab, setTab] = useState<MemoryDestination>("lenses");
+  const [tab, setTab] = useState<MemoryDestination>("claims");
 
   const tabs = (
     <Tabs

@@ -390,6 +390,114 @@ async def test_project_synthesis_failure_degrades_to_raw_list(store):
     assert "user runs 5k every morning" in page.markdown
 
 
+# --- anchor injection: synthesis must NOT echo opaque ids -----------
+# These DEFEAT the old stub that echoed `<!--claim:ID-->` verbatim — the exact
+# reason the raw-fallback bug shipped. A faithful model cites the numbered `[n]`
+# tag it was given (it never sees the opaque id); the projector injects anchors
+# deterministically post-synthesis. Synthesized must be True with anchors present.
+
+
+class _IndexCitingSynth:
+    """A real-model-like synth stub: returns clean markdown that cites claims by
+    the `[n]` index tag it was shown, and NEVER emits a `<!--claim:ID-->` anchor.
+    It reads the numbered ITEMS out of the prompt so it cites exactly the claims it
+    was given, in order — proving anchoring no longer depends on id-echo."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def completion(self, *, messages, model, response_format=None, **kwargs):
+        from tests.conftest import completion_response
+
+        self.calls.append({"messages": messages, "model": model})
+        user = messages[-1]["content"]
+        lines = []
+        for line in user.splitlines():
+            s = line.strip()
+            if not (s.startswith("[") and "]" in s):
+                continue
+            try:
+                idx = int(s[1 : s.index("]")])
+            except ValueError:
+                continue
+            # Clean prose + the index tag. No opaque anchor anywhere.
+            lines.append(f"- A faithfully synthesized line. [{idx}]")
+        md = "## Profile\n" + "\n".join(lines)
+        assert "<!--claim:" not in md  # the stub provably drops opaque anchors
+        return completion_response(_synth(md).model_dump_json())
+
+
+async def test_synthesis_without_anchor_echo_still_renders(store):
+    lens = await _lens(store, name="Health", criterion="claims about the user's health")
+    c1 = await _claim(store, "user runs 5k every morning")
+    c2 = await _claim(store, "user takes vitamin D")
+    await _member(store, lens.id, c1)
+    await _member(store, lens.id, c2)
+
+    cheap = KeywordJudge("user")
+    strong = _IndexCitingSynth()  # cites [0]/[1], never echoes anchors
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    # The page is genuinely synthesized (NOT the raw bullet fallback)...
+    assert page.synthesized is True
+    # ...and anchors were INJECTED deterministically from the [n] citations.
+    assert set(parse_anchors(page.markdown)) == {c1.id, c2.id}
+    assert "<!--claim:" in page.markdown
+    assert {b.claim_id for b in page.blocks} == {c1.id, c2.id}
+    # the synthesized prose survived (not replaced by raw `- {content}` bullets).
+    assert "faithfully synthesized" in page.markdown
+    # and the structured page was cached for the next read.
+    assert c1.id in (await store.get_lens(lens.id)).page
+
+
+async def test_grouped_profile_without_anchor_echo_still_renders(store):
+    from ntrp.memory.models import LensRenderMode
+
+    lens = await _lens(
+        store,
+        name="People",
+        criterion="claims about people",
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    r1 = await _claim(store, "Regina is CEO of ThirdLayer", canonical_subject="Regina")
+    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
+    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
+    for c in (r1, r2, k1):
+        await _member(store, lens.id, c)
+
+    cheap = KeywordJudge("regina", "kevin")
+    strong = _IndexCitingSynth()  # one call per bucket, cites by index, no anchors
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert page.groups is not None
+    assert all(g.synthesized for g in page.groups)  # no raw fallback
+    assert set(parse_anchors(page.markdown)) == {r1.id, r2.id, k1.id}
+    assert "<!--claim:" in page.markdown
+
+
+async def test_synthesis_citing_no_claims_degrades_to_raw(store):
+    """Genuine failure guard: a synthesis that cites NO claim at all (neither a
+    `[n]` tag nor an anchor) is not faithful -> raw anchored fallback, never blank."""
+    lens = await _lens(store, name="Health", criterion="health")
+    c1 = await _claim(store, "user runs 5k every morning")
+    await _member(store, lens.id, c1)
+
+    cheap = KeywordJudge("user")
+    # well-formed markdown, but it references nothing it was given.
+    strong = FakeCompletionClient(queue=[_synth("## Profile\n- Some unrelated prose.")])
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert page.synthesized is False
+    assert c1.id in set(parse_anchors(page.markdown))  # raw fallback still anchored
+    assert "user runs 5k every morning" in page.markdown
+
+
 # --- re-validate-at-read after criterion narrows --------------------
 
 

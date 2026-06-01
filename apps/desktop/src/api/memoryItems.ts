@@ -178,13 +178,42 @@ export interface LensPageParams {
   refresh?: boolean;
 }
 
+// Lens page generation is async (timeout fix): the GET returns either a
+// materialized page (clean cache hit) or a generation status (miss/dirty/refresh,
+// HTTP 202). The two JSON shapes are disjoint — the status object carries a
+// top-level `status`/`stage`; the page never does. Discriminate on that.
+export type LensGenStage = "creating" | "scoring" | "synthesizing" | "ready" | "error";
+export interface LensGenStatus {
+  lens_id: string;
+  status: "idle" | LensGenStage;
+  stage?: LensGenStage;
+  detail?: LensDetailLevel;
+  subject: string | null;
+  progress: string | null; // "2/5" while synthesizing grouped buckets
+  error: string | null;
+  updated_at?: string;
+}
+
+export type LensPageResult = ProjectedPage | LensGenStatus;
+
+export function isLensGenStatus(r: LensPageResult): r is LensGenStatus {
+  return "status" in r;
+}
+
 export function getLensPage(config: AppConfig, lensId: string, params: LensPageParams = {}) {
-  return apiWithConfig<ProjectedPage>(
+  return apiWithConfig<LensPageResult>(
     config,
     `/admin/memory/lenses/${encodeURIComponent(lensId)}/page${queryString({
       detail: params.detail,
       refresh: params.refresh,
     })}`,
+  );
+}
+
+export function getLensPageStatus(config: AppConfig, lensId: string) {
+  return apiWithConfig<LensGenStatus>(
+    config,
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/page/status`,
   );
 }
 

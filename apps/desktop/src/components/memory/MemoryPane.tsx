@@ -9,8 +9,8 @@ import { GraphView } from "./GraphView";
 
 export type MemoryDestination = "lenses" | "claims" | "graph";
 export const MEMORY_TABS: { id: MemoryDestination; label: string }[] = [
-  { id: "lenses", label: "Lenses" },
   { id: "claims", label: "Claims" },
+  { id: "lenses", label: "Lenses" },
   { id: "graph", label: "Graph" },
 ];
 const ORDER = MEMORY_TABS.map((t) => t.id);

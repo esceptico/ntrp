@@ -6,6 +6,7 @@ verbatim. A `ClaimCandidate`'s content/source_refs/provenance map by trivial
 field-copy onto a `MemoryItem(kind=CLAIM, …)` at write time.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 
@@ -50,6 +51,8 @@ __all__ = [
     "PageEditKind",
     "PageEditOp",
     "WriteBackResult",
+    "LensGenStage",
+    "ProgressFn",
 ]
 
 
@@ -290,3 +293,21 @@ class WriteBackResult:
     applied: list[tuple[PageEditKind, str]]
     rejected: list[tuple[PageEditOp, str]]  # op + reason
     rederive_triggered: bool
+
+
+# --- Lens page generation status (async, non-blocking GET) ----------
+# Generating a page is many sequential LLM calls; the GET must not block on it.
+# LensGenStage is the milestone the projector reports through a progress callback
+# while a background task drives generation (pipeline/lens_generation.py). It is
+# presentation/orchestration only — it gates no membership and no synthesis.
+class LensGenStage(StrEnum):
+    CREATING = "creating"  # task accepted, nothing run yet
+    SCORING = "scoring"  # membership refresh / re-validate
+    SYNTHESIZING = "synthesizing"  # per-subject / page synthesis
+    READY = "ready"  # page materialized + cached
+    ERROR = "error"  # generation raised
+
+
+# A progress callback the projector calls as it advances; kwargs carry the current
+# subject + "i/n" while synthesizing grouped buckets.
+ProgressFn = Callable[..., None]
