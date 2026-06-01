@@ -475,7 +475,10 @@ class LensProjector:
         return "\n".join(f"- {m.content} {_anchor(m.id)}" for m in claims)
 
     def _header(self, lens: LensRow) -> str:
-        return f"# {lens.name}\n*Lens · criterion: {lens.criterion}*\n"
+        # Just the title. The criterion is multi-section markdown (## Belongs /
+        # ## Profile shape) shown+edited in the lens header UI — dumping it into the
+        # page body printed the raw markdown as a garbled subtitle.
+        return f"# {lens.name}\n"
 
     def _raw_list(
         self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel

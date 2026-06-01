@@ -11,7 +11,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 async def _get_schema_version(conn: aiosqlite.Connection) -> int:
@@ -57,7 +57,22 @@ async def _migrate_v3(conn: aiosqlite.Connection) -> None:
     )
 
 
-_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3))
+async def _migrate_v4(conn: aiosqlite.Connection) -> None:
+    # Purge the derived lens caches. After the move to file-based lenses (v3), the
+    # caches still held STALE rows: orphan entries keyed by the old registry-row
+    # UUIDs, plus verdicts/pages computed under earlier (buggy) criteria. These are
+    # pure derived data ("drop it and nothing breaks except latency"), so clearing
+    # them forces every lens to re-score + re-synthesize fresh against the current
+    # file definitions + claims on next view. No claim is touched.
+    await conn.executescript(
+        """
+        DELETE FROM lens_membership_cache;
+        DELETE FROM lens_page_cache;
+        """
+    )
+
+
+_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4))
 
 
 async def run_migrations(conn: aiosqlite.Connection) -> None:
