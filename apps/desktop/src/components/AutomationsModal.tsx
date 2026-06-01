@@ -68,10 +68,10 @@ export function AutomationsModal() {
           variant="underline"
           className="items-center gap-5 px-6"
         >
-          <AutomationTab value="active" label="Active" count={activeCount} active={tab === "active"} />
-          <AutomationTab value="channels" label="Channels" count={channelCount} active={tab === "channels"} />
-          <AutomationTab value="system" label="System" count={systemCount} active={tab === "system"} />
-          <AutomationTab value="templates" label="Templates" active={tab === "templates"} />
+          <AutomationTab value="active" label="Active" count={activeCount} />
+          <AutomationTab value="channels" label="Channels" count={channelCount} />
+          <AutomationTab value="system" label="System" count={systemCount} />
+          <AutomationTab value="templates" label="Templates" />
         </Tabs>
 
         <div className="overflow-y-auto scroll-thin px-6 py-5">
@@ -103,12 +103,10 @@ function AutomationTab({
   value,
   label,
   count,
-  active,
 }: {
   value: string;
   label: string;
   count?: number;
-  active: boolean;
 }) {
   return (
     <TabItem
@@ -117,12 +115,7 @@ function AutomationTab({
     >
       {label}
       {count != null && count > 0 && (
-        <span
-          className={clsx(
-            "inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-full px-1.5 text-2xs font-medium tabular-nums",
-            active ? "bg-ink text-on-ink" : "bg-surface-soft text-muted",
-          )}
-        >
+        <span className="inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-full px-1.5 text-2xs font-medium tabular-nums bg-surface-soft text-muted group-data-[active=true]:bg-ink group-data-[active=true]:text-on-ink">
           {count}
         </span>
       )}

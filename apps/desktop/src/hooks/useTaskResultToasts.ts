@@ -10,14 +10,18 @@ export function useTaskResultToasts() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const pushToast = useStore((s) => s.pushToast);
   const seen = useRef<Set<string>>(new Set());
+  const initialized = useRef(false);
 
   useEffect(() => {
     for (const agent of Object.values(rows)) {
       const key = `bg:${agent.sessionId}:${agent.taskId}`;
       if (!isTerminalStatus(agent.status) || seen.current.has(key)) continue;
       seen.current.add(key); // mark even if suppressed, so it cannot re-fire later
+      // Skip agents already terminal at mount — only transitions after mount toast.
+      if (!initialized.current) continue;
       const toast = backgroundAgentToast(agent, currentSessionId);
       if (toast) pushToast(toast);
     }
+    initialized.current = true;
   }, [rows, currentSessionId, pushToast]);
 }
