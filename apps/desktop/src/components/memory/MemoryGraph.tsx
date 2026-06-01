@@ -93,6 +93,7 @@ export function MemoryGraph({
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
   const nodesRef = useRef<Map<string, SimNode>>(new Map());
   const linksRef = useRef<SimLink[]>([]);
+  const clustersRef = useRef<{ subject: string; x: number; y: number }[]>([]);
   const [, bump] = useState(0);
   const tick = useCallback(() => bump((v) => (v + 1) % 1_000_000), []);
 
@@ -138,13 +139,38 @@ export function MemoryGraph({
 
     simRef.current?.stop();
     const nodes = [...next.values()];
+
+    // Cluster by canonical_subject: each distinct subject gets an anchor on a ring
+    // around centre, and every claim is pulled toward its subject's anchor. Claims
+    // about the same person/thing group visibly even when no claim->claim edge
+    // connects them (the /init corpus has few edges). No fake edges are added — the
+    // model is unchanged (circles + real edges only); this is layout, not topology.
+    const subjects = [...new Set(nodes.map((n) => n.item.canonical_subject))];
+    const cx = size.w / 2;
+    const cy = size.h / 2;
+    const ring = Math.min(size.w, size.h) * 0.34;
+    const anchors = new Map<string, { x: number; y: number }>();
+    subjects.forEach((s, i) => {
+      if (subjects.length <= 1) {
+        anchors.set(s, { x: cx, y: cy });
+        return;
+      }
+      const a = (2 * Math.PI * i) / subjects.length;
+      anchors.set(s, { x: cx + ring * Math.cos(a), y: cy + ring * Math.sin(a) });
+    });
+    const anchorOf = (d: SimNode) => anchors.get(d.item.canonical_subject) ?? { x: cx, y: cy };
+    clustersRef.current =
+      subjects.length > 1
+        ? subjects.map((s) => ({ subject: s, ...anchors.get(s)! }))
+        : [];
+
     const sim = forceSimulation<SimNode>(nodes)
-      .force("charge", forceManyBody().strength(-340).distanceMax(420))
-      .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(96).strength(0.55))
-      .force("center", forceCenter(size.w / 2, size.h / 2).strength(0.06))
-      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d.item) + 14))
-      .force("x", forceX(size.w / 2).strength(0.03))
-      .force("y", forceY(size.h / 2).strength(0.03))
+      .force("charge", forceManyBody().strength(-300).distanceMax(380))
+      .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(80).strength(0.6))
+      .force("center", forceCenter(size.w / 2, size.h / 2).strength(0.02))
+      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d.item) + 12))
+      .force("x", forceX<SimNode>((d) => anchorOf(d).x).strength(0.16))
+      .force("y", forceY<SimNode>((d) => anchorOf(d).y).strength(0.16))
       .alpha(0.9)
       .alphaDecay(0.035);
     sim.on("tick", tick);
@@ -350,6 +376,23 @@ export function MemoryGraph({
           transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}
           style={easePan ? { transition: "transform 360ms var(--ease-emphasized)" } : undefined}
         >
+          {focusId == null &&
+            clustersRef.current.map((c) => (
+              <text
+                key={`cluster-${c.subject}`}
+                x={c.x}
+                y={c.y}
+                dy={-52}
+                textAnchor="middle"
+                className="pointer-events-none"
+                fontSize={13}
+                fontWeight={600}
+                fill="var(--color-muted)"
+                opacity={0.45}
+              >
+                {truncate(c.subject, 24)}
+              </text>
+            ))}
           {links.map((l, i) => {
             const lit = isLit(l.source.id) && isLit(l.target.id);
             return (
