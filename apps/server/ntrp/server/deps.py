@@ -8,46 +8,6 @@ from ntrp.server.state import RunRegistry
 from ntrp.tools.executor import ToolExecutor
 
 
-def require_memory(runtime: Runtime = Depends(get_runtime)):
-    if not runtime.memory_service:
-        if runtime.config.memory:
-            detail = "Memory is unavailable — configure an embedding model from OpenAI or Google"
-        else:
-            detail = "Memory is disabled"
-        raise HTTPException(status_code=503, detail=detail)
-    return runtime.memory_service
-
-
-def require_pattern_finder(runtime: Runtime = Depends(get_runtime)):
-    if not runtime.pattern_finder:
-        if runtime.config.memory:
-            detail = "Pattern finder is unavailable - configure memory with an embedding model"
-        else:
-            detail = "Memory is disabled"
-        raise HTTPException(status_code=503, detail=detail)
-    return runtime.pattern_finder
-
-
-def require_lens_pass(runtime: Runtime = Depends(get_runtime)):
-    if not runtime.lens_pass:
-        if runtime.config.memory:
-            detail = "Lens pass is unavailable - configure memory with an embedding model"
-        else:
-            detail = "Memory is disabled"
-        raise HTTPException(status_code=503, detail=detail)
-    return runtime.lens_pass
-
-
-def require_lens_author(runtime: Runtime = Depends(get_runtime)):
-    if not runtime.lens_author:
-        if runtime.config.memory:
-            detail = "Lens author is unavailable - configure memory with an embedding model"
-        else:
-            detail = "Memory is disabled"
-        raise HTTPException(status_code=503, detail=detail)
-    return runtime.lens_author
-
-
 def require_session_service(runtime: Runtime = Depends(get_runtime)):
     if not runtime.session_service:
         raise HTTPException(status_code=503, detail="Session service not available")

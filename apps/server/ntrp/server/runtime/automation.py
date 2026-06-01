@@ -5,10 +5,6 @@ from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.integrations.calendar.client import MultiCalendarSource
-from ntrp.memory.pattern_finder import PatternFinder
-from ntrp.memory.runtime import MemoryDatabase
-from ntrp.memory.service import MemoryService
-from ntrp.memory.skill_inducer import SkillInducer
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
@@ -23,9 +19,9 @@ class AutomationRuntime:
         *,
         stores: Stores,
         build_operator_deps: Callable[[], OperatorDeps],
-        get_memory: Callable[[], MemoryDatabase | None],
-        get_memory_service: Callable[[], MemoryService | None],
-        get_pattern_finder: Callable[[], PatternFinder | None],
+        get_memory: Callable[[], object | None],
+        get_memory_service: Callable[[], object | None],
+        get_pattern_finder: Callable[[], object | None],
         get_calendar_source: Callable[[], object | None],
         indexer: Indexer | None,
     ):
@@ -100,12 +96,7 @@ class AutomationRuntime:
                 return None
             inducer = getattr(pattern_finder, "skill_inducer", None)
             if inducer is None:
-                inducer = SkillInducer(
-                    repo=pattern_finder.repo,
-                    draft_client=pattern_finder.summary_client,
-                    embedder=pattern_finder.embedder,
-                )
-                pattern_finder.skill_inducer = inducer
+                return None
             result = await inducer.run(window_days=30, scope="user")
             return (
                 f"claims_considered={result.claims_considered}; toolable_claims={result.toolable_claims}; "

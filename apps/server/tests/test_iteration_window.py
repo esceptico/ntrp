@@ -8,7 +8,6 @@ the system message at index 0 and keeping the most recent tail.
 Trimming is runtime-only — disk history is untouched.
 """
 
-from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -16,7 +15,6 @@ import pytest
 from ntrp.constants import LOOP_ITERATION_HISTORY_WINDOW
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.factory import AgentConfig
-from ntrp.memory.activation import MemoryActivationBundle
 from ntrp.server.state import RunRegistry
 from ntrp.services.chat import (
     ChatDeps,
@@ -110,16 +108,6 @@ class _LoopPreTurnCompactor:
             {"role": "assistant", "content": "[Session State Handoff]\nloop summary"},
             *messages[-4:],
         ]
-
-
-class _FakeMemoryRetrieval:
-    def __init__(self, bundle: MemoryActivationBundle):
-        self.bundle = bundle
-        self.requests = []
-
-    async def search(self, request):
-        self.requests.append(request)
-        return self.bundle
 
 
 def _make_deps(session_service: _StubSessionService) -> ChatDeps:
@@ -499,34 +487,3 @@ def test_trim_no_expansion_when_cut_lands_on_user(monkeypatch):
         {"role": "assistant", "content": "asst2"},
     ]
     assert prefix == [{"role": "assistant", "content": "asst1"}]
-
-
-@pytest.mark.asyncio
-async def test_prepare_chat_passes_session_and_client_ids_to_activation():
-    session_service = _StubSessionService([])
-    retrieval = _FakeMemoryRetrieval(
-        MemoryActivationBundle(
-            query="hello memory",
-            scope="session:session-test-1",
-            kinds=None,
-            used_chars=18,
-            candidates=[],
-            prompt_context="<memory>ctx</memory>",
-        )
-    )
-    deps = replace(_make_deps(session_service), memory_retrieval=retrieval)
-
-    ctx = await prepare_chat(
-        deps,
-        "hello memory",
-        session_id="session-test-1",
-        client_id="client-test-1",
-    )
-
-    assert ctx.session_state.session_id == "session-test-1"
-    assert retrieval.requests
-    assert retrieval.requests[0].task == "chat_prompt"
-    assert retrieval.requests[0].session_id == "session-test-1"
-    assert retrieval.requests[0].task_id == "client-test-1"
-    assert retrieval.requests[0].run_id == ctx.run.run_id
-    assert retrieval.requests[0].record_access is True

@@ -107,6 +107,16 @@ OBSERVATION_HISTORY_LIMIT = 10  # max history entries kept per observation
 RRF_K = 60
 RRF_OVERFETCH_FACTOR = 2
 
+# --- Lens membership (Stage-4, LENS_CONTRACTS §5) ---
+# Scale-orchestration bounds: the expensive pass is once per NEW lens, never per
+# node, never per query. K bounds incremental recall fan-out; the scan cap +
+# batch size bound the one-time backfill; GENERIC_RATIO is the advisory-only
+# coverage threshold (never a gate — LENS_CONTRACTS §0, §7).
+MEMBERSHIP_CANDIDATE_K = 8
+BACKFILL_SCAN_CAP = 500
+MEMBERSHIP_BATCH = 20
+GENERIC_RATIO = 0.5
+
 # --- Context Compression (Summarizer) ---
 
 SUMMARY_MAX_TOKENS = 1500

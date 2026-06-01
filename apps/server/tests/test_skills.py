@@ -2,10 +2,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from ntrp.memory.activation import ActivationSkillSuggestion, MemoryActivationBundle
 from ntrp.server.app import app
 from ntrp.server.deps import require_skill_service
-from ntrp.skills.activation import render_activated_skill_context
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
 
@@ -78,54 +76,6 @@ def test_registry_renders_skill_xml_with_arguments(tmp_path):
     assert rendered.startswith(f'<skill name="research-helper" path="{tmp_path / "research-helper"}">')
     assert f"Use {tmp_path / 'research-helper'} for local assets." in rendered
     assert "ARGUMENTS: Current user request: audit it" in rendered
-
-
-def test_chat_activation_renders_top_selected_skill_body(tmp_path):
-    _write_skill(
-        tmp_path,
-        "dex-audit",
-        "name: dex-audit\ndescription: Audit Dex deploys\n",
-        body="# Dex audit\nCheck deploy invariants.\n",
-    )
-    _write_skill(
-        tmp_path,
-        "ignored-skill",
-        "name: ignored-skill\ndescription: Should not render by default\n",
-        body="# Ignored\n",
-    )
-    registry = SkillRegistry()
-    registry.load([(tmp_path, "project")])
-    bundle = MemoryActivationBundle(
-        query="audit the dex deploy",
-        scope=None,
-        kinds=None,
-        used_chars=0,
-        prompt_context="",
-        candidates=[],
-        skills_to_use=[
-            ActivationSkillSuggestion(
-                object_id="101",
-                skill_name="dex-audit",
-                description="Audit Dex deploys",
-                score=0.9,
-            ),
-            ActivationSkillSuggestion(
-                object_id="102",
-                skill_name="ignored-skill",
-                description="Should not render by default",
-                score=0.8,
-            ),
-        ],
-    )
-
-    context = render_activated_skill_context(bundle, registry)
-
-    assert context is not None
-    assert context.startswith("<activated_skills>")
-    assert '<skill name="dex-audit"' in context
-    assert "# Dex audit" in context
-    assert "ARGUMENTS: Current user request: audit the dex deploy" in context
-    assert "ignored-skill" not in context
 
 
 def test_skill_service_governance_report_marks_cleanup_candidates(tmp_path):

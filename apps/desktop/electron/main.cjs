@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, safeStorage, screen, session, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -180,7 +180,7 @@ async function apiRequest(configInput, requestInput, signal) {
   if (signal) signals.push(signal);
 
   try {
-    const response = await net.fetch(String(new URL(request.path, config.serverUrl)), {
+    const response = await fetch(new URL(request.path, config.serverUrl), {
       method: request.method,
       headers: apiHeaders(config, request.body),
       body: request.body,
@@ -219,7 +219,7 @@ async function streamEvents(connectionId, webContents, configInput, sessionId, a
   const config = normalizeConfig(configInput);
   let terminalSent = false;
   try {
-    const response = await net.fetch(String(eventStreamUrl(config, sessionId, afterSeq)), {
+    const response = await fetch(eventStreamUrl(config, sessionId, afterSeq), {
       headers: apiHeaders(config),
       signal,
     });
