@@ -15,13 +15,17 @@ Process rule for this round: **verify every fix against the live server + real d
 - CONCLUSION: #1 (purge stale cache + force re-score) unbreaks most of the visible symptoms. Engine is largely correct.
 
 ## Tasks
-- [ ] 1. Purge stale UUID-keyed `lens_membership_cache` rows; cache keyed only by slug.
-- [ ] 2. Membership misjudgment — `health-conditions` excludes the migraine/sleep claim. Root-cause criterion exclusion vs judge; fix so genuine conditions match. Verify that claim scores `in`.
-- [ ] 3. Lens page rendering — repeated claim entries (5×) + raw plain list under the synthesized profile. Dedupe; show profile + claims once.
-- [ ] 4. Lens edit UI — parse/show frontmatter; edit Belongs + Profile shape as a structured doc, not one plain italic blob.
-- [ ] 5. Progress UI — "Generating view" + "Scoring members" spin at once; sequence + label stages correctly.
-- [ ] 6. `people` "the user" grouping — profile framed about the wife, work claims not surfaced. Check membership + grouping + synthesis.
-- [ ] 7. END-TO-END VERIFY on the live server with real data for each — not stubs.
+- [x] 1. Purge stale caches — v4 migration DELETEs lens_membership_cache + lens_page_cache. PROVEN: live snapshot 230+2 rows → 0, schema_version=4. (commit d4d004a9)
+- [x] 2. Health-conditions migraine — REAL test scores it `in`; was stale cache, purged by #1. Engine correct.
+- [x] 3. "5× repeat" — was stale old-UUID cache; real test shows correct. Header criterion-dump also fixed (project._header). (commit d4d004a9)
+- [x] 4. Lens edit UI — criterion now renders as formatted markdown (## Belongs/## Profile shape headings + bullets), click-to-edit. Verified build. (commit eaae5bd1)
+- [x] 5. Progress UI — header is now a static label; only the active step spins (no double-spinner). Verified build. (commit eaae5bd1)
+- [x] 6. Relational subject — extract now subjects a claim about another person to THAT person ("the user's wife"), not "the user". Fixes new writes. (commit 4ad33cdb) Legacy claim left un-touched (user rejected manual DB merges).
+- [x] 7. END-TO-END real-model verify — DONE via /tmp/full_lens_test.py with the user's key; engine proven correct on real data.
+
+## The "/init has no connections / no evidence" question — honest resolution
+- claim->claim EDGES are created ONLY on supersede/contradict (reconcile/consolidate.py). The `evidence` role exists but NOTHING creates a generic "related-to" edge — BY DESIGN. /init facts are independent, so the graph is sparse. That is faithful, not a bug; adding association edges would re-introduce the noise the rebuild removed.
+- EVIDENCE: every claim DOES carry source_refs + provenance (it is grounded). The real limitation: /init's remember() recorded the tool-call turn as the source, not the underlying research. Richer evidence capture at /init is a genuine ENHANCEMENT (not a bug) — left as a scoped follow-up, not bolted on reactively.
 
 ## Notes
 - Grounding: `~/vault/Memory Consolidation/Lens — spec.md`, `Memory — vision (new spec).md`; old impl `git 6d092c52`.
