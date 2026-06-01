@@ -12,6 +12,7 @@ import type {
 } from "../api";
 import type { TransportDiagnosticsSnapshot } from "../lib/transportDiagnostics";
 import type { MessageSourceFocus } from "../lib/messageSourceFocus";
+import type { Toast } from "../lib/taskToast";
 import type { AutomationStreamDomainState } from "./automation-domain";
 import type { BackgroundAgentsDomainState } from "./background-agent-domain";
 import type { SessionViewState } from "./session-view";
@@ -365,6 +366,7 @@ export interface State {
   backgroundAgents: BackgroundAgentsDomainState;
   goals: Record<string, SessionGoal>;
   pendingGoalProposal: PendingGoalProposal | null;
+  toasts: Toast[];
   prefs: Prefs;
 }
 
@@ -485,6 +487,8 @@ export interface Actions {
   automationStreamIdle: () => void;
   automationProgress: (taskId: string, status: string) => void;
   automationFinished: (taskId: string) => void;
+  pushToast: (toast: Toast) => void;
+  dismissToast: (id: string) => void;
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
   setGoal: (sessionId: string, goal: SessionGoal | null) => void;

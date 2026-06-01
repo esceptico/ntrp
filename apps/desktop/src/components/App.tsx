@@ -9,6 +9,7 @@ import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { Toaster } from "./Toaster";
 
 // The five "open from chrome" modals only mount when the user actually
 // opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/
@@ -34,6 +35,7 @@ import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useAutomationEvents } from "../hooks/useAutomationEvents";
+import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
 import { useThemeEffect } from "../lib/theme";
 import { useGlassEffect } from "../lib/glass";
 import { bootstrap, createSession, sendMessage } from "../actions";
@@ -139,6 +141,7 @@ export function App() {
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
   useActiveRuns();
   useAutomationEvents();
+  useTaskResultToasts();
 
   // Receive messages submitted from the quick-capture floating window.
   // The Electron main process forwards each one via `quick:message`;
@@ -197,6 +200,7 @@ export function App() {
       <CommandPalette />
       <MarkdownViewer />
       <ApprovalReviewModal />
+      <Toaster />
     </MotionConfig>
   );
 }

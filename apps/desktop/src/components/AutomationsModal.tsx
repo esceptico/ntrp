@@ -13,6 +13,7 @@ import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
 import { ScrollBlurTop } from "./ScrollBlur";
+import { Tab as TabItem, Tabs } from "./ui/Tabs";
 
 type Tab = "active" | "channels" | "system" | "templates";
 
@@ -61,22 +62,17 @@ export function AutomationsModal() {
           ),
         }}
       >
-        <nav className="flex items-center gap-5 px-6">
-          <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
-          <TabButton
-            label="Channels"
-            count={channelCount}
-            active={tab === "channels"}
-            onClick={() => setTab("channels")}
-          />
-          <TabButton
-            label="System"
-            count={systemCount}
-            active={tab === "system"}
-            onClick={() => setTab("system")}
-          />
-          <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
-        </nav>
+        <Tabs
+          value={tab}
+          onChange={(v) => setTab(v as Tab)}
+          variant="underline"
+          className="items-center gap-5 px-6"
+        >
+          <AutomationTab value="active" label="Active" count={activeCount} />
+          <AutomationTab value="channels" label="Channels" count={channelCount} />
+          <AutomationTab value="system" label="System" count={systemCount} />
+          <AutomationTab value="templates" label="Templates" />
+        </Tabs>
 
         <div className="overflow-y-auto scroll-thin px-6 py-5">
           <ScrollBlurTop />
@@ -103,41 +99,27 @@ export function AutomationsModal() {
   );
 }
 
-function TabButton({
+function AutomationTab({
+  value,
   label,
   count,
-  active,
-  onClick,
 }: {
+  value: string;
   label: string;
   count?: number;
-  active: boolean;
-  onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        "relative inline-flex items-center gap-1.5 h-9 text-base font-medium tracking-[-0.005em] transition-colors",
-        active ? "text-ink" : "text-muted hover:text-ink",
-      )}
+    <TabItem
+      value={value}
+      className="inline-flex h-9 items-center gap-1.5 text-base font-medium tracking-[-0.005em] text-muted transition-colors hover:text-ink data-[active=true]:text-ink"
     >
       {label}
       {count != null && count > 0 && (
-        <span
-          className={clsx(
-            "inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-2xs font-medium tabular-nums",
-            active ? "bg-ink text-on-ink" : "bg-surface-soft text-muted",
-          )}
-        >
+        <span className="inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-full px-1.5 text-2xs font-medium tabular-nums bg-surface-soft text-muted group-data-[active=true]:bg-ink group-data-[active=true]:text-on-ink">
           {count}
         </span>
       )}
-      {active && (
-        <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-ink rounded-full" />
-      )}
-    </button>
+    </TabItem>
   );
 }
 
