@@ -173,18 +173,27 @@ class Reconciler:
         RRF-merged to rank distinct subjects; the roster then guarantees every
         distinct subject reaches the judge with a profile gist (count + samples).
         """
+        # The authoritative roster: EVERY distinct subject in scope, with no recency
+        # or volume limit. A claim-window LIMIT here is a hidden recency gate that
+        # drops long-established subjects (their oldest claims fall outside the
+        # window) and fragments them (User != Timur). distinct_subjects has no cap.
+        roster = await self.store.distinct_subjects(scope)
+        if not roster:
+            return []
+        counts = dict(roster)
+
+        # The recent active pool drives recall-channel ORDERING (signals only) and
+        # gives cheap sample gists for recent subjects; it does NOT define the roster.
         scoped = await self.store.query(scope=scope, status=Status.ACTIVE, limit=500)
         for it in prior_candidates or []:
             if it.status is Status.ACTIVE and it.id not in {s.id for s in scoped}:
                 scoped.append(it)
-        if not scoped:
-            return []
 
         by_id = {it.id: it for it in scoped}
         id_list = list(by_id)
         id_index = {iid: n for n, iid in enumerate(id_list)}
 
-        # Per-subject accumulation: claim count + a few sample facts for the gist.
+        # Sample facts per subject for the gist (from the recent pool where available).
         by_subject: dict[str, list[MemoryItem]] = {}
         for it in scoped:
             by_subject.setdefault(it.canonical_subject, []).append(it)
@@ -217,22 +226,26 @@ class Reconciler:
                 subject_score[subj] = score
 
         # Order: signal-scored subjects first (by score), then by claim count — this
-        # only ORDERS the prompt for readability. EVERY distinct subject in scope
-        # reaches the judge; we never truncate the roster (a cutoff here would be a
-        # threshold silently gating identity — exactly what fragments User != Timur).
-        # The roster is bounded by the scoped claim query, not by claim volume.
+        # only ORDERS the prompt for readability. EVERY distinct subject in `counts`
+        # (the full roster) reaches the judge; nothing is truncated.
         def sort_key(subj: str) -> tuple[float, int]:
-            return (subject_score.get(subj, float("-inf")), len(by_subject[subj]))
+            return (subject_score.get(subj, float("-inf")), counts.get(subj, 0))
 
-        ordered_subjects = sorted(by_subject, key=sort_key, reverse=True)
+        ordered_subjects = sorted(counts, key=sort_key, reverse=True)
 
         out: list[SubjectProfile] = []
         for subj in ordered_subjects:
-            claims = by_subject[subj]
+            claims = by_subject.get(subj)
+            if claims is None:
+                # Subject not in the recent pool — fetch a few samples directly so an
+                # old subject still gets a profile gist for the judge.
+                claims = await self.store.query(
+                    scope=scope, status=Status.ACTIVE, subject=subj, limit=SUBJECT_PROFILE_SAMPLE
+                )
             out.append(
                 SubjectProfile(
                     subject=subj,
-                    claim_count=len(claims),
+                    claim_count=counts.get(subj, len(claims)),
                     samples=[c.content[:160] for c in claims[:SUBJECT_PROFILE_SAMPLE]],
                 )
             )

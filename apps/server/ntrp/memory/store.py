@@ -382,6 +382,25 @@ class MemoryStore:
         rows = await self.conn.execute_fetchall(sql, tuple(params))
         return [self._row_to_item(r) for r in rows]
 
+    async def distinct_subjects(self, scope: Scope) -> list[tuple[str, int]]:
+        """Every distinct active canonical_subject in scope, with claim count,
+        most-claims-first. NO recency/volume limit — the coreference judge must see
+        the FULL roster of existing subjects, else an old subject whose claims fell
+        outside a recency window is never matched and fragments (User != Timur)."""
+        clauses = ["status = 'active'", "scope_kind = ?"]
+        params: list = [str(scope.kind)]
+        if scope.key is None:
+            clauses.append("scope_key IS NULL")
+        else:
+            clauses.append("scope_key = ?")
+            params.append(scope.key)
+        sql = (
+            f"SELECT canonical_subject, COUNT(*) AS n FROM memory_items "
+            f"WHERE {' AND '.join(clauses)} GROUP BY canonical_subject ORDER BY n DESC"
+        )
+        rows = await self.conn.execute_fetchall(sql, tuple(params))
+        return [(r["canonical_subject"], r["n"]) for r in rows]
+
     async def list_edges(
         self, item_id: str, *, direction: str = "from", role: EdgeRole | None = None
     ) -> list[MemoryEdge]:
@@ -525,10 +544,16 @@ class MemoryStore:
         return out
 
     async def delete_lens(self, lens_id: str) -> bool:
-        """Delete the lens FILE + its derived caches. Claims/edges untouched."""
+        """Delete the lens FILE + ALL its derived/durable rows. Claims/edges untouched.
+
+        Includes lens_rejection: the lens_id is the slug (= file stem), so recreating
+        a lens with the same name reuses the slug — leftover rejections would silently
+        suppress claims from the brand-new lens.
+        """
         removed = self.lens_files.delete(lens_id)
         await self.conn.execute(SQL_DELETE_PAGE, (lens_id,))
         await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
+        await self.conn.execute("DELETE FROM lens_rejection WHERE lens_id = ?", (lens_id,))
         await self.conn.commit()
         return removed
 
