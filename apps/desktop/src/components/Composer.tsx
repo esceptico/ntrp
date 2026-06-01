@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
@@ -25,7 +25,7 @@ import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
 import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
-import { SPRING_TAP } from "../lib/tokens/motion";
+import { EASE_OUT } from "../lib/tokens/motion";
 import { awaitingFirstRunOutput } from "../lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
 
@@ -473,47 +473,39 @@ export function Composer() {
           <span className="flex-1" />
           <BudgetDial />
           <ModelReasoningChip />
-          {running ? (
-            <button
-              type="button"
-              onClick={() => void stopRun()}
-              aria-label="Stop"
-              title="Stop (Esc)"
-              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-opacity"
-            >
+          {/* One persistent button so the glyph genuinely swaps (rotate+fade)
+              between send and stop instead of the button remounting. */}
+          <button
+            type={running ? "button" : "submit"}
+            onClick={running ? () => void stopRun() : undefined}
+            disabled={!running && disabled}
+            data-send={running ? undefined : "true"}
+            aria-label={running ? "Stop" : "Send"}
+            title={running ? "Stop (Esc)" : undefined}
+            // active:scale handles mouse press; sendPressing covers keyboard
+            // Enter (form-submit doesn't fire :active). Both look identical.
+            className={clsx(
+              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
+              sendPressing && "scale-[0.92]",
+            )}
+          >
+            <AnimatePresence mode="wait" initial={false}>
               <motion.span
+                key={running ? "stop" : "send"}
                 className="grid place-items-center"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={SPRING_TAP}
+                initial={{ opacity: 0, rotate: -90, scale: 0.4 }}
+                animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                exit={{ opacity: 0, rotate: 90, scale: 0.4 }}
+                transition={{ duration: 0.18, ease: EASE_OUT }}
               >
-                <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
+                {running ? (
+                  <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
+                ) : (
+                  <ArrowUp size={ICON.LG} strokeWidth={2.4} />
+                )}
               </motion.span>
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={disabled}
-              data-send="true"
-              aria-label="Send"
-              // active:scale handles mouse press; the sendPressing state
-              // covers keyboard Enter (form-submit doesn't fire :active).
-              // Both paths look identical to the user.
-              className={clsx(
-                "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
-                sendPressing && "scale-[0.92]",
-              )}
-            >
-              <motion.span
-                className="grid place-items-center"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={SPRING_TAP}
-              >
-                <ArrowUp size={ICON.LG} strokeWidth={2.4} />
-              </motion.span>
-            </button>
-          )}
+            </AnimatePresence>
+          </button>
         </div>
       </form>
       </div>

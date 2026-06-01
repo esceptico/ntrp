@@ -29,6 +29,7 @@ export function PaletteBody({
   crumbs,
   setCrumbs,
   onClose,
+  morph = false,
 }: {
   query: string;
   setQuery: (q: string) => void;
@@ -37,6 +38,7 @@ export function PaletteBody({
   crumbs: Crumb[];
   setCrumbs: React.Dispatch<React.SetStateAction<Crumb[]>>;
   onClose: () => void;
+  morph?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -150,7 +152,7 @@ export function PaletteBody({
 
   return (
     <>
-      <motion.div layout className="relative px-4 pt-3 pb-2.5">
+      <motion.div layout={morph} className="relative px-4 pt-3 pb-2.5">
         <Search
           size={ICON.MD}
           strokeWidth={2}
@@ -189,7 +191,7 @@ export function PaletteBody({
           the x-slide from spawning a horizontal scrollbar. */}
       <motion.div
         ref={listRef}
-        layout
+        layout={morph}
         layoutScroll
         className="overflow-y-auto overflow-x-hidden scroll-thin pb-2"
       >

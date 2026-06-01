@@ -17,6 +17,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
+  // Height-morph is disabled until the panel finishes animating in, so the
+  // first content-height settle on open doesn't animate as a bump.
+  const [morphReady, setMorphReady] = useState(false);
 
   // Global Cmd/Ctrl+K toggle + Esc close.
   useEffect(() => {
@@ -41,6 +44,8 @@ export function CommandPalette() {
       setQuery("");
       setIndex(0);
       setCrumbs([]);
+    } else {
+      setMorphReady(false);
     }
   }, [open]);
 
@@ -60,12 +65,13 @@ export function CommandPalette() {
           onClick={close}
         >
           <motion.div
-            layout
+            layout={morphReady}
             className="glass-surface glass-radius-md w-[min(660px,calc(100vw-80px))] max-h-[62vh] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden origin-top"
             initial={{ opacity: 0, scale: 0.96, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -6 }}
             transition={{ duration: PANEL_DURATION, ease: EASE, layout: SPRING_POPOVER }}
+            onAnimationComplete={() => setMorphReady(true)}
             onClick={(e) => e.stopPropagation()}
           >
             <PaletteBody
@@ -76,6 +82,7 @@ export function CommandPalette() {
               crumbs={crumbs}
               setCrumbs={setCrumbs}
               onClose={close}
+              morph={morphReady}
             />
           </motion.div>
         </motion.div>
