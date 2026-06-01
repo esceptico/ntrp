@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
@@ -481,18 +481,14 @@ export function Composer() {
               title="Stop (Esc)"
               className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-opacity"
             >
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key="stop"
-                  className="grid place-items-center"
-                  initial={{ opacity: 0, scale: 0.6 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.6 }}
-                  transition={SPRING_TAP}
-                >
-                  <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
-                </motion.span>
-              </AnimatePresence>
+              <motion.span
+                className="grid place-items-center"
+                initial={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={SPRING_TAP}
+              >
+                <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
+              </motion.span>
             </button>
           ) : (
             <button
@@ -508,18 +504,14 @@ export function Composer() {
                 sendPressing && "scale-[0.92]",
               )}
             >
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key="send"
-                  className="grid place-items-center"
-                  initial={{ opacity: 0, scale: 0.6 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.6 }}
-                  transition={SPRING_TAP}
-                >
-                  <ArrowUp size={ICON.LG} strokeWidth={2.4} />
-                </motion.span>
-              </AnimatePresence>
+              <motion.span
+                className="grid place-items-center"
+                initial={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={SPRING_TAP}
+              >
+                <ArrowUp size={ICON.LG} strokeWidth={2.4} />
+              </motion.span>
             </button>
           )}
         </div>

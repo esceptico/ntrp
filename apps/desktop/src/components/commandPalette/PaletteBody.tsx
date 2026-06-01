@@ -150,7 +150,7 @@ export function PaletteBody({
 
   return (
     <>
-      <div className="relative px-4 pt-3 pb-2.5">
+      <motion.div layout className="relative px-4 pt-3 pb-2.5">
         <Search
           size={ICON.MD}
           strokeWidth={2}
@@ -177,7 +177,7 @@ export function PaletteBody({
             className="flex-1 min-w-0 h-8 bg-transparent text-md text-ink placeholder:text-faint outline-none"
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Scroll viewport is unchanged — keyboard nav, scrollIntoView, and
           ScrollBlur (which reads parentElement) all keep seeing this div as
@@ -187,8 +187,10 @@ export function PaletteBody({
           swapped directionally via AnimatePresence (mode="wait" so the two
           pages never overlap inside the scroll area). overflow-x-hidden keeps
           the x-slide from spawning a horizontal scrollbar. */}
-      <div
+      <motion.div
         ref={listRef}
+        layout
+        layoutScroll
         className="overflow-y-auto overflow-x-hidden scroll-thin pb-2"
       >
         <ScrollBlurTop />
@@ -232,7 +234,7 @@ export function PaletteBody({
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </motion.div>
     </>
   );
 }
