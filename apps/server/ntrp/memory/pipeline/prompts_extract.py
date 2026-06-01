@@ -32,17 +32,22 @@ PROVENANCE (pick the coarse category, do not over-think it)
 - external: sourced from an external document/system quoted in the turn.
 
 SUBJECT
-- The claim is about exactly one subject. canonical_subject is its stable, \
-fully-resolved real-world referent — the name you'd use to look this entity up \
-every time, regardless of how this turn happened to refer to it. Normalize it so \
-the SAME referent always gets the SAME string.
-- If the turn says "I"/"me"/"my"/"the user" or otherwise refers to the \
-assistant's principal, resolve canonical_subject to that person's canonical name \
-when the scope context makes it known; otherwise use "the user".
+- The subject is the ONE real-world referent the claim is ABOUT. \
+canonical_subject is its stable, fully-resolved name — the string you'd use to \
+look this entity up every time, regardless of how this turn referred to it. \
+Normalize it so the SAME referent always gets the SAME string.
+- A claim that CHARACTERIZES another person/entity is about THAT person, even if \
+it also mentions the user. Use their proper name when known; if they are \
+identified only by relationship, use a stable relational identifier as the name \
+(e.g. "the user's wife", "the user's manager"). That other person IS the subject \
+— do NOT fold such a claim onto "the user" just because the user is mentioned.
+- "I"/"me"/"my"/"the user" referring to the assistant's principal resolves to \
+that person's canonical name when scope makes it known; otherwise "the user".
 - Two surface forms denoting the same referent in this segment MUST get the same \
 canonical_subject.
-- NEVER emit a pronoun, deictic, or role-relative phrase as canonical_subject \
-("he", "it", "the manager" are forbidden as the canonical name).
+- NEVER emit a bare pronoun or deictic alone as canonical_subject ("he", "she", \
+"it", "they" are forbidden). A relational identifier anchored to a known party \
+("the user's wife") IS allowed when the person has no proper name in the turn.
 - List every surface form you actually saw for this subject in the cited turn(s) \
 in subject_surfaces (e.g. ["I", "me", "Timur"]). It is recall fuel and alias \
 evidence only — it decides nothing.
