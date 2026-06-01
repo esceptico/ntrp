@@ -2382,3 +2382,62 @@ test("right sidebar active background agents excludes terminal statuses", () => 
     }),
   ).toBe(true);
 });
+
+test("concurrent research agents share one activity block with distinct labels", () => {
+  // Reproduces the "7 identical Research rows" / duplicate-block report: a turn
+  // that fans out several research sub-agents at once. They must collapse into
+  // ONE activity block (not one per agent), and each row must carry the slug
+  // name from task_started — never N identical generic "research" rows.
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-fan", session_id: "session-1" });
+
+  const agents = [
+    { call: "call-research-1", slug: "brave-otter" },
+    { call: "call-research-2", slug: "calm-finch" },
+    { call: "call-research-3", slug: "swift-puma" },
+  ];
+
+  for (const { call, slug } of agents) {
+    handleServerEvent({
+      type: "task_started",
+      run_id: "run-fan",
+      task_id: `${call}-task`,
+      parent_tool_call_id: call,
+      name: slug,
+      summary: "researching",
+    });
+    handleServerEvent({
+      type: "TOOL_CALL_START",
+      tool_call_id: call,
+      tool_call_name: "research",
+      kind: "agent",
+    });
+  }
+
+  const activityIds = getState().order.filter((id) => getState().messages.get(id)?.role === "activity");
+  expect(activityIds.length).toBe(1);
+
+  const items = getState().messages.get(activityIds[0])?.activity?.items ?? [];
+  const agentRows = items.filter((it) => agents.some((a) => a.call === it.id));
+  expect(agentRows.length).toBe(3);
+  expect(agentRows.map((r) => r.displayName).sort()).toEqual(["brave-otter", "calm-finch", "swift-puma"]);
+  expect(new Set(agentRows.map((r) => r.displayName)).size).toBe(3);
+  expect(agentRows.every((r) => r.taskStatus === "running")).toBe(true);
+
+  for (const { call } of agents) {
+    handleServerEvent({
+      type: "task_finished",
+      run_id: "run-fan",
+      task_id: `${call}-task`,
+      parent_tool_call_id: call,
+      status: "completed",
+      summary: "done",
+    });
+  }
+
+  const finalIds = getState().order.filter((id) => getState().messages.get(id)?.role === "activity");
+  expect(finalIds.length).toBe(1);
+  const finalRows = (getState().messages.get(finalIds[0])?.activity?.items ?? []).filter((it) =>
+    agents.some((a) => a.call === it.id),
+  );
+  expect(finalRows.every((r) => r.taskStatus === "completed")).toBe(true);
+});
