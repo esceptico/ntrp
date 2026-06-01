@@ -6,18 +6,25 @@
 
 // Our design tokens are OKLCH ramps (see lib/tokens/color.ts). Mermaid's
 // internal color lib (khroma) can't parse the oklch() function and throws
-// "Unsupported color format", so normalize every token to an rgb/hex string
-// the browser's own engine produces. Canvas fillStyle parses oklch() and
-// serializes back as "#rrggbb" / "rgba(...)", which khroma handles.
+// "Unsupported color format", so normalize every token to sRGB rgb()/rgba().
+// Setting fillStyle isn't enough — Chromium round-trips an oklch() fillStyle
+// back as oklch(). Rasterize a pixel and read its bytes instead: the canvas
+// backing store is 8-bit sRGB, so getImageData forces the conversion.
 let probeCtx: CanvasRenderingContext2D | null = null;
 
 function toRgb(color: string): string {
   if (!color || color === "transparent") return color;
-  if (!probeCtx) probeCtx = document.createElement("canvas").getContext("2d");
+  if (!probeCtx) {
+    probeCtx = document
+      .createElement("canvas")
+      .getContext("2d", { willReadFrequently: true });
+  }
   if (!probeCtx) return color;
-  probeCtx.fillStyle = "#000";
-  probeCtx.fillStyle = color; // invalid values are ignored, leaving "#000"
-  return probeCtx.fillStyle;
+  probeCtx.clearRect(0, 0, 1, 1);
+  probeCtx.fillStyle = color; // invalid values are ignored → transparent black
+  probeCtx.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = probeCtx.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${a / 255})`;
 }
 
 /** Read a CSS custom property from :root, normalized to an rgb/hex string. */
