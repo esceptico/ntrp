@@ -78,7 +78,7 @@ export function Tab({
       aria-selected={active}
       data-active={active ? "true" : undefined}
       onClick={() => ctx.onChange(value)}
-      className={clsx("group relative", className)}
+      className={clsx("group relative isolate", className)}
     >
       {active && ctx.variant === "pill" && (
         <motion.span
