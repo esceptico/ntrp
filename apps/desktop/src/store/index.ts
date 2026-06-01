@@ -192,6 +192,7 @@ export const useStore = create<State & Actions>((set) => ({
   backgroundAgents: createBackgroundAgentsDomainState(),
   goals: {},
   pendingGoalProposal: null,
+  toasts: [],
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -644,6 +645,10 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({
       automationStream: reduceAutomationFinished(s.automationStream, taskId),
     })),
+  pushToast: (toast) =>
+    set((s) => (s.toasts.some((t) => t.id === toast.id) ? {} : { toasts: [...s.toasts, toast] })),
+  dismissToast: (id) =>
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
   openArchive: (origin) => set({ archiveOpen: true, modalOrigin: origin ?? null }),
   closeArchive: () => set({ archiveOpen: false }),
