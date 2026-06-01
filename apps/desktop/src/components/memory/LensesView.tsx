@@ -680,13 +680,30 @@ function CriterionRow({
 
   if (!editing) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onEdit}
-        className="group/crit -mx-1 block w-full rounded-md px-1 py-1 text-left text-sm italic text-faint transition-colors hover:bg-surface-soft/50 hover:text-muted"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onEdit();
+          }
+        }}
+        title="Click to edit this lens definition"
+        className="group/crit -mx-1 block w-full cursor-pointer rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-soft/50"
       >
-        {lens.criterion || "No criterion — click to describe what this view collects."}
-      </button>
+        {lens.criterion ? (
+          <Markdown
+            content={lens.criterion}
+            className="text-sm leading-relaxed text-muted [&_h2]:mb-1 [&_h2]:mt-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:text-faint [&_h2:first-child]:mt-0 [&_ul]:my-0.5 [&_li]:text-sm"
+          />
+        ) : (
+          <span className="text-sm italic text-faint">
+            No criterion — click to describe what this view collects.
+          </span>
+        )}
+      </div>
     );
   }
 
@@ -1002,15 +1019,13 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
   const cur = STAGE_ORDER[gen.status] ?? 0;
   return (
     <div className="mt-4 flex flex-col gap-2.5">
+      {/* Static title — the spinner lives on the active step only, so there are
+          never two spinners competing ("Generating view" + "Scoring members"). */}
       <div className="flex items-center gap-2 text-sm font-medium text-ink">
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          {gen.status === "error" ? (
-            <AlertCircle size={ICON.XS} strokeWidth={2.4} className="text-bad" />
-          ) : (
-            <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
-          )}
-        </span>
-        {gen.status === "error" ? "Generation failed" : "Generating view…"}
+        {gen.status === "error" && (
+          <AlertCircle size={ICON.XS} strokeWidth={2.4} className="shrink-0 text-bad" />
+        )}
+        {gen.status === "error" ? "Generation failed" : "Generating lens…"}
       </div>
       <ul className="flex flex-col gap-1.5">
         {GEN_STEPS.map((step) => {
