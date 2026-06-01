@@ -1,104 +1,80 @@
 import type { AppConfig } from "../api";
 import { apiWithConfig } from "../api";
 
-export type MemoryItemKind =
-  | "episode"
-  | "observation"
-  | "claim"
-  | "skill"
-  | "proposal"
-  | "artifact_ref"
-  | "entity"
-  | "directory";
-export type MemoryItemStatus = "active" | "superseded" | "archived";
-export type MemoryParentRole = "step" | "evidence" | "contradicts" | "supersedes" | "similar_to" | "member_of";
+// ── Scope ─────────────────────────────────────────────────────────────────
+export type ScopeKind = "user" | "project" | "session";
+export interface ScopeParams {
+  scope_kind?: ScopeKind;
+  scope_key?: string;
+}
+export interface MemoryScope {
+  kind: ScopeKind;
+  key: string | null;
+}
 
-export interface MemoryItemSummary {
+// ── Shared value objects ────────────────────────────────────────────────────
+export type MemoryKind = "claim" | "lens";
+export type MemoryStatus = "active" | "superseded" | "archived";
+export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external" | "induced";
+export type MemoryFeedback = "none" | "confirmed" | "corrected";
+export type LensDetailLevel = "gist" | "structured" | "dossier";
+
+export interface MemorySourceRef {
+  kind: string;
+  ref: string;
+  captured_at: string;
+}
+
+export interface MemoryItem {
   id: string;
-  kind: MemoryItemKind;
+  kind: MemoryKind;
   content: string;
-  title: string | null;
-  provenance: string;
-  source_refs: unknown[];
-  confidence: number;
-  status: MemoryItemStatus;
+  scope: MemoryScope;
+  provenance: MemoryProvenance;
+  status: MemoryStatus;
   valid_from: string | null;
   invalid_at: string | null;
-  scope: string;
-  tags: string[];
-  artifact_ref: unknown | null;
-  usage: unknown | null;
-  feedback: unknown | null;
-  created_at: string | null;
-  updated_at: string | null;
-  has_embedding: boolean;
+  source_refs: MemorySourceRef[];
+  corroboration: number;
+  last_relevant_at: string | null;
+  feedback: MemoryFeedback;
+  lens_name: string | null;
+  lens_criterion: string | null;
+  lens_kind: string | null;
+  lens_detail_level: LensDetailLevel | null;
+  lens_exclusive: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface MemoryItemParentLink {
-  parent_id: string;
-  role: MemoryParentRole;
-  order: number | null;
-  created_at: string | null;
-  parent: MemoryItemSummary | null;
-}
-
-export interface MemoryItemDetail {
-  item: MemoryItemSummary;
-  parents: MemoryItemParentLink[];
-}
-
-export interface MemoryItemsPage {
-  items: MemoryItemSummary[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface MemoryStats {
-  counts: Record<MemoryItemKind, Record<MemoryItemStatus, number>>;
-}
-
-export interface MemoryToday {
-  new_skills: MemoryItemSummary[];
-  pending_proposals: MemoryItemSummary[];
-  low_confidence_claims: MemoryItemSummary[];
-  recent_corrections: MemoryItemSummary[];
-}
-
-export interface MemoryGraphEdge {
+export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts" | "member_of";
+export interface MemoryEdge {
   child_id: string;
   parent_id: string;
-  role: MemoryParentRole;
-  order: number | null;
-  created_at: string | null;
+  role: MemoryEdgeRole;
+  position: number;
+  created_at: string;
 }
 
-export interface MemoryGraph {
-  root_id: string;
-  nodes: MemoryItemSummary[];
-  edges: MemoryGraphEdge[];
-  depth: number;
-  direction: "parents" | "children" | "both";
+export interface CoverageAdvisory {
+  lens_id: string;
+  scope_pool: number;
+  member_count: number;
+  ratio: number;
+  generic: boolean;
+  suggestion: string;
 }
 
-export interface MemoryGlobalGraph {
-  nodes: MemoryItemSummary[];
-  edges: MemoryGraphEdge[];
-  include_unlinked: boolean;
+export interface RenderedClaim {
+  claim_id: string;
+  content: string;
+  provenance: MemoryProvenance;
+  corroboration: number;
+  feedback: MemoryFeedback;
+  source_refs: MemorySourceRef[];
 }
 
-export type MemoryValidityFilter = "all" | "current" | "future" | "expired";
-
-export interface ListMemoryItemsParams {
-  kinds?: MemoryItemKind[];
-  statuses?: MemoryItemStatus[];
-  scope?: string;
-  query?: string;
-  validity?: MemoryValidityFilter;
-  limit?: number;
-  offset?: number;
-}
-
+// ── Query encoding ──────────────────────────────────────────────────────────
 function queryString(params: Record<string, string | number | boolean | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -108,210 +84,236 @@ function queryString(params: Record<string, string | number | boolean | undefine
   return raw ? `?${raw}` : "";
 }
 
+function jsonBody(body: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+// ── 1 — List claims/lenses ──────────────────────────────────────────────────
+export interface MemoryItemsResponse {
+  items: MemoryItem[];
+  limit: number;
+}
+export interface ListMemoryItemsParams extends ScopeParams {
+  kind?: MemoryKind;
+  status?: MemoryStatus | ""; // "" => all statuses
+  valid_at?: string;
+  limit?: number;
+}
+
 export function listMemoryItems(config: AppConfig, params: ListMemoryItemsParams = {}) {
-  return apiWithConfig<MemoryItemsPage>(
+  return apiWithConfig<MemoryItemsResponse>(
     config,
     `/admin/memory/items${queryString({
-      kinds: params.kinds?.join(","),
-      statuses: params.statuses?.join(","),
-      scope: params.scope,
-      query: params.query,
-      validity: params.validity,
+      scope_kind: params.scope_kind,
+      scope_key: params.scope_key,
+      kind: params.kind,
+      status: params.status,
+      valid_at: params.valid_at,
       limit: params.limit,
-      offset: params.offset,
     })}`,
   );
+}
+
+// ── 2 — Get one item + provenance edges ─────────────────────────────────────
+export interface MemoryItemDetail {
+  item: MemoryItem;
+  parents: MemoryEdge[]; // direction=from: item -> parent
+  children: MemoryEdge[]; // direction=to:   child -> item
 }
 
 export function getMemoryItem(config: AppConfig, itemId: string) {
   return apiWithConfig<MemoryItemDetail>(config, `/admin/memory/items/${encodeURIComponent(itemId)}`);
 }
 
-export interface UpdateMemoryItemParams {
-  content?: string;
-  title?: string | null;
-  confidence?: number;
-  tags?: string[];
-  scope?: string;
-  status?: MemoryItemStatus;
-  invalid_at?: string | null;
+// ── 3 — List lenses (with coverage advisory) ────────────────────────────────
+export interface LensWithCoverage {
+  lens: MemoryItem;
+  coverage: CoverageAdvisory;
+}
+export interface LensesResponse {
+  lenses: LensWithCoverage[];
 }
 
-export function updateMemoryItem(config: AppConfig, itemId: string, params: UpdateMemoryItemParams) {
-  return apiWithConfig<{ item: MemoryItemSummary }>(config, `/admin/memory/items/${encodeURIComponent(itemId)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
+export function listMemoryLenses(config: AppConfig, params: ScopeParams = {}) {
+  return apiWithConfig<LensesResponse>(
+    config,
+    `/admin/memory/lenses${queryString({ scope_kind: params.scope_kind, scope_key: params.scope_key })}`,
+  );
 }
 
-export function deleteMemoryItem(config: AppConfig, itemId: string) {
-  return apiWithConfig<{ deleted: boolean }>(config, `/admin/memory/items/${encodeURIComponent(itemId)}`, {
-    method: "DELETE",
-  });
+// ── 4 — Get a lens page ─────────────────────────────────────────────────────
+export interface ProjectedPage {
+  lens_id: string;
+  detail: LensDetailLevel;
+  markdown: string;
+  blocks: RenderedClaim[];
+  synthesized: boolean;
+  coverage: CoverageAdvisory | null;
+}
+export interface LensPageParams {
+  detail?: LensDetailLevel;
+  refresh?: boolean;
 }
 
-export function getMemoryStats(config: AppConfig) {
-  return apiWithConfig<MemoryStats>(config, "/admin/memory/stats");
+export function getLensPage(config: AppConfig, lensId: string, params: LensPageParams = {}) {
+  return apiWithConfig<ProjectedPage>(
+    config,
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/page${queryString({
+      detail: params.detail,
+      refresh: params.refresh,
+    })}`,
+  );
 }
 
-export function getMemoryToday(config: AppConfig, scope?: string) {
-  return apiWithConfig<MemoryToday>(config, `/admin/memory/today${queryString({ scope })}`);
+// ── 5 — Provenance graph ────────────────────────────────────────────────────
+export interface MemoryGraph {
+  root_id: string;
+  nodes: MemoryItem[];
+  edges: MemoryEdge[];
+  depth: number;
+  direction: "parents" | "children" | "both";
+}
+export interface MemoryGraphParams {
+  direction?: "parents" | "children" | "both";
+  depth?: number;
+  roles?: MemoryEdgeRole[];
 }
 
-export function getMemoryGraph(config: AppConfig, itemId: string, depth = 3, direction: "parents" | "children" | "both" = "both") {
+export function getMemoryGraph(config: AppConfig, itemId: string, params: MemoryGraphParams = {}) {
   return apiWithConfig<MemoryGraph>(
     config,
-    `/admin/memory/items/${encodeURIComponent(itemId)}/graph${queryString({ depth, direction })}`,
+    `/admin/memory/items/${encodeURIComponent(itemId)}/graph${queryString({
+      direction: params.direction,
+      depth: params.depth,
+      roles: params.roles?.join(","),
+    })}`,
   );
 }
 
-export function getMemoryGlobalGraph(config: AppConfig, includeUnlinked = false, scope?: string) {
-  return apiWithConfig<MemoryGlobalGraph>(
+// ── 6 — Search ──────────────────────────────────────────────────────────────
+export interface MemorySearchFts {
+  mode: "fts";
+  items: MemoryItem[];
+  degraded: boolean;
+}
+export interface RankedItem {
+  item: MemoryItem;
+  order_score: number;
+  rrf: number;
+  freshness: number;
+  provenance_ord: number;
+  corroboration: number;
+}
+export interface MemorySearchRetrieve {
+  mode: "retrieve";
+  rendered: string;
+  items: RankedItem[];
+  degraded: boolean;
+  diagnostics: Record<string, unknown>;
+}
+export type MemorySearchResponse = MemorySearchFts | MemorySearchRetrieve;
+export interface MemorySearchParams extends ScopeParams {
+  q: string;
+  limit?: number;
+  include_inactive?: boolean;
+  mode?: "fts" | "retrieve";
+}
+
+export function searchMemory(config: AppConfig, params: MemorySearchParams) {
+  return apiWithConfig<MemorySearchResponse>(
     config,
-    `/admin/memory/graph${queryString({ include_unlinked: includeUnlinked, scope })}`,
+    `/admin/memory/search${queryString({
+      q: params.q,
+      scope_kind: params.scope_kind,
+      scope_key: params.scope_key,
+      limit: params.limit,
+      include_inactive: params.include_inactive,
+      mode: params.mode,
+    })}`,
   );
 }
 
-export function listMemorySkills(config: AppConfig, includeDisabled = true, scope?: string) {
-  return apiWithConfig<{ skills: MemoryItemSummary[] }>(
+// ── 7 — Lens page write-back ────────────────────────────────────────────────
+export type PageEditKind = "edit" | "reject" | "accept" | "add" | "edit_criterion";
+export interface PageEditOp {
+  kind: PageEditKind;
+  claim_id?: string; // required for edit|reject|accept
+  new_text?: string; // required for edit (successor) | add | edit_criterion
+}
+export interface WriteBackApplied {
+  kind: PageEditKind;
+  id: string;
+}
+export interface WriteBackRejected {
+  op: PageEditOp;
+  reason: string;
+}
+export interface WriteBackResult {
+  applied: WriteBackApplied[];
+  rejected: WriteBackRejected[];
+  rederive_triggered: boolean;
+}
+
+export function writebackLens(config: AppConfig, lensId: string, ops: PageEditOp[]) {
+  return apiWithConfig<WriteBackResult>(
     config,
-    `/admin/memory/skills${queryString({ include_disabled: includeDisabled, scope })}`,
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/writeback`,
+    jsonBody({ ops }),
   );
 }
 
-export function setMemorySkillEnabled(config: AppConfig, skillId: string, enabled: boolean) {
-  return apiWithConfig<{ skill: MemoryItemSummary }>(config, `/admin/memory/skills/${encodeURIComponent(skillId)}/enabled`, {
-    method: "POST",
+// ── 8 — Lens lifecycle (admin) ──────────────────────────────────────────────
+export interface CreateLensBody extends ScopeParams {
+  name: string;
+  criterion: string;
+  lens_kind?: string; // default "topic"
+}
+
+export function createLens(config: AppConfig, body: CreateLensBody) {
+  return apiWithConfig<{ lens: MemoryItem }>(config, "/admin/memory/lenses", jsonBody(body));
+}
+
+export function editLensCriterion(config: AppConfig, lensId: string, criterion: string) {
+  return apiWithConfig<{ lens: MemoryItem }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}/criterion`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ criterion }),
   });
 }
 
-export function approveMemoryProposal(config: AppConfig, proposalId: string, slug?: string) {
-  return apiWithConfig<{ skill_id: string; skill_path: string }>(
+export interface SplitChild {
+  name: string;
+  criterion: string;
+}
+export interface SplitLensBody {
+  into: SplitChild[];
+  archive_parent?: boolean; // default true
+}
+
+export function splitLens(config: AppConfig, lensId: string, body: SplitLensBody) {
+  return apiWithConfig<{ children: MemoryItem[] }>(
     config,
-    `/admin/memory/proposals/${encodeURIComponent(proposalId)}/approve${queryString({ slug })}`,
-    { method: "POST" },
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/split`,
+    jsonBody(body),
   );
 }
 
-export function rejectMemoryProposal(config: AppConfig, proposalId: string, reason?: string) {
-  return apiWithConfig<{ rejected_at: string }>(
-    config,
-    `/admin/memory/proposals/${encodeURIComponent(proposalId)}/reject`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: reason ?? null }),
-    },
-  );
+export interface MergeLensBody extends ScopeParams {
+  lens_ids: string[];
+  name: string;
+  criterion: string;
 }
 
-export interface MemoryDirectory {
-  directory: MemoryItemSummary;
-  slug: string | null;
-  entity_type: string | null;
-  markdown: string | null;
-  members: MemoryItemSummary[];
+export function mergeLenses(config: AppConfig, body: MergeLensBody) {
+  return apiWithConfig<{ lens: MemoryItem }>(config, "/admin/memory/lenses/merge", jsonBody(body));
 }
 
-export interface MemoryLens {
-  slug: string;
-  directory: string;
-  entity_type: string;
-  path: string;
-}
-
-export interface LensPassRunResult {
-  lenses: number;
-  directories: number;
-  entities_written: number;
-  edges_written: number;
-  elapsed_ms: number;
-}
-
-export function listMemoryDirectories(config: AppConfig, scope?: string) {
-  return apiWithConfig<{ directories: MemoryDirectory[] }>(
-    config,
-    `/admin/memory/directories${queryString({ scope })}`,
-  );
-}
-
-export function listMemoryLenses(config: AppConfig) {
-  return apiWithConfig<{ lenses: MemoryLens[] }>(config, "/admin/memory/lenses");
-}
-
-export function runLensPass(config: AppConfig, scope = "user") {
-  return apiWithConfig<LensPassRunResult>(config, `/admin/memory/lenses/run${queryString({ scope })}`, {
-    method: "POST",
+export function deleteLens(config: AppConfig, lensId: string) {
+  return apiWithConfig<{ archived: boolean }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}`, {
+    method: "DELETE",
   });
-}
-
-export function updateLens(config: AppConfig, slug: string, markdown: string, scope = "user") {
-  return apiWithConfig<{ slug: string; run: LensPassRunResult }>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(slug)}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markdown, scope }),
-    },
-  );
-}
-
-export function deleteLens(config: AppConfig, slug: string) {
-  return apiWithConfig<{ slug: string; file_removed: boolean; directory_removed: boolean; entities_removed: number }>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(slug)}`,
-    { method: "DELETE" },
-  );
-}
-
-export interface LensProposal {
-  proposal_id: string;
-  slug: string;
-  directory: string;
-  entity_type: string;
-  markdown: string;
-  created_at?: string | null;
-}
-
-export function generateLens(config: AppConfig, query: string, scope = "user") {
-  return apiWithConfig<Omit<LensProposal, "created_at">>(config, "/admin/memory/lenses/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, scope }),
-  });
-}
-
-export function listLensProposals(config: AppConfig, scope?: string) {
-  return apiWithConfig<{ proposals: LensProposal[] }>(
-    config,
-    `/admin/memory/lenses/proposals${queryString({ scope })}`,
-  );
-}
-
-export function approveLensProposal(config: AppConfig, proposalId: string, slug?: string, scope = "user") {
-  return apiWithConfig<{ slug: string; directory: string; run: LensPassRunResult }>(
-    config,
-    `/admin/memory/lenses/proposals/${encodeURIComponent(proposalId)}/approve${queryString({ slug, scope })}`,
-    { method: "POST" },
-  );
-}
-
-export function rejectLensProposal(config: AppConfig, proposalId: string) {
-  return apiWithConfig<{ rejected: boolean }>(
-    config,
-    `/admin/memory/lenses/proposals/${encodeURIComponent(proposalId)}/reject`,
-    { method: "POST" },
-  );
-}
-
-export function undoMemoryContradiction(config: AppConfig, childId: string, parentId: string) {
-  return apiWithConfig<{ already_undone: boolean; restored: boolean; cross_scope: boolean }>(
-    config,
-    `/admin/memory/contradictions/${encodeURIComponent(childId)}/${encodeURIComponent(parentId)}/undo`,
-    { method: "POST" },
-  );
 }

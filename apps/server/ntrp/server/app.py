@@ -19,6 +19,7 @@ from ntrp.server.routers.context import router as context_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.loops import router as loops_router
 from ntrp.server.routers.mcp import router as mcp_router
+from ntrp.server.routers.memory import router as memory_router
 from ntrp.server.routers.ops import router as ops_router
 from ntrp.server.routers.providers import router as providers_router
 from ntrp.server.routers.session import router as session_router
@@ -236,3 +237,4 @@ app.include_router(settings_router)
 app.include_router(skills_router)
 app.include_router(mcp_router)
 app.include_router(loops_router)
+app.include_router(memory_router)

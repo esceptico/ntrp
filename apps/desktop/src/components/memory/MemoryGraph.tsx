@@ -9,53 +9,37 @@ import {
   forceY,
   type Simulation,
 } from "d3-force";
-import type {
-  MemoryGraphEdge,
-  MemoryItemKind,
-  MemoryItemSummary,
-  MemoryParentRole,
-} from "../../api/memoryItems";
+import type { MemoryEdge, MemoryEdgeRole, MemoryItem, MemoryKind } from "../../api/memoryItems";
+import { lensTitle, nodeColor, truncate } from "./lens";
 
 export interface GraphPayload {
-  nodes: MemoryItemSummary[];
-  edges: MemoryGraphEdge[];
+  nodes: MemoryItem[];
+  edges: MemoryEdge[];
 }
 
-// Curated, harmonized kind palette (Flexoki mid-tones; read well on warm light + dark).
-export const KIND_COLOR: Record<MemoryItemKind, string> = {
-  episode: "#4385be",
-  observation: "#3aa99f",
-  claim: "#da702c",
-  skill: "#879a39",
-  proposal: "#8b7ec8",
-  artifact_ref: "#ce5d97",
-  entity: "#d0a215",
-  directory: "#a892d7",
+const KIND_RADIUS: Record<MemoryKind, number> = {
+  claim: 9,
+  lens: 13,
 };
 
-const KIND_RADIUS: Record<MemoryItemKind, number> = {
-  episode: 7,
-  observation: 8,
-  claim: 10,
-  skill: 11,
-  proposal: 9,
-  artifact_ref: 7,
-  entity: 10,
-  directory: 13,
-};
-
-const ROLE_DASH: Record<MemoryParentRole, string | undefined> = {
+// Dashed for the "tension" roles so they read as caveats, not structure.
+const ROLE_DASH: Record<MemoryEdgeRole, string | undefined> = {
   evidence: undefined,
-  supersedes: undefined,
-  contradicts: "5 4",
-  step: undefined,
-  similar_to: "1 5",
+  supersedes: "5 4",
+  contradicts: "2 4",
   member_of: undefined,
+};
+
+const ROLE_LABEL: Record<MemoryEdgeRole, string> = {
+  evidence: "evidence",
+  supersedes: "supersedes",
+  contradicts: "contradicts",
+  member_of: "member",
 };
 
 interface SimNode {
   id: string;
-  item: MemoryItemSummary;
+  item: MemoryItem;
   x: number;
   y: number;
   vx?: number;
@@ -67,7 +51,7 @@ interface SimNode {
 interface SimLink {
   source: SimNode;
   target: SimNode;
-  role: MemoryParentRole;
+  role: MemoryEdgeRole;
 }
 
 interface Transform {
@@ -81,6 +65,16 @@ export interface CenterRequest {
   nonce: number;
 }
 
+function nodeLabel(item: MemoryItem): string {
+  return item.kind === "lens" ? lensTitle(item) : item.content;
+}
+
+function roleStroke(role: MemoryEdgeRole): string {
+  return role === "contradicts" || role === "supersedes"
+    ? "var(--color-bad)"
+    : "var(--color-line-strong)";
+}
+
 export function MemoryGraph({
   graph,
   rootId,
@@ -91,7 +85,7 @@ export function MemoryGraph({
   graph: GraphPayload;
   rootId: string | null;
   selectedId: string | null;
-  onSelect: (item: MemoryItemSummary) => void;
+  onSelect: (item: MemoryItem) => void;
   centerRequest?: CenterRequest | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -211,10 +205,13 @@ export function MemoryGraph({
     });
   }, []);
 
-  const onPointerDownBg = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    panState.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y };
-  }, [transform]);
+  const onPointerDownBg = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      panState.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y };
+    },
+    [transform],
+  );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -259,8 +256,10 @@ export function MemoryGraph({
     if (nodes.length === 0) return;
     const xs = nodes.map((n) => n.x);
     const ys = nodes.map((n) => n.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const minX = Math.min(...xs),
+      maxX = Math.max(...xs);
+    const minY = Math.min(...ys),
+      maxY = Math.max(...ys);
     const pad = 60;
     const w = maxX - minX + pad * 2;
     const h = maxY - minY + pad * 2;
@@ -272,7 +271,7 @@ export function MemoryGraph({
     });
   }, [size]);
 
-  // Recenter on the requested node (drawer navigation), easing the slide so the
+  // Recenter on the requested node (peel navigation), easing the slide so the
   // hop reads as spatial. Direct pans keep `easePan` false and stay instant.
   useEffect(() => {
     if (!centerRequest) return;
@@ -308,7 +307,6 @@ export function MemoryGraph({
         >
           {links.map((l, i) => {
             const lit = isLit(l.source.id) && isLit(l.target.id);
-            const stroke = l.role === "contradicts" || l.role === "supersedes" ? "var(--color-bad)" : "var(--color-line-strong)";
             return (
               <line
                 key={i}
@@ -316,7 +314,7 @@ export function MemoryGraph({
                 y1={l.source.y}
                 x2={l.target.x}
                 y2={l.target.y}
-                stroke={stroke}
+                stroke={roleStroke(l.role)}
                 strokeWidth={l.role === "evidence" ? 1.4 : 1.1}
                 strokeDasharray={ROLE_DASH[l.role]}
                 opacity={lit ? (focusId ? 0.85 : 0.4) : 0.06}
@@ -325,13 +323,22 @@ export function MemoryGraph({
           })}
           {focusId &&
             links
-              .filter((l) => (l.source.id === focusId || l.target.id === focusId))
+              .filter((l) => l.source.id === focusId || l.target.id === focusId)
               .map((l, i) => {
                 const mx = (l.source.x + l.target.x) / 2;
                 const my = (l.source.y + l.target.y) / 2;
                 return (
-                  <text key={`rl-${i}`} x={mx} y={my} dy={-3} textAnchor="middle" className="pointer-events-none" fontSize={8} fill="var(--color-faint)">
-                    {l.role}
+                  <text
+                    key={`rl-${i}`}
+                    x={mx}
+                    y={my}
+                    dy={-3}
+                    textAnchor="middle"
+                    className="pointer-events-none"
+                    fontSize={8}
+                    fill="var(--color-faint)"
+                  >
+                    {ROLE_LABEL[l.role]}
                   </text>
                 );
               })}
@@ -340,7 +347,7 @@ export function MemoryGraph({
             const lit = isLit(n.id);
             const isRoot = n.id === rootId;
             const isSelected = n.id === selectedId;
-            const color = KIND_COLOR[n.item.kind];
+            const color = nodeColor(n.item);
             const dim = n.item.status !== "active";
             return (
               <g
@@ -360,13 +367,27 @@ export function MemoryGraph({
                 {(isSelected || isRoot) && (
                   <circle r={r + 5} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
                 )}
-                <circle
-                  r={r}
-                  fill={dim ? "var(--color-surface)" : color}
-                  stroke={color}
-                  strokeWidth={dim ? 1.5 : 0}
-                  strokeDasharray={n.item.status === "superseded" ? "3 2" : undefined}
-                />
+                {/* Lens nodes are rounded squares (a "view"); claims are circles (a fact). */}
+                {n.item.kind === "lens" ? (
+                  <rect
+                    x={-r}
+                    y={-r}
+                    width={r * 2}
+                    height={r * 2}
+                    rx={4}
+                    fill={dim ? "var(--color-surface)" : color}
+                    stroke={color}
+                    strokeWidth={dim ? 1.5 : 0}
+                  />
+                ) : (
+                  <circle
+                    r={r}
+                    fill={dim ? "var(--color-surface)" : color}
+                    stroke={color}
+                    strokeWidth={dim ? 1.5 : 0}
+                    strokeDasharray={n.item.status === "superseded" ? "3 2" : undefined}
+                  />
+                )}
                 {labelsVisible && lit && (
                   <text
                     x={r + 5}
@@ -378,7 +399,7 @@ export function MemoryGraph({
                     stroke="var(--color-surface)"
                     strokeWidth={3}
                   >
-                    {truncate(n.item.title ?? n.item.content, 28)}
+                    {truncate(nodeLabel(n.item), 28)}
                   </text>
                 )}
               </g>
@@ -401,21 +422,37 @@ export function MemoryGraph({
   );
 }
 
+const LEGEND_ROLES: MemoryEdgeRole[] = ["evidence", "member_of", "supersedes", "contradicts"];
+
 function Legend() {
-  const kinds = Object.keys(KIND_COLOR) as MemoryItemKind[];
   return (
-    <div className="pointer-events-none flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-line-soft bg-surface/80 px-3 py-2 backdrop-blur-sm">
-      {kinds.map((kind) => (
-        <span key={kind} className="flex items-center gap-1.5 text-2xs text-muted">
-          <span className="size-2 rounded-full" style={{ backgroundColor: KIND_COLOR[kind] }} />
-          {kind}
+    <div className="pointer-events-none flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line-soft bg-surface/80 px-3 py-2 backdrop-blur-sm">
+      <span className="flex items-center gap-1.5 text-2xs text-muted">
+        <span className="size-2 rounded-full" style={{ backgroundColor: nodeColor({ kind: "claim" } as MemoryItem) }} />
+        claim
+      </span>
+      <span className="flex items-center gap-1.5 text-2xs text-muted">
+        <span
+          className="size-2 rounded-[2px]"
+          style={{ backgroundColor: nodeColor({ kind: "lens", lens_exclusive: false } as MemoryItem) }}
+        />
+        lens
+      </span>
+      {LEGEND_ROLES.map((role) => (
+        <span key={role} className="flex items-center gap-1.5 text-2xs text-muted">
+          <span
+            className="h-px w-4"
+            style={
+              ROLE_DASH[role]
+                ? {
+                    backgroundImage: `repeating-linear-gradient(to right, ${roleStroke(role)} 0 3px, transparent 3px 6px)`,
+                  }
+                : { backgroundColor: roleStroke(role) }
+            }
+          />
+          {ROLE_LABEL[role]}
         </span>
       ))}
     </div>
   );
-}
-
-function truncate(text: string, max: number): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  return t.length > max ? `${t.slice(0, max)}…` : t;
 }

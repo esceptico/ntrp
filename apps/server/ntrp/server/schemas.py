@@ -421,6 +421,49 @@ class MemoryPruneApplyRequest(BaseModel):
     max_sources: int = Field(default=5, ge=0, le=1000)
 
 
+# --- Memory UI (Stage-5 lens/claim router) ---
+
+
+class PageEditOpBody(BaseModel):
+    kind: Literal["edit", "reject", "accept", "add", "edit_criterion"]
+    claim_id: str | None = None
+    new_text: str | None = None
+
+
+class WriteBackOpsBody(BaseModel):
+    ops: list[PageEditOpBody] = Field(default_factory=list, max_length=200)
+
+
+class CreateLensBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+    lens_kind: str = Field(default="topic", min_length=1, max_length=100)
+    scope_kind: Literal["user", "project", "session"] = "user"
+    scope_key: str | None = None
+
+
+class EditCriterionBody(BaseModel):
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+
+
+class SplitChildBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+
+
+class SplitLensBody(BaseModel):
+    into: list[SplitChildBody] = Field(..., min_length=1, max_length=50)
+    archive_parent: bool = True
+
+
+class MergeLensBody(BaseModel):
+    lens_ids: list[str] = Field(..., min_length=2, max_length=50)
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+    scope_kind: Literal["user", "project", "session"] = "user"
+    scope_key: str | None = None
+
+
 # --- Automations / notifiers ---
 
 
