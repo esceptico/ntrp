@@ -1,41 +1,31 @@
 import { useState } from "react";
-
 import { useStore } from "../store";
-import { LearningsPane } from "./memory/LearningsPane";
-import { MemoryItemsPane } from "./memory/MemoryItemsPane";
-import { PageModal } from "./PageModal";
+import { MemoryPane, MEMORY_TABS, type MemoryDestination } from "./memory/MemoryPane";
 import { Tab, Tabs } from "./ui/Tabs";
-import { TabPanels, useTabDirection } from "./ui/TabPanels";
+import { PageModal } from "./PageModal";
 
-type View = "memory" | "learnings";
-
-const VIEWS: { id: View; label: string }[] = [
-  { id: "memory", label: "Memory" },
-  { id: "learnings", label: "Learnings" },
-];
-const VIEW_IDS = VIEWS.map((v) => v.id);
-
+/** Memory views host. Title-row header with an inset-border tab strip below;
+ *  the three destinations (Lenses · Claims · Graph) are one woven sheet, swapped
+ *  by the shared-element pill indicator. Lenses is home. */
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
-  const [view, setView] = useState<View>("memory");
-  const direction = useTabDirection(VIEW_IDS, view);
+  const [tab, setTab] = useState<MemoryDestination>("lenses");
 
-  const toggle = (
+  const tabs = (
     <Tabs
-      value={view}
-      onChange={(v) => setView(v as View)}
+      value={tab}
+      onChange={(v) => setTab(v as MemoryDestination)}
       variant="pill"
-      className="items-center gap-0.5 rounded-lg bg-surface-soft p-0.5"
-      indicatorClassName="bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+      className="gap-0.5 rounded-lg bg-surface-soft p-0.5"
     >
-      {VIEWS.map((v) => (
+      {MEMORY_TABS.map((t) => (
         <Tab
-          key={v.id}
-          value={v.id}
-          className="rounded-md px-3 py-1 text-sm font-medium text-muted transition-colors hover:text-ink data-[active=true]:text-ink"
+          key={t.id}
+          value={t.id}
+          className="rounded-md px-3 py-1 text-sm font-medium text-muted data-[active=true]:text-ink"
         >
-          {v.label}
+          {t.label}
         </Tab>
       ))}
     </Tabs>
@@ -45,12 +35,13 @@ export function MemoryModal() {
     <PageModal
       open={open}
       onClose={close}
-      header={{ title: "Memory", actions: toggle }}
+      header={{ title: "Memory", actions: tabs }}
       size="w-[min(1280px,calc(100vw-32px))] h-[min(820px,calc(100vh-32px))] sm:w-[min(1280px,calc(100vw-80px))] sm:h-[min(820px,calc(100vh-80px))]"
     >
-      <TabPanels value={view} direction={direction} className="h-full min-h-0 overflow-hidden">
-        {view === "memory" ? <MemoryItemsPane /> : <LearningsPane />}
-      </TabPanels>
+      {/* Inset border under the title row — single delimiter, no nested glass. */}
+      <div className="flex min-h-0 flex-col border-t border-line-soft">
+        <MemoryPane tab={tab} onTab={setTab} />
+      </div>
     </PageModal>
   );
 }

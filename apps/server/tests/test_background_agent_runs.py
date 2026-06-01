@@ -1,14 +1,8 @@
 import asyncio
-from datetime import UTC, datetime
 
 import pytest
 
-import ntrp.tools.background as background_module
-from ntrp.context.models import SessionState
-from ntrp.core.spawner import SpawnResult
-from ntrp.memory.activation import MemoryActivationBundle
-from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
-from ntrp.tools.core.registry import ToolRegistry
+from ntrp.tools.core.context import BackgroundTaskRegistry
 
 
 @pytest.mark.asyncio
@@ -79,87 +73,3 @@ async def test_background_registry_injects_hidden_meta_completion_with_result():
             "client_id": "bg:bg-1:completed",
         }
     ]
-
-
-class _AccessEvents:
-    def __init__(self) -> None:
-        self.calls = []
-
-    async def create(self, **kwargs):
-        self.calls.append(kwargs)
-        return kwargs
-
-
-class _MemoryService:
-    def __init__(self) -> None:
-        self.access_events = _AccessEvents()
-
-
-class _FakeMemoryRetrieval:
-    def __init__(self, bundle: MemoryActivationBundle):
-        self.bundle = bundle
-        self.requests = []
-
-    async def search(self, request):
-        self.requests.append(request)
-        return self.bundle
-
-
-def _tool_context(*, spawn_fn=None, memory=None, memory_retrieval=None, skill_registry=None) -> ToolContext:
-    services = {"memory": memory, "skill_registry": skill_registry}
-    if memory_retrieval is not None:
-        services["memory_retrieval"] = memory_retrieval
-    ctx = ToolContext(
-        session_state=SessionState(session_id="sess-bg", started_at=datetime.now(UTC)),
-        registry=ToolRegistry(),
-        run=RunContext(run_id="run-bg", current_depth=0, max_depth=3),
-        io=IOBridge(),
-        services=services,
-        background_tasks=BackgroundTaskRegistry(session_id="sess-bg"),
-    )
-    ctx.spawn_fn = spawn_fn
-    return ctx
-
-
-@pytest.mark.asyncio
-async def test_background_tool_passes_runtime_context_to_memory_retrieval():
-    captured = {}
-    memory = _MemoryService()
-    retrieval = _FakeMemoryRetrieval(
-        MemoryActivationBundle(
-            query="audit background memory loop",
-            scope=None,
-            kinds=None,
-            used_chars=27,
-            candidates=[],
-            prompt_context="<memory>background memory</memory>",
-        )
-    )
-
-    async def spawn_fn(ctx, task, **kwargs):
-        captured["spawn"] = kwargs
-        captured["task"] = task
-        return SpawnResult(text="background done")
-
-    execution = ToolExecution(
-        tool_id="background-1",
-        tool_name="background",
-        ctx=_tool_context(spawn_fn=spawn_fn, memory=memory, memory_retrieval=retrieval),
-    )
-
-    result = await background_module.background(
-        execution,
-        background_module.BackgroundInput(task="audit background memory loop"),
-    )
-
-    assert result.content == "background done"
-    request = retrieval.requests[0]
-    assert request.task == "background_prompt"
-    assert request.task_id == "background-1"
-    assert request.session_id == "sess-bg"
-    assert request.run_id == "run-bg"
-    assert request.surface == "prompt"
-    system_prompt = captured["spawn"]["system_prompt"]
-    assert "<memory>background memory</memory>" in system_prompt
-    assert "<activated_skills>" not in system_prompt
-    assert memory.access_events.calls == []

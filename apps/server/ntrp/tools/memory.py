@@ -1,216 +1,177 @@
-from __future__ import annotations
+"""remember() tool — the user-facing entry to the memory write seam.
 
-import numpy as np
+A plain tool that enters the SAME admit->write path as any future writer (no
+privileged shortcut): it resolves scope + builds a SourceRef, then hands a single
+USER_AUTHORED claim to the shared WriteSeam (CONTRACTS.md §10). The seam runs the
+reconcile half (recall + ADD/NOOP/CONTRADICT) but skips the worth-gate
+(bypass_admit=True) because a user assertion is maximal-novelty.
+
+Input is deliberately small: {fact, valid_from}. No kind/confidence/tags/entities
+(v1 cruft the Stage-2 store has no columns for). provenance is fixed
+USER_AUTHORED, kind fixed CLAIM. Policy is WRITE/INTERNAL with no approval gate —
+memory never deletes, so there is nothing to guard. Registered only when the
+"memory_write" service is present (knowledge runtime wires it when memory is
+ready).
+"""
+
 from pydantic import BaseModel, Field
 
-from ntrp.memory.activation import MemoryActivationBundle, MemoryActivationRequest
-from ntrp.memory.connectors._confidence import compute_confidence
-from ntrp.memory.items_store import MemoryItemInsert
+from ntrp.logging import get_logger
+from ntrp.memory.models import Provenance, Scope, ScopeKind, SourceRef
+from ntrp.memory.pipeline.retrieve import Retriever
+from ntrp.memory.pipeline.types import Retrieval
+from ntrp.memory.pipeline.write import WriteRequest, WriteSeam
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
+from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
-RECALL_DESCRIPTION = """Recall stored knowledge about a topic or entity.
+_logger = get_logger(__name__)
 
-WHEN TO USE:
-- Before answering questions about the user, their preferences, people they know, or past conversations
-- When the user references something you should know ("remember when...", "what did I say about...")
-- Before asking the user something they may have already told you
-- When a topic comes up that might have stored context (projects, people, plans, opinions)
+MEMORY_WRITE_SERVICE = "memory_write"
+MEMORY_READ_SERVICE = "memory_read"
 
-The system prompt has activated knowledge only — recall() searches the full knowledge store when this turn needs more.
-
-PREFER recall() FOR: Known facts, user preferences, stored knowledge, lessons, procedures, artifacts, and past context
-PREFER source tools FOR: Finding new info in email, files, or web pages; use search_text/read_file for local files"""
-
-FORGET_DESCRIPTION = "Archive memory items by semantic search."
-
-REMEMBER_DESCRIPTION = """Store a memory item for future activation.
-
-WHEN TO USE:
-- After learning something important about the user
-- After discovering a key fact from email, files, or connected services
-- To record user preferences or decisions
-
-IMPORTANT: Only store knowledge that would be useful to recall in 6+ months.
-BAD: "Python is a programming language" (not user-specific)"""
+_RECALL_TOKEN_BUDGET = 2000
 
 
 class RememberInput(BaseModel):
-    fact: str = Field(description="The knowledge to remember (natural language).")
-    kind: str = Field(default="note", description="Knowledge type/scope label (free-form tag, e.g. note, preference, lesson, artifact).")
-    lifetime: str = Field(default="durable", description="How long this should remain active: durable or temporary.")
-    salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
-    entities: list[str] | None = Field(default=None, description="Concrete entity names in the fact, including User.")
-    source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
-    happened_at: str | None = Field(default=None, description="ISO timestamp of when the event occurred.")
-    expires_at: str | None = Field(default=None, description="ISO timestamp when a temporary fact expires.")
+    fact: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description=(
+            "A single durable fact to remember about the user or their world, "
+            "stated plainly and self-contained (resolve pronouns inline)."
+        ),
+    )
+    valid_from: str | None = Field(
+        default=None,
+        description="Optional ISO-8601 instant the fact became true; defaults to now.",
+    )
 
 
-async def approve_remember(execution: ToolExecution, args: RememberInput) -> ApprovalInfo | None:
-    return ApprovalInfo(description=args.fact[:100], preview=None, diff=None)
+def _resolve_scope(execution: ToolExecution) -> Scope:
+    """Scope from the active project (PROJECT/key=project_id) else USER scope.
+    Assigned from structural metadata, never LLM-inferred (CONTRACTS principle #4)."""
+    project = execution.ctx.project
+    if project is not None and project.project_id:
+        return Scope(kind=ScopeKind.PROJECT, key=str(project.project_id))
+    return Scope(kind=ScopeKind.USER)
+
+
+def _source_ref(execution: ToolExecution) -> SourceRef:
+    """Pointer back into the raw chat layer for this remember() call."""
+    ref = f"{execution.ctx.session_id}:{execution.tool_id}"
+    return SourceRef(kind="chat_turn", ref=ref)
 
 
 async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
-    items = execution.ctx.services["memory_items"]
-    embedder = execution.ctx.services.get("embedder")
-    project = execution.ctx.project
-    scope = project.knowledge_scope if project and project.knowledge_scope else "user"
-
-    tags = [f"kind:{args.kind}", f"lifetime:{args.lifetime}", f"salience:{args.salience}"]
-    if args.entities:
-        tags.extend(f"entity:{e}" for e in args.entities)
-    if args.happened_at:
-        tags.append(f"happened_at:{args.happened_at}")
-    if args.expires_at:
-        tags.append(f"expires_at:{args.expires_at}")
-
-    source_refs: list[dict] = []
-    if args.source:
-        source_refs.append({"kind": "user", "ref": args.source})
-
-    embedding: np.ndarray | None = None
-    if embedder is not None:
-        vec = await embedder.embed_one(args.fact)
-        embedding = np.asarray(vec, dtype=np.float32) if vec is not None else None
-
-    confidence = compute_confidence(
-        provenance="user_authored",
-        parent_confidences=[],
-        contradiction_count=0,
-        age_days=0,
-        last_used_days=0,
-        helped=0,
-        hurt=0,
-        ignored=0,
-    )
-
-    item_id = await items.insert_item(
-        MemoryItemInsert(
-            content=args.fact,
-            source_refs=source_refs,
-            confidence=confidence,
-            scope=scope,
-            kind="claim",
-            provenance="user_authored",
-            status="active",
-            tags=tags,
-            embedding=embedding,
+    seam = execution.ctx.services.get(MEMORY_WRITE_SERVICE)
+    if not isinstance(seam, WriteSeam):
+        return ToolResult(
+            content="Memory is not available.",
+            preview="Memory unavailable",
+            is_error=True,
         )
+
+    request = WriteRequest(
+        content=args.fact,
+        scope=_resolve_scope(execution),
+        provenance=Provenance.USER_AUTHORED,
+        source_refs=[_source_ref(execution)],
+        valid_from=args.valid_from,
+        bypass_admit=True,
     )
-    return ToolResult(content=f"Stored memory item {item_id}.", preview=args.fact[:80])
+
+    outcome = await seam.admit_and_write(request)
+    if not outcome.written and outcome.item_id is None and "Already known" not in outcome.reason:
+        # A genuine failure (empty/reconcile error), not a NOOP corroboration.
+        return ToolResult(content=outcome.reason, preview="Not remembered", is_error=True)
+
+    preview = "Remembered" if outcome.written else "Already known"
+    return ToolResult(content=outcome.reason, preview=preview)
 
 
-_DEFAULT_RECALL_LIMIT = 5
+def _resolve_recall_scopes(execution: ToolExecution) -> tuple[Scope, list[Scope]]:
+    """Recall scope + also_scopes, resolved structurally (never LLM-inferred).
+
+    In a project the primary scope is the project lens and USER rides along as an
+    also-scope; outside a project recall is USER-only. Mirrors the chat-side
+    injection scope in services/chat.py so the tool sees the same pool.
+    """
+    project = execution.ctx.project
+    if project is not None and project.project_id:
+        return (
+            Scope(kind=ScopeKind.PROJECT, key=str(project.project_id)),
+            [Scope(kind=ScopeKind.USER)],
+        )
+    return Scope(kind=ScopeKind.USER), []
 
 
 class RecallInput(BaseModel):
-    query: str = Field(description="What to recall.")
-    limit: int = Field(
-        default=_DEFAULT_RECALL_LIMIT, description=f"Number of seed facts (default {_DEFAULT_RECALL_LIMIT})."
+    query: str = Field(
+        min_length=1,
+        max_length=4_000,
+        description=(
+            "A natural-language query or goal describing what you need to recall "
+            "from the user's long-term memory (e.g. a question, topic, or task)."
+        ),
     )
-
-
-def _activation_bundle_payload(bundle: MemoryActivationBundle) -> dict:
-    return bundle.model_dump(mode="json")
 
 
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
-    retrieval = execution.ctx.services["memory_retrieval"]
-    project = execution.ctx.project
-    bundle = await retrieval.search(
-        MemoryActivationRequest(
-            query=args.query,
-            scope=project.knowledge_scope if project else None,
-            limit=args.limit,
-            task="recall_tool",
-            task_id=execution.tool_id,
-            session_id=execution.ctx.session_id,
-            run_id=execution.ctx.run.run_id,
-            surface="tool",
-            record_access=True,
-        )
-    )
-    payload = _activation_bundle_payload(bundle)
-    if bundle.prompt_context:
+    retriever = execution.ctx.services.get(MEMORY_READ_SERVICE)
+    if not isinstance(retriever, Retriever):
         return ToolResult(
-            content=bundle.prompt_context,
-            preview=f"{len(bundle.candidates)} memory items",
-            data={"activation_bundle": payload},
+            content="Memory is not available.",
+            preview="Memory unavailable",
+            is_error=True,
         )
-    return ToolResult(
-        content="No knowledge found for this query. Try broader terms or use remember() to store durable knowledge first.",
-        preview="0 memory items",
-        data={"activation_bundle": payload},
-    )
 
-
-class ForgetInput(BaseModel):
-    query: str = Field(description="Description of facts to forget.")
-
-
-async def approve_forget(execution: ToolExecution, args: ForgetInput) -> ApprovalInfo | None:
-    return ApprovalInfo(description=args.query, preview=None, diff=None)
-
-
-async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
-    retrieval = execution.ctx.services["memory_retrieval"]
-    bundle = await retrieval.search(
-        MemoryActivationRequest(
-            query=args.query,
-            limit=20,
-            task="forget_tool",
-            task_id=execution.tool_id,
-            session_id=execution.ctx.session_id,
-            run_id=execution.ctx.run.run_id,
-            surface="tool",
+    scope, also_scopes = _resolve_recall_scopes(execution)
+    result = await retriever.retrieve(
+        Retrieval(
+            goal=args.query,
+            scope=scope,
+            also_scopes=also_scopes,
+            token_budget=_RECALL_TOKEN_BUDGET,
         )
     )
-    count = 0
-    for candidate in bundle.candidates:
-        cursor = await retrieval.conn.execute(
-            "UPDATE memory_items SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (candidate.item_id,),
-        )
-        count += cursor.rowcount if cursor.rowcount > 0 else 0
-    await retrieval.conn.commit()
-    return ToolResult(
-        content=f"Archived {count} memory item(s) related to '{args.query}'.", preview=f"Archived {count}"
-    )
+
+    if not result.rendered:
+        return ToolResult(content="No relevant memory found.", preview="Nothing recalled")
+    return ToolResult(content=result.rendered, preview=f"Recalled {len(result.items)} item(s)")
+
+
+recall_tool = tool(
+    display_name="Recall",
+    description=(
+        "Search the user's long-term memory for knowledge relevant to a query or "
+        "goal. Returns a compact, scope-filtered bundle of recalled facts. Use "
+        "when the current task needs context that may have been stored in a past "
+        "session and is not already in the MEMORY CONTEXT block."
+    ),
+    input_model=RecallInput,
+    policy=ToolPolicy(
+        action=ToolAction.READ,
+        scope=ToolScope.INTERNAL,
+        permissions=frozenset({MEMORY_READ_SERVICE}),
+    ),
+    execute=recall,
+)
 
 
 remember_tool = tool(
     display_name="Remember",
-    description=REMEMBER_DESCRIPTION,
+    description=(
+        "Durably remember a single fact about the user or their world. Use for "
+        "stable preferences, decisions, and facts worth recalling in future "
+        "sessions — not transient task state. State one self-contained fact per "
+        "call. A repeat corroborates; a contradiction supersedes the old fact."
+    ),
     input_model=RememberInput,
     policy=ToolPolicy(
         action=ToolAction.WRITE,
         scope=ToolScope.INTERNAL,
-        requires_approval=True,
-        permissions=frozenset({"memory"}),
+        permissions=frozenset({MEMORY_WRITE_SERVICE}),
     ),
-    approval=approve_remember,
     execute=remember,
-)
-
-recall_tool = tool(
-    display_name="Recall",
-    description=RECALL_DESCRIPTION,
-    input_model=RecallInput,
-    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, permissions=frozenset({"memory"})),
-    execute=recall,
-)
-
-forget_tool = tool(
-    display_name="Forget",
-    description=FORGET_DESCRIPTION,
-    input_model=ForgetInput,
-    policy=ToolPolicy(
-        action=ToolAction.WRITE,
-        scope=ToolScope.INTERNAL,
-        requires_approval=True,
-        permissions=frozenset({"memory"}),
-    ),
-    approval=approve_forget,
-    execute=forget,
 )

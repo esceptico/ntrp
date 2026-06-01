@@ -9,17 +9,24 @@ import { fetchSkills } from "./skills";
 import { fetchServerConfig } from "./server";
 
 const RESYNC_DEBOUNCE_MS = 800;
+// Don't resync more than once per window: under reconnect churn (a busy server
+// delaying keepalives, rapid session switches) onConnect can fire repeatedly,
+// and we must not stampede an already-loaded server with 5-fetch bursts.
+const RESYNC_MIN_INTERVAL_MS = 8_000;
 let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+let lastResyncAt = 0;
 
 /** Re-fetch the collections that have no live SSE delta feed (sessions list,
  *  automations, loops, goal, server config) after a chat-stream (re)connect or
  *  server restart. Live deltas remain the fast path; this is the correctness
- *  backstop so nothing stays stale until a manual reload. Debounced so flappy
- *  reconnects collapse into one resync. */
+ *  backstop so nothing stays stale until a manual reload. Debounced + rate-
+ *  limited so flappy reconnects collapse into one resync. */
 export function reloadAllCollections(sessionId: string | null): void {
+  if (Date.now() - lastResyncAt < RESYNC_MIN_INTERVAL_MS) return;
   if (resyncTimer) clearTimeout(resyncTimer);
   resyncTimer = setTimeout(() => {
     resyncTimer = null;
+    lastResyncAt = Date.now();
     // Session-agnostic collections always reflect current truth.
     void refreshSessions();
     void fetchAutomations();

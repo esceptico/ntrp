@@ -6,7 +6,6 @@ from pathlib import Path
 import ntrp.database as database
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
-from ntrp.memory.search_source import MemorySearchSource
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore
 
@@ -80,7 +79,7 @@ class Indexer:
     def running(self) -> bool:
         return self._running
 
-    def start(self, source: MemorySearchSource | None) -> None:
+    def start(self, source: object | None) -> None:
         if self._running:
             return
 
@@ -90,7 +89,7 @@ class Indexer:
 
         self._task = asyncio.create_task(self._run(source))
 
-    async def _run(self, source: MemorySearchSource) -> None:
+    async def _run(self, source) -> None:
         self._running = True
         self._progress = IndexProgress()
 

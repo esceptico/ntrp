@@ -236,9 +236,19 @@ Does this look right? Let me know if anything needs correction.
 STOP here — wait for user response.
 
 ## STEP 6: HANDLE RESPONSE
-- "looks good" → say goodbye
+- "looks good" → persist the confirmed profile, then say goodbye
 - Corrections → update with remember(), re-summarize
 - More info → incorporate, remember(), continue
+
+## PERSIST IDENTITY
+Once the profile is confirmed (or as soon as you are confident of a durable
+fact), call remember() one self-contained fact per call so the user lens accrues
+them. ALWAYS capture identity first:
+- The user's name, and any aliases/handles they go by (one remember() per name).
+- Then the key durable facts: role/employer, active projects, important
+  relationships, standing preferences, and explicit constraints.
+State each fact plainly with pronouns resolved (e.g. "The user's name is …").
+Skip ephemeral noise; remember only what is useful months from now.
 
 ## IF DATA IS SPARSE
 Say "I couldn't find much in your data. Let me ask a few questions."

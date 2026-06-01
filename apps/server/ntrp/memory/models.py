@@ -1,318 +1,163 @@
-import json
+"""Stage-2 memory schema models.
+
+Storage layer only. One object table (`memory_items`) holds every durable
+knowledge unit (claims) and the editable lens objects, discriminated by `kind`.
+Relationships are role-typed edges in `memory_item_parents`, forming a walkable
+provenance DAG.
+
+No pipeline, no retrieval ranking, no LLM judgment lives here.
+"""
+
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
-
-import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from ntrp.database import deserialize_embedding
-
-type Embedding = np.ndarray
 
 
-class SourceType(StrEnum):
-    CHAT = "chat"
-    EXPLICIT = "explicit"
-
-    @classmethod
-    def _missing_(cls, value: object) -> "SourceType":
-        return cls.EXPLICIT
+def now_iso() -> str:
+    """Canonical ISO-8601 UTC timestamp. The store relies on every timestamp
+    being UTC + same offset so TEXT comparison equals chronological order."""
+    return datetime.now(UTC).isoformat()
 
 
-class FactKind(StrEnum):
-    IDENTITY = "identity"
-    PREFERENCE = "preference"
-    RELATIONSHIP = "relationship"
-    DECISION = "decision"
-    PROJECT = "project"
-    EVENT = "event"
-    ARTIFACT = "artifact"
-    PROCEDURE = "procedure"
-    CONSTRAINT = "constraint"
-    NOTE = "note"
-
-    @classmethod
-    def _missing_(cls, value: object) -> "FactKind":
-        return cls.NOTE
+class Kind(StrEnum):
+    CLAIM = "claim"
+    LENS = "lens"
 
 
-class FactLifetime(StrEnum):
-    DURABLE = "durable"
-    TEMPORARY = "temporary"
-
-
-class FactStatus(StrEnum):
+class Status(StrEnum):
     ACTIVE = "active"
-    ARCHIVED = "archived"
     SUPERSEDED = "superseded"
-    EXPIRED = "expired"
-    TEMPORARY = "temporary"
-    PINNED = "pinned"
+    ARCHIVED = "archived"
 
 
-class ObservationEvidenceLevel(StrEnum):
-    UNSUPPORTED = "unsupported"
-    SINGLE_FACT_SEED = "single_fact_seed"
-    MULTI_FACT = "multi_fact"
-    TEMPORAL_PATTERN = "temporal_pattern"
+class ScopeKind(StrEnum):
+    USER = "user"
+    PROJECT = "project"
+    SESSION = "session"
 
 
-def _parse_datetime(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=UTC)
-    if isinstance(value, str):
-        dt = datetime.fromisoformat(value)
-        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-    raise ValueError(f"Cannot parse datetime from {type(value)}")
+class Provenance(StrEnum):
+    """Ordinal trust source, most-trusted first.
+
+    For claims: user_authored > recorded > inferred > external.
+    For lenses only `induced` / `user_authored` are meaningful, but the column
+    is shared; the schema does not branch on the distinction.
+    """
+
+    USER_AUTHORED = "user_authored"
+    RECORDED = "recorded"
+    INFERRED = "inferred"
+    EXTERNAL = "external"
+    INDUCED = "induced"
 
 
-class _FrozenModel(BaseModel):
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    def __repr__(self) -> str:
-        fields = []
-        for name in type(self).model_fields:
-            val = getattr(self, name)
-            if isinstance(val, np.ndarray):
-                fields.append(f"{name}=<{val.shape}>")
-            else:
-                fields.append(f"{name}={val!r}")
-        return f"{type(self).__name__}({', '.join(fields)})"
+class Feedback(StrEnum):
+    NONE = "none"
+    CONFIRMED = "confirmed"
+    CORRECTED = "corrected"
 
 
-class ExtractedEntity(_FrozenModel):
-    name: str
+class EdgeRole(StrEnum):
+    EVIDENCE = "evidence"
+    SUPERSEDES = "supersedes"
+    CONTRADICTS = "contradicts"
+    MEMBER_OF = "member_of"
 
 
-class ExtractionResult(_FrozenModel):
-    entities: list[ExtractedEntity] = []
+class LensDetailLevel(StrEnum):
+    GIST = "gist"
+    STRUCTURED = "structured"
+    DOSSIER = "dossier"
 
 
-class HistoryEntry(_FrozenModel):
-    previous_text: str
-    changed_at: datetime
-    reason: str
-    source_fact_id: int
-    absorbed_text: str | None = None
+@dataclass(frozen=True)
+class SourceRef:
+    """A typed pointer into the immutable raw layer.
 
-    @field_validator("changed_at", mode="before")
-    @classmethod
-    def _parse_changed_at(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
+    Raw is never stored as memory; this only points at it. `kind` names the raw
+    store (chat_turn, tool_run, email, file, dex_log, ...), `ref` is its opaque
+    id/uri within that store.
+    """
 
+    kind: str
+    ref: str
+    captured_at: str = field(default_factory=now_iso)
 
-class _MemoryModel(_FrozenModel):
-    @field_validator("embedding", mode="before", check_fields=False)
-    @classmethod
-    def _deserialize_embedding(cls, v: Any) -> Embedding | None:
-        if v is None or isinstance(v, np.ndarray):
-            return v
-        if isinstance(v, bytes):
-            return deserialize_embedding(v)
-        return v
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "ref": self.ref, "captured_at": self.captured_at}
 
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_defaults(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if data.get("access_count") is None:
-                data["access_count"] = 0
-            if data.get("last_accessed_at") is None and data.get("created_at") is not None:
-                data["last_accessed_at"] = data["created_at"]
-        return data
+    @staticmethod
+    def from_dict(d: dict) -> "SourceRef":
+        return SourceRef(kind=d["kind"], ref=d["ref"], captured_at=d["captured_at"])
 
 
-class Observation(_MemoryModel):
-    id: int
-    summary: str
-    embedding: Embedding | None
-    source_fact_ids: list[int]
-    history: list[HistoryEntry]
-    created_at: datetime
-    updated_at: datetime
-    last_accessed_at: datetime
-    access_count: int
-    archived_at: datetime | None = None
-    created_by: str = "legacy"
-    policy_version: str = "legacy"
+@dataclass
+class Scope:
+    """Mandatory scoping. No global implicit scope.
 
-    @property
-    def evidence_count(self) -> int:
-        return len(self.source_fact_ids)
+    `key` is the scoping id for project/session; None only for user scope.
+    """
 
-    @property
-    def evidence_level(self) -> ObservationEvidenceLevel:
-        if self.evidence_count == 0:
-            return ObservationEvidenceLevel.UNSUPPORTED
-        if self.created_by == "temporal":
-            return ObservationEvidenceLevel.TEMPORAL_PATTERN
-        if self.evidence_count == 1:
-            return ObservationEvidenceLevel.SINGLE_FACT_SEED
-        return ObservationEvidenceLevel.MULTI_FACT
+    kind: ScopeKind
+    key: str | None = None
 
-    @field_validator("created_at", "updated_at", "last_accessed_at", "archived_at", mode="before")
-    @classmethod
-    def _parse_dt(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
+    def __post_init__(self):
+        if isinstance(self.kind, str):
+            self.kind = ScopeKind(self.kind)
+        if self.kind is ScopeKind.USER:
+            self.key = None
+        elif not self.key:
+            raise ValueError(f"scope {self.kind} requires a key")
 
 
-class Fact(_MemoryModel):
-    id: int
-    text: str
-    embedding: Embedding | None
-    source_type: SourceType
-    source_ref: str | None
-    created_at: datetime
-    happened_at: datetime | None
-    last_accessed_at: datetime
-    access_count: int
-    consolidated_at: datetime | None = None
-    archived_at: datetime | None = None
-    kind: FactKind = FactKind.NOTE
-    lifetime: FactLifetime = FactLifetime.DURABLE
-    salience: int = 0
-    confidence: float = 1.0
-    expires_at: datetime | None = None
-    pinned_at: datetime | None = None
-    valid_from: datetime | None = None
-    valid_until: datetime | None = None
-    superseded_by_fact_id: int | None = None
-    entity_refs: list["EntityRef"] = []
+@dataclass
+class MemoryItem:
+    """A row in the single object table.
 
-    @property
-    def status(self) -> FactStatus:
-        now = datetime.now(UTC)
-        if self.archived_at is not None:
-            return FactStatus.ARCHIVED
-        if self.superseded_by_fact_id is not None:
-            return FactStatus.SUPERSEDED
-        if self.expires_at is not None and self.expires_at <= now:
-            return FactStatus.EXPIRED
-        if self.valid_until is not None and self.valid_until <= now:
-            return FactStatus.EXPIRED
-        if self.lifetime == FactLifetime.TEMPORARY:
-            return FactStatus.TEMPORARY
-        if self.pinned_at is not None:
-            return FactStatus.PINNED
-        return FactStatus.ACTIVE
+    Claims carry validity + source_refs + trust signals. Lenses carry
+    criterion/page/detail_level. Shared columns (id, kind, content, scope,
+    provenance, timestamps) apply to both. Lens-only and claim-only columns are
+    nullable (fork F1 resolved to a polymorphic table — see SCHEMA.md).
+    """
 
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_lifetime(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            legacy_temporary_kind = data.get("kind") == "temporary"
-            has_expiry = data.get("expires_at") is not None
-            if data.get("lifetime") is None:
-                data["lifetime"] = FactLifetime.TEMPORARY.value if has_expiry else FactLifetime.DURABLE.value
-            if legacy_temporary_kind:
-                data["kind"] = FactKind.NOTE.value
-        return data
+    id: str
+    kind: Kind
+    content: str
+    scope: Scope
+    provenance: Provenance
 
-    @field_validator(
-        "created_at",
-        "happened_at",
-        "last_accessed_at",
-        "consolidated_at",
-        "archived_at",
-        "expires_at",
-        "pinned_at",
-        "valid_from",
-        "valid_until",
-        mode="before",
-    )
-    @classmethod
-    def _parse_dt(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
+    status: Status = Status.ACTIVE
+    valid_from: str | None = None
+    invalid_at: str | None = None
+
+    source_refs: list[SourceRef] = field(default_factory=list)
+
+    # Transparent trust signals — stored separately, never multiplied into one float.
+    corroboration: int = 0
+    last_relevant_at: str | None = None
+    feedback: Feedback = Feedback.NONE
+
+    # Lens-only fields (NULL for claims).
+    lens_name: str | None = None
+    lens_criterion: str | None = None
+    lens_kind: str | None = None
+    lens_page: str | None = None
+    lens_detail_level: LensDetailLevel | None = None
+    lens_exclusive: bool = False
+
+    created_at: str = field(default_factory=now_iso)
+    updated_at: str = field(default_factory=now_iso)
 
 
-class EntityRef(_FrozenModel):
-    id: int
-    fact_id: int
-    name: str
-    entity_id: int | None
+@dataclass
+class MemoryEdge:
+    """A role-typed edge: child --role--> parent.
 
+    Forms the walkable provenance DAG. `position` orders multi-parent edges.
+    """
 
-class Entity(_FrozenModel):
-    id: int
-    name: str
-    created_at: datetime
-    updated_at: datetime
-
-    @field_validator("created_at", "updated_at", mode="before")
-    @classmethod
-    def _parse_dt(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
-
-
-class MemoryEvent(_FrozenModel):
-    id: int
-    created_at: datetime
-    actor: str
-    action: str
-    target_type: str
-    target_id: int | None = None
-    source_type: str | None = None
-    source_ref: str | None = None
-    reason: str | None = None
-    policy_version: str
-    details: dict[str, Any] = {}
-
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _parse_created_at(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
-
-
-class MemoryAccessEvent(_FrozenModel):
-    id: int
-    created_at: datetime
-    source: str
-    query: str | None = None
-    retrieved_fact_ids: list[int] = []
-    retrieved_observation_ids: list[int] = []
-    injected_fact_ids: list[int] = []
-    injected_observation_ids: list[int] = []
-    omitted_fact_ids: list[int] = []
-    omitted_observation_ids: list[int] = []
-    bundled_fact_ids: list[int] = []
-    formatted_chars: int = 0
-    policy_version: str
-    details: dict[str, Any] = {}
-
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _parse_created_at(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_json_fields(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        for name in (
-            "retrieved_fact_ids",
-            "retrieved_observation_ids",
-            "injected_fact_ids",
-            "injected_observation_ids",
-            "omitted_fact_ids",
-            "omitted_observation_ids",
-            "bundled_fact_ids",
-        ):
-            raw = data.get(name)
-            if isinstance(raw, str):
-                data[name] = json.loads(raw)
-        details = data.get("details")
-        if isinstance(details, str):
-            data["details"] = json.loads(details) if details else {}
-        return data
-
-
-class FactContext(_FrozenModel):
-    facts: list[Fact]
-    observations: list[Observation] = []
-    bundled_sources: dict[int, list[Fact]] = {}  # observation_id -> source facts
-    fact_reasons: dict[int, list[str]] = Field(default_factory=dict)
-    observation_reasons: dict[int, list[str]] = Field(default_factory=dict)
+    child_id: str
+    parent_id: str
+    role: EdgeRole
+    position: int = 0
+    created_at: str = field(default_factory=now_iso)

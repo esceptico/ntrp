@@ -145,12 +145,25 @@ export function Messages() {
   const metaFlags = useStore(
     useShallow((s) => order.map((id) => Boolean(s.messages.get(id)?.isMeta))),
   );
-  const contents = useStore(
-    useShallow((s) => order.map((id) => s.messages.get(id)?.content ?? "")),
+  // visibleMessageIds only reads `content` to detect an EMPTY assistant message
+  // (isHiddenTranscriptMessage), so collapse it to an emptiness-stable marker
+  // instead of the full string. This keeps the array shallow-equal as a
+  // streaming assistant message grows token-by-token — without it, the live
+  // message's content changed every tick, invalidating visibleOrder + segments
+  // and re-deriving over the entire (49k-message) order on every token. Marker
+  // is "" vs "x" so the empty/non-empty decision is identical.
+  const contentFlags = useStore(
+    useShallow((s) =>
+      order.map((id) => {
+        const message = s.messages.get(id);
+        if (message?.role !== "assistant") return "";
+        return (message.content ?? "").trim().length > 0 ? "x" : "";
+      }),
+    ),
   );
   const visibleOrder = useMemo(
-    () => visibleMessageIds({ ids: order, roles, metaFlags, contents }),
-    [order, roles, metaFlags, contents],
+    () => visibleMessageIds({ ids: order, roles, metaFlags, contents: contentFlags }),
+    [order, roles, metaFlags, contentFlags],
   );
 
   const segments = useMemo(

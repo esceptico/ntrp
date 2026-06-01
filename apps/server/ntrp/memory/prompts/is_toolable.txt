@@ -1,7 +1,0 @@
-Given this claim and supporting evidence, identify the precondition or trigger that starts the workflow.
-
-Claim: {claim_content}
-Evidence (observations and/or prior claims):
-{evidence_bullets}
-
-Answer with ONE short phrase (10 words or fewer) describing when this workflow begins, or the word "unclear" if no consistent trigger exists.

@@ -6,6 +6,7 @@ belong to an Integration, including the ones ntrp ships out of the box.
 """
 
 from ntrp.integrations.base import Integration
+from ntrp.memory.lens import lens_tool
 from ntrp.skills.tool import create_skill_tool, use_skill_tool
 from ntrp.tools.automation import (
     create_automation_tool,
@@ -36,7 +37,7 @@ from ntrp.tools.files import (
     write_file_tool,
 )
 from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
-from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
+from ntrp.tools.memory import recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
 from ntrp.tools.sessions import (
@@ -65,13 +66,10 @@ SYSTEM = Integration(
     },
 )
 
-MEMORY_TOOLS = Integration(
-    id="_memory",
-    label="Memory",
+GOALS = Integration(
+    id="_goals",
+    label="Goals",
     tools={
-        "remember": remember_tool,
-        "recall": recall_tool,
-        "forget": forget_tool,
         "get_goal": get_goal_tool,
         "complete_goal": complete_goal_tool,
         "block_goal": block_goal_tool,
@@ -143,9 +141,19 @@ SESSIONS = Integration(
     },
 )
 
+# remember()/recall()/lens() stay hidden until the knowledge runtime wires the
+# memory_write / memory_read / memory_lens services (each tool's permission), so
+# they never appear when memory is off. lens() is the single Stage-4 surface
+# (define/show/edit/delete/split/merge/list), gated by MEMORY_LENS_SERVICE.
+MEMORY = Integration(
+    id="_memory",
+    label="Memory",
+    tools={"remember": remember_tool, "recall": recall_tool, "lens": lens_tool},
+)
+
 CORE_INTEGRATIONS = [
     SYSTEM,
-    MEMORY_TOOLS,
+    GOALS,
     AUTOMATION,
     BACKGROUND,
     NOTIFICATIONS,
@@ -153,4 +161,5 @@ CORE_INTEGRATIONS = [
     TASK_TRACKING,
     SKILLS,
     SESSIONS,
+    MEMORY,
 ]

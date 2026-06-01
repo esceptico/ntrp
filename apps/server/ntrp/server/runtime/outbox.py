@@ -1,14 +1,9 @@
-import asyncio
 from collections.abc import Callable
 from datetime import datetime
 
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.logging import get_logger
-from ntrp.memory.connectors.base import BufferingConnector
-from ntrp.memory.connectors.chat import ChatConnector
-from ntrp.memory.connectors.idle_sweeper import IdleBufferSweeper
-from ntrp.memory.service import MemoryService
 from ntrp.outbox import (
     OUTBOX_RUN_COMPLETED,
     OutboxEvent,
@@ -29,7 +24,7 @@ class RuntimeOutbox:
         automation_store: AutomationStore,
         scheduler: Scheduler,
         indexer: Indexer | None,
-        get_memory_service: Callable[[], MemoryService | None],
+        get_memory_service: Callable[[], object | None],
     ):
         self.worker = OutboxWorker(outbox_store)
         self.outbox_store = outbox_store
@@ -37,23 +32,12 @@ class RuntimeOutbox:
         self.scheduler = scheduler
         self.indexer = indexer
         self._get_memory_service = get_memory_service
-        self._idle_sweeper_task: asyncio.Task | None = None
         self._register_handlers()
 
     def start(self) -> None:
         self.worker.start()
-        if self._get_connectors() and (self._idle_sweeper_task is None or self._idle_sweeper_task.done()):
-            sweeper = IdleBufferSweeper(self._get_connectors)
-            self._idle_sweeper_task = asyncio.create_task(sweeper.run_loop())
 
     async def stop(self) -> None:
-        if self._idle_sweeper_task:
-            self._idle_sweeper_task.cancel()
-            try:
-                await self._idle_sweeper_task
-            except asyncio.CancelledError:
-                pass
-            self._idle_sweeper_task = None
         await self.worker.stop()
 
     def _register_handlers(self) -> None:
@@ -69,13 +53,9 @@ class RuntimeOutbox:
                 _logger.warning("Chat connector run-completed handler failed", exc_info=True)
         await self.scheduler.handle_run_completed(run_completed)
 
-    def _get_chat_connector(self) -> ChatConnector | None:
+    def _get_chat_connector(self):
         memory_service = self._get_memory_service()
         return getattr(memory_service, "chat_connector", None) if memory_service else None
-
-    def _get_connectors(self) -> list[BufferingConnector]:
-        memory_service = self._get_memory_service()
-        return list(getattr(memory_service, "connectors", [])) if memory_service else []
 
     async def get_status(self) -> dict:
         worker_running = self.worker.is_running

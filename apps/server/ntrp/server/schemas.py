@@ -1,9 +1,7 @@
-from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from ntrp.memory.models import FactKind, FactLifetime
 from ntrp.tools.core.types import ToolOverrideDecision
 
 # --- Chat / run ---
@@ -396,17 +394,6 @@ class SupersedeFactRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
 
 
-class UpdateFactMetadataRequest(BaseModel):
-    kind: FactKind | None = None
-    lifetime: FactLifetime | None = None
-    salience: int | None = Field(default=None, ge=0, le=2)
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    expires_at: datetime | None = None
-    pinned: bool | None = None
-    superseded_by_fact_id: int | None = Field(default=None, ge=1)
-    archived: bool | None = None
-
-
 class MemoryRecallInspectRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     limit: int = Field(default=5, ge=1, le=20)
@@ -432,6 +419,49 @@ class MemoryPruneApplyRequest(BaseModel):
     all_matching: bool = False
     older_than_days: int = Field(default=30, ge=1, le=3650)
     max_sources: int = Field(default=5, ge=0, le=1000)
+
+
+# --- Memory UI (Stage-5 lens/claim router) ---
+
+
+class PageEditOpBody(BaseModel):
+    kind: Literal["edit", "reject", "accept", "add", "edit_criterion"]
+    claim_id: str | None = None
+    new_text: str | None = None
+
+
+class WriteBackOpsBody(BaseModel):
+    ops: list[PageEditOpBody] = Field(default_factory=list, max_length=200)
+
+
+class CreateLensBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+    lens_kind: str = Field(default="topic", min_length=1, max_length=100)
+    scope_kind: Literal["user", "project", "session"] = "user"
+    scope_key: str | None = None
+
+
+class EditCriterionBody(BaseModel):
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+
+
+class SplitChildBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+
+
+class SplitLensBody(BaseModel):
+    into: list[SplitChildBody] = Field(..., min_length=1, max_length=50)
+    archive_parent: bool = True
+
+
+class MergeLensBody(BaseModel):
+    lens_ids: list[str] = Field(..., min_length=2, max_length=50)
+    name: str = Field(..., min_length=1, max_length=500)
+    criterion: str = Field(..., min_length=1, max_length=10_000)
+    scope_kind: Literal["user", "project", "session"] = "user"
+    scope_key: str | None = None
 
 
 # --- Automations / notifiers ---
