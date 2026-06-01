@@ -539,7 +539,10 @@ class Reconciler:
             canonical_subject=subject,
             scope=cand.scope,
             provenance=cand.provenance,
-            valid_from=now_iso(),
+            # Honor a caller-supplied event/validity time (e.g. remember(valid_from=...));
+            # default to now only when none was given. (valid_from is the bi-temporal
+            # event axis, distinct from created_at's transaction time.)
+            valid_from=cand.valid_from or now_iso(),
             source_refs=list(cand.source_refs),
         )
 
@@ -572,14 +575,21 @@ class Reconciler:
         target: MemoryItem,
         res: ReconcileResult,
     ) -> None:
-        successor = self._new_claim(row.merged_text or cand.content, subject, cand)
-        successor.source_refs = list(cand.source_refs)
-        await self.store.supersede(old_id=target.id, new_item=successor)
+        # A contradiction is NOT a successor-chain (vision §4.4: "no successor-chain").
+        # Write the new claim, ARCHIVE the contradicted target (close its validity),
+        # and link a CONTRADICTS edge — no SUPERSEDED status, no SUPERSEDES edge.
+        # Mirrors the consolidate path; supersede() (used by UPDATE) would wrongly
+        # stamp SUPERSEDED + add a SUPERSEDES edge, misrepresenting it as a clean
+        # replacement.
+        new_claim = self._new_claim(row.merged_text or cand.content, subject, cand)
+        new_claim.source_refs = list(cand.source_refs)
+        await self.store.create_item(new_claim)
+        await self.store.invalidate(target.id, status=Status.ARCHIVED)
         await self.store.add_edge(
-            MemoryEdge(child_id=successor.id, parent_id=target.id, role=EdgeRole.CONTRADICTS)
+            MemoryEdge(child_id=new_claim.id, parent_id=target.id, role=EdgeRole.CONTRADICTS)
         )
         res.op = Op.CONTRADICT
-        res.written_id = successor.id
+        res.written_id = new_claim.id
         res.target_claim_id = target.id
 
     async def _do_noop(

@@ -119,9 +119,7 @@ language. This is a multiple-choice judgment, one vote per item, judged solely a
 the criterion as written.
 
 You are given the lens NAME, its membership CRITERION, a short PAGE_GIST for
-context, an optional list of NEGATIVE_EXAMPLES (items the user previously rejected from
-this lens — read them as examples of what does NOT belong, never as a keyword filter),
-and a NUMBERED list of ITEMS.
+context, and a NUMBERED list of ITEMS.
 
 For each item choose exactly one decision:
 - in: the item clearly satisfies the criterion as written.
@@ -138,7 +136,6 @@ Rules:
   covers it.
 - Bias to `out` under doubt. Absence of an explicit reason to include is `out`, not
   `defer`. Use `defer` sparingly, only when the item could plausibly read either way.
-- Treat each NEGATIVE_EXAMPLE as a worked example of an `out` verdict for similar items.
 - Never invent facts. Reason only over the item content shown.
 - Return one vote per item, each carrying the item's index verbatim from the list.
 """

@@ -144,6 +144,7 @@ class WriteSeam:
             boundary=BoundaryKind.EXPLICIT,
             watermark=wm,
             forced=forced,
+            valid_from=request.valid_from,
         )
 
     def _to_outcome(self, result) -> WriteOutcome:

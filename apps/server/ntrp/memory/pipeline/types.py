@@ -94,6 +94,7 @@ class CaptureUnit:
     boundary: BoundaryKind
     watermark: Watermark
     forced: bool = False  # explicit (/close, remember) → pin ADMIT in Admit
+    valid_from: str | None = None  # caller-supplied event time (remember); claims inherit it
 
 
 # --- Admit output ---------------------------------------------------
@@ -121,6 +122,7 @@ class ClaimCandidate:
     canonical_subject: str  # model-canonicalized referent; the recall key
     scope: Scope
     subject_surfaces: list[str] = field(default_factory=list)  # observed surfaces; recall+alias fuel
+    valid_from: str | None = None  # caller-supplied event/validity time; None -> now at write
 
 
 @dataclass

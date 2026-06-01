@@ -59,7 +59,6 @@ from ntrp.search.retrieval import rrf_merge
 _logger = get_logger(__name__)
 
 _PAGE_GIST_LIMIT = 600
-_NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
 
 
 def _compose_criterion(belongs: str, profile_shape: list[str]) -> str:
@@ -395,24 +394,17 @@ class LensMembership:
         return out
 
     def _judge_prompt(self, claims: list[MemoryItem], lens: LensRow) -> str:
+        # REJECTed claims are enforced durably (membership pool excludes them via
+        # store.get_rejections before judging), so no negative-examples prompt slot
+        # is needed — the old one read a page section that REJECT no longer writes.
         gist = (lens.page or lens.criterion or "")[:_PAGE_GIST_LIMIT]
-        negatives = self._negative_examples(lens)
         items = "\n".join(f"  [{i}] {c.content!r}" for i, c in enumerate(claims))
         return (
             f"LENS: name={lens.name!r}\n"
             f"CRITERION: {lens.criterion!r}\n"
             f"PAGE_GIST: {gist!r}\n"
-            f"NEGATIVE_EXAMPLES: {negatives!r}\n"
             f"ITEMS:\n{items}"
         )
-
-    @staticmethod
-    def _negative_examples(lens: LensRow) -> str:
-        """Lens-scoped REJECT corrections live in a section of the lens page,
-        appended by write-back. Read as worked examples, NEVER as a keyword filter."""
-        page = lens.page or ""
-        idx = page.find(_NEGATIVE_EXAMPLES_HEADER)
-        return page[idx + len(_NEGATIVE_EXAMPLES_HEADER) :].strip() if idx >= 0 else ""
 
     async def _escalate(
         self, claim: MemoryItem, lens: LensRow, prior_rationale: str

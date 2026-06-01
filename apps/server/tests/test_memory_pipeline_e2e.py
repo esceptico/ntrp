@@ -288,6 +288,7 @@ async def test_remember_seam_adds_a_user_authored_claim(store):
             provenance=Provenance.USER_AUTHORED,
             source_refs=[SourceRef(kind="chat_turn", ref="run1:tool2")],
             bypass_admit=True,
+            valid_from="2025-01-15T00:00:00+00:00",  # caller-supplied event time
         )
     )
 
@@ -300,6 +301,9 @@ async def test_remember_seam_adds_a_user_authored_claim(store):
     berlin = next(c for c in claims if "Berlin" in c.content)
     assert berlin.canonical_subject == "Timur"
     assert berlin.provenance is Provenance.USER_AUTHORED
+    # the caller's valid_from is threaded through unit -> candidate -> claim,
+    # not silently overwritten with now().
+    assert berlin.valid_from == "2025-01-15T00:00:00+00:00"
 
 
 # --- background consolidate loop is constructible + runs one sweep ---

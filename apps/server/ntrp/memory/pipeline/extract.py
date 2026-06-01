@@ -118,6 +118,7 @@ class Extractor:
                     scope=unit.scope,
                     canonical_subject=canonical_subject,
                     subject_surfaces=surfaces,
+                    valid_from=unit.valid_from,
                 )
             )
 

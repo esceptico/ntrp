@@ -358,7 +358,7 @@ class LensProjector:
         )
         user = (
             f"LENS: name={lens.name!r}\n"
-            f"CRITERION: {lens.criterion}\n"
+            f"CRITERION: {lens.criterion!r}\n"
             f"DETAIL: {level}\n\n"
             f"MEMBERS:\n{numbered}"
         )
@@ -450,7 +450,7 @@ class LensProjector:
         user = (
             f"SUBJECT: {subject!r}\n"
             f"LENS: name={lens.name!r}\n"
-            f"CRITERION: {lens.criterion}\n"
+            f"CRITERION: {lens.criterion!r}\n"
             f"DETAIL: {level}\n\n"
             f"CLAIMS:\n{numbered}"
         )

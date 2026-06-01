@@ -270,7 +270,7 @@ async def test_noop_bumps_corroboration(store):
     assert bumped.status is Status.ACTIVE
 
 
-async def test_contradict_supersedes_and_links_edge(store):
+async def test_contradict_archives_and_links_edge_no_successor_chain(store):
     old = await _existing_claim(store, "Timur is vegetarian", subject="Timur")
     cheap = StubLLM()
     cheap.subject_queue.append(
@@ -288,9 +288,15 @@ async def test_contradict_supersedes_and_links_edge(store):
 
     r = results[0]
     assert r.op is Op.CONTRADICT
-    assert (await store.get(old.id)).status is Status.SUPERSEDED
-    contradicts = await store.list_edges(r.written_id, direction="from", role=EdgeRole.CONTRADICTS)
+    # A contradiction is NOT a successor-chain (vision §4.4): the target is ARCHIVED
+    # (validity closed), never SUPERSEDED, and there is no SUPERSEDES edge.
+    assert (await store.get(old.id)).status is Status.ARCHIVED
+    edges = await store.list_edges(r.written_id, direction="from")
+    contradicts = [e for e in edges if e.role is EdgeRole.CONTRADICTS]
     assert old.id in {e.parent_id for e in contradicts}
+    assert all(e.role is not EdgeRole.SUPERSEDES for e in edges)
+    # the new claim is active.
+    assert (await store.get(r.written_id)).status is Status.ACTIVE
 
 
 async def test_user_authored_noop_over_inferred_confirms_not_supersedes(store):
