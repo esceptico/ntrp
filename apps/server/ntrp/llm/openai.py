@@ -61,6 +61,9 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         messages = self._preprocess_messages(messages)
         request: dict = {"model": model, "messages": messages}
 
+        if not self._supports_temperature(model):
+            temperature = None
+
         token_key = "max_completion_tokens" if self._native_openai else "max_tokens"
         optional = {
             "tools": tools,
@@ -91,6 +94,11 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
         return request
 
+    def _supports_temperature(self, model: str) -> bool:
+        if not self._native_openai:
+            return True
+        return not get_model(model).reasoning_efforts
+
     def _uses_responses_api(self, tools: list[dict] | None, reasoning_effort: str | None) -> bool:
         return self._native_openai and bool(tools) and reasoning_effort is not None
 
@@ -111,7 +119,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             model=model,
             tools=tools,
             tool_choice=tool_choice,
-            temperature=temperature,
+            temperature=temperature if self._supports_temperature(model) else None,
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             response_format=response_format,
