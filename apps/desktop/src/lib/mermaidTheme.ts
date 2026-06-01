@@ -4,9 +4,26 @@
 // absolute pixel dimensions (the panel relies on a real natural size for
 // fit-to-view math).
 
-/** Read the current value of a CSS custom property from :root. */
+// Our design tokens are OKLCH ramps (see lib/tokens/color.ts). Mermaid's
+// internal color lib (khroma) can't parse the oklch() function and throws
+// "Unsupported color format", so normalize every token to an rgb/hex string
+// the browser's own engine produces. Canvas fillStyle parses oklch() and
+// serializes back as "#rrggbb" / "rgba(...)", which khroma handles.
+let probeCtx: CanvasRenderingContext2D | null = null;
+
+function toRgb(color: string): string {
+  if (!color || color === "transparent") return color;
+  if (!probeCtx) probeCtx = document.createElement("canvas").getContext("2d");
+  if (!probeCtx) return color;
+  probeCtx.fillStyle = "#000";
+  probeCtx.fillStyle = color; // invalid values are ignored, leaving "#000"
+  return probeCtx.fillStyle;
+}
+
+/** Read a CSS custom property from :root, normalized to an rgb/hex string. */
 function tok(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return toRgb(raw);
 }
 
 function currentTheme(): "light" | "dark" {
