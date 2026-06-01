@@ -26,7 +26,6 @@ import { SPRING_LAYOUT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
-import { Tab, Tabs } from "../ui/Tabs";
 import { ClaimBlock, type ClaimOp } from "./ClaimBlock";
 import {
   DetailPlaceholder,
@@ -39,12 +38,6 @@ import {
 } from "./shared";
 import { lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
 
-const DETAILS: LensDetailLevel[] = ["gist", "structured", "dossier"];
-const DETAIL_LABEL: Record<LensDetailLevel, string> = {
-  gist: "Summary",
-  structured: "List",
-  dossier: "Full",
-};
 
 export function LensesView({
   config,
@@ -337,7 +330,8 @@ function LensPage({
   onListChanged: () => void;
   onArchived: () => void;
 }) {
-  const [detail, setDetail] = useState<LensDetailLevel>(lens.detail_level);
+  // Detail level is fixed to the lens's own setting — no user-facing toggle.
+  const detail = lens.detail_level;
   const [grouped, setGrouped] = useState(lens.render_mode === "grouped_by_subject");
   const [page, setPage] = useState<ProjectedPage | null>(null);
   const [gen, setGen] = useState<LensGenStatus | null>(null);
@@ -482,8 +476,6 @@ function LensPage({
       header={
         <LensHeader
           lens={lens}
-          detail={detail}
-          onDetail={setDetail}
           onProvenance={onProvenance}
           onRefresh={() => load({ detail, refresh: true })}
           refreshing={loading}
@@ -592,8 +584,6 @@ function LensPage({
 
 function LensHeader({
   lens,
-  detail,
-  onDetail,
   onProvenance,
   onRefresh,
   refreshing,
@@ -601,8 +591,6 @@ function LensHeader({
   onToggleGroup,
 }: {
   lens: Lens;
-  detail: LensDetailLevel;
-  onDetail: (d: LensDetailLevel) => void;
   onProvenance: () => void;
   onRefresh: () => void;
   refreshing: boolean;
@@ -626,13 +614,6 @@ function LensHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <Tabs value={detail} onChange={(v) => onDetail(v as LensDetailLevel)} variant="pill" className="gap-0.5 rounded-lg bg-surface-soft p-0.5">
-          {DETAILS.map((d) => (
-            <Tab key={d} value={d} className="rounded-md px-2.5 py-1 text-xs font-medium text-muted data-[active=true]:text-ink">
-              {DETAIL_LABEL[d]}
-            </Tab>
-          ))}
-        </Tabs>
         <IconButton
           onClick={onToggleGroup}
           aria-label="Group by subject"
