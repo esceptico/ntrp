@@ -213,6 +213,27 @@ class FakeWriteSeam:
 # --- projection: anchors + cache + active members --------------------
 
 
+async def test_durably_rejected_claim_never_renders_despite_stale_in_row(store):
+    # A durable user REJECT must keep a claim OUT regardless of a stale IN cache row
+    # (Mode-1 scoring can leave one a refresh-upsert never purges). The read path must
+    # enforce the override even when the re-validation judge would vote it back IN.
+    lens = await _lens(store, name="Health", criterion="claims about the user's health")
+    c1 = await _claim(store, "user runs 5k every morning")
+    c2 = await _claim(store, "user takes vitamin D")
+    await _member(store, lens.id, c1)
+    await _member(store, lens.id, c2)  # stale IN row for the soon-rejected claim
+    await store.add_rejection(lens.id, c2.id)
+
+    cheap = KeywordJudge("user")  # would happily keep BOTH (both say "user")
+    strong = _IndexCitingSynth()
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id, refresh=True)
+    rendered_ids = {b.claim_id for b in page.blocks}
+    assert c1.id in rendered_ids
+    assert c2.id not in rendered_ids  # rejection enforced at read time
+
+
 async def test_project_renders_anchored_bullets_and_caches(store):
     lens = await _lens(store, name="Health", criterion="claims about the user's health")
     c1 = await _claim(store, "user runs 5k every morning")

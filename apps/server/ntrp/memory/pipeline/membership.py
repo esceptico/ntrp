@@ -134,11 +134,18 @@ class LensMembership:
 
         verdicts: list[MembershipVerdict] = []
         for lens_id, lens in touched.items():
+            # Never re-admit a durably-rejected claim: a re-written rejected claim
+            # must not score back IN and resurrect a stale cache row (user override,
+            # not a heuristic gate). Mirrors refresh_lens_cache's pool filter.
+            rejected = await self.store.get_rejections(lens_id)
+            batch = [c for c in batches[lens_id] if c.id not in rejected]
+            if not batch:
+                continue
             prior_in = {
                 v.claim_id
                 for v in await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
             }
-            scored = await self._judge_and_cache(batches[lens_id], lens)
+            scored = await self._judge_and_cache(batch, lens)
             verdicts.extend(scored)
             # If a NEW claim scored IN, the cached page no longer reflects the lens's
             # membership (the staleness guard only catches removals, not additions —

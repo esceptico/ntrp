@@ -348,8 +348,16 @@ class LensProjector:
         if refresh or not cached:
             await self.membership.refresh_lens_cache(lens.id)
             cached = await self.store.get_membership(lens.id, decision=MembershipDecision.IN)
+        # A durable user REJECT keeps a claim OUT regardless of cache state. The
+        # backfill pool filters rejections, but Mode-1 scoring can leave a stale IN
+        # row for a re-written rejected claim that a refresh-upsert never purges —
+        # so enforce the override here, at the single read path. Not a heuristic gate:
+        # get_rejections is an explicit user override, not an LLM/embedding decision.
+        rejected = await self.store.get_rejections(lens.id)
         members: list[MemoryItem] = []
         for v in cached:
+            if v.claim_id in rejected:
+                continue
             m = await self.store.get(v.claim_id)
             if m is not None and m.status is Status.ACTIVE:
                 members.append(m)
