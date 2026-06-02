@@ -293,17 +293,21 @@ class MemoryStore:
             await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def invalidate(self, item_id: str, *, status: Status = Status.ARCHIVED) -> bool:
+    async def invalidate(
+        self, item_id: str, *, status: Status = Status.ARCHIVED, commit: bool = True
+    ) -> bool:
         """Close an item's validity interval. Never deletes the row.
 
         Sets invalid_at to now and moves status off 'active'. No-op if the item
-        is not currently active.
+        is not currently active. `commit=False` lets a caller batch this into one
+        transaction (e.g. atomic CONTRADICT / merge fold).
         """
         if status is Status.ACTIVE:
             raise ValueError("invalidate must move status off 'active'")
         now = now_iso()
         cursor = await self.conn.execute(SQL_INVALIDATE, (str(status), now, now, item_id))
-        await self.conn.commit()
+        if commit:
+            await self.conn.commit()
         return cursor.rowcount > 0
 
     async def supersede(self, *, old_id: str, new_item: MemoryItem) -> MemoryItem:

@@ -309,13 +309,19 @@ class ConsolidateLint:
         # recomputes (claims carry no membership edge).
         await self.store.supersede(old_id=survivor.id, new_item=new_survivor)
 
+        # Fold each loser atomically: close it + link the SUPERSEDES edge under ONE
+        # transaction (commit=False per step, one commit after) so a crash mid-fold
+        # can't leave a superseded loser with no edge — orphaning its history.
         for loser in losers:
-            await self.store.invalidate(loser.id, status=Status.SUPERSEDED)
+            await self.store.invalidate(loser.id, status=Status.SUPERSEDED, commit=False)
             await self.store.add_edge(
                 MemoryEdge(
                     child_id=new_survivor.id, parent_id=loser.id, role=EdgeRole.SUPERSEDES
-                )
+                ),
+                commit=False,
             )
+        if losers:
+            await self.store.conn.commit()
 
         await self.store.bump_corroboration(new_survivor.id)
         return len(losers)
@@ -347,13 +353,15 @@ class ConsolidateLint:
                 )
                 return "flag"
             # Newer/better-grounded claim wins: archive the stale target and link
-            # the contradiction for walkability.
-            await self.store.invalidate(target.id, status=Status.ARCHIVED)
+            # the contradiction for walkability — atomically (one transaction).
+            await self.store.invalidate(target.id, status=Status.ARCHIVED, commit=False)
             await self.store.add_edge(
                 MemoryEdge(
                     child_id=contra.id, parent_id=target.id, role=EdgeRole.CONTRADICTS
-                )
+                ),
+                commit=False,
             )
+            await self.store.conn.commit()
             return "invalidate"
 
         # Plain stale invalidation.

@@ -583,11 +583,17 @@ class Reconciler:
         # replacement.
         new_claim = self._new_claim(row.merged_text or cand.content, subject, cand)
         new_claim.source_refs = list(cand.source_refs)
-        await self.store.create_item(new_claim)
-        await self.store.invalidate(target.id, status=Status.ARCHIVED)
+        # Atomic: write the claim, archive the target, link CONTRADICTS as ONE
+        # transaction (commit=False on each, one final commit) — a crash between
+        # steps must not leave a half-applied contradiction (target archived with no
+        # edge, etc.). Mirrors store.supersede()'s atomicity.
+        await self.store.create_item(new_claim, commit=False)
+        await self.store.invalidate(target.id, status=Status.ARCHIVED, commit=False)
         await self.store.add_edge(
-            MemoryEdge(child_id=new_claim.id, parent_id=target.id, role=EdgeRole.CONTRADICTS)
+            MemoryEdge(child_id=new_claim.id, parent_id=target.id, role=EdgeRole.CONTRADICTS),
+            commit=False,
         )
+        await self.store.conn.commit()
         res.op = Op.CONTRADICT
         res.written_id = new_claim.id
         res.target_claim_id = target.id

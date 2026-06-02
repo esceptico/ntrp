@@ -483,10 +483,15 @@ function LensPage({
 
   const toggleGroup = useCallback(() => {
     const next = grouped ? "flat" : "grouped_by_subject";
-    setGrouped(!grouped);
+    setGrouped(!grouped); // optimistic
     setLensRenderMode(config, lens.id, next)
       .then(() => load({ detail, refresh: true }))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => {
+        // Roll back the optimistic flip so the UI doesn't show a mode the server
+        // never persisted (it would snap back on the next load anyway).
+        setGrouped(grouped);
+        setError(e instanceof Error ? e.message : String(e));
+      });
   }, [grouped, config, lens.id, load, detail]);
 
   return (
