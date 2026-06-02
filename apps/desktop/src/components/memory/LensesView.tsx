@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, Check, ChevronRight, GitFork, Loader2, Plus, RefreshCw, Users } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Loader2, Plus, RefreshCw } from "lucide-react";
 import type { AppConfig } from "../../api";
 import {
   createLens,
   deleteLens,
+  draftLens,
   editLensCriterion,
   getLensPage,
   getLensPageStatus,
   isLensGenStatus,
   listMemoryLenses,
-  setLensRenderMode,
   writebackLens,
   type CoverageAdvisory,
   type Lens,
@@ -20,6 +20,7 @@ import {
   type PageEditOp,
   type ProjectedGroup,
   type ProjectedPage,
+  type RenderedClaim,
 } from "../../api/memoryItems";
 import { Markdown } from "../Markdown";
 import { SPRING_LAYOUT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
@@ -42,11 +43,9 @@ import { criterionPreview, lensColor, lensProvenanceLabel, lensProvenanceTone, l
 export function LensesView({
   config,
   onPeekClaim,
-  onProvenance,
 }: {
   config: AppConfig;
   onPeekClaim: (claimId: string) => void;
-  onProvenance: (lensId: string) => void;
 }) {
   const [lenses, setLenses] = useState<LensWithCoverage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,7 +146,6 @@ export function LensesView({
             lens={selected.lens}
             coverage={selected.coverage}
             onPeekClaim={onPeekClaim}
-            onProvenance={() => onProvenance(selected.lens.id)}
             onListChanged={reloadList}
             onArchived={() => {
               setSelectedId(null);
@@ -209,39 +207,35 @@ function Composer({
   onCreated: (lens: Lens) => void;
   onCancel: () => void;
 }) {
-  // Phase A: name only → create (criterion synthesized server-side).
-  // Phase B: the generated criterion, prefilled + editable, before finishing.
   const [name, setName] = useState("");
-  const [created, setCreated] = useState<Lens | null>(null);
-  const [criterion, setCriterion] = useState("");
+  const [markdown, setMarkdown] = useState("");
+  const [phase, setPhase] = useState<"seed" | "draft">("seed");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const critRef = useRef<HTMLTextAreaElement>(null);
+  const markdownRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
 
-  // Auto-grow the criterion box to its content so the generated text is never
-  // clipped (it can be several lines) and stays fully readable/editable.
   useEffect(() => {
-    const el = critRef.current;
+    const el = markdownRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
-  }, [criterion, created]);
+    el.style.height = `${Math.min(el.scrollHeight, 420)}px`;
+  }, [markdown]);
 
-  const create = () => {
+  const makeDraft = () => {
     if (!name.trim() || busy) return;
     setBusy(true);
     setErr(null);
-    createLens(config, { name: name.trim() })
+    draftLens(config, { name: name.trim() })
       .then((r) => {
-        setCreated(r.lens);
-        setCriterion(r.lens.criterion);
+        setMarkdown(r.markdown);
+        setPhase("draft");
         setBusy(false);
-        requestAnimationFrame(() => critRef.current?.focus());
+        requestAnimationFrame(() => markdownRef.current?.focus());
       })
       .catch((e) => {
         setErr(e instanceof Error ? e.message : String(e));
@@ -249,23 +243,20 @@ function Composer({
       });
   };
 
-  const finish = () => {
-    if (!created || busy) return;
-    const next = criterion.trim();
-    if (next && next !== created.criterion.trim()) {
-      setBusy(true);
-      editLensCriterion(config, created.id, next)
-        .then((r) => onCreated(r.lens))
-        .catch((e) => {
-          setErr(e instanceof Error ? e.message : String(e));
-          setBusy(false);
-        });
-    } else {
-      onCreated(created);
-    }
+  const approve = () => {
+    const definition = markdown.trim();
+    if (!definition || busy) return;
+    setBusy(true);
+    setErr(null);
+    createLens(config, { definition_markdown: definition })
+      .then((r) => onCreated(r.lens))
+      .catch((e) => {
+        setErr(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      });
   };
 
-  if (!created) {
+  if (phase === "seed") {
     return (
       <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
         <input
@@ -273,22 +264,22 @@ function Composer({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") create();
+            if (e.key === "Enter") makeDraft();
             if (e.key === "Escape") onCancel();
           }}
-          placeholder="Lens name (e.g. People)"
+          placeholder="Lens seed"
           spellCheck={false}
           className="input-field h-7 text-sm"
         />
         {err && <span className="text-xs text-bad">{err}</span>}
         <div className="flex items-center justify-between">
-          <span className="text-2xs text-faint">Name it — we'll draft the criterion.</span>
+          <span className="text-2xs text-faint">Drafts an editable lens file.</span>
           <div className="flex items-center gap-1">
             <GhostBtn onClick={onCancel} disabled={busy}>
               Cancel
             </GhostBtn>
-            <PrimaryBtn onClick={create} disabled={busy || !name.trim()}>
-              {busy ? "Creating…" : "Create"}
+            <PrimaryBtn onClick={makeDraft} disabled={busy || !name.trim()}>
+              {busy ? "Drafting…" : "Draft"}
             </PrimaryBtn>
           </div>
         </div>
@@ -299,22 +290,27 @@ function Composer({
   return (
     <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
       <textarea
-        ref={critRef}
-        value={criterion}
-        onChange={(e) => setCriterion(e.target.value)}
+        ref={markdownRef}
+        value={markdown}
+        onChange={(e) => setMarkdown(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) finish();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) approve();
         }}
-        rows={3}
+        rows={12}
         spellCheck={false}
-        className="input-field resize-none overflow-y-auto py-1.5 text-sm leading-relaxed"
+        className="input-field resize-none overflow-y-auto py-1.5 font-mono text-xs leading-relaxed"
       />
       {err && <span className="text-xs text-bad">{err}</span>}
       <div className="flex items-center justify-between">
-        <span className="text-2xs text-faint">Generated criterion — edit if needed.</span>
-        <PrimaryBtn onClick={finish} disabled={busy || !criterion.trim()}>
-          {busy ? "Saving…" : "Done"}
-        </PrimaryBtn>
+        <span className="text-2xs text-faint">Approve writes the lens.</span>
+        <div className="flex items-center gap-1">
+          <GhostBtn onClick={onCancel} disabled={busy}>
+            Cancel
+          </GhostBtn>
+          <PrimaryBtn onClick={approve} disabled={busy || !markdown.trim()}>
+            {busy ? "Saving…" : "Approve"}
+          </PrimaryBtn>
+        </div>
       </div>
     </div>
   );
@@ -327,7 +323,6 @@ function LensPage({
   lens,
   coverage,
   onPeekClaim,
-  onProvenance,
   onListChanged,
   onArchived,
 }: {
@@ -335,13 +330,12 @@ function LensPage({
   lens: Lens;
   coverage: CoverageAdvisory;
   onPeekClaim: (claimId: string) => void;
-  onProvenance: () => void;
   onListChanged: () => void;
   onArchived: () => void;
 }) {
   // Detail level is fixed to the lens's own setting — no user-facing toggle.
   const detail = lens.detail_level;
-  const [grouped, setGrouped] = useState(lens.render_mode === "grouped_by_subject");
+  const grouped = lens.render_mode === "grouped_by_subject";
   const [page, setPage] = useState<ProjectedPage | null>(null);
   const [gen, setGen] = useState<LensGenStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -513,35 +507,13 @@ function LensPage({
     void applyOps([op], how ? { id: op.claim_id, how } : null);
   };
 
-  const toggleGroup = useCallback(() => {
-    const next = grouped ? "flat" : "grouped_by_subject";
-    setGrouped(!grouped); // optimistic
-    setLensRenderMode(config, lens.id, next)
-      .then(() => {
-        // Bail if the lens was switched mid-flight: load() on an unmounted instance
-        // would arm an orphan poll token that nothing ever cancels (mirrors applyOps).
-        if (!mountedRef.current) return;
-        load({ detail, refresh: true });
-      })
-      .catch((e) => {
-        if (!mountedRef.current) return;
-        // Roll back the optimistic flip so the UI doesn't show a mode the server
-        // never persisted (it would snap back on the next load anyway).
-        setGrouped(grouped);
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, [grouped, config, lens.id, load, detail]);
-
   return (
     <DetailShell
       header={
         <LensHeader
           lens={lens}
-          onProvenance={onProvenance}
           onRefresh={() => load({ detail, refresh: true })}
           refreshing={loading}
-          grouped={grouped}
-          onToggleGroup={toggleGroup}
         />
       }
       body={
@@ -571,10 +543,10 @@ function LensPage({
             </div>
           ) : page && page.blocks.length === 0 ? (
             <Empty>Nothing matches this criterion yet. New memories appear here as they're admitted.</Empty>
-          ) : page?.groups && page.groups.length > 1 ? (
-            // Per-person cards only when there's genuinely more than one subject.
-            // A single-subject "group" (e.g. a topic lens where everything is about
-            // the user) renders flat — no pointless "the user" card.
+          ) : page?.groups && page.groups.length > 0 ? (
+            // Directory-style lenses render as list/profile rows from generated
+            // `## Name` sections. Even one row should still feel like a list item,
+            // not collapse back into one large markdown note.
             <GroupedProfiles
               groups={page.groups}
               editingId={editingId}
@@ -653,20 +625,14 @@ function LensPage({
   );
 }
 
-function LensHeader({
+export function LensHeader({
   lens,
-  onProvenance,
   onRefresh,
   refreshing,
-  grouped,
-  onToggleGroup,
 }: {
   lens: Lens;
-  onProvenance: () => void;
   onRefresh: () => void;
   refreshing: boolean;
-  grouped: boolean;
-  onToggleGroup: () => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -685,19 +651,6 @@ function LensHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <IconButton
-          onClick={onToggleGroup}
-          aria-label="Group by subject"
-          aria-pressed={grouped}
-          size="md"
-          title={grouped ? "Grouping by subject" : "Group by subject"}
-          className={grouped ? "text-accent" : undefined}
-        >
-          <Users size={ICON.SM} strokeWidth={2} />
-        </IconButton>
-        <IconButton onClick={onProvenance} aria-label="Provenance graph" size="md" title="Provenance graph">
-          <GitFork size={ICON.SM} strokeWidth={2} />
-        </IconButton>
         <IconButton onClick={onRefresh} aria-label="Re-synthesize" size="md" title="Re-synthesize (LLM)">
           <RefreshCw size={ICON.SM} strokeWidth={2} className={refreshing ? "animate-spin" : undefined} />
         </IconButton>
@@ -919,12 +872,11 @@ function CoverageMeter({ coverage, compact }: { coverage: CoverageAdvisory; comp
   );
 }
 
-// ── Grouped-by-subject profiles ──────────────────────────────────────────────
-// A grouped lens (e.g. "persons") renders one collapsible profile per subject,
-// straight off the claim `canonical_subject` attribute. Expanding drills into the
-// subject's underlying claims through the same ClaimBlock / peek wiring.
+// ── Lens profile rows ────────────────────────────────────────────────────────
+// A grouped lens uses claim `canonical_subject`; a flat directory-style lens uses
+// synthesized `## Name` sections. Both drill into the row's backing claims here.
 
-function GroupedProfiles({
+export function GroupedProfiles({
   groups,
   editingId,
   busyId,
@@ -996,30 +948,16 @@ function GroupedProfiles({
                         className="text-sm leading-relaxed"
                       />
                     )}
-                    {g.blocks.length > 0 && (
-                      <div className="mt-1 border-t border-line-soft/50 pt-1.5">
-                        <div className="mb-1 text-2xs font-medium uppercase tracking-wide text-faint">
-                          {g.blocks.length === 1 ? "Source claim" : "Source claims"}
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <AnimatePresence initial={false}>
-                            {g.blocks.map((b) => (
-                              <ClaimBlock
-                                key={b.claim_id}
-                                block={b}
-                                editing={editingId === b.claim_id}
-                                busy={busyId === b.claim_id}
-                                exiting={exiting?.id === b.claim_id ? exiting.how : null}
-                                onOpen={() => onOpen(b.claim_id)}
-                                onClose={onClose}
-                                onCommit={onCommit}
-                                onPeek={() => onPeek(b.claim_id)}
-                              />
-                            ))}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                    )}
+                    <ClaimSources
+                      blocks={g.blocks}
+                      editingId={editingId}
+                      busyId={busyId}
+                      exiting={exiting}
+                      onOpen={onOpen}
+                      onClose={onClose}
+                      onCommit={onCommit}
+                      onPeek={onPeek}
+                    />
                   </div>
                 </motion.div>
               )}
@@ -1027,6 +965,78 @@ function GroupedProfiles({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ClaimSources({
+  blocks,
+  editingId,
+  busyId,
+  exiting,
+  onOpen,
+  onClose,
+  onCommit,
+  onPeek,
+}: {
+  blocks: RenderedClaim[];
+  editingId: string | null;
+  busyId: string | null;
+  exiting: { id: string; how: "supersede" | "reject" } | null;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+  onCommit: (op: ClaimOp) => void;
+  onPeek: (claimId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (blocks.length === 0) return null;
+  return (
+    <div className="mt-1 border-t border-line-soft/50 pt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-faint transition-colors hover:bg-surface-soft hover:text-muted"
+      >
+        <ChevronRight
+          size={ICON.XS}
+          strokeWidth={2}
+          className="transition-transform"
+          style={{ transform: open ? "rotate(90deg)" : undefined }}
+        />
+        Sources
+        <Badge tone="neutral" size="sm" className="tabular-nums">
+          {blocks.length}
+        </Badge>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={SPRING_LAYOUT}
+            className="overflow-hidden"
+          >
+            <div className="mt-1 flex flex-col gap-0.5">
+              {blocks.map((b) => (
+                <ClaimBlock
+                  key={b.claim_id}
+                  block={b}
+                  editing={editingId === b.claim_id}
+                  busy={busyId === b.claim_id}
+                  exiting={exiting && exiting.id === b.claim_id ? exiting.how : null}
+                  onOpen={() => onOpen(b.claim_id)}
+                  onClose={onClose}
+                  onCommit={onCommit}
+                  onPeek={() => onPeek(b.claim_id)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1068,30 +1078,16 @@ function FlatPage({
   return (
     <div className="mt-3 flex flex-col gap-3">
       {prose && <Markdown content={prose} className="text-sm leading-relaxed" />}
-      <div className={prose ? "border-t border-line-soft/50 pt-2" : ""}>
-        {prose && (
-          <div className="mb-1 text-2xs font-medium uppercase tracking-wide text-faint">
-            {page.blocks.length === 1 ? "Source claim" : "Source claims"}
-          </div>
-        )}
-        <div className="flex flex-col gap-0.5">
-          <AnimatePresence initial={false}>
-            {page.blocks.map((b) => (
-              <ClaimBlock
-                key={b.claim_id}
-                block={b}
-                editing={editingId === b.claim_id}
-                busy={busyId === b.claim_id}
-                exiting={exiting?.id === b.claim_id ? exiting.how : null}
-                onOpen={() => onOpen(b.claim_id)}
-                onClose={onClose}
-                onCommit={onCommit}
-                onPeek={() => onPeek(b.claim_id)}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
+      <ClaimSources
+        blocks={page.blocks}
+        editingId={editingId}
+        busyId={busyId}
+        exiting={exiting}
+        onOpen={onOpen}
+        onClose={onClose}
+        onCommit={onCommit}
+        onPeek={onPeek}
+      />
     </div>
   );
 }

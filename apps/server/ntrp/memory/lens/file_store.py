@@ -6,19 +6,19 @@ Files live at ``NTRP_DIR/memory/lenses/<slug>.md`` with YAML frontmatter plus a
 ``## Profile shape`` section (the fields each member's profile captures):
 
     ---
-    directory: thirdlayer engineers
-    entity_type: person
+    directory: example directory
+    entity_type: item
     scope: user
-    render_mode: grouped_by_subject
+    render_mode: flat
     detail_level: structured
     provenance: user_authored
     ---
     ## Belongs
-    Engineers who work at thirdlayer — Kevin, Chris, me.
+    Items that match the user-approved criterion.
 
     ## Profile shape
-    - Role / what they own
-    - How I work with them
+    - Known facts
+    - Open questions
 
 This store reads/lists/writes/deletes those files and nothing else. It owns NO
 membership computation, NO claims, NO graph. The computed membership cache lives
@@ -41,6 +41,7 @@ from ntrp.memory.models import (
     LensStatus,
     Scope,
     ScopeKind,
+    now_iso,
 )
 
 _logger = get_logger(__name__)
@@ -119,6 +120,12 @@ class LensFileStore:
             return None
         return self._parse_file(slug, path)
 
+    def parse_markdown(self, slug: str, content: str) -> LensRow | None:
+        """Parse an approved draft markdown definition without reading/writing a file."""
+        if not self.valid_slug(slug):
+            return None
+        return self._parse_content(slug, content, source=f"<draft:{slug}>", fallback_time=now_iso())
+
     def list(self) -> list[LensRow]:
         if not self.lenses_dir.is_dir():
             return []
@@ -143,9 +150,7 @@ class LensFileStore:
         if not self.valid_slug(lens.id):
             raise ValueError(f"invalid lens slug: {lens.id!r}")
         self.lenses_dir.mkdir(parents=True, exist_ok=True)
-        (self.lenses_dir / f"{lens.id}.md").write_text(
-            render_lens_markdown(lens), encoding="utf-8"
-        )
+        (self.lenses_dir / f"{lens.id}.md").write_text(render_lens_markdown(lens), encoding="utf-8")
         return lens
 
     @staticmethod
@@ -172,43 +177,52 @@ class LensFileStore:
         except OSError as e:
             _logger.warning("lens file %s unreadable: %s", path, e)
             return None
+        return self._parse_content(slug, content, source=str(path), fallback_time=self._mtime_iso(path))
+
+    def _parse_content(
+        self,
+        slug: str,
+        content: str,
+        *,
+        source: str,
+        fallback_time: str,
+    ) -> LensRow | None:
         m = _FRONTMATTER_RE.match(content)
         if not m:
-            _logger.warning("lens %s: missing frontmatter", path)
+            _logger.warning("lens %s: missing frontmatter", source)
             return None
         try:
             front = yaml.safe_load(m.group(1))
         except yaml.YAMLError as e:
-            _logger.warning("lens %s: bad frontmatter yaml: %s", path, e)
+            _logger.warning("lens %s: bad frontmatter yaml: %s", source, e)
             return None
         if not isinstance(front, dict):
-            _logger.warning("lens %s: frontmatter not a dict: %s", path, type(front).__name__)
+            _logger.warning("lens %s: frontmatter not a dict: %s", source, type(front).__name__)
             return None
 
         directory = front.get("directory")
         entity_type = front.get("entity_type")
         if not isinstance(directory, str) or not directory.strip():
-            _logger.warning("lens %s: missing 'directory'", path)
+            _logger.warning("lens %s: missing 'directory'", source)
             return None
         if not isinstance(entity_type, str) or not entity_type.strip():
-            _logger.warning("lens %s: missing 'entity_type'", path)
+            _logger.warning("lens %s: missing 'entity_type'", source)
             return None
 
-        body = content[m.end():].strip()
+        body = content[m.end() :].strip()
         try:
             scope = self._scope(front)
         except ValueError as e:
             # A hand-edited PROJECT/SESSION lens missing scope_key would otherwise
             # raise out of read()/list() and break loading of EVERY lens. Skip just
             # this one, like the other malformed-frontmatter guards above.
-            _logger.warning("lens %s: invalid scope: %s", path, e)
+            _logger.warning("lens %s: invalid scope: %s", source, e)
             return None
         # Prefer persisted timestamps; fall back to mtime only for legacy files that
         # predate timestamp persistence. (mtime alone makes created_at jump to the
         # last edit and reshuffles the lens list — fixed by writing them out.)
-        mtime = self._mtime_iso(path)
-        created = front.get("created_at") if isinstance(front.get("created_at"), str) else mtime
-        updated = front.get("updated_at") if isinstance(front.get("updated_at"), str) else mtime
+        created = front.get("created_at") if isinstance(front.get("created_at"), str) else fallback_time
+        updated = front.get("updated_at") if isinstance(front.get("updated_at"), str) else fallback_time
         return LensRow(
             id=slug,
             name=directory.strip(),

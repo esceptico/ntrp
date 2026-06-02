@@ -81,6 +81,33 @@ class _FakeLensRegistry:
             for lens in lenses
         ]
 
+    async def draft_lens(self, name, scope):
+        self.calls.append(("draft_lens", name, scope))
+        return (
+            "---\n"
+            f"directory: {name}\n"
+            "entity_type: thing\n"
+            "scope: user\n"
+            "render_mode: flat\n"
+            "detail_level: structured\n"
+            "provenance: user_authored\n"
+            "---\n"
+            "## Belongs\n"
+            f"claims about {name}\n"
+        )
+
+    async def create_lens_from_markdown(self, markdown):
+        self.calls.append(("create_lens_from_markdown", markdown))
+        lens = LensRow(
+            id=_lens_slug(),
+            name="Approved",
+            criterion="## Belongs\napproved",
+            scope=USER,
+            provenance=LensProvenance.USER_AUTHORED,
+        )
+        await self.store.create_lens_row(lens)
+        return lens
+
     async def create_lens(self, name, criterion, scope, *, render_mode=None):
         self.calls.append(("create_lens", name, criterion, scope, render_mode))
         lens = LensRow(
@@ -177,9 +204,7 @@ class _FakePipeline:
         self.lens_registry = _FakeLensRegistry(store)
         self.lens_projector = _FakeProjector()
         self.lens_generator = LensPageGenerator(self.lens_projector)
-        self.lens_writeback = _FakeWriteBack(
-            WriteBackResult(applied=[], rejected=[], rederive_triggered=False)
-        )
+        self.lens_writeback = _FakeWriteBack(WriteBackResult(applied=[], rejected=[], rederive_triggered=False))
         self.ctx = ctx
         self.retrieve_calls: list = []
 
@@ -273,6 +298,7 @@ def test_routes_registered():
         "/admin/memory/items/{item_id}",
         "/admin/memory/items/{item_id}/graph",
         "/admin/memory/lenses",
+        "/admin/memory/lenses/draft",
         "/admin/memory/lenses/{lens_id}/page",
         "/admin/memory/lenses/{lens_id}/writeback",
         "/admin/memory/lenses/merge",
@@ -330,9 +356,7 @@ async def test_list_items_empty_status_returns_all(store, client):
 
 def test_list_items_project_scope_missing_key_422(client):
     # Scope(project) without a key -> Scope raises -> 422.
-    assert client.get(
-        "/admin/memory/items", params={"scope_kind": "project"}
-    ).status_code == 422
+    assert client.get("/admin/memory/items", params={"scope_kind": "project"}).status_code == 422
 
 
 # --- 2: get item + edges ---------------------------------------------
@@ -342,9 +366,7 @@ def test_list_items_project_scope_missing_key_422(client):
 async def test_get_item_with_parent_and_child_edges(store, client):
     parent = await _claim(store, "evidence claim")
     child = await _claim(store, "derived claim")
-    await store.add_edge(
-        MemoryEdge(child_id=child.id, parent_id=parent.id, role=EdgeRole.EVIDENCE)
-    )
+    await store.add_edge(MemoryEdge(child_id=child.id, parent_id=parent.id, role=EdgeRole.EVIDENCE))
     resp = client.get(f"/admin/memory/items/{child.id}")
     assert resp.status_code == 200
     body = resp.json()
@@ -423,9 +445,7 @@ async def test_lens_page_serializes_blocks(store, client, pipeline):
 async def test_lens_page_passes_detail_and_refresh(store, client, pipeline):
     lens = await _lens(store, "T", "c")
     # No cached page -> 202 + background generation; the GET does not block on it.
-    resp = client.get(
-        f"/admin/memory/lenses/{lens.id}/page", params={"detail": "gist", "refresh": "true"}
-    )
+    resp = client.get(f"/admin/memory/lenses/{lens.id}/page", params={"detail": "gist", "refresh": "true"})
     assert resp.status_code == 202
     assert resp.json()["status"] in ("creating", "scoring", "synthesizing", "ready")
     # Generation runs in the background; drain it, then assert it drove the projector
@@ -435,9 +455,7 @@ async def test_lens_page_passes_detail_and_refresh(store, client, pipeline):
 
 
 def test_lens_page_invalid_detail_422(client):
-    assert client.get(
-        "/admin/memory/lenses/x/page", params={"detail": "huge"}
-    ).status_code == 422
+    assert client.get("/admin/memory/lenses/x/page", params={"detail": "huge"}).status_code == 422
 
 
 def test_lens_page_empty_and_missing_is_404(client):
@@ -502,9 +520,7 @@ def test_graph_404_and_bad_direction(client):
 @pytest.mark.asyncio
 async def test_graph_bad_direction_422(store, client):
     a = await _claim(store, "a")
-    assert client.get(
-        f"/admin/memory/items/{a.id}/graph", params={"direction": "sideways"}
-    ).status_code == 422
+    assert client.get(f"/admin/memory/items/{a.id}/graph", params={"direction": "sideways"}).status_code == 422
 
 
 # --- 6: search -------------------------------------------------------
@@ -512,7 +528,7 @@ async def test_graph_bad_direction_422(store, client):
 
 @pytest.mark.asyncio
 async def test_search_fts(store, client):
-    await _claim(store, "kubernetes operator pattern")
+    await _claim(store, "kubernetes controller pattern")
     await _claim(store, "completely unrelated")
     body = client.get("/admin/memory/search", params={"q": "kubernetes"}).json()
     assert body["mode"] == "fts"
@@ -540,9 +556,7 @@ async def test_search_retrieve_mode(store, client, pipeline):
         degraded=False,
         diagnostics={"fts_hits": 1, "vector_hits": 1, "ranked": 1},
     )
-    body = client.get(
-        "/admin/memory/search", params={"q": "ranked", "mode": "retrieve"}
-    ).json()
+    body = client.get("/admin/memory/search", params={"q": "ranked", "mode": "retrieve"}).json()
     assert body["mode"] == "retrieve"
     assert body["rendered"] == "- ranked claim"
     assert body["items"][0]["order_score"] == 1.23
@@ -553,9 +567,7 @@ async def test_search_retrieve_mode(store, client, pipeline):
 
 
 def test_search_invalid_mode_422(client):
-    assert client.get(
-        "/admin/memory/search", params={"q": "x", "mode": "bogus"}
-    ).status_code == 422
+    assert client.get("/admin/memory/search", params={"q": "x", "mode": "bogus"}).status_code == 422
 
 
 def test_search_requires_q(client):
@@ -614,20 +626,26 @@ async def test_writeback_validates_required_fields(store, client):
 
 
 def test_writeback_404_on_missing_lens(client):
-    assert client.post(
-        "/admin/memory/lenses/ghost/writeback",
-        json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
-    ).status_code == 404
+    assert (
+        client.post(
+            "/admin/memory/lenses/ghost/writeback",
+            json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
+        ).status_code
+        == 404
+    )
 
 
 @pytest.mark.asyncio
 async def test_writeback_404_on_deleted_lens(store, client):
     lens = await _lens(store, "L", "c")
     await store.delete_lens(lens.id)  # deleting the file removes the view
-    assert client.post(
-        f"/admin/memory/lenses/{lens.id}/writeback",
-        json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
-    ).status_code == 404
+    assert (
+        client.post(
+            f"/admin/memory/lenses/{lens.id}/writeback",
+            json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
+        ).status_code
+        == 404
+    )
 
 
 # --- 8: lifecycle ----------------------------------------------------
@@ -652,6 +670,38 @@ async def test_create_lens(store, client, pipeline):
     )
 
 
+def test_draft_lens_returns_markdown_without_persisting(client, pipeline):
+    resp = client.post("/admin/memory/lenses/draft", json={"name": "Records"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["markdown"].startswith("---\n")
+    assert "directory: Records" in body["markdown"]
+    assert "## Belongs" in body["markdown"]
+    assert pipeline.lens_registry.calls[-1] == ("draft_lens", "Records", USER)
+
+
+def test_create_lens_from_approved_markdown(client, pipeline):
+    markdown = (
+        "---\n"
+        "directory: Records\n"
+        "entity_type: item\n"
+        "scope: user\n"
+        "render_mode: flat\n"
+        "detail_level: structured\n"
+        "provenance: user_authored\n"
+        "---\n"
+        "## Belongs\n"
+        "approved record entries\n"
+    )
+
+    resp = client.post("/admin/memory/lenses", json={"definition_markdown": markdown})
+
+    assert resp.status_code == 200
+    assert resp.json()["lens"]["name"] == "Approved"
+    assert pipeline.lens_registry.calls[-1] == ("create_lens_from_markdown", markdown)
+
+
 @pytest.mark.asyncio
 async def test_edit_criterion(store, client):
     lens = await _lens(store, "L", "old criterion")
@@ -668,9 +718,7 @@ async def test_edit_criterion(store, client):
 
 
 def test_edit_criterion_404_on_non_lens(client):
-    assert client.put(
-        "/admin/memory/lenses/ghost/criterion", json={"criterion": "x"}
-    ).status_code == 404
+    assert client.put("/admin/memory/lenses/ghost/criterion", json={"criterion": "x"}).status_code == 404
 
 
 @pytest.mark.asyncio
@@ -720,10 +768,13 @@ async def test_merge_lenses(store, client):
 
 
 def test_merge_requires_two(client):
-    assert client.post(
-        "/admin/memory/lenses/merge",
-        json={"lens_ids": ["only-one"], "name": "X", "criterion": "c"},
-    ).status_code == 422  # pydantic min_length=2
+    assert (
+        client.post(
+            "/admin/memory/lenses/merge",
+            json={"lens_ids": ["only-one"], "name": "X", "criterion": "c"},
+        ).status_code
+        == 422
+    )  # pydantic min_length=2
 
 
 @pytest.mark.asyncio

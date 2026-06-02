@@ -109,9 +109,7 @@ class LensMembership:
 
     # --- Mode 1: incremental cache-warming (hot, per write) ----------
 
-    async def score_into_active_lenses(
-        self, claim_ids: list[str], scope: Scope
-    ) -> list[MembershipVerdict]:
+    async def score_into_active_lenses(self, claim_ids: list[str], scope: Scope) -> list[MembershipVerdict]:
         """Score freshly-written claims into the scope's active lenses (cache-warming).
 
         Best-effort: writes verdicts to the cache. Correctness does not depend on
@@ -141,10 +139,7 @@ class LensMembership:
             batch = [c for c in batches[lens_id] if c.id not in rejected]
             if not batch:
                 continue
-            prior_in = {
-                v.claim_id
-                for v in await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
-            }
+            prior_in = {v.claim_id for v in await self.store.get_membership(lens_id, decision=MembershipDecision.IN)}
             scored = await self._judge_and_cache(batch, lens)
             # A criterion edit could have landed during the judge await; like
             # refresh_lens_cache / _revalidate, drop our writes if the lens was edited
@@ -158,9 +153,7 @@ class LensMembership:
             # membership (the staleness guard only catches removals, not additions —
             # Lens spec §6: re-derive when members CHANGE). Null the page so the next
             # read re-synthesizes with the new member; write-triggered, so no read loop.
-            if any(
-                v.decision is MembershipDecision.IN and v.claim_id not in prior_in for v in scored
-            ):
+            if any(v.decision is MembershipDecision.IN and v.claim_id not in prior_in for v in scored):
                 await self.store.update_lens(lens_id, page=None)
         return verdicts
 
@@ -175,9 +168,7 @@ class LensMembership:
             _logger.warning("refresh_lens_cache: %s missing", lens_id)
             return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
-        pool = await self.store.query(
-            scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1
-        )
+        pool = await self.store.query(scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1)
         # Honor durable user REJECTions: a rejected claim is never a member, full
         # stop. This is a user override (explicit feedback), not a heuristic gate —
         # it removes the claim from the judge's pool so it can't re-enter on re-derive.
@@ -207,15 +198,11 @@ class LensMembership:
             _logger.info("refresh_lens_cache: %s edited mid-pass; dropped stale verdicts", lens_id)
             return BackfillReport(lens_id=lens_id, scanned=len(pool), members_added=0, capped=capped)
 
-        return BackfillReport(
-            lens_id=lens_id, scanned=len(pool), members_added=added, capped=capped
-        )
+        return BackfillReport(lens_id=lens_id, scanned=len(pool), members_added=added, capped=capped)
 
     # --- the decider -------------------------------------------------
 
-    async def score(
-        self, claims: list[MemoryItem], lens: LensRow
-    ) -> list[MembershipVerdict]:
+    async def score(self, claims: list[MemoryItem], lens: LensRow) -> list[MembershipVerdict]:
         """Judge N claims against ONE lens criterion. One cheap structured call.
 
         Parse failure / empty output -> the whole batch is `out`. `defer` escalates
@@ -244,9 +231,7 @@ class LensMembership:
 
     # --- criterion authoring (text only; no membership decision) -----
 
-    async def synthesize_criterion(
-        self, name: str, intent: str | None = None
-    ) -> tuple[str, str, str]:
+    async def synthesize_criterion(self, name: str, intent: str | None = None) -> tuple[str, str, str]:
         """Draft a criterion body + entity_type from a lens NAME.
 
         One cheap structured call. Authors TEXT only — makes no membership call.
@@ -276,11 +261,8 @@ class LensMembership:
             if not belongs:
                 raise ValueError("blank synthesized criterion")
             criterion = _compose_criterion(belongs, parsed.profile_shape)
-            # Spec (Lens spec §1/§2): a lens renders as a synthesized markdown page at
-            # a DETAIL LEVEL (gist / structured list / dossier) — a structured LIST of
-            # its member claims. There is NO subject-grouping render in the spec
-            # (entities are their OWN lenses per §4). Always flat; never a per-person
-            # dossier (which turned "my nicknames" into a profile of the user).
+            # Synthesis authors text only. The returned mode is ignored so metadata
+            # cannot silently pick a different presentation or membership path.
             entity_type = parsed.entity_type.strip() or "thing"
             return criterion, "flat", entity_type
         except Exception as e:
@@ -315,9 +297,7 @@ class LensMembership:
         scoped = await self.store.list_lenses(scope=scope)
         return {le.id: le for le in scoped}
 
-    async def _recall_lenses(
-        self, claim: MemoryItem, scoped: dict[str, LensRow]
-    ) -> list[LensRow]:
+    async def _recall_lenses(self, claim: MemoryItem, scoped: dict[str, LensRow]) -> list[LensRow]:
         """RRF-merge recall channels for one claim, capped at the candidate-K.
 
         Channels over the claim content + the lens name/criterion/page text: lens-
@@ -330,9 +310,7 @@ class LensMembership:
         id_index = {iid: n for n, iid in enumerate(id_list)}
         rankings: list[list[tuple[int, float]]] = []
 
-        hits = await self.store.search_lenses(
-            _salient_tokens(claim.content), limit=MEMBERSHIP_CANDIDATE_K * 2
-        )
+        hits = await self.store.search_lenses(_salient_tokens(claim.content), limit=MEMBERSHIP_CANDIDATE_K * 2)
         rankings.append(self._rank(hits, scoped, id_index))
 
         margins = await self._embedding_margins(claim, scoped)
@@ -359,9 +337,7 @@ class LensMembership:
                 ranked.append((id_index[h.id], 1.0 / (rank + 1)))
         return ranked
 
-    async def _embedding_margins(
-        self, claim: MemoryItem, scoped: dict[str, LensRow]
-    ) -> dict[str, float]:
+    async def _embedding_margins(self, claim: MemoryItem, scoped: dict[str, LensRow]) -> dict[str, float]:
         lens_texts = [self._lens_text(le) for le in scoped.values()]
         if not lens_texts:
             return {}
@@ -374,9 +350,7 @@ class LensMembership:
         sims = (mat @ q).tolist()  # both L2-normalized -> cosine
         return {le.id: float(s) for le, s in zip(scoped.values(), sims)}
 
-    async def _rank_to_cap(
-        self, lens: LensRow, pool: list[MemoryItem], cap: int
-    ) -> list[MemoryItem]:
+    async def _rank_to_cap(self, lens: LensRow, pool: list[MemoryItem], cap: int) -> list[MemoryItem]:
         """Embedding-rank the over-cap pool to the cap (orders the scan, never gates).
         Embedder down -> keep the first `cap` by recency."""
         try:
@@ -395,9 +369,7 @@ class LensMembership:
 
     # --- judge + cache -----------------------------------------------
 
-    async def _judge_and_cache(
-        self, claims: list[MemoryItem], lens: LensRow
-    ) -> list[MembershipVerdict]:
+    async def _judge_and_cache(self, claims: list[MemoryItem], lens: LensRow) -> list[MembershipVerdict]:
         verdicts = await self.score(claims, lens)
         # Write every verdict to the cache (in/out/defer) so the projector can read
         # a cached decision without re-judging. The cache is not graph truth.
@@ -446,16 +418,9 @@ class LensMembership:
         # is needed — the old one read a page section that REJECT no longer writes.
         gist = (lens.page or lens.criterion or "")[:_PAGE_GIST_LIMIT]
         items = "\n".join(f"  [{i}] {c.content!r}" for i, c in enumerate(claims))
-        return (
-            f"LENS: name={lens.name!r}\n"
-            f"CRITERION: {lens.criterion!r}\n"
-            f"PAGE_GIST: {gist!r}\n"
-            f"ITEMS:\n{items}"
-        )
+        return f"LENS: name={lens.name!r}\nCRITERION: {lens.criterion!r}\nPAGE_GIST: {gist!r}\nITEMS:\n{items}"
 
-    async def _escalate(
-        self, claim: MemoryItem, lens: LensRow, prior_rationale: str
-    ) -> tuple[MembershipDecision, str]:
+    async def _escalate(self, claim: MemoryItem, lens: LensRow, prior_rationale: str) -> tuple[MembershipDecision, str]:
         """Re-judge one `defer` item on the strong model. Still `defer` -> stays
         DEFER (left out of the projection). The band routes who decides."""
         votes = await self._judge([claim], lens, self.strong_llm, self.strong_model)

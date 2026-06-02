@@ -62,7 +62,7 @@ export function MemoryPane({
   return (
     <TabPanels value={tab} direction={direction} className="h-full min-h-0">
       {tab === "lenses" && (
-        <LensesView config={config} onPeekClaim={peekClaim} onProvenance={showProvenance} />
+        <LensesView config={config} onPeekClaim={peekClaim} />
       )}
       {tab === "claims" && (
         <ClaimsView config={config} focusId={claimFocus} onProvenance={showProvenance} />

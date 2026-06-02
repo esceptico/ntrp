@@ -24,18 +24,19 @@ from pydantic import BaseModel, Field
 
 PAGE_SYNTH_SYSTEM = """\
 You render one "lens" — a named, criterion-defined view over a personal knowledge
-base — into a single, well-structured markdown PAGE that reads like a hand-kept wiki
+base — into a compact markdown DIRECTORY. The user wants a usable list, not one big
 note. You are given the lens name, its membership criterion, a target detail level,
 and a NUMBERED list of member claims, each tagged {{0}}, {{1}}, {{2}}, ….
 
-Write a proper markdown document, not a flat dump. ORGANIZE BY THE NATURAL UNIT of
-the claims:
-- If the claims are about DISTINCT SUBJECTS (people, projects, tools, places), make
-  ONE `## {subject}` section per subject — the subject's name as the heading — with
-  that subject's claims as tight bullets under it. One block per subject; never smear
-  one subject's facts across several sections, and never list the same subject twice.
-- If the claims are a flat set of attributes about a single thing (e.g. the user's
-  nicknames, traits), just write a clean bulleted list — no per-subject sections.
+Write a proper markdown document organized as list/profile rows:
+- Identify the distinct records represented in the member claims and make ONE
+  `## {record}` section per record when the claims support record-level profiles.
+- Under each `## {record}`, write a tight profile from the supporting claims: short
+  bullets for what is known, timeline/status when present, and uncertainty when the
+  claims are weak. Do not write an essay.
+- If the claims are truly just a flat set of attributes about one record, or the
+  records cannot be named from the claims, use a clean bulleted list instead of
+  sections.
 - Optionally open with ONE short orienting sentence (no heading). Do NOT restate or
   echo the lens criterion anywhere in the page.
 - Merge near-duplicates, note contradictions inline.
@@ -63,9 +64,9 @@ class PageSynthesis(BaseModel):
 
 PROFILE_SYNTH_SYSTEM = """\
 You render ONE subject's profile inside a grouped lens view — a compact, readable
-note about a single person or thing. You are given the subject name, the lens
-criterion, a detail level, and a NUMBERED list of the claims about THIS subject,
-each tagged {{0}}, {{1}}, ….
+note about that subject. You are given the subject name, the lens criterion, a
+detail level, and a NUMBERED list of the claims about THIS subject, each tagged
+{{0}}, {{1}}, ….
 
 Write a tight, well-formed profile:
 - Lead with a 1–3 sentence synthesis of who/what this subject is and how they relate
@@ -74,9 +75,9 @@ Write a tight, well-formed profile:
   fields (as a short labelled bullet each). Otherwise a few grouped bullets for
   specifics. Merge near-duplicates and note contradictions inline.
 - Render ONLY the claims given. Never add a fact not in the list.
-- Cite each claim inline by its index tag where you use it, e.g. "CEO of ThirdLayer
-  {{0}}." A merged statement cites every index it covers. EVERY index given MUST appear
-  at least once. Cite ONLY with this {{n}} tag — never invent other bracketed numbers.
+- Cite each claim inline by its index tag where you use it. A merged statement cites
+  every index it covers. EVERY index given MUST appear at least once. Cite ONLY with
+  this {{n}} tag — never invent other bracketed numbers.
 - Do NOT write a "## <subject>" heading — the caller adds it. Do not echo the
   criterion as a fact. Do not write a count.
 

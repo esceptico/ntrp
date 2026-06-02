@@ -14,19 +14,17 @@ from pydantic import BaseModel, Field
 CRITERION_SYNTH_SYSTEM = """\
 You author a "lens" — a named, criterion-defined view over a personal knowledge base
 (Lens spec §0-§2). A lens selects a slice of claims by a natural-language criterion
-and renders as a synthesized markdown page that is a STRUCTURED LIST of the matching
-claims (deduped, cross-referenced). Topics ("bugs"), the user's own categories ("my
-nicknames", "my health conditions", "personal traits"), and people are all lenses.
+and renders as a synthesized markdown directory: distinct matching items as rows,
+each with a compact profile from supporting claims.
 
 Given a lens NAME (the seed) and optional INTENT, produce:
 - belongs: 1-3 sentences — the inclusion test: who/what BELONGS + what to exclude.
-  Be concrete. Define the slice; the page will list the claims that match it.
-- profile_shape: OPTIONAL 2-4 short facets worth capturing per matching item, used
-  only to organize the list (e.g. for a contact: "Role", "How the user works with
-  them"). Leave EMPTY for a plain list lens (e.g. "my nicknames" → just the list of
-  names). Never use it to wrap the user's own attributes into a single person profile.
-- entity_type: one short noun for what the lens collects ("person", "nickname",
-  "condition", "preference", "decision", "topic").
+  Be concrete and faithful to the requested lens name. Define the record the
+  directory should list without adding scope the user did not ask for.
+- profile_shape: optional short facets worth capturing per matching record, used
+  only to organize each row/profile. Leave empty when the record needs no profile.
+- entity_type: one short noun for what the lens collects. This is metadata only;
+  it must not change membership.
 
 No numbers, scores, or percentages. Stay faithful to the name; invent no extra scope.
 """
@@ -39,5 +37,5 @@ class SynthesizedCriterion(BaseModel):
     )
     entity_type: str = Field(
         default="thing",
-        description='the kind of thing grouped, e.g. "person", "project", "topic"',
+        description="the kind of thing grouped; metadata only, not a membership rule",
     )

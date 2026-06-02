@@ -22,7 +22,7 @@ def _lens(name: str, **kw) -> LensRow:
         name=name,
         criterion=kw.get("criterion", "## Belongs\nstuff"),
         scope=kw.get("scope", Scope(kind=ScopeKind.USER)),
-        entity_type=kw.get("entity_type", "person"),
+        entity_type=kw.get("entity_type", "item"),
         detail_level=LensDetailLevel.STRUCTURED,
         render_mode=LensRenderMode.FLAT,
         provenance=LensProvenance.USER_AUTHORED,
@@ -45,12 +45,12 @@ def test_name_with_colon_round_trips(tmp_path: Path):
 
 def test_timestamps_persist_across_rewrite(tmp_path: Path):
     store = LensFileStore(tmp_path)
-    store.write(_lens("People", id="people", created_at="2025-01-01T00:00:00+00:00"))
+    store.write(_lens("Records", id="records", created_at="2025-01-01T00:00:00+00:00"))
     # Re-read, edit the body, rewrite — created_at must NOT jump to the edit time.
-    first = store.read("people")
+    first = store.read("records")
     assert first.created_at == "2025-01-01T00:00:00+00:00"
-    store.write(_lens("People", id="people", created_at=first.created_at, updated_at="2025-06-01T00:00:00+00:00"))
-    again = store.read("people")
+    store.write(_lens("Records", id="records", created_at=first.created_at, updated_at="2025-06-01T00:00:00+00:00"))
+    again = store.read("records")
     assert again.created_at == "2025-01-01T00:00:00+00:00"
     assert again.updated_at == "2025-06-01T00:00:00+00:00"
 
@@ -71,11 +71,9 @@ def test_delete_rejects_traversal_slug(tmp_path: Path):
 
 def test_malformed_scope_is_skipped_not_crashing(tmp_path: Path):
     # A PROJECT lens hand-edited to drop scope_key must be skipped, not crash list().
-    (tmp_path / "good.md").write_text(
-        "---\ndirectory: Good\nentity_type: person\n---\n## Belongs\nx\n", encoding="utf-8"
-    )
+    (tmp_path / "good.md").write_text("---\ndirectory: Good\nentity_type: item\n---\n## Belongs\nx\n", encoding="utf-8")
     (tmp_path / "bad.md").write_text(
-        "---\ndirectory: Bad\nentity_type: person\nscope: project\n---\n## Belongs\nx\n",
+        "---\ndirectory: Bad\nentity_type: item\nscope: project\n---\n## Belongs\nx\n",
         encoding="utf-8",
     )
     store = LensFileStore(tmp_path)

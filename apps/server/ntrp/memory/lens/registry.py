@@ -20,7 +20,7 @@ keyword/regex/threshold gate decides anything here.
 from typing import Protocol
 
 from ntrp.logging import get_logger
-from ntrp.memory.lens.file_store import slugify
+from ntrp.memory.lens.file_store import render_lens_markdown, slugify
 from ntrp.memory.models import (
     LensDetailLevel,
     LensProvenance,
@@ -46,9 +46,7 @@ class _Membership(Protocol):
 
     async def refresh_lens_cache(self, lens_id: str) -> BackfillReport: ...
 
-    async def synthesize_criterion(
-        self, name: str, intent: str | None = ...
-    ) -> tuple[str, str, str]: ...
+    async def synthesize_criterion(self, name: str, intent: str | None = ...) -> tuple[str, str, str]: ...
 
 
 class LensRegistry:
@@ -60,6 +58,46 @@ class LensRegistry:
         self.projector = projector
 
     # --- create (touches zero claims) -------------------------------
+
+    async def draft_lens(self, name: str, scope: Scope) -> str:
+        """Return a full editable lens definition file without persisting it."""
+        if not name or not name.strip():
+            raise ValueError("lens name cannot be empty")
+        criterion, _synth_mode, entity_type = await self.membership.synthesize_criterion(name.strip())
+        if not criterion.lstrip().startswith("##"):
+            criterion = f"## Belongs\n{criterion.strip()}"
+        draft = LensRow(
+            id=slugify(name),
+            name=name.strip(),
+            criterion=criterion,
+            scope=scope,
+            entity_type=entity_type,
+            render_mode=LensRenderMode.FLAT,
+            detail_level=LensDetailLevel.STRUCTURED,
+            provenance=LensProvenance.USER_AUTHORED,
+        )
+        return render_lens_markdown(draft)
+
+    async def create_lens_from_markdown(self, markdown: str) -> LensRow:
+        """Persist an approved draft definition. This is the only draft commit point."""
+        parsed = self.store.lens_files.parse_markdown("draft", markdown)
+        if parsed is None:
+            raise ValueError("invalid lens markdown")
+        if not parsed.criterion.strip():
+            raise ValueError("criterion cannot be empty")
+        lens = LensRow(
+            id=self._unique_slug(parsed.name),
+            name=parsed.name,
+            criterion=parsed.criterion,
+            scope=parsed.scope,
+            entity_type=parsed.entity_type,
+            detail_level=parsed.detail_level,
+            render_mode=parsed.render_mode,
+            provenance=parsed.provenance,
+        )
+        await self.store.create_lens_row(lens)
+        _logger.info("lens created %s name=%r (approved draft; zero claims touched)", lens.id, lens.name)
+        return lens
 
     async def create_lens(
         self,
@@ -75,9 +113,9 @@ class LensRegistry:
         """Write one lens DEFINITION file. NO backfill, NO edges, NO claim writes (C7).
 
         When no criterion is given, the LLM synthesizes the body (## Belongs [+
-        ## Profile shape]), the render mode AND the entity_type from the name (a
-        pure text call — still touches zero claims, makes no membership decision).
-        The page is None; membership/page are computed lazily on first projection.
+        ## Profile shape]) and an informational entity_type from the name (a pure
+        text call — still touches zero claims, makes no membership decision). The
+        page is None; membership/page are computed lazily on first projection.
         """
         if scope is None:
             raise ValueError("create_lens requires a scope")
@@ -90,8 +128,7 @@ class LensRegistry:
         if not (criterion or "").strip():
             # The synth drafts the criterion (+ entity_type, kept only as the spec's
             # informational `kind` — the schema does NOT branch on it, Lens spec §2).
-            # Layout is the page synthesizer's job (§5: one structured page that groups
-            # by subject when claims span subjects), not a stored render_mode.
+            # Layout is explicit metadata/default UI state, not inferred here.
             criterion, _synth_mode, entity_type = await self.membership.synthesize_criterion(name)
         if render_mode is None:
             render_mode = LensRenderMode.FLAT
@@ -210,9 +247,7 @@ class LensRegistry:
             await self.store.delete_lens(parent.id)
         return children
 
-    async def merge_lenses(
-        self, lens_ids: list[str], name: str, criterion: str
-    ) -> LensRow:
+    async def merge_lenses(self, lens_ids: list[str], name: str, criterion: str) -> LensRow:
         """Merge into one union view: create the union row, delete the inputs.
         Re-points nothing; the union re-derives its members from the criterion."""
         if len(lens_ids) < 2:
@@ -229,9 +264,7 @@ class LensRegistry:
         # scoped input would be silently dropped while that source lens is deleted.
         # Refuse the lossy merge (categorical scope-equality, not a lexical gate).
         if not all(i.scope == scope for i in inputs):
-            raise ValueError(
-                f"cannot merge lenses across scopes: {sorted({str(i.scope) for i in inputs})}"
-            )
+            raise ValueError(f"cannot merge lenses across scopes: {sorted({str(i.scope) for i in inputs})}")
         union = await self.create_lens(name, criterion, scope)
         for lens in inputs:
             await self.store.delete_lens(lens.id)

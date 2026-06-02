@@ -42,6 +42,7 @@ from ntrp.server.deps import require_knowledge_runtime
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
 from ntrp.server.schemas import (
     CreateLensBody,
+    DraftLensBody,
     EditCriterionBody,
     MergeLensBody,
     SetLensRenderModeBody,
@@ -257,11 +258,7 @@ async def list_lenses(
 ):
     scope = _scope(scope_kind, scope_key)
     rows = await knowledge.memory_retrieval.lens_registry.list_lenses(scope)
-    return {
-        "lenses": [
-            {"lens": lens_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows
-        ]
-    }
+    return {"lenses": [{"lens": lens_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows]}
 
 
 # --- 4: get a lens page ----------------------------------------------
@@ -288,9 +285,7 @@ async def get_lens_page(
     if await knowledge.memory.get_lens(lens_id) is None:
         raise HTTPException(status_code=404, detail="lens not found")
 
-    result = await knowledge.memory_retrieval.lens_generator.ensure(
-        lens_id, detail=detail_level, refresh=refresh
-    )
+    result = await knowledge.memory_retrieval.lens_generator.ensure(lens_id, detail=detail_level, refresh=refresh)
     if isinstance(result, ProjectedPage):
         return page_json(result)
     response.status_code = 202
@@ -381,9 +376,7 @@ async def get_graph(
     role_filter = _parse_roles(roles)
 
     depth = max(0, min(depth, _MAX_GRAPH_DEPTH))
-    dirs = (
-        ["from"] if direction == "parents" else ["to"] if direction == "children" else ["from", "to"]
-    )
+    dirs = ["from"] if direction == "parents" else ["to"] if direction == "children" else ["from", "to"]
 
     nodes: dict[str, MemoryItem] = {item_id: root}
     edge_keys: set[tuple] = set()
@@ -443,9 +436,7 @@ async def search(
         }
     if mode == "retrieve":
         scope = _scope(scope_kind, scope_key)
-        ctx: RetrievedContext = await knowledge.memory_retrieval.retrieve(
-            Retrieval(goal=q, scope=scope)
-        )
+        ctx: RetrievedContext = await knowledge.memory_retrieval.retrieve(Retrieval(goal=q, scope=scope))
         return {
             "mode": "retrieve",
             "rendered": ctx.rendered,
@@ -494,8 +485,26 @@ async def writeback(
 # --- 8: lens lifecycle (admin) ---------------------------------------
 
 
+@router.post("/lenses/draft")
+async def draft_lens(body: DraftLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
+    scope = _scope(body.scope_kind, body.scope_key)
+    try:
+        markdown = await knowledge.memory_retrieval.lens_registry.draft_lens(body.name, scope)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"markdown": markdown}
+
+
 @router.post("/lenses")
 async def create_lens(body: CreateLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
+    if body.definition_markdown is not None:
+        try:
+            lens = await knowledge.memory_retrieval.lens_registry.create_lens_from_markdown(body.definition_markdown)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        return {"lens": lens_json(lens)}
+    if body.name is None:
+        raise HTTPException(status_code=422, detail="name or definition_markdown required")
     scope = _scope(body.scope_kind, body.scope_key)
     lens = await knowledge.memory_retrieval.lens_registry.create_lens(
         body.name,
@@ -513,9 +522,7 @@ async def set_render_mode(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
 ):
     try:
-        lens = await knowledge.memory_retrieval.lens_registry.set_render_mode(
-            lens_id, LensRenderMode(body.render_mode)
-        )
+        lens = await knowledge.memory_retrieval.lens_registry.set_render_mode(lens_id, LensRenderMode(body.render_mode))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"lens": lens_json(lens)}
@@ -528,9 +535,7 @@ async def edit_criterion(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
 ):
     try:
-        lens = await knowledge.memory_retrieval.lens_registry.edit_criterion(
-            lens_id, body.criterion
-        )
+        lens = await knowledge.memory_retrieval.lens_registry.edit_criterion(lens_id, body.criterion)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"lens": lens_json(lens)}
@@ -557,9 +562,7 @@ async def merge_lenses(body: MergeLensBody, knowledge: KnowledgeRuntime = Depend
     # scope is validated for symmetry; merge re-derives scope from the inputs.
     _scope(body.scope_kind, body.scope_key)
     try:
-        lens = await knowledge.memory_retrieval.lens_registry.merge_lenses(
-            body.lens_ids, body.name, body.criterion
-        )
+        lens = await knowledge.memory_retrieval.lens_registry.merge_lenses(body.lens_ids, body.name, body.criterion)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"lens": lens_json(lens)}

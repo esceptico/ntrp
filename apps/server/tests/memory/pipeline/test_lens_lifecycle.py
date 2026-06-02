@@ -64,17 +64,12 @@ class FakeMembership:
         self.refreshed.append(lens_id)
         return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
-    async def synthesize_criterion(
-        self, name: str, intent: str | None = None
-    ) -> tuple[str, str, str]:
+    async def synthesize_criterion(self, name: str, intent: str | None = None) -> tuple[str, str, str]:
         # Stand-in for the LLM criterion author: deterministic, records nothing
         # about membership (this is text authoring only). Returns
         # (criterion, mode, entity_type).
         self.synth_calls.append(name)
-        is_people = name.lower() in ("people", "persons", "contacts")
-        mode = "grouped_by_subject" if is_people else "flat"
-        entity_type = "person" if is_people else "thing"
-        return f"this item is about {name}", mode, entity_type
+        return f"this item is about {name}", "grouped_by_subject", "thing"
 
     async def coverage(self, lens_id: str, scope: Scope) -> CoverageAdvisory:
         self.coverage_calls.append(lens_id)
@@ -105,6 +100,41 @@ async def _claim(store, content, *, subject="alice"):
 
 
 # --- create: one registry row, zero claims ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_draft_lens_returns_full_markdown_without_persisting(store):
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+
+    draft = await reg.draft_lens("Inventory", USER)
+
+    assert mem.synth_calls == ["Inventory"]
+    assert "directory: Inventory" in draft
+    assert "entity_type: thing" in draft
+    assert "## Belongs" in draft
+    assert "this item is about Inventory" in draft
+    assert await store.list_lenses(scope=USER) == []
+
+
+@pytest.mark.asyncio
+async def test_create_lens_from_approved_markdown_persists_edited_definition(store):
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    draft = await reg.draft_lens("Inventory", USER)
+    approved = draft.replace("directory: Inventory", "directory: Approved records")
+    approved = approved.replace("this item is about Inventory", "approved record entries")
+
+    lens = await reg.create_lens_from_markdown(approved)
+
+    assert lens.id == "approved-records"
+    assert lens.name == "Approved records"
+    assert lens.criterion == "## Belongs\napproved record entries"
+    assert await store.query(scope=USER) == []
+    persisted = await store.get_lens(lens.id)
+    assert persisted is not None
+    assert persisted.name == "Approved records"
+    assert persisted.criterion == lens.criterion
 
 
 @pytest.mark.asyncio
@@ -156,10 +186,10 @@ async def test_create_lens_without_criterion_synthesizes_from_name(store):
     mem = FakeMembership(store)
     reg = _registry(store, mem)
 
-    lens = await reg.create_lens("Regina Volkov", scope=USER)
+    lens = await reg.create_lens("Inventory", scope=USER)
 
-    assert mem.synth_calls == ["Regina Volkov"]
-    assert lens.criterion == "this item is about Regina Volkov"
+    assert mem.synth_calls == ["Inventory"]
+    assert lens.criterion == "this item is about Inventory"
     # Still a view: no claims written.
     assert await store.query(scope=USER) == []
     persisted = await store.get_lens(lens.id)
@@ -187,10 +217,10 @@ async def test_set_render_mode_flips_layout_without_touching_membership(store):
     mem = FakeMembership(store)
     reg = _registry(store, mem)
     c1 = await _claim(store, "alice climbs")
-    lens = await reg.create_lens("People", "about people", USER)
+    lens = await reg.create_lens("Records", "about records", USER)
     assert lens.render_mode is LensRenderMode.FLAT
     # Seed a cached (flat-format) page — what a prior projection would have stored.
-    await store.update_lens(lens.id, page="# People\n## Profile\n- alice climbs.\n")
+    await store.update_lens(lens.id, page="# Records\n## Profile\n- alice climbs.\n")
     assert (await store.get_lens(lens.id)).page is not None
 
     updated = await reg.set_render_mode(lens.id, LensRenderMode.GROUPED_BY_SUBJECT)
@@ -379,14 +409,12 @@ async def test_merge_across_scopes_is_refused(store):
 @pytest.mark.asyncio
 async def test_create_lens_keeps_explicit_render_mode_when_synthesizing(store):
     # When the criterion is auto-synthesized, an explicit caller render_mode must NOT
-    # be overwritten by the synth's (always-flat) mode.
+    # be overwritten by the synth's returned mode.
     from ntrp.memory.models import LensRenderMode
 
     mem = FakeMembership(store)
     reg = _registry(store, mem)
-    lens = await reg.create_lens(
-        "People", None, USER, render_mode=LensRenderMode.GROUPED_BY_SUBJECT
-    )
+    lens = await reg.create_lens("Records", None, USER, render_mode=LensRenderMode.GROUPED_BY_SUBJECT)
     assert lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
     # Default still flat when nothing is passed and a criterion IS given.
     flat = await reg.create_lens("Bugs", "about bugs", USER)

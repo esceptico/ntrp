@@ -162,6 +162,17 @@ export function listMemoryLenses(config: AppConfig, params: ScopeParams = {}) {
   );
 }
 
+export interface DraftLensBody extends ScopeParams {
+  name: string;
+}
+export interface DraftLensResponse {
+  markdown: string;
+}
+
+export function draftLens(config: AppConfig, body: DraftLensBody) {
+  return apiWithConfig<DraftLensResponse>(config, "/admin/memory/lenses/draft", jsonBody(body));
+}
+
 // ── 4 — Get a lens page ─────────────────────────────────────────────────────
 export interface ProjectedGroup {
   subject: string;
@@ -346,8 +357,9 @@ export function writebackLens(config: AppConfig, lensId: string, ops: PageEditOp
 
 // ── 8 — Lens lifecycle (admin) ──────────────────────────────────────────────
 export interface CreateLensBody extends ScopeParams {
-  name: string;
+  name?: string;
   criterion?: string; // optional — synthesized server-side from the name when omitted
+  definition_markdown?: string;
   render_mode?: LensRenderMode;
 }
 

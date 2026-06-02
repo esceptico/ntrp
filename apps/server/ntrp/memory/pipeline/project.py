@@ -47,6 +47,8 @@ from ntrp.memory.pipeline.prompts_project import (
 )
 from ntrp.memory.pipeline.types import (
     LensGenStage as _GenStage,
+)
+from ntrp.memory.pipeline.types import (
     ProgressFn,
     ProjectedGroup,
     ProjectedPage,
@@ -67,7 +69,8 @@ _INDEX_CITE_RE = re.compile(r"\{\{(\d+)\}\}")
 
 
 def _cite_tag(n: int) -> str:
-    return "{{%d}}" % n
+    return f"{{{{{n}}}}}"
+
 
 # NEGATIVE_EXAMPLES_HEADER (ntrp.constants): the write-back REJECT section label.
 # Parsing-only here — it is NOT a subject group, so the cached-grouped
@@ -169,9 +172,7 @@ class LensProjector:
             strong_model=strong_model,
         )
 
-    async def cached_page(
-        self, lens_id: str, *, detail: LensDetailLevel | None = None
-    ) -> ProjectedPage | None:
+    async def cached_page(self, lens_id: str, *, detail: LensDetailLevel | None = None) -> ProjectedPage | None:
         """The materialized page if it is a clean cache hit, else None.
 
         Pure cache read: NO synthesis, NO membership judge. A grouped page rebuilds
@@ -203,6 +204,7 @@ class LensProjector:
         if anchors and len(blocks) != len(set(anchors)):
             return None
         coverage = await self.membership.coverage(lens_id, lens.scope)
+        groups = await self._profile_groups_from_sections(lens.page)
         return ProjectedPage(
             lens_id=lens_id,
             detail=level,
@@ -210,6 +212,7 @@ class LensProjector:
             blocks=blocks,
             synthesized=True,
             coverage=coverage,
+            groups=groups,
         )
 
     async def project(
@@ -252,9 +255,7 @@ class LensProjector:
         blocks = [self._to_block(m) for m in valid]
 
         if grouped:
-            markdown, synthesized, groups = await self._render_grouped(
-                lens, valid, level, progress=progress
-            )
+            markdown, synthesized, groups = await self._render_grouped(lens, valid, level, progress=progress)
             # Cache the concatenated markdown (same `page` slot as flat). It is the
             # human surface AND fully reconstructs the groups on the next read. Only a
             # fully-synthesized structured page is cached, mirroring the flat path.
@@ -277,6 +278,7 @@ class LensProjector:
         if progress is not None and valid:
             progress(_GenStage.SYNTHESIZING)
         markdown, synthesized, rendered = await self._render(lens, valid, level)
+        groups = await self._profile_groups_from_sections(markdown) if synthesized else None
 
         # Only flat `structured` is cached into the registry page.
         if synthesized and level is LensDetailLevel.STRUCTURED and markdown != lens.page:
@@ -293,6 +295,7 @@ class LensProjector:
             blocks=[b for b in blocks if b.claim_id in rendered],
             synthesized=synthesized,
             coverage=coverage,
+            groups=groups,
         )
 
     async def _cached_grouped(self, lens: LensRow, level: LensDetailLevel) -> ProjectedPage | None:
@@ -339,6 +342,32 @@ class LensProjector:
             groups=groups,
         )
 
+    async def _profile_groups_from_sections(self, markdown: str) -> list[ProjectedGroup] | None:
+        """Read generated `## Name` sections as list/profile rows.
+
+        This is structural only: section anchors decide which claims back each row.
+        Generic page sections like `## Profile` stay as prose.
+        """
+        groups: list[ProjectedGroup] = []
+        for title, body in _split_subject_sections(markdown):
+            if title.strip().casefold() in {"profile", "evidence"}:
+                continue
+            anchors = parse_anchors(body)
+            if not anchors:
+                continue
+            blocks = await self._blocks_for(anchors)
+            if not blocks:
+                continue
+            groups.append(
+                ProjectedGroup(
+                    subject=title,
+                    markdown=body,
+                    blocks=blocks,
+                    synthesized=True,
+                )
+            )
+        return groups or None
+
     # --- members from the cache (recompute on miss) ------------------
 
     async def _members(self, lens: LensRow, *, refresh: bool) -> list[MemoryItem]:
@@ -367,9 +396,7 @@ class LensProjector:
                 members.append(m)
         return members
 
-    async def _revalidate(
-        self, members: list[MemoryItem], lens: LensRow
-    ) -> list[MemoryItem]:
+    async def _revalidate(self, members: list[MemoryItem], lens: LensRow) -> list[MemoryItem]:
         """Re-judge current members against the CURRENT criterion. Renders only
         still-`in`. `defer` is treated conservatively as not-rendered."""
         if not members:
@@ -418,20 +445,13 @@ class LensProjector:
             return self._raw_list(lens, members, level), False, all_ids
         return markdown, True, rendered
 
-    async def _synthesize(
-        self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel
-    ) -> str:
+    async def _synthesize(self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel) -> str:
         numbered = "\n".join(
             f"{_cite_tag(n)} subject={m.canonical_subject!r} content={m.content!r} "
             f"prov={m.provenance} corrob={m.corroboration} feedback={m.feedback}"
             for n, m in enumerate(members)
         )
-        user = (
-            f"LENS: name={lens.name!r}\n"
-            f"CRITERION: {lens.criterion!r}\n"
-            f"DETAIL: {level}\n\n"
-            f"MEMBERS:\n{numbered}"
-        )
+        user = f"LENS: name={lens.name!r}\nCRITERION: {lens.criterion!r}\nDETAIL: {level}\n\nMEMBERS:\n{numbered}"
         resp = await self.strong_llm.completion(
             messages=[
                 {"role": "system", "content": PAGE_SYNTH_SYSTEM},
@@ -524,8 +544,7 @@ class LensProjector:
         self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel
     ) -> str:
         numbered = "\n".join(
-            f"{_cite_tag(n)} content={m.content!r} prov={m.provenance} "
-            f"corrob={m.corroboration} feedback={m.feedback}"
+            f"{_cite_tag(n)} content={m.content!r} prov={m.provenance} corrob={m.corroboration} feedback={m.feedback}"
             for n, m in enumerate(claims)
         )
         user = (
@@ -561,9 +580,7 @@ class LensProjector:
         # page body printed the raw markdown as a garbled subtitle.
         return f"# {lens.name}\n"
 
-    def _raw_list(
-        self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel
-    ) -> str:
+    def _raw_list(self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel) -> str:
         """Degraded but honest fallback: header + every member as an anchored bullet."""
         lines = [self._header(lens), "\n## Profile"]
         for m in members:
@@ -572,9 +589,7 @@ class LensProjector:
             lines.append("\n## Evidence")
             for m in members:
                 refs = ", ".join(f"{r.kind}:{r.ref}" for r in m.source_refs) or "—"
-                lines.append(
-                    f"- {_anchor(m.id)} prov={m.provenance} corrob={m.corroboration} refs={refs}"
-                )
+                lines.append(f"- {_anchor(m.id)} prov={m.provenance} corrob={m.corroboration} refs={refs}")
         return "\n".join(lines)
 
     def _empty_page(self, lens: LensRow, level: LensDetailLevel) -> str:

@@ -251,16 +251,16 @@ class RenderedClaim:
 
 @dataclass
 class ProjectedGroup:
-    """One subject bucket of a grouped-by-subject page (presentation only).
+    """One profile row of a projected lens page (presentation only).
 
-    Buckets the page's `in`-claims by the `canonical_subject` claim attribute — a
-    profile per subject (e.g. a person). Grouping is post-membership presentation;
-    it reads only the claim attribute, never an entity row.
+    For grouped-by-subject rendering, this is a canonical_subject bucket. For
+    directory-style flat lenses, this is a generated `## Name` section. Grouping
+    is post-membership presentation.
     """
 
-    subject: str  # canonical_subject value
-    markdown: str  # synthesized profile for this subject
-    blocks: list[RenderedClaim]  # this subject's claims; write-back diffs by id
+    subject: str  # display label for this profile row
+    markdown: str  # synthesized profile body
+    blocks: list[RenderedClaim]  # row claims; write-back diffs by id
     synthesized: bool  # False = degraded raw-list fallback for this bucket
 
 
@@ -272,7 +272,7 @@ class ProjectedPage:
     blocks: list[RenderedClaim]  # served spine; write-back diffs against this
     synthesized: bool  # False = degraded raw-list fallback (never blank)
     coverage: CoverageAdvisory | None
-    groups: list[ProjectedGroup] | None = None  # set only when render_mode groups
+    groups: list[ProjectedGroup] | None = None  # profile rows when the page is row-shaped
 
 
 class PageEditKind(StrEnum):

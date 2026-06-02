@@ -166,9 +166,7 @@ async def test_defer_escalates_to_strong_and_in_becomes_member(store):
 async def test_only_defers_escalate_not_every_item(store):
     lens = await _lens(store, name="Food", criterion="claims about user food prefs")
     cs = [await _claim(store, f"food fact {i}") for i in range(4)]
-    cheap = FakeCompletionClient(
-        queue=[_batch((0, "in"), (1, "out"), (2, "defer"), (3, "out"))]
-    )
+    cheap = FakeCompletionClient(queue=[_batch((0, "in"), (1, "out"), (2, "defer"), (3, "out"))])
     strong = FakeCompletionClient(queue=[_batch((0, "out"))])
 
     m = _membership(store, cheap, strong)
@@ -184,10 +182,7 @@ async def test_incremental_judge_calls_bounded_by_touched_lenses(store):
     # Many lenses + many claims, but recall + one batched call per touched lens
     # means cheap judge calls <= number of distinct lenses recalled. The fan-out
     # is bounded by MEMBERSHIP_CANDIDATE_K, never by corpus size.
-    lenses = [
-        await _lens(store, name=f"topic {i}", criterion=f"claims about subject {i}")
-        for i in range(12)
-    ]
+    lenses = [await _lens(store, name=f"topic {i}", criterion=f"claims about subject {i}") for i in range(12)]
     claims = [await _claim(store, f"alpha beta gamma fact {i}") for i in range(20)]
     # Default-out for every batch, regardless of count.
     cheap = FakeCompletionClient(default=MembershipBatch())
@@ -216,9 +211,7 @@ async def test_incremental_drops_verdicts_if_criterion_edited_mid_pass(store):
             if not self.edited:
                 self.edited = True
                 await store.update_lens(lens.id, criterion="claims about bananas")
-            return await super().completion(
-                messages=messages, model=model, response_format=response_format, **kwargs
-            )
+            return await super().completion(messages=messages, model=model, response_format=response_format, **kwargs)
 
     m = _membership(store, EditingJudge())
     await m.score_into_active_lenses([c.id], USER)
@@ -252,7 +245,9 @@ async def test_new_in_member_nulls_cached_page(store):
     # newly-scored IN claim must invalidate the cached page (Lens spec §6: re-derive
     # when members change) — else the page under-reports its own membership.
     lens = await _lens(
-        store, name="A", criterion="claims about apples",
+        store,
+        name="A",
+        criterion="claims about apples",
         page="# A\n## Profile\n_existing_\n",
     )
     assert (await store.get_lens(lens.id)).page is not None
@@ -284,9 +279,7 @@ async def test_refresh_drops_verdicts_if_criterion_edited_mid_pass(store):
                 # Simulate a concurrent edit_criterion landing during the judge await:
                 # bump the lens definition (updated_at) the way a criterion edit does.
                 await store.update_lens(lens.id, criterion="claims about bananas")
-            return await super().completion(
-                messages=messages, model=model, response_format=response_format, **kwargs
-            )
+            return await super().completion(messages=messages, model=model, response_format=response_format, **kwargs)
 
     m = _membership(store, EditingJudge())
     await m.refresh_lens_cache(lens.id)
@@ -305,7 +298,7 @@ async def test_rescoring_existing_in_member_leaves_page(store):
     await m.score_into_active_lenses([c.id], USER)  # first IN
 
     # Cache a page now that the member exists, then re-score the same claim.
-    await store.update_lens(lens.id, page="# A\n## Profile\n- apples <!--claim:%s-->\n" % c.id)
+    await store.update_lens(lens.id, page=f"# A\n## Profile\n- apples <!--claim:{c.id}-->\n")
     await m.score_into_active_lenses([c.id], USER)  # already IN → no new member
 
     assert (await store.get_lens(lens.id)).page is not None  # untouched
@@ -493,14 +486,14 @@ async def test_synthesize_criterion_always_flat_per_spec(store):
     cheap = FakeCompletionClient(
         queue=[
             SynthesizedCriterion(
-                belongs="A specific individual the user knows, or a relationship between people.",
-                profile_shape=["Role", "Relationship to the user"],
+                belongs="Records matching the requested directory.",
+                profile_shape=["Known facts", "Open questions"],
             )
         ]
     )
     m = _membership(store, cheap)
 
-    crit, mode, _entity_type = await m.synthesize_criterion("People")
+    _crit, mode, _entity_type = await m.synthesize_criterion("Records")
 
     assert mode == "flat"  # synthesis never produces a grouped layout
 
@@ -509,10 +502,10 @@ async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
     cheap = FakeCompletionClient(default="not json at all")  # parse fail
     m = _membership(store, cheap)
 
-    crit, mode, _entity_type = await m.synthesize_criterion("Regina Volkov")
+    crit, mode, _entity_type = await m.synthesize_criterion("Inventory")
 
     assert "## Belongs" in crit
-    assert "Regina Volkov" in crit
+    assert "Inventory" in crit
     assert mode == "flat"
 
 

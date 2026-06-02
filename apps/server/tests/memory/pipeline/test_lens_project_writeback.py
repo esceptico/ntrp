@@ -24,6 +24,7 @@ import uuid
 import aiosqlite
 import pytest_asyncio
 
+from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
 from ntrp.memory.models import (
     Feedback,
     LensDetailLevel,
@@ -41,7 +42,6 @@ from ntrp.memory.pipeline.project import LensProjector, parse_anchors
 from ntrp.memory.pipeline.prompts_project import PageSynthesis
 from ntrp.memory.pipeline.prompts_reconcile import MembershipBatch, MembershipVote
 from ntrp.memory.pipeline.types import PageEditKind, PageEditOp
-from ntrp.constants import NEGATIVE_EXAMPLES_HEADER
 from ntrp.memory.pipeline.writeback import LensWriteBack
 from ntrp.memory.store import MemoryStore
 from tests.conftest import FakeCompletionClient, FakeEmbedder
@@ -133,10 +133,8 @@ def test_inject_anchors_ignores_literal_brackets_in_prose():
     # wrong claim's anchor or silently deleted.
     from ntrp.memory.pipeline.project import _inject_anchors
 
-    m0 = MemoryItem(id="a" * 32, content="x", canonical_subject="Tim", scope=USER,
-                    provenance=Provenance.RECORDED)
-    m1 = MemoryItem(id="b" * 32, content="y", canonical_subject="Tim", scope=USER,
-                    provenance=Provenance.RECORDED)
+    m0 = MemoryItem(id="a" * 32, content="x", canonical_subject="Tim", scope=USER, provenance=Provenance.RECORDED)
+    m1 = MemoryItem(id="b" * 32, content="y", canonical_subject="Tim", scope=USER, provenance=Provenance.RECORDED)
     md = "See table [1] in the appendix {{0}}. Also relevant {{1}}."
 
     out, rendered = _inject_anchors(md, [m0, m1])
@@ -174,9 +172,7 @@ async def _lens(
 
 async def _member(store, lens_id, claim):
     """Seed an `in` membership-cache row — the projection's member set."""
-    await store.put_membership(
-        [MembershipVerdict(lens_id=lens_id, claim_id=claim.id, decision=MembershipDecision.IN)]
-    )
+    await store.put_membership([MembershipVerdict(lens_id=lens_id, claim_id=claim.id, decision=MembershipDecision.IN)])
 
 
 async def _member_ids(store, lens_id):
@@ -263,12 +259,62 @@ async def test_project_renders_anchored_bullets_and_caches(store):
     assert c1.id in refreshed.page
 
 
+async def test_flat_lens_sections_render_as_profile_list(store):
+    lens = await _lens(store, name="Records", criterion="approved record entries")
+    alpha = await _claim(store, "alpha marker belongs in the directory", canonical_subject="User")
+    beta = await _claim(store, "beta marker belongs in the directory", canonical_subject="User")
+    await _member(store, lens.id, alpha)
+    await _member(store, lens.id, beta)
+
+    cheap = KeywordJudge("alpha", "beta")
+    synth_md = (
+        "# Records\n"
+        f"## Record A\n- Alpha marker. <!--claim:{alpha.id}-->\n\n"
+        f"## Record B\n- Beta marker. <!--claim:{beta.id}-->\n"
+    )
+    strong = FakeCompletionClient(queue=[_synth(synth_md)])
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert page.groups is not None
+    assert [g.subject for g in page.groups] == ["Record A", "Record B"]
+    assert {b.claim_id for b in page.groups[0].blocks} == {alpha.id}
+    assert {b.claim_id for b in page.groups[1].blocks} == {beta.id}
+
+
+async def test_flat_lens_cached_sections_render_as_profile_list(store):
+    alpha = await _claim(store, "alpha marker belongs in the directory", canonical_subject="User")
+    beta = await _claim(store, "beta marker belongs in the directory", canonical_subject="User")
+    page_md = (
+        "# Records\n"
+        f"## Record A\n- Alpha marker. <!--claim:{alpha.id}-->\n\n"
+        f"## Record B\n- Beta marker. <!--claim:{beta.id}-->\n"
+    )
+    lens = await _lens(store, name="Records", criterion="approved record entries", page=page_md)
+    await _member(store, lens.id, alpha)
+    await _member(store, lens.id, beta)
+
+    cheap = FakeCompletionClient()
+    strong = FakeCompletionClient()
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id)
+
+    assert cheap.calls == []
+    assert strong.calls == []
+    assert page.markdown == page_md
+    assert page.groups is not None
+    assert [g.subject for g in page.groups] == ["Record A", "Record B"]
+    assert {b.claim_id for b in page.groups[0].blocks} == {alpha.id}
+    assert {b.claim_id for b in page.groups[1].blocks} == {beta.id}
+    assert {b.claim_id for b in page.blocks} == {alpha.id, beta.id}
+
+
 async def test_project_cache_hit_costs_zero_synthesis(store):
     c1 = await _claim(store, "user runs 5k")
     page_md = f"# Health\n## Profile\n- Runs 5k. <!--claim:{c1.id}-->\n"
-    lens = await _lens(
-        store, name="Health", criterion="health", page=page_md, detail=LensDetailLevel.STRUCTURED
-    )
+    lens = await _lens(store, name="Health", criterion="health", page=page_md, detail=LensDetailLevel.STRUCTURED)
     await _member(store, lens.id, c1)
 
     cheap = FakeCompletionClient()
@@ -282,6 +328,7 @@ async def test_project_cache_hit_costs_zero_synthesis(store):
     # Cache hit: no re-validation judge call, no synthesis call.
     assert cheap.calls == []
     assert strong.calls == []
+    assert page.groups is None
     assert {b.claim_id for b in page.blocks} == {c1.id}
 
 
@@ -293,35 +340,35 @@ async def test_grouped_projection_buckets_by_canonical_subject(store):
 
     lens = await _lens(
         store,
-        name="People",
-        criterion="claims about people",
+        name="Subjects",
+        criterion="claims about subjects",
         render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
     )
-    # Regina has two claims, Kevin one -> Regina bucket leads (largest first).
-    r1 = await _claim(store, "Regina is CEO of ThirdLayer", canonical_subject="Regina")
-    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
-    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
-    for c in (r1, r2, k1):
+    # Alpha has two claims, Beta one -> Alpha bucket leads (largest first).
+    a1 = await _claim(store, "Alpha owns item one", canonical_subject="Alpha")
+    a2 = await _claim(store, "Alpha owns item two", canonical_subject="Alpha")
+    b1 = await _claim(store, "Beta owns item three", canonical_subject="Beta")
+    for c in (a1, a2, b1):
         await _member(store, lens.id, c)
 
-    cheap = KeywordJudge("regina", "kevin")  # all three stay `in`
+    cheap = KeywordJudge("alpha", "beta")  # all three stay `in`
     # One profile-synthesis call per subject bucket; echo that bucket's anchors.
-    regina_md = f"- CEO of ThirdLayer. <!--claim:{r1.id}-->\n- Judged a hackathon. <!--claim:{r2.id}-->"
-    kevin_md = f"- An engineer. <!--claim:{k1.id}-->"
-    strong = FakeCompletionClient(queue=[_synth(regina_md), _synth(kevin_md)])
+    alpha_md = f"- Owns item one. <!--claim:{a1.id}-->\n- Owns item two. <!--claim:{a2.id}-->"
+    beta_md = f"- Owns item three. <!--claim:{b1.id}-->"
+    strong = FakeCompletionClient(queue=[_synth(alpha_md), _synth(beta_md)])
     proj = _projector(store, cheap=cheap, strong=strong)
 
     page = await proj.project(lens.id)
 
     assert page.groups is not None
     subjects = [g.subject for g in page.groups]
-    assert subjects == ["Regina", "Kevin"]  # largest bucket first
-    regina = page.groups[0]
-    assert {b.claim_id for b in regina.blocks} == {r1.id, r2.id}
-    assert regina.synthesized is True
+    assert subjects == ["Alpha", "Beta"]  # largest bucket first
+    alpha = page.groups[0]
+    assert {b.claim_id for b in alpha.blocks} == {a1.id, a2.id}
+    assert alpha.synthesized is True
     # Concatenated page markdown carries per-subject headings + all anchors.
-    assert "## Regina" in page.markdown and "## Kevin" in page.markdown
-    assert set(parse_anchors(page.markdown)) == {r1.id, r2.id, k1.id}
+    assert "## Alpha" in page.markdown and "## Beta" in page.markdown
+    assert set(parse_anchors(page.markdown)) == {a1.id, a2.id, b1.id}
     # Grouped output is cached into the `page` slot as markdown (Lens spec §6).
     cached = (await store.get_lens(lens.id)).page
     assert cached == page.markdown
@@ -333,22 +380,22 @@ async def test_grouped_cache_hit_costs_zero_synthesis(store):
     """
     from ntrp.memory.models import LensRenderMode
 
-    r1 = await _claim(store, "Regina is CEO", canonical_subject="Regina")
-    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
-    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
+    a1 = await _claim(store, "Alpha owns item one", canonical_subject="Alpha")
+    a2 = await _claim(store, "Alpha owns item two", canonical_subject="Alpha")
+    b1 = await _claim(store, "Beta owns item three", canonical_subject="Beta")
     page_md = (
-        "# People\n*Lens · criterion: claims about people*\n\n"
-        f"## Regina\n- CEO. <!--claim:{r1.id}-->\n- Judged a hackathon. <!--claim:{r2.id}-->\n\n"
-        f"## Kevin\n- An engineer. <!--claim:{k1.id}-->"
+        "# Subjects\n*Lens · criterion: claims about subjects*\n\n"
+        f"## Alpha\n- Owns item one. <!--claim:{a1.id}-->\n- Owns item two. <!--claim:{a2.id}-->\n\n"
+        f"## Beta\n- Owns item three. <!--claim:{b1.id}-->"
     )
     lens = await _lens(
         store,
-        name="People",
-        criterion="claims about people",
+        name="Subjects",
+        criterion="claims about subjects",
         page=page_md,
         render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
     )
-    for c in (r1, r2, k1):
+    for c in (a1, a2, b1):
         await _member(store, lens.id, c)
 
     cheap = FakeCompletionClient()
@@ -363,10 +410,10 @@ async def test_grouped_cache_hit_costs_zero_synthesis(store):
     assert page.synthesized is True
     assert page.markdown == page_md
     # Groups + blocks reconstructed from the cached markdown's `## {subject}` sections.
-    assert [g.subject for g in page.groups] == ["Regina", "Kevin"]
-    assert {b.claim_id for b in page.groups[0].blocks} == {r1.id, r2.id}
-    assert {b.claim_id for b in page.groups[1].blocks} == {k1.id}
-    assert {b.claim_id for b in page.blocks} == {r1.id, r2.id, k1.id}
+    assert [g.subject for g in page.groups] == ["Alpha", "Beta"]
+    assert {b.claim_id for b in page.groups[0].blocks} == {a1.id, a2.id}
+    assert {b.claim_id for b in page.groups[1].blocks} == {b1.id}
+    assert {b.claim_id for b in page.blocks} == {a1.id, a2.id, b1.id}
 
 
 async def test_grouped_cache_skips_negative_examples_section(store):
@@ -374,26 +421,26 @@ async def test_grouped_cache_skips_negative_examples_section(store):
     cached-grouped reconstruction must ignore it (it carries no anchors anyway)."""
     from ntrp.memory.models import LensRenderMode
 
-    r1 = await _claim(store, "Regina is CEO", canonical_subject="Regina")
+    a1 = await _claim(store, "Alpha owns item one", canonical_subject="Alpha")
     page_md = (
-        "# People\n*Lens · criterion: claims about people*\n\n"
-        f"## Regina\n- CEO. <!--claim:{r1.id}-->\n\n"
+        "# Subjects\n*Lens · criterion: claims about subjects*\n\n"
+        f"## Alpha\n- Owns item one. <!--claim:{a1.id}-->\n\n"
         f"{NEGATIVE_EXAMPLES_HEADER}\n- user drives a tesla\n"
     )
     lens = await _lens(
         store,
-        name="People",
-        criterion="claims about people",
+        name="Subjects",
+        criterion="claims about subjects",
         page=page_md,
         render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
     )
-    await _member(store, lens.id, r1)
+    await _member(store, lens.id, a1)
 
     proj = _projector(store, cheap=FakeCompletionClient(), strong=FakeCompletionClient())
     page = await proj.project(lens.id)
 
-    assert [g.subject for g in page.groups] == ["Regina"]
-    assert {b.claim_id for b in page.blocks} == {r1.id}
+    assert [g.subject for g in page.groups] == ["Alpha"]
+    assert {b.claim_id for b in page.blocks} == {a1.id}
 
 
 async def test_grouped_profile_synthesis_failure_degrades_that_bucket(store):
@@ -401,14 +448,14 @@ async def test_grouped_profile_synthesis_failure_degrades_that_bucket(store):
 
     lens = await _lens(
         store,
-        name="People",
-        criterion="claims about people",
+        name="Subjects",
+        criterion="claims about subjects",
         render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
     )
-    c = await _claim(store, "Regina runs the company", canonical_subject="Regina")
+    c = await _claim(store, "Alpha owns item one", canonical_subject="Alpha")
     await _member(store, lens.id, c)
 
-    cheap = KeywordJudge("regina")
+    cheap = KeywordJudge("alpha")
     strong = FakeCompletionClient(queue=[""])  # empty -> profile synth raises
     proj = _projector(store, cheap=cheap, strong=strong)
 
@@ -418,7 +465,7 @@ async def test_grouped_profile_synthesis_failure_degrades_that_bucket(store):
     grp = page.groups[0]
     assert grp.synthesized is False  # degraded to raw anchored list
     assert c.id in set(parse_anchors(grp.markdown))
-    assert "Regina runs the company" in grp.markdown
+    assert "Alpha owns item one" in grp.markdown
 
 
 # --- §9.5 synthesis failure -> raw anchored list ---------------------
@@ -473,7 +520,7 @@ class _IndexCitingSynth:
             except ValueError:
                 continue
             # Clean prose + the index tag. No opaque anchor anywhere.
-            lines.append("- A faithfully synthesized line. {{%d}}" % idx)
+            lines.append(f"- A faithfully synthesized line. {{{{{idx}}}}}")
         md = "## Profile\n" + "\n".join(lines)
         assert "<!--claim:" not in md  # the stub provably drops opaque anchors
         return completion_response(_synth(md).model_dump_json())
@@ -509,17 +556,17 @@ async def test_grouped_profile_without_anchor_echo_still_renders(store):
 
     lens = await _lens(
         store,
-        name="People",
-        criterion="claims about people",
+        name="Subjects",
+        criterion="claims about subjects",
         render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
     )
-    r1 = await _claim(store, "Regina is CEO of ThirdLayer", canonical_subject="Regina")
-    r2 = await _claim(store, "Regina judged a hackathon", canonical_subject="Regina")
-    k1 = await _claim(store, "Kevin is an engineer", canonical_subject="Kevin")
-    for c in (r1, r2, k1):
+    a1 = await _claim(store, "Alpha owns item one", canonical_subject="Alpha")
+    a2 = await _claim(store, "Alpha owns item two", canonical_subject="Alpha")
+    b1 = await _claim(store, "Beta owns item three", canonical_subject="Beta")
+    for c in (a1, a2, b1):
         await _member(store, lens.id, c)
 
-    cheap = KeywordJudge("regina", "kevin")
+    cheap = KeywordJudge("alpha", "beta")
     strong = _IndexCitingSynth()  # one call per bucket, cites by index, no anchors
     proj = _projector(store, cheap=cheap, strong=strong)
 
@@ -527,7 +574,7 @@ async def test_grouped_profile_without_anchor_echo_still_renders(store):
 
     assert page.groups is not None
     assert all(g.synthesized for g in page.groups)  # no raw fallback
-    assert set(parse_anchors(page.markdown)) == {r1.id, r2.id, k1.id}
+    assert set(parse_anchors(page.markdown)) == {a1.id, a2.id, b1.id}
     assert "<!--claim:" in page.markdown
 
 
@@ -723,9 +770,7 @@ async def test_add_routes_through_write_seam(store):
     seam = FakeWriteSeam(store)
     wb = LensWriteBack(store, seam, membership=None, projector=_projector(store))
 
-    res = await wb.apply(
-        lens.id, [PageEditOp(kind=PageEditKind.ADD, new_text="user sleeps 8 hours")]
-    )
+    res = await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.ADD, new_text="user sleeps 8 hours")])
 
     assert any(k is PageEditKind.ADD for k, _ in res.applied)
     # the ONLY prose->claim translation went through WriteSeam, nowhere else.
@@ -768,9 +813,7 @@ async def test_stale_anchor_op_is_rejected(store):
     await store.invalidate(c1.id, status=Status.SUPERSEDED)  # claim moved out from under us
     wb = _writeback(store)
 
-    res = await wb.apply(
-        lens.id, [PageEditOp(kind=PageEditKind.EDIT, claim_id=c1.id, new_text="user runs 10k")]
-    )
+    res = await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.EDIT, claim_id=c1.id, new_text="user runs 10k")])
 
     assert res.applied == []
     assert len(res.rejected) == 1
