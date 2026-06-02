@@ -6,6 +6,8 @@ from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger, Trigger
 from ntrp.constants import (
+    AUTOMATION_SUGGESTER_DAILY_AT,
+    BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
     BUILTIN_PATTERN_FINDER_DAILY_ID,
     BUILTIN_SKILL_INDUCER_DAILY_ID,
 )
@@ -45,6 +47,16 @@ BUILTINS = [
             TimeTrigger(at="06:00", days="daily"),
         ],
         handler="skill_inducer_daily",
+        auto_approve=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
+        name="Automation Suggester Daily",
+        description="Draft contextual automation suggestions from memory, chats, and actions",
+        triggers=[
+            TimeTrigger(at=AUTOMATION_SUGGESTER_DAILY_AT, days="daily"),
+        ],
+        handler="automation_suggester_daily",
         auto_approve=True,
     ),
 ]

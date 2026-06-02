@@ -150,7 +150,7 @@ export function BudgetDial() {
         }
         className={clsx(
           "inline-flex items-center gap-1.5 h-7 px-2 rounded-full",
-          "text-xs text-muted hover:bg-surface-soft hover:text-ink transition-colors",
+          "text-xs text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97]",
           open && "bg-surface-soft text-ink",
         )}
       >
@@ -224,6 +224,7 @@ export function BudgetDial() {
                 bottom: coords.bottom,
                 right: coords.right,
                 zIndex: 60,
+                transformOrigin: "bottom right",
               }}
               className="glass-surface surface-popover w-[300px] p-3 text-sm"
             >

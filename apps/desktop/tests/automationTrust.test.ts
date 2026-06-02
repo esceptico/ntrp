@@ -14,7 +14,7 @@ function automation(patch: Partial<Automation>): Automation {
     last_run_at: null,
     next_run_at: null,
     last_result: null,
-    writable: false,
+    auto_approve: false,
     running_since: null,
     handler: null,
     builtin: false,
@@ -29,9 +29,9 @@ test("labels internal knowledge automation trust level", () => {
   expect(automationTrustLabel(automation({ handler: "knowledge_reflection" }))).toBe("learns context");
 });
 
-test("marks generic writable automations as higher trust", () => {
-  const writable = automation({ writable: true });
+test("marks generic auto-approve automations as higher trust", () => {
+  const writable = automation({ auto_approve: true });
 
-  expect(automationTrustLabel(writable)).toBe("can write");
+  expect(automationTrustLabel(writable)).toBe("auto-approve");
   expect(automationTrustTone(writable)).toBe("bad");
 });

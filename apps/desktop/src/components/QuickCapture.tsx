@@ -28,15 +28,12 @@ export function QuickCapture() {
 
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  // `present` drives AnimatePresence — when it flips false we play an
-  // exit animation, and only fire the IPC dismiss (submit or close) once
-  // the animation completes. This is what keeps the card from vanishing
-  // mid-flick: the Electron `quick:submit` handler hides the window
-  // immediately, so we have to animate BEFORE the IPC, not after.
+  // `present` drives AnimatePresence so the IPC dismiss (submit or close)
+  // fires after React removes the card. The quick surface is keyboard
+  // summoned, so entry/exit stay instant rather than animated.
   const [present, setPresent] = useState(true);
-  // Encodes the intent behind the exit so we can play the right motion
-  // and fire the matching IPC in onExitComplete. submit = decisive flick
-  // upward (intent sent); close = settle in place (intent withdrawn).
+  // Encodes the intent behind the removal so onExitComplete can fire the
+  // matching IPC.
   type ExitReason = "submit" | "close" | null;
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   // Held during the exit animation so we can fire submit with the
@@ -101,35 +98,8 @@ export function QuickCapture() {
         {present && (
           <motion.div
             key="card"
-            initial={{ y: -16, opacity: 0, scale: 0.96 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            // Entry uses a spring — the card "arrives" with a subtle
-            // settle. Exit uses a tighter ease-out — leaving should feel
-            // decisive, not bouncy. Direction encodes intent: submit
-            // flicks upward (sent), close fades in place (withdrawn).
-            exit={
-              exitReason === "submit"
-                ? {
-                    y: -10,
-                    opacity: 0,
-                    scale: 0.97,
-                    transition: { duration: 0.14, ease: [0.4, 0, 1, 1] },
-                  }
-                : {
-                    y: 0,
-                    opacity: 0,
-                    scale: 0.96,
-                    transition: { duration: 0.11, ease: [0.4, 0, 1, 1] },
-                  }
-            }
-            transition={{
-              type: "spring",
-              stiffness: 520,
-              damping: 36,
-              mass: 0.7,
-              opacity: { duration: 0.16, ease: [0.22, 1, 0.36, 1] },
-            }}
-            style={{ willChange: "transform, opacity" }}
+            initial={false}
+            exit={{ opacity: 0, transition: { duration: 0 } }}
             className="quick-capture-card flex items-center gap-2.5 rounded-[12px] px-3.5"
           >
             <span
@@ -164,7 +134,7 @@ export function QuickCapture() {
               disabled={disabled}
               aria-label="Send"
               className={clsx(
-                "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-all",
+                "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[opacity,transform] duration-check ease-out",
                 disabled
                   ? "text-faint"
                   : "bg-ink text-on-ink hover:opacity-90 active:scale-[0.94]",

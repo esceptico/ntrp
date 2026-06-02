@@ -420,7 +420,7 @@ async def get_graph(
 async def search(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
     q: str = Query(..., min_length=1),
-    scope_kind: str = "user",
+    scope_kind: str | None = None,
     scope_key: str | None = None,
     limit: int = Query(default=20, ge=1, le=200),
     include_inactive: bool = False,
@@ -428,7 +428,9 @@ async def search(
 ):
     if mode == "fts":
         store = knowledge.memory_search or knowledge.memory
-        scope = _scope(scope_kind, scope_key)
+        # Omitted scope_kind -> no scope filter (whole pool), so evidence search
+        # can surface any claim to Include. An explicit scope_kind still filters.
+        scope = _scope(scope_kind, scope_key) if scope_kind else None
         items = await store.search(q, limit=limit, include_inactive=include_inactive, scope=scope)
         return {
             "mode": "fts",
@@ -436,7 +438,7 @@ async def search(
             "degraded": not store.has_fts,
         }
     if mode == "retrieve":
-        scope = _scope(scope_kind, scope_key)
+        scope = _scope(scope_kind or "user", scope_key)
         ctx: RetrievedContext = await knowledge.memory_retrieval.retrieve(Retrieval(goal=q, scope=scope))
         return {
             "mode": "retrieve",
@@ -463,7 +465,7 @@ async def writeback(
     ops: list[PageEditOp] = []
     for op in body.ops:
         kind = PageEditKind(op.kind)
-        if kind in (PageEditKind.EDIT, PageEditKind.REJECT, PageEditKind.ACCEPT) and not op.claim_id:
+        if kind in (PageEditKind.EDIT, PageEditKind.REJECT, PageEditKind.ACCEPT, PageEditKind.INCLUDE) and not op.claim_id:
             raise HTTPException(status_code=422, detail=f"{op.kind} requires claim_id")
         if kind is PageEditKind.EDIT_CRITERION and not op.new_text:
             raise HTTPException(status_code=422, detail=f"{op.kind} requires new_text")

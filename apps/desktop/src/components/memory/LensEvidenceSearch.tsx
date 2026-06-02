@@ -1,205 +1,286 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ExternalLink, Loader2, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import type { AppConfig } from "../../api";
-import {
-  searchMemory,
-  type Lens,
-  type MemoryItem,
-} from "../../api/memoryItems";
+import { searchMemory, writebackLens, type Lens, type MemoryItem } from "../../api/memoryItems";
 import { ICON } from "../../lib/icons";
+import { MOTION, SPRING_LAYOUT, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { Badge } from "../Badge";
-import { GhostBtn, PrimaryBtn } from "./shared";
+import { GhostBtn, SearchInput } from "./shared";
+
+const DEBOUNCE = 220;
+const LIMIT = 15;
 
 interface LensEvidenceSearchProps {
   config: AppConfig;
   lens: Lens;
-  subject?: string;
   memberIds: Set<string>;
   onEditCriterion: () => void;
   onPeekClaim: (claimId: string) => void;
   onRefresh: () => void;
+  /** A group header bumps `nonce` to open the panel seeded with a subject term. */
+  seed?: { term: string; nonce: number };
 }
 
 export function LensEvidenceSearch({
   config,
   lens,
-  subject,
   memberIds,
   onEditCriterion,
   onPeekClaim,
   onRefresh,
+  seed,
 }: LensEvidenceSearchProps) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(initialQuery(subject, lens.name));
+  const [query, setQuery] = useState("");
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [includingId, setIncludingId] = useState<string | null>(null);
+  const [includedIds, setIncludedIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
-  const queryRef = useRef(query);
-  const requestSeq = useRef(0);
-  const mounted = useRef(true);
-  const label = subject ? "Find evidence" : "Find entries";
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // A group header opens the single search seeded with its subject term.
   useEffect(() => {
-    queryRef.current = query;
-  }, [query]);
+    if (!seed || seed.nonce === 0) return;
+    setOpen(true);
+    setQuery(seed.term);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.nonce]);
 
+  // Refocus on (re)seed — autoFocus only fires on first mount, so a reseed while
+  // the panel is already open needs an explicit focus (effects run post-commit, so
+  // the input is already mounted; focusing it also scrolls it into view).
   useEffect(() => {
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+    if (!open || !seed || seed.nonce === 0) return;
+    inputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, seed?.nonce]);
 
-  const candidates = useMemo(() => {
-    if (subject) return items.map((item) => ({ item, count: 1, inView: memberIds.has(item.id) }));
-    const bySubject = new Map<string, { item: MemoryItem; count: number; inView: boolean }>();
-    for (const item of items) {
-      const current = bySubject.get(item.canonical_subject);
-      if (current) {
-        current.count += 1;
-        current.inView &&= memberIds.has(item.id);
-      } else {
-        bySubject.set(item.canonical_subject, { item, count: 1, inView: memberIds.has(item.id) });
-      }
-    }
-    return [...bySubject.values()];
-  }, [items, memberIds, subject]);
-
-  const run = () => {
+  // Live, debounced, whole-pool search (mirrors ClaimsView). Stale responses are
+  // dropped via the `alive` flag; an empty query clears results without a request.
+  useEffect(() => {
+    if (!open) return;
     const q = query.trim();
-    if (!q || busy) return;
-    const seq = requestSeq.current + 1;
-    requestSeq.current = seq;
+    if (!q) {
+      setItems([]);
+      setSearched(false);
+      setBusy(false);
+      setError(null);
+      return;
+    }
     setBusy(true);
     setError(null);
-    searchMemory(config, {
-      q,
-      mode: "fts",
-      limit: 12,
-      scope_kind: lens.scope.kind,
-      scope_key: lens.scope.key ?? undefined,
-    })
-      .then((result) => {
-        if (!mounted.current || seq !== requestSeq.current || queryRef.current.trim() !== q) return;
-        setItems(result.mode === "fts" ? result.items : result.items.map(({ item }) => item));
-        setSearched(true);
+    let alive = true;
+    const handle = setTimeout(() => {
+      searchMemory(config, { q, mode: "fts", limit: LIMIT })
+        .then((r) => {
+          if (!alive) return;
+          setItems(r.mode === "fts" ? r.items : r.items.map(({ item }) => item));
+          setSearched(true);
+        })
+        .catch((e) => {
+          if (alive) setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (alive) setBusy(false);
+        });
+    }, DEBOUNCE);
+    return () => {
+      alive = false;
+      clearTimeout(handle);
+    };
+  }, [query, config, open]);
+
+  const results = useMemo(
+    () =>
+      items.map((item) => ({
+        item,
+        inView: memberIds.has(item.id) || includedIds.has(item.id),
+        included: includedIds.has(item.id),
+      })),
+    [items, memberIds, includedIds],
+  );
+
+  const include = (item: MemoryItem) => {
+    if (memberIds.has(item.id) || includedIds.has(item.id) || includingId) return;
+    setIncludingId(item.id);
+    setError(null);
+    writebackLens(config, lens.id, [{ kind: "include", claim_id: item.id }])
+      .then(() => {
+        setIncludedIds((cur) => new Set(cur).add(item.id));
+        onRefresh();
       })
       .catch((e) => {
-        if (!mounted.current || seq !== requestSeq.current || queryRef.current.trim() !== q) return;
         setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {
-        if (mounted.current && seq === requestSeq.current) setBusy(false);
+        setIncludingId(null);
       });
   };
 
   const close = () => {
-    requestSeq.current += 1;
-    setBusy(false);
     setOpen(false);
+    setError(null);
   };
 
-  if (!open) {
-    return (
-      <div className="mt-2">
-        <GhostBtn onClick={() => setOpen(true)} title={subject ? `Find evidence for ${subject}` : "Find entries"}>
-          <Search size={ICON.XS} strokeWidth={2.2} />
-          <span>{label}</span>
-          {subject && <span className="max-w-[180px] truncate text-xs text-faint">{subject}</span>}
-        </GhostBtn>
-      </div>
-    );
-  }
+  const trimmed = query.trim();
 
   return (
-    <div className="glass-surface surface-popover mt-2 p-2.5">
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            size={ICON.XS}
-            strokeWidth={2.2}
-            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-faint"
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") run();
-              if (e.key === "Escape") close();
-            }}
-            placeholder={subject ? "Search this profile" : "Search memory"}
-            spellCheck={false}
-            className="input-field h-7 pl-7 text-sm"
-            style={{ paddingLeft: "2rem" }}
-          />
-        </div>
-        <PrimaryBtn onClick={run} disabled={busy || !query.trim()}>
-          {busy ? "Searching..." : "Search"}
-        </PrimaryBtn>
-      </div>
-
-      {error && <div className="mt-2 text-xs text-bad">{error}</div>}
-
-      {searched && candidates.length === 0 && !error && (
-        <div className="py-4 text-center text-sm italic text-faint">No claims found.</div>
+    <div className="mt-2">
+      {!open && (
+        <GhostBtn onClick={() => setOpen(true)} title="Find entries">
+          <Search size={ICON.XS} strokeWidth={2.2} />
+          <span>Find entries</span>
+        </GhostBtn>
       )}
-
-      {candidates.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
-          {candidates.map(({ item, count, inView }) => {
-            return (
-              <div
-                key={item.id}
-                className="rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-soft/60"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="panel"
+            initial={{ opacity: 0, scale: 0.98, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: -4 }}
+            transition={SPRING_POPOVER}
+            style={{ transformOrigin: "top" }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                close();
+              }
+            }}
+            className="glass-surface surface-popover p-2.5"
+          >
+            <div className="flex items-center gap-2">
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Search your memory"
+                ariaLabel="Search memory for evidence"
+                autoFocus
+                busy={busy}
+                inputRef={inputRef}
+              />
+              <button
+                type="button"
+                onClick={close}
+                aria-label="Close search"
+                className="grid size-7 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-surface-soft hover:text-ink"
               >
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-medium text-ink">
-                        {subject ? item.content : item.canonical_subject}
-                      </span>
-                      {count > 1 && (
-                        <Badge tone="neutral" size="sm" className="tabular-nums">
-                          {count}
-                        </Badge>
-                      )}
-                    </div>
-                    {!subject && (
-                      <div className="mt-0.5 truncate text-xs text-faint">{item.content}</div>
-                    )}
-                  </div>
-                  <Badge tone={inView ? "ok" : "warn"} size="sm">
-                    {inView ? "In view" : "Review criterion"}
-                  </Badge>
+                <X size={ICON.XS} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            {error && <div className="mt-2 text-xs text-bad">{error}</div>}
+
+            {!trimmed && (
+              <div className="px-2 py-5 text-center text-sm text-faint">
+                Search your memory to add evidence to this view.
+              </div>
+            )}
+
+            {trimmed && busy && results.length === 0 && (
+              <div className="mt-2 flex flex-col gap-1.5" aria-hidden>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton h-9 rounded-md" />
+                ))}
+              </div>
+            )}
+
+            {trimmed && searched && !busy && !error && results.length === 0 && (
+              <div className="px-2 py-5 text-center">
+                <div className="text-sm text-faint">No matching claims.</div>
+                <div className="mt-1 text-xs text-faint">
+                  Try a broader term, or adjust what belongs in this view.
                 </div>
-                <div className="mt-1 flex items-center justify-end gap-1">
-                  <GhostBtn onClick={() => onPeekClaim(item.id)}>
-                    <ExternalLink size={ICON.XS} strokeWidth={2.2} /> Open
-                  </GhostBtn>
-                  {!inView && (
-                    <GhostBtn onClick={onEditCriterion}>
-                      <SlidersHorizontal size={ICON.XS} strokeWidth={2.2} /> Edit criterion
-                    </GhostBtn>
-                  )}
-                  <GhostBtn onClick={onRefresh}>
-                    <RefreshCw size={ICON.XS} strokeWidth={2.2} /> Refresh
+                <div className="mt-2 flex justify-center">
+                  <GhostBtn onClick={onEditCriterion}>
+                    <SlidersHorizontal size={ICON.XS} strokeWidth={2.2} /> Edit criterion
                   </GhostBtn>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
 
-      <div className="mt-2 flex justify-end">
-        <GhostBtn onClick={close}>Close</GhostBtn>
-      </div>
+            {results.length > 0 && (
+              <div className="mt-2 flex flex-col gap-0.5">
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {results.map(({ item, inView, included }) => (
+                    <motion.div
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{
+                        layout: SPRING_LAYOUT,
+                        opacity: { duration: MOTION.row },
+                        y: { duration: MOTION.fast },
+                      }}
+                      className="group/ev rounded-md px-2 py-1.5 transition-colors hover:bg-surface-soft/60"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm text-ink-soft">{item.content}</div>
+                          <div className="mt-0.5 truncate text-xs text-faint">{item.canonical_subject}</div>
+                        </div>
+                        {inView && (
+                          <Badge tone="ok" size="sm" className="mt-0.5">
+                            {included ? "Included" : "In view"}
+                          </Badge>
+                        )}
+                        <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/ev:opacity-100 focus-within:opacity-100">
+                          <RowIcon onClick={() => onPeekClaim(item.id)} title="Open claim">
+                            <ExternalLink size={ICON.XS} strokeWidth={2.2} />
+                          </RowIcon>
+                          {!inView && (
+                            <RowIcon
+                              onClick={() => include(item)}
+                              disabled={includingId !== null}
+                              title="Include in this view"
+                            >
+                              {includingId === item.id ? (
+                                <Loader2 size={ICON.XS} strokeWidth={2.2} className="animate-spin" />
+                              ) : (
+                                <Plus size={ICON.XS} strokeWidth={2.2} />
+                              )}
+                            </RowIcon>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function initialQuery(subject: string | undefined, lensName: string) {
-  if (!subject) return lensName;
-  const normalized = subject.trim().toLowerCase();
-  return normalized === "the user" || normalized === "user" ? "" : subject;
+function RowIcon({
+  children,
+  onClick,
+  disabled,
+  title,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className="grid size-[22px] place-items-center rounded text-faint transition-colors hover:bg-surface-soft hover:text-ink disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
 }

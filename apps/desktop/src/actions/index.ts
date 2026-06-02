@@ -60,7 +60,10 @@ export {
 export {
   createAutomation,
   deleteAutomation,
+  dismissSuggestion,
   fetchAutomations,
+  fetchAutomationSuggestions,
+  refreshSuggestions,
   runAutomation,
   toggleAutomation,
   updateAutomation,

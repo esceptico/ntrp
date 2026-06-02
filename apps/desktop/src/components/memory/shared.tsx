@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import type { ButtonHTMLAttributes, Ref, ReactNode } from "react";
+import { Loader2, Search, X } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
 import { ScrollBlurTop } from "../ScrollBlur";
@@ -252,25 +252,37 @@ export function SearchInput({
   onChange,
   placeholder,
   ariaLabel = placeholder,
+  autoFocus = false,
+  busy = false,
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   ariaLabel?: string;
+  autoFocus?: boolean;
+  busy?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
+  const Icon = busy ? Loader2 : Search;
   return (
     <div className="relative flex-1 min-w-0">
-      <Search
+      <Icon
         size={ICON.XS}
         strokeWidth={2}
-        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
+        className={clsx(
+          "absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none",
+          busy && "animate-spin",
+        )}
       />
       <input
+        ref={inputRef}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        autoFocus={autoFocus}
         spellCheck={false}
         className="w-full h-7 pl-7 pr-7 rounded-md bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
       />

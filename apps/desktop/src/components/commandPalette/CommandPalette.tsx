@@ -6,8 +6,8 @@ import { EASE_OUT, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { PaletteBody } from "./PaletteBody";
 import type { Crumb } from "./types";
 
-const BACKDROP_DURATION = 0.16;
-const PANEL_DURATION = 0.18;
+const BACKDROP_DURATION = 0;
+const PANEL_DURATION = 0;
 const EASE = EASE_OUT;
 
 export function CommandPalette() {
@@ -44,6 +44,7 @@ export function CommandPalette() {
       setQuery("");
       setIndex(0);
       setCrumbs([]);
+      setMorphReady(true);
     } else {
       setMorphReady(false);
     }
@@ -58,7 +59,7 @@ export function CommandPalette() {
         <motion.div
           key="palette"
           className="modal-scrim absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8"
-          initial={{ opacity: 0 }}
+          initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: BACKDROP_DURATION, ease: EASE }}
@@ -67,11 +68,10 @@ export function CommandPalette() {
           <motion.div
             layout={morphReady}
             className="glass-surface glass-radius-md w-[min(660px,calc(100vw-80px))] max-h-[62vh] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden origin-top"
-            initial={{ opacity: 0, scale: 0.96, y: -6 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -6 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: PANEL_DURATION, ease: EASE, layout: SPRING_POPOVER }}
-            onAnimationComplete={() => setMorphReady(true)}
             onClick={(e) => e.stopPropagation()}
           >
             <PaletteBody

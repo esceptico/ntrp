@@ -425,7 +425,7 @@ class MemoryPruneApplyRequest(BaseModel):
 
 
 class PageEditOpBody(BaseModel):
-    kind: Literal["edit", "reject", "accept", "edit_criterion"]
+    kind: Literal["edit", "reject", "accept", "include", "edit_criterion"]
     claim_id: str | None = None
     new_text: str | None = None
 
@@ -498,6 +498,22 @@ class CreateAutomationRequest(BaseModel):
     end: str | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None
+    from_suggestion_id: str | None = None
+
+
+class AutomationSuggestionResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    triggers: list[dict]
+    rationale: str
+    evidence: list[str]
+    category: str
+    icon: str | None = None
+
+
+class AutomationSuggestionsResponse(BaseModel):
+    suggestions: list[AutomationSuggestionResponse]
 
 
 class UpdateAutomationRequest(BaseModel):

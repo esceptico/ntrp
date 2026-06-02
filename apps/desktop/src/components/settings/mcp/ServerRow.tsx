@@ -2,7 +2,7 @@ import { Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../../store";
 import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "../../../api";
-import { useMountedRef, useMutationState } from "../../../lib/hooks";
+import { useMutationState } from "../../../lib/hooks";
 import { ICON } from "../../../lib/icons";
 import { IconButton } from "../../IconButton";
 import { GlassSwitch } from "../../GlassSwitch";
@@ -17,8 +17,7 @@ export function ServerRow({
   onChanged: () => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
-  const mounted = useMountedRef();
-  const { busy, error, run } = useMutationState(mounted);
+  const { busy, error, run } = useMutationState();
 
   const onToggle = (next: boolean) =>
     void run(async () => {

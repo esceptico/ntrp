@@ -313,7 +313,10 @@ export interface MemorySearchParams extends ScopeParams {
 }
 
 export function searchMemory(config: AppConfig, params: MemorySearchParams) {
-  return fetchMemorySearch(
+  // Routed through apiWithConfig so it uses the Electron bridge (main-process
+  // fetch, no renderer CSP/CORS) like every other memory call — a raw renderer
+  // fetch breaks lens search in packaged builds / non-localhost servers.
+  return apiWithConfig<MemorySearchResponse>(
     config,
     `/admin/memory/search${queryString({
       q: params.q,
@@ -323,33 +326,15 @@ export function searchMemory(config: AppConfig, params: MemorySearchParams) {
       include_inactive: params.include_inactive,
       mode: params.mode,
     })}`,
+    { timeout: 8_000 } as RequestInit & { timeout: number },
   );
 }
 
-async function fetchMemorySearch(config: AppConfig, path: string): Promise<MemorySearchResponse> {
-  const headers: Record<string, string> = {};
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-  const response = await fetch(`${config.serverUrl}${path}`, { headers });
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const body = (await response.json()) as { detail?: unknown; message?: unknown };
-      if (typeof body.detail === "string") message = body.detail;
-      if (typeof body.message === "string") message = body.message;
-    } catch {
-      const text = await response.text();
-      if (text) message = text;
-    }
-    throw new Error(message);
-  }
-  return (await response.json()) as MemorySearchResponse;
-}
-
 // ── 7 — Lens page write-back ────────────────────────────────────────────────
-export type PageEditKind = "edit" | "reject" | "accept" | "edit_criterion";
+export type PageEditKind = "edit" | "reject" | "accept" | "include" | "edit_criterion";
 export interface PageEditOp {
   kind: PageEditKind;
-  claim_id?: string; // required for edit|reject|accept
+  claim_id?: string; // required for edit|reject|accept|include
   new_text?: string; // required for edit (successor) | edit_criterion
 }
 export interface WriteBackApplied {

@@ -1138,6 +1138,9 @@ export interface CreateAutomationPayload {
   end?: string;
   triggers?: AutomationTrigger[];
   cooldown_minutes?: number | null;
+  /** When set, the server marks the originating suggestion `accepted` on
+   *  successful create (see suggestionToPayload / AutomationSuggestion). */
+  from_suggestion_id?: string;
 }
 
 export type UpdateAutomationPayload = Partial<
@@ -1185,6 +1188,56 @@ export async function runAutomationApi(config: AppConfig, taskId: string): Promi
 
 export async function deleteAutomationApi(config: AppConfig, taskId: string): Promise<void> {
   await apiWithConfig(config, `/automations/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+}
+
+// ─── Automation suggestions ──────────────────────────────────────────
+
+/** Contextual, server-synthesized automation the user can accept in one
+ *  click. Mirrors the `GET /automations/suggestions` response shape. */
+export interface AutomationSuggestion {
+  id: string;
+  name: string;
+  description: string;
+  triggers: AutomationTrigger[];
+  rationale: string;
+  evidence: string[];
+  category: string;
+  icon: string | null;
+}
+
+export async function listAutomationSuggestionsApi(config: AppConfig): Promise<AutomationSuggestion[]> {
+  const r = await apiWithConfig<{ suggestions: AutomationSuggestion[] }>(config, "/automations/suggestions");
+  return r.suggestions;
+}
+
+export async function dismissAutomationSuggestionApi(config: AppConfig, id: string): Promise<void> {
+  await apiWithConfig(config, `/automations/suggestions/${encodeURIComponent(id)}/dismiss`, {
+    method: "POST",
+  });
+}
+
+export async function refreshAutomationSuggestionsApi(config: AppConfig): Promise<AutomationSuggestion[]> {
+  const r = await apiWithConfig<{ suggestions: AutomationSuggestion[] }>(config, "/automations/suggestions/refresh", {
+    method: "POST",
+  });
+  return r.suggestions;
+}
+
+/** Convert a suggestion into the editor's create payload. Flattens the
+ *  first trigger into the schedule fields `formFromPreset` expects, so the
+ *  existing automation editor hydrates unchanged. */
+export function suggestionToPayload(s: AutomationSuggestion): CreateAutomationPayload {
+  const trigger = s.triggers[0];
+  const schedule =
+    trigger.type === "event"
+      ? { trigger_type: "event" as const, event_type: trigger.event_type, lead_minutes: trigger.lead_minutes }
+      : { trigger_type: "time" as const, at: trigger.at, days: trigger.days, every: trigger.every };
+  return {
+    name: s.name,
+    description: s.description,
+    from_suggestion_id: s.id,
+    ...schedule,
+  };
 }
 
 export interface BackgroundTaskSummary {

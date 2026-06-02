@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, Check, ChevronRight, Loader2, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import type { AppConfig } from "../../api";
 import {
   createLens,
@@ -23,13 +23,14 @@ import {
   type RenderedClaim,
 } from "../../api/memoryItems";
 import { Markdown } from "../Markdown";
-import { SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { MOTION, SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
 import { ClaimBlock, type ClaimOp } from "./ClaimBlock";
 import { LensEvidenceSearch } from "./LensEvidenceSearch";
 import {
+  DangerBtn,
   DetailPlaceholder,
   DetailShell,
   Empty,
@@ -346,6 +347,14 @@ function LensPage({
   const [exiting, setExiting] = useState<{ id: string; how: "supersede" | "reject" } | null>(null);
   const [runNote, setRunNote] = useState<string | null>(null);
   const [editingCriterion, setEditingCriterion] = useState(false);
+  // A single page-level evidence search; group headers bump `nonce` to open it
+  // seeded with their subject (one live search, not one popover per group).
+  const [evidenceSeed, setEvidenceSeed] = useState({ term: "", nonce: 0 });
+  const findEvidenceFor = useCallback(
+    (subject: string) => setEvidenceSeed((s) => ({ term: subject, nonce: s.nonce + 1 })),
+    [],
+  );
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
     if (!page) return ids;
@@ -562,17 +571,7 @@ function LensPage({
               onClose={() => setEditingId(null)}
               onCommit={onClaimCommit}
               onPeek={onPeekClaim}
-              evidenceSearch={(subject) => (
-                <LensEvidenceSearch
-                  config={config}
-                  lens={lens}
-                  subject={subject}
-                  memberIds={memberIds}
-                  onEditCriterion={() => setEditingCriterion(true)}
-                  onPeekClaim={onPeekClaim}
-                  onRefresh={() => load({ detail, refresh: true })}
-                />
-              )}
+              onFindEvidence={findEvidenceFor}
             />
           ) : page ? (
             <FlatPage
@@ -587,14 +586,17 @@ function LensPage({
             />
           ) : null}
 
-          <LensEvidenceSearch
-            config={config}
-            lens={lens}
-            memberIds={memberIds}
-            onEditCriterion={() => setEditingCriterion(true)}
-            onPeekClaim={onPeekClaim}
-            onRefresh={() => load({ detail, refresh: true })}
-          />
+          <div className="mt-4 border-t border-line-soft/40 pt-1">
+            <LensEvidenceSearch
+              config={config}
+              lens={lens}
+              memberIds={memberIds}
+              seed={evidenceSeed}
+              onEditCriterion={() => setEditingCriterion(true)}
+              onPeekClaim={onPeekClaim}
+              onRefresh={() => load({ detail, refresh: true })}
+            />
+          </div>
         </div>
       }
       meta={
@@ -620,23 +622,49 @@ function LensPage({
           <span className="mr-auto text-xs text-faint">
             {page?.synthesized === false && "raw list (synthesis unavailable)"}
           </span>
-          <GhostBtn onClick={() => setEditingCriterion(true)}>Edit criterion</GhostBtn>
-          <GhostBtn
-            onClick={() => {
-              if (window.confirm(`Delete the "${lensTitle(lens)}" view? Claims are untouched.`)) {
-                void deleteLens(config, lens.id)
-                  .then(onArchived)
-                  .catch((e) => {
-                    // Surface a failed delete instead of swallowing it (the lens
-                    // stays open) — matches the component's setError pattern.
-                    if (!mountedRef.current) return;
-                    setError(e instanceof Error ? e.message : String(e));
-                  });
-              }
-            }}
-          >
-            Delete view
-          </GhostBtn>
+          <AnimatePresence initial={false} mode="wait">
+            {confirmingDelete ? (
+              // In-app confirm instead of the off-brand native window.confirm.
+              <motion.div
+                key="confirm"
+                initial={{ opacity: 0, x: 6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: MOTION.fast }}
+                className="flex items-center gap-2"
+              >
+                <span className="text-xs text-faint">Delete this view? Claims are untouched.</span>
+                <GhostBtn onClick={() => setConfirmingDelete(false)}>Cancel</GhostBtn>
+                <DangerBtn
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    void deleteLens(config, lens.id)
+                      .then(onArchived)
+                      .catch((e) => {
+                        // Surface a failed delete instead of swallowing it (the lens
+                        // stays open) — matches the component's setError pattern.
+                        if (!mountedRef.current) return;
+                        setError(e instanceof Error ? e.message : String(e));
+                      });
+                  }}
+                >
+                  Delete view
+                </DangerBtn>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="actions"
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: MOTION.fast }}
+                className="flex items-center gap-2"
+              >
+                <GhostBtn onClick={() => setEditingCriterion(true)}>Edit criterion</GhostBtn>
+                <GhostBtn onClick={() => setConfirmingDelete(true)}>Delete view</GhostBtn>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       }
     />
@@ -833,7 +861,7 @@ export function GroupedProfiles({
   onClose,
   onCommit,
   onPeek,
-  evidenceSearch,
+  onFindEvidence,
 }: {
   groups: ProjectedGroup[];
   editingId: string | null;
@@ -843,7 +871,7 @@ export function GroupedProfiles({
   onClose: () => void;
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
-  evidenceSearch?: (subject: string) => React.ReactNode;
+  onFindEvidence?: (subject: string) => void;
 }) {
   // Key collapse state by a stable per-group id, not the raw subject string: two
   // groups can legitimately share a subject (cached re-read), and a subject-keyed
@@ -870,12 +898,13 @@ export function GroupedProfiles({
               aria-expanded={isOpen}
               className="app-row group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
             >
-              <ChevronRight
-                size={ICON.SM}
-                strokeWidth={2}
-                className="shrink-0 text-faint transition-transform"
-                style={{ transform: isOpen ? "rotate(90deg)" : undefined }}
-              />
+              <motion.span
+                className="inline-flex shrink-0 text-faint"
+                animate={{ rotate: isOpen ? 90 : 0 }}
+                transition={SPRING_LAYOUT}
+              >
+                <ChevronRight size={ICON.SM} strokeWidth={2} />
+              </motion.span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{g.subject}</span>
               <Badge tone="neutral" size="sm" className="tabular-nums">
                 {g.blocks.length}
@@ -908,7 +937,16 @@ export function GroupedProfiles({
                       onCommit={onCommit}
                       onPeek={onPeek}
                     />
-                    {evidenceSearch?.(g.subject)}
+                    {onFindEvidence && (
+                      <button
+                        type="button"
+                        onClick={() => onFindEvidence(g.subject)}
+                        className="inline-flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-xs font-medium text-faint transition-colors hover:bg-surface-soft hover:text-muted"
+                      >
+                        <Search size={ICON.XS} strokeWidth={2} />
+                        Find evidence for {g.subject}
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -949,12 +987,13 @@ function ClaimSources({
         aria-expanded={open}
         className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-faint transition-colors hover:bg-surface-soft hover:text-muted"
       >
-        <ChevronRight
-          size={ICON.XS}
-          strokeWidth={2}
-          className="transition-transform"
-          style={{ transform: open ? "rotate(90deg)" : undefined }}
-        />
+        <motion.span
+          className="inline-flex"
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={SPRING_LAYOUT}
+        >
+          <ChevronRight size={ICON.XS} strokeWidth={2} />
+        </motion.span>
         Sources
         <Badge tone="neutral" size="sm" className="tabular-nums">
           {blocks.length}
@@ -1056,7 +1095,12 @@ const STAGE_ORDER: Record<string, number> = { creating: 0, scoring: 1, synthesiz
 function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boolean }) {
   const cur = STAGE_ORDER[gen.status] ?? 0;
   return (
-    <div className="mt-4 flex flex-col gap-2.5">
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: MOTION.panel }}
+      className="mt-4 flex flex-col gap-2.5"
+    >
       {/* Static title — the spinner lives on the active step only, so there are
           never two spinners competing ("Generating view" + "Scoring members"). */}
       <div className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -1077,16 +1121,38 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
           return (
             <li key={step.stage} className="flex items-center gap-2 text-sm">
               <span className="flex size-4 shrink-0 items-center justify-center">
-                {done ? (
-                  <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
-                ) : active ? (
-                  <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
-                ) : (
-                  <span className="size-1.5 rounded-full bg-line" aria-hidden />
-                )}
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={done ? "done" : active ? "active" : "pending"}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ duration: MOTION.check }}
+                    className="flex items-center justify-center"
+                  >
+                    {done ? (
+                      <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
+                    ) : active ? (
+                      <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
+                    ) : (
+                      <span className="size-1.5 rounded-full bg-line" aria-hidden />
+                    )}
+                  </motion.span>
+                </AnimatePresence>
               </span>
-              <span className={done || active ? "text-ink" : "text-faint"}>{step.label}</span>
-              {detail && <span className="text-xs tabular-nums text-faint">{detail}</span>}
+              <span className={`transition-colors ${done || active ? "text-ink" : "text-faint"}`}>
+                {step.label}
+              </span>
+              {detail && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: MOTION.fast }}
+                  className="text-xs tabular-nums text-faint"
+                >
+                  {detail}
+                </motion.span>
+              )}
             </li>
           );
         })}
@@ -1094,7 +1160,7 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
       {gen.status === "error" && gen.error && (
         <span className="text-xs text-bad">{gen.error}</span>
       )}
-    </div>
+    </motion.div>
   );
 }
 

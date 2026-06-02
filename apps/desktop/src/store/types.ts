@@ -2,6 +2,7 @@ import type {
   AppConfig,
   ArchivedSession,
   Automation,
+  AutomationSuggestion,
   ModelsResponse,
   Project,
   ServerConfig,
@@ -333,6 +334,7 @@ export interface State {
   serverConfig: ServerConfig | null;
   serverModels: ModelsResponse | null;
   automations: Automation[] | null;
+  automationSuggestions: AutomationSuggestion[] | null;
   automationsOpen: boolean;
   automationStream: AutomationStreamDomainState;
   archiveOpen: boolean;
@@ -478,6 +480,7 @@ export interface Actions {
   setServerConfig: (cfg: ServerConfig | null) => void;
   setServerModels: (models: ModelsResponse | null) => void;
   setAutomations: (automations: Automation[] | null) => void;
+  setAutomationSuggestions: (suggestions: AutomationSuggestion[] | null) => void;
   openAutomations: (origin?: { x: number; y: number } | null) => void;
   closeAutomations: () => void;
   automationStreamConnecting: () => void;

@@ -169,12 +169,35 @@ class LensMembership:
             return BackfillReport(lens_id=lens_id, scanned=0, members_added=0, capped=False)
 
         pool = await self.store.query(scope=lens.scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP + 1)
-        # Honor durable user REJECTions: a rejected claim is never a member, full
-        # stop. This is a user override (explicit feedback), not a heuristic gate —
-        # it removes the claim from the judge's pool so it can't re-enter on re-derive.
+        # Honor durable user overrides. These are explicit feedback, not heuristic
+        # gates: rejects never enter the judge pool; includes are written IN before
+        # judging the rest so refresh cannot drop a user-added search result.
         rejected = await self.store.get_rejections(lens_id)
         if rejected:
             pool = [c for c in pool if c.id not in rejected]
+        included_ids = await self.store.get_inclusions(lens_id)
+        included = [
+            c
+            for c in await self._load_claims(list(included_ids))
+            if c is not None
+            and c.id not in rejected
+            and c.scope.kind is lens.scope.kind
+            and c.scope.key == lens.scope.key
+        ]
+        if included:
+            await self.store.put_membership(
+                [
+                    MembershipVerdict(
+                        lens_id=lens_id,
+                        claim_id=c.id,
+                        decision=MembershipDecision.IN,
+                        rationale="explicitly included by user",
+                    )
+                    for c in included
+                ]
+            )
+            included_set = {c.id for c in included}
+            pool = [c for c in pool if c.id not in included_set]
 
         capped = len(pool) > BACKFILL_SCAN_CAP
         if capped:

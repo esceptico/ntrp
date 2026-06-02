@@ -36,6 +36,7 @@ from ntrp.memory.models import (
     LensRenderMode,
     LensRow,
     MembershipDecision,
+    MembershipVerdict,
     MemoryItem,
     Status,
 )
@@ -387,12 +388,27 @@ class LensProjector:
         # so enforce the override here, at the single read path. Not a heuristic gate:
         # get_rejections is an explicit user override, not an LLM/embedding decision.
         rejected = await self.store.get_rejections(lens.id)
+        included = await self.store.get_inclusions(lens.id)
+        seen: set[str] = set()
         members: list[MemoryItem] = []
         for v in cached:
             if v.claim_id in rejected:
                 continue
             m = await self.store.get(v.claim_id)
-            if m is not None and m.status is Status.ACTIVE:
+            if m is not None and m.status is Status.ACTIVE and m.id not in seen:
+                seen.add(m.id)
+                members.append(m)
+        for claim_id in included:
+            if claim_id in rejected or claim_id in seen:
+                continue
+            m = await self.store.get(claim_id)
+            if (
+                m is not None
+                and m.status is Status.ACTIVE
+                and m.scope.kind is lens.scope.kind
+                and m.scope.key == lens.scope.key
+            ):
+                seen.add(m.id)
                 members.append(m)
         return members
 
@@ -401,7 +417,19 @@ class LensProjector:
         still-`in`. `defer` is treated conservatively as not-rendered."""
         if not members:
             return []
-        verdicts = await self.membership.score(members, lens)
+        included = await self.store.get_inclusions(lens.id)
+        forced = [m for m in members if m.id in included]
+        judged = [m for m in members if m.id not in included]
+        verdicts = await self.membership.score(judged, lens)
+        forced_verdicts = [
+            MembershipVerdict(
+                lens_id=lens.id,
+                claim_id=m.id,
+                decision=MembershipDecision.IN,
+                rationale="explicitly included by user",
+            )
+            for m in forced
+        ]
         # score() awaits the judge against the criterion captured in `lens`. A
         # concurrent edit_criterion (file-first, invalidate-last) could land in that
         # window; our put_membership would then write OLD-criterion verdicts back into
@@ -412,9 +440,9 @@ class LensProjector:
         if fresh is not None and fresh.updated_at != lens.updated_at:
             await self.store.invalidate_lens_membership(lens.id)
             return []
-        await self.store.put_membership(verdicts)
+        await self.store.put_membership([*forced_verdicts, *verdicts])
         keep: dict[str, MembershipDecision] = {v.claim_id: v.decision for v in verdicts}
-        return [m for m in members if keep.get(m.id) is MembershipDecision.IN]
+        return [m for m in members if m.id in included or keep.get(m.id) is MembershipDecision.IN]
 
     # --- rendering ---------------------------------------------------
 

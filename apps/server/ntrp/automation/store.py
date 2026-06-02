@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.automation.models import Automation, IdempotencyClaim
+from ntrp.automation.suggestions import AutomationSuggestion
 from ntrp.automation.triggers import parse_triggers
 from ntrp.logging import get_logger
 
@@ -109,6 +110,22 @@ def _row_to_automation(row: dict) -> Automation:
 
 def _serialize_triggers(triggers: list) -> str:
     return json.dumps([{"type": t.type, **t.params()} for t in triggers])
+
+
+def _row_to_suggestion(row: dict) -> AutomationSuggestion:
+    return AutomationSuggestion(
+        id=row["id"],
+        name=row["name"],
+        description=row["description"],
+        triggers=parse_triggers(row["triggers"]),
+        rationale=row["rationale"],
+        category=row["category"],
+        evidence=json.loads(row["evidence"]) if row["evidence"] else [],
+        icon=row["icon"],
+        status=row["status"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        source_automation_id=row["source_automation_id"],
+    )
 
 
 _SCHEMA = """
@@ -503,6 +520,37 @@ SELECT
 FROM automation_event_dead_letter
 """
 
+_SUGGESTION_COLUMNS = (
+    "id, name, description, triggers, rationale, evidence, "
+    "category, icon, status, created_at, source_automation_id"
+)
+
+_SQL_DELETE_ACTIVE_SUGGESTIONS = "DELETE FROM automation_suggestions WHERE status = 'active'"
+
+_SQL_INSERT_SUGGESTION = f"""
+INSERT INTO automation_suggestions ({_SUGGESTION_COLUMNS})
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+_SQL_LIST_ACTIVE_SUGGESTIONS = f"""
+SELECT {_SUGGESTION_COLUMNS} FROM automation_suggestions
+WHERE status = 'active'
+ORDER BY created_at DESC
+"""
+
+_SQL_DISMISS_SUGGESTION = "UPDATE automation_suggestions SET status = 'dismissed' WHERE id = ?"
+
+_SQL_ACCEPT_SUGGESTION = """
+UPDATE automation_suggestions
+SET status = 'accepted', source_automation_id = ?
+WHERE id = ?
+"""
+
+_SQL_LIST_EXCLUDED_SIGNATURES = """
+SELECT name || ' — ' || description AS signature FROM automation_suggestions
+WHERE status IN ('dismissed', 'accepted')
+"""
+
 # --- Migration ---
 
 _MIGRATION_V1 = """
@@ -548,7 +596,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -967,6 +1015,31 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await _set_schema_version(conn, 10)
         await conn.commit()
         _logger.info("Migrated automation store to v10 (dropped target_session_id, rewrote kind index to thread_id)")
+
+    if version < 11:
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS automation_suggestions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                triggers TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                evidence TEXT,
+                category TEXT NOT NULL,
+                icon TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                source_automation_id TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_suggestions_status
+            ON automation_suggestions(status, created_at);
+            """
+        )
+        await _set_schema_version(conn, 11)
+        await conn.commit()
+        _logger.info("Migrated automation store to v11 (automation_suggestions table)")
 
 
 class AutomationStore:
@@ -1438,3 +1511,45 @@ class AutomationStore:
                 "newest_failed_at": dead_letter_row["newest_failed_at"],
             },
         }
+
+    async def replace_active_suggestions(self, items: list[AutomationSuggestion]) -> None:
+        await self.conn.execute("BEGIN")
+        try:
+            await self.conn.execute(_SQL_DELETE_ACTIVE_SUGGESTIONS)
+            for item in items:
+                await self.conn.execute(
+                    _SQL_INSERT_SUGGESTION,
+                    (
+                        item.id,
+                        item.name,
+                        item.description,
+                        _serialize_triggers(item.triggers),
+                        item.rationale,
+                        json.dumps(item.evidence),
+                        item.category,
+                        item.icon,
+                        item.status,
+                        item.created_at.isoformat(),
+                        item.source_automation_id,
+                    ),
+                )
+            await self.conn.commit()
+        except BaseException:
+            await self.conn.rollback()
+            raise
+
+    async def list_active_suggestions(self) -> list[AutomationSuggestion]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ACTIVE_SUGGESTIONS)
+        return [_row_to_suggestion(row) for row in rows]
+
+    async def mark_suggestion_dismissed(self, suggestion_id: str) -> None:
+        await self.conn.execute(_SQL_DISMISS_SUGGESTION, (suggestion_id,))
+        await self.conn.commit()
+
+    async def mark_suggestion_accepted(self, suggestion_id: str, source_automation_id: str) -> None:
+        await self.conn.execute(_SQL_ACCEPT_SUGGESTION, (source_automation_id, suggestion_id))
+        await self.conn.commit()
+
+    async def list_excluded_signatures(self) -> list[str]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_EXCLUDED_SIGNATURES)
+        return [row["signature"] for row in rows]

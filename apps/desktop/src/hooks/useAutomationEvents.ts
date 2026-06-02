@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
-import { fetchAutomations, refreshLoops } from "../actions";
+import { fetchAutomations, fetchAutomationSuggestions, refreshLoops } from "../actions";
 import { type AppConfig, type SessionListItem } from "../api";
 import { createStallWatchdog } from "../lib/streamWatchdog";
 import { automationToast } from "../lib/taskToast";
@@ -20,6 +20,7 @@ const AUTOMATION_STALL_CHECK_MS = 5_000;
 type AutomationEvent =
   | { type: "automation_progress"; task_id: string; status: string; seq?: number }
   | { type: "automation_finished"; task_id: string; result: string | null; seq?: number }
+  | { type: "automation_suggestions_updated"; seq?: number }
   | { type: "session_created"; session: SessionListItem; seq?: number }
   | { type: "session_activity"; session: SessionListItem; seq?: number }
   | { type: "stream_keepalive"; latest_seq: number; seq?: number }
@@ -130,6 +131,11 @@ export function useAutomationEvents(): void {
                   // sidebar card immediately rather than after the next
                   // 20s poll catches up to running_since going null.
                   void fetchAutomations();
+                } else if (event.type === "automation_suggestions_updated") {
+                  // The background suggester recomputed the active set —
+                  // pull it so the "Suggested for you" section reflects the
+                  // new drafts without waiting for the next modal open.
+                  void fetchAutomationSuggestions();
                 } else if (event.type === "session_created") {
                   // An automation just provisioned its channel session.
                   // Prepend it so the sidebar row shows up live; the store

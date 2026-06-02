@@ -1,7 +1,10 @@
 import {
   createAutomationApi,
   deleteAutomationApi,
+  dismissAutomationSuggestionApi,
+  listAutomationSuggestionsApi,
   listAutomationsApi,
+  refreshAutomationSuggestionsApi,
   runAutomationApi,
   toggleAutomationApi,
   updateAutomationApi,
@@ -48,4 +51,26 @@ export async function deleteAutomation(taskId: string): Promise<void> {
   const s = getState();
   await deleteAutomationApi(s.config, taskId);
   await fetchAutomations();
+}
+
+export async function fetchAutomationSuggestions(): Promise<void> {
+  const s = getState();
+  try {
+    const suggestions = await listAutomationSuggestionsApi(s.config);
+    s.setAutomationSuggestions(suggestions);
+  } catch {
+    /* leave previous list in place */
+  }
+}
+
+export async function dismissSuggestion(id: string): Promise<void> {
+  const s = getState();
+  s.setAutomationSuggestions((s.automationSuggestions ?? []).filter((sug) => sug.id !== id));
+  await dismissAutomationSuggestionApi(s.config, id);
+}
+
+export async function refreshSuggestions(): Promise<void> {
+  const s = getState();
+  const suggestions = await refreshAutomationSuggestionsApi(s.config);
+  s.setAutomationSuggestions(suggestions);
 }

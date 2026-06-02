@@ -57,16 +57,21 @@ interface FormState {
   prompt: string;
   schedule: Schedule;
   auto_approve: boolean;
+  /** Rides along from a "Suggested for you" preset so the create payload can
+   *  tell the server which suggestion to mark accepted. Editing fields never
+   *  clears it; an `edit` seed never sets it. */
+  from_suggestion_id?: string;
 }
 
 function emptyForm(): FormState {
   return { name: "", prompt: "", schedule: { ...DEFAULT_SCHEDULE }, auto_approve: false };
 }
 
-function formFromPreset(p: CreateAutomationPayload): FormState {
+export function formFromPreset(p: CreateAutomationPayload): FormState {
   const f = emptyForm();
   f.name = p.name ?? "";
   f.prompt = p.description ?? "";
+  f.from_suggestion_id = p.from_suggestion_id;
   if (p.auto_approve) f.auto_approve = true;
   if (p.trigger_type === "event") {
     f.schedule = {
@@ -119,7 +124,7 @@ function formFromAutomation(a: Automation): FormState {
   return f;
 }
 
-function buildPayload(f: FormState): CreateAutomationPayload {
+export function buildPayload(f: FormState): CreateAutomationPayload {
   const p: CreateAutomationPayload = {
     name: f.name.trim() || "Untitled automation",
     description: f.prompt.trim(),
@@ -141,6 +146,7 @@ function buildPayload(f: FormState): CreateAutomationPayload {
     p.event_type = s.event;
     if (s.lead) p.lead_minutes = s.lead;
   }
+  if (f.from_suggestion_id) p.from_suggestion_id = f.from_suggestion_id;
   return p;
 }
 

@@ -1,11 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Circle, FileText, Play, Plus, Radio, Trash2, type LucideIcon } from "lucide-react";
+import {
+  Bell,
+  Briefcase,
+  CalendarClock,
+  Circle,
+  Clock,
+  FileSearch,
+  FileText,
+  GitPullRequest,
+  Inbox,
+  Mail,
+  Play,
+  Plus,
+  Radio,
+  Sparkles,
+  Trash2,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import clsx from "clsx";
 import { SPRING_LAYOUT } from "../lib/tokens/motion";
 import { useStore } from "../store";
-import { deleteAutomation, fetchAutomations, runAutomation, switchSession, toggleAutomation } from "../actions";
-import type { Automation, AutomationTrigger } from "../api";
+import {
+  deleteAutomation,
+  dismissSuggestion,
+  fetchAutomations,
+  fetchAutomationSuggestions,
+  runAutomation,
+  switchSession,
+  toggleAutomation,
+} from "../actions";
+import { suggestionToPayload, type Automation, type AutomationSuggestion, type AutomationTrigger } from "../api";
 import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
@@ -18,9 +44,9 @@ import { ScrollBlurTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
-type Tab = "active" | "channels" | "system" | "templates";
+type Tab = "active" | "system" | "templates";
 
-const TAB_ORDER: Tab[] = ["active", "channels", "system", "templates"];
+const TAB_ORDER: Tab[] = ["active", "system", "templates"];
 
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
@@ -32,6 +58,7 @@ export function AutomationsModal() {
   useEffect(() => {
     if (!open) return;
     void fetchAutomations();
+    void fetchAutomationSuggestions();
   }, [open]);
 
   // When the user has nothing yet, default the page to Templates so the
@@ -43,7 +70,6 @@ export function AutomationsModal() {
 
   const automationGroups = useMemo(() => (automations ? splitAutomationsForTabs(automations) : null), [automations]);
   const activeCount = automationGroups?.user.length ?? 0;
-  const channelCount = automationGroups?.channels.length ?? 0;
   const systemCount = automationGroups?.internal.length ?? 0;
 
   const direction = useTabDirection(TAB_ORDER, tab);
@@ -76,7 +102,6 @@ export function AutomationsModal() {
           className="items-center gap-5 px-6"
         >
           <AutomationTab value="active" label="Active" count={activeCount} />
-          <AutomationTab value="channels" label="Channels" count={channelCount} />
           <AutomationTab value="system" label="System" count={systemCount} />
           <AutomationTab value="templates" label="Templates" />
         </Tabs>
@@ -95,13 +120,12 @@ export function AutomationsModal() {
                 onPickTemplate={() => setTab("templates")}
                 onCreate={() => setEditor({ kind: "create" })}
               />
-            ) : tab === "channels" ? (
-              <ChannelList automations={automationGroups?.channels ?? null} />
             ) : tab === "system" ? (
               <SystemList automations={automationGroups?.internal ?? null} />
             ) : (
               <TemplatesList
                 onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
+                onPickSuggestion={(s) => setEditor({ kind: "create", preset: suggestionToPayload(s) })}
               />
             )}
           </TabPanels>
@@ -193,37 +217,6 @@ function ActiveList({
   );
 }
 
-function ChannelList({ automations }: { automations: Automation[] | null }) {
-  if (automations === null) {
-    return <div className="text-sm text-faint">Loading…</div>;
-  }
-  if (automations.length === 0) {
-    return (
-      <div className="grid gap-2 max-w-[420px] py-10">
-        <div className="text-md font-medium text-ink">No channels yet.</div>
-        <div className="text-sm text-muted leading-[1.5]">
-          Channels are post-mode loops that emit to a dedicated session each
-          tick. Ask the agent to set one up — e.g. "every morning post a brief
-          to a new session".
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-      <AnimatePresence mode="popLayout" initial={false}>
-        {automations.map((automation) => (
-          <AutomationCard
-            key={automation.task_id}
-            automation={automation}
-            onEdit={() => undefined}
-          />
-        ))}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function SystemList({ automations }: { automations: Automation[] | null }) {
   if (automations === null) {
     return <div className="text-sm text-faint">Loading…</div>;
@@ -260,10 +253,18 @@ function SystemList({ automations }: { automations: Automation[] | null }) {
 
 // ─── Templates list ─────────────────────────────────────────────────
 
-function TemplatesList({ onPick }: { onPick: (template: AutomationTemplate) => void }) {
+function TemplatesList({
+  onPick,
+  onPickSuggestion,
+}: {
+  onPick: (template: AutomationTemplate) => void;
+  onPickSuggestion: (suggestion: AutomationSuggestion) => void;
+}) {
   const groups = useMemo(() => templatesByCategory(), []);
+  const suggestions = useStore((s) => s.automationSuggestions);
   return (
     <div className="grid gap-6 content-start">
+      <SuggestionsSection suggestions={suggestions} onPick={onPickSuggestion} />
       {groups.map(({ category, items }) => (
         <section key={category} className="grid gap-2">
           <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-faint">
@@ -277,6 +278,117 @@ function TemplatesList({ onPick }: { onPick: (template: AutomationTemplate) => v
         </section>
       ))}
     </div>
+  );
+}
+
+// ─── Suggested for you ──────────────────────────────────────────────
+
+const SUGGESTION_ICONS: Record<string, LucideIcon> = {
+  Sparkles,
+  Bell,
+  Briefcase,
+  CalendarClock,
+  Clock,
+  FileSearch,
+  FileText,
+  GitPullRequest,
+  Inbox,
+  Mail,
+};
+
+function suggestionIcon(name: string | null): LucideIcon {
+  return (name && SUGGESTION_ICONS[name]) || Sparkles;
+}
+
+/** Server-synthesized, contextual automation cards rendered above the
+ *  static templates. Renders nothing when there are no active suggestions
+ *  so cold-start shows only the static templates. */
+export function SuggestionsSection({
+  suggestions,
+  onPick,
+  onDismiss = dismissSuggestion,
+}: {
+  suggestions: AutomationSuggestion[] | null;
+  onPick: (suggestion: AutomationSuggestion) => void;
+  onDismiss?: (id: string) => void;
+}) {
+  if (!suggestions || suggestions.length === 0) return null;
+  return (
+    <section className="grid gap-2">
+      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-faint">
+        Suggested for you
+      </h3>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {suggestions.map((suggestion) => (
+            <SuggestionCard
+              key={suggestion.id}
+              suggestion={suggestion}
+              onPick={onPick}
+              onDismiss={onDismiss}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+    </section>
+  );
+}
+
+export function SuggestionCard({
+  suggestion,
+  onPick,
+  onDismiss = dismissSuggestion,
+}: {
+  suggestion: AutomationSuggestion;
+  onPick: (suggestion: AutomationSuggestion) => void;
+  onDismiss?: (id: string) => void;
+}) {
+  const Icon = suggestionIcon(suggestion.icon);
+  const schedule = suggestion.triggers.map(formatTrigger).join(" · ") || "—";
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={SPRING_LAYOUT}
+      data-suggestion={suggestion.id}
+      role="button"
+      tabIndex={0}
+      onClick={() => onPick(suggestion)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick(suggestion);
+        }
+      }}
+      className="group/suggestion glass-surface glass-radius-sm relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+    >
+      <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
+      <div className="min-w-0 grid gap-1.5 pr-6">
+        <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
+          {suggestion.name}
+        </h4>
+        <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
+          {suggestion.rationale}
+        </p>
+        <Badge tone="neutral" className="font-mono tabular-nums" title={schedule}>
+          {schedule}
+        </Badge>
+      </div>
+      <button
+        type="button"
+        aria-label="Dismiss suggestion"
+        title="Dismiss"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss(suggestion.id);
+        }}
+        className="absolute top-2.5 right-2.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+      >
+        <X size={ICON.XS} strokeWidth={2} />
+      </button>
+    </motion.div>
   );
 }
 

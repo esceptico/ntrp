@@ -171,6 +171,7 @@ export const useStore = create<State & Actions>((set) => ({
   serverConfig: null,
   serverModels: null,
   automations: null,
+  automationSuggestions: null,
   automationsOpen: false,
   automationStream: createAutomationStreamDomainState(),
   archiveOpen: false,
@@ -615,6 +616,7 @@ export const useStore = create<State & Actions>((set) => ({
   setServerConfig: (serverConfig) => set({ serverConfig }),
   setServerModels: (serverModels) => set({ serverModels }),
   setAutomations: (automations) => set({ automations }),
+  setAutomationSuggestions: (automationSuggestions) => set({ automationSuggestions }),
   openAutomations: (origin) => set({ automationsOpen: true, modalOrigin: origin ?? null }),
   closeAutomations: () => set({ automationsOpen: false }),
   automationStreamConnecting: () =>

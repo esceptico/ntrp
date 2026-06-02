@@ -330,7 +330,7 @@ function ApprovalCard({
             type="button"
             tabIndex={interactive ? 0 : -1}
             onClick={(e) => setReviewing(toolId, originFromEvent(e.currentTarget))}
-            className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-colors"
+            className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97]"
           >
             Review
           </button>
@@ -342,7 +342,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("reject", () => respondToAllApprovals(false))}
-              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-all active:scale-[0.97]"
+              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97]"
             >
               Reject all
             </button>
@@ -350,7 +350,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("approve", () => respondToAllApprovals(true))}
-              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-all active:scale-[0.97]"
+              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
             >
               Approve all
             </button>
@@ -361,7 +361,7 @@ function ApprovalCard({
           type="button"
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("reject", () => respondToApproval(toolId, false))}
-          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-all active:scale-[0.97]"
+          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
         >
           Reject
         </button>
@@ -370,7 +370,7 @@ function ApprovalCard({
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("approve", () => respondToApproval(toolId, true))}
           title="Approve (⌘↩)"
-          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-all active:scale-[0.97]"
+          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,transform] duration-check ease-out active:scale-[0.97]"
         >
           Approve
           <span className="inline-flex items-center gap-0.5 opacity-70 text-2xs font-mono leading-none">

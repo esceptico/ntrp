@@ -10,7 +10,7 @@ import {
   startMCPOAuthApi,
   updateMCPServerApi,
 } from "../../../api";
-import { useMountedRef, useMutationState } from "../../../lib/hooks";
+import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
 import { ICON } from "../../../lib/icons";
 import { GlassToggle } from "../../GlassToggle";
@@ -35,8 +35,7 @@ export function ServerForm({
   onRemoved?: () => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
-  const mounted = useMountedRef();
-  const { busy, error, run } = useMutationState(mounted);
+  const { busy, error, run } = useMutationState();
 
   const initialTransport: MCPTransport =
     server?.transport === "http" || server?.transport === "stdio" ? server.transport : "http";

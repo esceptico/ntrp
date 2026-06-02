@@ -11,8 +11,8 @@ member_of edge. Load-bearing invariants asserted here:
                into the registry row; cache hit costs zero synthesis.
   re-validate-at-read — after a criterion change, project returns only still-`in`
                members; the cache is just a cache (nothing is destroyed).
-  write-back — EDIT -> supersede the claim; ACCEPT -> feedback + corrob; ADD ->
-               WriteSeam (the one prose->claim path); REJECT -> lens-scoped
+  write-back — EDIT -> supersede the claim; ACCEPT -> feedback + corrob; INCLUDE ->
+               explicit lens inclusion of an existing claim; REJECT -> lens-scoped
                negative-example correction, claim survives, page hides it next read;
                EDIT_CRITERION -> in-place criterion update + page nulled (dirty).
   §9.5  — synthesis failure -> synthesized=False raw anchored list, never blank.
@@ -698,6 +698,38 @@ async def test_edit_supersedes_claim(store):
 
 
 # --- write-back: REJECT -> correction, claim + cache survive ---------
+
+
+async def test_include_records_override_and_marks_dirty(store):
+    lens = await _lens(store, name="Dex employees", criterion="strict employees", page="# Dex\n")
+    c1 = await _claim(store, "Kevin Gu is a Dex collaborator.", canonical_subject="Kevin Gu")
+    wb = _writeback(store)
+
+    res = await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.INCLUDE, claim_id=c1.id)])
+
+    assert (PageEditKind.INCLUDE, c1.id) in res.applied
+    assert res.rederive_triggered is True
+    assert c1.id in await store.get_inclusions(lens.id)
+    assert await _member_ids(store, lens.id) == {c1.id}
+    assert (await store.get_lens(lens.id)).page is None
+
+
+async def test_include_then_project_keeps_claim_even_when_judge_would_drop_it(store):
+    lens = await _lens(store, name="Dex employees", criterion="strict employees", page="# Dex\n")
+    included = await _claim(store, "Kevin Gu is a Dex collaborator.", canonical_subject="Kevin Gu")
+    wb = _writeback(store)
+    await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.INCLUDE, claim_id=included.id)])
+    await store.invalidate_lens_membership(lens.id)
+
+    cheap = KeywordJudge("not-present")
+    synth_md = f"# Dex employees\n## Kevin Gu\n- Collaborator. <!--claim:{included.id}-->\n"
+    strong = FakeCompletionClient(queue=[_synth(synth_md)])
+    proj = _projector(store, cheap=cheap, strong=strong)
+
+    page = await proj.project(lens.id, refresh=True)
+
+    assert set(parse_anchors(page.markdown)) == {included.id}
+    assert {b.claim_id for b in page.blocks} == {included.id}
 
 
 async def test_reject_records_correction_keeps_claim(store):

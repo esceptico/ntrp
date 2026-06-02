@@ -145,7 +145,12 @@ export function ModelReasoningPicker({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 4, scale: 0.98 }}
           transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
-          style={{ position: "fixed", ...coords, zIndex: 60 }}
+          style={{
+            position: "fixed",
+            ...coords,
+            zIndex: 60,
+            transformOrigin: placement === "above-right" ? "bottom right" : "top left",
+          }}
           className="glass-surface surface-popover w-[300px] overflow-hidden"
         >
           {efforts.length > 0 && (

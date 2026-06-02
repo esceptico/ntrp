@@ -1,5 +1,17 @@
 # Lessons
 
+## React StrictMode: `useRef(true)` + cleanup-only-false "mounted" gate is broken in dev (Jun 2026)
+
+`const mounted = useRef(true); useEffect(() => () => { mounted.current = false; }, [])` is unsafe under `<StrictMode>` (enabled in src/main.tsx). Dev runs mount effects setup→cleanup→setup; the cleanup flips it false and the empty setup never restores true, so the ref is stuck `false` for the component's whole life in dev — every `if (mounted.current)` gate becomes a permanent no-op (stuck spinners, errors never shown, busy never clears). Bit twice: `LensEvidenceSearch`'s `mounted` and the shared `useMountedRef` hook (feeding `useMutationState`).
+
+Rule: prefer DROPPING the gate — setState-after-unmount is a harmless no-op in React 18/19 (the warning that motivated these guards was removed in React 18), so a mounted-gate that only protects setState is pure defensive code (no-defensive-code stance). Only if a gate is genuinely load-bearing (guards a side effect, not setState) set `ref.current = true` at the START of the effect body (the LensPage pattern), never cleanup-only. Audit before deleting a shared hook: grep all callers and confirm none use the ref for a side-effect guard.
+
+## "use /workflows" means orchestrate the implementation too (Jun 2026)
+
+On the lens-search task I used workflows for discovery + adversarial review but implemented the actual changes solo in the main loop (reasoning LensEvidenceSearch.tsx / LensesView.tsx overlapped too much for parallel agents). User: "next time use /workflows please."
+
+Rule: when the user asks to use /workflows, decompose the **implementation** across workflow agents — `isolation: "worktree"` for overlapping-file parallel edits, or `pipeline()`/`parallel()` partitioned by file/area for independent ones — not just the research/review bracket. Solo main-loop editing only for trivial or tightly-coupled single-file changes.
+
 ## Memory work — the spec IS the implementation guide; read it FIRST, every time (Jun 2026)
 
 Before ANY memory decision (diagnosis, fix, build, answer), read the governing docs FIRST — never improvise then check:

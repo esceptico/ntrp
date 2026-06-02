@@ -8,6 +8,7 @@ from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.llm.router import close as llm_close
+from ntrp.llm.router import get_completion_client
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
@@ -235,6 +236,8 @@ class Runtime:
             get_memory_service=lambda: self.memory_service,
             get_pattern_finder=lambda: self.pattern_finder,
             get_calendar_source=lambda: self.integrations.get_client("calendar"),
+            get_cheap_llm=lambda: get_completion_client(self.config.memory_model) if self.config.memory_model else None,
+            cheap_model=self.config.memory_model,
             indexer=self.indexer,
         )
 

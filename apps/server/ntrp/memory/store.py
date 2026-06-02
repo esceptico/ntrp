@@ -107,6 +107,15 @@ CREATE TABLE IF NOT EXISTS lens_rejection (
     PRIMARY KEY (lens_id, claim_id)
 );
 
+-- Durable user INCLUDEs of a claim into a lens. This is the opposite explicit
+-- override: refresh/re-validation keeps the claim IN until the user rejects it.
+CREATE TABLE IF NOT EXISTS lens_inclusion (
+    lens_id TEXT NOT NULL,
+    claim_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (lens_id, claim_id)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -165,6 +174,12 @@ SQL_ADD_REJECTION = (
     "INSERT OR IGNORE INTO lens_rejection (lens_id, claim_id, created_at) VALUES (?, ?, ?)"
 )
 SQL_GET_REJECTIONS = "SELECT claim_id FROM lens_rejection WHERE lens_id = ?"
+SQL_REMOVE_REJECTION = "DELETE FROM lens_rejection WHERE lens_id = ? AND claim_id = ?"
+SQL_ADD_INCLUSION = (
+    "INSERT OR IGNORE INTO lens_inclusion (lens_id, claim_id, created_at) VALUES (?, ?, ?)"
+)
+SQL_GET_INCLUSIONS = "SELECT claim_id FROM lens_inclusion WHERE lens_id = ?"
+SQL_REMOVE_INCLUSION = "DELETE FROM lens_inclusion WHERE lens_id = ? AND claim_id = ?"
 
 
 def _default_lenses_dir() -> Path:
@@ -599,21 +614,22 @@ class MemoryStore:
     async def delete_lens(self, lens_id: str) -> bool:
         """Delete the lens FILE + ALL its derived/durable rows. Claims/edges untouched.
 
-        Includes lens_rejection: the lens_id is the slug (= file stem), so recreating
-        a lens with the same name reuses the slug — leftover rejections would silently
-        suppress claims from the brand-new lens.
+        Includes lens_rejection/lens_inclusion: the lens_id is the slug (= file
+        stem), so recreating a lens with the same name reuses the slug — leftover
+        overrides would silently suppress/include claims from the brand-new lens.
         """
         # Reject an invalid/traversal slug before any DB mutation (the lens tool
         # passes an LLM-supplied lens_id straight through).
         if not self.lens_files.valid_slug(lens_id):
             return False
-        # Durable state first: delete + commit the DB rows (esp. lens_rejection,
+        # Durable state first: delete + commit the DB rows (esp. user overrides,
         # which does NOT self-heal) BEFORE unlinking the file. If the file unlink
         # then fails the DB is already clean; the reverse order could leave orphaned
-        # rejection rows that silently suppress claims from a same-slug recreation.
+        # override rows that silently alter a same-slug recreation.
         await self.conn.execute(SQL_DELETE_PAGE, (lens_id,))
         await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
         await self.conn.execute("DELETE FROM lens_rejection WHERE lens_id = ?", (lens_id,))
+        await self.conn.execute("DELETE FROM lens_inclusion WHERE lens_id = ?", (lens_id,))
         await self.conn.commit()
         return self.lens_files.delete(lens_id)
 
@@ -676,9 +692,20 @@ class MemoryStore:
 
     async def add_rejection(self, lens_id: str, claim_id: str) -> None:
         """Record a durable user REJECT of a claim from a lens (survives re-derive)."""
+        await self.conn.execute(SQL_REMOVE_INCLUSION, (lens_id, claim_id))
         await self.conn.execute(SQL_ADD_REJECTION, (lens_id, claim_id, now_iso()))
         await self.conn.commit()
 
     async def get_rejections(self, lens_id: str) -> set[str]:
         rows = await self.conn.execute_fetchall(SQL_GET_REJECTIONS, (lens_id,))
+        return {r["claim_id"] for r in rows}
+
+    async def add_inclusion(self, lens_id: str, claim_id: str) -> None:
+        """Record a durable user INCLUDE of a claim into a lens (survives re-derive)."""
+        await self.conn.execute(SQL_REMOVE_REJECTION, (lens_id, claim_id))
+        await self.conn.execute(SQL_ADD_INCLUSION, (lens_id, claim_id, now_iso()))
+        await self.conn.commit()
+
+    async def get_inclusions(self, lens_id: str) -> set[str]:
+        rows = await self.conn.execute_fetchall(SQL_GET_INCLUSIONS, (lens_id,))
         return {r["claim_id"] for r in rows}

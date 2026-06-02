@@ -6,6 +6,8 @@ lens is a VIEW: it has no member_of edges, so membership changes are projection
 ops, not edge writes.
 
   ACCEPT(id)            -> set_feedback(CONFIRMED) + bump_corroboration
+  INCLUDE(id)           -> record a durable lens_inclusion, write an IN cache row,
+                           null the page, and force re-derive.
   EDIT(id, new_text)    -> supersede(old=id, successor); union evidence. The
                            successor keeps the same canonical_subject; membership
                            recomputes on the next projection.
@@ -15,8 +17,8 @@ ops, not edge writes.
   EDIT_CRITERION(text)  -> update the registry criterion + null page + invalidate
                            cache; membership re-derives at next read.
 
-Apply order is fixed (ACCEPT -> EDIT -> REJECT -> EDIT_CRITERION). A stale anchor
-is a no-op + `rejected`, never a silent write to a dead row.
+Apply order is fixed (ACCEPT -> INCLUDE -> EDIT -> REJECT -> EDIT_CRITERION). A
+stale anchor is a no-op + `rejected`, never a silent write to a dead row.
 """
 
 import uuid
@@ -25,6 +27,8 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import (
     Feedback,
     LensRow,
+    MembershipDecision,
+    MembershipVerdict,
     MemoryItem,
     Provenance,
     Status,
@@ -41,9 +45,10 @@ _logger = get_logger(__name__)
 
 _APPLY_ORDER = {
     PageEditKind.ACCEPT: 0,
-    PageEditKind.EDIT: 1,
-    PageEditKind.REJECT: 2,
-    PageEditKind.EDIT_CRITERION: 3,
+    PageEditKind.INCLUDE: 1,
+    PageEditKind.EDIT: 2,
+    PageEditKind.REJECT: 3,
+    PageEditKind.EDIT_CRITERION: 4,
 }
 
 
@@ -84,6 +89,8 @@ class LensWriteBack:
     async def _apply_one(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
         if op.kind is PageEditKind.ACCEPT:
             return await self._accept(op)
+        if op.kind is PageEditKind.INCLUDE:
+            return await self._include(lens, op)
         if op.kind is PageEditKind.EDIT:
             return await self._edit(op)
         if op.kind is PageEditKind.REJECT:
@@ -107,6 +114,24 @@ class LensWriteBack:
         await self.store.set_feedback(m.id, Feedback.CONFIRMED)
         await self.store.bump_corroboration(m.id)
         return True, m.id, False
+
+    async def _include(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
+        m = await self._live_claim(op.claim_id)
+        if m is None:
+            return False, "claim moved; re-open the page", False
+        await self.store.add_inclusion(lens.id, m.id)
+        await self.store.put_membership(
+            [
+                MembershipVerdict(
+                    lens_id=lens.id,
+                    claim_id=m.id,
+                    decision=MembershipDecision.IN,
+                    rationale="explicitly included by user",
+                )
+            ]
+        )
+        await self.store.update_lens(lens.id, page=None)
+        return True, m.id, True
 
     async def _edit(self, op: PageEditOp) -> tuple[bool, str, bool]:
         m = await self._live_claim(op.claim_id)

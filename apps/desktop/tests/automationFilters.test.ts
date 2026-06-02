@@ -14,7 +14,7 @@ function automation(patch: Partial<Automation>): Automation {
     last_run_at: null,
     next_run_at: null,
     last_result: null,
-    writable: false,
+    auto_approve: false,
     running_since: null,
     handler: null,
     builtin: false,
@@ -35,7 +35,6 @@ test("keeps user automations separate from internal automations", () => {
   expect(splitAutomationsForTabs([internal, user])).toEqual({
     user: [user],
     internal: [internal],
-    channels: [],
   });
 });
 
@@ -49,11 +48,10 @@ test("treats known knowledge handlers as internal even before builtin metadata i
   expect(splitAutomationsForTabs([health])).toEqual({
     user: [],
     internal: [health],
-    channels: [],
   });
 });
 
-test("routes post-mode loop to channels bucket", () => {
+test("keeps post-mode channel automations in active list", () => {
   const channel = automation({
     task_id: "channel",
     name: "News feed",
@@ -62,9 +60,8 @@ test("routes post-mode loop to channels bucket", () => {
   });
 
   expect(splitAutomationsForTabs([channel])).toEqual({
-    user: [],
+    user: [channel],
     internal: [],
-    channels: [channel],
   });
 });
 
@@ -79,6 +76,5 @@ test("drops iteration loops from all buckets", () => {
   expect(splitAutomationsForTabs([iteration])).toEqual({
     user: [],
     internal: [],
-    channels: [],
   });
 });

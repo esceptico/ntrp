@@ -16,6 +16,7 @@ export function PickerRow({ active, children, className, onMouseMove, ...rest }:
     <button
       type="button"
       data-active={active || undefined}
+      data-picker-row="true"
       className={clsx("w-full text-left", className)}
       onMouseMove={onMouseMove}
       {...rest}

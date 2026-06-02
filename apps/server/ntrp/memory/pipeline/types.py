@@ -279,6 +279,7 @@ class PageEditKind(StrEnum):
     EDIT = "edit"
     REJECT = "reject"
     ACCEPT = "accept"
+    INCLUDE = "include"
     EDIT_CRITERION = "edit_criterion"
 
 

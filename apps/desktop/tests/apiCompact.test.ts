@@ -94,23 +94,31 @@ test("desktop API bridge rejects when the renderer timeout elapses", async () =>
   expect((error as Error).message).toBe("Request timed out for GET /slow");
 });
 
-test("memory search uses renderer fetch instead of desktop bridge", async () => {
+test("memory search routes through the desktop bridge like other memory calls", async () => {
+  // The renderer fetch bypass (commit 5789e07f) broke lens search in packaged
+  // builds (file:// origin / non-localhost serverUrl hit the CSP/CORS wall).
+  // Search must use the bridge — a main-process fetch with no CSP/CORS — like
+  // every other memory call.
   const calls: string[] = [];
   (globalThis as typeof globalThis & { window?: unknown }).window = {
     ntrpDesktop: {
       api: {
-        request: async () => {
-          throw new Error("bridge should not be used for memory search");
+        request: async (_config: unknown, req: { path: string }) => {
+          calls.push(req.path);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: { mode: "fts", degraded: false, items: [] },
+            text: "",
+          };
         },
       },
     },
   };
-  globalThis.fetch = async (url, init) => {
-    calls.push(String(url));
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-key");
-    return new Response(JSON.stringify({ mode: "fts", degraded: false, items: [] }), {
-      headers: { "Content-Type": "application/json" },
-    });
+  globalThis.fetch = async () => {
+    throw new Error("renderer fetch must not be used when the bridge is available");
   };
 
   const result = await searchMemory(

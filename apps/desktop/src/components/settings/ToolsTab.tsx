@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { listToolsApi, type ToolMetadata, type ToolOverrideDecision } from "../../api";
 import { useStore } from "../../store";
-import { useMountedRef, useMutationState } from "../../lib/hooks";
+import { useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { GlassToggle } from "../GlassToggle";
@@ -16,8 +16,7 @@ const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
 export function ToolsTab() {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
-  const mounted = useMountedRef();
-  const { error, run } = useMutationState(mounted);
+  const { error, run } = useMutationState();
   const [tools, setTools] = useState<ToolMetadata[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");

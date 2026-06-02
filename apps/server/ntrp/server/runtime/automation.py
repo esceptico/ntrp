@@ -4,6 +4,8 @@ from datetime import datetime
 from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
+from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
+from ntrp.events.sse import AutomationSuggestionsUpdatedEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
@@ -11,6 +13,10 @@ from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
 from ntrp.server.runtime.outbox import RuntimeOutbox
 from ntrp.server.stores import Stores
+
+
+class SuggesterUnavailableError(Exception):
+    """Raised when the automation suggester cannot run (memory or cheap_llm missing)."""
 
 
 class AutomationRuntime:
@@ -23,6 +29,8 @@ class AutomationRuntime:
         get_memory_service: Callable[[], object | None],
         get_pattern_finder: Callable[[], object | None],
         get_calendar_source: Callable[[], object | None],
+        get_cheap_llm: Callable[[], object | None],
+        cheap_model: str | None,
         indexer: Indexer | None,
     ):
         self.stores = stores
@@ -30,6 +38,8 @@ class AutomationRuntime:
         self.get_memory_service = get_memory_service
         self.get_pattern_finder = get_pattern_finder
         self.get_calendar_source = get_calendar_source
+        self.get_cheap_llm = get_cheap_llm
+        self.cheap_model = cheap_model
         self.scheduler = Scheduler(
             store=stores.automations,
             build_deps=build_operator_deps,
@@ -62,6 +72,10 @@ class AutomationRuntime:
         self.scheduler.register_handler(
             "skill_inducer_daily",
             self._build_skill_inducer_daily_handler(),
+        )
+        self.scheduler.register_handler(
+            "automation_suggester_daily",
+            self._build_automation_suggester_handler(),
         )
 
         await seed_builtins(self.stores.automations)
@@ -104,6 +118,35 @@ class AutomationRuntime:
             )
 
         return handler
+
+    def _build_automation_suggester_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            return await self._run_suggester()
+
+        return handler
+
+    def _suggester_available(self) -> bool:
+        return self.get_memory() is not None and self.get_cheap_llm() is not None
+
+    async def _run_suggester(self) -> str | None:
+        if not self._suggester_available():
+            return None
+        suggester = AutomationSuggester(
+            memory=self.get_memory(),
+            sessions=self.stores.sessions,
+            automations=self.stores.automations,
+            cheap_llm=self.get_cheap_llm(),
+            model=self.cheap_model,
+        )
+        summary = await suggester.run()
+        await self.scheduler.emit_automation_event(AutomationSuggestionsUpdatedEvent())
+        return summary
+
+    async def refresh_suggestions(self) -> list[AutomationSuggestion]:
+        if not self._suggester_available():
+            raise SuggesterUnavailableError("memory or cheap_llm is not available")
+        await self._run_suggester()
+        return await self.stores.automations.list_active_suggestions()
 
     def start_monitor(self) -> None:
         if self.stores.monitor is None:

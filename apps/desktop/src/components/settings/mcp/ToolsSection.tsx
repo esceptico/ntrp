@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useStore } from "../../../store";
 import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "../../../api";
 import { fetchServerConfig, updateServerConfig } from "../../../actions";
-import { useMountedRef, useMutationState } from "../../../lib/hooks";
+import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
 import { GlassToggle } from "../../GlassToggle";
 import { GlassSwitch } from "../../GlassSwitch";
@@ -23,8 +23,7 @@ export function ToolsSection({
 }) {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
-  const mounted = useMountedRef();
-  const { busy, error, run } = useMutationState(mounted);
+  const { busy, error, run } = useMutationState();
   const overrides = serverConfig?.tool_overrides ?? {};
 
   const enabledNames = useMemo(

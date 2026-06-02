@@ -9,7 +9,7 @@ import {
 } from "../actions";
 import type { ArchivedSession } from "../api";
 import { PageModal } from "./PageModal";
-import { useMountedRef, useMutationState } from "../lib/hooks";
+import { useMutationState } from "../lib/hooks";
 import { formatRelativePast } from "../lib/format";
 import { ICON } from "../lib/icons";
 import { ScrollBlurTop } from "./ScrollBlur";
@@ -76,15 +76,14 @@ export function ArchiveModal() {
 }
 
 function ArchivedRow({ session }: { session: ArchivedSession }) {
-  const mounted = useMountedRef();
-  const { busy: anyBusy, error, run } = useMutationState(mounted);
+  const { busy: anyBusy, error, run } = useMutationState();
   const [busyOp, setBusyOp] = useState<"restore" | "delete" | null>(null);
 
   const trigger = async (op: "restore" | "delete", fn: () => Promise<void>) => {
     if (anyBusy) return;
     setBusyOp(op);
     await run(fn);
-    if (mounted.current) setBusyOp(null);
+    setBusyOp(null);
   };
 
   const onRestore = () =>

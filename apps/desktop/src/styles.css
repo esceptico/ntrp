@@ -434,14 +434,15 @@ html[data-fullscreen="true"] .sidebar-toggle { left: 18px; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 
-/* Tap feedback — scoped to UI chrome (sidebar) so chat/trace buttons
-   don't jump on press. `.sidebar button` selector beats Tailwind's
-   `.transition-colors` on specificity (0,1,1 vs 0,1,0) so we don't
-   need `!important`.
+/* Tap feedback — scoped to UI chrome (sidebar). Use the individual
+   `scale` property so buttons that already translate for positioning
+   (e.g. filter clear buttons) don't lose their translate on press.
+   `.sidebar button` selector beats Tailwind's `.transition-colors` on
+   specificity (0,1,1 vs 0,1,0) so we don't need `!important`.
    Spec: docs/internal/apple-design-intel.md "Tap / Active States". */
 .sidebar button:not(:disabled) {
   transition:
-    transform var(--duration-check) cubic-bezier(0.25, 0.1, 0.25, 1),
+    scale var(--duration-check) cubic-bezier(0.25, 0.1, 0.25, 1),
     background-color var(--duration-palette) ease,
     color var(--duration-palette) ease,
     border-color var(--duration-palette) ease,
@@ -449,7 +450,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     opacity var(--duration-palette) ease;
 }
 .sidebar button:not(:disabled):active {
-  transform: scale(0.96);
+  scale: 0.96;
 }
 
 /* ─── Drag regions ─────────────────────────────────────────── */
@@ -642,10 +643,20 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `aria-selected="true"` if the row already exposes it. */
 .app-row {
   position: relative;
-  transition: color 120ms ease-out, box-shadow 120ms ease-out;
+  transition:
+    background-color var(--duration-check) ease-out,
+    box-shadow var(--duration-check) ease-out,
+    color var(--duration-check) ease-out,
+    scale var(--duration-check) ease-out;
+}
+.app-row[data-picker-row="true"] {
+  transition: none;
 }
 .app-row:hover {
   color: var(--color-ink);
+}
+button.app-row:not(:disabled):active {
+  scale: 0.985;
 }
 .app-row[data-active="true"],
 .app-row[aria-selected="true"] {
@@ -1690,8 +1701,14 @@ main[data-has-approval="false"] .scroll-messages {
 @media (prefers-reduced-motion: reduce) {
   /* Drop Phase 5 interactive transitions on glass + cards. */
   .glass-surface,
-  .surface-card {
+  .surface-card,
+  .app-row,
+  .sidebar button:not(:disabled) {
     transition: none !important;
+  }
+  button.app-row:not(:disabled):active,
+  .sidebar button:not(:disabled):active {
+    scale: 1;
   }
   /* Reset per-material hover/active bumps — surfaces stay at rest. */
   :root[data-material="glass"] .surface-card:hover,

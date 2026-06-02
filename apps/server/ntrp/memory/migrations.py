@@ -11,7 +11,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 async def _get_schema_version(conn: aiosqlite.Connection) -> int:
@@ -72,7 +72,26 @@ async def _migrate_v4(conn: aiosqlite.Connection) -> None:
     )
 
 
-_MIGRATIONS = ((1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4))
+async def _migrate_v5(conn: aiosqlite.Connection) -> None:
+    await conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS lens_inclusion (
+            lens_id TEXT NOT NULL,
+            claim_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (lens_id, claim_id)
+        );
+        """
+    )
+
+
+_MIGRATIONS = (
+    (1, _migrate_v1),
+    (2, _migrate_v2),
+    (3, _migrate_v3),
+    (4, _migrate_v4),
+    (5, _migrate_v5),
+)
 
 
 async def run_migrations(conn: aiosqlite.Connection) -> None:

@@ -1,0 +1,166 @@
+import { beforeEach, expect, mock, test } from "bun:test";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { JSDOM } from "jsdom";
+import type { AutomationSuggestion, CreateAutomationPayload } from "../src/api.ts";
+import { suggestionToPayload } from "../src/api.ts";
+
+// Capture what the editor hands to the create action. The component imports
+// `createAutomation` from `../../actions`, which resolves to the same module
+// file we mock here, so the stub intercepts the real submit path.
+let created: CreateAutomationPayload[] = [];
+let updated: { taskId: string; patch: unknown }[] = [];
+
+mock.module("../src/actions/index.ts", () => ({
+  createAutomation: async (payload: CreateAutomationPayload) => {
+    created.push(payload);
+  },
+  updateAutomation: async (taskId: string, patch: unknown) => {
+    updated.push({ taskId, patch });
+  },
+}));
+
+// Imported after the mock is registered so the component picks up the stub,
+// and so the module-local helpers are available for focused unit tests.
+const { AutomationEditor, formFromPreset, buildPayload } = await import(
+  "../src/components/automations/AutomationEditor.tsx"
+);
+
+beforeEach(() => {
+  created = [];
+  updated = [];
+});
+
+function suggestion(overrides: Partial<AutomationSuggestion> = {}): AutomationSuggestion {
+  return {
+    id: "sugg-123",
+    name: "Weekly PR digest",
+    description: "Summarize merged PRs this week.",
+    triggers: [{ type: "time", at: "09:00", days: "mon" }],
+    rationale: "You review PRs most mornings",
+    evidence: ["recent PR reviews"],
+    category: "Status reports",
+    icon: "GitPullRequest",
+    ...overrides,
+  };
+}
+
+// ─── Unit: the form ↔ payload round-trip carries from_suggestion_id ──────
+
+test("formFromPreset captures from_suggestion_id and buildPayload echoes it", () => {
+  const preset = suggestionToPayload(suggestion());
+  expect(preset.from_suggestion_id).toBe("sugg-123");
+
+  const form = formFromPreset(preset);
+  expect(buildPayload(form).from_suggestion_id).toBe("sugg-123");
+});
+
+test("editing the form fields does not clear from_suggestion_id", () => {
+  const form = formFromPreset(suggestionToPayload(suggestion()));
+  // Mirror what the component does on input: replace name/prompt/schedule.
+  form.name = "Tweaked name";
+  form.prompt = "Summarize merged PRs and tag reviewers.";
+  form.auto_approve = true;
+
+  const payload = buildPayload(form);
+  expect(payload.description).toBe("Summarize merged PRs and tag reviewers.");
+  expect(payload.from_suggestion_id).toBe("sugg-123");
+});
+
+test("a preset without a suggestion id yields no from_suggestion_id", () => {
+  const form = formFromPreset({ name: "Manual", description: "do x", trigger_type: "time", at: "08:00" });
+  expect("from_suggestion_id" in buildPayload(form)).toBe(false);
+});
+
+// ─── Integration: clicking Create submits the suggestion id ─────────────
+
+test("a create seeded from a suggestion preset submits with from_suggestion_id", async () => {
+  const { dom, root, restore } = setupDom();
+  try {
+    await act(async () => {
+      root.render(
+        <AutomationEditor
+          seed={{ kind: "create", preset: suggestionToPayload(suggestion()) }}
+          onClose={() => {}}
+        />,
+      );
+    });
+
+    await clickCreate(dom);
+
+    expect(created).toHaveLength(1);
+    expect(created[0].from_suggestion_id).toBe("sugg-123");
+
+    await act(async () => root.unmount());
+  } finally {
+    restore();
+  }
+});
+
+test("a plain create (no preset) submits without from_suggestion_id", async () => {
+  const { dom, root, restore } = setupDom();
+  try {
+    // Seed via a preset that carries no suggestion id so the prompt is valid
+    // (valid submit needs a non-empty prompt) but the id stays absent.
+    await act(async () => {
+      root.render(
+        <AutomationEditor
+          seed={{
+            kind: "create",
+            preset: { name: "Morning brief", description: "Do a thing every morning." },
+          }}
+          onClose={() => {}}
+        />,
+      );
+    });
+
+    await clickCreate(dom);
+
+    expect(created).toHaveLength(1);
+    expect(created[0].from_suggestion_id).toBeUndefined();
+
+    await act(async () => root.unmount());
+  } finally {
+    restore();
+  }
+});
+
+// ─── helpers ─────────────────────────────────────────────────────────
+
+async function clickCreate(dom: JSDOM) {
+  const doc = dom.window.document;
+  const create = [...doc.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Create");
+  if (!create) throw new Error("missing Create button");
+  await act(async () => {
+    create.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+  // Let the async submit() microtasks settle so the stub records the payload.
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function setupDom() {
+  const dom = new JSDOM('<!doctype html><div id="app"></div>', { url: "http://localhost" });
+  const testGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const prev = {
+    window: globalThis.window,
+    document: globalThis.document,
+    act: testGlobal.IS_REACT_ACT_ENVIRONMENT,
+  };
+  testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+  globalThis.window = dom.window as unknown as Window & typeof globalThis;
+  globalThis.document = dom.window.document;
+
+  const appEl = dom.window.document.getElementById("app");
+  if (!appEl) throw new Error("missing #app");
+  const root: Root = createRoot(appEl);
+
+  const restore = () => {
+    globalThis.document = prev.document;
+    globalThis.window = prev.window;
+    testGlobal.IS_REACT_ACT_ENVIRONMENT = prev.act;
+  };
+  return { dom, doc: dom.window.document, appEl, root, restore };
+}

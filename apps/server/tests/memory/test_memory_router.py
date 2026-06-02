@@ -552,6 +552,22 @@ async def test_search_fts_respects_scope(store, client):
 
 
 @pytest.mark.asyncio
+async def test_search_fts_whole_pool_when_scope_omitted(store, client):
+    # Lens evidence search omits scope to find any claim to Include, regardless of
+    # which scope it lives in. Omitted scope_kind -> no scope filter (whole pool).
+    project = Scope(kind=ScopeKind.PROJECT, key="dex")
+    await _claim(store, "kevin dex collaborator", scope=project)
+    await _claim(store, "kevin user note")
+
+    body = client.get("/admin/memory/search", params={"q": "kevin"}).json()
+
+    assert sorted(m["content"] for m in body["items"]) == [
+        "kevin dex collaborator",
+        "kevin user note",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_fts_uses_dedicated_search_store(store):
     class BusyStore:
         has_fts = True
@@ -635,6 +651,25 @@ async def test_writeback_serializes_result(store, client, pipeline):
 
 
 @pytest.mark.asyncio
+async def test_writeback_accepts_include_ops(store, client, pipeline):
+    lens = await _lens(store, "L", "c")
+    pipeline.lens_writeback.result = WriteBackResult(
+        applied=[(PageEditKind.INCLUDE, "c1")],
+        rejected=[],
+        rederive_triggered=True,
+    )
+
+    resp = client.post(
+        f"/admin/memory/lenses/{lens.id}/writeback",
+        json={"ops": [{"kind": "include", "claim_id": "c1"}]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["applied"] == [{"kind": "include", "id": "c1"}]
+    assert pipeline.lens_writeback.calls[0][1][0].kind is PageEditKind.INCLUDE
+
+
+@pytest.mark.asyncio
 async def test_writeback_rejects_add_ops(store, client, pipeline):
     lens = await _lens(store, "L", "c")
     resp = client.post(
@@ -654,6 +689,12 @@ async def test_writeback_validates_required_fields(store, client):
         json={"ops": [{"kind": "accept"}]},
     )
     assert r1.status_code == 422
+    # include without claim_id -> 422
+    r1b = client.post(
+        f"/admin/memory/lenses/{lens.id}/writeback",
+        json={"ops": [{"kind": "include"}]},
+    )
+    assert r1b.status_code == 422
     # criterion edit without new_text -> 422
     r2 = client.post(
         f"/admin/memory/lenses/{lens.id}/writeback",
