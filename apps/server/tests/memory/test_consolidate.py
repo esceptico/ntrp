@@ -129,6 +129,13 @@ async def test_merge_collapses_duplicates_and_keeps_best_survivor(store):
     survivor = active[0]
     # Survivor is a fresh row (supersede minted it) carrying the unioned refs.
     assert survivor.id not in {keep.id, loser.id}
+    # The minted id must be a 32-char continuous hex (uuid4().hex), NOT a hyphenated
+    # str(uuid4()): the lens anchor regex is hex-only, so a hyphenated id would make
+    # the consolidated claim silently vanish from cached lens pages.
+    from ntrp.memory.pipeline.project import parse_anchors
+
+    assert "-" not in survivor.id and len(survivor.id) == 32
+    assert parse_anchors(f"- text <!--claim:{survivor.id}-->") == [survivor.id]
     assert {r.ref for r in survivor.source_refs} == {"a", "b"}
     # Predecessors preserved as superseded, history walkable.
     assert (await store.get(keep.id)).status is Status.SUPERSEDED

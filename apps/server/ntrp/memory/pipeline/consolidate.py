@@ -430,7 +430,10 @@ class ConsolidateLint:
 
         now = now_iso()
         return MemoryItem(
-            id=str(uuid.uuid4()),
+            # .hex (32-char continuous), matching writeback/reconcile. A hyphenated
+            # str(uuid4()) breaks the lens anchor regex (_ANCHOR_RE, hex-only), so the
+            # consolidated claim would silently vanish from cached lens pages.
+            id=uuid.uuid4().hex,
             content=content,
             canonical_subject=base.canonical_subject,
             scope=base.scope,

@@ -414,7 +414,9 @@ class Reconciler:
                 if better is not None:
                     row.op = better.op
                     row.target_idx = better.target_idx
-                    row.merged_text = better.merged_text
+                    # Same blank-normalization as _validate_rows — escalation
+                    # overrides merged_text after validation, so re-apply it here.
+                    row.merged_text = (better.merged_text or "").strip() or None
                     escalated_idxs.add(row.claim_index)
         return rows, escalated_idxs
 
@@ -430,6 +432,12 @@ class Reconciler:
             if row.claim_index in seen:
                 continue
             seen.add(row.claim_index)
+            # Normalize merged_text to None when blank/whitespace-only so the
+            # `merged_text or cand.content` fallback in UPDATE/CONTRADICT can't write
+            # a whitespace-only claim over a valid target (cand.content is already
+            # stripped+non-empty by extract.py Guard 1).
+            if row.merged_text is not None and not row.merged_text.strip():
+                row.merged_text = None
             if row.op != "add":
                 if row.target_idx is None or not (0 <= row.target_idx < n_profile):
                     _logger.warning(
