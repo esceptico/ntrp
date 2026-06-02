@@ -165,6 +165,25 @@ async def test_merge_sums_member_corroboration(store):
 
 
 @pytest.mark.asyncio
+async def test_merge_across_distinct_subjects_is_skipped(store):
+    # Similar content about DIFFERENT subjects must not merge — that would
+    # re-attribute one subject's fact to another (User != Timur fragmentation).
+    a = _claim("prefers raw SQL over ORMs")
+    a.canonical_subject = "User"
+    b = _claim("prefers raw SQL over ORMs")
+    b.canonical_subject = "Timur"
+    await store.create_item(a)
+    await store.create_item(b)
+
+    cheap = FakeLLM([LintOps(merges=[MergeOp(member_ids=[a.id, b.id])])])
+    report = await _lint(store, cheap).run_once(scope=USER)
+
+    assert report.merged == 0  # cross-subject merge refused
+    active = await store.query(scope=USER, status=Status.ACTIVE)
+    assert {c.id for c in active} == {a.id, b.id}  # both survive, distinct subjects intact
+
+
+@pytest.mark.asyncio
 async def test_merge_ignores_whitespace_only_merged_text(store):
     # A whitespace-only merged_text is truthy in Python; the `or survivor.content`
     # fallback must NOT write it as the survivor's content (it would replace a valid

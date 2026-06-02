@@ -235,6 +235,7 @@ class ConsolidateLint:
                     {
                         "id": c.id,
                         "content": c.content,
+                        "subject": c.canonical_subject,
                         "provenance": str(c.provenance),
                         "corroboration": c.corroboration,
                         "feedback": str(c.feedback),
@@ -284,6 +285,14 @@ class ConsolidateLint:
         members = [live[m] for m in op.member_ids if m in live]
         if len(members) < 2:
             return 0  # hallucinated/stale ids dropped, not dead-ended
+        # Never merge across distinct subjects: similar content about different
+        # referents (User vs Timur, two different people) is NOT the same fact —
+        # merging would re-attribute one subject's fact to another. Coreference is
+        # reconcile's job, not consolidate's. Categorical identity check, not a gate.
+        if len({m.canonical_subject for m in members}) > 1:
+            _logger.info("skip merge spanning distinct subjects: %s",
+                         sorted({m.canonical_subject for m in members}))
+            return 0
         # Never merge away a user-confirmed claim; if any member is confirmed,
         # leave the whole group (the rubric forbids it, this enforces it).
         if any(m.feedback is Feedback.CONFIRMED for m in members):

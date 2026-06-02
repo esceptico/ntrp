@@ -12,12 +12,15 @@ from pydantic import BaseModel, Field
 # user-confirmed claim is never invalidated or merged away (only flagged).
 LINT_RUBRIC = """You are health-checking a small slice of a personal knowledge base.
 
-You are shown a NEIGHBORHOOD of atomic claims (each with an id, content,
-provenance, corroboration count, feedback, validity window, source-ref summary,
-and an edges note) within a single scope. Propose ONLY these operations:
+You are shown a NEIGHBORHOOD of atomic claims (each with an id, content, subject
+(the person/thing the claim is ABOUT), provenance, corroboration count, feedback,
+validity window, source-ref summary, and an edges note) within a single scope.
+Propose ONLY these operations:
 
-- merge: two or more claims state the SAME fact; collapse duplicates onto one
-  survivor. List every member id; the processor picks the best-grounded survivor.
+- merge: two or more claims state the SAME fact ABOUT THE SAME SUBJECT; collapse
+  duplicates onto one survivor. List every member id; the processor picks the
+  best-grounded survivor. Claims with DIFFERENT subjects are never the same fact —
+  similar wording about two different people/things must NOT be merged.
 - invalidate: a claim is stale (no longer true) or is contradicted by a newer,
   better-grounded claim shown here. Give the claim id and a one-line reason.
 - drop_orphan: a claim whose evidence is gone (no source refs and no connecting
