@@ -76,11 +76,11 @@ class AdmitGate:
 
         # Step 4 -- the one cheap call.
         decision = await self._judge(unit, text, candidates)
-        biased_admit = not self.store.has_fts
 
         if decision is None:
             # Parse/LLM failure: bias toward ADMIT (false-reject of a new fact is
-            # not recoverable; false-admit is).
+            # not recoverable; false-admit is). This is the ONLY admit bias — it
+            # fires when NO judgment exists, not to override one.
             return AdmitResult(
                 verdict=Verdict.ADMIT,
                 unit=unit,
@@ -90,11 +90,12 @@ class AdmitGate:
                 forced=False,
             )
 
+        # Honor the judge's verdict verbatim. A prior override flipped a SUCCESSFUL
+        # REJECT to ADMIT whenever FTS was unavailable — a heuristic (infra state)
+        # deciding admit, which principle #2 forbids. Recall already degrades to the
+        # scoped query() pool when FTS is down, so the judge still reasons over real
+        # incumbents; that degraded-but-real context is enough.
         admit = not decision.predictable_from_memory
-        if biased_admit and decision.predictable_from_memory:
-            # FTS down -> judged on thin context -> bias toward ADMIT.
-            admit = True
-
         verdict = Verdict.ADMIT if admit else Verdict.REJECT
         residual = (decision.surprising_residual or text) if verdict is Verdict.ADMIT else None
         return AdmitResult(

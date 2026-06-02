@@ -252,18 +252,20 @@ async def test_automation_role_strengthens_system_prompt(store):
     assert "AUTOMATION run" in system_msg
 
 
-async def test_fts_unavailable_biases_predictable_to_admit(store):
+async def test_fts_unavailable_does_not_override_judge(store):
+    # Infra state (FTS availability) must NOT flip a SUCCESSFUL judgment (principle
+    # #2: no heuristic gate decides admit). Recall degrades to the scoped pool when
+    # FTS is down, so the judge still reasons over real incumbents; its REJECT stands.
     await _seed_claim(store, "Timur prefers tea over coffee.")
     store._has_fts = False  # simulate FTS5 unavailable
     llm = FakeLLM(
-        AdmitDecision(predictable_from_memory=True, surprising_residual="", reason="thin context")
+        AdmitDecision(predictable_from_memory=True, surprising_residual="", reason="known")
     )
     gate = _gate(store, llm)
 
     result = await gate.admit(_unit("Timur drinks tea in the mornings."))
 
-    # FTS down -> judged on thin scoped pool -> false-reject not tolerated.
-    assert result.verdict is Verdict.ADMIT
+    assert result.verdict is Verdict.REJECT  # judge honored, not force-admitted
     assert len(llm.calls) == 1
 
 
