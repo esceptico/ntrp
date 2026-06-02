@@ -11,9 +11,10 @@ Files: `models.py` (dataclasses + enums), `store.py` (`MemoryStore` + DDL),
 - **Memory is claims only**, plus claim↔claim edges (`evidence`, `supersedes`,
   `contradicts`). Nothing else is a memory participant.
 - **Lenses are views, not memory.** A lens is a named, criterion-defined
-  projection over claims. It lives in a **separate `lenses` registry table**,
-  never in `memory_items`, never as a graph node, never edge-linked. Creating or
-  deleting a lens touches zero claims.
+  projection over claims. Its definition lives as an **editable markdown file on
+  disk** (`$NTRP_DIR/memory/lenses/<slug>.md`), never in `memory_items`, never as
+  a graph node, never edge-linked; the DB holds only derived, slug-keyed caches.
+  Creating or deleting a lens touches zero claims.
 - **Subject / coreference is a claim attribute** (`canonical_subject`), not an
   entity row. Reconcile resolves it and merges/supersedes claims sharing a
   subject. Aliases are themselves ordinary claims.
@@ -47,28 +48,23 @@ claims-only. `memory_items_fts` (FTS5, external-content + triggers) indexes
 `content` and `canonical_subject` (the subject-alias recall channel). Degrades
 gracefully if FTS5 is unavailable (`_has_fts`).
 
-### `lenses` — the view registry (NOT memory)
+### Lens DEFINITIONS — editable markdown files (NOT a DB table)
 
 A lens is a small editable object: a criterion + metadata + a cached rendered
-page. It owns no claims.
+page. It owns no claims. Lens **definitions live as markdown files on disk**
+(`$NTRP_DIR/memory/lenses/<slug>.md`, see `lens/file_store.py`) — the `lenses`
+and `lenses_fts` DB tables were dropped in the v3 migration. The slug (`<slug>` =
+the file stem) is the lens id, validated by `^[a-z][a-z0-9-]{0,63}$`.
 
-| column | meaning |
-|---|---|
-| `id` TEXT PK | uuid |
-| `name` | short label ("People", "Regina Volkov", "Bugs") |
-| `criterion` | one-sentence natural-language membership test |
-| `scope_kind` / `scope_key` | inherits the scoping rule |
-| `detail_level` | default render zoom: `gist` \| `structured` \| `dossier` |
-| `render_mode` | page layout: `flat` \| `grouped_by_subject` (bucket by `canonical_subject`) |
-| `provenance` | `user_authored` \| `induced` (system-proposed) |
-| `status` | `active` \| `archived` |
-| `page` | cached synthesized markdown projection; `NULL` = dirty / not yet computed |
-| `created_at` / `updated_at` | timestamps |
+Each file carries YAML frontmatter (`directory`/name, `entity_type`,
+`detail_level`: `gist`\|`structured`\|`dossier`, `render_mode`: `flat`\|
+`grouped_by_subject` (bucket by `canonical_subject`), `provenance`, scope) plus a
+`## Belongs` (+ optional `## Profile shape`) criterion body.
 
-Edits are **in-place `UPDATE`s** (registry, not memory): a lens has no
-provenance DAG, no supersede chain. `lenses_fts` (FTS5) indexes
-`name`/`criterion`/`page` for lens-name recall. `delete_lens` is a hard `DELETE`
-(plus cache invalidation) — disposable, owns no data.
+Edits are **in-place file rewrites**: a lens has no provenance DAG, no supersede
+chain. Lens-name recall is in-memory (`store.search_lenses()` — lexical term-hit
+ranking over loaded files), not FTS. `delete_lens` unlinks the file (slug
+validated) and clears the derived caches — disposable, owns no data.
 
 ### `lens_membership_cache` — a cache, not graph truth
 

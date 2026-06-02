@@ -634,7 +634,14 @@ function LensPage({
           <GhostBtn
             onClick={() => {
               if (window.confirm(`Delete the "${lensTitle(lens)}" view? Claims are untouched.`)) {
-                void deleteLens(config, lens.id).then(onArchived);
+                void deleteLens(config, lens.id)
+                  .then(onArchived)
+                  .catch((e) => {
+                    // Surface a failed delete instead of swallowing it (the lens
+                    // stays open) — matches the component's setError pattern.
+                    if (!mountedRef.current) return;
+                    setError(e instanceof Error ? e.message : String(e));
+                  });
               }
             }}
           >
