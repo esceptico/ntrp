@@ -23,11 +23,12 @@ import {
   type RenderedClaim,
 } from "../../api/memoryItems";
 import { Markdown } from "../Markdown";
-import { SPRING_LAYOUT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
+import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
 import { ClaimBlock, type ClaimOp } from "./ClaimBlock";
+import { LensEvidenceSearch } from "./LensEvidenceSearch";
 import {
   DetailPlaceholder,
   DetailShell,
@@ -345,7 +346,13 @@ function LensPage({
   const [exiting, setExiting] = useState<{ id: string; how: "supersede" | "reject" } | null>(null);
   const [runNote, setRunNote] = useState<string | null>(null);
   const [editingCriterion, setEditingCriterion] = useState(false);
-  const [adding, setAdding] = useState(false);
+  const memberIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!page) return ids;
+    const blocks = page.groups?.flatMap((g) => g.blocks) ?? page.blocks;
+    for (const block of blocks) ids.add(block.claim_id);
+    return ids;
+  }, [page]);
 
   // Auto-dismiss the write-back result note so it doesn't linger permanently in
   // the meta bar after the user has moved on (it was only ever replaced, never cleared).
@@ -496,7 +503,6 @@ function LensPage({
       } finally {
         setBusyId(null);
         setEditingId(null);
-        setAdding(false);
       }
     },
     [config, lens.id, load, detail, onListChanged],
@@ -556,6 +562,17 @@ function LensPage({
               onClose={() => setEditingId(null)}
               onCommit={onClaimCommit}
               onPeek={onPeekClaim}
+              evidenceSearch={(subject) => (
+                <LensEvidenceSearch
+                  config={config}
+                  lens={lens}
+                  subject={subject}
+                  memberIds={memberIds}
+                  onEditCriterion={() => setEditingCriterion(true)}
+                  onPeekClaim={onPeekClaim}
+                  onRefresh={() => load({ detail, refresh: true })}
+                />
+              )}
             />
           ) : page ? (
             <FlatPage
@@ -570,12 +587,13 @@ function LensPage({
             />
           ) : null}
 
-          <AddClaim
-            open={adding}
-            busy={busyId === "lens"}
-            onOpen={() => setAdding(true)}
-            onCancel={() => setAdding(false)}
-            onAdd={(text) => void applyOps([{ kind: "add", new_text: text }], null)}
+          <LensEvidenceSearch
+            config={config}
+            lens={lens}
+            memberIds={memberIds}
+            onEditCriterion={() => setEditingCriterion(true)}
+            onPeekClaim={onPeekClaim}
+            onRefresh={() => load({ detail, refresh: true })}
           />
         </div>
       }
@@ -771,76 +789,6 @@ function CriterionRow({
   );
 }
 
-function AddClaim({
-  open,
-  busy,
-  onOpen,
-  onCancel,
-  onAdd,
-}: {
-  open: boolean;
-  busy: boolean;
-  onOpen: () => void;
-  onCancel: () => void;
-  onAdd: (text: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const taRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (open) requestAnimationFrame(() => taRef.current?.focus());
-    else setText("");
-  }, [open]);
-
-  if (!open) {
-    return (
-      <div className="mt-2 pl-4">
-        <GhostBtn onClick={onOpen}>
-          <Plus size={ICON.XS} strokeWidth={2.2} /> Add to this lens
-        </GhostBtn>
-      </div>
-    );
-  }
-
-  const submit = () => {
-    if (!text.trim() || busy) return;
-    onAdd(text.trim());
-    setText("");
-  };
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={SPRING_ROW_ENTRY}
-      className="glass-surface surface-popover mt-2 p-2.5"
-    >
-      <textarea
-        ref={taRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
-          if (e.key === "Escape") onCancel();
-        }}
-        placeholder="Add a claim to this view…"
-        rows={2}
-        spellCheck={false}
-        className="w-full resize-none bg-transparent text-sm leading-[1.55] text-ink outline-none placeholder:text-faint"
-      />
-      <div className="mt-2 flex items-center justify-end gap-1">
-        <GhostBtn onClick={onCancel} disabled={busy}>
-          Cancel
-        </GhostBtn>
-        <PrimaryBtn onClick={submit} disabled={busy || !text.trim()}>
-          {busy ? "Adding…" : "Add"}
-        </PrimaryBtn>
-      </div>
-    </motion.div>
-  );
-}
-
 function CoverageStrip({ coverage }: { coverage: CoverageAdvisory }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -885,6 +833,7 @@ export function GroupedProfiles({
   onClose,
   onCommit,
   onPeek,
+  evidenceSearch,
 }: {
   groups: ProjectedGroup[];
   editingId: string | null;
@@ -894,6 +843,7 @@ export function GroupedProfiles({
   onClose: () => void;
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
+  evidenceSearch?: (subject: string) => React.ReactNode;
 }) {
   // Key collapse state by a stable per-group id, not the raw subject string: two
   // groups can legitimately share a subject (cached re-read), and a subject-keyed
@@ -958,6 +908,7 @@ export function GroupedProfiles({
                       onCommit={onCommit}
                       onPeek={onPeek}
                     />
+                    {evidenceSearch?.(g.subject)}
                   </div>
                 </motion.div>
               )}

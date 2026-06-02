@@ -447,7 +447,12 @@ class MemoryStore:
         return edges
 
     async def search(
-        self, query: str, *, limit: int = 20, include_inactive: bool = False
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        include_inactive: bool = False,
+        scope: Scope | None = None,
     ) -> list[MemoryItem]:
         """FTS5 search over claim content and canonical_subject.
 
@@ -462,16 +467,28 @@ class MemoryStore:
         if not terms:
             return []
         match = " OR ".join(DQ + t.replace(DQ, DQ + DQ) + DQ for t in terms)
-        status_clause = "" if include_inactive else " AND i.status = 'active'"
+        filters: list[str] = []
+        params: list = [match]
+        if not include_inactive:
+            filters.append("i.status = 'active'")
+        if scope is not None:
+            filters.append("i.scope_kind = ?")
+            params.append(str(scope.kind))
+            if scope.key is None:
+                filters.append("i.scope_key IS NULL")
+            else:
+                filters.append("i.scope_key = ?")
+                params.append(scope.key)
+        filter_sql = "".join(f" AND {clause}" for clause in filters)
         sql = f"""
             SELECT {','.join('i.' + c for c in _COLUMNS.split(', '))}
             FROM memory_items_fts f
             JOIN memory_items i ON i.rowid = f.rowid
-            WHERE memory_items_fts MATCH ?{status_clause}
-            ORDER BY f.rank
+            WHERE memory_items_fts MATCH ?{filter_sql}
             LIMIT ?
         """
-        rows = await self.conn.execute_fetchall(sql, (match, limit))
+        params.append(limit)
+        rows = await self.conn.execute_fetchall(sql, tuple(params))
         return [self._row_to_item(r) for r in rows]
 
     async def search_subjects(

@@ -184,9 +184,7 @@ class MemoryPipeline:
             strong_model=config.strong_model,
         )
         self.lens_generator = LensPageGenerator(self.lens_projector)
-        self.lens_writeback = LensWriteBack(
-            store, self.write_seam, self.lens_membership, self.lens_projector
-        )
+        self.lens_writeback = LensWriteBack(store)
         self.lens_registry = LensRegistry(
             store, self.lens_membership, projector=self.lens_projector
         )

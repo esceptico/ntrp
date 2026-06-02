@@ -428,7 +428,8 @@ async def search(
 ):
     if mode == "fts":
         store = knowledge.memory
-        items = await store.search(q, limit=limit, include_inactive=include_inactive)
+        scope = _scope(scope_kind, scope_key)
+        items = await store.search(q, limit=limit, include_inactive=include_inactive, scope=scope)
         return {
             "mode": "fts",
             "items": [item_json(m) for m in items],
@@ -464,7 +465,7 @@ async def writeback(
         kind = PageEditKind(op.kind)
         if kind in (PageEditKind.EDIT, PageEditKind.REJECT, PageEditKind.ACCEPT) and not op.claim_id:
             raise HTTPException(status_code=422, detail=f"{op.kind} requires claim_id")
-        if kind in (PageEditKind.ADD, PageEditKind.EDIT_CRITERION) and not op.new_text:
+        if kind is PageEditKind.EDIT_CRITERION and not op.new_text:
             raise HTTPException(status_code=422, detail=f"{op.kind} requires new_text")
         ops.append(PageEditOp(kind=kind, claim_id=op.claim_id, new_text=op.new_text))
 

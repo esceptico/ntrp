@@ -327,11 +327,11 @@ export function searchMemory(config: AppConfig, params: MemorySearchParams) {
 }
 
 // ── 7 — Lens page write-back ────────────────────────────────────────────────
-export type PageEditKind = "edit" | "reject" | "accept" | "add" | "edit_criterion";
+export type PageEditKind = "edit" | "reject" | "accept" | "edit_criterion";
 export interface PageEditOp {
   kind: PageEditKind;
   claim_id?: string; // required for edit|reject|accept
-  new_text?: string; // required for edit (successor) | add | edit_criterion
+  new_text?: string; // required for edit (successor) | edit_criterion
 }
 export interface WriteBackApplied {
   kind: PageEditKind;

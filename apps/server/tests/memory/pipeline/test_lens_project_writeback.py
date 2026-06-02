@@ -191,21 +191,6 @@ def _projector(store, cheap=None, strong=None, embed=None):
     )
 
 
-# A duck-typed WriteSeam: ADD routes through it. The unit test only needs to prove
-# delegation, so a fake records the request and returns a WriteOutcome.
-class FakeWriteSeam:
-    def __init__(self, store):
-        self.store = store
-        self.requests = []
-
-    async def admit_and_write(self, request):
-        from ntrp.memory.pipeline.write import WriteOutcome
-
-        self.requests.append(request)
-        claim = await _claim(self.store, request.content, provenance=request.provenance)
-        return WriteOutcome(written=True, item_id=claim.id, reason="Remembered.")
-
-
 # --- projection: anchors + cache + active members --------------------
 
 
@@ -762,21 +747,11 @@ async def test_reject_then_project_hides_claim(store):
     assert (await store.get(rejected.id)).status is Status.ACTIVE
 
 
-# --- write-back: ADD -> WriteSeam (the one prose->claim path) --------
+# --- write-back: no freeform ADD path -------------------------------
 
 
-async def test_add_routes_through_write_seam(store):
-    lens = await _lens(store, name="Health", criterion="health")
-    seam = FakeWriteSeam(store)
-    wb = LensWriteBack(store, seam, membership=None, projector=_projector(store))
-
-    res = await wb.apply(lens.id, [PageEditOp(kind=PageEditKind.ADD, new_text="user sleeps 8 hours")])
-
-    assert any(k is PageEditKind.ADD for k, _ in res.applied)
-    # the ONLY prose->claim translation went through WriteSeam, nowhere else.
-    assert len(seam.requests) == 1
-    assert seam.requests[0].content == "user sleeps 8 hours"
-    assert seam.requests[0].scope == lens.scope
+async def test_writeback_has_no_freeform_add_op():
+    assert "add" not in {kind.value for kind in PageEditKind}
 
 
 # --- write-back: EDIT_CRITERION -> in-place criterion update + dirty -
@@ -848,4 +823,4 @@ async def test_failed_op_lands_in_rejected_rest_apply(store):
 
 
 def _writeback(store):
-    return LensWriteBack(store, FakeWriteSeam(store), membership=None, projector=_projector(store))
+    return LensWriteBack(store)

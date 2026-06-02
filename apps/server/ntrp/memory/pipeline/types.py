@@ -279,15 +279,14 @@ class PageEditKind(StrEnum):
     EDIT = "edit"
     REJECT = "reject"
     ACCEPT = "accept"
-    ADD = "add"
     EDIT_CRITERION = "edit_criterion"
 
 
 @dataclass
 class PageEditOp:
     kind: PageEditKind
-    claim_id: str | None = None  # required for edit/reject/accept; None for add/criterion
-    new_text: str | None = None  # edit: successor; add: new claim; criterion: new criterion
+    claim_id: str | None = None  # required for edit/reject/accept; None for criterion
+    new_text: str | None = None  # edit: successor; criterion: new criterion
 
 
 @dataclass

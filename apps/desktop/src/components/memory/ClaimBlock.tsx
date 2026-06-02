@@ -46,7 +46,7 @@ export function ClaimBlock({
 
   return (
     <motion.div
-      layout
+      layout="position"
       initial={false}
       exit={exitVariant}
       transition={{ layout: SPRING_LAYOUT, default: SPRING_CARD }}
@@ -138,11 +138,11 @@ function ClaimEditor({
 
   return (
     <motion.div
-      layout
+      layout="position"
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={SPRING_CARD}
-      className="glass-surface surface-popover relative z-10 my-1 p-2.5"
+      className="glass-surface surface-popover relative z-10 my-1 min-w-0 p-2.5"
     >
       <textarea
         ref={taRef}
@@ -160,7 +160,7 @@ function ClaimEditor({
         }}
         rows={1}
         spellCheck={false}
-        className="w-full resize-none bg-transparent text-sm leading-[1.55] text-ink outline-none placeholder:text-faint"
+        className="block w-full min-w-0 resize-none bg-transparent text-left text-sm leading-[1.55] tracking-normal text-ink outline-none placeholder:text-faint"
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">

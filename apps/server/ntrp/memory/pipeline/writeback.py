@@ -9,18 +9,14 @@ ops, not edge writes.
   EDIT(id, new_text)    -> supersede(old=id, successor); union evidence. The
                            successor keeps the same canonical_subject; membership
                            recomputes on the next projection.
-  REJECT(id)            -> append a lens-scoped negative-example to lenses.page +
-                           null the page + invalidate the membership cache. The
-                           membership judge reads the negative example as worked
-                           text; re-validate-at-read drops the claim from the
-                           projection. The claim survives globally.
-  ADD(new_text)         -> routed through the WriteSeam (the ONE prose->claim path);
-                           reconcile attaches by subject; membership picks it up.
+  REJECT(id)            -> record a durable lens_rejection, null the page, and
+                           invalidate the membership cache. The claim survives
+                           globally.
   EDIT_CRITERION(text)  -> update the registry criterion + null page + invalidate
                            cache; membership re-derives at next read.
 
-Apply order is fixed (ACCEPT -> EDIT -> REJECT -> ADD -> EDIT_CRITERION). A stale
-anchor is a no-op + `rejected`, never a silent write to a dead row.
+Apply order is fixed (ACCEPT -> EDIT -> REJECT -> EDIT_CRITERION). A stale anchor
+is a no-op + `rejected`, never a silent write to a dead row.
 """
 
 import uuid
@@ -31,11 +27,9 @@ from ntrp.memory.models import (
     LensRow,
     MemoryItem,
     Provenance,
-    SourceRef,
     Status,
     now_iso,
 )
-from ntrp.memory.pipeline.project import LensProjector
 from ntrp.memory.pipeline.types import (
     PageEditKind,
     PageEditOp,
@@ -49,17 +43,13 @@ _APPLY_ORDER = {
     PageEditKind.ACCEPT: 0,
     PageEditKind.EDIT: 1,
     PageEditKind.REJECT: 2,
-    PageEditKind.ADD: 3,
-    PageEditKind.EDIT_CRITERION: 4,
+    PageEditKind.EDIT_CRITERION: 3,
 }
 
 
 class LensWriteBack:
-    def __init__(self, store: MemoryStore, write_seam, membership, projector: LensProjector):
+    def __init__(self, store: MemoryStore):
         self.store = store
-        self.write_seam = write_seam
-        self.membership = membership
-        self.projector = projector
 
     async def apply(self, lens_id: str, ops: list[PageEditOp]) -> WriteBackResult:
         lens = await self.store.get_lens(lens_id)
@@ -98,8 +88,6 @@ class LensWriteBack:
             return await self._edit(op)
         if op.kind is PageEditKind.REJECT:
             return await self._reject(lens, op)
-        if op.kind is PageEditKind.ADD:
-            return await self._add(lens, op)
         if op.kind is PageEditKind.EDIT_CRITERION:
             return await self._edit_criterion(lens, op)
         return False, f"unknown op kind {op.kind}", False
@@ -157,26 +145,6 @@ class LensWriteBack:
         await self.store.invalidate_lens_membership(lens.id)
         return True, m.id, True
 
-    async def _add(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
-        if not op.new_text or not op.new_text.strip():
-            return False, "add with empty text", False
-        from ntrp.memory.pipeline.write import WriteRequest
-
-        outcome = await self.write_seam.admit_and_write(
-            WriteRequest(
-                content=op.new_text.strip(),
-                scope=lens.scope,
-                provenance=Provenance.USER_AUTHORED,
-                source_refs=[SourceRef(kind="lens_writeback", ref=lens.id)],
-                bypass_admit=True,
-            )
-        )
-        if not outcome.written:
-            return False, f"add not written: {outcome.reason}", False
-        # New claim may match this lens; drop the cached page so it re-derives.
-        await self.store.update_lens(lens.id, page=None)
-        return True, outcome.item_id or "", True
-
     async def _edit_criterion(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
         if not op.new_text or not op.new_text.strip():
             return False, "criterion edit with empty text", False
@@ -187,4 +155,3 @@ class LensWriteBack:
         await self.store.update_lens(lens.id, criterion=op.new_text.strip(), page=None)
         await self.store.invalidate_lens_membership(lens.id)
         return True, lens.id, True
-

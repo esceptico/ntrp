@@ -131,6 +131,9 @@ Rules:
 - The criterion is markdown. Judge membership ONLY against its "## Belongs" section
   (who/what belongs + exclusions). A "## Profile shape" section, if present, only
   describes how members are rendered — it is NOT a membership rule; ignore it here.
+- Do not require exact wording from the criterion. If the item directly states a
+  named candidate's affiliation, role, status, or relationship in language that is
+  semantically covered by "## Belongs", vote `in`.
 - Judge ONLY against the criterion as written. Topical adjacency is not membership: an
   item that is merely related to the lens's theme is `out` unless the criterion actually
   covers it.

@@ -425,7 +425,7 @@ class MemoryPruneApplyRequest(BaseModel):
 
 
 class PageEditOpBody(BaseModel):
-    kind: Literal["edit", "reject", "accept", "add", "edit_criterion"]
+    kind: Literal["edit", "reject", "accept", "edit_criterion"]
     claim_id: str | None = None
     new_text: str | None = None
 

@@ -268,7 +268,7 @@ async def _claim(store, content, **kw):
         id=uuid.uuid4().hex,
         content=content,
         canonical_subject=kw.pop("canonical_subject", "Tim"),
-        scope=USER,
+        scope=kw.pop("scope", USER),
         provenance=kw.pop("provenance", Provenance.RECORDED),
         **kw,
     )
@@ -537,6 +537,20 @@ async def test_search_fts(store, client):
 
 
 @pytest.mark.asyncio
+async def test_search_fts_respects_scope(store, client):
+    project = Scope(kind=ScopeKind.PROJECT, key="dex")
+    await _claim(store, "kevin dex collaborator", scope=project)
+    await _claim(store, "kevin unrelated user claim")
+
+    body = client.get(
+        "/admin/memory/search",
+        params={"q": "kevin", "scope_kind": "project", "scope_key": "dex"},
+    ).json()
+
+    assert [m["content"] for m in body["items"]] == ["kevin dex collaborator"]
+
+
+@pytest.mark.asyncio
 async def test_search_retrieve_mode(store, client, pipeline):
     claim = await _claim(store, "ranked claim")
     pipeline.ctx = RetrievedContext(
@@ -583,29 +597,32 @@ async def test_writeback_serializes_result(store, client, pipeline):
     from ntrp.memory.pipeline.types import PageEditOp
 
     pipeline.lens_writeback.result = WriteBackResult(
-        applied=[(PageEditKind.ACCEPT, "c1"), (PageEditKind.ADD, "c2")],
+        applied=[(PageEditKind.ACCEPT, "c1")],
         rejected=[(PageEditOp(kind=PageEditKind.EDIT, claim_id="dead"), "claim moved")],
         rederive_triggered=True,
     )
     resp = client.post(
         f"/admin/memory/lenses/{lens.id}/writeback",
-        json={
-            "ops": [
-                {"kind": "accept", "claim_id": "c1"},
-                {"kind": "add", "new_text": "new claim"},
-            ]
-        },
+        json={"ops": [{"kind": "accept", "claim_id": "c1"}]},
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["applied"] == [
-        {"kind": "accept", "id": "c1"},
-        {"kind": "add", "id": "c2"},
-    ]
+    assert body["applied"] == [{"kind": "accept", "id": "c1"}]
     assert body["rejected"][0]["op"]["kind"] == "edit"
     assert body["rejected"][0]["reason"] == "claim moved"
     assert body["rederive_triggered"] is True
     assert pipeline.lens_writeback.calls[0][0] == lens.id
+
+
+@pytest.mark.asyncio
+async def test_writeback_rejects_add_ops(store, client, pipeline):
+    lens = await _lens(store, "L", "c")
+    resp = client.post(
+        f"/admin/memory/lenses/{lens.id}/writeback",
+        json={"ops": [{"kind": "add", "new_text": "freeform claim"}]},
+    )
+    assert resp.status_code == 422
+    assert pipeline.lens_writeback.calls == []
 
 
 @pytest.mark.asyncio
@@ -617,10 +634,10 @@ async def test_writeback_validates_required_fields(store, client):
         json={"ops": [{"kind": "accept"}]},
     )
     assert r1.status_code == 422
-    # add without new_text -> 422
+    # criterion edit without new_text -> 422
     r2 = client.post(
         f"/admin/memory/lenses/{lens.id}/writeback",
-        json={"ops": [{"kind": "add"}]},
+        json={"ops": [{"kind": "edit_criterion"}]},
     )
     assert r2.status_code == 422
 
