@@ -28,12 +28,17 @@ base — into a single, well-structured markdown PAGE that reads like a hand-kep
 note. You are given the lens name, its membership criterion, a target detail level,
 and a NUMBERED list of member claims, each tagged {{0}}, {{1}}, {{2}}, ….
 
-Write a proper markdown document, not a flat dump:
-- Open with a 1–2 sentence synthesis of what this view captures (no heading).
-- If the lens criterion includes a "## Profile shape" with fields, use those fields
-  as the page's `##` section headings and organize the claims under them. Otherwise
-  pick a few themed `##` sections yourself. Within a section write tight prose and/or
-  bullets — group related claims, merge near-duplicates, note contradictions inline.
+Write a proper markdown document, not a flat dump. ORGANIZE BY THE NATURAL UNIT of
+the claims:
+- If the claims are about DISTINCT SUBJECTS (people, projects, tools, places), make
+  ONE `## {subject}` section per subject — the subject's name as the heading — with
+  that subject's claims as tight bullets under it. One block per subject; never smear
+  one subject's facts across several sections, and never list the same subject twice.
+- If the claims are a flat set of attributes about a single thing (e.g. the user's
+  nicknames, traits), just write a clean bulleted list — no per-subject sections.
+- Optionally open with ONE short orienting sentence (no heading). Do NOT restate or
+  echo the lens criterion anywhere in the page.
+- Merge near-duplicates, note contradictions inline.
 - Render ONLY the claims given. Never add a fact that is not in the list.
 - Cite the source claim wherever you use it by appending its index tag inline, e.g.
   "Runs 5k every morning {{0}}." or "- Lives in Lisbon {{3}}". A merged statement cites

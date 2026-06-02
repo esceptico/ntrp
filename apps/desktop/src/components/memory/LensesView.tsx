@@ -757,10 +757,15 @@ function CriterionRow({
         className="group/crit -mx-1 block w-full cursor-pointer rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-soft/50"
       >
         {lens.criterion ? (
-          <Markdown
-            content={lens.criterion}
-            className="text-sm leading-relaxed text-muted [&_h2]:mb-1 [&_h2]:mt-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:text-faint [&_h2:first-child]:mt-0 [&_ul]:my-0.5 [&_li]:text-sm"
-          />
+          // Compact one-line definition, not the full ## Belongs / ## Profile shape
+          // markdown wall — the synthesized page below is the content, not this.
+          // Click reveals the full editable criterion.
+          <span className="block text-sm leading-relaxed text-muted">
+            <span className="mr-1.5 text-2xs font-semibold uppercase tracking-wide text-faint">
+              Collects
+            </span>
+            {criterionPreview(lens.criterion)}
+          </span>
         ) : (
           <span className="text-sm italic text-faint">
             No criterion — click to describe what this view collects.

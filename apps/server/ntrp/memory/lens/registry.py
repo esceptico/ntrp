@@ -88,15 +88,11 @@ class LensRegistry:
         if not name or not name.strip():
             raise ValueError("lens name cannot be empty")
         if not (criterion or "").strip():
-            # The synth drafts the criterion body and entity_type from the name.
-            # render_mode is ALWAYS "flat" (membership.synthesize_criterion; no auto
-            # subject-grouping); grouping is only ever a manual choice. Only adopt the
-            # synth's mode when the caller did NOT pass one — else an explicit
-            # render_mode (e.g. grouped_by_subject from the REST endpoint) is silently
-            # discarded.
-            criterion, synth_mode, entity_type = await self.membership.synthesize_criterion(name)
-            if render_mode is None:
-                render_mode = LensRenderMode(synth_mode)
+            # The synth drafts the criterion (+ entity_type, kept only as the spec's
+            # informational `kind` — the schema does NOT branch on it, Lens spec §2).
+            # Layout is the page synthesizer's job (§5: one structured page that groups
+            # by subject when claims span subjects), not a stored render_mode.
+            criterion, _synth_mode, entity_type = await self.membership.synthesize_criterion(name)
         if render_mode is None:
             render_mode = LensRenderMode.FLAT
         lens = LensRow(
