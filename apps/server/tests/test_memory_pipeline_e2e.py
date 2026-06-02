@@ -125,6 +125,9 @@ class FakeSessions:
     async def load_session(self, session_id):
         return self._sessions.get(session_id)
 
+    async def recent_session_ids(self, limit):
+        return list(self._sessions.keys())[:limit]
+
 
 @pytest_asyncio.fixture
 async def store(tmp_path):
@@ -253,6 +256,27 @@ async def test_close_session_ingests_from_raw(store):
     assert len(results) == 1
     claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
     assert len(claims) == 1
+
+
+async def test_periodic_sweep_ingests_an_idle_session(store):
+    # The spec PRIMARY mechanism: a session that never gets an interactive close
+    # (idle chat / automation) is ingested by the background sweep. The sweep's
+    # work-list comes from raw_sessions.recent_session_ids; sweep emits a SESSION
+    # unit only when the stream is idle past idle_seconds.
+    from datetime import UTC, datetime, timedelta
+
+    idle = datetime.now(UTC) - timedelta(hours=2)  # well past the 30-min idle window
+    sessions = {
+        "s1": FakeSession("s1", [{"role": "user", "content": "I prefer dark mode"}], idle)
+    }
+    pipe = _pipeline(store, StubLLM(), sessions=sessions)
+
+    assert await pipe._recent_session_ids() == ["s1"]
+    n = await pipe.sweep_sessions(["s1"])
+    assert n >= 1
+
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    assert len(claims) == 1  # idle session ingested by the background sweep path
 
 
 async def test_schedule_ingest_session_writes_a_claim_in_background(store):

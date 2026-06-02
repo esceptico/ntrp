@@ -38,6 +38,12 @@ class _CaptureSessions:
         data = await self._store.load_session(session_id)
         return _CaptureSession(data) if data is not None else None
 
+    async def recent_session_ids(self, limit: int) -> list[str]:
+        """Most-recently-active, non-archived session ids — the periodic sweep's
+        work-list (the memory pipeline's background ingest of idle/automation sessions)."""
+        rows = await self._store.list_sessions(limit=limit)
+        return [r["session_id"] for r in rows if r.get("session_id")]
+
 
 class KnowledgeRuntime:
     def __init__(self, config: Config):

@@ -85,6 +85,8 @@ class MemoryPipelineConfig:
     strong_model: str  # chat_model — the escalation/lint judge
     consolidation_interval: int  # minutes between background lint sweeps
     idle_seconds: int = 30 * 60
+    sweep_interval_seconds: int = 600  # periodic capture sweep cadence (spec §4.1 primary)
+    sweep_session_limit: int = 50  # most-recent sessions scanned per sweep tick
 
 
 class MemoryPipeline:
@@ -255,10 +257,39 @@ class MemoryPipeline:
         return ingested
 
     def start_background(self) -> None:
-        """Start the consolidate/lint loop (watermark-durable, demote-only)."""
-        task = asyncio.create_task(self.consolidate.run_loop())
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        """Start the background loops: consolidate/lint (watermark-durable,
+        demote-only) AND the periodic capture sweep (spec §4.1/Fork B — the PRIMARY
+        ingest mechanism for sessions that never get an interactive close: idle chats,
+        automations, scheduled runs)."""
+        for coro in (self.consolidate.run_loop(), self._sweep_loop()):
+            task = asyncio.create_task(coro)
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
+    async def _sweep_loop(self) -> None:
+        """Periodically sweep recent sessions into the ingest path. capture.sweep only
+        emits units past the watermark and only closes an idle/bounded stream, so this
+        is watermark-idempotent and composes with the interactive chat-close trigger."""
+        while True:
+            try:
+                await asyncio.sleep(self.config.sweep_interval_seconds)
+                ids = await self._recent_session_ids()
+                if ids:
+                    await self.sweep_sessions(ids)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _logger.exception("memory sweep loop iteration failed")
+
+    async def _recent_session_ids(self) -> list[str]:
+        fn = getattr(self.capture.raw_sessions, "recent_session_ids", None)
+        if fn is None:
+            return []
+        try:
+            return await fn(self.config.sweep_session_limit)
+        except Exception:
+            _logger.exception("recent_session_ids failed")
+            return []
 
     async def stop(self) -> None:
         await self.lens_generator.drain()
