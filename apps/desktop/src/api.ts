@@ -312,12 +312,13 @@ export async function apiWithConfig<T>(config: AppConfig, path: string, init: Re
   const desktopApi = window.ntrpDesktop?.api;
 
   if (desktopApi) {
-    const response: ApiBridgeResponse = await desktopApi.request(config, {
+    const request = {
       path,
       method: requestInit.method ?? "GET",
       body,
       timeout: effectiveTimeout,
-    });
+    };
+    const response: ApiBridgeResponse = await desktopRequestWithTimeout(desktopApi, config, request, effectiveTimeout);
     if (!response.ok) throw new Error(errorMessageFromResponse(response));
     return response.contentType.includes("application/json") ? (response.data as T) : (undefined as T);
   }
@@ -353,6 +354,28 @@ export async function apiWithConfig<T>(config: AppConfig, path: string, init: Re
     return (await response.json()) as T;
   } finally {
     if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+async function desktopRequestWithTimeout(
+  desktopApi: NonNullable<NonNullable<Window["ntrpDesktop"]>["api"]>,
+  config: AppConfig,
+  request: Parameters<NonNullable<NonNullable<Window["ntrpDesktop"]>["api"]>["request"]>[1],
+  timeoutMs: number,
+): Promise<ApiBridgeResponse> {
+  if (timeoutMs <= 0) return desktopApi.request(config, request);
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      desktopApi.request(config, request),
+      new Promise<never>((_, reject) => {
+        timeoutId = globalThis.setTimeout(() => {
+          reject(new Error(`Request timed out for ${request.method ?? "GET"} ${request.path}`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
   }
 }
 

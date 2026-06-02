@@ -396,6 +396,68 @@ test("lens evidence search ignores responses after unmount", async () => {
   }
 });
 
+test("lens evidence search close cancels stuck visual state", async () => {
+  const dom = new JSDOM("<!doctype html><div id=\"root\"></div>", { url: "http://localhost" });
+  const prevWindow = globalThis.window;
+  const prevDocument = globalThis.document;
+  const prevFetch = globalThis.fetch;
+  const testGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const prevActEnvironment = testGlobal.IS_REACT_ACT_ENVIRONMENT;
+  const pending: ((r: Response) => void)[] = [];
+
+  testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+  globalThis.window = dom.window as unknown as Window & typeof globalThis;
+  globalThis.document = dom.window.document;
+  globalThis.fetch = async () => new Promise<Response>((resolve) => pending.push(resolve));
+
+  try {
+    const rootEl = dom.window.document.getElementById("root");
+    if (!rootEl) throw new Error("missing root");
+    const root = createRoot(rootEl);
+
+    await act(async () => {
+      root.render(
+        <LensEvidenceSearch
+          config={{ serverUrl: "http://server", apiKey: "test" }}
+          lens={lens}
+          subject="Kevin Gu"
+          memberIds={new Set()}
+          onEditCriterion={() => {}}
+          onPeekClaim={() => {}}
+          onRefresh={() => {}}
+        />,
+      );
+    });
+
+    await openAndSearch(dom, rootEl);
+    expect(rootEl.textContent).toContain("Searching...");
+
+    const closeButton = [...rootEl.querySelectorAll("button")].find((b) => b.textContent?.includes("Close"));
+    if (!closeButton) throw new Error("missing close button");
+    await act(async () => {
+      closeButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(rootEl.textContent).not.toContain("Searching...");
+    expect(rootEl.textContent).toContain("Find evidence");
+
+    await act(async () => {
+      pending[0](searchResponse([memoryItem("c-kevin", "Kevin Gu is a Dex collaborator.")]));
+    });
+    expect(rootEl.textContent).not.toContain("Kevin Gu is a Dex collaborator.");
+
+    await act(async () => {
+      root.unmount();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  } finally {
+    globalThis.fetch = prevFetch;
+    globalThis.document = prevDocument;
+    globalThis.window = prevWindow;
+    testGlobal.IS_REACT_ACT_ENVIRONMENT = prevActEnvironment;
+  }
+});
+
 function memoryItem(id: string, content: string, subject = "Kevin Gu") {
   return {
     id,

@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { compactSessionApi, listProjectsApi } from "../src/api.ts";
+import { apiWithConfig, compactSessionApi, listProjectsApi } from "../src/api.ts";
 import { runBuiltinCommand } from "../src/actions/builtins.ts";
 import { getState, setState } from "../src/store/index.ts";
+import { searchMemory } from "../src/api/memoryItems.ts";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 
@@ -67,6 +68,57 @@ test("standard API calls use the default timeout", async () => {
     body: undefined,
     timeout: 60_000,
   });
+});
+
+test("desktop API bridge rejects when the renderer timeout elapses", async () => {
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => new Promise(() => {}),
+      },
+    },
+  };
+
+  let error: unknown = null;
+  try {
+    await apiWithConfig({ serverUrl: "http://localhost:6877", apiKey: "" }, "/slow", {
+      timeout: 5,
+    } as RequestInit & { timeout: number });
+  } catch (e) {
+    error = e;
+  }
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe("Request timed out for GET /slow");
+});
+
+test("memory search forwards a short timeout", async () => {
+  let request: { path: string; method?: string; body?: string; timeout?: number } | null = null;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, req: typeof request) => {
+          request = req;
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: { mode: "fts", degraded: false, items: [] },
+            text: "",
+          };
+        },
+      },
+    },
+  };
+
+  await searchMemory(
+    { serverUrl: "http://localhost:6877", apiKey: "" },
+    { q: "kevin", mode: "fts", limit: 12, timeout: 2_000 },
+  );
+
+  expect(request?.path).toContain("/admin/memory/search?");
+  expect(request?.timeout).toBe(2_000);
 });
 
 test("compact command does not reload or claim success when compaction is below threshold", async () => {

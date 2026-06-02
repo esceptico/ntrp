@@ -78,6 +78,7 @@ export function LensEvidenceSearch({
       limit: 12,
       scope_kind: lens.scope.kind,
       scope_key: lens.scope.key ?? undefined,
+      timeout: 2_000,
     })
       .then((result) => {
         if (!mounted.current || seq !== requestSeq.current || queryRef.current.trim() !== q) return;
@@ -91,6 +92,12 @@ export function LensEvidenceSearch({
       .finally(() => {
         if (mounted.current && seq === requestSeq.current) setBusy(false);
       });
+  };
+
+  const close = () => {
+    requestSeq.current += 1;
+    setBusy(false);
+    setOpen(false);
   };
 
   if (!open) {
@@ -119,7 +126,7 @@ export function LensEvidenceSearch({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") run();
-              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Escape") close();
             }}
             placeholder={subject ? "Search this profile" : "Search memory"}
             spellCheck={false}
@@ -186,7 +193,7 @@ export function LensEvidenceSearch({
       )}
 
       <div className="mt-2 flex justify-end">
-        <GhostBtn onClick={() => setOpen(false)}>Close</GhostBtn>
+        <GhostBtn onClick={close}>Close</GhostBtn>
       </div>
     </div>
   );
