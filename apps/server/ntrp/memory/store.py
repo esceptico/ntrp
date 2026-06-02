@@ -391,6 +391,22 @@ class MemoryStore:
         rows = await self.conn.execute_fetchall(sql, tuple(params))
         return [self._row_to_item(r) for r in rows]
 
+    async def count_active(self, scope: Scope) -> int:
+        """COUNT of active claims in scope — the TRUE corpus size, with no recency
+        cap. Used for the advisory coverage ratio (len(query(limit=N)) saturates at
+        N and inflates the ratio, falsely flagging big-corpus lenses as generic)."""
+        clauses = ["status = 'active'", "scope_kind = ?"]
+        params: list = [str(scope.kind)]
+        if scope.key is None:
+            clauses.append("scope_key IS NULL")
+        else:
+            clauses.append("scope_key = ?")
+            params.append(scope.key)
+        rows = await self.conn.execute_fetchall(
+            f"SELECT COUNT(*) AS n FROM memory_items WHERE {' AND '.join(clauses)}", tuple(params)
+        )
+        return int(rows[0]["n"]) if rows else 0
+
     async def distinct_subjects(self, scope: Scope) -> list[tuple[str, int]]:
         """Every distinct active canonical_subject in scope, with claim count,
         most-claims-first. NO recency/volume limit — the coreference judge must see

@@ -530,6 +530,10 @@ class Reconciler:
         elif op == "noop":
             await self._do_noop(cand, target, res)
         else:
+            # An op the judge invented (schema drift / hallucination). ADD is the
+            # safe non-destructive default, but log it so a misbehaving judge is
+            # visible instead of silently absorbed.
+            _logger.warning("reconcile: unknown op %r for claim_index %s -> ADD", op, row.claim_index)
             await self._do_add(cand, subject, res)
 
     def _new_claim(self, content: str, subject: str, cand: ClaimCandidate) -> MemoryItem:

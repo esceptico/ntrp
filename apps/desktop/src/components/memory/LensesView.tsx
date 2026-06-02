@@ -353,6 +353,14 @@ function LensPage({
   const [editingCriterion, setEditingCriterion] = useState(false);
   const [adding, setAdding] = useState(false);
 
+  // Auto-dismiss the write-back result note so it doesn't linger permanently in
+  // the meta bar after the user has moved on (it was only ever replaced, never cleared).
+  useEffect(() => {
+    if (!runNote) return;
+    const t = window.setTimeout(() => setRunNote(null), 4000);
+    return () => clearTimeout(t);
+  }, [runNote]);
+
   // A generation poll in flight — cancelled on unmount/reload so a stale loop
   // never writes into a remounted page (lens switch keys remount LensPage).
   const pollRef = useRef<{ alive: boolean } | null>(null);

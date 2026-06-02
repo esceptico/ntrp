@@ -249,8 +249,9 @@ class LensMembership:
         cached = await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
         member_count = len(cached)
 
-        pool = await self.store.query(scope=scope, status=Status.ACTIVE, limit=BACKFILL_SCAN_CAP)
-        scope_pool = len(pool)
+        # TRUE corpus size (no recency cap) — len(query(limit=N)) would saturate at N
+        # and inflate the ratio, falsely flagging a big-corpus lens as "generic".
+        scope_pool = await self.store.count_active(scope)
         ratio = member_count / scope_pool if scope_pool else 0.0
         generic = scope_pool > 0 and ratio >= GENERIC_RATIO
         return CoverageAdvisory(
