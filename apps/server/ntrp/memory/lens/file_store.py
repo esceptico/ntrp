@@ -180,7 +180,14 @@ class LensFileStore:
             return None
 
         body = content[m.end():].strip()
-        scope = self._scope(front)
+        try:
+            scope = self._scope(front)
+        except ValueError as e:
+            # A hand-edited PROJECT/SESSION lens missing scope_key would otherwise
+            # raise out of read()/list() and break loading of EVERY lens. Skip just
+            # this one, like the other malformed-frontmatter guards above.
+            _logger.warning("lens %s: invalid scope: %s", path, e)
+            return None
         # Prefer persisted timestamps; fall back to mtime only for legacy files that
         # predate timestamp persistence. (mtime alone makes created_at jump to the
         # last edit and reshuffles the lens list — fixed by writing them out.)

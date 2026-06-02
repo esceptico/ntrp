@@ -307,11 +307,11 @@ class ConsolidateLint:
         # invalidate + add the SUPERSEDES edge by hand — same end state. The
         # successor keeps the survivor's canonical_subject; lens membership
         # recomputes (claims carry no membership edge).
-        await self.store.supersede(old_id=survivor.id, new_item=new_survivor)
-
-        # Fold each loser atomically: close it + link the SUPERSEDES edge under ONE
-        # transaction (commit=False per step, one commit after) so a crash mid-fold
-        # can't leave a superseded loser with no edge — orphaning its history.
+        # The ENTIRE merge — survivor mint + every loser fold — is one transaction.
+        # supersede(commit=False) leaves the survivor uncommitted so a crash anywhere
+        # in the fold can't leave the survivor ACTIVE while losers are still ACTIVE
+        # with duplicated content (orphaned duplicates). One commit covers it all.
+        await self.store.supersede(old_id=survivor.id, new_item=new_survivor, commit=False)
         for loser in losers:
             await self.store.invalidate(loser.id, status=Status.SUPERSEDED, commit=False)
             await self.store.add_edge(
@@ -320,8 +320,7 @@ class ConsolidateLint:
                 ),
                 commit=False,
             )
-        if losers:
-            await self.store.conn.commit()
+        await self.store.conn.commit()
 
         await self.store.bump_corroboration(new_survivor.id)
         return len(losers)

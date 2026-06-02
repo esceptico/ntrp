@@ -310,11 +310,15 @@ class MemoryStore:
             await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def supersede(self, *, old_id: str, new_item: MemoryItem) -> MemoryItem:
+    async def supersede(
+        self, *, old_id: str, new_item: MemoryItem, commit: bool = True
+    ) -> MemoryItem:
         """Create a successor, close the predecessor, link with a supersedes edge.
 
         The predecessor row is preserved (status=superseded, invalid_at set);
-        history stays walkable. No row is removed.
+        history stays walkable. No row is removed. `commit=False` lets a caller fold
+        more rows into the SAME transaction (e.g. a consolidate merge that supersedes
+        the survivor then folds N losers) so the whole merge is atomic.
         """
         await self.create_item(new_item, commit=False)
         now = now_iso()
@@ -323,7 +327,8 @@ class MemoryStore:
             MemoryEdge(child_id=new_item.id, parent_id=old_id, role=EdgeRole.SUPERSEDES),
             commit=False,
         )
-        await self.conn.commit()
+        if commit:
+            await self.conn.commit()
         return new_item
 
     async def set_feedback(self, item_id: str, feedback: Feedback) -> bool:
