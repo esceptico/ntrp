@@ -158,9 +158,15 @@ class LensRegistry:
         lens = await self.store.get_lens(lens_id)
         if lens is None:
             raise ValueError(f"not a lens: {lens_id}")
-        await self.store.invalidate_lens_membership(lens_id)
+        # Write the new criterion file FIRST, then invalidate last. Each await yields
+        # the event loop; if we wiped the cache before the file write, a concurrent
+        # projection could refresh_lens_cache against the OLD criterion file and
+        # repopulate stale verdicts that survive. File-first + invalidate-last means
+        # any refresh starting after the edit reads the new criterion, and the final
+        # invalidate is the last write (mirrors delete_lens's durable ordering).
         updated = await self.store.update_lens(lens_id, criterion=new_criterion, page=None)
         assert updated is not None
+        await self.store.invalidate_lens_membership(lens_id)
         return updated
 
     # --- delete (the view; never the claims) ------------------------
