@@ -422,10 +422,14 @@ function LensPage({
                     })
                     .catch((e) => {
                       if (!token.alive) return;
+                      // Clear gen so the error branch renders — the `gen && !page`
+                      // guard would otherwise keep a frozen progress checklist up.
+                      setGen(null);
                       setError(e instanceof Error ? e.message : String(e));
                       setLoading(false);
                     });
                 } else if (s.status === "error") {
+                  setGen(null);
                   setError(s.error || "Lens generation failed.");
                   setLoading(false);
                 } else {
@@ -434,6 +438,7 @@ function LensPage({
               })
               .catch((e) => {
                 if (!token.alive) return;
+                setGen(null);
                 setError(e instanceof Error ? e.message : String(e));
                 setLoading(false);
               });

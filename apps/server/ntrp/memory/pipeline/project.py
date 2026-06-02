@@ -179,7 +179,11 @@ class LensProjector:
         # serving that inconsistency.
         anchors = parse_anchors(lens.page)
         blocks = await self._blocks_for(anchors)
-        if len(blocks) != len(set(anchors)) or not blocks:
+        # Stale iff a cited anchor no longer resolves to an active claim. An
+        # anchor-less page is a legitimately-empty lens (no members), NOT stale —
+        # `or not blocks` would wrongly reject it and force re-synthesis on every
+        # view, so guard only when there are anchors to verify.
+        if anchors and len(blocks) != len(set(anchors)):
             return None
         coverage = await self.membership.coverage(lens_id, lens.scope)
         return ProjectedPage(

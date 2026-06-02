@@ -262,6 +262,24 @@ async def test_flat_cached_page_re_derives_when_a_cited_claim_is_archived(store)
     assert await proj.cached_page(lens.id, detail=None) is None
 
 
+async def test_empty_flat_lens_page_still_cache_hits(store):
+    # An empty lens (no members) caches a page with NO claim anchors. The staleness
+    # guard must NOT treat anchor-less markdown as stale — else it forces synthesis
+    # on every view. Anchor-less == legitimately empty, not inconsistent.
+    page_md = "# Empty\n## Profile\n_No members yet._\n"
+    lens = await _lens(store, name="Empty", criterion="nothing matches", page=page_md)
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _AllInJudge(),
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    hit = await proj.cached_page(lens.id, detail=None)
+    assert hit is not None
+    assert hit.markdown == page_md
+    assert hit.blocks == []
+
+
 async def test_generation_error_surfaces_in_status(store):
     """A genuine generation failure (projector raises, not a recoverable synthesis
     miss) surfaces as ERROR with the message — the background loop never crashes."""
