@@ -375,6 +375,16 @@ class LensProjector:
         if not members:
             return []
         verdicts = await self.membership.score(members, lens)
+        # score() awaits the judge against the criterion captured in `lens`. A
+        # concurrent edit_criterion (file-first, invalidate-last) could land in that
+        # window; our put_membership would then write OLD-criterion verdicts back into
+        # the just-cleared cache. Guard like refresh_lens_cache: if the lens was edited
+        # mid-pass, drop these stale verdicts instead of caching them (page is dirty →
+        # the next read re-derives against the new criterion).
+        fresh = await self.store.get_lens(lens.id)
+        if fresh is not None and fresh.updated_at != lens.updated_at:
+            await self.store.invalidate_lens_membership(lens.id)
+            return []
         await self.store.put_membership(verdicts)
         keep: dict[str, MembershipDecision] = {v.claim_id: v.decision for v in verdicts}
         return [m for m in members if keep.get(m.id) is MembershipDecision.IN]

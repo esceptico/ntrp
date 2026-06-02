@@ -577,6 +577,36 @@ async def test_revalidate_hides_now_out_member(store):
     assert (await store.get(drop.id)).status is Status.ACTIVE
 
 
+async def test_revalidate_drops_verdicts_if_criterion_edited_mid_pass(store):
+    # A criterion edit landing during _revalidate's judge await must not let it cache
+    # OLD-criterion verdicts back into the just-cleared cache (mirrors the guard in
+    # refresh_lens_cache). updated_at changed → drop the stale verdicts.
+    from tests.conftest import completion_response
+
+    lens = await _lens(store, name="Health", criterion="health")
+    m1 = await _claim(store, "user runs 5k")
+    await _member(store, lens.id, m1)
+    captured = await store.get_lens(lens.id)  # the old criterion/updated_at
+
+    class EditingJudge:
+        def __init__(self):
+            self.edited = False
+
+        async def completion(self, *, messages, model, response_format=None, **kwargs):
+            if not self.edited:
+                self.edited = True
+                await store.update_lens(lens.id, criterion="cardio only")  # bumps updated_at
+            return completion_response(
+                MembershipBatch(votes=[MembershipVote(item_index=0, decision="in", rationale="")]).model_dump_json()
+            )
+
+    proj = _projector(store, cheap=EditingJudge())
+    kept = await proj._revalidate([m1], captured)
+
+    assert kept == []  # stale verdicts not rendered
+    assert await _member_ids(store, lens.id) == set()  # and not cached
+
+
 async def test_empty_members_no_judge_no_synth(store):
     lens = await _lens(store, name="Empty", criterion="nothing")
     cheap = FakeCompletionClient()
