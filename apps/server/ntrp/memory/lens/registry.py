@@ -67,7 +67,7 @@ class LensRegistry:
         criterion: str | None = None,
         scope: Scope | None = None,
         *,
-        render_mode: LensRenderMode = LensRenderMode.FLAT,
+        render_mode: LensRenderMode | None = None,
         detail_level: LensDetailLevel = LensDetailLevel.STRUCTURED,
         provenance: LensProvenance = LensProvenance.USER_AUTHORED,
         entity_type: str = "thing",
@@ -89,11 +89,16 @@ class LensRegistry:
             raise ValueError("lens name cannot be empty")
         if not (criterion or "").strip():
             # The synth drafts the criterion body and entity_type from the name.
-            # render_mode is ALWAYS "flat" (membership.synthesize_criterion; Lens spec
-            # §1/§2 — no auto subject-grouping); grouping is only ever a manual choice
-            # via set_render_mode, never derived from the name.
+            # render_mode is ALWAYS "flat" (membership.synthesize_criterion; no auto
+            # subject-grouping); grouping is only ever a manual choice. Only adopt the
+            # synth's mode when the caller did NOT pass one — else an explicit
+            # render_mode (e.g. grouped_by_subject from the REST endpoint) is silently
+            # discarded.
             criterion, synth_mode, entity_type = await self.membership.synthesize_criterion(name)
-            render_mode = LensRenderMode(synth_mode)
+            if render_mode is None:
+                render_mode = LensRenderMode(synth_mode)
+        if render_mode is None:
+            render_mode = LensRenderMode.FLAT
         lens = LensRow(
             id=self._unique_slug(name),
             name=name,

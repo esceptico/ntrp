@@ -364,6 +364,23 @@ async def test_merge_across_scopes_is_refused(store):
 
 
 @pytest.mark.asyncio
+async def test_create_lens_keeps_explicit_render_mode_when_synthesizing(store):
+    # When the criterion is auto-synthesized, an explicit caller render_mode must NOT
+    # be overwritten by the synth's (always-flat) mode.
+    from ntrp.memory.models import LensRenderMode
+
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    lens = await reg.create_lens(
+        "People", None, USER, render_mode=LensRenderMode.GROUPED_BY_SUBJECT
+    )
+    assert lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
+    # Default still flat when nothing is passed and a criterion IS given.
+    flat = await reg.create_lens("Bugs", "about bugs", USER)
+    assert flat.render_mode is LensRenderMode.FLAT
+
+
+@pytest.mark.asyncio
 async def test_create_lens_rejects_blank_name(store):
     # A blank/whitespace name slugifies to "lens" and writes a file with an empty
     # directory that can't be read back — silent disappearance. Reject categorically.
