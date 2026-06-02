@@ -74,6 +74,30 @@ export function lensTitle(lens: Lens): string {
   return lens.name || "Untitled lens";
 }
 
+/** Clean one-line preview of a lens criterion for list subtitles. The criterion is
+ *  structured markdown (`## Belongs\n<sentence>\n## Profile shape\n- …`); show the
+ *  Belongs sentence, never the raw `## Belongs` heading/bullets. */
+export function criterionPreview(criterion: string): string {
+  if (!criterion) return "";
+  const lines = criterion.split("\n");
+  const belongsIdx = lines.findIndex((l) => /^#{1,6}\s*belongs\b/i.test(l.trim()));
+  if (belongsIdx !== -1) {
+    const body: string[] = [];
+    for (let i = belongsIdx + 1; i < lines.length; i++) {
+      if (/^#{1,6}\s/.test(lines[i].trim())) break; // next section
+      body.push(lines[i]);
+    }
+    const sentence = body.join(" ").trim();
+    if (sentence) return sentence;
+  }
+  // No Belongs section — strip any markdown heading/bullet markers and flatten.
+  return criterion
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function scopeLabel(scope: { kind: string; key: string | null }): string {
   return scope.key ? `${scope.kind}:${scope.key}` : scope.kind;
 }

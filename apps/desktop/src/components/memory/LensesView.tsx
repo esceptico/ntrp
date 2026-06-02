@@ -36,7 +36,7 @@ import {
   PrimaryBtn,
   SearchInput,
 } from "./shared";
-import { lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
+import { criterionPreview, lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
 
 
 export function LensesView({
@@ -189,7 +189,7 @@ function LensRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">{lensTitle(lens)}</span>
           {lens.criterion && (
-            <span className="block truncate text-xs text-faint">{lens.criterion}</span>
+            <span className="block truncate text-xs text-faint">{criterionPreview(lens.criterion)}</span>
           )}
         </span>
         <Badge tone={coverage.generic ? "warn" : "neutral"} size="sm" className="tabular-nums">
