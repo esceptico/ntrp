@@ -558,7 +558,10 @@ class LensProjector:
         return "\n".join(lines)
 
     def _empty_page(self, lens: LensRow, level: LensDetailLevel) -> str:
-        if level is LensDetailLevel.GIST:
+        # Grouped pages reconstruct subjects by splitting on `## ` headers, so an empty
+        # grouped page must emit NO `## ` section — else the cached re-read parses the
+        # `## Profile` placeholder as a phantom subject group (fresh path returns []).
+        if level is LensDetailLevel.GIST or lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT:
             return f"{self._header(lens)}\n_No members yet._"
         return f"{self._header(lens)}\n## Profile\n_No members yet._"
 

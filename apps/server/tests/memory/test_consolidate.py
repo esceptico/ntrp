@@ -143,6 +143,28 @@ async def test_merge_collapses_duplicates_and_keeps_best_survivor(store):
 
 
 @pytest.mark.asyncio
+async def test_merge_sums_member_corroboration(store):
+    # corroboration = independent evidence links (vision §7). A merge unions the
+    # members' source_refs, so the survivor must SUM their corroboration — not inherit
+    # only the survivor's count (which silently dropped the losers' trust).
+    from ntrp.memory.models import SourceRef
+
+    keep = _claim("User lives in Berlin", corroboration=2,
+                  source_refs=[SourceRef(kind="chat", ref="a")])
+    loser = _claim("User lives in Berlin", corroboration=2,
+                   source_refs=[SourceRef(kind="chat", ref="b")])
+    await store.create_item(keep)
+    await store.create_item(loser)
+
+    cheap = FakeLLM([LintOps(merges=[MergeOp(member_ids=[keep.id, loser.id])])])
+    await _lint(store, cheap).run_once(scope=USER)
+
+    active = await store.query(scope=USER, status=Status.ACTIVE)
+    assert len(active) == 1
+    assert active[0].corroboration == 4  # 2 + 2, not 2 or 3
+
+
+@pytest.mark.asyncio
 async def test_merge_caps_survivor_provenance_at_inferred(store):
     # USER_AUTHORED but NOT confirmed: it may be merged, but the merge is the
     # LLM's inference, so the survivor's trust is capped at INFERRED. Lint may

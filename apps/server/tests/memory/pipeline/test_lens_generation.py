@@ -357,6 +357,29 @@ def test_demoted_body_h2_does_not_split_into_phantom_subjects():
     assert subjects == ["Alice", "Bob"]  # no phantom 'Background'/'Notes' subjects
 
 
+async def test_empty_grouped_lens_agrees_fresh_and_cached(store):
+    # A freshly-projected empty grouped lens must produce NO subject groups, and the
+    # cached re-read must agree. The empty page is subject-less (no `## Profile`), so
+    # _split_subject_sections can't manufacture a phantom "Profile" group.
+    lens = await _lens(
+        store, name="People", criterion="people",
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )  # zero members
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _AllInJudge(),
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    fresh = await proj.project(lens.id, refresh=True)
+    assert fresh.groups == []
+    assert "## Profile" not in fresh.markdown  # no phantom subject section
+
+    cached = await proj.cached_page(lens.id, detail=None)
+    assert cached is not None
+    assert cached.groups == []  # cached re-read agrees with the fresh render
+
+
 async def test_grouped_fresh_page_blocks_match_cited_anchors(store):
     # A fresh grouped render's top-level blocks must equal the anchor-filtered
     # per-group blocks (the cited claims) — not the full bucket — so the fresh page

@@ -306,6 +306,10 @@ class ConsolidateLint:
             content=op.merged_text or survivor.content,
             source_refs=union_refs,
             provenance=self._capped_provenance(members),
+            # corroboration = independent evidence links (vision §7). The merge unions
+            # every member's source_refs, so it must also sum their corroboration —
+            # inheriting only the survivor's count silently dropped the losers' trust.
+            corroboration=sum(m.corroboration for m in members),
         )
 
         # Mint the unified survivor by superseding the old survivor row (closes it
@@ -328,9 +332,8 @@ class ConsolidateLint:
                 ),
                 commit=False,
             )
-        # Corroboration bump joins the same transaction so the survivor's count can't
-        # drift if the process dies between two separate commits.
-        await self.store.bump_corroboration(new_survivor.id, commit=False)
+        # No separate corroboration bump: the survivor was minted with the SUMMED
+        # member corroboration (above), which already accounts for the merged evidence.
         await self.store.conn.commit()
         return len(losers)
 
@@ -425,6 +428,7 @@ class ConsolidateLint:
         content: str,
         source_refs,
         provenance: Provenance,
+        corroboration: int | None = None,
     ) -> MemoryItem:
         import uuid
 
@@ -442,7 +446,7 @@ class ConsolidateLint:
             valid_from=base.valid_from,
             invalid_at=None,
             source_refs=source_refs,
-            corroboration=base.corroboration,
+            corroboration=base.corroboration if corroboration is None else corroboration,
             last_relevant_at=base.last_relevant_at,
             feedback=Feedback.NONE,
             created_at=now,
