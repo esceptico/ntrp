@@ -313,7 +313,7 @@ export interface MemorySearchParams extends ScopeParams {
 }
 
 export function searchMemory(config: AppConfig, params: MemorySearchParams) {
-  return apiWithConfig<MemorySearchResponse>(
+  return fetchMemorySearch(
     config,
     `/admin/memory/search${queryString({
       q: params.q,
@@ -324,6 +324,25 @@ export function searchMemory(config: AppConfig, params: MemorySearchParams) {
       mode: params.mode,
     })}`,
   );
+}
+
+async function fetchMemorySearch(config: AppConfig, path: string): Promise<MemorySearchResponse> {
+  const headers: Record<string, string> = {};
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  const response = await fetch(`${config.serverUrl}${path}`, { headers });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: unknown; message?: unknown };
+      if (typeof body.detail === "string") message = body.detail;
+      if (typeof body.message === "string") message = body.message;
+    } catch {
+      const text = await response.text();
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as MemorySearchResponse;
 }
 
 // ── 7 — Lens page write-back ────────────────────────────────────────────────

@@ -2,11 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { apiWithConfig, compactSessionApi, listProjectsApi } from "../src/api.ts";
 import { runBuiltinCommand } from "../src/actions/builtins.ts";
 import { getState, setState } from "../src/store/index.ts";
+import { searchMemory } from "../src/api/memoryItems.ts";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  globalThis.fetch = originalFetch;
 });
 
 test("compactSessionApi uses an extended timeout", async () => {
@@ -89,6 +92,35 @@ test("desktop API bridge rejects when the renderer timeout elapses", async () =>
 
   expect(error).toBeInstanceOf(Error);
   expect((error as Error).message).toBe("Request timed out for GET /slow");
+});
+
+test("memory search uses renderer fetch instead of desktop bridge", async () => {
+  const calls: string[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => {
+          throw new Error("bridge should not be used for memory search");
+        },
+      },
+    },
+  };
+  globalThis.fetch = async (url, init) => {
+    calls.push(String(url));
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-key");
+    return new Response(JSON.stringify({ mode: "fts", degraded: false, items: [] }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  const result = await searchMemory(
+    { serverUrl: "http://localhost:6877", apiKey: "test-key" },
+    { q: "kevin", mode: "fts", limit: 12 },
+  );
+
+  expect(result).toEqual({ mode: "fts", degraded: false, items: [] });
+  expect(calls[0]).toContain("/admin/memory/search?");
+  expect(calls[0]).toContain("q=kevin");
 });
 
 test("compact command does not reload or claim success when compaction is below threshold", async () => {

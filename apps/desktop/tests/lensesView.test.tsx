@@ -260,6 +260,7 @@ test("entry evidence search queries scoped memory and renders criterion review",
     expect(calls[0]).toContain("q=Kevin+Gu");
     expect(calls[0]).toContain("scope_kind=project");
     expect(calls[0]).toContain("scope_key=dex");
+    expect(rootEl.textContent).not.toContain("Searching...");
     expect(rootEl.textContent).toContain("Review criterion");
     expect(rootEl.textContent).toContain("Edit criterion");
 
