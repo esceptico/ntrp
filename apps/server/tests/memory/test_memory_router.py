@@ -216,8 +216,9 @@ class _FakePipeline:
 
 
 class _FakeKnowledge:
-    def __init__(self, store, pipeline, *, ready=True):
+    def __init__(self, store, pipeline, *, ready=True, search_store=None):
         self.memory = store
+        self.memory_search = search_store
         self.memory_retrieval = pipeline
         self._ready = ready
 
@@ -548,6 +549,25 @@ async def test_search_fts_respects_scope(store, client):
     ).json()
 
     assert [m["content"] for m in body["items"]] == ["kevin dex collaborator"]
+
+
+@pytest.mark.asyncio
+async def test_search_fts_uses_dedicated_search_store(store):
+    class BusyStore:
+        has_fts = True
+
+        async def search(self, *args, **kwargs):
+            raise AssertionError("shared memory store should not serve UI search")
+
+    await _claim(store, "kevin dex collaborator")
+    pipeline = _FakePipeline(store)
+    knowledge = _FakeKnowledge(BusyStore(), pipeline, search_store=store)
+    app.dependency_overrides[require_knowledge_runtime] = lambda: knowledge
+    try:
+        body = TestClient(app).get("/admin/memory/search", params={"q": "kevin"}).json()
+        assert [m["content"] for m in body["items"]] == ["kevin dex collaborator"]
+    finally:
+        app.dependency_overrides.pop(require_knowledge_runtime, None)
 
 
 @pytest.mark.asyncio

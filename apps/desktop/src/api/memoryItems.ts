@@ -310,7 +310,6 @@ export interface MemorySearchParams extends ScopeParams {
   limit?: number;
   include_inactive?: boolean;
   mode?: "fts" | "retrieve";
-  timeout?: number;
 }
 
 export function searchMemory(config: AppConfig, params: MemorySearchParams) {
@@ -324,7 +323,6 @@ export function searchMemory(config: AppConfig, params: MemorySearchParams) {
       include_inactive: params.include_inactive,
       mode: params.mode,
     })}`,
-    { timeout: params.timeout } as RequestInit & { timeout?: number },
   );
 }
 

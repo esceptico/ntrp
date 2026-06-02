@@ -427,7 +427,7 @@ async def search(
     mode: str = "fts",
 ):
     if mode == "fts":
-        store = knowledge.memory
+        store = knowledge.memory_search or knowledge.memory
         scope = _scope(scope_kind, scope_key)
         items = await store.search(q, limit=limit, include_inactive=include_inactive, scope=scope)
         return {

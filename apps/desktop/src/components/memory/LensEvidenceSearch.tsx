@@ -78,7 +78,6 @@ export function LensEvidenceSearch({
       limit: 12,
       scope_kind: lens.scope.kind,
       scope_key: lens.scope.key ?? undefined,
-      timeout: 2_000,
     })
       .then((result) => {
         if (!mounted.current || seq !== requestSeq.current || queryRef.current.trim() !== q) return;

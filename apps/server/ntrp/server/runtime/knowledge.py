@@ -52,6 +52,7 @@ class KnowledgeRuntime:
         self.indexer = Indexer(db_path=config.search_db_path, embedding=self.embedding) if self.embedding else None
         self.search_index = None
         self.memory = None
+        self.memory_search = None
         self.memory_service = None
         self.memory_reader = None
         self.memory_search_source = None
@@ -64,6 +65,7 @@ class KnowledgeRuntime:
         self.chat_connector = None
 
         self._memory_conn = None
+        self._memory_read_conn = None
         self._memory_pipeline: MemoryPipeline | None = None
 
     @property
@@ -90,6 +92,9 @@ class KnowledgeRuntime:
         if self._memory_conn is not None:
             await self._memory_conn.close()
             self._memory_conn = None
+        if self._memory_read_conn is not None:
+            await self._memory_read_conn.close()
+            self._memory_read_conn = None
 
     def tool_services(self) -> dict[str, object]:
         services: dict[str, object] = {}
@@ -164,6 +169,11 @@ class KnowledgeRuntime:
         await store.init_schema()
         self._memory_conn = conn
 
+        read_conn = await db_connect(self.config.memory_db_path, readonly=True)
+        read_store = MemoryStore(read_conn, lenses_dir=store.lens_files.lenses_dir)
+        await read_store.init_readonly()
+        self._memory_read_conn = read_conn
+
         pipeline = MemoryPipeline(
             store=store,
             embed=Embedder(self.embedding),
@@ -184,6 +194,7 @@ class KnowledgeRuntime:
 
         self._memory_pipeline = pipeline
         self.memory = store
+        self.memory_search = read_store
         self.memory_service = pipeline.write_seam
         self.memory_reader = pipeline.retriever
         self.memory_retrieval = pipeline

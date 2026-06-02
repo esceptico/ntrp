@@ -228,6 +228,12 @@ class MemoryStore:
         await run_migrations(self.conn)
         await self.conn.commit()
 
+    async def init_readonly(self) -> None:
+        rows = await self.conn.execute_fetchall(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_items_fts' LIMIT 1"
+        )
+        self._has_fts = bool(rows)
+
     # --- row mapping ---
 
     def _row_to_item(self, row: aiosqlite.Row) -> MemoryItem:
