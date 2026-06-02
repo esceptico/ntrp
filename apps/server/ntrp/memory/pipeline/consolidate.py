@@ -139,7 +139,15 @@ class ConsolidateLint:
             limit=self.config.max_items_per_sweep + 1,
         )
         if watermark is not None:
-            rows = [r for r in rows if (r.updated_at or "") > watermark]
+            # Inclusive (`>=`), not strict (`>`): a capped sweep advances the
+            # watermark to the last KEPT claim's updated_at, but a tie-group sharing
+            # that exact timestamp can straddle the cap boundary (microsecond ties
+            # are realistic for a batch minted in one transaction). A strict `>`
+            # would skip that tie-tail forever. Re-including the boundary is safe —
+            # the apply path is idempotent (_reload_active re-verifies live state;
+            # already-resolved claims re-confirm and are skipped), so the only cost
+            # is re-judging the boundary tie-group once per catch-up sweep.
+            rows = [r for r in rows if (r.updated_at or "") >= watermark]
         # query() orders by created_at DESC; process oldest-first so a capped
         # catch-up watermark advances monotonically over a stable prefix.
         rows.sort(key=lambda r: r.updated_at or "")

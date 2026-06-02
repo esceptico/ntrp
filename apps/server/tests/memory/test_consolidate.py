@@ -244,6 +244,45 @@ async def test_watermark_advances_and_skips_unchanged_on_next_sweep(store):
 
 
 @pytest.mark.asyncio
+async def test_capped_sweep_does_not_skip_tie_group_straddling_the_cap(store):
+    # A group of claims sharing one updated_at can straddle the cap boundary. A
+    # strict `>` watermark filter would advance to that timestamp and skip the
+    # unprocessed tie-tail FOREVER. The inclusive `>=` filter re-includes the
+    # boundary group on the catch-up sweep (idempotent apply makes that safe), so
+    # no claim is permanently skipped.
+    import uuid
+
+    tie = "2026-06-01T00:00:00.000003+00:00"
+    stamps = [
+        "2026-06-01T00:00:00.000001+00:00",
+        "2026-06-01T00:00:00.000002+00:00",
+        tie,
+        tie,  # c3 and c4 share the exact boundary timestamp
+    ]
+    ids = []
+    for n, ts in enumerate(stamps):
+        c = _claim(f"fact {n}")
+        c.id = str(uuid.uuid4())
+        c.created_at = ts
+        c.updated_at = ts
+        await store.create_item(c)
+        ids.append(c.id)
+
+    lint = _lint(store, FakeLLM(), max_items_per_sweep=3)
+
+    rows1, capped1, last1 = await lint._select_delta(USER, None)
+    assert capped1  # 4 candidates, cap 3 → capped catch-up
+    seen = {r.id for r in rows1}
+
+    rows2, _, _ = await lint._select_delta(USER, last1)
+    seen |= {r.id for r in rows2}
+
+    # Every claim is selected across the two catch-up sweeps — the tie-tail at the
+    # boundary timestamp is not lost.
+    assert seen == set(ids)
+
+
+@pytest.mark.asyncio
 async def test_empty_scope_returns_clean_report(store):
     cheap = FakeLLM([])
     report = await _lint(store, cheap).run_once(scope=USER)

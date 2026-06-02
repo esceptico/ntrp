@@ -227,6 +227,41 @@ async def test_cache_hit_returns_page_no_generation(store):
     assert gen.status(lens.id) is None  # no generation status recorded
 
 
+async def test_flat_cached_page_re_derives_when_a_cited_claim_is_archived(store):
+    # Background consolidation can archive a claim a flat lens page cites, without
+    # nulling the page (consolidate never touches lenses). The cached markdown still
+    # shows the claim while the live active set no longer covers it. cached_page must
+    # detect that and return None (re-derive) rather than serve markdown/blocks that
+    # disagree — the same staleness guard the grouped path already has.
+    from ntrp.memory.models import Status
+
+    c1 = await _claim(store, "user runs 5k")
+    c2 = await _claim(store, "user lifts weights")
+    page_md = (
+        f"# Fitness\n## Profile\n- Runs 5k. <!--claim:{c1.id}-->\n"
+        f"- Lifts weights. <!--claim:{c2.id}-->\n"
+    )
+    lens = await _lens(store, name="Fitness", criterion="fitness", page=page_md)
+    await _member(store, lens.id, c1)
+    await _member(store, lens.id, c2)
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _AllInJudge(),
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    # Fresh: both cited claims active → fast cache hit.
+    hit = await proj.cached_page(lens.id, detail=None)
+    assert hit is not None
+    assert hit.markdown == page_md
+
+    # Archive one cited claim (what consolidation does on a contradiction/orphan).
+    await store.invalidate(c2.id, status=Status.ARCHIVED)
+
+    # Now the cache is internally inconsistent → cached_page must refuse to serve it.
+    assert await proj.cached_page(lens.id, detail=None) is None
+
+
 async def test_generation_error_surfaces_in_status(store):
     """A genuine generation failure (projector raises, not a recoverable synthesis
     miss) surfaces as ERROR with the message — the background loop never crashes."""

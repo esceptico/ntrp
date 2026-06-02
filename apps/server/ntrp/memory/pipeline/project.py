@@ -171,7 +171,16 @@ class LensProjector:
             return None
         if lens.render_mode is LensRenderMode.GROUPED_BY_SUBJECT:
             return await self._cached_grouped(lens, level)
-        blocks = await self._blocks_for(parse_anchors(lens.page))
+        # STALENESS GUARD (mirrors _cached_grouped): background consolidation can
+        # supersede/invalidate a cited claim WITHOUT nulling this page (consolidate
+        # never touches lenses). _blocks_for drops inactive/missing claims, so if the
+        # live active set no longer covers every distinct anchor the cached markdown
+        # still cites, the page text and blocks disagree. Re-derive instead of
+        # serving that inconsistency.
+        anchors = parse_anchors(lens.page)
+        blocks = await self._blocks_for(anchors)
+        if len(blocks) != len(set(anchors)) or not blocks:
+            return None
         coverage = await self.membership.coverage(lens_id, lens.scope)
         return ProjectedPage(
             lens_id=lens_id,

@@ -163,16 +163,29 @@ function ClaimDetail({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // ClaimDetail is reused (no key prop) across selection changes, so rapid
+    // A→B→C clicks fire overlapping fetches. Drop any response that resolves
+    // after the selection moved on, else a slow earlier reply overwrites the
+    // current claim (same alive-flag pattern as GraphView/LensesView).
+    let alive = true;
     setLoading(true);
     getMemoryItem(config, claimId)
       .then((d) => {
+        if (!alive) return;
         setItem(d.item);
         setParents(d.parents);
         setChildren(d.children);
         setError(null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (alive) setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [config, claimId]);
 
   const contradicts = useMemo(
