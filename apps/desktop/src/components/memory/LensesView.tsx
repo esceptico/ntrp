@@ -463,6 +463,9 @@ function LensPage({
           setExiting(hint);
           // let the exit animation play, then re-fetch the spine. Tracked so an
           // unmount (lens switch) within the window cancels it (see stopPoll).
+          // Cancel any prior pending timer first: back-to-back commits within the
+          // 240ms window would otherwise orphan it into a redundant re-fetch.
+          if (exitTimerRef.current !== null) clearTimeout(exitTimerRef.current);
           exitTimerRef.current = window.setTimeout(() => {
             exitTimerRef.current = null;
             setExiting(null);

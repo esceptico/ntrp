@@ -37,10 +37,6 @@ class SynthesizedCriterion(BaseModel):
     profile_shape: list[str] = Field(
         default_factory=list, description="2-4 short fields each member's profile captures"
     )
-    render_mode: str = Field(
-        default="flat",
-        description='"grouped_by_subject" for people/entity lenses (one profile per individual), else "flat"',
-    )
     entity_type: str = Field(
         default="thing",
         description='the kind of thing grouped, e.g. "person", "project", "topic"',

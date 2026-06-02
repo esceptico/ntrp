@@ -207,14 +207,16 @@ class LensMembership:
     async def synthesize_criterion(
         self, name: str, intent: str | None = None
     ) -> tuple[str, str, str]:
-        """Draft a criterion body + render mode + entity_type from a lens NAME.
+        """Draft a criterion body + entity_type from a lens NAME.
 
         One cheap structured call. Authors TEXT only — makes no membership call.
         Returns (criterion, render_mode, entity_type): the criterion is the file
-        body (## Belongs [+ ## Profile shape]); render_mode is "grouped_by_subject"
-        for people/entity lenses else "flat". On empty/parse failure, degrade to a
-        faithful echo criterion + flat (still not a keyword gate; decides no
-        membership, just gives the user editable text).
+        body (## Belongs [+ ## Profile shape]). render_mode is ALWAYS "flat" —
+        synthesis never auto-picks a layout (Lens spec §1/§2: a lens renders as a
+        structured list, not a per-subject dossier); grouped layout is a manual
+        user choice via set_render_mode. On empty/parse failure, degrade to a
+        faithful echo criterion (still not a keyword gate; decides no membership,
+        just gives the user editable text).
         """
         user = f"LENS_NAME: {name!r}\nINTENT: {intent!r}"
         try:

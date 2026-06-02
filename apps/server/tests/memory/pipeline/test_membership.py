@@ -376,7 +376,6 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
             SynthesizedCriterion(
                 belongs="Claims describing the user's running training and races.",
                 profile_shape=["Distance / pace", "Goal races"],
-                render_mode="flat",
             )
         ]
     )
@@ -396,8 +395,9 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
 
 async def test_synthesize_criterion_always_flat_per_spec(store):
     # Lens spec §1/§2: a lens renders as a structured-list page at a detail level —
-    # there is no subject-grouping render. The synth always returns "flat" even if a
-    # (legacy) model emits grouped_by_subject.
+    # there is no subject-grouping render. Synthesis can no longer even EMIT a layout
+    # (SynthesizedCriterion carries no render_mode), so the synth path is structurally
+    # flat; grouped layout is only ever a manual user choice via set_render_mode.
     from ntrp.memory.pipeline.prompts_criterion import SynthesizedCriterion
 
     cheap = FakeCompletionClient(
@@ -405,7 +405,6 @@ async def test_synthesize_criterion_always_flat_per_spec(store):
             SynthesizedCriterion(
                 belongs="A specific individual the user knows, or a relationship between people.",
                 profile_shape=["Role", "Relationship to the user"],
-                render_mode="grouped_by_subject",
             )
         ]
     )
@@ -413,7 +412,7 @@ async def test_synthesize_criterion_always_flat_per_spec(store):
 
     crit, mode, _entity_type = await m.synthesize_criterion("People")
 
-    assert mode == "flat"  # never grouped, regardless of what the model returns
+    assert mode == "flat"  # synthesis never produces a grouped layout
 
 
 async def test_synthesize_criterion_degrades_to_echo_on_failure(store):
