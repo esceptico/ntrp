@@ -517,8 +517,14 @@ function LensPage({
     const next = grouped ? "flat" : "grouped_by_subject";
     setGrouped(!grouped); // optimistic
     setLensRenderMode(config, lens.id, next)
-      .then(() => load({ detail, refresh: true }))
+      .then(() => {
+        // Bail if the lens was switched mid-flight: load() on an unmounted instance
+        // would arm an orphan poll token that nothing ever cancels (mirrors applyOps).
+        if (!mountedRef.current) return;
+        load({ detail, refresh: true });
+      })
       .catch((e) => {
+        if (!mountedRef.current) return;
         // Roll back the optimistic flip so the UI doesn't show a mode the server
         // never persisted (it would snap back on the next load anyway).
         setGrouped(grouped);
