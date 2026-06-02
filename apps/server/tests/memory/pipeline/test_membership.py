@@ -221,6 +221,40 @@ async def test_incremental_caches_members_only_for_in_verdicts(store):
             assert members == set()
 
 
+async def test_new_in_member_nulls_cached_page(store):
+    # The page staleness guard only catches removed members, not added ones, so a
+    # newly-scored IN claim must invalidate the cached page (Lens spec §6: re-derive
+    # when members change) — else the page under-reports its own membership.
+    lens = await _lens(
+        store, name="A", criterion="claims about apples",
+        page="# A\n## Profile\n_existing_\n",
+    )
+    assert (await store.get_lens(lens.id)).page is not None
+
+    c = await _claim(store, "apples in the basket")
+    cheap = FakeCompletionClient(default=_batch((0, "in")))
+    m = _membership(store, cheap)
+    await m.score_into_active_lenses([c.id], USER)
+
+    assert c.id in await _members(store, lens.id)  # scored IN
+    assert (await store.get_lens(lens.id)).page is None  # page invalidated
+
+
+async def test_rescoring_existing_in_member_leaves_page(store):
+    # A re-score that produces no NEW IN member must NOT needlessly null the page.
+    lens = await _lens(store, name="A", criterion="claims about apples")
+    c = await _claim(store, "apples in the basket")
+    cheap = FakeCompletionClient(default=_batch((0, "in")))
+    m = _membership(store, cheap)
+    await m.score_into_active_lenses([c.id], USER)  # first IN
+
+    # Cache a page now that the member exists, then re-score the same claim.
+    await store.update_lens(lens.id, page="# A\n## Profile\n- apples <!--claim:%s-->\n" % c.id)
+    await m.score_into_active_lenses([c.id], USER)  # already IN → no new member
+
+    assert (await store.get_lens(lens.id)).page is not None  # untouched
+
+
 # --- §0 ABSOLUTE BAN guard -------------------------------------------
 
 

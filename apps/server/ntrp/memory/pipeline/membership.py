@@ -134,7 +134,20 @@ class LensMembership:
 
         verdicts: list[MembershipVerdict] = []
         for lens_id, lens in touched.items():
-            verdicts.extend(await self._judge_and_cache(batches[lens_id], lens))
+            prior_in = {
+                v.claim_id
+                for v in await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
+            }
+            scored = await self._judge_and_cache(batches[lens_id], lens)
+            verdicts.extend(scored)
+            # If a NEW claim scored IN, the cached page no longer reflects the lens's
+            # membership (the staleness guard only catches removals, not additions —
+            # Lens spec §6: re-derive when members CHANGE). Null the page so the next
+            # read re-synthesizes with the new member; write-triggered, so no read loop.
+            if any(
+                v.decision is MembershipDecision.IN and v.claim_id not in prior_in for v in scored
+            ):
+                await self.store.update_lens(lens_id, page=None)
         return verdicts
 
     # --- Mode 3: lazy backfill (cold, on cache miss / dirty) ---------
