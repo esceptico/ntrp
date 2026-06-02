@@ -257,22 +257,28 @@ class LensProjector:
             coverage=coverage,
         )
 
-    async def _cached_grouped(self, lens: LensRow, level: LensDetailLevel) -> ProjectedPage:
+    async def _cached_grouped(self, lens: LensRow, level: LensDetailLevel) -> ProjectedPage | None:
         """Reconstruct a grouped page from its cached markdown — no LLM, no judge.
 
         The cached `page` is the same concatenated markdown `_render_grouped` returns:
         a header followed by `## {subject}` sections. Each section's anchors recover
-        that subject's claims, so groups + blocks rebuild from the cache alone. A
-        section whose claims are no longer all active is skipped (re-derive on change
-        is the caller's job via refresh); the negative-examples section written by
-        write-back REJECT is not a subject section and is ignored.
+        that subject's claims.
+
+        STALENESS GUARD: background consolidation can supersede/invalidate a claim
+        WITHOUT nulling citing lens pages (consolidate never touches lenses). If any
+        cited claim is no longer active, the cached markdown (which still shows it)
+        would disagree with the filtered blocks/groups. Rather than serve that
+        inconsistency, return None so the caller re-derives the page from live claims.
         """
         groups: list[ProjectedGroup] = []
         blocks: list[RenderedClaim] = []
         for subject, body in _split_subject_sections(lens.page):
-            section_blocks = await self._blocks_for(parse_anchors(body))
-            if not section_blocks:
-                continue
+            anchors = parse_anchors(body)
+            section_blocks = await self._blocks_for(anchors)
+            # _blocks_for dedupes + drops inactive claims; if the live active set no
+            # longer covers every distinct cited claim, the cache is stale.
+            if len(section_blocks) != len(set(anchors)) or not section_blocks:
+                return None
             groups.append(
                 ProjectedGroup(
                     subject=subject,
