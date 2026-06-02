@@ -417,8 +417,13 @@ function LensPage({
                       if (!isLensGenStatus(p)) {
                         setPage(p);
                         setGen(null);
+                        setLoading(false);
+                      } else {
+                        // "ready" but the re-GET still returned a status — don't
+                        // dead-end on a frozen checklist; keep polling.
+                        setGen(p);
+                        window.setTimeout(tick, 700);
                       }
-                      setLoading(false);
                     })
                     .catch((e) => {
                       if (!token.alive) return;
@@ -705,6 +710,7 @@ function CriterionRow({
 }) {
   const [text, setText] = useState(lens.criterion);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -755,9 +761,12 @@ function CriterionRow({
   const save = () => {
     if (!dirty || busy) return;
     setBusy(true);
+    setErr(null);
     editLensCriterion(config, lens.id, text.trim())
       .then(() => onDone(true))
-      .catch(() => onDone(false))
+      // Don't treat a failed save like a cancel — keep edit mode open and surface
+      // the error so the user knows the criterion was NOT persisted, and can retry.
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
   };
 
@@ -778,6 +787,7 @@ function CriterionRow({
       <div className="mt-1.5">
         <CoverageMeter coverage={coverage} />
       </div>
+      {err && <div className="mt-1.5 text-xs text-bad">Couldn’t save: {err}</div>}
       <div className="mt-2 flex items-center justify-end gap-1">
         <GhostBtn onClick={() => onDone(false)} disabled={busy}>
           Cancel

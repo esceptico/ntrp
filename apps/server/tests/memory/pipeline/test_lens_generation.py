@@ -195,6 +195,30 @@ async def test_ensure_returns_generating_then_completes(store):
     assert c1.id in set(parse_anchors(page.markdown))
 
 
+async def test_noncacheable_level_resolves_to_page_not_endless_status(store):
+    # GIST (and any non-STRUCTURED level) never round-trips through the page cache,
+    # so a READY status's cache re-GET would miss forever. The generator must hold
+    # the freshly-produced page and serve it, so READY resolves to a real page.
+    from ntrp.memory.pipeline.types import ProjectedPage
+
+    lens = await _lens(store, name="Health", criterion="health")
+    c1 = await _claim(store, "user runs 5k")
+    await _member(store, lens.id, c1)
+
+    gen = _gen(store, _AllInJudge(), _FirstOnlySynth())
+
+    first = await gen.ensure(lens.id, detail=LensDetailLevel.GIST, refresh=False)
+    assert not isinstance(first, ProjectedPage)  # generation started → status
+    await gen.drain()
+    assert gen.status(lens.id).stage is LensGenStage.READY
+
+    # The re-GET after READY must yield the page (served from the in-memory hold),
+    # NOT another generating status that would freeze the UI checklist.
+    page = await gen.ensure(lens.id, detail=LensDetailLevel.GIST, refresh=False)
+    assert isinstance(page, ProjectedPage)
+    assert page.detail is LensDetailLevel.GIST
+
+
 async def test_ensure_reports_per_subject_progress(store):
     lens = await _lens(
         store, name="People", criterion="people", render_mode=LensRenderMode.GROUPED_BY_SUBJECT

@@ -62,6 +62,11 @@ class LensPageGenerator:
         self.projector = projector
         self._status: dict[str, LensGenStatus] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        # The page a just-finished background task produced. Held until the next
+        # ensure() serves it, so READY always resolves to a retrievable page — even
+        # for non-STRUCTURED/unsynthesized levels the projector never round-trips
+        # through the page cache (otherwise the GET re-misses and re-generates forever).
+        self._ready: dict[str, ProjectedPage] = {}
 
     def status(self, lens_id: str) -> LensGenStatus | None:
         return self._status.get(lens_id)
@@ -75,12 +80,22 @@ class LensPageGenerator:
         if cached is not None and not refresh:
             # A clean cache hit short-circuits any in-flight status — it is current.
             self._status.pop(lens_id, None)
+            self._ready.pop(lens_id, None)
             return cached
 
         status = self._status.get(lens_id)
         running = self._tasks.get(lens_id)
         if running is not None and not running.done():
             return status or self._set(lens_id, LensGenStage.CREATING, detail)
+
+        # Task finished (or never ran). If it produced a page the cache didn't retain
+        # (non-STRUCTURED / synthesis-unavailable level), serve that directly so a
+        # READY status resolves instead of triggering an endless re-generation loop.
+        if not refresh:
+            ready = self._ready.pop(lens_id, None)
+            if ready is not None and (detail is None or ready.detail is detail):
+                self._status.pop(lens_id, None)
+                return ready
 
         status = self._set(lens_id, LensGenStage.CREATING, detail)
         task = asyncio.create_task(self._generate(lens_id, detail=detail, refresh=refresh))
@@ -97,9 +112,10 @@ class LensPageGenerator:
             self._set(lens_id, stage, detail, subject=subject, progress=progress)
 
         try:
-            await self.projector.project(
+            page = await self.projector.project(
                 lens_id, detail=detail, refresh=refresh, progress=report
             )
+            self._ready[lens_id] = page
             self._set(lens_id, LensGenStage.READY, detail)
         except Exception as e:  # generation failed; surface it, don't crash the loop
             _logger.warning("lens generation failed for %s: %s", lens_id, e)
