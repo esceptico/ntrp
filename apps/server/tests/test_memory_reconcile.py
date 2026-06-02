@@ -267,6 +267,37 @@ async def test_update_supersedes_target(store):
     assert "old" in {ref.ref for ref in successor.source_refs}  # evidence unioned
 
 
+async def test_two_rows_targeting_same_claim_dont_fork_the_dag(store):
+    # If the judge emits two destructive rows (update/contradict) against the SAME
+    # existing claim, applying both would supersede/archive it twice and fork the
+    # successor DAG (two successors, no edge between them). The second is demoted to
+    # a non-destructive ADD so the target is superseded exactly once.
+    from ntrp.memory.models import EdgeRole
+
+    old = await _existing_claim(store, "Timur lives in Berlin", subject="Timur")
+    cheap = StubLLM()
+    cheap.subject_queue.append(SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same"))
+    cheap.subject_queue.append(SubjectResolution(decision="MATCH", canonical_subject="Timur", reason="same"))
+    cheap.batch_queue.append(
+        BatchReconcile(rows=[
+            {"claim_index": 0, "op": "update", "target_idx": 0, "merged_text": "Timur lives in Lisbon"},
+            {"claim_index": 1, "op": "update", "target_idx": 0, "merged_text": "Timur lives in Porto"},
+        ])
+    )
+    rec = _reconciler(store, cheap)
+
+    results = await rec.reconcile(
+        [_candidate("Timur moved to Lisbon"), _candidate("Timur moved to Porto")], USER_SCOPE
+    )
+
+    ops = [r.op for r in results]
+    assert ops.count(Op.UPDATE) == 1 and ops.count(Op.ADD) == 1  # duplicate demoted
+    # The target was superseded exactly once → a single SUPERSEDES edge, no fork.
+    assert (await store.get(old.id)).status is Status.SUPERSEDED
+    edges = await store.list_edges(old.id, direction="to", role=EdgeRole.SUPERSEDES)
+    assert len(edges) == 1
+
+
 async def test_noop_bumps_corroboration(store):
     existing = await _existing_claim(store, "Timur likes coffee", subject="Timur")
     cheap = StubLLM()

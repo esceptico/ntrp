@@ -182,6 +182,7 @@ class LensFileStore:
             _logger.warning("lens %s: bad frontmatter yaml: %s", path, e)
             return None
         if not isinstance(front, dict):
+            _logger.warning("lens %s: frontmatter not a dict: %s", path, type(front).__name__)
             return None
 
         directory = front.get("directory")

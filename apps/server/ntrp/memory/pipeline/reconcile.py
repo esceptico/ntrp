@@ -427,6 +427,7 @@ class Reconciler:
     ) -> list[ReconcileRow]:
         """Drop out-of-range claim indices; coerce bad target_idx to ADD."""
         seen: set[int] = set()
+        targeted: set[int] = set()
         out: list[ReconcileRow] = []
         for row in rows:
             if row.claim_index < 0 or row.claim_index >= n_new:
@@ -447,6 +448,20 @@ class Reconciler:
                     )
                     row.op = "add"
                     row.target_idx = None
+                elif row.target_idx in targeted:
+                    # A destructive op (update/contradict) per target at most once: a
+                    # second row hitting the same existing claim would supersede/archive
+                    # it twice, forking the successor DAG (two successors of one claim,
+                    # no edge between them). Demote the later one to a non-destructive
+                    # ADD — a consolidate pass can merge it — mirroring the ADD-degrade.
+                    _logger.warning(
+                        "reconcile: %s reuses target_idx %s -> ADD (avoid DAG fork)",
+                        row.op, row.target_idx
+                    )
+                    row.op = "add"
+                    row.target_idx = None
+                else:
+                    targeted.add(row.target_idx)
             out.append(row)
         for i in range(n_new):
             if i not in seen:
