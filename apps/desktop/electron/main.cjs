@@ -330,6 +330,12 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      // ntrp streams agent activity the user watches from OTHER windows. With
+      // the default (true), Chromium throttles/pauses rAF + timers when this
+      // window is backgrounded or occluded, freezing the SSE-driven UI until
+      // refocus. Keep the renderer live in the background — the whole point of
+      // a personal agent dashboard is updates you don't have to babysit.
+      backgroundThrottling: false,
     },
   });
 
