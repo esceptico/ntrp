@@ -137,6 +137,11 @@ class LensFileStore:
     # --- write / delete -----------------------------------------------
 
     def write(self, lens: LensRow) -> LensRow:
+        # Fail loudly on an invalid slug rather than writing a file read()/list()
+        # would silently reject (an unreadable orphan). Slugs come from _unique_slug,
+        # which guarantees validity — this is defense-in-depth matching delete().
+        if not self.valid_slug(lens.id):
+            raise ValueError(f"invalid lens slug: {lens.id!r}")
         self.lenses_dir.mkdir(parents=True, exist_ok=True)
         (self.lenses_dir / f"{lens.id}.md").write_text(
             render_lens_markdown(lens), encoding="utf-8"

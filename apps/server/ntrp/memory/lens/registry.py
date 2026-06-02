@@ -110,12 +110,15 @@ class LensRegistry:
 
     def _unique_slug(self, name: str) -> str:
         """Derive a file slug from the name, suffixing on collision so two lenses
-        with the same name get distinct files."""
+        with the same name get distinct files. The base is truncated to leave room
+        for the `-{n}` suffix so the result never exceeds the 64-char slug limit —
+        an over-length slug would fail _SLUG_RE and produce an unreadable file."""
         base = slugify(name)
         slug = base
         n = 2
         while self.store.lens_files.read(slug) is not None:
-            slug = f"{base}-{n}"
+            suffix = f"-{n}"
+            slug = f"{base[: 64 - len(suffix)]}{suffix}"
             n += 1
         return slug
 

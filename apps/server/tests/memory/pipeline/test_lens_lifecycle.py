@@ -126,6 +126,28 @@ async def test_create_lens_inserts_registry_row_and_touches_zero_claims(store):
     assert persisted is not None and persisted.id == lens.id
 
 
+@pytest.mark.asyncio
+async def test_collision_slug_stays_within_length_limit_and_is_readable(store):
+    # A very long name whose slug is near the 64-char cap must still get a readable
+    # collision suffix — the suffixed slug must not overflow the limit (which would
+    # produce a file read()/list() silently reject).
+    from ntrp.memory.lens.file_store import LensFileStore
+
+    long_name = "Quarterly Engineering Roadmap And Strategic Planning Initiative Notes Archive"
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+
+    a = await reg.create_lens(long_name, "crit a", USER)
+    b = await reg.create_lens(long_name, "crit b", USER)  # same name → collision suffix
+
+    assert a.id != b.id
+    for lens in (a, b):
+        assert len(lens.id) <= 64
+        assert LensFileStore.valid_slug(lens.id)
+        # Written file round-trips: the lens is actually readable, not an orphan.
+        assert await store.get_lens(lens.id) is not None
+
+
 # --- create without a criterion: synthesize from the name -----------
 
 

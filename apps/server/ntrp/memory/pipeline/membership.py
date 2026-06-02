@@ -187,6 +187,19 @@ class LensMembership:
             batch = pool[start : start + MEMBERSHIP_BATCH]
             verdicts = await self._judge_and_cache(batch, lens)
             added += sum(1 for v in verdicts if v.decision is MembershipDecision.IN)
+
+        # The judge ran against the criterion captured in `lens` at the start. Each
+        # judge await yields the loop, so a concurrent edit_criterion could have
+        # rewritten the criterion (and invalidated the cache) WHILE we judged — our
+        # put_membership writes would then be stale-criterion verdicts that survive
+        # that invalidate. Detect the edit via updated_at (bumped only on definition
+        # edits, not page/membership writes) and drop our now-stale writes.
+        fresh = await self.store.get_lens(lens_id)
+        if fresh is not None and fresh.updated_at != lens.updated_at:
+            await self.store.invalidate_lens_membership(lens_id)
+            _logger.info("refresh_lens_cache: %s edited mid-pass; dropped stale verdicts", lens_id)
+            return BackfillReport(lens_id=lens_id, scanned=len(pool), members_added=0, capped=capped)
+
         return BackfillReport(
             lens_id=lens_id, scanned=len(pool), members_added=added, capped=capped
         )

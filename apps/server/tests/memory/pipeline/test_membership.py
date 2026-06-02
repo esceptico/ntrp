@@ -240,6 +240,36 @@ async def test_new_in_member_nulls_cached_page(store):
     assert (await store.get_lens(lens.id)).page is None  # page invalidated
 
 
+async def test_refresh_drops_verdicts_if_criterion_edited_mid_pass(store):
+    # A criterion edit while a membership refresh is mid-flight (the judge already
+    # loaded the OLD criterion) must not leave stale-criterion verdicts in the cache.
+    # refresh_lens_cache detects the concurrent edit via updated_at and drops them.
+    lens = await _lens(store, name="A", criterion="claims about apples")
+    await _claim(store, "apples in the basket")
+
+    class EditingJudge(FakeCompletionClient):
+        def __init__(self):
+            super().__init__(default=_batch((0, "in")))
+            self.edited = False
+
+        async def completion(self, *, messages, model, response_format=None, **kwargs):
+            if not self.edited:
+                self.edited = True
+                # Simulate a concurrent edit_criterion landing during the judge await:
+                # bump the lens definition (updated_at) the way a criterion edit does.
+                await store.update_lens(lens.id, criterion="claims about bananas")
+            return await super().completion(
+                messages=messages, model=model, response_format=response_format, **kwargs
+            )
+
+    m = _membership(store, EditingJudge())
+    await m.refresh_lens_cache(lens.id)
+
+    # The verdict was judged against the OLD criterion but the lens changed mid-pass,
+    # so the stale verdict must not survive.
+    assert await store.get_membership(lens.id) == []
+
+
 async def test_rescoring_existing_in_member_leaves_page(store):
     # A re-score that produces no NEW IN member must NOT needlessly null the page.
     lens = await _lens(store, name="A", criterion="claims about apples")
