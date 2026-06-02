@@ -255,6 +255,26 @@ async def test_close_session_ingests_from_raw(store):
     assert len(claims) == 1
 
 
+async def test_schedule_ingest_session_writes_a_claim_in_background(store):
+    # The chat-completion trigger: schedule_ingest_session fires a tracked
+    # fire-and-forget ingest. This is the wiring that was MISSING — without it a
+    # chat never becomes memory. Draining the runtime's tasks must yield a claim.
+    from datetime import UTC, datetime
+
+    sessions = {
+        "s1": FakeSession("s1", [{"role": "user", "content": "I prefer dark mode"}], datetime.now(UTC))
+    }
+    pipe = _pipeline(store, StubLLM(), sessions=sessions)
+
+    pipe.schedule_ingest_session("s1", BoundaryKind.SESSION)  # sync, non-blocking
+    import asyncio
+
+    await asyncio.gather(*list(pipe._tasks))  # await the tracked background ingest
+
+    claims = await store.query(scope=USER_SCOPE, status=Status.ACTIVE, limit=10)
+    assert len(claims) == 1  # the backgrounded chat-turn ingest landed a claim
+
+
 # --- remember(): the WriteSeam shares the admit->write path ----------
 
 

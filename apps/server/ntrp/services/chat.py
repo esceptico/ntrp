@@ -151,6 +151,7 @@ class ChatContext:
     project_context: ProjectContext | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
+    memory_ingest: object | None = None
 
 
 async def _apply_generated_session_name(ctx: ChatContext, bus: SessionBus) -> None:
@@ -682,6 +683,7 @@ async def prepare_chat(
         project_context=project_context,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
+        memory_ingest=deps.memory_retrieval,
     )
 
 
@@ -949,6 +951,14 @@ async def _record_completed_run(ctx: ChatContext, *, last_seq: int | None) -> No
     )
     await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
     ctx.run_registry.complete_run(ctx.run.run_id)
+    # Ingest this turn into memory (capture→admit→extract→reconcile). Fire-and-forget
+    # off the response path; the runtime tracks the task and swallows errors. Without
+    # this, chats never become memory (the trigger was never wired).
+    ingest = ctx.memory_ingest
+    if ingest is not None and hasattr(ingest, "schedule_ingest_session"):
+        from ntrp.memory.pipeline.types import BoundaryKind
+
+        ingest.schedule_ingest_session(ctx.session_state.session_id, BoundaryKind.SESSION)
 
 
 async def _drain_backgrounded(

@@ -214,6 +214,21 @@ class MemoryPipeline:
             return []
         return await self.ingest_unit(unit)
 
+    def schedule_ingest_session(self, session_id: str, boundary: BoundaryKind) -> None:
+        """Fire-and-forget ingest of a session's new exchanges (the interactive
+        chat-boundary trigger, spec §4.1). Tracked in self._tasks so it isn't GC'd,
+        runs off the chat response path, and never propagates errors to the caller.
+        close() is watermark-idempotent, so re-firing is safe."""
+        async def _run() -> None:
+            try:
+                await self.close_session(session_id, boundary)
+            except Exception:
+                _logger.exception("memory ingest failed for session %s", session_id)
+
+        task = asyncio.create_task(_run())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     # --- read: retrieve -------------------------------------------------
 
     async def retrieve(self, req: Retrieval) -> RetrievedContext:
