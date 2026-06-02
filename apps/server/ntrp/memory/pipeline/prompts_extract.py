@@ -23,6 +23,13 @@ researching an external feature yields the user's DECISION or INTENT about it \
 feature's internals.
 - Do NOT extract ephemeral operational chatter (tool status, acknowledgements like \
 "ok"/"cool"/"let's try", run mechanics) or facts only true within this one session.
+- Do NOT turn one task/debugging segment into durable memory: a SPECIFIC experiment- \
+run config, an individual PR/commit/issue number, a transient build/test result, a \
+one-off step the user took — these are work-in-progress, not durable knowledge. Keep \
+the DURABLE residue (a decision made, an outcome reached, a stable preference or a \
+fact about the user/their projects), drop the run-by-run mechanics. (e.g. keep "The \
+user is researching memory-unit choices for ntrp"; drop "run stage3_x_800 used 800 \
+controls".)
 - When in doubt, DROP. A near-empty extract is the CORRECT result for a segment that \
 taught the system nothing durable about the user.
 
