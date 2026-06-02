@@ -175,6 +175,8 @@ class KnowledgeRuntime:
                 cheap_model=self.config.memory_model,
                 strong_model=self.config.chat_model,
                 consolidation_interval=self.config.consolidation_interval,
+                cheap_reasoning_effort=self._memory_reasoning_effort(self.config.memory_model),
+                strong_reasoning_effort=self._memory_reasoning_effort(self.config.chat_model),
             ),
             eligible_scopes=self._eligible_scopes,
         )
@@ -187,6 +189,22 @@ class KnowledgeRuntime:
         self.memory_retrieval = pipeline
         self.lens_service = pipeline.lens_registry
         _logger.info("memory pipeline ready", db=str(self.config.memory_db_path))
+
+    def _memory_reasoning_effort(self, model_id: str | None) -> str | None:
+        """Effort for memory's structured calls: the user's configured effort if set,
+        else 'low' (or the model's lowest) so a reasoning model doesn't run at its slow
+        API-default and time out. Returns None for non-reasoning models."""
+        if not model_id:
+            return None
+        configured = self.config.reasoning_effort_for(model_id)
+        if configured:
+            return configured
+        from ntrp.llm.models import get_models
+
+        efforts = get_models()[model_id].reasoning_efforts
+        if not efforts:
+            return None
+        return "low" if "low" in efforts else efforts[0]
 
     def _eligible_scopes(self) -> list[Scope]:
         """Scopes the background lint sweep visits each tick.

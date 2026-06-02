@@ -87,6 +87,32 @@ class MemoryPipelineConfig:
     idle_seconds: int = 30 * 60
     sweep_interval_seconds: int = 600  # periodic capture sweep cadence (spec §4.1 primary)
     sweep_session_limit: int = 50  # most-recent sessions scanned per sweep tick
+    # Reasoning effort for memory's structured calls. Memory is the CHEAP path
+    # (admit/extract/reconcile are classification/extraction, not deep reasoning), so
+    # without an explicit low effort a reasoning model (e.g. gpt-5.5) runs at its slow
+    # API-default and the call times out. Resolved by the server from config.
+    cheap_reasoning_effort: str | None = None
+    strong_reasoning_effort: str | None = None
+
+
+class _EffortClient:
+    """Wraps a CompletionClient to inject a default reasoning_effort on memory's
+    structured calls. Memory's admit/extract/reconcile are cheap classification tasks;
+    without a low effort a reasoning model runs at its slow API-default and the 60s
+    call times out (chat passes an effort, memory historically did not). Transparent
+    delegate — only completion() is touched, and only when an effort is configured."""
+
+    def __init__(self, inner: CompletionClient, effort: str | None):
+        self._inner = inner
+        self._effort = effort
+
+    async def completion(self, **kwargs):
+        if self._effort is not None:
+            kwargs.setdefault("reasoning_effort", self._effort)
+        return await self._inner.completion(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
 
 
 class MemoryPipeline:
@@ -104,6 +130,9 @@ class MemoryPipeline:
     ):
         self.store = store
         self.config = config
+        # All memory + lens LLM calls go through the effort-injecting wrapper.
+        cheap_llm = _EffortClient(cheap_llm, config.cheap_reasoning_effort)
+        strong_llm = _EffortClient(strong_llm, config.strong_reasoning_effort)
 
         self.capture = CaptureService(
             raw_sessions=raw_sessions,

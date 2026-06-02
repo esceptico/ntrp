@@ -11,6 +11,21 @@ from pydantic import BaseModel, Field
 
 EXTRACT_SYSTEM = """You extract atomic, self-contained claims from a conversation segment.
 
+WORTH — be selective; most segments yield FEW claims, and noise poisons memory
+- Extract durable facts about the USER and THEIR world: identity, preferences, \
+decisions, goals/intentions, projects, work, relationships, possessions, habits, \
+and commitments.
+- Do NOT transcribe external reference material the user is merely reading, \
+researching, or being told about — how some other tool/library/product/feature \
+works, documentation, search results, general knowledge. A whole conversation \
+researching an external feature yields the user's DECISION or INTENT about it \
+(e.g. "The user wants to build a goal feature in ntrp"), NOT a catalog of that \
+feature's internals.
+- Do NOT extract ephemeral operational chatter (tool status, acknowledgements like \
+"ok"/"cool"/"let's try", run mechanics) or facts only true within this one session.
+- When in doubt, DROP. A near-empty extract is the CORRECT result for a segment that \
+taught the system nothing durable about the user.
+
 RULES
 - One fact per claim. Never merge two facts into one claim. Never split one fact.
 - Resolve every pronoun and reference inline so each claim stands alone WITHOUT \
