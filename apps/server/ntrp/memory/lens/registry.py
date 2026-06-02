@@ -194,6 +194,14 @@ class LensRegistry:
                 raise ValueError(f"not a lens: {lid}")
             inputs.append(lens)
         scope = inputs[0].scope
+        # Recall/resolution is scope-isolated: a union inherits one scope, so it
+        # could only ever surface inputs[0]'s scope — claims from a differently-
+        # scoped input would be silently dropped while that source lens is deleted.
+        # Refuse the lossy merge (categorical scope-equality, not a lexical gate).
+        if not all(i.scope == scope for i in inputs):
+            raise ValueError(
+                f"cannot merge lenses across scopes: {sorted({str(i.scope) for i in inputs})}"
+            )
         union = await self.create_lens(name, criterion, scope)
         for lens in inputs:
             await self.store.delete_lens(lens.id)

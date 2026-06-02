@@ -316,6 +316,25 @@ async def test_merge_lenses_creates_union_and_drops_inputs(store):
 
 
 @pytest.mark.asyncio
+async def test_merge_across_scopes_is_refused(store):
+    # A union inherits ONE scope; recall is scope-isolated, so merging a user-scope
+    # and a project-scope lens would silently drop the other scope's claims while
+    # deleting that source lens. Refuse rather than produce a lossy phantom union.
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    a = await reg.create_lens("A", "crit a", USER)
+    proj = Scope(kind=ScopeKind.PROJECT, key="alpha")
+    b = await reg.create_lens("B", "crit b", proj)
+
+    with pytest.raises(ValueError, match="across scopes"):
+        await reg.merge_lenses([a.id, b.id], "AB", "crit a or crit b")
+
+    # Both inputs survive — nothing was deleted on the rejected merge.
+    assert await store.get_lens(a.id) is not None
+    assert await store.get_lens(b.id) is not None
+
+
+@pytest.mark.asyncio
 async def test_merge_requires_two_lenses(store):
     mem = FakeMembership(store)
     reg = _registry(store, mem)

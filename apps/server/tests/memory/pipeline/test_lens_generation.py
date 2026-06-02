@@ -280,6 +280,26 @@ async def test_empty_flat_lens_page_still_cache_hits(store):
     assert hit.blocks == []
 
 
+async def test_empty_grouped_lens_page_still_cache_hits(store):
+    # Same empty-lens guard for the grouped path: the `## Profile` placeholder has no
+    # anchors, which must not be mistaken for staleness and force re-synthesis.
+    page_md = "# People\n\n## Profile\n_No members yet._\n"
+    lens = await _lens(
+        store, name="People", criterion="people", page=page_md,
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _AllInJudge(),
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    hit = await proj.cached_page(lens.id, detail=None)
+    assert hit is not None
+    assert hit.markdown == page_md
+    assert hit.blocks == []
+
+
 async def test_generation_error_surfaces_in_status(store):
     """A genuine generation failure (projector raises, not a recoverable synthesis
     miss) surfaces as ERROR with the message — the background loop never crashes."""

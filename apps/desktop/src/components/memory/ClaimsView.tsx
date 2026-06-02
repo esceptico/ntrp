@@ -68,18 +68,30 @@ export function ClaimsView({
       return;
     }
     setLoading(true);
+    // Debounce only prevents overlap within the window; slower typing leaves two
+    // fetches in flight, and a slow earlier query's response can land last and
+    // overwrite newer results. Drop stale responses (same guard as ClaimDetail).
+    let alive = true;
     const handle = setTimeout(() => {
       searchMemory(config, { q, mode: "fts", limit: 50 })
         .then((r: MemorySearchResponse) => {
+          if (!alive) return;
           const list = r.mode === "fts" ? r.items : r.items.map((i) => i.item);
           setItems(list);
           setDegraded(r.degraded);
           setError(null);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-        .finally(() => setLoading(false));
+        .catch((e) => {
+          if (alive) setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
     }, DEBOUNCE);
-    return () => clearTimeout(handle);
+    return () => {
+      alive = false;
+      clearTimeout(handle);
+    };
   }, [query, config, runDefault]);
 
   return (

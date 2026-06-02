@@ -289,8 +289,10 @@ class LensProjector:
             anchors = parse_anchors(body)
             section_blocks = await self._blocks_for(anchors)
             # _blocks_for dedupes + drops inactive claims; if the live active set no
-            # longer covers every distinct cited claim, the cache is stale.
-            if len(section_blocks) != len(set(anchors)) or not section_blocks:
+            # longer covers every distinct cited anchor, the cache is stale. Guard
+            # only when there are anchors — an anchor-less `## Profile` placeholder is
+            # a legitimately-empty lens, not stale (mirrors the flat guard above).
+            if anchors and len(section_blocks) != len(set(anchors)):
                 return None
             groups.append(
                 ProjectedGroup(

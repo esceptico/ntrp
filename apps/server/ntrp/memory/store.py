@@ -336,9 +336,10 @@ class MemoryStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def bump_corroboration(self, item_id: str) -> bool:
+    async def bump_corroboration(self, item_id: str, *, commit: bool = True) -> bool:
         cursor = await self.conn.execute(SQL_BUMP_CORROBORATION, (now_iso(), item_id))
-        await self.conn.commit()
+        if commit:
+            await self.conn.commit()
         return cursor.rowcount > 0
 
     # --- claim reads ---

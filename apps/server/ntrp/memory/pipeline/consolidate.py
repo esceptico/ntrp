@@ -328,9 +328,10 @@ class ConsolidateLint:
                 ),
                 commit=False,
             )
+        # Corroboration bump joins the same transaction so the survivor's count can't
+        # drift if the process dies between two separate commits.
+        await self.store.bump_corroboration(new_survivor.id, commit=False)
         await self.store.conn.commit()
-
-        await self.store.bump_corroboration(new_survivor.id)
         return len(losers)
 
     async def _apply_invalidate(self, op: InvalidateOp, live: dict[str, MemoryItem]) -> str:
