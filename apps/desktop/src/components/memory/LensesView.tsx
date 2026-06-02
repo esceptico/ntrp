@@ -915,23 +915,28 @@ function GroupedProfiles({
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
 }) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set(groups[0] ? [groups[0].subject] : []));
-  const toggle = (subject: string) =>
+  // Key collapse state by a stable per-group id, not the raw subject string: two
+  // groups can legitimately share a subject (cached re-read), and a subject-keyed
+  // Set would toggle both at once.
+  const groupId = (i: number) => `${groups[i].subject}#${i}`;
+  const [open, setOpen] = useState<Set<string>>(() => new Set(groups[0] ? [`${groups[0].subject}#0`] : []));
+  const toggle = (id: string) =>
     setOpen((cur) => {
       const next = new Set(cur);
-      next.has(subject) ? next.delete(subject) : next.add(subject);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
 
   return (
     <div className="mt-3 flex flex-col gap-1">
-      {groups.map((g) => {
-        const isOpen = open.has(g.subject);
+      {groups.map((g, i) => {
+        const id = groupId(i);
+        const isOpen = open.has(id);
         return (
-          <div key={g.subject} className="rounded-lg">
+          <div key={id} className="rounded-lg">
             <button
               type="button"
-              onClick={() => toggle(g.subject)}
+              onClick={() => toggle(id)}
               aria-expanded={isOpen}
               className="app-row group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
             >

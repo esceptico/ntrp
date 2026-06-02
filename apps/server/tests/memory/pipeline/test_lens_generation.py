@@ -138,6 +138,24 @@ class _SlowIndexSynth:
         return completion_response(PageSynthesis(markdown=md).model_dump_json())
 
 
+class _FirstOnlySynth:
+    """Cites ONLY the lowest claim index it is given — simulates a synthesizer that
+    under-cites a bucket, so some bucket claims are members but uncited."""
+
+    async def completion(self, *, messages, model, response_format=None, **kwargs):
+        user = messages[-1]["content"]
+        idxs = []
+        for line in user.splitlines():
+            s = line.strip()
+            if s.startswith("[") and "]" in s:
+                try:
+                    idxs.append(int(s[1 : s.index("]")]))
+                except ValueError:
+                    pass
+        first = min(idxs) if idxs else 0
+        return completion_response(PageSynthesis(markdown=f"## Profile\n- Only one. [{first}]").model_dump_json())
+
+
 def _gen(store, cheap, strong):
     proj = LensProjector(
         store, FakeEmbedder(), cheap, strong, cheap_model="cheap", strong_model="strong"
@@ -298,6 +316,49 @@ async def test_empty_grouped_lens_page_still_cache_hits(store):
     assert hit is not None
     assert hit.markdown == page_md
     assert hit.blocks == []
+
+
+def test_demoted_body_h2_does_not_split_into_phantom_subjects():
+    # A profile body field heading (`## Background`) must be demoted to `### ` so the
+    # cached re-read's _split_subject_sections sees only the subject header, not a
+    # phantom duplicate subject.
+    from ntrp.memory.pipeline.project import _demote_inline_h2, _split_subject_sections
+
+    body = _demote_inline_h2("## Background\nworks in security\n## Notes\nlikes tea")
+    assert not any(ln.startswith("## ") for ln in body.splitlines())  # no body line is H2
+    assert "### Background" in body and "### Notes" in body
+
+    page = f"# People\n## Alice\n{body}\n\n## Bob\n{_demote_inline_h2('## Background\nartist')}"
+    subjects = [s for s, _ in _split_subject_sections(page)]
+    assert subjects == ["Alice", "Bob"]  # no phantom 'Background'/'Notes' subjects
+
+
+async def test_grouped_fresh_page_blocks_match_cited_anchors(store):
+    # A fresh grouped render's top-level blocks must equal the anchor-filtered
+    # per-group blocks (the cited claims) — not the full bucket — so the fresh page
+    # and the cached re-read (_cached_grouped) expose an identical block set.
+    c1 = await _claim(store, "alpha fact", canonical_subject="Tim")
+    c2 = await _claim(store, "beta fact", canonical_subject="Tim")
+    lens = await _lens(
+        store, name="Tim", criterion="about Tim",
+        render_mode=LensRenderMode.GROUPED_BY_SUBJECT,
+    )
+    await _member(store, lens.id, c1)
+    await _member(store, lens.id, c2)
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _FirstOnlySynth(),
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    page = await proj.project(lens.id, refresh=True)
+    assert page.groups is not None
+    group_block_ids = [b.claim_id for g in page.groups for b in g.blocks]
+    top_block_ids = [b.claim_id for b in page.blocks]
+    # Exactly one of the two bucket claims was cited; top-level blocks must match the
+    # per-group (cited) blocks, not surface the uncited claim as an editable block.
+    assert sorted(top_block_ids) == sorted(group_block_ids)
+    assert len(top_block_ids) == 1
 
 
 async def test_generation_error_surfaces_in_status(store):

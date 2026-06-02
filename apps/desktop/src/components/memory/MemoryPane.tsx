@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppConfig } from "../../api";
 import { useStore } from "../../store";
 import { TabPanels, useTabDirection } from "../ui/TabPanels";
@@ -30,16 +30,32 @@ export function MemoryPane({
   const [graphFocus, setGraphFocus] = useState<string | null>(null);
   const direction = useTabDirection(ORDER, tab);
 
+  // A peel-in (claim/provenance) carries focus to the destination; a manual tab
+  // switch must NOT — else the stale focus re-applies when the unmounted view
+  // remounts. Mark peel navigations so the tab-change effect leaves their focus,
+  // and clear focus on any other tab change.
+  const peeledRef = useRef(false);
+  useEffect(() => {
+    if (peeledRef.current) {
+      peeledRef.current = false;
+      return;
+    }
+    setClaimFocus(null);
+    setGraphFocus(null);
+  }, [tab]);
+
   if (!config) {
     return <DetailPlaceholder>Memory is unavailable until the app config loads.</DetailPlaceholder>;
   }
 
   const peekClaim = (claimId: string) => {
     setClaimFocus(claimId);
+    if (tab !== "claims") peeledRef.current = true;
     onTab("claims");
   };
   const showProvenance = (itemId: string) => {
     setGraphFocus(itemId);
+    if (tab !== "graph") peeledRef.current = true;
     onTab("graph");
   };
 

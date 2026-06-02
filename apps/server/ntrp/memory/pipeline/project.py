@@ -102,6 +102,13 @@ def _inject_anchors(markdown: str, members: list[MemoryItem]) -> tuple[str, set[
     return _INDEX_CITE_RE.sub(repl, markdown), rendered
 
 
+def _demote_inline_h2(body: str) -> str:
+    """Demote H2 (`## `) headings inside a profile body to H3 (`### `), so only the
+    subject header uses `## ` and `_split_subject_sections` won't read a body field
+    heading as a new subject. Exactly-two-hash headings only; `### ` is untouched."""
+    return re.sub(r"(?m)^## (?!#)", "### ", body)
+
+
 def _split_subject_sections(markdown: str) -> list[tuple[str, str]]:
     """Split a grouped page's markdown into (subject, body) per `## {subject}` section.
 
@@ -247,7 +254,11 @@ class LensProjector:
                 lens_id=lens_id,
                 detail=level,
                 markdown=markdown,
-                blocks=blocks,
+                # Top-level blocks must be the anchor-filtered per-group blocks, NOT
+                # the unfiltered `valid` list — else a fresh grouped render exposes
+                # uncited claims that the cached re-read (_cached_grouped) does not,
+                # so the two reads disagree. Mirrors _cached_grouped's accumulation.
+                blocks=[b for g in groups for b in g.blocks],
                 synthesized=synthesized,
                 coverage=coverage,
                 groups=groups,
@@ -431,6 +442,11 @@ class LensProjector:
             if progress is not None:
                 progress(_GenStage.SYNTHESIZING, subject=subject, progress=f"{i + 1}/{total}")
             body, synthesized, rendered = await self._render_profile(lens, subject, claims, level)
+            # Reserve `## ` for the subject header: demote any H2 the synthesizer
+            # emitted inside the body to H3, so the cached re-read's
+            # `_split_subject_sections` can't mistake a body field heading for a new
+            # subject (which would split one bucket into phantom duplicate subjects).
+            body = _demote_inline_h2(body)
             all_synth = all_synth and synthesized
             # Blocks must match the claims the markdown actually cites — else a fresh
             # page (all bucket claims) and the cached re-read (anchor-filtered via
