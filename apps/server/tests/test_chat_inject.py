@@ -369,20 +369,21 @@ async def test_event_stream_replays_explicit_text_boundaries():
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
     try:
-        chunks = [await anext(stream), await anext(stream), await anext(stream)]
+        chunks = [await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
 
     parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
-    assert [seq for seq, _event_name, _payload in parsed] == [1, 2, 3]
+    # Catch-up replay is structural-only: the CONTENT delta (seq 2) is dropped,
+    # the START/END boundaries (carrying full content) replay verbatim.
+    assert [seq for seq, _event_name, _payload in parsed] == [1, 3]
     payloads = [payload for _seq, _event_name, payload in parsed]
-    assert [payload["session_id"] for payload in payloads] == ["sess-1", "sess-1", "sess-1"]
+    assert [payload["session_id"] for payload in payloads] == ["sess-1", "sess-1"]
     assert [payload["type"] for payload in payloads] == [
         "TEXT_MESSAGE_START",
-        "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
     ]
-    assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
+    assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1"]
 
 
 @pytest.mark.asyncio
@@ -433,17 +434,19 @@ async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_pa
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=0, event_store=store)
     try:
-        chunks = [await anext(stream), await anext(stream), await anext(stream), await anext(stream)]
+        chunks = [await anext(stream), await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
         await read_conn.close()
         await conn.close()
 
     parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
-    assert [seq for seq, _event_name, _payload in parsed] == [1, 2, 3, 4]
+    # Durable replay after bus recreation. Catch-up replay is structural-only,
+    # so the (artificially persisted) CONTENT delta at seq 2 is dropped while
+    # the cursor still advances past it; START/END/TOOL_CALL_START replay.
+    assert [seq for seq, _event_name, _payload in parsed] == [1, 3, 4]
     assert [event_name for _seq, event_name, _payload in parsed] == [
         "TEXT_MESSAGE_START",
-        "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
         "TOOL_CALL_START",
     ]

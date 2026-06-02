@@ -35,6 +35,10 @@ from ntrp.events.sse import (
     TextMessageStartEvent,
     ThinkingEvent,
     TodoUpdatedEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallResultEvent,
+    ToolCallStartEvent,
     agent_events_to_sse,
 )
 from ntrp.server.bus import RECENT_BUFFER_MAX, BusRegistry, SessionBus
@@ -242,7 +246,13 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_event_stream_does_not_synthesize_text_boundaries():
+async def test_catchup_replay_emits_structural_events_only():
+    """Catch-up replay (snapshot/durable) emits STRUCTURAL events only — never
+    the ephemeral deltas (token text, tool args, reasoning) — even with
+    stream=True. A client joining an ongoing run lands on the settled current
+    state instead of re-streaming the whole token/tool-call history (the "full
+    replay" churn). The live tail still carries deltas for what's streaming now.
+    Boundaries are passed through verbatim, never synthesized."""
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(TextMessageStartEvent(message_id="text-1"))
@@ -251,17 +261,18 @@ async def test_event_stream_does_not_synthesize_text_boundaries():
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
     try:
-        chunks = [await anext(stream), await anext(stream), await anext(stream)]
+        chunks = [await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
 
     payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    # CONTENT delta dropped on replay; START + END (carrying full content) kept.
     assert [payload["type"] for payload in payloads] == [
         "TEXT_MESSAGE_START",
-        "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
     ]
-    assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
+    assert payloads[1]["content"] == "hello"
+    assert all(payload["message_id"] == "text-1" for payload in payloads)
 
 
 @pytest.mark.asyncio
@@ -2533,3 +2544,41 @@ async def test_durable_replay_serves_sparse_ledger_without_reset():
     assert "stream_reset" not in types
     seqs = [p["seq"] for p in payloads]
     assert seqs == [5, 8, 10]
+
+
+@pytest.mark.asyncio
+async def test_catchup_replay_collapses_tool_call_chain_keeps_live_tail():
+    """REGRESSION (user report: 'full replay of tool calls when I open a tab
+    with an ongoing research subagent'). A long tool-call chain in the buffer
+    must replay as its STRUCTURAL skeleton (start/end/result) with the ephemeral
+    ARGS deltas dropped — not the full re-stream. Events emitted AFTER the
+    client subscribes (the live tail) still carry args, so what's actively
+    streaming renders normally."""
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    # Buffered (pre-join) tool-call chain.
+    await bus.emit(ToolCallStartEvent(tool_call_id="t1", tool_call_name="bash", display_name="Bash"))
+    await bus.emit(ToolCallArgsEvent(tool_call_id="t1", delta='{"command":'))
+    await bus.emit(ToolCallArgsEvent(tool_call_id="t1", delta='"ls"}'))
+    await bus.emit(ToolCallEndEvent(tool_call_id="t1"))
+    await bus.emit(ToolCallResultEvent(tool_call_id="t1", content="a\nb", preview="2 lines", name="bash"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
+    try:
+        replayed = [json.loads((await anext(stream)).split("data: ", 1)[1].strip()) for _ in range(3)]
+        # Live tail: a new args delta emitted after subscription must come through.
+        await bus.emit(ToolCallArgsEvent(tool_call_id="t2", delta='{"q":"x"}'))
+        live = json.loads((await anext(stream)).split("data: ", 1)[1].strip())
+    finally:
+        await stream.aclose()
+
+    assert [p["type"] for p in replayed] == [
+        "TOOL_CALL_START",
+        "TOOL_CALL_END",
+        "TOOL_CALL_RESULT",
+    ]
+    assert all(p.get("replay") for p in replayed)
+    assert all(p["type"] != "TOOL_CALL_ARGS" for p in replayed)
+    # Live tail keeps full deltas.
+    assert live["type"] == "TOOL_CALL_ARGS"
+    assert live.get("replay") is not True

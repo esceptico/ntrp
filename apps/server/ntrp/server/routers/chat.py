@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ntrp.events.sse import ApprovalNeededEvent, TextDeltaEvent
+from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, ApprovalNeededEvent, TextDeltaEvent
 from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -93,6 +93,17 @@ async def _event_stream(
     def should_emit(event) -> bool:
         return stream or not isinstance(event, TextDeltaEvent)
 
+    # Catch-up replay (durable + in-memory snapshot) emits only STRUCTURAL
+    # events — never the ephemeral deltas (token text, tool args, reasoning).
+    # A client joining a long/ongoing run must land on the settled current
+    # state, not re-stream thousands of historical deltas (the "full replay of
+    # tool calls" churn). This mirrors what's persisted, so the in-memory
+    # snapshot replay matches the durable DB replay exactly; the live tail
+    # (after replay_upper_seq) still carries full deltas for whatever is
+    # actively streaming right now.
+    def should_replay(event) -> bool:
+        return event.type not in EPHEMERAL_EVENT_TYPES
+
     durable_pending_approval_ids: set[str] | None = None
 
     async def is_pending_approval(tool_id: str) -> bool:
@@ -154,7 +165,7 @@ async def _event_stream(
             async for chunk in iter_replay_records(
                 session_id,
                 await filter_replay_records(snapshot),
-                should_emit=should_emit,
+                should_emit=should_replay,
             ):
                 yield chunk
         else:
@@ -171,7 +182,7 @@ async def _event_stream(
             async for chunk in iter_replay_records(
                 session_id,
                 await filter_replay_records(records_to_replay),
-                should_emit=should_emit,
+                should_emit=should_replay,
             ):
                 yield chunk
 
