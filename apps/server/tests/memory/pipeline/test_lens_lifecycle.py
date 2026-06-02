@@ -260,6 +260,19 @@ async def test_edit_criterion_updates_in_place_and_invalidates_cache(store):
 
 
 @pytest.mark.asyncio
+async def test_edit_criterion_rejects_blank_text(store):
+    # A whitespace-only criterion writes an empty body the judge then scores against.
+    # Reject it (matches writeback._edit_criterion); the lens keeps its old criterion.
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    lens = await reg.create_lens("Climbing", "about climbing", USER)
+    for bad in ("", "   ", "\n\t"):
+        with pytest.raises(ValueError, match="criterion cannot be empty"):
+            await reg.edit_criterion(lens.id, bad)
+    assert (await store.get_lens(lens.id)).criterion == "about climbing"  # unchanged
+
+
+@pytest.mark.asyncio
 async def test_edit_criterion_rejects_unknown_lens(store):
     mem = FakeMembership(store)
     reg = _registry(store, mem)

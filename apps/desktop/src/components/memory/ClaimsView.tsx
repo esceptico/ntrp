@@ -181,6 +181,10 @@ function ClaimDetail({
     // current claim (same alive-flag pattern as GraphView/LensesView).
     let alive = true;
     setLoading(true);
+    // Clear stale state for the previous selection so a prior fetch's error (or the
+    // old claim's content) doesn't render while this one is in flight.
+    setError(null);
+    setItem(null);
     getMemoryItem(config, claimId)
       .then((d) => {
         if (!alive) return;

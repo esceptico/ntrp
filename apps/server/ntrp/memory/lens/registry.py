@@ -163,6 +163,13 @@ class LensRegistry:
         UPDATE the registry row (criterion + page=NULL) and drop the membership
         cache. Membership re-derives on the next projection. Zero claim impact.
         """
+        # A blank/whitespace criterion writes an empty body the membership judge then
+        # scores against (silent garbage verdicts). Reject it, mirroring
+        # writeback._edit_criterion (the REST min_length=1 / tool truthy checks don't
+        # strip, so "   " slips through to here).
+        new_criterion = (new_criterion or "").strip()
+        if not new_criterion:
+            raise ValueError("criterion cannot be empty")
         lens = await self.store.get_lens(lens_id)
         if lens is None:
             raise ValueError(f"not a lens: {lens_id}")
