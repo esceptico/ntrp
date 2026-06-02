@@ -2480,3 +2480,56 @@ def test_foreground_child_suppression_drops_nested_text_keeps_tool_args():
     assert "ToolCallStartEvent" in tool
     assert "ToolCallArgsEvent" in tool
     assert "ToolCallEndEvent" in tool
+
+
+@pytest.mark.asyncio
+async def test_durable_replay_serves_sparse_ledger_without_reset():
+    """REGRESSION: session_events is a sparse ledger — ephemeral deltas (token
+    text, tool args, reasoning) are not persisted, so seqs have holes. After a
+    server restart the in-memory buffer is empty, so a resuming client relies on
+    durable replay. The old contiguity check treated every hole as a gap and
+    returned None → a bogus replay_gap reset → reload loop. With a sparse store
+    and an empty buffer, the stream must REPLAY the persisted rows, not reset."""
+    from ntrp.server.bus import StreamRecord
+
+    buses = BusRegistry()
+
+    # Persisted rows are sparse: seqs 5, 8, 10 (4/6/7/9 were dropped deltas).
+    # Checkpoint 3, latest persisted 10 → bus seeds next_seq=11, replay_upper=10.
+    sparse = [
+        StreamRecord(seq=5, session_id="sess-1", event=TextMessageEndEvent(message_id="m", content="hi")),
+        StreamRecord(seq=8, session_id="sess-1", event=ThinkingEvent(status="tail")),
+        StreamRecord(seq=10, session_id="sess-1", event=TaskFinishedEvent(run_id="r", task_id="t", status="completed")),
+    ]
+
+    class SparseStore:
+        async def get_latest_session_event_seq(self, session_id: str) -> int:
+            return 10
+
+        async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+            return 3
+
+        async def list_session_events(self, session_id: str, *, after_seq: int, limit: int) -> list:
+            return [r for r in sparse if r.seq > after_seq]
+
+    stream = _event_stream(
+        "sess-1",
+        buses,
+        RunRegistry(),
+        stream=True,
+        after_seq=3,
+        event_store=SparseStore(),
+    )
+    chunks: list[str] = []
+    try:
+        for _ in range(3):
+            chunks.append(await anext(stream))
+    finally:
+        await stream.aclose()
+
+    payloads = [json.loads(c.split("data: ", 1)[1].strip()) for c in chunks]
+    types = [p["type"] for p in payloads]
+    # No reset — the sparse rows replay straight through, in order.
+    assert "stream_reset" not in types
+    seqs = [p["seq"] for p in payloads]
+    assert seqs == [5, 8, 10]

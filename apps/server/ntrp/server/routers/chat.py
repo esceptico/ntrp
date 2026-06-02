@@ -132,12 +132,15 @@ async def _event_stream(
             return []
         records = await event_store.list_session_events(session_id, after_seq=after_seq, limit=10000)
         records = [record for record in records if record.seq <= replay_upper_seq]
-        expected = after_seq + 1
-        for record in records:
-            if record.seq != expected:
-                return None
-            expected += 1
-        if expected <= replay_upper_seq:
+        # session_events is a SPARSE ledger: ephemeral deltas (token text, tool
+        # args, reasoning — see EPHEMERAL_EVENT_TYPES) are intentionally NOT
+        # persisted, so seqs are non-contiguous by design. A hole is NOT a gap —
+        # the omitted seqs are transient deltas the client re-derives from the
+        # persisted START/END + result rows. Requiring contiguity here made
+        # nearly every resume return None → a bogus replay_gap reset → a
+        # reload loop. The only real concern is whether the DB has caught up to
+        # the live boundary; if not, fall back to the in-memory buffer/snapshot.
+        if not records or records[-1].seq != replay_upper_seq:
             return None
         return records
 
