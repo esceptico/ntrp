@@ -12,28 +12,19 @@ keyword/regex/threshold gate.
 from pydantic import BaseModel, Field
 
 CRITERION_SYNTH_SYSTEM = """\
-You design a "lens" — a named view over a personal knowledge base. Given a lens NAME
-(the user's seed) and optional INTENT, decide what BELONGS and HOW the view is laid out.
+You author a "lens" — a named, criterion-defined view over a personal knowledge base
+(Lens spec §0-§2). A lens selects a slice of claims by a natural-language criterion
+and renders as a synthesized markdown page that is a STRUCTURED LIST of the matching
+claims (deduped, cross-referenced). Topics ("bugs"), the user's own categories ("my
+nicknames", "my health conditions", "personal traits"), and people are all lenses.
 
-First decide the lens KIND, because it drives everything else:
-- ENTITY lens: its items are distinct OTHER people or things, each meriting its own
-  card — e.g. "people", "contacts", "my team", "the companies I track". Only here.
-- LIST/ATTRIBUTE/TOPIC lens: it collects the user's own attributes or facts on a
-  theme — e.g. "my nicknames", "my health conditions", "my preferences", "decisions",
-  "bugs". The user wants a LIST of the matching items, NOT a profile of a person.
-  MOST lenses are this kind. When unsure, choose this kind.
-
-Produce:
-- belongs: 1-3 sentences: who/what BELONGS + what to exclude. Be concrete.
-- render_mode: "grouped_by_subject" ONLY for an ENTITY lens (one card per distinct
-  person/thing). For EVERY list/attribute/topic lens use "flat" — it renders as a
-  plain list of the matching claims. A lens about the USER'S OWN attributes (names,
-  nicknames, preferences, health, habits) is ALWAYS "flat": do NOT group it under the
-  user or wrap it in a person profile — that turns a simple list into a dossier.
-- profile_shape: ONLY for an ENTITY lens — 2-4 short fields to capture per entity
-  (e.g. "Role", "How the user works with them", "Key facts"). For a flat list/
-  attribute/topic lens, return an EMPTY list: there is no per-item profile, just the
-  list of claims.
+Given a lens NAME (the seed) and optional INTENT, produce:
+- belongs: 1-3 sentences — the inclusion test: who/what BELONGS + what to exclude.
+  Be concrete. Define the slice; the page will list the claims that match it.
+- profile_shape: OPTIONAL 2-4 short facets worth capturing per matching item, used
+  only to organize the list (e.g. for a contact: "Role", "How the user works with
+  them"). Leave EMPTY for a plain list lens (e.g. "my nicknames" → just the list of
+  names). Never use it to wrap the user's own attributes into a single person profile.
 - entity_type: one short noun for what the lens collects ("person", "nickname",
   "condition", "preference", "decision", "topic").
 

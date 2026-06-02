@@ -394,7 +394,10 @@ async def test_synthesize_criterion_uses_cheap_llm(store):
     assert cheap.calls[0]["model"] == "cheap"
 
 
-async def test_synthesize_criterion_groups_people_lens(store):
+async def test_synthesize_criterion_always_flat_per_spec(store):
+    # Lens spec §1/§2: a lens renders as a structured-list page at a detail level —
+    # there is no subject-grouping render. The synth always returns "flat" even if a
+    # (legacy) model emits grouped_by_subject.
     from ntrp.memory.pipeline.prompts_criterion import SynthesizedCriterion
 
     cheap = FakeCompletionClient(
@@ -410,8 +413,7 @@ async def test_synthesize_criterion_groups_people_lens(store):
 
     crit, mode, _entity_type = await m.synthesize_criterion("People")
 
-    assert mode == "grouped_by_subject"
-    assert "## Profile shape" in crit
+    assert mode == "flat"  # never grouped, regardless of what the model returns
 
 
 async def test_synthesize_criterion_degrades_to_echo_on_failure(store):

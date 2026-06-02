@@ -234,9 +234,13 @@ class LensMembership:
             if not belongs:
                 raise ValueError("blank synthesized criterion")
             criterion = _compose_criterion(belongs, parsed.profile_shape)
-            mode = parsed.render_mode if parsed.render_mode in ("grouped_by_subject", "flat") else "flat"
+            # Spec (Lens spec §1/§2): a lens renders as a synthesized markdown page at
+            # a DETAIL LEVEL (gist / structured list / dossier) — a structured LIST of
+            # its member claims. There is NO subject-grouping render in the spec
+            # (entities are their OWN lenses per §4). Always flat; never a per-person
+            # dossier (which turned "my nicknames" into a profile of the user).
             entity_type = parsed.entity_type.strip() or "thing"
-            return criterion, mode, entity_type
+            return criterion, "flat", entity_type
         except Exception as e:
             _logger.warning("lens: criterion synthesis failed for %r, echoing: %s", name, e)
             return f"## Belongs\nThis item is about {name}.", "flat", "thing"
