@@ -57,10 +57,17 @@ from ntrp.memory.store import MemoryStore
 _logger = get_logger(__name__)
 
 _ANCHOR_RE = re.compile(r"<!--\s*claim:([0-9a-fA-F]+)\s*-->")
-# Synthesis cites each claim by the numbered index tag `[n]` it was given (not the
+# Synthesis cites each claim by the numbered index tag `{{n}}` it was given (not the
 # opaque id). `_inject_anchors` rewrites those tags into stable anchors after the
 # model returns — structural index → id substitution, no meaning rule, no keyword.
-_INDEX_CITE_RE = re.compile(r"\[(\d+)\]")
+# The double-brace token (not bare `[n]`) is collision-resistant: a claim whose
+# CONTENT literally contains `[1]` ("see table [1]") can't be mistaken for a citation
+# and mis-anchored/deleted.
+_INDEX_CITE_RE = re.compile(r"\{\{(\d+)\}\}")
+
+
+def _cite_tag(n: int) -> str:
+    return "{{%d}}" % n
 
 # NEGATIVE_EXAMPLES_HEADER (ntrp.constants): the write-back REJECT section label.
 # Parsing-only here — it is NOT a subject group, so the cached-grouped
@@ -77,10 +84,10 @@ def parse_anchors(markdown: str) -> list[str]:
 
 
 def _inject_anchors(markdown: str, members: list[MemoryItem]) -> tuple[str, set[str]]:
-    """Rewrite the synthesizer's `[n]` index citations into stable claim anchors.
+    """Rewrite the synthesizer's `{{n}}` index citations into stable claim anchors.
 
-    The model cites each claim by the numbered tag it was given (`[0]`, `[1]`, …);
-    `members[n]` is that claim. Each in-range `[n]` becomes `<!--claim:ID-->`
+    The model cites each claim by the numbered tag it was given (`{{0}}`, `{{1}}`, …);
+    `members[n]` is that claim. Each in-range `{{n}}` becomes `<!--claim:ID-->`
     deterministically. Out-of-range / nonexistent indexes are dropped (the model
     can't invent a member it wasn't given). A claim whose anchor the model already
     emitted verbatim is honored too, so a faithful page renders either way.
@@ -98,6 +105,9 @@ def _inject_anchors(markdown: str, members: list[MemoryItem]) -> tuple[str, set[
             rendered.add(cid)
             return _anchor(cid)
         return ""
+
+    # NOTE: `{{n}}` only — bare `[n]` in claim content is left untouched (the bug
+    # this token switch fixes).
 
     return _INDEX_CITE_RE.sub(repl, markdown), rendered
 
@@ -384,7 +394,7 @@ class LensProjector:
         self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel
     ) -> str:
         numbered = "\n".join(
-            f"[{n}] subject={m.canonical_subject!r} content={m.content!r} "
+            f"{_cite_tag(n)} subject={m.canonical_subject!r} content={m.content!r} "
             f"prov={m.provenance} corrob={m.corroboration} feedback={m.feedback}"
             for n, m in enumerate(members)
         )
@@ -486,7 +496,7 @@ class LensProjector:
         self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel
     ) -> str:
         numbered = "\n".join(
-            f"[{n}] content={m.content!r} prov={m.provenance} "
+            f"{_cite_tag(n)} content={m.content!r} prov={m.provenance} "
             f"corrob={m.corroboration} feedback={m.feedback}"
             for n, m in enumerate(claims)
         )

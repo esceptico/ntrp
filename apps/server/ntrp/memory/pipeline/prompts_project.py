@@ -8,8 +8,8 @@ recursion guard, §4.3).
 
 Anchoring is NOT the model's job (lessons.md: "don't require the model to
 reproduce opaque ids"). Each member claim is shown with a short numbered tag
-`[n]`; the model cites the claim it renders by that tag, e.g. `- runs 5k [0]`.
-The projector then DETERMINISTICALLY rewrites each `[n]` into the stable
+`{{n}}`; the model cites the claim it renders by that tag, e.g. `- runs 5k {{0}}`.
+The projector then DETERMINISTICALLY rewrites each `{{n}}` into the stable
 `<!--claim:ID-->` anchor post-synthesis (project.py). The model never sees, nor
 echoes, the opaque claim id — so faithful synthesis can no longer "drop anchors"
 and fall back to a raw list. A genuinely failed synthesis (blank output, or prose
@@ -26,7 +26,7 @@ PAGE_SYNTH_SYSTEM = """\
 You render one "lens" — a named, criterion-defined view over a personal knowledge
 base — into a single, well-structured markdown PAGE that reads like a hand-kept wiki
 note. You are given the lens name, its membership criterion, a target detail level,
-and a NUMBERED list of member claims, each tagged [0], [1], [2], ….
+and a NUMBERED list of member claims, each tagged {{0}}, {{1}}, {{2}}, ….
 
 Write a proper markdown document, not a flat dump:
 - Open with a 1–2 sentence synthesis of what this view captures (no heading).
@@ -36,9 +36,10 @@ Write a proper markdown document, not a flat dump:
   bullets — group related claims, merge near-duplicates, note contradictions inline.
 - Render ONLY the claims given. Never add a fact that is not in the list.
 - Cite the source claim wherever you use it by appending its index tag inline, e.g.
-  "Runs 5k every morning [0]." or "- Lives in Lisbon [3]". A merged statement cites
-  every index it covers, e.g. "Runs daily [0] [3]." EVERY index you were given MUST
-  appear at least once somewhere on the page.
+  "Runs 5k every morning {{0}}." or "- Lives in Lisbon {{3}}". A merged statement cites
+  every index it covers, e.g. "Runs daily {{0}} {{3}}." EVERY index you were given MUST
+  appear at least once somewhere on the page. Cite ONLY with this {{n}} tag — never
+  invent other bracketed numbers.
 - Do not echo the criterion text as a fact. Do not write a "members" count.
 
 Detail levels:
@@ -52,14 +53,14 @@ Reason only over the content shown. Output the full markdown page as one string.
 
 
 class PageSynthesis(BaseModel):
-    markdown: str = Field(description="the full markdown page, claims cited by [n] index")
+    markdown: str = Field(description="the full markdown page, claims cited by {{n}} index")
 
 
 PROFILE_SYNTH_SYSTEM = """\
 You render ONE subject's profile inside a grouped lens view — a compact, readable
 note about a single person or thing. You are given the subject name, the lens
 criterion, a detail level, and a NUMBERED list of the claims about THIS subject,
-each tagged [0], [1], ….
+each tagged {{0}}, {{1}}, ….
 
 Write a tight, well-formed profile:
 - Lead with a 1–3 sentence synthesis of who/what this subject is and how they relate
@@ -69,8 +70,8 @@ Write a tight, well-formed profile:
   specifics. Merge near-duplicates and note contradictions inline.
 - Render ONLY the claims given. Never add a fact not in the list.
 - Cite each claim inline by its index tag where you use it, e.g. "CEO of ThirdLayer
-  [0]." A merged statement cites every index it covers. EVERY index given MUST appear
-  at least once.
+  {{0}}." A merged statement cites every index it covers. EVERY index given MUST appear
+  at least once. Cite ONLY with this {{n}} tag — never invent other bracketed numbers.
 - Do NOT write a "## <subject>" heading — the caller adds it. Do not echo the
   criterion as a fact. Do not write a count.
 

@@ -127,6 +127,25 @@ async def _claim(store, content, **kw):
     return await store.create_item(c)
 
 
+def test_inject_anchors_ignores_literal_brackets_in_prose():
+    # The citation token is `{{n}}`, NOT bare `[n]`. A bracketed integer copied from
+    # claim content ("see table [1]") must be left intact — never rewritten into the
+    # wrong claim's anchor or silently deleted.
+    from ntrp.memory.pipeline.project import _inject_anchors
+
+    m0 = MemoryItem(id="a" * 32, content="x", canonical_subject="Tim", scope=USER,
+                    provenance=Provenance.RECORDED)
+    m1 = MemoryItem(id="b" * 32, content="y", canonical_subject="Tim", scope=USER,
+                    provenance=Provenance.RECORDED)
+    md = "See table [1] in the appendix {{0}}. Also relevant {{1}}."
+
+    out, rendered = _inject_anchors(md, [m0, m1])
+
+    assert "See table [1] in the appendix" in out  # literal [1] preserved verbatim
+    assert f"<!--claim:{m0.id}-->" in out and f"<!--claim:{m1.id}-->" in out
+    assert rendered == {m0.id, m1.id}
+
+
 async def _lens(
     store,
     *,
@@ -426,14 +445,14 @@ class _IndexCitingSynth:
         lines = []
         for line in user.splitlines():
             s = line.strip()
-            if not (s.startswith("[") and "]" in s):
+            if not (s.startswith("{{") and "}}" in s):
                 continue
             try:
-                idx = int(s[1 : s.index("]")])
+                idx = int(s[2 : s.index("}}")])
             except ValueError:
                 continue
             # Clean prose + the index tag. No opaque anchor anywhere.
-            lines.append(f"- A faithfully synthesized line. [{idx}]")
+            lines.append("- A faithfully synthesized line. {{%d}}" % idx)
         md = "## Profile\n" + "\n".join(lines)
         assert "<!--claim:" not in md  # the stub provably drops opaque anchors
         return completion_response(_synth(md).model_dump_json())

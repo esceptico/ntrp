@@ -128,12 +128,12 @@ class _SlowIndexSynth:
         lines = []
         for line in user.splitlines():
             s = line.strip()
-            if s.startswith("[") and "]" in s:
+            if s.startswith("{{") and "}}" in s:
                 try:
-                    idx = int(s[1 : s.index("]")])
+                    idx = int(s[2 : s.index("}}")])
                 except ValueError:
                     continue
-                lines.append(f"- Synthesized line. [{idx}]")
+                lines.append("- Synthesized line. {{%d}}" % idx)
         md = "## Profile\n" + "\n".join(lines)
         return completion_response(PageSynthesis(markdown=md).model_dump_json())
 
@@ -147,13 +147,13 @@ class _FirstOnlySynth:
         idxs = []
         for line in user.splitlines():
             s = line.strip()
-            if s.startswith("[") and "]" in s:
+            if s.startswith("{{") and "}}" in s:
                 try:
-                    idxs.append(int(s[1 : s.index("]")]))
+                    idxs.append(int(s[2 : s.index("}}")]))
                 except ValueError:
                     pass
         first = min(idxs) if idxs else 0
-        return completion_response(PageSynthesis(markdown=f"## Profile\n- Only one. [{first}]").model_dump_json())
+        return completion_response(PageSynthesis(markdown="## Profile\n- Only one. {{%d}}" % first).model_dump_json())
 
 
 def _gen(store, cheap, strong):
