@@ -237,10 +237,12 @@ class Reconciler:
         for subj in ordered_subjects:
             claims = by_subject.get(subj)
             if claims is None:
-                # Subject not in the recent pool — fetch a few samples directly so an
-                # old subject still gets a profile gist for the judge.
+                # Subject not in the recent active pool — fetch a few samples directly
+                # so an old subject still gets a profile gist. status=None so a
+                # re-emerging archived-only subject still shows its (archived) gist to
+                # the judge rather than an empty profile.
                 claims = await self.store.query(
-                    scope=scope, status=Status.ACTIVE, subject=subj, limit=SUBJECT_PROFILE_SAMPLE
+                    scope=scope, status=None, subject=subj, limit=SUBJECT_PROFILE_SAMPLE
                 )
             out.append(
                 SubjectProfile(

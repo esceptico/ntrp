@@ -180,6 +180,22 @@ async def test_new_subject_kept_when_no_candidates(store):
     assert claim.source_refs  # grounding preserved
 
 
+async def test_distinct_subjects_keeps_archived_only_subject_on_roster(store):
+    # The coreference roster must retain a subject whose ONLY claim was archived
+    # (bare archive / contradiction), so a re-emerging claim re-matches it instead of
+    # fragmenting into a new canonical_subject. Active subjects still rank first.
+    await _existing_claim(store, "Timur drinks tea", subject="Timur")
+    gone = await _existing_claim(store, "Old project note", subject="ProjectX")
+    await store.invalidate(gone.id, status=Status.ARCHIVED)
+
+    roster = await store.distinct_subjects(USER_SCOPE)
+    counts = dict(roster)
+    assert counts.get("Timur") == 1
+    assert "ProjectX" in counts  # archived-only subject still on the roster
+    assert counts["ProjectX"] == 0  # zero active claims → ranked last
+    assert roster[0][0] == "Timur"  # live subject first
+
+
 async def test_recalled_candidate_goes_to_judge_who_matches(store):
     # A recalled candidate is decided by the LLM judge, not a heuristic. The judge
     # MATCHes the existing subject string — identity closes via the extractor's

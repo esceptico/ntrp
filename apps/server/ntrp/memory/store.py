@@ -409,11 +409,13 @@ class MemoryStore:
         return int(rows[0]["n"]) if rows else 0
 
     async def distinct_subjects(self, scope: Scope) -> list[tuple[str, int]]:
-        """Every distinct active canonical_subject in scope, with claim count,
-        most-claims-first. NO recency/volume limit — the coreference judge must see
-        the FULL roster of existing subjects, else an old subject whose claims fell
-        outside a recency window is never matched and fragments (User != Timur)."""
-        clauses = ["status = 'active'", "scope_kind = ?"]
+        """Every distinct canonical_subject EVER seen in scope (any status), with its
+        ACTIVE claim count, live-subjects-first. NO recency/volume limit — the
+        coreference judge must see the FULL roster, else a subject is never matched
+        and fragments (User != Timur). Critically, status is NOT filtered: a subject
+        whose last active claim was archived/contradicted must still re-match when it
+        re-emerges, so archived-only subjects stay on the roster (count 0, ranked last)."""
+        clauses = ["scope_kind = ?"]
         params: list = [str(scope.kind)]
         if scope.key is None:
             clauses.append("scope_key IS NULL")
@@ -421,11 +423,13 @@ class MemoryStore:
             clauses.append("scope_key = ?")
             params.append(scope.key)
         sql = (
-            f"SELECT canonical_subject, COUNT(*) AS n FROM memory_items "
-            f"WHERE {' AND '.join(clauses)} GROUP BY canonical_subject ORDER BY n DESC"
+            f"SELECT canonical_subject, "
+            f"SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_n "
+            f"FROM memory_items WHERE {' AND '.join(clauses)} "
+            f"GROUP BY canonical_subject ORDER BY active_n DESC"
         )
         rows = await self.conn.execute_fetchall(sql, tuple(params))
-        return [(r["canonical_subject"], r["n"]) for r in rows]
+        return [(r["canonical_subject"], int(r["active_n"])) for r in rows]
 
     async def list_edges(
         self, item_id: str, *, direction: str = "from", role: EdgeRole | None = None
