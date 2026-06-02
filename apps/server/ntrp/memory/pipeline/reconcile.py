@@ -200,13 +200,13 @@ class Reconciler:
 
         rankings: list[list[tuple[int, float]]] = []
 
+        # Name/alias channel: FTS over canonical_subject + observed surfaces.
         name_query = " ".join([cand.canonical_subject, *cand.subject_surfaces]).strip()
         if name_query:
             name_hits = await self.store.search_subjects(name_query, limit=SUBJECT_RECALL_K * 4)
             rankings.append(self._rank(name_hits, by_id, id_index))
-            body_hits = await self.store.search(name_query, limit=SUBJECT_RECALL_K * 2)
-            rankings.append(self._rank(body_hits, by_id, id_index))
 
+        # Body channel: FTS over the claim CONTENT (distinct signal from the name).
         content_hits = await self.store.search(
             _salient_tokens(cand.content), limit=SUBJECT_RECALL_K * 2
         )
