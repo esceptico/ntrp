@@ -276,7 +276,7 @@ class LensProjector:
 
         if progress is not None and valid:
             progress(_GenStage.SYNTHESIZING)
-        markdown, synthesized = await self._render(lens, valid, level)
+        markdown, synthesized, rendered = await self._render(lens, valid, level)
 
         # Only flat `structured` is cached into the registry page.
         if synthesized and level is LensDetailLevel.STRUCTURED and markdown != lens.page:
@@ -286,7 +286,11 @@ class LensProjector:
             lens_id=lens_id,
             detail=level,
             markdown=markdown,
-            blocks=blocks,
+            # Filter to the cited claims — synthesis may cite a subset of members, and
+            # the cached re-read derives blocks from the page anchors. Without this a
+            # fresh flat read exposes uncited claims the cached read doesn't (mirrors
+            # the grouped path). gist/raw-fallback cover all members, so unchanged there.
+            blocks=[b for b in blocks if b.claim_id in rendered],
             synthesized=synthesized,
             coverage=coverage,
         )
@@ -379,24 +383,30 @@ class LensProjector:
 
     async def _render(
         self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, set[str]]:
+        """Returns (markdown, synthesized, cited_ids). cited_ids is the set of member
+        ids the markdown actually anchors — the raw fallback and gist anchor/cover all
+        members. The caller filters blocks to cited_ids so the fresh read agrees with
+        the anchor-derived cached re-read (no uncited claim shown as an editable block)."""
+        all_ids = {m.id for m in members}
         if not members:
-            return self._empty_page(lens, level), True
+            return self._empty_page(lens, level), True, set()
         try:
             raw = await self._synthesize(lens, members, level)
         except Exception as e:
             _logger.warning("lens project: synthesis failed for %s: %s", lens.id, e)
-            return self._raw_list(lens, members, level), False
+            return self._raw_list(lens, members, level), False, all_ids
         if level is LensDetailLevel.GIST:
-            # Gist is a prose paragraph with no anchors by contract — accept as-is.
-            return raw, True
+            # Gist is a prose paragraph with no anchors by contract; it is never cached,
+            # so there is no cross-read divergence — keep all members as blocks.
+            return raw, True, all_ids
         markdown, rendered = _inject_anchors(raw, members)
         if not rendered:
             # Genuine failure: faithful prose always cites at least one claim. Zero
             # citations means the synthesis carried no usable claim reference.
             _logger.warning("lens project: synthesis cited no claims for %s; raw fallback", lens.id)
-            return self._raw_list(lens, members, level), False
-        return markdown, True
+            return self._raw_list(lens, members, level), False, all_ids
+        return markdown, True, rendered
 
     async def _synthesize(
         self, lens: LensRow, members: list[MemoryItem], level: LensDetailLevel

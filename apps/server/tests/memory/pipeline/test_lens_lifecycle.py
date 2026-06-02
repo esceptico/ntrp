@@ -342,6 +342,17 @@ async def test_merge_across_scopes_is_refused(store):
 
 
 @pytest.mark.asyncio
+async def test_create_lens_rejects_blank_name(store):
+    # A blank/whitespace name slugifies to "lens" and writes a file with an empty
+    # directory that can't be read back — silent disappearance. Reject categorically.
+    mem = FakeMembership(store)
+    reg = _registry(store, mem)
+    for bad in ("", "   ", "\n\t"):
+        with pytest.raises(ValueError, match="name cannot be empty"):
+            await reg.create_lens(bad, "crit", USER)
+
+
+@pytest.mark.asyncio
 async def test_merge_requires_two_lenses(store):
     mem = FakeMembership(store)
     reg = _registry(store, mem)

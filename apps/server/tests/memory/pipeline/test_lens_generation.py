@@ -380,6 +380,29 @@ async def test_empty_grouped_lens_agrees_fresh_and_cached(store):
     assert cached.groups == []  # cached re-read agrees with the fresh render
 
 
+async def test_flat_fresh_page_blocks_match_cited_anchors(store):
+    # Flat twin of the grouped block-filter: synthesis may cite a subset of members,
+    # and the cached re-read derives blocks from anchors. The fresh flat read must
+    # filter blocks to the cited claims so it agrees with the cached read (no uncited
+    # claim exposed as an editable block).
+    c1 = await _claim(store, "alpha fact")
+    c2 = await _claim(store, "beta fact")
+    lens = await _lens(store, name="Facts", criterion="facts")  # flat (default)
+    await _member(store, lens.id, c1)
+    await _member(store, lens.id, c2)
+
+    proj = LensProjector(
+        store, FakeEmbedder(), _AllInJudge(), _FirstOnlySynth(),  # cites only one
+        cheap_model="cheap", strong_model="strong",
+    )
+
+    page = await proj.project(lens.id, refresh=True)
+    top_ids = {b.claim_id for b in page.blocks}
+    anchor_ids = set(parse_anchors(page.markdown))
+    assert top_ids == anchor_ids  # blocks match what the markdown cites
+    assert len(top_ids) == 1
+
+
 async def test_grouped_fresh_page_blocks_match_cited_anchors(store):
     # A fresh grouped render's top-level blocks must equal the anchor-filtered
     # per-group blocks (the cited claims) — not the full bucket — so the fresh page

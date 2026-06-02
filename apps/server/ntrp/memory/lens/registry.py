@@ -81,6 +81,12 @@ class LensRegistry:
         """
         if scope is None:
             raise ValueError("create_lens requires a scope")
+        # A blank/whitespace name slugifies to the fallback "lens" and writes a file
+        # with an empty directory that _parse_file rejects on read — a write-then-
+        # can't-read silent disappearance. Reject categorically (covers all callers:
+        # tool, REST router, split/merge).
+        if not name or not name.strip():
+            raise ValueError("lens name cannot be empty")
         if not (criterion or "").strip():
             # The synth drafts the criterion body and entity_type from the name.
             # render_mode is ALWAYS "flat" (membership.synthesize_criterion; Lens spec
