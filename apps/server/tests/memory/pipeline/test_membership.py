@@ -200,6 +200,32 @@ async def test_incremental_judge_calls_bounded_by_touched_lenses(store):
     assert len(cheap.calls) <= len(lenses)
 
 
+async def test_incremental_drops_verdicts_if_criterion_edited_mid_pass(store):
+    # Mode-1 scoring must not cache verdicts judged against an old criterion when a
+    # concurrent edit_criterion lands mid-pass (same guard as refresh_lens_cache /
+    # _revalidate). updated_at changed → drop the writes.
+    lens = await _lens(store, name="A", criterion="claims about apples")
+    c = await _claim(store, "apples in the basket")
+
+    class EditingJudge(FakeCompletionClient):
+        def __init__(self):
+            super().__init__(default=_batch((0, "in")))
+            self.edited = False
+
+        async def completion(self, *, messages, model, response_format=None, **kwargs):
+            if not self.edited:
+                self.edited = True
+                await store.update_lens(lens.id, criterion="claims about bananas")
+            return await super().completion(
+                messages=messages, model=model, response_format=response_format, **kwargs
+            )
+
+    m = _membership(store, EditingJudge())
+    await m.score_into_active_lenses([c.id], USER)
+
+    assert await store.get_membership(lens.id) == []  # stale verdicts not cached
+
+
 async def test_incremental_caches_members_only_for_in_verdicts(store):
     lens_a = await _lens(store, name="A", criterion="claims about apples")
     lens_b = await _lens(store, name="B", criterion="claims about bananas")

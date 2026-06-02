@@ -146,6 +146,13 @@ class LensMembership:
                 for v in await self.store.get_membership(lens_id, decision=MembershipDecision.IN)
             }
             scored = await self._judge_and_cache(batch, lens)
+            # A criterion edit could have landed during the judge await; like
+            # refresh_lens_cache / _revalidate, drop our writes if the lens was edited
+            # mid-pass rather than caching verdicts judged against the old criterion.
+            fresh = await self.store.get_lens(lens_id)
+            if fresh is not None and fresh.updated_at != lens.updated_at:
+                await self.store.invalidate_lens_membership(lens_id)
+                continue
             verdicts.extend(scored)
             # If a NEW claim scored IN, the cached page no longer reflects the lens's
             # membership (the staleness guard only catches removals, not additions —
