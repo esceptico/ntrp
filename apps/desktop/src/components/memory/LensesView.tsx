@@ -367,6 +367,10 @@ function LensPage({
   // Exit-animation timer for a write-back op; tracked so a lens switch within the
   // 240ms window can't fire load()/re-arm a poll on the unmounted page.
   const exitTimerRef = useRef<number | null>(null);
+  // False once this LensPage has unmounted (lens switch). applyOps awaits the
+  // write-back before arming the exit timer; if the user switches lenses during
+  // that await, the continuation must not arm a timer / load() on the dead page.
+  const mountedRef = useRef(true);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) pollRef.current.alive = false;
@@ -445,8 +449,12 @@ function LensPage({
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     load({ detail });
-    return stopPoll;
+    return () => {
+      mountedRef.current = false;
+      stopPoll();
+    };
   }, [load, detail, stopPoll]);
 
   const applyOps = useCallback(
@@ -455,6 +463,9 @@ function LensPage({
       setBusyId(opId);
       try {
         const res = await writebackLens(config, lens.id, ops);
+        // Lens switched during the await → this page is unmounted; don't arm a
+        // timer or trigger load()/onListChanged() against the dead instance.
+        if (!mountedRef.current) return;
         const parts: string[] = [];
         if (res.applied.length) parts.push(`${res.applied.length} applied`);
         if (res.rejected.length) parts.push(`${res.rejected.length} rejected`);

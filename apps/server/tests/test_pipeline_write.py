@@ -159,7 +159,9 @@ async def test_noop_reports_not_written_but_keeps_target(store):
     assert out.reason == "Already known (corroborated)."
 
 
-async def test_contradict_reports_supersede(store):
+async def test_contradict_reports_archive_not_supersede(store):
+    # CONTRADICT archives the target + links a CONTRADICTS edge (no successor
+    # chain, vision §4.4) — its message must NOT claim a supersede.
     rec = StubReconciler(
         result=ReconcileResult(
             claim_index=0,
@@ -173,7 +175,8 @@ async def test_contradict_reports_supersede(store):
     out = await seam.admit_and_write(_req())
     assert out.written is True
     assert out.item_id == "claim-new"
-    assert "superseded" in out.reason
+    assert "contradicts" in out.reason.lower()
+    assert "superseded" not in out.reason.lower()
 
 
 async def test_bypass_admit_always_reaches_reconcile_even_on_reject_verdict(store):

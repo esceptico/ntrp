@@ -63,7 +63,7 @@ class WriteOutcome:
 _OUTCOME_REASON = {
     Op.ADD: "Remembered.",
     Op.UPDATE: "Updated — superseded a prior claim.",
-    Op.CONTRADICT: "Updated — superseded a prior claim.",
+    Op.CONTRADICT: "Noted — contradicts and archives a prior claim.",
     Op.NOOP: "Already known (corroborated).",
 }
 
