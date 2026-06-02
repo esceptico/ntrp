@@ -167,11 +167,18 @@ async def test_set_render_mode_flips_layout_without_touching_membership(store):
     c1 = await _claim(store, "alice climbs")
     lens = await reg.create_lens("People", "about people", USER)
     assert lens.render_mode is LensRenderMode.FLAT
+    # Seed a cached (flat-format) page — what a prior projection would have stored.
+    await store.update_lens(lens.id, page="# People\n## Profile\n- alice climbs.\n")
+    assert (await store.get_lens(lens.id)).page is not None
 
     updated = await reg.set_render_mode(lens.id, LensRenderMode.GROUPED_BY_SUBJECT)
 
     assert updated.id == lens.id
     assert updated.render_mode is LensRenderMode.GROUPED_BY_SUBJECT
+    # The mode-specific page cache MUST be nulled so the next read re-derives in the
+    # new (grouped) format — serving the flat-format markdown through the grouped
+    # path would misrender it as one bogus "Profile" group.
+    assert (await store.get_lens(lens.id)).page is None
     # Membership cache untouched (no refresh), claims untouched.
     assert mem.refreshed == []
     assert (await store.get(c1.id)) is not None

@@ -576,12 +576,15 @@ class MemoryStore:
         a lens with the same name reuses the slug — leftover rejections would silently
         suppress claims from the brand-new lens.
         """
-        removed = self.lens_files.delete(lens_id)
+        # Durable state first: delete + commit the DB rows (esp. lens_rejection,
+        # which does NOT self-heal) BEFORE unlinking the file. If the file unlink
+        # then fails the DB is already clean; the reverse order could leave orphaned
+        # rejection rows that silently suppress claims from a same-slug recreation.
         await self.conn.execute(SQL_DELETE_PAGE, (lens_id,))
         await self.conn.execute(SQL_INVALIDATE_MEMBERSHIP, (lens_id,))
         await self.conn.execute("DELETE FROM lens_rejection WHERE lens_id = ?", (lens_id,))
         await self.conn.commit()
-        return removed
+        return self.lens_files.delete(lens_id)
 
     async def search_lenses(self, query: str, *, limit: int = 20) -> list[LensRow]:
         """Lexical recall over the loaded lens files (name/criterion/page). Orders

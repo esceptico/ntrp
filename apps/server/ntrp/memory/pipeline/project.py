@@ -430,13 +430,16 @@ class LensProjector:
         for i, (subject, claims) in enumerate(ordered):
             if progress is not None:
                 progress(_GenStage.SYNTHESIZING, subject=subject, progress=f"{i + 1}/{total}")
-            body, synthesized = await self._render_profile(lens, subject, claims, level)
+            body, synthesized, rendered = await self._render_profile(lens, subject, claims, level)
             all_synth = all_synth and synthesized
+            # Blocks must match the claims the markdown actually cites — else a fresh
+            # page (all bucket claims) and the cached re-read (anchor-filtered via
+            # _cached_grouped) disagree, surfacing uncited claims as editable blocks.
             groups.append(
                 ProjectedGroup(
                     subject=subject,
                     markdown=body,
-                    blocks=[self._to_block(m) for m in claims],
+                    blocks=[self._to_block(m) for m in claims if m.id in rendered],
                     synthesized=synthesized,
                 )
             )
@@ -448,17 +451,20 @@ class LensProjector:
 
     async def _render_profile(
         self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, set[str]]:
+        """Returns (markdown, synthesized, cited_ids). cited_ids is the set of claim
+        ids the markdown actually anchors — the raw fallback anchors every claim."""
+        all_ids = {m.id for m in claims}
         try:
             raw = await self._synthesize_profile(lens, subject, claims, level)
         except Exception as e:
             _logger.warning("lens project: profile synthesis failed for %s/%r: %s", lens.id, subject, e)
-            return self._raw_profile(claims), False
+            return self._raw_profile(claims), False, all_ids
         markdown, rendered = _inject_anchors(raw, claims)
         if not rendered:
             _logger.warning("lens project: profile cited no claims for %s/%r; raw fallback", lens.id, subject)
-            return self._raw_profile(claims), False
-        return markdown, True
+            return self._raw_profile(claims), False, all_ids
+        return markdown, True, rendered
 
     async def _synthesize_profile(
         self, lens: LensRow, subject: str, claims: list[MemoryItem], level: LensDetailLevel

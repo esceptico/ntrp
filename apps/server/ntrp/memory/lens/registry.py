@@ -82,8 +82,10 @@ class LensRegistry:
         if scope is None:
             raise ValueError("create_lens requires a scope")
         if not (criterion or "").strip():
-            # The synth decides the criterion body, the layout (people/entity lenses
-            # → grouped cards) AND the entity_type, so a "people" lens is born grouped.
+            # The synth drafts the criterion body and entity_type from the name.
+            # render_mode is ALWAYS "flat" (membership.synthesize_criterion; Lens spec
+            # §1/§2 — no auto subject-grouping); grouping is only ever a manual choice
+            # via set_render_mode, never derived from the name.
             criterion, synth_mode, entity_type = await self.membership.synthesize_criterion(name)
             render_mode = LensRenderMode(synth_mode)
         lens = LensRow(
@@ -115,12 +117,17 @@ class LensRegistry:
 
     async def set_render_mode(self, lens_id: str, render_mode: LensRenderMode) -> LensRow:
         """Flip a lens between flat and grouped-by-subject layout by editing the
-        file's frontmatter. Presentation only: membership is unchanged, so no cache
-        invalidation."""
+        file's frontmatter. Membership is mode-independent (left cached), but the
+        cached PAGE markdown is layout-specific — flat and grouped reconstruct it
+        differently — so a mode change must null the page so the next read re-derives
+        in the new format. Serving the old-format markdown through the new mode's path
+        misrenders (e.g. a flat page becomes one bogus "Profile" group)."""
         lens = await self.store.get_lens(lens_id)
         if lens is None:
             raise ValueError(f"not a lens: {lens_id}")
-        updated = await self.store.update_lens(lens_id, render_mode=render_mode)
+        if lens.render_mode == render_mode:
+            return lens
+        updated = await self.store.update_lens(lens_id, render_mode=render_mode, page=None)
         assert updated is not None
         return updated
 
