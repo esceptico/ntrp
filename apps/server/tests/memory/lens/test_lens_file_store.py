@@ -55,6 +55,20 @@ def test_timestamps_persist_across_rewrite(tmp_path: Path):
     assert again.updated_at == "2025-06-01T00:00:00+00:00"
 
 
+def test_delete_rejects_traversal_slug(tmp_path: Path):
+    # delete() must validate the slug like read()/list() — a traversal slug must not
+    # unlink a .md file outside the lenses dir.
+    outside = tmp_path / "secret.md"
+    outside.write_text("important", encoding="utf-8")
+    lenses_dir = tmp_path / "lenses"
+    store = LensFileStore(lenses_dir)
+    store.write(_lens("Keep", id="keep"))
+
+    assert store.delete("../secret") is False  # traversal rejected
+    assert outside.exists()  # the outside file survives
+    assert store.delete("keep") is True  # a valid slug still works
+
+
 def test_malformed_scope_is_skipped_not_crashing(tmp_path: Path):
     # A PROJECT lens hand-edited to drop scope_key must be skipped, not crash list().
     (tmp_path / "good.md").write_text(

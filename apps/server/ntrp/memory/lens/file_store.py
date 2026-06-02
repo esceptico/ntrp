@@ -143,7 +143,16 @@ class LensFileStore:
         )
         return lens
 
+    @staticmethod
+    def valid_slug(slug: str) -> bool:
+        return bool(_SLUG_RE.match(slug))
+
     def delete(self, slug: str) -> bool:
+        # Validate the slug like read()/list() do — an unvalidated slug like
+        # `../../foo` would unlink a .md file outside the lenses dir (the lens tool
+        # passes an LLM-supplied lens_id straight through).
+        if not self.valid_slug(slug):
+            return False
         path = self.lenses_dir / f"{slug}.md"
         if not path.is_file():
             return False

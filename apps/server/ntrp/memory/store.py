@@ -576,6 +576,10 @@ class MemoryStore:
         a lens with the same name reuses the slug — leftover rejections would silently
         suppress claims from the brand-new lens.
         """
+        # Reject an invalid/traversal slug before any DB mutation (the lens tool
+        # passes an LLM-supplied lens_id straight through).
+        if not self.lens_files.valid_slug(lens_id):
+            return False
         # Durable state first: delete + commit the DB rows (esp. lens_rejection,
         # which does NOT self-heal) BEFORE unlinking the file. If the file unlink
         # then fails the DB is already clean; the reverse order could leave orphaned
