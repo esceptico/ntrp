@@ -376,6 +376,26 @@ async def test_user_authored_noop_over_inferred_confirms_not_supersedes(store):
     assert target.feedback is Feedback.CONFIRMED  # user-authored confirms the inferred claim
 
 
+async def test_match_with_drifted_casing_resolves_to_stored_subject(store):
+    # The model is told to copy the subject verbatim but drifts casing/whitespace. A
+    # correct MATCH returning 'timur' for stored 'Timur' must still group under the
+    # stored subject, not fragment to a NEW subject (case-insensitive validation).
+    await _existing_claim(store, "Timur drinks tea", subject="Timur")
+    cheap = StubLLM()
+    cheap.subject_queue.append(
+        SubjectResolution(decision="MATCH", canonical_subject="  timur ", reason="same person")
+    )
+    cheap.batch_queue.append(BatchReconcile(rows=[{"claim_index": 0, "op": "add"}]))
+    rec = _reconciler(store, cheap)
+
+    results = await rec.reconcile(
+        [_candidate("Timur likes espresso", subject="Timur")], USER_SCOPE
+    )
+
+    assert results[0].subject_is_new is False  # matched, not fragmented
+    assert results[0].canonical_subject == "Timur"  # stored casing is authoritative
+
+
 async def test_invalid_target_idx_coerced_to_add(store):
     existing = await _existing_claim(store, "Timur lives in Berlin", subject="Timur")
     cheap = StubLLM()

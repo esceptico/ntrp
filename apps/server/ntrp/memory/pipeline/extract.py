@@ -25,6 +25,7 @@ from ntrp.memory.pipeline.prompts_extract import (
     EXTRACT_USER_TEMPLATE,
     ExtractOutput,
 )
+from ntrp.logging import get_logger
 from ntrp.memory.pipeline.types import (
     AdmitResult,
     ClaimCandidate,
@@ -33,6 +34,8 @@ from ntrp.memory.pipeline.types import (
     RawExchange,
     Verdict,
 )
+
+_logger = get_logger(__name__)
 
 _PROVENANCE_BY_NAME: dict[str, Provenance] = {
     "user_authored": Provenance.USER_AUTHORED,
@@ -61,6 +64,16 @@ class Extractor:
 
         messages = self._build_prompt(admitted)
         parsed = await self._call(messages, model=model)
+
+        if parsed is None:
+            # The extract call/parse FAILED (not a legitimate empty extract). Record an
+            # audit span so the admitted exchange isn't silently dropped with no trace
+            # — distinguishes "extraction failed" from "nothing worth remembering".
+            snippet = "\n".join(ex.text for ex in unit.exchanges).strip()[:200]
+            return ExtractResult(
+                candidates=[],
+                dropped=[DroppedSpan(turn_id=None, attempted_content=snippet, reason="extraction_failed")],
+            )
 
         candidates: list[ClaimCandidate] = []
         dropped: list[DroppedSpan] = []
@@ -142,16 +155,18 @@ class Extractor:
             {"role": "user", "content": user},
         ]
 
-    async def _call(self, messages: list[dict], *, model: str) -> ExtractOutput:
+    async def _call(self, messages: list[dict], *, model: str) -> ExtractOutput | None:
         """The single cheap LLM call (the one LLM seam in this stage).
 
         Contract (CONTRACTS §6/§13): one cheap structured-output call over
         ``ExtractOutput``. Uses the frozen ``CompletionClient.completion`` API
         with ``response_format`` (same convention as ``core/naming.py``): the
         provider returns a JSON string in ``choices[0].message.content`` which
-        is parsed with ``model_validate_json``. On any client/parse failure
-        Extract yields nothing rather than emitting ungrounded claims —
-        drop-on-doubt; evidence is re-extractable from immutable raw.
+        is parsed with ``model_validate_json``.
+
+        Returns ``None`` on a client/parse FAILURE (distinct from a legitimate
+        empty extract, ``ExtractOutput(claims=[])``) so the caller can record an
+        audit span instead of silently masquerading a failure as "nothing here".
         """
         try:
             response = await self._llm.completion(
@@ -159,22 +174,24 @@ class Extractor:
                 model=model,
                 response_format=ExtractOutput,
             )
-        except Exception:
-            return ExtractOutput(claims=[])
+        except Exception as e:
+            _logger.warning("extract: LLM call failed: %s", e)
+            return None
         return self._parse_response(response)
 
     @staticmethod
-    def _parse_response(response) -> ExtractOutput:
+    def _parse_response(response) -> ExtractOutput | None:
         choices = getattr(response, "choices", None)
         if not choices:
-            return ExtractOutput(claims=[])
+            return None
         content = choices[0].message.content
         if not content:
-            return ExtractOutput(claims=[])
+            return None
         try:
             return ExtractOutput.model_validate_json(content)
-        except Exception:
-            return ExtractOutput(claims=[])
+        except Exception as e:
+            _logger.warning("extract: response parse failed: %s", e)
+            return None
 
     @staticmethod
     def _scope_label(scope) -> str:

@@ -305,9 +305,17 @@ class Reconciler:
             # when recall is empty.
             _logger.warning("reconcile: subject-resolution parse failed -> NEW: %s", e)
             return cand.canonical_subject, True
-        known = {p.subject for p in profiles}
-        if decision.decision.upper() == "MATCH" and decision.canonical_subject in known:
-            return decision.canonical_subject, False
+        if decision.decision.upper() == "MATCH":
+            # Match case-insensitively (the model is told to copy the subject verbatim
+            # but routinely drifts casing/whitespace) and return the STORED casing as
+            # the authority. An exact-match check would reject a correct coreference on
+            # cosmetic drift and fragment the subject (User != Timur) — a lexical gate
+            # overriding the judge. A genuinely unrelated subject still falls through to
+            # NEW, preserving the anti-hallucination guard.
+            target = decision.canonical_subject.strip().casefold()
+            for p in profiles:
+                if p.subject.strip().casefold() == target:
+                    return p.subject, False
         # NEW, or a hallucinated subject -> keep the extractor's (self-correcting).
         return cand.canonical_subject, True
 

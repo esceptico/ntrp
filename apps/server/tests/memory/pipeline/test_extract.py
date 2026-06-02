@@ -291,13 +291,16 @@ async def test_multiple_turns_each_claim_grounds_to_its_own_source_ref():
 
 
 @pytest.mark.asyncio
-async def test_llm_failure_yields_empty_not_crash():
+async def test_llm_failure_yields_empty_with_audit_span_not_crash():
     ex = _ex("t1", "anything")
     llm = FakeLLM(raise_exc=True)
     res = await _run(llm, _admitted([ex]))
     assert len(llm.calls) == 1
     assert res.candidates == []
-    assert res.dropped == []
+    # A FAILED extract is audited (distinct from a legitimate empty extract), so the
+    # admitted exchange isn't silently dropped with no trace.
+    assert len(res.dropped) == 1
+    assert res.dropped[0].reason == "extraction_failed"
 
 
 @pytest.mark.asyncio
