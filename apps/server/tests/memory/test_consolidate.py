@@ -165,6 +165,25 @@ async def test_merge_sums_member_corroboration(store):
 
 
 @pytest.mark.asyncio
+async def test_merge_ignores_whitespace_only_merged_text(store):
+    # A whitespace-only merged_text is truthy in Python; the `or survivor.content`
+    # fallback must NOT write it as the survivor's content (it would replace a valid
+    # claim with a blank one). Mirrors the reconcile guard.
+    keep = _claim("User lives in Berlin", corroboration=1)
+    loser = _claim("User lives in Berlin", corroboration=1)
+    await store.create_item(keep)
+    await store.create_item(loser)
+
+    cheap = FakeLLM([LintOps(merges=[MergeOp(member_ids=[keep.id, loser.id], merged_text="   ")])])
+    await _lint(store, cheap).run_once(scope=USER)
+
+    active = await store.query(scope=USER, status=Status.ACTIVE)
+    assert len(active) == 1
+    assert active[0].content.strip() != ""  # not a blank claim
+    assert active[0].content == "User lives in Berlin"  # fell back to survivor content
+
+
+@pytest.mark.asyncio
 async def test_merge_caps_survivor_provenance_at_inferred(store):
     # USER_AUTHORED but NOT confirmed: it may be merged, but the merge is the
     # LLM's inference, so the survivor's trust is capped at INFERRED. Lint may

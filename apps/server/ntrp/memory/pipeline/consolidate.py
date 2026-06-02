@@ -301,9 +301,13 @@ class ConsolidateLint:
                     union_refs.append(r)
                     seen.add((r.kind, r.ref))
 
+        # Normalize blank/whitespace-only merged_text to None so it can't replace the
+        # survivor with an empty claim (mirrors reconcile._validate_rows). survivor
+        # content is already a valid non-empty proposition.
+        merged = (op.merged_text or "").strip() or None
         new_survivor = self._clone_for_supersede(
             survivor,
-            content=op.merged_text or survivor.content,
+            content=merged or survivor.content,
             source_refs=union_refs,
             provenance=self._capped_provenance(members),
             # corroboration = independent evidence links (vision §7). The merge unions

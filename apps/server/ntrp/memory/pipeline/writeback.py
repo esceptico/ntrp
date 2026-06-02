@@ -180,7 +180,11 @@ class LensWriteBack:
     async def _edit_criterion(self, lens: LensRow, op: PageEditOp) -> tuple[bool, str, bool]:
         if not op.new_text or not op.new_text.strip():
             return False, "criterion edit with empty text", False
-        await self.store.invalidate_lens_membership(lens.id)
+        # Write the criterion file FIRST, invalidate LAST (mirrors
+        # registry.edit_criterion). Invalidating first would let a concurrent
+        # refresh_lens_cache repopulate stale verdicts before updated_at bumps,
+        # defeating refresh's mid-pass guard.
         await self.store.update_lens(lens.id, criterion=op.new_text.strip(), page=None)
+        await self.store.invalidate_lens_membership(lens.id)
         return True, lens.id, True
 

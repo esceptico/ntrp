@@ -710,6 +710,8 @@ async def test_add_routes_through_write_seam(store):
 async def test_edit_criterion_updates_in_place_and_marks_dirty(store):
     page_md = "# Health\n## Profile\n_cached_\n"
     lens = await _lens(store, name="Health", criterion="health", page=page_md)
+    c1 = await _claim(store, "user runs 5k")
+    await _member(store, lens.id, c1)  # a stale membership row to be invalidated
     wb = _writeback(store)
 
     res = await wb.apply(
@@ -722,6 +724,8 @@ async def test_edit_criterion_updates_in_place_and_marks_dirty(store):
     updated = await store.get_lens(lens.id)
     assert updated.criterion == "cardiovascular health only"
     assert updated.page is None  # dirty signal
+    # The membership cache is invalidated (file written first, invalidate last).
+    assert await store.get_membership(lens.id) == []
 
 
 # --- stale anchor -> rejected, no silent write -----------------------
