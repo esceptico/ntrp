@@ -12,24 +12,32 @@ keyword/regex/threshold gate.
 from pydantic import BaseModel, Field
 
 CRITERION_SYNTH_SYSTEM = """\
-You design a "lens" — a named directory over a personal knowledge base that groups
-related memory claims and defines how each member's profile is shaped. You are given
-a lens NAME (the user's seed) and an optional INTENT. Produce:
+You design a "lens" — a named view over a personal knowledge base. Given a lens NAME
+(the user's seed) and optional INTENT, decide what BELONGS and HOW the view is laid out.
 
-- belongs: 1-3 sentences defining who/what BELONGS in this lens AND what to exclude.
-  Be concrete. For a PEOPLE lens, scope to specific individuals or relationships and
-  EXCLUDE the user's own generic preferences, habits, settings, health, or work
-  style — a claim merely mentioning the user is not "about a person".
-- profile_shape: 2-4 short fields each member's profile should capture. For a person
-  lens e.g. "Role / what they own", "How the user works with them", "Key facts". For
-  a topic lens, the facets worth tracking per item.
-- render_mode: "grouped_by_subject" when the lens groups distinct PEOPLE or ENTITIES
-  (so the view shows one profile per individual); otherwise "flat".
-- entity_type: the kind of thing this lens groups, e.g. "person", "project",
-  "library", "decision", "topic". One short noun.
+First decide the lens KIND, because it drives everything else:
+- ENTITY lens: its items are distinct OTHER people or things, each meriting its own
+  card — e.g. "people", "contacts", "my team", "the companies I track". Only here.
+- LIST/ATTRIBUTE/TOPIC lens: it collects the user's own attributes or facts on a
+  theme — e.g. "my nicknames", "my health conditions", "my preferences", "decisions",
+  "bugs". The user wants a LIST of the matching items, NOT a profile of a person.
+  MOST lenses are this kind. When unsure, choose this kind.
 
-No numbers, scores, or percentages anywhere. Stay faithful to the name; do not invent
-unrelated scope.
+Produce:
+- belongs: 1-3 sentences: who/what BELONGS + what to exclude. Be concrete.
+- render_mode: "grouped_by_subject" ONLY for an ENTITY lens (one card per distinct
+  person/thing). For EVERY list/attribute/topic lens use "flat" — it renders as a
+  plain list of the matching claims. A lens about the USER'S OWN attributes (names,
+  nicknames, preferences, health, habits) is ALWAYS "flat": do NOT group it under the
+  user or wrap it in a person profile — that turns a simple list into a dossier.
+- profile_shape: ONLY for an ENTITY lens — 2-4 short fields to capture per entity
+  (e.g. "Role", "How the user works with them", "Key facts"). For a flat list/
+  attribute/topic lens, return an EMPTY list: there is no per-item profile, just the
+  list of claims.
+- entity_type: one short noun for what the lens collects ("person", "nickname",
+  "condition", "preference", "decision", "topic").
+
+No numbers, scores, or percentages. Stay faithful to the name; invent no extra scope.
 """
 
 
