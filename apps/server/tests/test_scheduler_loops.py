@@ -761,8 +761,7 @@ def _make_trigger(
 ) -> MessageTrigger:
     return MessageTrigger(
         source="slack",
-        channel_id=channel_id,
-        channel_name="bugs",
+        channels=[{"id": channel_id, "name": "bugs"}],
         from_user_id=from_user_id,
         contains=contains or [],
     )

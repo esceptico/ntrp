@@ -347,8 +347,9 @@ class CountTrigger:
 class MessageTrigger:
     type: Literal["message"] = "message"
     source: str = "slack"
-    channel_id: str = ""
-    channel_name: str = ""
+    # Each channel is {"id": <slack id>, "name": <display name>}, resolved at
+    # save time. The trigger fires for a message in ANY of its channels.
+    channels: list[dict] = field(default_factory=list)
     from_user_id: str | None = None
     from_user_name: str | None = None
     contains: list[str] = field(default_factory=list)
@@ -356,12 +357,15 @@ class MessageTrigger:
     def params(self) -> dict:
         return {
             "source": self.source,
-            "channel_id": self.channel_id,
-            "channel_name": self.channel_name,
+            "channels": self.channels,
             "from_user_id": self.from_user_id,
             "from_user_name": self.from_user_name,
             "contains": self.contains,
         }
+
+    @property
+    def channel_ids(self) -> list[str]:
+        return [c["id"] for c in self.channels]
 
     @property
     def one_shot(self) -> bool:
@@ -487,8 +491,7 @@ def _parse_count_trigger(payload: dict) -> Trigger:
 def _parse_message_trigger(payload: dict) -> Trigger:
     return MessageTrigger(
         source=payload["source"],
-        channel_id=payload["channel_id"],
-        channel_name=payload["channel_name"],
+        channels=payload.get("channels", []),
         from_user_id=payload.get("from_user_id"),
         from_user_name=payload.get("from_user_name"),
         contains=payload.get("contains", []),

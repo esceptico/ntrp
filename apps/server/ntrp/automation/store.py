@@ -290,19 +290,22 @@ _SQL_LIST_MESSAGE_TRIGGERED = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
 WHERE enabled = 1
   AND EXISTS (
-    SELECT 1 FROM json_each(triggers)
-    WHERE json_extract(value, '$.type') = 'message'
-      AND json_extract(value, '$.source') = ?
-      AND json_extract(value, '$.channel_id') = ?
+    SELECT 1 FROM json_each(triggers) AS t
+    WHERE json_extract(t.value, '$.type') = 'message'
+      AND json_extract(t.value, '$.source') = ?
+      AND EXISTS (
+        SELECT 1 FROM json_each(t.value, '$.channels') AS c
+        WHERE json_extract(c.value, '$.id') = ?
+      )
   )
 """
 
 _SQL_LIST_WATCHED_SLACK_CHANNELS = """
-SELECT DISTINCT json_extract(value, '$.channel_id') AS channel_id
-FROM scheduled_tasks, json_each(triggers)
+SELECT DISTINCT json_extract(c.value, '$.id') AS channel_id
+FROM scheduled_tasks, json_each(triggers) AS t, json_each(t.value, '$.channels') AS c
 WHERE enabled = 1
-  AND json_extract(value, '$.type') = 'message'
-  AND json_extract(value, '$.source') = 'slack'
+  AND json_extract(t.value, '$.type') = 'message'
+  AND json_extract(t.value, '$.source') = 'slack'
 """
 
 _SQL_UPDATE_LAST_RUN = """

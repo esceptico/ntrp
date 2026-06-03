@@ -43,8 +43,7 @@ def _trigger(
 ) -> MessageTrigger:
     return MessageTrigger(
         source=source,
-        channel_id=channel_id,
-        channel_name=channel_name,
+        channels=[{"id": channel_id, "name": channel_name}],
         from_user_id=from_user_id,
         from_user_name=from_user_name,
         contains=contains or [],
@@ -114,8 +113,7 @@ def test_params_emits_all_fields():
 
     assert trigger.params() == {
         "source": "slack",
-        "channel_id": "C42",
-        "channel_name": "alerts",
+        "channels": [{"id": "C42", "name": "alerts"}],
         "from_user_id": "U9",
         "from_user_name": "bob",
         "contains": ["broken", "down"],
@@ -135,8 +133,9 @@ def test_parse_triggers_round_trips_message_trigger():
         contains=["crash"],
     )
     # parse_triggers reads what the store writes: {"type": ..., **params()}.
-    raw = '[{"type": "message", "source": "slack", "channel_id": "C7", ' \
-        '"channel_name": "bugs", "from_user_id": "U1", "from_user_name": "alice", ' \
+    raw = '[{"type": "message", "source": "slack", ' \
+        '"channels": [{"id": "C7", "name": "bugs"}], ' \
+        '"from_user_id": "U1", "from_user_name": "alice", ' \
         '"contains": ["crash"]}]'
 
     parsed = parse_triggers(raw)
@@ -146,7 +145,7 @@ def test_parse_triggers_round_trips_message_trigger():
 
 
 def test_parse_triggers_defaults_optional_fields():
-    raw = '[{"type": "message", "source": "slack", "channel_id": "C1", "channel_name": "bugs"}]'
+    raw = '[{"type": "message", "source": "slack", "channels": [{"id": "C1", "name": "bugs"}]}]'
 
     parsed = parse_triggers(raw)
 
@@ -161,7 +160,7 @@ def test_parse_triggers_defaults_optional_fields():
 def test_parse_triggers_mixed_union_preserves_types():
     raw = (
         '[{"type": "time", "at": "09:00"}, '
-        '{"type": "message", "source": "slack", "channel_id": "C1", "channel_name": "bugs"}]'
+        '{"type": "message", "source": "slack", "channels": [{"id": "C1", "name": "bugs"}]}]'
     )
 
     parsed = parse_triggers(raw)
@@ -227,6 +226,24 @@ async def test_list_watched_slack_channels_empty_when_no_triggers(store: Automat
     assert await store.list_watched_slack_channels() == []
 
 
+@pytest.mark.asyncio
+async def test_list_message_triggered_matches_any_channel_in_list(store: AutomationStore):
+    multi = MessageTrigger(source="slack", channels=[{"id": "C1", "name": "bugs"}, {"id": "C2", "name": "alerts"}])
+    await _save_watcher(store, "multi", multi)
+
+    assert {a.task_id for a in await store.list_message_triggered("slack", "C1")} == {"multi"}
+    assert {a.task_id for a in await store.list_message_triggered("slack", "C2")} == {"multi"}
+    assert await store.list_message_triggered("slack", "C9") == []
+
+
+@pytest.mark.asyncio
+async def test_list_watched_includes_every_channel_in_a_multi_trigger(store: AutomationStore):
+    multi = MessageTrigger(source="slack", channels=[{"id": "C1", "name": "bugs"}, {"id": "C2", "name": "alerts"}])
+    await _save_watcher(store, "multi", multi)
+
+    assert sorted(await store.list_watched_slack_channels()) == ["C1", "C2"]
+
+
 # --- (3) scheduler.fire_event message branch gating ---
 
 
@@ -279,6 +296,15 @@ async def test_fire_event_empty_contains_passes_all(store: AutomationStore):
 
     matched = await _fire_and_collect_enqueued(store, _event(channel_id="C1", text="anything at all"))
     assert matched == {"watch"}
+
+
+@pytest.mark.asyncio
+async def test_fire_event_matches_a_second_channel_in_the_list(store: AutomationStore):
+    multi = MessageTrigger(source="slack", channels=[{"id": "C1", "name": "bugs"}, {"id": "C2", "name": "alerts"}])
+    await _save_watcher(store, "watch", multi, running=True)
+
+    enqueued = await _fire_and_collect_enqueued(store, _event(channel_id="C2"))
+    assert enqueued == {"watch"}
 
 
 @pytest.mark.asyncio

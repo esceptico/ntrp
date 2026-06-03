@@ -82,6 +82,12 @@ function splitKeywords(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** Stored message triggers echo channels back as {id,name}; the editor edits
+ *  them as a comma-separated list of names. */
+function channelsToInput(channels?: (string | { id: string; name: string })[]): string {
+  return (channels ?? []).map((c) => (typeof c === "string" ? c : c.name)).join(", ");
+}
+
 interface FormState {
   name: string;
   prompt: string;
@@ -108,7 +114,7 @@ export function formFromPreset(p: CreateAutomationPayload): FormState {
     f.schedule = {
       ...f.schedule,
       kind: "message",
-      channel: msg.channel_name ?? msg.channel ?? "",
+      channel: channelsToInput(msg.channels),
       fromUser: msg.from_user_name ?? msg.from_user ?? "",
       keywords: (msg.contains ?? []).join(", "),
     };
@@ -163,7 +169,7 @@ function formFromAutomation(a: Automation): FormState {
     f.schedule = {
       ...f.schedule,
       kind: "message",
-      channel: t.channel_name ?? t.channel ?? "",
+      channel: channelsToInput(t.channels),
       fromUser: t.from_user_name ?? t.from_user ?? "",
       keywords: (t.contains ?? []).join(", "),
     };
@@ -193,7 +199,7 @@ export function buildPayload(f: FormState): CreateAutomationPayload {
     const trigger: AutomationTrigger = {
       type: "message",
       source: "slack",
-      channel: s.channel.trim(),
+      channels: splitKeywords(s.channel),
     };
     const fromUser = s.fromUser.trim();
     if (fromUser) trigger.from_user = fromUser;
@@ -211,10 +217,11 @@ export function buildPayload(f: FormState): CreateAutomationPayload {
 
 function scheduleLabel(s: Schedule): string {
   if (s.kind === "message") {
-    const channel = s.channel.trim();
-    if (!channel) return "On Slack message";
+    const chans = splitKeywords(s.channel);
+    if (!chans.length) return "On Slack message";
+    const head = chans.length === 1 ? `#${chans[0]}` : `#${chans[0]} +${chans.length - 1}`;
     const from = s.fromUser.trim();
-    return from ? `#${channel} from @${from}` : `#${channel}`;
+    return from ? `${head} from @${from}` : head;
   }
   if (s.kind === "at") {
     const time = formatTime12(s.at);
@@ -288,7 +295,7 @@ export function AutomationEditor({
   const isMessage = form.schedule.kind === "message";
   const valid =
     form.prompt.trim().length > 0 &&
-    (!isMessage || form.schedule.channel.trim().length > 0);
+    (!isMessage || splitKeywords(form.schedule.channel).length > 0);
   /** Message triggers act on untrusted external input. Without a sender gate,
    *  anyone who can post to the channel can drive a full-tool unattended run. */
   const unsafeAutoApprove =
@@ -648,7 +655,7 @@ function ScheduleChip({
                   aria-hidden={schedule.kind !== "message" || undefined}
                   className={fieldStackCls(schedule.kind === "message")}
                 >
-                  <ScheduleField label="Channel" hint="Slack channel, e.g. feel-good-inc">
+                  <ScheduleField label="Channels" hint="one or more, comma-separated">
                     <div className="relative">
                       <Hash
                         size={ICON.XS}
@@ -658,7 +665,7 @@ function ScheduleChip({
                       <input
                         value={schedule.channel}
                         onChange={(e) => onChange({ ...schedule, channel: e.target.value })}
-                        placeholder="channel-name"
+                        placeholder="feel-good-inc, eng-bugs"
                         spellCheck={false}
                         className={`${schedFieldCls} pl-7`}
                       />

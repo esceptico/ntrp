@@ -623,7 +623,7 @@ class Scheduler:
             triggers = [
                 t
                 for t in automation.triggers
-                if isinstance(t, MessageTrigger) and t.source == event.source and t.channel_id == event.channel_id
+                if isinstance(t, MessageTrigger) and t.source == event.source and event.channel_id in t.channel_ids
             ]
             if any(self._message_trigger_passes(t, event) for t in triggers):
                 matched.append(automation)

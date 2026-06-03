@@ -120,7 +120,15 @@ class AutomationService:
             raise ValueError(f"Unsupported message trigger source: {source!r}")
 
         slack = self._slack()
-        channel_id, channel_name = await slack.resolve_channel(payload["channel"])
+        raw_channels = payload.get("channels")
+        if isinstance(raw_channels, str):
+            raw_channels = [raw_channels]
+        channels: list[dict] = []
+        for channel_name in raw_channels or []:
+            cid, cname = await slack.resolve_channel(channel_name)
+            channels.append({"id": cid, "name": cname})
+        if not channels:
+            raise ValueError("a Slack message trigger needs at least one channel")
 
         from_user_id: str | None = None
         from_user_name: str | None = None
@@ -134,8 +142,7 @@ class AutomationService:
 
         return MessageTrigger(
             source=source,
-            channel_id=channel_id,
-            channel_name=channel_name,
+            channels=channels,
             from_user_id=from_user_id,
             from_user_name=from_user_name,
             contains=payload.get("contains") or [],

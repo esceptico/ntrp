@@ -1094,9 +1094,9 @@ export interface AutomationTrigger {
   // the server resolves them to ids at save time and echoes both the *_id and
   // *_name fields back on read.
   source?: string;
-  channel?: string;
-  channel_id?: string;
-  channel_name?: string;
+  // Channel names on the way in (editor → server); the server resolves them
+  // and echoes back {id,name} objects on read. One or more channels.
+  channels?: (string | { id: string; name: string })[];
   from_user?: string;
   from_user_id?: string | null;
   from_user_name?: string | null;
