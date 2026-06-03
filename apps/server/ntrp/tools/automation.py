@@ -19,6 +19,8 @@ CREATE_AUTOMATION_DESCRIPTION = (
     "For reacting to Slack messages use trigger_type='message' with 'channels' (one or more channel "
     "names) plus optional 'from_user' and 'contains' keyword filters — this is the correct trigger for "
     "a Slack watcher; do NOT fake it with time/interval polling. Detection is near-real-time (~1 min). "
+    "If the user wants a Slack watcher but hasn't named the channel(s), ASK which channels — do not "
+    "substitute a scheduled scan. "
     "Time triggers support two modes: schedule ('at' a specific time) or interval ('every' N hours/minutes). "
     "Optional model override per automation (falls back to default chat model when omitted). "
     "Read-only by default, set auto_approve=true for autonomous memory/note writes (skips approvals)."
