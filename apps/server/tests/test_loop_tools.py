@@ -250,6 +250,46 @@ async def test_create_automation_message_trigger_resolves_channels(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_update_automation_to_message_trigger_resolves_channels(tmp_path: Path):
+    from ntrp.automation.triggers import MessageTrigger
+    from ntrp.context.store import SessionStore
+    from ntrp.services.session import SessionService
+    from ntrp.tools.automation import UpdateAutomationInput, update_automation
+
+    conn = await database.connect(tmp_path / "automation.db")
+    store = AutomationStore(conn)
+    await store.init_schema()
+    session_conn = await database.connect(tmp_path / "sessions.db")
+    session_store = SessionStore(session_conn)
+    await session_store.init_schema()
+    svc = AutomationService(
+        store=store,
+        scheduler=Scheduler(store=store, build_deps=lambda: None),
+        session_service=SessionService(session_store),
+        get_slack_client=lambda: _FakeSlack(),
+    )
+    execution = _execution(svc, loop_task_id=None)
+    await create_automation(
+        execution,
+        CreateAutomationInput(name="watch", description="triage", trigger_type="time", every="1h"),
+    )
+    task_id = next(a.task_id for a in await store.list_all())
+
+    result = await update_automation(
+        execution,
+        UpdateAutomationInput(task_id=task_id, trigger_type="message", channels=["eng-bugs"], contains=["bug"]),
+    )
+    assert not result.is_error, result.content
+
+    updated = await store.get(task_id)
+    msg = [t for t in updated.triggers if isinstance(t, MessageTrigger)]
+    assert len(msg) == 1
+    assert msg[0].channel_ids == ["C-eng-bugs"]
+    assert msg[0].contains == ["bug"]
+    await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_create_automation_defaults_parent_from_loop_ctx(store_and_svc):
     store, svc = store_and_svc
     execution = _execution(svc, loop_task_id="loop-1")

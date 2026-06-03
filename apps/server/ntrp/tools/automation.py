@@ -195,9 +195,9 @@ class UpdateAutomationInput(BaseModel):
     name: str | None = Field(default=None, description="New name")
     description: str | None = Field(default=None, description="New task description")
     model: str | None = Field(default=None, description="New model override")
-    trigger_type: Literal["time", "event"] | None = Field(
+    trigger_type: Literal["time", "event", "message"] | None = Field(
         default=None,
-        description="New trigger type: 'time' or 'event'. Only set when switching trigger type.",
+        description="New trigger type: 'time', 'event', or 'message'. Only set when switching trigger type.",
     )
     at: str | None = Field(default=None, description="New time of day HH:MM (24h). For schedule-based time triggers.")
     days: str | None = Field(
@@ -212,6 +212,18 @@ class UpdateAutomationInput(BaseModel):
     lead_minutes: int | str | None = Field(
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",
+    )
+    channels: list[str] | None = Field(
+        default=None,
+        description="For trigger_type='message': Slack channel names to watch (one or more). Replaces the existing channel set.",
+    )
+    from_user: str | None = Field(
+        default=None,
+        description="For trigger_type='message': only react to messages from this Slack username/display name.",
+    )
+    contains: list[str] | None = Field(
+        default=None,
+        description="For trigger_type='message': only react when the message contains any of these keywords (case-insensitive).",
     )
     auto_approve: bool | None = Field(
         default=None,
@@ -395,6 +407,9 @@ async def approve_update_automation(execution: ToolExecution, args: UpdateAutoma
         "every": args.every,
         "event_type": args.event_type,
         "lead_minutes": args.lead_minutes,
+        "channels": args.channels,
+        "from_user": args.from_user,
+        "contains": args.contains,
         "start": args.start,
         "end": args.end,
     }
@@ -411,6 +426,14 @@ async def approve_update_automation(execution: ToolExecution, args: UpdateAutoma
 
 
 async def update_automation(execution: ToolExecution, args: UpdateAutomationInput) -> ToolResult:
+    message_triggers: list[dict] | None = None
+    if args.trigger_type == "message":
+        message_trigger: dict = {"type": "message", "source": "slack", "channels": args.channels or []}
+        if args.from_user:
+            message_trigger["from_user"] = args.from_user
+        if args.contains:
+            message_trigger["contains"] = args.contains
+        message_triggers = [message_trigger]
     try:
         automation_service = execution.ctx.services["automation"]
         automation = await automation_service.update(
@@ -419,6 +442,7 @@ async def update_automation(execution: ToolExecution, args: UpdateAutomationInpu
             description=args.description,
             model=args.model,
             trigger_type=args.trigger_type,
+            triggers=message_triggers,
             at=args.at,
             days=args.days,
             every=args.every,
