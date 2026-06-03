@@ -1,4 +1,5 @@
 import asyncio
+import json
 import signal
 from contextlib import asynccontextmanager
 from importlib.metadata import version
@@ -107,15 +108,27 @@ async def lifespan(app: FastAPI):
         )
         return result.get("run_id") if isinstance(result, dict) else None
 
-    async def _dispatch_iteration(automation: Automation) -> str | None:
+    async def _dispatch_iteration(automation: Automation, context: str | dict | None = None) -> str | None:
         # Iteration loops are autonomous: the user already approved the
         # loop at creation (via the create_loop approval card), so
         # subsequent iterations should skip per-tool approvals. Matches
         # the same auto_approve→skip_approvals convention the regular
         # automation path uses in scheduler._run_agent.
+        #
+        # When the run was triggered by an event (e.g. a Slack message),
+        # `context` carries the rendered event block — fold it into the
+        # turn via AUTOMATION_PROMPT, mirroring scheduler._run_agent. With
+        # no context the prompt collapses to the bare description, so
+        # non-event iterations submit exactly what they did before.
+        ctx_str = json.dumps(context) if isinstance(context, dict) else context
+        message = (
+            AUTOMATION_PROMPT.render(description=automation.description, context=ctx_str)
+            if context
+            else automation.description
+        )
         return await _dispatch_session_message(
             _loop_target_id(automation) or "",
-            automation.description,
+            message,
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
             skip_approvals=automation.auto_approve,
         )
@@ -123,7 +136,7 @@ async def lifespan(app: FastAPI):
     runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
     runtime.dispatch_session_message = _dispatch_session_message
 
-    async def _dispatch_post(automation: Automation) -> str | None:
+    async def _dispatch_post(automation: Automation, context: str | dict | None = None) -> str | None:
         # Post mode: run the agent fresh (no session history), then write
         # the agent's final text into the target session as an assistant
         # message. The chat UI picks it up on the next history fetch —
@@ -141,7 +154,8 @@ async def lifespan(app: FastAPI):
             return None
 
         async with _get_or_create_session_lock(session_write_locks, target_id):
-            prompt = AUTOMATION_PROMPT.render(description=automation.description, context=None)
+            ctx_str = json.dumps(context) if isinstance(context, dict) else context
+            prompt = AUTOMATION_PROMPT.render(description=automation.description, context=ctx_str)
             request = RunRequest(
                 prompt=prompt,
                 prompt_suffix=AUTOMATION_SUFFIX,

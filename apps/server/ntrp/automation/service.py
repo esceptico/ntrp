@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -7,8 +8,9 @@ from coolname import generate_slug
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import TimeTrigger, Trigger, build_trigger, parse_one
+from ntrp.automation.triggers import MessageTrigger, TimeTrigger, Trigger, build_trigger, parse_one
 from ntrp.context.models import SessionState
+from ntrp.integrations.slack.client import SlackClient
 from ntrp.llm.models import get_models
 from ntrp.services.session import SessionService
 
@@ -91,12 +93,69 @@ class AutomationService:
         store: AutomationStore,
         scheduler: Scheduler,
         session_service: SessionService,
+        get_slack_client: Callable[[], SlackClient | None] | None = None,
     ):
         self.store = store
         self.scheduler = scheduler
         self.session_service = session_service
+        # Resolves the live Slack client from the integration registry
+        # (mirrors get_calendar_source wiring). Lets save-time message-trigger
+        # resolution reach Slack without a new global; None until Slack connects.
+        self._get_slack_client = get_slack_client
 
-    async def _provision_channel(self, name: str, task_id: str) -> SessionState:
+    def _slack(self) -> SlackClient:
+        client = self._get_slack_client() if self._get_slack_client else None
+        if client is None:
+            raise ValueError("Slack is not connected — cannot create a Slack message trigger")
+        return client
+
+    async def _resolve_message_trigger(self, payload: dict) -> MessageTrigger:
+        """Resolve a name-based message-trigger payload to stored IDs.
+
+        Editor sends {channel, from_user?, contains?}; names are stale, so we
+        pin to Slack IDs at save time and keep the display names for the UI.
+        """
+        source = payload.get("source", "slack")
+        if source != "slack":
+            raise ValueError(f"Unsupported message trigger source: {source!r}")
+
+        slack = self._slack()
+        channel_id, channel_name = await slack.resolve_channel(payload["channel"])
+
+        from_user_id: str | None = None
+        from_user_name: str | None = None
+        if from_user := payload.get("from_user"):
+            resolved = await slack.resolve_user(from_user)
+            if not isinstance(resolved, dict):
+                names = ", ".join(f"{c['name']} (@{c['username']})" for c in resolved) or "none"
+                raise ValueError(f"Ambiguous Slack user {from_user!r}; candidates: {names}")
+            from_user_id = resolved["id"]
+            from_user_name = resolved["name"]
+
+        return MessageTrigger(
+            source=source,
+            channel_id=channel_id,
+            channel_name=channel_name,
+            from_user_id=from_user_id,
+            from_user_name=from_user_name,
+            contains=payload.get("contains") or [],
+        )
+
+    async def _resolve_message_triggers(self, triggers: list[dict] | None) -> list[dict] | None:
+        """Replace name-based message-trigger dicts with resolved, ID-form dicts
+        so the shared parse/build path stores Slack IDs."""
+        if not triggers:
+            return triggers
+        resolved: list[dict] = []
+        for t in triggers:
+            if t.get("type") == "message":
+                trigger = await self._resolve_message_trigger(t)
+                resolved.append({"type": "message", **trigger.params()})
+            else:
+                resolved.append(t)
+        return resolved
+
+    async def _provision_channel(self, name: str, task_id: str, project_id: str | None = None) -> SessionState:
         """Create the durable channel session that owns an automation's
         activity. SessionService.provision announces it (SESSION_CREATED) so
         connected desktops add the sidebar row live instead of after reload."""
@@ -104,6 +163,7 @@ class AutomationService:
             name=name,
             session_type="channel",
             origin_automation_id=task_id,
+            project_id=project_id,
         )
 
     @property
@@ -252,6 +312,7 @@ class AutomationService:
         )
 
         # Full triggers list replacement takes precedence over field-level patching
+        triggers = await self._resolve_message_triggers(triggers)
         if triggers:
             parsed_triggers = [trigger for t in triggers if (trigger := parse_one(t)) is not None]
             time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
@@ -295,12 +356,14 @@ class AutomationService:
         cooldown_minutes: int | None = None,
         thread_id: str | None = None,
         read_history: bool = False,
+        project_id: str | None = None,
         idempotency_key: str | None = None,
         idempotency_scope: str | None = None,
         parent_automation_id: str | None = None,
         parent_fire_at: str | None = None,
         attempt_n: int | None = None,
     ) -> Automation | None:
+        triggers = await self._resolve_message_triggers(triggers)
         parsed_triggers, next_run = _build_trigger_and_next_run(
             trigger_type=trigger_type,
             at=at,
@@ -326,7 +389,7 @@ class AutomationService:
         # through the existing session-bound iteration path (no new
         # execution path), which persists the full turn and emits live SSE.
         if thread_id is None:
-            channel = await self._provision_channel(name, task_id)
+            channel = await self._provision_channel(name, task_id, project_id=project_id)
             thread_id = channel.session_id
             read_history = True
 

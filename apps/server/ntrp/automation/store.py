@@ -286,6 +286,25 @@ WHERE enabled = 1
   )
 """
 
+_SQL_LIST_MESSAGE_TRIGGERED = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE enabled = 1
+  AND EXISTS (
+    SELECT 1 FROM json_each(triggers)
+    WHERE json_extract(value, '$.type') = 'message'
+      AND json_extract(value, '$.source') = ?
+      AND json_extract(value, '$.channel_id') = ?
+  )
+"""
+
+_SQL_LIST_WATCHED_SLACK_CHANNELS = """
+SELECT DISTINCT json_extract(value, '$.channel_id') AS channel_id
+FROM scheduled_tasks, json_each(triggers)
+WHERE enabled = 1
+  AND json_extract(value, '$.type') = 'message'
+  AND json_extract(value, '$.source') = 'slack'
+"""
+
 _SQL_UPDATE_LAST_RUN = """
 UPDATE scheduled_tasks
 SET last_run_at = ?, next_run_at = ?, last_result = ?
@@ -1116,6 +1135,14 @@ class AutomationStore:
     async def list_by_trigger_type(self, trigger_type: str) -> list[Automation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_BY_TRIGGER_TYPE, (trigger_type,))
         return [_row_to_automation(row) for row in rows]
+
+    async def list_message_triggered(self, source: str, channel_id: str) -> list[Automation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_MESSAGE_TRIGGERED, (source, channel_id))
+        return [_row_to_automation(row) for row in rows]
+
+    async def list_watched_slack_channels(self) -> list[str]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_WATCHED_SLACK_CHANNELS)
+        return [row["channel_id"] for row in rows if row["channel_id"] is not None]
 
     async def try_mark_running(self, task_id: str, now: datetime) -> bool:
         cursor = await self.conn.execute(_SQL_TRY_MARK_RUNNING, (now.isoformat(), task_id))

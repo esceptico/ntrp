@@ -9,9 +9,11 @@ from ntrp.core.factory import AgentConfig
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import get_completion_client
+from ntrp.integrations.slack.client import SlackClient
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
+from ntrp.monitor.slack import SlackMonitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
@@ -236,6 +238,7 @@ class Runtime:
             get_memory_service=lambda: self.memory_service,
             get_pattern_finder=lambda: self.pattern_finder,
             get_calendar_source=lambda: self.integrations.get_client("calendar"),
+            get_slack_client=lambda: self.integrations.get_client("slack"),
             get_cheap_llm=lambda: get_completion_client(self.config.memory_model) if self.config.memory_model else None,
             cheap_model=self.config.memory_model,
             indexer=self.indexer,
@@ -342,6 +345,7 @@ class Runtime:
         if not self.automation:
             raise RuntimeError("Automation runtime is not initialized")
         self.automation.start_monitor()
+        self._register_slack_monitor()
 
     async def sync_google_sources(self) -> None:
         self.integrations.sync(self.config)
@@ -351,6 +355,16 @@ class Runtime:
         if not self.automation:
             return
         await self.automation.restart_monitor()
+        self._register_slack_monitor()
+
+    def _register_slack_monitor(self) -> None:
+        slack = self.integrations.get_client("slack")
+        if not isinstance(slack, SlackClient) or not self.monitor or not self.stores or not self.stores.monitor:
+            return
+        self.monitor.register(
+            SlackMonitor(slack, state_store=self.stores.monitor, automation_store=self.stores.automations)
+        )
+        self.monitor.start()
 
     def start_indexing(self) -> None:
         self.knowledge.start_indexing()

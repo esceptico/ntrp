@@ -396,6 +396,60 @@ class SlackClient:
                 )
             return items
 
+    async def history_since(
+        self,
+        channel: str,
+        oldest: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Fetch channel messages since `oldest`, ordered oldest -> newest.
+
+        conversations.history returns newest-first per page; we page via
+        response_metadata.next_cursor and reverse to chronological order.
+        """
+        async with aiohttp.ClientSession() as session:
+            cid, _ = await self._resolve_channel_id(session, channel)
+            messages: list[dict[str, Any]] = []
+            cursor = ""
+            while True:
+                params: dict[str, Any] = {"channel": cid, "limit": str(limit)}
+                if oldest:
+                    params["oldest"] = oldest
+                if cursor:
+                    params["cursor"] = cursor
+                data = await self._get(session, "conversations.history", **params)
+                messages.extend(data.get("messages", []))
+                cursor = data.get("response_metadata", {}).get("next_cursor", "")
+                if not cursor:
+                    break
+            messages.reverse()
+            return messages
+
+    async def resolve_channel(self, name: str) -> tuple[str, str]:
+        """Public wrapper over _resolve_channel_id. Returns (channel_id, channel_name); raises on miss."""
+        async with aiohttp.ClientSession() as session:
+            return await self._resolve_channel_id(session, name)
+
+    async def resolve_user(self, name: str) -> dict[str, str] | list[dict[str, str]]:
+        """Resolve a user name to a single {id, name} or, on 0/>1 matches, the candidate list."""
+        candidates = await self.search_users(name)
+        q = name.lower()
+        exact = [c for c in candidates if c["username"].lower() == q or c["name"].lower() == q]
+        if len(exact) == 1:
+            return {"id": exact[0]["id"], "name": exact[0]["name"]}
+        return candidates
+
+    async def resolve_user_name(self, user_id: str) -> str:
+        """Public wrapper over _resolve_user. Returns a display name (cached); falls back to the id."""
+        async with aiohttp.ClientSession() as session:
+            return await self._resolve_user(session, user_id)
+
+    async def whoami(self) -> dict[str, str]:
+        """auth.test -> the authed identity used for self-message filtering."""
+        async with aiohttp.ClientSession() as session:
+            data = await self._get(session, "auth.test")
+            return {"user_id": data.get("user_id", ""), "user": data.get("user", "")}
+
     async def read_thread(self, source_id: str) -> SlackThreadResult | None:
         """Read a message + thread replies. source_id is 'channel_id:ts'."""
         if ":" not in source_id:

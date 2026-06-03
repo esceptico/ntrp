@@ -1,7 +1,7 @@
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
 from typing import Any, Literal
 
@@ -343,7 +343,32 @@ class CountTrigger:
         return None
 
 
-Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger
+@dataclass(frozen=True)
+class MessageTrigger:
+    type: Literal["message"] = "message"
+    source: str = "slack"
+    channel_id: str = ""
+    channel_name: str = ""
+    from_user_id: str | None = None
+    from_user_name: str | None = None
+    contains: list[str] = field(default_factory=list)
+
+    def params(self) -> dict:
+        return {
+            "source": self.source,
+            "channel_id": self.channel_id,
+            "channel_name": self.channel_name,
+            "from_user_id": self.from_user_id,
+            "from_user_name": self.from_user_name,
+            "contains": self.contains,
+        }
+
+    @property
+    def one_shot(self) -> bool:
+        return False
+
+
+Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger | MessageTrigger
 
 
 def _next_run_for_time(trigger: TimeTrigger, now: datetime) -> datetime:
@@ -459,11 +484,23 @@ def _parse_count_trigger(payload: dict) -> Trigger:
     return CountTrigger(every_n=payload["every_n"])
 
 
+def _parse_message_trigger(payload: dict) -> Trigger:
+    return MessageTrigger(
+        source=payload["source"],
+        channel_id=payload["channel_id"],
+        channel_name=payload["channel_name"],
+        from_user_id=payload.get("from_user_id"),
+        from_user_name=payload.get("from_user_name"),
+        contains=payload.get("contains", []),
+    )
+
+
 PARSE_DISPATCH: dict[str, ParseHandler] = {
     "time": _parse_time_trigger,
     "event": _parse_event_trigger,
     "idle": _parse_idle_trigger,
     "count": _parse_count_trigger,
+    "message": _parse_message_trigger,
 }
 
 

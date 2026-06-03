@@ -6,8 +6,9 @@ from datetime import UTC, datetime, timedelta
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, TimeTrigger
+from ntrp.automation.triggers import CountTrigger, EventTrigger, IdleTrigger, MessageTrigger, TimeTrigger
 from ntrp.constants import (
+    MESSAGE_RECEIVED,
     SCHEDULER_DEDUP_TTL,
     SCHEDULER_EVENT_MAX_RETRIES,
     SCHEDULER_EVENT_RETRY_BASE_SECONDS,
@@ -16,7 +17,7 @@ from ntrp.constants import (
 )
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SSEEvent
-from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
+from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, MessageReceived, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry
@@ -26,15 +27,17 @@ AUTOMATION_BUS_KEY = "automation:events"
 _logger = get_logger(__name__)
 
 
-IterationDispatcher = Callable[[Automation], Awaitable[str | None]]
+IterationDispatcher = Callable[[Automation, str | dict | None], Awaitable[str | None]]
 """Fire a session-bound automation in iteration mode (read_history=True):
 re-enter the target session with the loop prompt; the agent sees the full
-session history."""
+session history. `context` is the triggering event's rendered context (None
+for non-event runs)."""
 
-PostDispatcher = Callable[[Automation], Awaitable[str | None]]
+PostDispatcher = Callable[[Automation, str | dict | None], Awaitable[str | None]]
 """Fire a session-bound automation in post mode (read_history=False): run
 the agent fresh (no session history), then post the result back into the
-target session as an assistant message."""
+target session as an assistant message. `context` is the triggering event's
+rendered context (None for non-event runs)."""
 
 # Back-compat alias — older code (and external callers) may still import
 # `LoopDispatcher`. New code should reach for `IterationDispatcher`.
@@ -415,7 +418,7 @@ class Scheduler:
         error_message = ""
         try:
             if self._is_session_bound(automation):
-                result = await self._run_session_bound(automation)
+                result = await self._run_session_bound(automation, context)
             elif automation.handler:
                 result = await self._run_handler(automation, context)
             else:
@@ -527,7 +530,9 @@ class Scheduler:
 
         return result.output
 
-    async def _run_session_bound(self, automation: Automation) -> str | None:
+    async def _run_session_bound(
+        self, automation: Automation, context: str | dict | None = None
+    ) -> str | None:
         """Fire a session-bound automation.
 
         Two modes, picked by `automation.read_history`:
@@ -571,7 +576,7 @@ class Scheduler:
             automation.iteration_count + 1,
             automation.thread_id,
         )
-        result = await dispatcher(automation)
+        result = await dispatcher(automation, context)
         # Disable after max_iterations is hit. iteration_count was already
         # incremented in the store; compare against the in-memory value + 1
         # since `automation` is a snapshot taken before the increment.
@@ -607,7 +612,32 @@ class Scheduler:
             await self._start_next_queued_event_if_idle(automation.task_id)
 
     async def _matching_event_automations(self, event: TriggerEvent) -> list[Automation]:
+        if event.event_type == MESSAGE_RECEIVED and isinstance(event, MessageReceived):
+            return await self._matching_message_automations(event)
         return await self.store.list_event_triggered(event.event_type)
+
+    async def _matching_message_automations(self, event: MessageReceived) -> list[Automation]:
+        automations = await self.store.list_message_triggered(event.source, event.channel_id)
+        matched: list[Automation] = []
+        for automation in automations:
+            triggers = [
+                t
+                for t in automation.triggers
+                if isinstance(t, MessageTrigger) and t.source == event.source and t.channel_id == event.channel_id
+            ]
+            if any(self._message_trigger_passes(t, event) for t in triggers):
+                matched.append(automation)
+        return matched
+
+    @staticmethod
+    def _message_trigger_passes(trigger: MessageTrigger, event: MessageReceived) -> bool:
+        if trigger.from_user_id is not None and trigger.from_user_id != event.user_id:
+            return False
+        if trigger.contains:
+            text = event.text.lower()
+            if not any(keyword.lower() in text for keyword in trigger.contains):
+                return False
+        return True
 
     def schedule_run(self, task_id: str) -> None:
         execution = asyncio.create_task(self._manual_run(task_id))

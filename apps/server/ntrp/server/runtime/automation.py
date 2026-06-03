@@ -29,6 +29,7 @@ class AutomationRuntime:
         get_memory_service: Callable[[], object | None],
         get_pattern_finder: Callable[[], object | None],
         get_calendar_source: Callable[[], object | None],
+        get_slack_client: Callable[[], object | None],
         get_cheap_llm: Callable[[], object | None],
         cheap_model: str | None,
         indexer: Indexer | None,
@@ -38,6 +39,7 @@ class AutomationRuntime:
         self.get_memory_service = get_memory_service
         self.get_pattern_finder = get_pattern_finder
         self.get_calendar_source = get_calendar_source
+        self.get_slack_client = get_slack_client
         self.get_cheap_llm = get_cheap_llm
         self.cheap_model = cheap_model
         self.scheduler = Scheduler(
@@ -48,6 +50,7 @@ class AutomationRuntime:
             store=stores.automations,
             scheduler=self.scheduler,
             session_service=stores.sessions,
+            get_slack_client=self.get_slack_client,
         )
         self.outbox_runtime = RuntimeOutbox(
             outbox_store=stores.outbox,

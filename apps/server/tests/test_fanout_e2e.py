@@ -51,7 +51,7 @@ async def test_watcher_fanout_dedup_cascade(
     # target session.
     posted: list[tuple[str, str]] = []
 
-    async def stub_post(automation: Automation) -> str | None:
+    async def stub_post(automation: Automation, context: str | dict | None = None) -> str | None:
         target_id = automation.thread_id
         assert target_id is not None
         text = f"status for {automation.task_id}"

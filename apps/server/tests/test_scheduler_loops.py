@@ -11,7 +11,8 @@ from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import TimeTrigger
+from ntrp.automation.triggers import MessageTrigger, TimeTrigger
+from ntrp.events.triggers import MessageReceived
 
 
 @pytest_asyncio.fixture
@@ -73,7 +74,7 @@ def _loop(
 def _make_scheduler(store: AutomationStore) -> tuple[Scheduler, list[Automation]]:
     dispatched: list[Automation] = []
 
-    async def dispatcher(auto: Automation) -> str | None:
+    async def dispatcher(auto: Automation, context: str | dict | None = None) -> str | None:
         dispatched.append(auto)
         return "fake-run-id"
 
@@ -89,7 +90,7 @@ def _make_post_scheduler(
     dispatched: list[Automation] = []
     results: list[str] = []
 
-    async def post_dispatcher(auto: Automation) -> str | None:
+    async def post_dispatcher(auto: Automation, context: str | dict | None = None) -> str | None:
         dispatched.append(auto)
         result = f"agent result for {auto.task_id}"
         results.append(result)
@@ -213,7 +214,7 @@ async def test_run_finalize_does_not_silently_complete_when_clear_running_fails(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def dispatcher(_auto: Automation) -> str | None:
+    async def dispatcher(_auto: Automation, context: str | dict | None = None) -> str | None:
         started.set()
         await release.wait()
         return "fake-run-id"
@@ -644,11 +645,11 @@ async def test_post_mode_routes_to_post_not_iteration_dispatcher(store: Automati
     iteration_calls: list[Automation] = []
     post_calls: list[Automation] = []
 
-    async def iteration(auto: Automation) -> str | None:
+    async def iteration(auto: Automation, context: str | dict | None = None) -> str | None:
         iteration_calls.append(auto)
         return "iter-id"
 
-    async def post(auto: Automation) -> str | None:
+    async def post(auto: Automation, context: str | dict | None = None) -> str | None:
         post_calls.append(auto)
         return "posted text"
 
@@ -671,11 +672,11 @@ async def test_iteration_mode_routes_to_iteration_not_post_dispatcher(store: Aut
     iteration_calls: list[Automation] = []
     post_calls: list[Automation] = []
 
-    async def iteration(auto: Automation) -> str | None:
+    async def iteration(auto: Automation, context: str | dict | None = None) -> str | None:
         iteration_calls.append(auto)
         return "iter-id"
 
-    async def post(auto: Automation) -> str | None:
+    async def post(auto: Automation, context: str | dict | None = None) -> str | None:
         post_calls.append(auto)
         return "posted text"
 
@@ -689,6 +690,144 @@ async def test_iteration_mode_routes_to_iteration_not_post_dispatcher(store: Aut
 
     assert post_calls == []
     assert len(iteration_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_session_bound_threads_event_context_to_iteration_dispatcher(store: AutomationStore):
+    """Regression guard for the Part E event-context drop: a session-bound
+    event automation must hand its triggering context to the dispatcher (covers
+    Slack message + calendar event_approaching runs alike)."""
+    await store.save(_loop(read_history=True))
+    seen: list[str | dict | None] = []
+
+    async def iteration(auto: Automation, context: str | dict | None = None) -> str | None:
+        seen.append(context)
+        return "iter-id"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_iteration_dispatcher(iteration)
+
+    automation = await store.get("loop-1")
+    await sched._run_session_bound(automation, "event context block")
+
+    assert seen == ["event context block"]
+
+
+@pytest.mark.asyncio
+async def test_session_bound_passes_none_context_for_non_event_runs(store: AutomationStore):
+    """Non-event runs default context to None, so the dispatcher submits the
+    bare description exactly as before Part E."""
+    await store.save(_loop(read_history=True))
+    seen: list[str | dict | None] = []
+
+    async def iteration(auto: Automation, context: str | dict | None = None) -> str | None:
+        seen.append(context)
+        return "iter-id"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_iteration_dispatcher(iteration)
+
+    automation = await store.get("loop-1")
+    await sched._run_session_bound(automation)
+
+    assert seen == [None]
+
+
+def _message_event(
+    *,
+    source: str = "slack",
+    channel_id: str = "C1",
+    user_id: str = "U1",
+    text: str = "the deploy is broken",
+) -> MessageReceived:
+    return MessageReceived(
+        source=source,
+        channel_id=channel_id,
+        channel_name="bugs",
+        user_id=user_id,
+        user_name="alice",
+        text=text,
+        ts="1700000000.000100",
+        thread_ts=None,
+        permalink=None,
+    )
+
+
+def _make_trigger(
+    *,
+    channel_id: str = "C1",
+    from_user_id: str | None = None,
+    contains: list[str] | None = None,
+) -> MessageTrigger:
+    return MessageTrigger(
+        source="slack",
+        channel_id=channel_id,
+        channel_name="bugs",
+        from_user_id=from_user_id,
+        contains=contains or [],
+    )
+
+
+def test_message_gate_passes_when_no_user_or_text_constraint():
+    assert Scheduler._message_trigger_passes(_make_trigger(), _message_event()) is True
+
+
+def test_message_gate_filters_on_from_user():
+    trigger = _make_trigger(from_user_id="U1")
+    assert Scheduler._message_trigger_passes(trigger, _message_event(user_id="U1")) is True
+    assert Scheduler._message_trigger_passes(trigger, _message_event(user_id="U2")) is False
+
+
+def test_message_gate_contains_is_any_of_and_case_insensitive():
+    trigger = _make_trigger(contains=["Broken", "down"])
+    assert Scheduler._message_trigger_passes(trigger, _message_event(text="the deploy is BROKEN")) is True
+    assert Scheduler._message_trigger_passes(trigger, _message_event(text="everything is fine")) is False
+
+
+def test_message_gate_empty_contains_passes_all_text():
+    trigger = _make_trigger(contains=[])
+    assert Scheduler._message_trigger_passes(trigger, _message_event(text="anything at all")) is True
+
+
+async def _save_message_automation(
+    store: AutomationStore,
+    task_id: str,
+    trigger: MessageTrigger,
+    *,
+    enabled: bool = True,
+) -> None:
+    now = datetime.now(UTC)
+    await store.save(
+        Automation(
+            task_id=task_id,
+            name="watcher",
+            description="triage",
+            model=None,
+            triggers=[trigger],
+            enabled=enabled,
+            created_at=now,
+            next_run_at=None,
+            last_run_at=None,
+            last_result=None,
+            running_since=None,
+            auto_approve=True,
+            kind="automation",
+            thread_id=f"sess-{task_id}",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_matching_message_automations_applies_channel_and_gate(store: AutomationStore):
+    await _save_message_automation(store, "match", _make_trigger(channel_id="C1", from_user_id="U1"))
+    await _save_message_automation(store, "wrong-channel", _make_trigger(channel_id="C2"))
+    await _save_message_automation(store, "wrong-user", _make_trigger(channel_id="C1", from_user_id="U9"))
+    await _save_message_automation(store, "disabled", _make_trigger(channel_id="C1"), enabled=False)
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    matched = await sched._matching_message_automations(_message_event(channel_id="C1", user_id="U1"))
+
+    assert {a.task_id for a in matched} == {"match"}
 
 
 @pytest.mark.asyncio
@@ -820,7 +959,7 @@ async def test_post_mode_persists_assistant_message_to_target_session(store: Aut
 
     # Post dispatcher: emulate what app.py wires — run agent, append assistant
     # message into target session, return text.
-    async def post_dispatcher(auto: Automation) -> str | None:
+    async def post_dispatcher(auto: Automation, context: str | dict | None = None) -> str | None:
         result_text = f"hello from {auto.task_id}"
         loaded = await session_service.load(auto.thread_id)
         assert loaded is not None

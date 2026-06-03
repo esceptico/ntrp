@@ -155,7 +155,7 @@ export function GlassToggle({
     border: "1px solid var(--gt-pill-border)",
     boxShadow: "var(--gt-pill-shadow)",
     transition: ready
-      ? `transform 380ms ${EASE}, width 380ms ${EASE}`
+      ? `transform 220ms ${EASE}, width 220ms ${EASE}`
       : "none",
     pointerEvents: "none",
     zIndex: 0,

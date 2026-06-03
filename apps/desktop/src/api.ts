@@ -1071,7 +1071,7 @@ export async function listToolsApi(config: AppConfig): Promise<{ tools: ToolMeta
 
 // ─── Automations ───────────────────────────────────────────────────
 
-export type AutomationTriggerType = "time" | "event" | "idle" | "count";
+export type AutomationTriggerType = "time" | "event" | "idle" | "count" | "message";
 
 export interface AutomationTrigger {
   type: AutomationTriggerType;
@@ -1090,6 +1090,17 @@ export interface AutomationTrigger {
   every_n?: number;
   threshold?: number;
   scope?: string;
+  // Message (slack watcher). The editor submits names (channel/from_user);
+  // the server resolves them to ids at save time and echoes both the *_id and
+  // *_name fields back on read.
+  source?: string;
+  channel?: string;
+  channel_id?: string;
+  channel_name?: string;
+  from_user?: string;
+  from_user_id?: string | null;
+  from_user_name?: string | null;
+  contains?: string[];
 }
 
 export type AutomationKind = "automation" | "loop";
