@@ -15,7 +15,10 @@ from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScop
 CREATE_AUTOMATION_DESCRIPTION = (
     "Create an automation — a task the agent runs autonomously. "
     "Trigger types: 'time' (runs at a scheduled time or interval), 'event' (runs when an event fires, "
-    f"e.g. '{EVENT_APPROACHING}'). "
+    f"e.g. '{EVENT_APPROACHING}'), 'message' (runs when a new Slack message arrives). "
+    "For reacting to Slack messages use trigger_type='message' with 'channels' (one or more channel "
+    "names) plus optional 'from_user' and 'contains' keyword filters — this is the correct trigger for "
+    "a Slack watcher; do NOT fake it with time/interval polling. Detection is near-real-time (~1 min). "
     "Time triggers support two modes: schedule ('at' a specific time) or interval ('every' N hours/minutes). "
     "Optional model override per automation (falls back to default chat model when omitted). "
     "Read-only by default, set auto_approve=true for autonomous memory/note writes (skips approvals)."
@@ -26,8 +29,9 @@ LIST_AUTOMATIONS_DESCRIPTION = "List all automations with their trigger, status,
 UPDATE_AUTOMATION_DESCRIPTION = (
     "Update an existing automation. Only provide the fields you want to change. "
     "Use list_automations to find IDs. "
-    "Trigger fields (trigger_type, at, days, every, event_type, lead_minutes, start, end) are merged with "
-    "the current trigger — only provide what should change. "
+    "Trigger fields (trigger_type, at, days, every, event_type, lead_minutes, start, end, and for "
+    "trigger_type='message': channels, from_user, contains) are merged with the current trigger — only "
+    "provide what should change. "
     "Set enabled=false to pause or enabled=true to resume."
 )
 
