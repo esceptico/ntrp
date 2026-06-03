@@ -150,7 +150,7 @@ export function LensEvidenceSearch({
                 close();
               }
             }}
-            className="glass-surface surface-popover p-2.5"
+            className="surface-panel surface-popover p-2.5"
           >
             <div className="flex items-center gap-2">
               <SearchInput

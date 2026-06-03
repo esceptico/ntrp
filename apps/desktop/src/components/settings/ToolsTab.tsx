@@ -5,7 +5,7 @@ import { useStore } from "../../store";
 import { useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { GlassToggle } from "../GlassToggle";
+import { SegmentedControl } from "../SegmentedControl";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
@@ -130,7 +130,7 @@ export function ToolsTab() {
                         </div>
                       )}
                     </div>
-                    <GlassToggle
+                    <SegmentedControl
                       size="sm"
                       options={DECISIONS}
                       value={current}

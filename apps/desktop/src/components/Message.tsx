@@ -222,7 +222,7 @@ function SkillInlineToken({ skill }: { skill: SkillDescriptor }) {
 
 function GoalMessageBubble({ objective }: { objective: string }) {
   return (
-    <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-left">
+    <div className="surface-panel surface-radius-lg max-w-[75%] px-3.5 py-2 text-left">
       <div className="mb-1 inline-flex items-center gap-1.5 text-2xs font-medium text-muted">
         <Target size={ICON.XS} strokeWidth={2} />
         <span>Goal</span>
@@ -279,7 +279,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
       {goalMatch ? (
         <GoalMessageBubble objective={goalMatch} />
       ) : showBubble && (
-        <div className="glass-surface glass-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] break-words text-left">
+        <div className="surface-panel surface-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] break-words text-left">
           {skillMatch && (
             <>
               <SkillInlineToken skill={skillMatch.skill} />
@@ -533,7 +533,7 @@ const TodoMessage = memo(function TodoMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="glass-surface glass-radius-lg max-w-[560px] px-3.5 py-3 border border-line-soft">
+      <div className="surface-panel surface-radius-lg max-w-[560px] px-3.5 py-3 border border-line-soft">
         <div className="flex items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 min-w-0">
             <ListChecks size={ICON.SM} strokeWidth={2} className="text-muted shrink-0" />

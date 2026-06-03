@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { LabeledField } from "../Field";
 import { KeyValueEditor, ListEditor, type KeyVal } from "./editors";
-import { GlassToggle } from "../../GlassToggle";
+import { SegmentedControl } from "../../SegmentedControl";
 import type { MCPAuthMode } from "./payload";
 
 export function StdioFields({
@@ -84,7 +84,7 @@ export function HttpFields({
       {oauthSection ?? (
         <>
           <LabeledField label="Auth">
-            <GlassToggle
+            <SegmentedControl
               className="justify-self-start"
               size="sm"
               value={auth}

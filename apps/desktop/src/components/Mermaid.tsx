@@ -5,11 +5,9 @@ import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucid
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 import {
-  ENTRY_GLASS,
-  ENTRY_LINEN,
+  ENTRY_PANEL,
   EASE_DECELERATE,
 } from "../lib/tokens/motion";
-import { useStore } from "../store";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
@@ -85,11 +83,6 @@ export function Mermaid({ code }: { code: string }) {
  *  remounts `PanelInner`, which re-runs fit-to-view for the new size. */
 function MermaidPanel({ svg, source }: { svg: string; source: string }) {
   const [fullscreen, setFullscreen] = useState(false);
-  const material = useStore((s) => s.prefs.material);
-  const isGlass = material === "glass";
-  const panelTransition = isGlass
-    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
-    : ENTRY_LINEN.spring;
   const toggle = () => setFullscreen((v) => !v);
   const root = document.querySelector("#app");
 
@@ -118,7 +111,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
                   initial={{ opacity: 0, scale: 0.96, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 6 }}
-                  transition={panelTransition}
+                  transition={ENTRY_PANEL}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <PanelInner svg={svg} source={source} fullscreen onToggleFullscreen={toggle} />

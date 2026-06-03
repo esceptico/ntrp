@@ -52,34 +52,11 @@ export type PaletteId =
   | "raycast"
   | "notion";
 
-export interface GlassParams {
-  /** Tint opacity 0–100 (% white for light mode; framework derives dark). */
-  tint: number;
-  /** Backdrop-filter blur in px. */
-  blur: number;
-  /** Backdrop-filter saturate %. */
-  saturate: number;
-  /** Top-edge specular rim opacity 0–100 (%). */
-  rim: number;
-}
-
-export type GlassPrefs = GlassParams;
-
-/** Surface material.
- *  - "glass": translucent + backdrop-filter (blur/saturate). The
- *    tint/blur/saturate/rim sliders apply.
- *  - "linen": solid surface with a hairline ink ring and a soft drop
- *    shadow. No backdrop-filter, no SVG noise — cheaper to paint and
- *    reads as an architectural panel rather than translucent glass.
- *    Tint/blur/saturate sliders don't apply (rim still does). */
-export type Material = "glass" | "linen";
-
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
   palette: PaletteId;
-  material: Material;
   sidebarHidden: boolean;
   /** Sidebar width in pixels. User-resizable via the right-edge drag
    *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the
@@ -90,7 +67,6 @@ export interface Prefs {
    *  process via IPC; main re-registers on change. Empty string disables
    *  the shortcut entirely. */
   quickCaptureShortcut: string;
-  glass: GlassPrefs;
 }
 
 /** A user message submitted while a run was already active. The server

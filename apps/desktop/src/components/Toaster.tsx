@@ -57,7 +57,7 @@ function ToastCard({ toast }: { toast: Toast }) {
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ layout: SPRING_LAYOUT, duration: MOTION.panel, ease: EASE_DECELERATE }}
       data-toast-status={toast.status}
-      className="glass-surface glass-radius-md pointer-events-auto flex w-full items-start gap-2.5 px-3.5 py-3 text-left"
+      className="surface-panel surface-radius-md pointer-events-auto flex w-full items-start gap-2.5 px-3.5 py-3 text-left"
     >
       <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center text-ink-soft">
         <Icon size={ICON.SM} strokeWidth={2} />

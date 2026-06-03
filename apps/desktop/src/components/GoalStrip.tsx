@@ -81,7 +81,7 @@ export function GoalStatusBar() {
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
           style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-          className="glass-surface surface-popover w-[360px] p-3"
+          className="surface-panel surface-popover w-[360px] p-3"
         >
           <div className="mb-2 flex items-center gap-2">
             <Target size={ICON.SM} strokeWidth={2} className="text-accent" />

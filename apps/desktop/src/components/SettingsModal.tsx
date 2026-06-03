@@ -77,7 +77,7 @@ export function SettingsModal() {
       grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       disableEscape={saving}
     >
-        <aside className="sidebar glass-surface settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
+        <aside className="sidebar surface-panel settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
           <div className="drag-spacer shrink-0 h-[22px]" />
           <Tabs
             value={active}

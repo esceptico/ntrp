@@ -65,18 +65,9 @@ export const DURATION_POPOVER = MOTION.palette;
 export const DURATION_PANEL = MOTION.panel;
 export const DURATION_ROUTE = MOTION.route;
 
-// ─── Per-material entry curves ───────────────────────────────
-// Glass entries decelerate (the slab "lands"); linen entries use the
-// modal spring so the body and surface arrive together.
+// ─── Panel entry curve ───────────────────────────────────────
 
-export const ENTRY_GLASS = {
-  ease: EASE_DECELERATE,
-  duration: MOTION.panel,
-} as const;
-
-export const ENTRY_LINEN = {
-  spring: SPRING_MODAL,
-} as const;
+export const ENTRY_PANEL = SPRING_MODAL;
 
 // ─── Spatial origin helpers ──────────────────────────────────
 

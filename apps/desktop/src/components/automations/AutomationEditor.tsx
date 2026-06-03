@@ -21,19 +21,17 @@ import type {
   UpdateAutomationPayload,
 } from "../../api";
 import {
-  ENTRY_GLASS,
-  ENTRY_LINEN,
+  ENTRY_PANEL,
   EASE_DECELERATE,
   EASE_OUT,
   SPRING_POPOVER,
   MOTION,
 } from "../../lib/tokens/motion";
-import { useStore } from "../../store";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
-import { GlassToggle } from "../GlassToggle";
+import { SegmentedControl } from "../SegmentedControl";
 import { Chip } from "../Chip";
-import { GlassSwitch } from "../GlassSwitch";
+import { SwitchControl } from "../SwitchControl";
 
 const MODAL_BACKDROP_DURATION = 0.2;
 
@@ -266,11 +264,6 @@ export function AutomationEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = !!seed;
-  const material = useStore((s) => s.prefs.material);
-  const isGlass = material === "glass";
-  const panelTransition = isGlass
-    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
-    : ENTRY_LINEN.spring;
 
   // (Re)hydrate the form whenever a new seed arrives.
   useEffect(() => {
@@ -344,11 +337,11 @@ export function AutomationEditor({
           onClick={onClose}
         >
           <motion.div
-            className="auto-editor glass-surface glass-radius-md w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+            className="auto-editor surface-panel surface-radius-md w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={panelTransition}
+            transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
@@ -421,7 +414,7 @@ export function AutomationEditor({
                     setForm((p) => ({ ...p, auto_approve: !p.auto_approve }));
                   }}
                 >
-                  <GlassSwitch
+                  <SwitchControl
                     size="sm"
                     checked={form.auto_approve}
                     onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
@@ -469,9 +462,7 @@ function ScheduleChip({
   const wrapRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   // Anchor the portaled popover off the chip's rect. Portaling to <body>
-  // lets it escape the editor modal's `overflow-hidden` and its glass
-  // containing block — a glass-surface nested in another samples the
-  // parent, not the page (feedback_backdrop_filter_containing_block).
+  // lets it escape the editor modal's `overflow-hidden`.
   // Opens above-left: bottom edge above the chip, left edges aligned.
   const [coords, setCoords] = useState<{ bottom: number; left: number } | null>(null);
 
@@ -543,9 +534,9 @@ function ScheduleChip({
                 zIndex: 70,
                 transformOrigin: "bottom left",
               }}
-              className="glass-surface surface-popover w-[340px] grid gap-3 p-3"
+              className="surface-panel surface-popover w-[340px] grid gap-3 p-3"
             >
-              <GlassToggle
+              <SegmentedControl
                 size="sm"
                 value={schedule.kind}
                 onChange={(kind) => onChange({ ...schedule, kind: kind as ScheduleKind })}
@@ -753,4 +744,3 @@ function ScheduleField({
     </label>
   );
 }
-

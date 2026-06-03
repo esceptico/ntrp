@@ -226,7 +226,7 @@ export function BudgetDial() {
                 zIndex: 60,
                 transformOrigin: "bottom right",
               }}
-              className="glass-surface surface-popover w-[300px] p-3 text-sm"
+              className="surface-panel surface-popover w-[300px] p-3 text-sm"
             >
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium text-muted">Context budget</span>

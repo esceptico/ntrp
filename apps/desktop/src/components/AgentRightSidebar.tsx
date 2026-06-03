@@ -415,7 +415,7 @@ export function AgentRightSidebar() {
         animate={{ x: collapsed ? panelTranslateWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
         style={{ width: RIGHT_PANEL_BODY_WIDTH }}
-        className="glass-surface glass-radius-md absolute top-2 right-2 z-40 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
+        className="surface-panel surface-radius-md absolute top-2 right-2 z-40 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
       >
         {/* Drag region height tuned so the "Active" label's vertical
             center sits at viewport y=25 — same eye-line as the toggle

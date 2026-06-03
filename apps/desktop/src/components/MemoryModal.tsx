@@ -39,7 +39,7 @@ export function MemoryModal() {
       header={{ title: "Memory", actions: tabs }}
       size="w-[min(1280px,calc(100vw-32px))] h-[min(820px,calc(100vh-32px))] sm:w-[min(1280px,calc(100vw-80px))] sm:h-[min(820px,calc(100vh-80px))]"
     >
-      {/* Inset border under the title row — single delimiter, no nested glass. */}
+      {/* Inset border under the title row — single delimiter. */}
       <div className="flex min-h-0 flex-col border-t border-line-soft">
         <MemoryPane tab={tab} onTab={setTab} />
       </div>

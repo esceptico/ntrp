@@ -66,7 +66,7 @@ export function SessionContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="glass-surface surface-popover fixed z-50 w-[220px] py-1"
+      className="surface-panel surface-popover fixed z-50 w-[220px] py-1"
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >

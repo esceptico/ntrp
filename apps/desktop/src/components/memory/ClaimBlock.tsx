@@ -18,8 +18,7 @@ export interface ClaimOp {
  *  accent gutter on hover; clicking lifts it into an inline editor offering
  *  Edit (supersede with new text), Supersede (explicit successor), Accept
  *  (confirm), and Remove-from-lens (reject). The claim survives every op —
- *  never-delete. The editor is a sibling-elevated card (glass drop shadow),
- *  not a modal, so it samples the page surface, not the slab. */
+ *  never-delete. The editor is a sibling-elevated card, not a modal. */
 export function ClaimBlock({
   block,
   editing,
@@ -142,7 +141,7 @@ function ClaimEditor({
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={SPRING_CARD}
-      className="glass-surface surface-popover relative z-10 my-1 min-w-0 p-2.5"
+      className="surface-panel surface-popover relative z-10 my-1 min-w-0 p-2.5"
     >
       <textarea
         ref={taRef}

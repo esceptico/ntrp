@@ -362,7 +362,7 @@ export function SuggestionCard({
           onPick(suggestion);
         }
       }}
-      className="group/suggestion glass-surface glass-radius-sm relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="group/suggestion surface-panel surface-radius-sm relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1.5 pr-6">
@@ -460,7 +460,7 @@ function AutomationCard({
         }
       }}
       className={clsx(
-        "group/auto-card glass-surface glass-radius-sm relative grid gap-2 p-3.5 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
         editable && "cursor-pointer",
       )}
     >
@@ -630,7 +630,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={onPick}
-      className="glass-surface glass-radius-sm cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="surface-panel surface-radius-sm cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">

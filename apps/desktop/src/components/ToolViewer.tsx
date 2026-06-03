@@ -11,8 +11,7 @@ import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { ScrollBlurTop } from "./ScrollBlur";
 import {
-  ENTRY_GLASS,
-  ENTRY_LINEN,
+  ENTRY_PANEL,
   EASE_DECELERATE,
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
@@ -36,11 +35,6 @@ function formatMaybeJson(raw: string | undefined): { body: string; lang: string 
 export function ToolViewer() {
   const item = useStore((s) => s.viewingTool);
   const close = useStore((s) => s.setViewingTool);
-  const material = useStore((s) => s.prefs.material);
-  const isGlass = material === "glass";
-  const panelTransition = isGlass
-    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
-    : ENTRY_LINEN.spring;
 
   // Re-read the live item from the store so a streaming result patches in
   // while the viewer is open. The selector returns a stable reference for
@@ -129,11 +123,11 @@ export function ToolViewer() {
           onClick={() => close(null)}
         >
           <motion.div
-            className="glass-surface glass-radius-md w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={panelTransition}
+            transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">

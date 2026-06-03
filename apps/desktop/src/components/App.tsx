@@ -37,7 +37,6 @@ import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useAutomationEvents } from "../hooks/useAutomationEvents";
 import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
 import { useThemeEffect } from "../lib/theme";
-import { useGlassEffect } from "../lib/glass";
 import { bootstrap, createSession, sendMessage } from "../actions";
 
 function useHash(): string {
@@ -81,7 +80,6 @@ export function App() {
   }, [sidebarWidth]);
 
   useThemeEffect();
-  useGlassEffect();
   useFullscreenClass();
 
   useEffect(() => {
@@ -176,7 +174,7 @@ export function App() {
        AnimatePresence). */
     <MotionConfig reducedMotion="user">
       <motion.div
-        className="glass-surface glass-radius-md absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] overflow-hidden"
+        className="surface-panel surface-radius-md absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] overflow-hidden"
         initial={false}
         animate={{ x: sidebarHidden ? -sidebarWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}

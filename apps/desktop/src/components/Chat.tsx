@@ -93,11 +93,10 @@ export function Chat() {
   const sessionId = useStore((s) => s.currentSessionId);
   const hasApproval = useStore((s) => s.pendingApprovals.length > 0);
 
-  // Composer overlays the bottom of the message scroll area so messages
-  // pass behind its glass via backdrop-filter (Rauno's Depth essay:
-  // "Shoot through a surface"). The scroll area needs padding-bottom
-  // equal to the bottom stack's actual height so the last message
-  // clears the composer when scrolled to the end. Height is dynamic
+  // Composer overlays the bottom of the message scroll area. The scroll
+  // area needs padding-bottom equal to the bottom stack's actual height
+  // so the last message clears the composer when scrolled to the end.
+  // Height is dynamic
   // (textarea auto-resize, approval banner appears/disappears), so we
   // observe it and write to `--chat-bottom-h` consumed by
   // `.scroll-messages` padding-bottom + the jump-to-bottom pill offset.
@@ -141,11 +140,8 @@ export function Chat() {
         <div className="absolute top-0 left-0 right-0 z-10">
           <ChatHeader />
         </div>
-        {/* SidebarToggle lives outside the glassy header — backdrop-filter
-            creates a containing block for `position: fixed` descendants,
-            which would tether the toggle to the header instead of the
-            viewport. Keeping it at the main level preserves its fixed-
-            to-viewport anchor near the macOS traffic lights. */}
+        {/* SidebarToggle lives outside the header so it keeps its fixed
+            viewport anchor near the macOS traffic lights. */}
         <SidebarToggle />
         <div
           ref={bottomStackRef}

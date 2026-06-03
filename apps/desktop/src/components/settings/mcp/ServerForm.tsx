@@ -13,7 +13,7 @@ import {
 import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
 import { ICON } from "../../../lib/icons";
-import { GlassToggle } from "../../GlassToggle";
+import { SegmentedControl } from "../../SegmentedControl";
 import { LabeledField } from "../Field";
 import { type KeyVal } from "./editors";
 import { buildMCPServerPayload, type MCPAuthMode } from "./payload";
@@ -153,7 +153,7 @@ export function ServerForm({
             {transport === "stdio" ? "STDIO" : "Streamable HTTP"}
           </div>
         ) : (
-          <GlassToggle
+          <SegmentedControl
             size="sm"
             value={transport}
             onChange={(v) => setTransport(v as MCPTransport)}

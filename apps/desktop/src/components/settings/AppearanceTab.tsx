@@ -5,19 +5,16 @@ import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, t
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
-  type Material,
   type PaletteId,
   type ThemeChoice,
   type ThinkingAnimation,
   type ThinkingIntensity,
 } from "../../store";
-import { DEFAULT_GLASS_PREFS } from "../../store/prefs";
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
-import { GlassToggle } from "../GlassToggle";
-import { GlassSwitch } from "../GlassSwitch";
+import { SegmentedControl } from "../SegmentedControl";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -43,10 +40,7 @@ export function AppearanceTab() {
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
-  const glass = useStore((s) => s.prefs.glass);
-  const material = useStore((s) => s.prefs.material);
   const setPref = useStore((s) => s.setPref);
-  const isGlass = material === "glass";
 
   return (
     <div className="grid gap-6">
@@ -55,7 +49,7 @@ export function AppearanceTab() {
           title="Mode"
           hint="Light, Dark, or follow your system preference."
           control={
-            <GlassToggle
+            <SegmentedControl
               size="sm"
               value={theme}
               onChange={(v) => setPref("theme", v as ThemeChoice)}
@@ -87,7 +81,7 @@ export function AppearanceTab() {
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
           control={
-            <GlassToggle
+            <SegmentedControl
               size="sm"
               value={intensity}
               onChange={(v) => setPref("thinkingIntensity", v as ThinkingIntensity)}
@@ -108,123 +102,7 @@ export function AppearanceTab() {
         </div>
       </section>
 
-      {/* === Material ===
-          Same .glass-surface CSS class, two recipes swapped via
-          :root[data-material]. Glass = translucent + backdrop-filter
-          (Tint/Blur/Saturate apply). Linen = solid + hairline ring +
-          drop shadow (only Rim applies). Sliders are only rendered
-          when they have effect — no dimmed dead UI. */}
-      <section className="surface-rail divide-y divide-line-soft/50">
-        <SettingRow
-          title="Glass material"
-          hint="Translucent surfaces with backdrop blur. Off = Linen — solid panels with a hairline ring."
-          control={
-            <GlassSwitch
-              size="sm"
-              checked={isGlass}
-              onChange={(next) => setPref("material", (next ? "glass" : "linen") as Material)}
-              aria-label="Use glass material"
-            />
-          }
-        />
-        {isGlass && (
-          <>
-            <SliderRow
-              title="Tint"
-              hint="Opacity of the surface color over the backdrop."
-              value={glass.tint}
-              min={0}
-              max={100}
-              unit="%"
-              onChange={(v) => setPref("glass", { ...glass, tint: v })}
-            />
-            <SliderRow
-              title="Blur"
-              hint="Backdrop blur radius (capped at 18px — two glass layers can stack at runtime; per-layer must stay under 20px per glass-design.md)."
-              value={glass.blur}
-              min={0}
-              max={18}
-              unit="px"
-              onChange={(v) => setPref("glass", { ...glass, blur: v })}
-            />
-            <SliderRow
-              title="Saturate"
-              hint="Color intensity pulled from behind the surface."
-              value={glass.saturate}
-              min={0}
-              max={250}
-              unit="%"
-              onChange={(v) => setPref("glass", { ...glass, saturate: v })}
-            />
-          </>
-        )}
-        <SliderRow
-          title="Rim"
-          hint="Top-edge specular highlight strength."
-          value={glass.rim}
-          min={0}
-          max={100}
-          unit="%"
-          onChange={(v) => setPref("glass", { ...glass, rim: v })}
-        />
-        <div className="px-4 py-2.5 flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              setPref("glass", DEFAULT_GLASS_PREFS);
-              setPref("material", "linen");
-            }}
-            className="text-xs font-medium text-muted hover:text-ink transition-colors"
-          >
-            Reset to defaults
-          </button>
-        </div>
-      </section>
     </div>
-  );
-}
-
-/** Slider in a SettingRow's control slot — title/hint live on the row
- *  (matches every other Appearance row), so the slider itself is just
- *  the input + value readout. Fixed-width track keeps the right edge
- *  aligned across rows. */
-function SliderRow({
-  title,
-  hint,
-  value,
-  min,
-  max,
-  unit,
-  onChange,
-}: {
-  title: string;
-  hint: string;
-  value: number;
-  min: number;
-  max: number;
-  unit: string;
-  onChange: (next: number) => void;
-}) {
-  return (
-    <SettingRow
-      title={title}
-      hint={hint}
-      control={
-        <div className="flex items-center gap-3 w-[220px]">
-          <input
-            type="range"
-            value={value}
-            min={min}
-            max={max}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="flex-1 accent-accent cursor-pointer"
-          />
-          <span className="w-12 text-right text-sm text-ink-soft tabular-nums font-mono">
-            {Math.round(value)}{unit}
-          </span>
-        </div>
-      }
-    />
   );
 }
 
@@ -433,7 +311,7 @@ function PalettePicker({
           <div
             ref={popoverRef}
             style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="glass-surface surface-popover fixed z-[60] py-1"
+            className="surface-panel surface-popover fixed z-[60] py-1"
           >
             {PALETTES.map((p) => (
               <PaletteRow

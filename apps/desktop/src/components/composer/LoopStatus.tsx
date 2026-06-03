@@ -71,11 +71,9 @@ export function LoopStatusBar() {
     };
   }, [sessionId]);
 
-  // Hover popover is portaled to document.body so it can use a real
-  // `backdrop-filter` — otherwise the composer form's own glass
-  // backdrop-filter would neutralize the child's blur (see
-  // `feedback_backdrop_filter_containing_block.md`). Open state is
-  // hover-bridged: button hover shows; popover hover keeps it open;
+  // Hover popover is portaled to document.body so it can escape the
+  // composer panel. Open state is hover-bridged: button hover shows;
+  // popover hover keeps it open;
   // either leaving hides after a brief delay so the user can move the
   // cursor across the gap.
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -148,7 +146,7 @@ export function LoopStatusBar() {
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
           style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-          className="glass-surface surface-popover w-[360px] p-3"
+          className="surface-panel surface-popover w-[360px] p-3"
         >
           <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
           <div className="space-y-1">
@@ -209,7 +207,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
       <div
         role="dialog"
         aria-label="Loop detail"
-        className="glass-surface glass-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto]"
+        className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-line">

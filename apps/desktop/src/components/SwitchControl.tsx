@@ -1,6 +1,6 @@
 import { CSSProperties, Ref } from "react";
 
-interface GlassSwitchProps {
+interface SwitchControlProps {
   checked: boolean;
   onChange: (next: boolean) => void;
   size?: "sm" | "md";
@@ -15,7 +15,7 @@ const SIZES = {
   md: { w: 36, h: 22, knob: 18, offMin: 2, onMax: 16 },
 } as const;
 
-export function GlassSwitch({
+export function SwitchControl({
   checked,
   onChange,
   size = "md",
@@ -23,7 +23,7 @@ export function GlassSwitch({
   className,
   "aria-label": ariaLabel,
   ref,
-}: GlassSwitchProps) {
+}: SwitchControlProps) {
   const sz = SIZES[size];
   const tx = checked ? sz.onMax : sz.offMin;
 
@@ -39,8 +39,8 @@ export function GlassSwitch({
   };
 
   const classes = [
-    "glass-switch",
-    checked ? "glass-switch-on" : null,
+    "switch-control",
+    checked ? "switch-control-on" : null,
     className,
   ]
     .filter(Boolean)
@@ -58,9 +58,9 @@ export function GlassSwitch({
       className={classes}
       style={trackStyle}
     >
-      <span aria-hidden className="glass-switch-knob" style={knobStyle} />
+      <span aria-hidden className="switch-control-knob" style={knobStyle} />
     </button>
   );
 }
 
-export default GlassSwitch;
+export default SwitchControl;

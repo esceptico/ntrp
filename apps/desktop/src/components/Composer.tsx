@@ -185,12 +185,10 @@ export function Composer() {
   // This gives keyboard submits the same tactile feedback as a mouse
   // click — the button shrinks for ~140ms each time submit() runs.
   const [sendPressing, flashSendPress] = useTimeoutFlag(140);
-  // Composer-level send acknowledgement — the inner ring pulses
-  // brighter for a single beat (280ms) on submit. Uses the existing
-  // glass edge specular as its vocabulary, so the material itself
-  // responds to the action rather than a new animation layer being
-  // grafted on top. Composes alongside the thinking-rim ::before
-  // since this lives on a separate ::after pseudo-element in CSS.
+  // Composer-level send acknowledgement — the panel fill brightens for
+  // a single beat (280ms) on submit. It composes alongside the
+  // thinking-rim ::before since this lives on a separate ::after
+  // pseudo-element in CSS.
   const [justSent, flashJustSent] = useTimeoutFlag(280);
 
   useEffect(() => {
@@ -302,12 +300,8 @@ export function Composer() {
         <GoalProposalCard objective={pendingGoalProposal.objective} />
       )}
       {/* Wrapper exists so the CommandPicker can sit as a sibling of
-          the form rather than a child. The form has backdrop-filter
-          (`.glass-surface`), which establishes a backdrop-sampling
-          containing block — child backdrop-filters would sample the
-          already-filtered form bg instead of the chat content beneath,
-          producing a flat/invisible blur. Lifting the picker out lets
-          its own glass material sample from the page directly. */}
+          the form rather than a child and avoid being clipped by the
+          composer panel. */}
       <div className="composer-wrap relative max-w-[760px] mx-auto">
         {pickerOpen && query !== null && (
           <CommandPicker query={query} onSelect={applyPickerSelection} />
@@ -324,7 +318,7 @@ export function Composer() {
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}
-        className="composer-card glass-surface glass-radius-md relative flex flex-col"
+        className="composer-card surface-panel surface-radius-md relative flex flex-col"
       >
         {editingId && (
           <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
@@ -516,7 +510,7 @@ export function Composer() {
 function GoalProposalCard({ objective }: { objective: string }) {
   return (
     <div className="max-w-[760px] mx-auto mb-2">
-      <div className="glass-surface glass-radius-md flex items-start gap-2 px-3 py-2">
+      <div className="surface-panel surface-radius-md flex items-start gap-2 px-3 py-2">
         <Target size={ICON.MD} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <div className="text-2xs font-medium text-muted">Proposed goal</div>

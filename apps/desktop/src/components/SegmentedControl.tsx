@@ -51,7 +51,7 @@ function normalize(opt: Option): NormalizedOption {
   return typeof opt === "string" ? { value: opt, label: opt } : opt;
 }
 
-export function GlassToggle({
+export function SegmentedControl({
   options,
   value,
   onChange,
@@ -162,7 +162,7 @@ export function GlassToggle({
     opacity: pill ? 1 : 0,
   };
 
-  const classes = ["glass-toggle", className].filter(Boolean).join(" ");
+  const classes = ["segmented-control", className].filter(Boolean).join(" ");
 
   const btnSizing: CSSProperties = {
     padding: `0 ${sz.padX}px`,
@@ -177,7 +177,7 @@ export function GlassToggle({
       style={trackStyle}
       onKeyDown={onKeyDown}
     >
-      <span aria-hidden className="glass-toggle-pill" style={pillStyle} />
+      <span aria-hidden className="segmented-control-pill" style={pillStyle} />
       {items.map((opt, i) => {
         const active = opt.value === value;
         return (
@@ -209,4 +209,4 @@ export function GlassToggle({
   );
 }
 
-export default GlassToggle;
+export default SegmentedControl;

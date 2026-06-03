@@ -8,8 +8,8 @@
  */
 
 // ─── Ring alphas (universal) ─────────────────────────────────
-// Used by linen rings, glass inset rings, focus rings. Theme-aware
-// variants resolve via `:root.dark` overrides in styles.css.
+// Used by panel rings and focus rings. Theme-aware variants resolve via
+// `:root.dark` overrides in styles.css.
 
 export const RING_LIGHT = "var(--ring-light)";
 export const RING_LIGHT_SOFT = "var(--ring-light-soft)";
@@ -26,13 +26,6 @@ export const SHADOW_LINEN_REST = "var(--shadow-linen-rest)";
 export const SHADOW_LINEN_HOVER = "var(--shadow-linen-hover)";
 export const SHADOW_LINEN_POPOVER = "var(--shadow-linen-popover)";
 export const SHADOW_LINEN_MODAL = "var(--shadow-linen-modal)";
-
-// ─── Glass rim + drop ────────────────────────────────────────
-
-export const GLASS_DROP_LIGHT = "var(--glass-drop-light)";
-export const GLASS_DROP_DARK = "var(--glass-drop-dark)";
-export const GLASS_RIM_LIGHT = "var(--glass-rim-light)";
-export const GLASS_RIM_DARK = "var(--glass-rim-dark)";
 
 // ─── Focus ring ──────────────────────────────────────────────
 // Drives `:focus-visible` across interactive primitives in Phase 3.

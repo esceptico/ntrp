@@ -92,7 +92,7 @@ export function GraphView({
         <MemoryGraph graph={graph} rootId={rootId} selectedId={selected?.id ?? null} onSelect={onSelect} centerRequest={center} />
       )}
 
-      {/* Peel-in inspector — sibling-anchored glass card, slides from the right. */}
+      {/* Peel-in inspector — sibling-anchored panel, slides from the right. */}
       <AnimatePresence>
         {selected && (
           <motion.div

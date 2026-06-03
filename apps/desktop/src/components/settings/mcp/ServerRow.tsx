@@ -5,7 +5,7 @@ import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "../../../a
 import { useMutationState } from "../../../lib/hooks";
 import { ICON } from "../../../lib/icons";
 import { IconButton } from "../../IconButton";
-import { GlassSwitch } from "../../GlassSwitch";
+import { SwitchControl } from "../../SwitchControl";
 
 export function ServerRow({
   server,
@@ -81,7 +81,7 @@ export function ServerRow({
         <IconButton onClick={onEdit} aria-label="Configure">
           <SettingsIcon size={ICON.MD} strokeWidth={2} />
         </IconButton>
-        <GlassSwitch
+        <SwitchControl
           size="sm"
           checked={server.enabled}
           onChange={onToggle}

@@ -4,8 +4,8 @@ import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "..
 import { fetchServerConfig, updateServerConfig } from "../../../actions";
 import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
-import { GlassToggle } from "../../GlassToggle";
-import { GlassSwitch } from "../../GlassSwitch";
+import { SegmentedControl } from "../../SegmentedControl";
+import { SwitchControl } from "../../SwitchControl";
 import { SectionHeader } from "../../SectionHeader";
 
 const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
@@ -64,7 +64,7 @@ export function ToolsSection({
           const checked = enabledNames.has(t.name);
           return (
             <li key={t.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-2">
-              <GlassSwitch
+              <SwitchControl
                 size="sm"
                 checked={checked}
                 disabled={busy}
@@ -87,7 +87,7 @@ export function ToolsSection({
                   </div>
                 )}
               </div>
-              <GlassToggle
+              <SegmentedControl
                 size="sm"
                 value={overrides[t.full_name] ?? baseDecision(t)}
                 onChange={(v) => setToolDecision(t, v as ToolOverrideDecision)}

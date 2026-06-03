@@ -6,8 +6,7 @@ import { useStore } from "../store";
 import { respondToApproval } from "../actions";
 import {
   modalOriginTransform,
-  ENTRY_GLASS,
-  ENTRY_LINEN,
+  ENTRY_PANEL,
   EASE_DECELERATE,
 } from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
@@ -39,11 +38,6 @@ export function ApprovalReviewModal() {
   );
   const close = useStore((s) => s.setReviewingApproval);
   const liveOrigin = useStore((s) => s.modalOrigin);
-  const material = useStore((s) => s.prefs.material);
-  const isGlass = material === "glass";
-  const panelTransition = isGlass
-    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
-    : ENTRY_LINEN.spring;
 
   // Same snapshot pattern as PageModal — exit needs the origin that was
   // present at open time, even after the store has cleared it.
@@ -75,7 +69,7 @@ export function ApprovalReviewModal() {
           onClick={() => close(null)}
         >
           <motion.div
-            className="glass-surface glass-radius-md w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
             initial={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
@@ -87,7 +81,7 @@ export function ApprovalReviewModal() {
                 ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
                 : { opacity: 0, scale: 0.96, y: 6 }
             }
-            transition={panelTransition}
+            transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center gap-2 px-5 pt-4 pb-3 min-w-0">

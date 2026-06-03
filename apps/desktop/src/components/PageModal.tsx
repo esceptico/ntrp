@@ -3,11 +3,9 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import {
-  ENTRY_GLASS,
-  ENTRY_LINEN,
+  ENTRY_PANEL,
   EASE_DECELERATE,
 } from "../lib/tokens/motion";
-import { useStore } from "../store";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
@@ -55,7 +53,7 @@ const DEFAULT_GRID = "grid-rows-[auto_minmax(0,1fr)]";
 /** Standard portal+backdrop+panel modal shell used across Settings,
  *  Automations, Archive, Memory. Callers compose their own header / body
  *  inside `children`. Closes on backdrop click and Escape (unless
- *  `disableEscape` is set). Corner radius comes from .glass-radius-md —
+ *  `disableEscape` is set). Corner radius comes from .surface-radius-md —
  *  callers cannot override (was the source of per-modal radius drift). */
 export function PageModal({
   open,
@@ -67,13 +65,6 @@ export function PageModal({
   disableEscape,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
-  const material = useStore((s) => s.prefs.material);
-  const isGlass = material === "glass";
-  // Glass entries decelerate (slab "lands"); linen entries use the modal
-  // spring so body + surface arrive together (spec §3.3).
-  const panelTransition = isGlass
-    ? { duration: ENTRY_GLASS.duration, ease: ENTRY_GLASS.ease }
-    : ENTRY_LINEN.spring;
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -91,11 +82,11 @@ export function PageModal({
           onClick={onClose}
         >
           <motion.div
-            className={`glass-surface glass-radius-md ${size} grid ${grid} overflow-hidden`}
-            initial={{ opacity: 0, scale: isGlass ? 0.96 : 0.95, y: 6 }}
+            className={`surface-panel surface-radius-md ${size} grid ${grid} overflow-hidden`}
+            initial={{ opacity: 0, scale: 0.95, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: isGlass ? 0.96 : 0.95, y: 6 }}
-            transition={panelTransition}
+            exit={{ opacity: 0, scale: 0.95, y: 6 }}
+            transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >
             {header && (
@@ -118,17 +109,8 @@ export function PageModal({
                 </div>
               </header>
             )}
-            {/* Phase 5: Glass entry — content fades 100 ms after the slab
-                lands so the surface "materializes first, content surfaces
-                through it" (research §3). Linen mode shows them together.
-                Chose option (b) from the spec: wrap children in a motion.div
-                that occupies the body row of the panel grid. Only applied
-                when the structured `header` shell is in use — callers that
-                override `grid` (e.g. SettingsModal with a sidebar layout)
-                pass no header and supply their own multi-cell children, so
-                wrapping would collapse them into a single cell. Those
-                modals fall back to a single immediate fade, which matches
-                the slab opacity already coming from the parent. */}
+            {/* Keep structured header/body shells in one grid cell; callers
+                with custom grids supply their own children directly. */}
             {header ? (
               <motion.div
                 className="min-h-0 min-w-0 grid grid-rows-[minmax(0,1fr)]"
@@ -138,7 +120,6 @@ export function PageModal({
                 transition={{
                   duration: 0.18,
                   ease: EASE_DECELERATE,
-                  delay: isGlass ? 0.1 : 0,
                 }}
               >
                 {children}
