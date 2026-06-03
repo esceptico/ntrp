@@ -29,10 +29,12 @@ const DEBOUNCE = 220;
 
 export function ClaimsView({
   config,
+  scope,
   focusId,
   onProvenance,
 }: {
   config: AppConfig;
+  scope: { kind: "user" | "project" | "session"; key: string | null };
   /** External request to open a specific claim (peel-in from a lens). */
   focusId: string | null;
   onProvenance: (claimId: string) => void;
@@ -50,7 +52,7 @@ export function ClaimsView({
 
   const runDefault = useCallback(() => {
     setLoading(true);
-    listMemoryItems(config, { limit: 100 })
+    listMemoryItems(config, { limit: 100, scope_kind: scope.kind, scope_key: scope.key ?? undefined })
       .then((r) => {
         setItems(r.items);
         setDegraded(false);
@@ -59,7 +61,7 @@ export function ClaimsView({
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [config]);
+  }, [config, scope.kind, scope.key]);
 
   useEffect(() => {
     const q = query.trim();
@@ -73,7 +75,7 @@ export function ClaimsView({
     // overwrite newer results. Drop stale responses (same guard as ClaimDetail).
     let alive = true;
     const handle = setTimeout(() => {
-      searchMemory(config, { q, mode: "fts", limit: 50 })
+      searchMemory(config, { q, mode: "fts", limit: 50, scope_kind: scope.kind, scope_key: scope.key ?? undefined })
         .then((r: MemorySearchResponse) => {
           if (!alive) return;
           const list = r.mode === "fts" ? r.items : r.items.map((i) => i.item);
@@ -92,7 +94,7 @@ export function ClaimsView({
       alive = false;
       clearTimeout(handle);
     };
-  }, [query, config, runDefault]);
+  }, [query, config, runDefault, scope.kind, scope.key]);
 
   return (
     <PaneShell

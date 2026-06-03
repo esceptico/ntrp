@@ -429,6 +429,18 @@ class MemoryStore:
         )
         return int(rows[0]["n"]) if rows else 0
 
+    async def scopes_with_counts(self) -> list[dict]:
+        """Every scope that holds active claims, with counts — so the UI can offer a
+        scope selector instead of silently showing only user scope."""
+        rows = await self.conn.execute_fetchall(
+            "SELECT scope_kind, scope_key, COUNT(*) AS n FROM memory_items "
+            "WHERE status = 'active' GROUP BY scope_kind, scope_key ORDER BY n DESC"
+        )
+        return [
+            {"scope_kind": r["scope_kind"], "scope_key": r["scope_key"], "count": int(r["n"])}
+            for r in rows
+        ]
+
     async def distinct_subjects(self, scope: Scope) -> list[tuple[str, int]]:
         """Every distinct canonical_subject EVER seen in scope (any status), with its
         ACTIVE claim count, live-subjects-first. NO recency/volume limit — the

@@ -14,7 +14,15 @@ import { provenanceLabel, provenanceTone, relativeTime, scopeLabel } from "./len
 /** The claim graph. By default the whole in-scope graph (all claims + claim↔claim
  *  edges); click-to-focus re-roots a bounded BFS on a claim. Lenses are never
  *  nodes (the locked model: memory is claims only). */
-export function GraphView({ config, focusId }: { config: AppConfig; focusId: string | null }) {
+export function GraphView({
+  config,
+  scope,
+  focusId,
+}: {
+  config: AppConfig;
+  scope: { kind: "user" | "project" | "session"; key: string | null };
+  focusId: string | null;
+}) {
   const [rootId, setRootId] = useState<string | null>(focusId);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
@@ -32,7 +40,7 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
       // No root → whole-graph (default). A root → click-to-focus BFS.
       const req = id
         ? getMemoryGraph(config, id, { direction: "both", depth: 3 })
-        : getWholeGraph(config);
+        : getWholeGraph(config, { scope_kind: scope.kind, scope_key: scope.key ?? undefined });
       req
         .then((g) => {
           // Drop a stale response: rootId may have changed (and a newer request
@@ -49,7 +57,7 @@ export function GraphView({ config, focusId }: { config: AppConfig; focusId: str
           if (alive()) setLoading(false);
         });
     },
-    [config],
+    [config, scope.kind, scope.key],
   );
 
   useEffect(() => {

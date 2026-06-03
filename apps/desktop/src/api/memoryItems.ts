@@ -114,6 +114,16 @@ export interface MemoryItemsResponse {
   items: MemoryItem[];
   limit: number;
 }
+export interface MemoryScope {
+  scope_kind: ScopeKind;
+  scope_key: string | null;
+  count: number;
+}
+
+export function listScopes(config: AppConfig) {
+  return apiWithConfig<{ scopes: MemoryScope[] }>(config, `/admin/memory/scopes`);
+}
+
 export interface ListMemoryItemsParams extends ScopeParams {
   subject?: string;
   status?: MemoryStatus | ""; // "" => all statuses

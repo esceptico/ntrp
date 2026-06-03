@@ -44,9 +44,11 @@ import { criterionPreview, lensColor, lensProvenanceLabel, lensProvenanceTone, l
 
 export function LensesView({
   config,
+  scope,
   onPeekClaim,
 }: {
   config: AppConfig;
+  scope: { kind: "user" | "project" | "session"; key: string | null };
   onPeekClaim: (claimId: string) => void;
 }) {
   const [lenses, setLenses] = useState<LensWithCoverage[]>([]);
@@ -58,7 +60,7 @@ export function LensesView({
 
   const reloadList = useCallback(() => {
     setLoading(true);
-    listMemoryLenses(config)
+    listMemoryLenses(config, { scope_kind: scope.kind, scope_key: scope.key ?? undefined })
       .then((r) => {
         setLenses(r.lenses);
         setError(null);
@@ -66,7 +68,7 @@ export function LensesView({
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [config]);
+  }, [config, scope.kind, scope.key]);
 
   useEffect(() => {
     reloadList();

@@ -203,6 +203,12 @@ async def _require_active_lens(store, lens_id: str) -> LensRow:
 # --- 1: list claims/lenses -------------------------------------------
 
 
+@router.get("/scopes")
+async def list_scopes(knowledge: KnowledgeRuntime = Depends(_knowledge)):
+    """Scopes that hold active claims (+counts) so the UI can offer a scope switcher."""
+    return {"scopes": await knowledge.memory.scopes_with_counts()}
+
+
 @router.get("/items")
 async def list_items(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
