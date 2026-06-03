@@ -27,12 +27,13 @@ function styleFor(variant: ChipVariant, tone: ChipTone, active: boolean): string
     if (tone === "ink") return "bg-ink text-on-ink";
     return "bg-surface text-ink border border-line-soft";
   }
-  // ghost
+  // ghost — keep a constant 1px border across states so toggling `active`
+  // never reflows the chip (transparent until the neutral-active border).
   if (!active) {
-    return "text-muted hover:bg-surface-soft hover:text-ink";
+    return "border border-transparent text-muted hover:bg-surface-soft hover:text-ink";
   }
-  if (tone === "accent") return "bg-accent-soft text-accent-strong hover:bg-accent-soft/80";
-  if (tone === "ink") return "bg-ink text-on-ink";
+  if (tone === "accent") return "border border-transparent bg-accent-soft text-accent-strong hover:bg-accent-soft/80";
+  if (tone === "ink") return "border border-transparent bg-ink text-on-ink";
   return "bg-surface text-ink shadow-[var(--shadow-sm)] border border-line-soft";
 }
 

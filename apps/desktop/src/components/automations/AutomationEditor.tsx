@@ -555,7 +555,7 @@ function ScheduleChip({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: MOTION.fast, ease: EASE_OUT }}
-                className="grid gap-2.5"
+                className="grid gap-2.5 content-start min-h-[216px]"
               >
                 {schedule.kind === "at" && (
                   <>
