@@ -148,6 +148,7 @@ export const useStore = create<State & Actions>((set) => ({
   error: null,
   draft: "",
   settingsOpen: false,
+  settingsTab: null,
   connectionDraft: { ...DEFAULT_CONFIG },
   connectionError: null,
   connectionSaving: false,
@@ -463,9 +464,10 @@ export const useStore = create<State & Actions>((set) => ({
       usage: { ...s.usage, lastPrompt, messageCount },
     })),
 
-  openSettings: (origin) =>
+  openSettings: (origin, tab) =>
     set((s) => ({
       settingsOpen: true,
+      settingsTab: tab ?? null,
       connectionDraft: { ...s.config },
       connectionError: null,
       modalOrigin: origin ?? null,

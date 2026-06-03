@@ -10,9 +10,18 @@ import {
   X,
 } from "lucide-react";
 import clsx from "clsx";
-import { cancelBackgroundTaskApi, listBackgroundTasksApi, type TodoStatus } from "../api";
+import {
+  cancelBackgroundTaskApi,
+  listBackgroundTasksApi,
+  type TodoStatus,
+} from "../api";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
-import { EASE_EMPHASIZED, MOTION, originFromEvent, SPRING_ROW_ENTRY } from "../lib/tokens/motion";
+import {
+  EASE_EMPHASIZED,
+  MOTION,
+  originFromEvent,
+  SPRING_ROW_ENTRY,
+} from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import { ScrollBlurTop } from "./ScrollBlur";
@@ -85,6 +94,13 @@ export function latestTodoListFromMessages(
 
 export const RIGHT_PANEL_WIDTH = 320;
 export const RIGHT_PANEL_BODY_WIDTH = 304;
+
+const COLLAPSED_STORAGE_KEY = "ntrp:right-panel:collapsed";
+
+function readCollapsedPref(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "false";
+}
 
 function useBackgroundTasksPoll(sessionId: string | null): void {
   const config = useStore((s) => s.config);
@@ -190,7 +206,7 @@ function Row({
             disabled={cancelling}
             title="Cancel"
             aria-label="Cancel"
-            className="grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/row:opacity-100 hover:text-bad transition-opacity disabled:opacity-40"
+            className="grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/row:opacity-100 hover:text-bad transition-opacity disabled:opacity-[0.45]"
           >
             <X size={10} strokeWidth={2.2} />
           </button>
@@ -324,13 +340,36 @@ function TodoSidebarSection({ todo }: { todo: TodoListState }) {
 function SectionHeader({ label, count }: { label: string; count?: number }) {
   return (
     <div className="flex items-baseline justify-between px-0.5 pt-0.5 pb-1">
-      <span className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+      <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">
         {label}
       </span>
       {count != null && count > 0 && (
         <span className="text-2xs text-faint tabular-nums">{count}</span>
       )}
     </div>
+  );
+}
+
+// The single load-bearing "needs you" signal: a run is paused waiting on
+// an approval. One amber row that opens the review modal.
+function ApprovalsRow() {
+  const count = useStore((s) => s.pendingApprovals.length);
+  const firstToolId = useStore((s) => s.pendingApprovals[0]?.toolId);
+  const review = useStore((s) => s.setReviewingApproval);
+  if (count === 0 || !firstToolId) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => review(firstToolId, originFromEvent(e.currentTarget))}
+      className="flex w-full items-center gap-2 rounded-[8px] bg-warn/10 px-2.5 py-2 text-left transition-colors hover:bg-warn/15"
+    >
+      <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-warn" aria-hidden />
+      <span className="flex-1 text-xs text-ink-soft">
+        {count} awaiting approval
+      </span>
+      <span className="shrink-0 text-2xs text-warn">Review →</span>
+    </button>
   );
 }
 
@@ -341,7 +380,14 @@ export function AgentRightSidebar() {
   const backgroundAgentRows = useStore((s) => s.backgroundAgents.rows);
   const openAutomations = useStore((s) => s.openAutomations);
   const todo = useStore((s) => latestTodoListFromMessages(s.order, s.messages));
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(readCollapsedPref);
+
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      const next = !v;
+      window.localStorage.setItem(COLLAPSED_STORAGE_KEY, String(next));
+      return next;
+    });
 
   useBackgroundTasksPoll(currentSessionId);
 
@@ -365,6 +411,8 @@ export function AgentRightSidebar() {
       ),
     [automations],
   );
+
+  const approvalCount = useStore((s) => s.pendingApprovals.length);
 
   const hasTodo = todo != null;
   const hasAgents = agents.length > 0;
@@ -391,7 +439,7 @@ export function AgentRightSidebar() {
           with the macOS traffic lights (light center y = 25). */}
       <button
         type="button"
-        onClick={() => setCollapsed((v) => !v)}
+        onClick={toggleCollapsed}
         title={collapsed ? "Show active" : "Hide active"}
         aria-label={collapsed ? `Show active${totalCount > 0 ? ` (${totalCount})` : ""}` : "Hide active"}
         className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
@@ -422,66 +470,69 @@ export function AgentRightSidebar() {
             icon and the macOS traffic-light center. (panel top-2 = 8px,
             label centered in h-[34px] → 8 + 17 = 25.) */}
         <div className="drag-spacer flex items-center justify-between gap-2 px-3 h-[34px] shrink-0">
-          <span className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+          <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">
             Active{totalCount > 0 ? ` · ${totalCount}` : ""}
           </span>
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollBlurTop />
-            {todo && <TodoSidebarSection todo={todo} />}
+            <div className="space-y-3">
+              <ApprovalsRow />
+              {todo && <TodoSidebarSection todo={todo} />}
 
-            {hasAgents && (
-              <section className={hasTodo ? "mt-3" : undefined}>
-                {sectionCount > 1 && <SectionHeader label="Agents" count={agents.length} />}
-                <div>
-                  {agents.map((agent) => (
-                    <BackgroundAgentRow
-                      key={`${agent.sessionId}:${agent.taskId}`}
-                      agent={agent}
-                    />
-                  ))}
+              {hasAgents && (
+                <section>
+                  {sectionCount > 1 && <SectionHeader label="Agents" count={agents.length} />}
+                  <div>
+                    {agents.map((agent) => (
+                      <BackgroundAgentRow
+                        key={`${agent.sessionId}:${agent.taskId}`}
+                        agent={agent}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {hasAutomations && (
+                <section>
+                  {sectionCount > 1 ? (
+                    <button
+                      type="button"
+                      onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
+                      className="block w-full text-left hover:text-ink transition-colors"
+                      title="Open automations"
+                    >
+                      <SectionHeader
+                        label="Automations"
+                        count={runningAutomations.length}
+                      />
+                    </button>
+                  ) : null}
+                  <div>
+                    {runningAutomations.map((automation) => (
+                      <AutomationRow
+                        key={automation.task_id}
+                        name={automation.name || automation.task_id}
+                        runningSince={automation.running_since!}
+                        status={automationStatuses[automation.task_id]}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {!visible && approvalCount === 0 && (
+                <div className="grid place-items-center min-h-[120px] px-3 text-center">
+                  <p className="text-xs text-muted leading-relaxed">
+                    No active agents or automations.
+                    <br />
+                    Background tasks will appear here.
+                  </p>
                 </div>
-              </section>
-            )}
-
-            {hasAutomations && (
-              <section className={hasTodo || hasAgents ? "mt-3" : undefined}>
-                {sectionCount > 1 ? (
-                  <button
-                    type="button"
-                    onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
-                    className="block w-full text-left hover:text-ink transition-colors"
-                    title="Open automations"
-                  >
-                    <SectionHeader
-                      label="Automations"
-                      count={runningAutomations.length}
-                    />
-                  </button>
-                ) : null}
-                <div>
-                  {runningAutomations.map((automation) => (
-                    <AutomationRow
-                      key={automation.task_id}
-                      name={automation.name || automation.task_id}
-                      runningSince={automation.running_since!}
-                      status={automationStatuses[automation.task_id]}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {!visible && (
-              <div className="grid place-items-center min-h-[120px] px-3 text-center">
-                <p className="text-xs text-faint leading-relaxed">
-                  No active agents or automations.
-                  <br />
-                  Background tasks will appear here.
-                </p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </motion.aside>

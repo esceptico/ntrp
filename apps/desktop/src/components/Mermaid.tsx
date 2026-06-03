@@ -340,7 +340,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
     flashCopied();
   };
   return (
-    <div className="my-[0.6em] px-3.5 py-3 border border-[rgba(184,68,43,0.18)] rounded-xl bg-bad-soft">
+    <div className="my-[0.6em] px-3.5 py-3 border border-bad/20 rounded-xl bg-bad-soft">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <strong className="text-xs font-semibold text-bad">Couldn't render diagram</strong>
         <button
@@ -348,7 +348,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
           onClick={() => void onCopy()}
           aria-label={copied ? "Copied" : "Copy source"}
           title={copied ? "Copied" : "Copy source"}
-          className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-[rgba(184,68,43,0.24)] text-bad cursor-pointer transition-[background-color,color] duration-150 ease-out hover:bg-[rgba(184,68,43,0.08)]"
+          className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-bad/25 text-bad cursor-pointer transition-[background-color,color,transform] duration-check ease-out hover:bg-bad-soft active:scale-[0.97]"
         >
           {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
         </button>

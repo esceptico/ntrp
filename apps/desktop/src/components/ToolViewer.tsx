@@ -13,6 +13,7 @@ import { ScrollBlurTop } from "./ScrollBlur";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
+  MOTION,
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
@@ -119,7 +120,7 @@ export function ToolViewer() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: EASE_DECELERATE }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
           onClick={() => close(null)}
         >
           <motion.div

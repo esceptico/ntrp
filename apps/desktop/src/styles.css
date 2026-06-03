@@ -178,6 +178,9 @@
   .skeleton::after {
     animation: none;
   }
+  .status-dot-breathe {
+    animation: none;
+  }
 }
 
 /* ─── Base ─────────────────────────────────────────────────── */
@@ -299,6 +302,15 @@ button:focus-visible,
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
+/* Compact variant — h-8, tighter radius/padding for grid-dense forms
+   (MCP server config). Inherits .input-field's hover + accent-focus
+   treatment so dense inputs match the rest of the app instead of a
+   bespoke faint-border focus. */
+.input-field-sm {
+  height: 2rem;
+  border-radius: 6px;
+  padding-inline: 0.625rem;
+}
 
 * {
   -electron-corner-smoothing: system-ui;
@@ -347,7 +359,7 @@ body.quick-capture-mode .quick-capture-card {
     inset 0 0 0 0.5px color-mix(in oklab, var(--color-ink) 10%, transparent),
     0 14px 38px -10px rgba(0, 0, 0, 0.32),
     0 2px 8px -2px rgba(0, 0, 0, 0.18);
-  transition: box-shadow 180ms ease;
+  transition: box-shadow var(--duration-palette) ease;
 }
 .quick-capture-card:focus-within {
   /* Subtle accent ring on focus — signals "ready, type here" without
@@ -441,78 +453,39 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
           mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
 }
 
-/* Scroll edge fade overlay. */
-.progressive-blur {
-  pointer-events: none;
-  overflow: visible;
-}
-.progressive-blur > div,
-.progressive-blur::before,
-.progressive-blur::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.scroll-mask-top-sentinel {
+/* Scroll edge blur — pinned to the top of the scroll viewport with sticky so
+   the blur's backdrop stays the live, scrolling page. A transform-based pin
+   would turn this wrapper into a backdrop root and the blur would sample
+   nothing. */
+.scroll-progressive-blur-top {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 1px;
-  margin-bottom: -1px;
+  height: 0;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-row) var(--ease-out-soft);
 }
-.scroll-mask-top {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.08) 20px, rgba(0,0,0,0.4) 56px, #000 120px);
-          mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.08) 20px, rgba(0,0,0,0.4) 56px, #000 120px);
+.scroll-progressive-blur-top[data-scrolled="true"] {
+  opacity: 1;
+}
+/* BlurEffect renders an absolutely-positioned wrapper; the sticky parent is
+   0-tall, so the band height and color veil live here. */
+.scroll-progressive-blur-layer {
+  height: 72px;
+  pointer-events: none !important;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-bg) 68%, transparent),
+    color-mix(in oklab, var(--color-bg) 22%, transparent) 58%,
+    transparent
+  );
 }
 
-.progressive-blur-bottom::before {
-  z-index: 1;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 34%, rgba(0,0,0,0) 54%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 34%, rgba(0,0,0,0) 54%);
-}
-.progressive-blur-bottom > div:nth-child(1) {
-  z-index: 2;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 22%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 22%, rgba(0,0,0,1) 38%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
-}
-.progressive-blur-bottom > div:nth-child(2) {
-  z-index: 3;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 44%, rgba(0,0,0,1) 58%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 96%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 44%, rgba(0,0,0,1) 58%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 96%);
-}
-.progressive-blur-bottom > div:nth-child(3) {
-  z-index: 4;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 66%, rgba(0,0,0,1) 82%, rgba(0,0,0,1) 100%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 66%, rgba(0,0,0,1) 82%, rgba(0,0,0,1) 100%);
-}
-.progressive-blur-top::before {
-  z-index: 4;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 18%, rgba(0,0,0,0) 42%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 18%, rgba(0,0,0,0) 42%);
-}
-.progressive-blur-top > div:nth-child(1) {
-  z-index: 3;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 10%, rgba(0,0,0,1) 28%, rgba(0,0,0,1) 48%, rgba(0,0,0,0) 70%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 10%, rgba(0,0,0,1) 28%, rgba(0,0,0,1) 48%, rgba(0,0,0,0) 70%);
-}
-.progressive-blur-top > div:nth-child(2) {
-  z-index: 2;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 36%, rgba(0,0,0,1) 52%, rgba(0,0,0,1) 72%, rgba(0,0,0,0) 92%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 36%, rgba(0,0,0,1) 52%, rgba(0,0,0,1) 72%, rgba(0,0,0,0) 92%);
-}
-.progressive-blur-top > div:nth-child(3) {
-  z-index: 1;
-  -webkit-mask: linear-gradient(to bottom, rgba(0,0,0,0) 58%, rgba(0,0,0,1) 76%, rgba(0,0,0,0) 100%);
-          mask: linear-gradient(to bottom, rgba(0,0,0,0) 58%, rgba(0,0,0,1) 76%, rgba(0,0,0,0) 100%);
-}
-.progressive-blur-bottom::after {
-  z-index: 5;
-  background: linear-gradient(to bottom, transparent 0%, color-mix(in oklab, var(--color-bg) 24%, transparent) 68%, color-mix(in oklab, var(--color-bg) 62%, transparent) 100%);
-}
-.progressive-blur-top::after {
-  z-index: 5;
-  background: linear-gradient(to top, transparent 0%, color-mix(in oklab, var(--color-bg) 24%, transparent) 68%, color-mix(in oklab, var(--color-bg) 62%, transparent) 100%);
+@media (prefers-reduced-motion: reduce) {
+  .scroll-progressive-blur-top {
+    transition: none;
+  }
 }
 .scroll-fade-bottom {
   -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
@@ -583,7 +556,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .app-row:hover {
   color: var(--color-ink);
 }
-button.app-row:not(:disabled):active {
+button.app-row:not(:disabled):active,
+.app-row[role="button"]:active {
   scale: 0.985;
 }
 .app-row[data-active="true"],
@@ -706,7 +680,7 @@ button.app-row:not(:disabled):active {
   background-color: transparent;
   border: 0;
   cursor: pointer;
-  transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease, transform 180ms ease;
+  transition: color var(--duration-row) ease, opacity var(--duration-row) ease, background-color var(--duration-row) ease, transform var(--duration-palette) ease;
 }
 .md .code-block-copy:hover,
 .md .code-block-copy:focus-visible {
@@ -718,7 +692,7 @@ button.app-row:not(:disabled):active {
   color: var(--color-accent);
   opacity: 1;
   background-color: var(--color-accent-soft);
-  animation: codeCopyFlash 180ms ease-out;
+  animation: codeCopyFlash var(--duration-palette) ease-out;
 }
 @keyframes codeCopyFlash {
   0%   { transform: scale(0.92); }
@@ -879,7 +853,7 @@ button.app-row:not(:disabled):active {
   box-shadow:
     var(--shadow-linen-modal),
     inset 0 0 0 1px var(--ring-light);
-  transition: box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow var(--duration-row) cubic-bezier(0.16, 1, 0.3, 1);
 }
 :root.dark .surface-panel,
 .surface-panel[data-tone="dark"] {
@@ -908,6 +882,11 @@ button.app-row:not(:disabled):active {
    them per color scheme. Light defaults live on the element; the dark
    override flips them under :root.dark. */
 .segmented-control {
+  /* Hug content — never stretch full-width when used as a grid/flex
+     item (default justify-self:stretch otherwise blows the track out
+     with empty space to the right). */
+  justify-self: start;
+  align-self: start;
   /* Light values use ink-derived alphas (not white). White-on-light is
      invisible on flat panels. Ink-derived borders read on both flat
      light panels and elevated surfaces. */
@@ -968,7 +947,7 @@ button.app-row:not(:disabled):active {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+  transition: background var(--duration-panel) ease, border-color var(--duration-panel) ease, box-shadow var(--duration-panel) ease;
 }
 .switch-control:disabled {
   cursor: not-allowed;
@@ -993,7 +972,7 @@ button.app-row:not(:disabled):active {
   border: 1px solid var(--gs-knob-border);
   box-shadow: var(--gs-knob-shadow);
   pointer-events: none;
-  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform var(--duration-panel) var(--ease-emphasized);
 }
 .switch-control:focus-visible {
   outline: none;
@@ -1078,7 +1057,7 @@ button.app-row:not(:disabled):active {
   box-shadow:
     var(--shadow-linen-rest),
     inset 0 0 0 1px var(--ring-light-soft);
-  transition: box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow var(--duration-row) cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .surface-card:hover {
@@ -1143,7 +1122,7 @@ button.app-row:not(:disabled):active {
 }
 
 /* Send acknowledgement — when the user submits, the composer's
-   surface briefly brightens. Single pulse, ~360ms ease-out.
+   surface briefly brightens. Single route-duration pulse, ease-out.
    Body-fill flash (not edge) so it doesn't compete with the
    thinking-rim's comet/breath/hue-cycle animations on the
    perimeter — different visual axis, both can fire together
@@ -1160,7 +1139,7 @@ button.app-row:not(:disabled):active {
     color-mix(in oklab, var(--color-ink) 10%, transparent),
     color-mix(in oklab, var(--color-ink) 4%, transparent)
   );
-  animation: composerJustSent 360ms ease-out forwards;
+  animation: composerJustSent var(--duration-route) ease-out forwards;
 }
 :root.dark .composer-card.surface-panel[data-just-sent="true"]::after {
   background: linear-gradient(
@@ -1174,9 +1153,11 @@ button.app-row:not(:disabled):active {
   to { opacity: 0; }
 }
 
-/* Modal scrim — dim layer between a modal and the chat behind. */
+/* Modal scrim — dim and soften the background behind modal panels. */
 .modal-scrim {
   background-color: rgba(20, 24, 28, 0.10);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 :root.dark .modal-scrim {
   background-color: rgba(0, 0, 0, 0.32);
@@ -1235,10 +1216,10 @@ button.app-row:not(:disabled):active {
   inset: 0;
   border-radius: inherit;
   /* Beat 1: graceful rim exit. When the rim transitions out via the
-     `data-thinking-leaving="true"` flag, opacity fades over 250ms
+     `data-thinking-leaving="true"` flag, opacity fades over panel-duration
      instead of the element vanishing instantly when data-thinking
      flips off. */
-  transition: opacity 250ms ease-out;
+  transition: opacity var(--duration-panel) ease-out;
   /* Rim thickness — was 1px, bumped to 1.6 so the comet reads at a
      glance without dominating the composer outline. */
   padding: 1.6px;
@@ -1265,7 +1246,7 @@ button.app-row:not(:disabled):active {
 @keyframes snakeRotate {
   to { --snake-angle: 360deg; }
 }
-/* Comet leaving: fade the rim opacity to 0 over the 250ms hold. The
+/* Comet leaving: fade the rim opacity to 0 over the panel-duration hold. The
    ::before above transitions opacity, so this just sets the target. */
 .composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="comet"]::before {
   opacity: 0;
@@ -1288,11 +1269,11 @@ button.app-row:not(:disabled):active {
   }
 }
 /* Breath leaving: stop the animation and let box-shadow transition
-   back to the panel base over 250ms. Keeps the halo dissolving instead
+   back to the panel base over panel-duration. Keeps the halo dissolving instead
    of snapping off mid-cycle. */
 .composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="breath"] {
   animation: none;
-  transition: box-shadow 250ms ease-out;
+  transition: box-shadow var(--duration-panel) ease-out;
 }
 
 /* Variant: hue-cycle — no motion, border color drifts toward accent. */
@@ -1304,10 +1285,10 @@ button.app-row:not(:disabled):active {
   50% { border-color: color-mix(in oklab, var(--color-accent) var(--thinking-peak), var(--color-line)); }
 }
 /* Hue-cycle leaving: stop the animation, transition border-color
-   back to baseline over 250ms. */
+   back to baseline over panel-duration. */
 .composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="hue-cycle"] {
   animation: none;
-  transition: border-color 250ms ease-out;
+  transition: border-color var(--duration-panel) ease-out;
 }
 
 
@@ -1325,9 +1306,9 @@ button.app-row:not(:disabled):active {
   border-right-color: color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent);
   animation: sendOrbit calc(var(--thinking-duration) * 0.45) linear infinite;
   pointer-events: none;
-  transition: opacity 250ms ease-out;
+  transition: opacity var(--duration-panel) ease-out;
 }
-/* Send-orbit leaving: fade the spinner out over 250ms. */
+/* Send-orbit leaving: fade the spinner out over panel-duration. */
 .composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="send-orbit"] [data-send="true"]::before {
   opacity: 0;
 }
@@ -1391,7 +1372,7 @@ button.app-row:not(:disabled):active {
    resolving into the final text rather than abruptly stopping. */
 .tool-line,
 .tool-line * {
-  transition: color 240ms ease-out;
+  transition: color var(--duration-panel) ease-out;
 }
 
 /* Reasoning head's icons (Brain, ChevronDown) stay muted instead of

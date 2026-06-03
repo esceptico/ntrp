@@ -27,7 +27,8 @@ const SIZES = {
   lg: { pad: 6, h: 48, font: 14, gap: 4, padX: 22 },
 } as const;
 
-const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+// Mirrors --ease-emphasized / EASE_EMPHASIZED — moving/morphing on-screen.
+const EASE = "var(--ease-emphasized)";
 
 const BTN_STYLE_BASE: CSSProperties = {
   position: "relative",
@@ -43,7 +44,7 @@ const BTN_STYLE_BASE: CSSProperties = {
   cursor: "pointer",
   appearance: "none",
   WebkitAppearance: "none",
-  transition: "color 200ms ease",
+  transition: "color var(--duration-trace) ease",
   userSelect: "none",
 };
 
@@ -155,7 +156,7 @@ export function SegmentedControl({
     border: "1px solid var(--gt-pill-border)",
     boxShadow: "var(--gt-pill-shadow)",
     transition: ready
-      ? `transform 220ms ${EASE}, width 220ms ${EASE}`
+      ? `transform var(--duration-panel) ${EASE}, width var(--duration-panel) ${EASE}`
       : "none",
     pointerEvents: "none",
     zIndex: 0,

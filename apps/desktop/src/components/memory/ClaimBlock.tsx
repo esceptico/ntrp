@@ -62,7 +62,7 @@ export function ClaimBlock({
           {/* gutter rule — light catches the wet edge of the backing claim */}
           <span
             aria-hidden
-            className="absolute left-1 top-1.5 bottom-1.5 w-px rounded-full bg-accent/0 transition-colors duration-150 group-hover/claim:bg-accent/50"
+            className="absolute left-1 top-1.5 bottom-1.5 w-px rounded-full bg-accent/0 transition-colors duration-row group-hover/claim:bg-accent/50"
           />
           <span className={block.feedback === "corrected" ? "text-faint line-through decoration-line" : undefined}>
             {block.content}
@@ -159,7 +159,7 @@ function ClaimEditor({
         }}
         rows={1}
         spellCheck={false}
-        className="block w-full min-w-0 resize-none bg-transparent text-left text-sm leading-[1.55] tracking-normal text-ink outline-none placeholder:text-faint"
+        className="block w-full min-w-0 resize-none bg-transparent text-left text-sm leading-[1.55] tracking-normal text-ink outline-none placeholder:text-muted"
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
@@ -184,7 +184,7 @@ function ClaimEditor({
             disabled={busy || !dirty}
             onClick={() => onCommit({ kind: "edit", claim_id: block.claim_id, new_text: text.trim() })}
             title="Supersede with the edited text"
-            className="inline-flex h-6 items-center gap-1 rounded-md bg-ink px-2.5 text-xs font-medium text-on-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="inline-flex h-6 items-center gap-1 rounded-md bg-ink px-2.5 text-xs font-medium text-on-ink transition-opacity hover:opacity-90 disabled:opacity-[0.45]"
           >
             <Pencil size={ICON.XS} strokeWidth={2.2} /> Save
           </button>
@@ -214,7 +214,7 @@ function EditorBtn({
       disabled={disabled}
       title={title}
       className={[
-        "inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors disabled:opacity-40",
+        "inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors disabled:opacity-[0.45]",
         danger ? "hover:bg-bad-soft hover:text-bad" : "hover:bg-surface-soft hover:text-ink",
       ].join(" ")}
     >

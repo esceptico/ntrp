@@ -76,7 +76,7 @@ export function ToolsTab() {
   }
 
   if (tools === null) {
-    return <div className="text-sm text-faint">Loading tools…</div>;
+    return <div className="text-sm text-muted">Loading tools…</div>;
   }
 
   if (loadError) {
@@ -108,7 +108,7 @@ export function ToolsTab() {
       <div className="grid gap-3">
         {groups.map(([source, items]) => (
           <section key={source} className="grid gap-2">
-            <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-faint">
+            <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-muted">
               {formatSource(source)} ({items.length})
             </h3>
             <ul className="rounded-[10px] border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">

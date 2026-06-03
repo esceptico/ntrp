@@ -24,6 +24,7 @@ import {
 } from "../../api/memoryItems";
 import { Markdown } from "../Markdown";
 import { MOTION, SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { BlurSwap } from "../BlurSwap";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
@@ -191,7 +192,7 @@ function LensRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">{lensTitle(lens)}</span>
           {lens.criterion && (
-            <span className="block truncate text-xs text-faint">{criterionPreview(lens.criterion)}</span>
+            <span className="block truncate text-xs text-muted">{criterionPreview(lens.criterion)}</span>
           )}
         </span>
         <Badge tone={coverage.generic ? "warn" : "neutral"} size="sm" className="tabular-nums">
@@ -762,13 +763,13 @@ function CriterionRow({
           // markdown wall — the synthesized page below is the content, not this.
           // Click reveals the full editable criterion.
           <span className="block text-sm leading-relaxed text-muted">
-            <span className="mr-1.5 text-2xs font-semibold uppercase tracking-wide text-faint">
+            <span className="mr-1.5 text-2xs font-semibold uppercase tracking-wide text-muted">
               Collects
             </span>
             {criterionPreview(lens.criterion)}
           </span>
         ) : (
-          <span className="text-sm italic text-faint">
+          <span className="text-sm italic text-muted">
             No criterion — click to describe what this view collects.
           </span>
         )}
@@ -1122,26 +1123,18 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
               : "";
           return (
             <li key={step.stage} className="flex items-center gap-2 text-sm">
-              <span className="flex size-4 shrink-0 items-center justify-center">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span
-                    key={done ? "done" : active ? "active" : "pending"}
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.5 }}
-                    transition={{ duration: MOTION.check }}
-                    className="flex items-center justify-center"
-                  >
-                    {done ? (
-                      <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
-                    ) : active ? (
-                      <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
-                    ) : (
-                      <span className="size-1.5 rounded-full bg-line" aria-hidden />
-                    )}
-                  </motion.span>
-                </AnimatePresence>
-              </span>
+              <BlurSwap
+                swapKey={done ? "done" : active ? "active" : "pending"}
+                className="size-4 shrink-0"
+              >
+                {done ? (
+                  <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
+                ) : active ? (
+                  <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
+                ) : (
+                  <span className="size-1.5 rounded-full bg-line" aria-hidden />
+                )}
+              </BlurSwap>
               <span className={`transition-colors ${done || active ? "text-ink" : "text-faint"}`}>
                 {step.label}
               </span>

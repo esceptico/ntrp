@@ -96,7 +96,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
                 type="button"
                 disabled={saving || pickingCwd}
                 onClick={pickCwd}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft"
               >
                 <FolderOpen size={ICON.SM} strokeWidth={2} />
                 Choose
@@ -118,14 +118,14 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
             type="button"
             disabled={saving}
             onClick={onClose}
-            className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={!canSave}
-            className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink"
           >
             Save
           </button>

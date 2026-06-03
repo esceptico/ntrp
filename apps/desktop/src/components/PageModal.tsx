@@ -5,12 +5,13 @@ import { X } from "lucide-react";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
+  MOTION,
 } from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
-const BACKDROP_DURATION = 0.2;
+const BACKDROP_DURATION = MOTION.trace;
 
 export interface PageModalHeader {
   /** Main title — usually a string but any node so callers can include
@@ -118,7 +119,7 @@ export function PageModal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{
-                  duration: 0.18,
+                  duration: MOTION.palette,
                   ease: EASE_DECELERATE,
                 }}
               >

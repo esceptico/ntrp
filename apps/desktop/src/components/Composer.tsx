@@ -20,12 +20,13 @@ import { QueueCard } from "./QueueCard";
 import { GoalStatusBar } from "./GoalStrip";
 import { CommandPicker } from "./CommandPicker";
 import { Chip } from "./Chip";
+import { BlurSwap } from "./BlurSwap";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
 import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
-import { EASE_OUT } from "../lib/tokens/motion";
+import { EASE_OUT, MOTION } from "../lib/tokens/motion";
 import { awaitingFirstRunOutput } from "../lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
 
@@ -347,7 +348,7 @@ export function Composer() {
                   type="button"
                   onClick={() => removePendingImage(i)}
                   aria-label="Remove image"
-                  className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:bg-black"
+                  className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-opacity"
                 >
                   <X size={ICON.XS} strokeWidth={2.4} />
                 </button>
@@ -438,7 +439,7 @@ export function Composer() {
             }}
             rows={1}
             placeholder={selectedSkill ? "if needed" : "Message ntrp…"}
-            className="min-h-[44px] max-h-[220px] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
+            className="min-h-[44px] max-h-[220px] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-muted"
           />
         </div>
         <div className="composer-toolbar flex items-center gap-1.5 px-2 pt-1.5 pb-2">
@@ -455,7 +456,11 @@ export function Composer() {
             size="sm"
             active={skipApprovals}
             tone="accent"
-            leading={skipApprovals ? <ShieldOff size={ICON.SM} strokeWidth={2} /> : <ShieldCheck size={ICON.SM} strokeWidth={2} />}
+            leading={
+              <BlurSwap swapKey={skipApprovals ? "auto" : "approve"}>
+                {skipApprovals ? <ShieldOff size={ICON.SM} strokeWidth={2} /> : <ShieldCheck size={ICON.SM} strokeWidth={2} />}
+              </BlurSwap>
+            }
             onClick={() => void toggleAuto(!skipApprovals)}
             title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
             aria-label={skipApprovals ? "Auto-approve enabled — click to require approval" : "Click to enable auto-approve"}
@@ -479,18 +484,18 @@ export function Composer() {
             // active:scale handles mouse press; sendPressing covers keyboard
             // Enter (form-submit doesn't fire :active). Both look identical.
             className={clsx(
-              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
+              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,transform] duration-fast ease-out active:scale-[0.92]",
               sendPressing && "scale-[0.92]",
             )}
           >
-            <AnimatePresence mode="wait" initial={false}>
+            <AnimatePresence initial={false}>
               <motion.span
                 key={running ? "stop" : "send"}
-                className="grid place-items-center"
-                initial={{ opacity: 0, rotate: -90, scale: 0.4 }}
-                animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                exit={{ opacity: 0, rotate: 90, scale: 0.4 }}
-                transition={{ duration: 0.18, ease: EASE_OUT }}
+                className="col-start-1 row-start-1 grid place-items-center"
+                initial={{ opacity: 0, rotate: -18, scale: 0.92, filter: "blur(4px)" }}
+                animate={{ opacity: 1, rotate: 0, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, rotate: 18, scale: 0.92, filter: "blur(4px)" }}
+                transition={{ duration: MOTION.palette, ease: EASE_OUT }}
               >
                 {running ? (
                   <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />

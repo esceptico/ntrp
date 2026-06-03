@@ -126,7 +126,7 @@ export function QuickCapture() {
               spellCheck={false}
               autoCorrect="off"
               autoCapitalize="off"
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[15px] text-ink placeholder:text-faint tracking-[-0.005em]"
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[15px] text-ink placeholder:text-muted tracking-[-0.005em]"
             />
             <button
               type="button"

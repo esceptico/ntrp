@@ -28,7 +28,7 @@ export function StdioFields({
           onChange={(e) => onCommand(e.target.value)}
           placeholder="openai-dev-mcp serve-sqlite"
           spellCheck={false}
-          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
+          className="w-full input-field input-field-sm font-mono"
         />
       </LabeledField>
 
@@ -77,7 +77,7 @@ export function HttpFields({
           onChange={(e) => onUrl(e.target.value)}
           placeholder="https://mcp.example.com/mcp"
           spellCheck={false}
-          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
+          className="w-full input-field input-field-sm font-mono"
         />
       </LabeledField>
 
@@ -85,7 +85,6 @@ export function HttpFields({
         <>
           <LabeledField label="Auth">
             <SegmentedControl
-              className="justify-self-start"
               size="sm"
               value={auth}
               onChange={(v) => onAuth(v as MCPAuthMode)}

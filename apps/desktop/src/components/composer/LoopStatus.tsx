@@ -159,7 +159,7 @@ export function LoopStatusBar() {
                     onClick={() => void stopLoop(loop.task_id)}
                     title="Stop loop"
                     aria-label="Stop loop"
-                    className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
+                    className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-[color,background-color,transform] active:scale-[0.92]"
                   >
                     <X size={ICON.SM} strokeWidth={2} />
                   </button>

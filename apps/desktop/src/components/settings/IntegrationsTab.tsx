@@ -180,7 +180,7 @@ export function IntegrationsTab() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
         >
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -195,7 +195,7 @@ export function IntegrationsTab() {
       )}
 
       {loading && !hasLoadedData ? (
-        <div className="text-sm text-faint">Loading integrations…</div>
+        <div className="text-sm text-muted">Loading integrations…</div>
       ) : !showContent ? (
         <SettingsConnectionHint />
       ) : (
@@ -277,7 +277,7 @@ function GoogleCard({
               {summary.label}
             </span>
           </div>
-          <div className="text-xs text-faint leading-[1.4]">
+          <div className="text-xs text-muted leading-[1.4]">
             Gmail and Calendar share the same Google account token.
           </div>
           <div className="text-xs text-muted font-mono truncate">
@@ -290,7 +290,7 @@ function GoogleCard({
             type="button"
             onClick={() => void onAdd()}
             disabled={pendingAdd}
-            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
           >
             {pendingAdd ? "Connecting…" : "Add account"}
           </button>
@@ -299,7 +299,7 @@ function GoogleCard({
             onClick={() => void onToggle(!enabled)}
             disabled={pendingGoogle}
             className={clsx(
-              "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50",
+              "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
               enabled
                 ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                 : "bg-ink text-on-ink hover:opacity-90",
@@ -382,13 +382,13 @@ function ServiceCard({
           <MessageCircle size={ICON.MD} strokeWidth={2} className="text-muted" />
           <div className="text-base font-medium text-ink">Slack</div>
         </div>
-        <div className="mt-1 text-xs text-faint leading-[1.4]">
+        <div className="mt-1 text-xs text-muted leading-[1.4]">
           Token-backed Slack tools. OAuth MCP servers stay in the MCP tab.
         </div>
       </div>
 
       {connectedServices.length + setupServices.length === 0 ? (
-        <div className="px-3.5 py-3 text-sm text-faint">No token-backed services are registered.</div>
+        <div className="px-3.5 py-3 text-sm text-muted">No token-backed services are registered.</div>
       ) : (
         <div className="grid gap-3 px-3.5 py-3">
           <ServiceSection title="Ready" empty="No Slack tokens connected.">
@@ -445,7 +445,7 @@ function ServiceSection({
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (
-        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-sm text-faint">
+        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-sm text-muted">
           {empty}
         </div>
       )}
@@ -499,7 +499,7 @@ function ServiceRow({
               onClick={service.connected ? onDisconnect : onEdit}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50",
+                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
                 service.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
@@ -525,7 +525,7 @@ function ServiceRow({
             type="button"
             onClick={onConnect}
             disabled={!serviceKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
           >
             Connect
           </button>

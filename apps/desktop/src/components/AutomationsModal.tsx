@@ -79,7 +79,6 @@ export function AutomationsModal() {
       <PageModal
         open={open}
         onClose={close}
-        grid="grid-rows-[auto_auto_minmax(0,1fr)]"
         disableEscape={!!editor}
         header={{
           title: "Automations",
@@ -95,40 +94,42 @@ export function AutomationsModal() {
           ),
         }}
       >
-        <Tabs
-          value={tab}
-          onChange={(v) => setTab(v as Tab)}
-          variant="underline"
-          className="items-center gap-5 px-6"
-        >
-          <AutomationTab value="active" label="Active" count={activeCount} />
-          <AutomationTab value="system" label="System" count={systemCount} />
-          <AutomationTab value="templates" label="Templates" />
-        </Tabs>
-
-        <div className="relative min-h-0 overflow-hidden">
-          <TabPanels
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <Tabs
             value={tab}
-            direction={direction}
-            className="h-full overflow-y-auto scroll-thin px-6 py-5"
+            onChange={(v) => setTab(v as Tab)}
+            variant="underline"
+            className="items-center gap-5 px-6"
           >
-            <ScrollBlurTop />
-            {tab === "active" ? (
-              <ActiveList
-                automations={automationGroups?.user ?? null}
-                onEdit={(automation) => setEditor({ kind: "edit", automation })}
-                onPickTemplate={() => setTab("templates")}
-                onCreate={() => setEditor({ kind: "create" })}
-              />
-            ) : tab === "system" ? (
-              <SystemList automations={automationGroups?.internal ?? null} />
-            ) : (
-              <TemplatesList
-                onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
-                onPickSuggestion={(s) => setEditor({ kind: "create", preset: suggestionToPayload(s) })}
-              />
-            )}
-          </TabPanels>
+            <AutomationTab value="active" label="Active" count={activeCount} />
+            <AutomationTab value="system" label="System" count={systemCount} />
+            <AutomationTab value="templates" label="Templates" />
+          </Tabs>
+
+          <div className="relative min-h-0 overflow-hidden">
+            <TabPanels
+              value={tab}
+              direction={direction}
+              className="h-full min-h-0 overflow-y-auto scroll-thin px-6 py-5"
+            >
+              <ScrollBlurTop />
+              {tab === "active" ? (
+                <ActiveList
+                  automations={automationGroups?.user ?? null}
+                  onEdit={(automation) => setEditor({ kind: "edit", automation })}
+                  onPickTemplate={() => setTab("templates")}
+                  onCreate={() => setEditor({ kind: "create" })}
+                />
+              ) : tab === "system" ? (
+                <SystemList automations={automationGroups?.internal ?? null} />
+              ) : (
+                <TemplatesList
+                  onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
+                  onPickSuggestion={(s) => setEditor({ kind: "create", preset: suggestionToPayload(s) })}
+                />
+              )}
+            </TabPanels>
+          </div>
         </div>
       </PageModal>
       <AutomationEditor seed={editor} onClose={() => setEditor(null)} />
@@ -174,7 +175,7 @@ function ActiveList({
   onCreate: () => void;
 }) {
   if (automations === null) {
-    return <div className="text-sm text-faint">Loading…</div>;
+    return <div className="text-sm text-muted">Loading…</div>;
   }
   if (automations.length === 0) {
     return (
@@ -219,7 +220,7 @@ function ActiveList({
 
 function SystemList({ automations }: { automations: Automation[] | null }) {
   if (automations === null) {
-    return <div className="text-sm text-faint">Loading…</div>;
+    return <div className="text-sm text-muted">Loading…</div>;
   }
   if (automations.length === 0) {
     return (
@@ -267,7 +268,7 @@ function TemplatesList({
       <SuggestionsSection suggestions={suggestions} onPick={onPickSuggestion} />
       {groups.map(({ category, items }) => (
         <section key={category} className="grid gap-2">
-          <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-faint">
+          <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-muted">
             {category}
           </h3>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
@@ -315,7 +316,7 @@ export function SuggestionsSection({
   if (!suggestions || suggestions.length === 0) return null;
   return (
     <section className="grid gap-2">
-      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-muted">
         Suggested for you
       </h3>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">

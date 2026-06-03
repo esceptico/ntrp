@@ -73,7 +73,7 @@ export function ServerRow({
             type="button"
             onClick={onAuthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
+            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-[0.45]"
           >
             {busy ? "…" : server.error ? "Re-authenticate" : "Sign in"}
           </button>

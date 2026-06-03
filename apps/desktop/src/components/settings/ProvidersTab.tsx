@@ -269,7 +269,7 @@ export function ProvidersTab() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
         >
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -285,7 +285,7 @@ export function ProvidersTab() {
 
       <div className="grid gap-3">
         {loading && providers.length === 0 ? (
-          <div className="text-sm text-faint">Loading providers…</div>
+          <div className="text-sm text-muted">Loading providers…</div>
         ) : !showContent ? (
           <SettingsConnectionHint />
         ) : (
@@ -336,7 +336,7 @@ function ProviderSection({
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (
-        <div className="rounded-[10px] border border-line-soft bg-surface px-3 py-2 text-sm text-faint">
+        <div className="rounded-[10px] border border-line-soft bg-surface px-3 py-2 text-sm text-muted">
           {empty}
         </div>
       )}
@@ -426,7 +426,7 @@ function ProviderRow({
               onClick={primaryAction}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50",
+                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
                 provider.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
@@ -452,7 +452,7 @@ function ProviderRow({
             type="button"
             onClick={onConnect}
             disabled={!apiKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
           >
             Connect
           </button>
@@ -516,7 +516,7 @@ function CustomModelsPanel({
     <div className="grid gap-3 px-3.5 py-3 bg-surface-soft/35">
       <div className="grid gap-1.5">
         {models.length === 0 ? (
-          <div className="text-sm text-faint">No custom models configured.</div>
+          <div className="text-sm text-muted">No custom models configured.</div>
         ) : (
           models.map((model) => {
             const deleting = pendingId === `custom:delete:${model.id}`;
@@ -594,7 +594,7 @@ function CustomModelsPanel({
             type="button"
             onClick={onCreate}
             disabled={!canSaveCustomModelDraft(draft) || creating}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
           >
             {creating ? <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" /> : <Plus size={ICON.MD} strokeWidth={2} />}
             Add

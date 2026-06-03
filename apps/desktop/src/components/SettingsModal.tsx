@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import { useStore } from "../store";
+import type { SettingsTabId } from "../store/types";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
 import { ConnectionTab } from "./settings/ConnectionTab";
 import { ProvidersTab } from "./settings/ProvidersTab";
@@ -18,7 +19,7 @@ import { ScrollBlurTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
-type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "tools" | "mcp" | "appearance";
+type TabId = SettingsTabId;
 
 interface Tab {
   id: TabId;
@@ -42,6 +43,7 @@ const SETTINGS_TAB_IDS = TABS.map((t) => t.id);
 
 export function SettingsModal() {
   const open = useStore((s) => s.settingsOpen);
+  const requestedTab = useStore((s) => s.settingsTab);
   const closeSettings = useStore((s) => s.closeSettings);
   const saving = useStore((s) => s.connectionSaving);
   const draft = useStore((s) => s.connectionDraft);
@@ -59,6 +61,13 @@ export function SettingsModal() {
     // fresh values is cheap and keeps the form honest.
     void fetchServerConfig();
   }, [open]);
+
+  // Deep-link: when a caller passes a tab to openSettings, jump there as
+  // the modal opens. Only honored on open so manual tab switches aren't
+  // clobbered while the modal stays mounted.
+  useEffect(() => {
+    if (open && requestedTab) setActive(requestedTab);
+  }, [open, requestedTab]);
 
   function close() {
     if (!saving) closeSettings();

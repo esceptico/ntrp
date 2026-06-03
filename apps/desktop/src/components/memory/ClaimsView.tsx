@@ -318,7 +318,7 @@ function ClaimDetail({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md bg-surface-soft/50 px-2.5 py-2">
-      <div className="text-2xs uppercase tracking-wide text-faint">{label}</div>
+      <div className="text-2xs uppercase tracking-wide text-muted">{label}</div>
       <div className="mt-0.5 truncate text-sm text-ink-soft tabular-nums">{value}</div>
     </div>
   );
@@ -327,7 +327,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">{title}</h3>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{title}</h3>
       {children}
     </div>
   );

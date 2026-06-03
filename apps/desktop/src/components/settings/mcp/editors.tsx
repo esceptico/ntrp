@@ -49,7 +49,7 @@ export function ListEditor({
             placeholder={placeholder}
             spellCheck={false}
             className={clsx(
-              "flex-1 h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors",
+              "flex-1 input-field input-field-sm",
               mono && "font-mono",
             )}
           />
@@ -91,7 +91,7 @@ export function KeyValueEditor({
             onChange={(ev) => update(i, { key: ev.target.value })}
             placeholder="Key"
             spellCheck={false}
-            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
+            className="input-field input-field-sm font-mono"
           />
           <input
             type="text"
@@ -99,7 +99,7 @@ export function KeyValueEditor({
             onChange={(ev) => update(i, { value: ev.target.value })}
             placeholder={valuePlaceholder}
             spellCheck={false}
-            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
+            className="input-field input-field-sm font-mono"
           />
           <RemoveBtn onClick={() => remove(i)} />
         </div>

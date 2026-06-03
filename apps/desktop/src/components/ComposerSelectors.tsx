@@ -181,7 +181,7 @@ export function ModelReasoningPicker({
               placeholder="Search models…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-sm text-ink outline-none placeholder:text-whisper"
+              className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-sm text-ink outline-none placeholder:text-muted"
               autoFocus
             />
             <div className="max-h-[260px] overflow-y-auto scroll-thin py-1">
@@ -316,7 +316,7 @@ function EffortPill({
       type="button"
       onClick={onClick}
       className={clsx(
-        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none capitalize",
+        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-[background-color,color,transform] duration-check ease-out select-none capitalize active:scale-[0.97]",
         active
           ? "bg-accent-soft text-accent-strong"
           : "text-muted hover:bg-surface-soft hover:text-ink",

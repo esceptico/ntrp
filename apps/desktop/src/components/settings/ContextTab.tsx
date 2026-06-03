@@ -41,7 +41,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
 
   if (!serverConfig || !draft) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-sm text-faint">Loading context settings…</div>;
+    return <div className="text-sm text-muted">Loading context settings…</div>;
   }
 
   const dirty = KEYS.some((k) => draft[k] !== serverConfig[k]);
@@ -131,7 +131,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
         <button
           type="submit"
           disabled={!dirty || saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
         >
           {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
         </button>

@@ -135,7 +135,7 @@ export function MetaGrid({ rows }: { rows: (MetaGridRow | null | false)[] }) {
 function MetaRow({ row }: { row: MetaGridRow }) {
   return (
     <>
-      <dt className="text-faint">{row.label}</dt>
+      <dt className="text-muted">{row.label}</dt>
       <dd
         className={clsx(
           "text-ink-soft min-w-0",
@@ -150,13 +150,13 @@ function MetaRow({ row }: { row: MetaGridRow }) {
 
 export function DetailPlaceholder({ children }: { children: ReactNode }) {
   return (
-    <div className="grid place-items-center h-full text-base italic text-faint">{children}</div>
+    <div className="grid place-items-center h-full text-base italic text-muted">{children}</div>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="grid place-items-center min-h-[200px] text-base italic text-faint">
+    <div className="grid place-items-center min-h-[200px] text-base italic text-muted">
       {children}
     </div>
   );
@@ -194,7 +194,7 @@ export function PrimaryBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
     >
       {children}
     </button>
@@ -217,7 +217,7 @@ export function GhostBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-[0.45]"
     >
       {children}
     </button>
@@ -238,7 +238,7 @@ export function DangerBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-colors disabled:opacity-[0.45]"
     >
       {children}
     </button>
@@ -284,7 +284,7 @@ export function SearchInput({
         aria-label={ariaLabel}
         autoFocus={autoFocus}
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-7 rounded-md bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-7 rounded-md bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-muted outline-none transition-[background-color,border-color]"
       />
       {value && (
         <button

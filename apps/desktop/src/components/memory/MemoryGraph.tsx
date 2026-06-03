@@ -348,7 +348,7 @@ export function MemoryGraph({
       >
         <g
           transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}
-          style={easePan ? { transition: "transform 360ms var(--ease-emphasized)" } : undefined}
+          style={easePan ? { transition: "transform var(--duration-route) var(--ease-emphasized)" } : undefined}
         >
           {links.map((l, i) => {
             const lit = isLit(l.source.id) && isLit(l.target.id);

@@ -124,7 +124,7 @@ export function ServerForm({
             type="button"
             onClick={() => void remove()}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-[0.45]"
           >
             <Trash2 size={ICON.SM} strokeWidth={2} /> Uninstall
           </button>
@@ -144,7 +144,7 @@ export function ServerForm({
             disabled={mode === "edit"}
             placeholder="MCP server name"
             spellCheck={false}
-            className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors disabled:bg-surface-soft disabled:text-muted"
+            className="w-full input-field input-field-sm disabled:bg-surface-soft disabled:text-muted"
           />
         </LabeledField>
 
@@ -208,7 +208,7 @@ export function ServerForm({
           type="button"
           onClick={() => void save()}
           disabled={!valid || busy}
-          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
         >
           {busy ? "Saving…" : "Save"}
         </button>

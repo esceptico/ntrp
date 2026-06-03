@@ -13,7 +13,7 @@ export function SectionHeader({ label, count, detail, action, className }: Secti
   const hasRight = detail !== undefined || action !== undefined;
   return (
     <div className={clsx("flex items-center justify-between gap-2", className)}>
-      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-faint">
+      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-muted">
         {label}
         {count !== undefined && <span className="ml-1 text-faint">({count})</span>}
       </h3>

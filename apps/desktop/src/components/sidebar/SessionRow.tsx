@@ -105,7 +105,7 @@ export function SessionRow({
       </span>
       <span className="relative shrink-0 h-[22px] w-[56px]">
         {/* Default state: timestamp. Hover swaps to row actions. */}
-        <span className="absolute inset-0 flex items-center justify-end pr-[5px] transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
+        <span className="absolute inset-0 flex items-center justify-end pr-[5px] transition-opacity duration-row group-hover/row:opacity-0 pointer-events-none">
           <span
             className={clsx(
               "text-xs tabular-nums",
@@ -115,7 +115,7 @@ export function SessionRow({
             {formatRelativePast(lastActivity)}
           </span>
         </span>
-        <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
+        <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-row">
           <RowAction
             icon={<Pencil size={ICON.SM} strokeWidth={2} />}
             label="Rename"

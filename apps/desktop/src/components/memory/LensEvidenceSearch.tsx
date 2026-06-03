@@ -175,7 +175,7 @@ export function LensEvidenceSearch({
             {error && <div className="mt-2 text-xs text-bad">{error}</div>}
 
             {!trimmed && (
-              <div className="px-2 py-5 text-center text-sm text-faint">
+              <div className="px-2 py-5 text-center text-sm text-muted">
                 Search your memory to add evidence to this view.
               </div>
             )}
@@ -190,7 +190,7 @@ export function LensEvidenceSearch({
 
             {trimmed && searched && !busy && !error && results.length === 0 && (
               <div className="px-2 py-5 text-center">
-                <div className="text-sm text-faint">No matching claims.</div>
+                <div className="text-sm text-muted">No matching claims.</div>
                 <div className="mt-1 text-xs text-faint">
                   Try a broader term, or adjust what belongs in this view.
                 </div>
@@ -278,7 +278,7 @@ function RowIcon({
       disabled={disabled}
       title={title}
       aria-label={title}
-      className="grid size-[22px] place-items-center rounded text-faint transition-colors hover:bg-surface-soft hover:text-ink disabled:opacity-40"
+      className="grid size-[22px] place-items-center rounded text-faint transition-colors hover:bg-surface-soft hover:text-ink disabled:opacity-[0.45]"
     >
       {children}
     </button>

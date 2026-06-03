@@ -163,7 +163,7 @@ function RowAction({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid place-items-center min-h-[200px] text-base italic text-faint">
+    <div className="grid place-items-center min-h-[200px] text-base italic text-muted">
       {children}
     </div>
   );
@@ -189,7 +189,7 @@ function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Filter…"
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-muted outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
       />
     </div>
   );

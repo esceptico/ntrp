@@ -36,7 +36,7 @@ export function Breadcrumbs({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onJump(i)}
-              className="h-6 px-2 rounded-[6px] bg-surface-soft text-xs text-ink-soft hover:text-ink hover:bg-surface-sunken transition-colors whitespace-nowrap"
+              className="h-6 px-2 rounded-md bg-surface-soft text-xs text-ink-soft hover:text-ink hover:bg-surface-sunken transition-colors whitespace-nowrap"
             >
               {crumb.label}
             </button>

@@ -32,6 +32,7 @@ import { IconButton } from "../IconButton";
 import { SegmentedControl } from "../SegmentedControl";
 import { Chip } from "../Chip";
 import { SwitchControl } from "../SwitchControl";
+import { BlurSwap } from "../BlurSwap";
 
 const MODAL_BACKDROP_DURATION = 0.2;
 
@@ -351,7 +352,7 @@ export function AutomationEditor({
                 placeholder="Untitled automation"
                 spellCheck={false}
                 autoFocus={seed.kind === "create" && !seed.preset}
-                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
+                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-muted"
               />
               <div className="flex items-center gap-0.5 text-faint">
                 <IconButton tone="faint" onClick={reset} title="Reset" aria-label="Reset">
@@ -370,7 +371,7 @@ export function AutomationEditor({
                 placeholder="What should the agent do when this automation fires?"
                 spellCheck={false}
                 rows={6}
-                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-faint"
+                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-muted"
               />
             </div>
 
@@ -435,7 +436,7 @@ export function AutomationEditor({
                   type="button"
                   onClick={() => void submit()}
                   disabled={!valid || saving}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-[0.45] disabled:cursor-not-allowed transition-opacity"
                 >
                   {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
                 </button>
@@ -501,11 +502,13 @@ function ScheduleChip({
         size="md"
         active={open}
         leading={
-          schedule.kind === "message" ? (
-            <MessageSquare size={ICON.XS} strokeWidth={2} />
-          ) : (
-            <Clock size={ICON.XS} strokeWidth={2} />
-          )
+          <BlurSwap swapKey={schedule.kind === "message" ? "message" : "time"}>
+            {schedule.kind === "message" ? (
+              <MessageSquare size={ICON.XS} strokeWidth={2} />
+            ) : (
+              <Clock size={ICON.XS} strokeWidth={2} />
+            )}
+          </BlurSwap>
         }
         trailing={<ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-60" />}
         onClick={() => setOpen((v) => !v)}
@@ -691,11 +694,13 @@ function ScheduleChip({
               </div>
 
               <div className="flex items-center gap-1.5 pt-2.5 border-t border-line-soft text-xs text-faint">
-                {schedule.kind === "message" ? (
-                  <MessageSquare size={ICON.XS} strokeWidth={2} />
-                ) : (
-                  <CalendarClock size={ICON.XS} strokeWidth={2} />
-                )}
+                <BlurSwap swapKey={schedule.kind === "message" ? "message" : "time"}>
+                  {schedule.kind === "message" ? (
+                    <MessageSquare size={ICON.XS} strokeWidth={2} />
+                  ) : (
+                    <CalendarClock size={ICON.XS} strokeWidth={2} />
+                  )}
+                </BlurSwap>
                 <span className="truncate">{scheduleLabel(schedule)}</span>
               </div>
           </motion.div>
@@ -718,7 +723,7 @@ const schedFieldCls =
 const fieldStackCls = (active: boolean) =>
   clsx(
     "[grid-area:1/1] grid gap-2.5 content-start",
-    active ? "opacity-100 transition-opacity duration-150 ease-out" : "invisible opacity-0",
+    active ? "opacity-100 transition-opacity duration-row ease-out" : "invisible opacity-0",
   );
 
 function ScheduleField({

@@ -123,7 +123,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
   return (
     <div
       className={clsx(
-        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-row",
         role === "user" && "justify-end",
       )}
     >
@@ -256,7 +256,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "group flex flex-col items-end transition-[background-color,box-shadow] duration-300",
+        "group flex flex-col items-end transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-fade-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -310,7 +310,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   return (
     <article
       className={clsx(
-        "assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 transition-[background-color,box-shadow] duration-300",
+        "assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-fade-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -343,7 +343,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
   return (
     <article
       className={clsx(
-        "grid grid-cols-[minmax(0,1fr)] min-w-0 transition-[background-color,box-shadow] duration-300",
+        "grid grid-cols-[minmax(0,1fr)] min-w-0 transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-roll-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -362,7 +362,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         <ChevronDown
           size={ICON.XS}
           strokeWidth={2}
-          className={clsx("transition-transform duration-200", expanded && "rotate-180")}
+          className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
         />
       </button>
 
@@ -396,7 +396,7 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-xs leading-[1.45] transition-[background-color,box-shadow] duration-300",
+        "grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-xs leading-[1.45] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-roll-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -427,7 +427,7 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "self-center grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        "self-center grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-fade-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -449,7 +449,7 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-fade-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -457,7 +457,7 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-base leading-[1.45] whitespace-pre-wrap break-words">
+      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-bad/20 text-bad text-base leading-[1.45] whitespace-pre-wrap break-words">
         {message.content}
       </div>
     </article>
@@ -484,7 +484,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-roll-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -525,7 +525,7 @@ const TodoMessage = memo(function TodoMessage({ id }: { id: string }) {
   return (
     <article
       className={clsx(
-        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-roll-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}

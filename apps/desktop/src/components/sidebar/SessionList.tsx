@@ -106,11 +106,11 @@ export function SessionList() {
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
         {sessions.length === 0 && projects.length === 0 ? (
-          <div className="px-3 py-3 text-sm italic text-faint">
+          <div className="px-3 py-3 text-sm italic text-muted">
             {connected ? "No sessions yet." : "Connect to load sessions."}
           </div>
         ) : grouped.length === 0 ? (
-          <div className="px-3 py-3 text-sm italic text-faint">No matches.</div>
+          <div className="px-3 py-3 text-sm italic text-muted">No matches.</div>
         ) : (
           grouped.map((group) => {
             const groupKey = group.project?.project_id ?? "inbox";
@@ -132,7 +132,7 @@ export function SessionList() {
                       size={ICON.XS}
                       strokeWidth={2.2}
                       className={clsx(
-                        "transition-transform duration-150",
+                        "transition-transform duration-row",
                         isCollapsed && "-rotate-90",
                       )}
                     />
@@ -291,7 +291,7 @@ function SessionSearch({
         }}
         placeholder="Filter sessions"
         spellCheck={false}
-        className="w-full h-full pl-[22px] pr-6 rounded-md bg-surface-soft focus:bg-surface-sunken text-sm leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
+        className="w-full h-full pl-[22px] pr-6 rounded-md bg-surface-soft focus:bg-surface-sunken text-sm leading-none text-ink-soft placeholder:text-muted outline-none transition-[background-color] border border-transparent focus:border-line-soft"
       />
       <button
         type="button"

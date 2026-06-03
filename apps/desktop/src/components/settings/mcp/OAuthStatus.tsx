@@ -38,7 +38,7 @@ export function OAuthStatus({
             type="button"
             onClick={onReauthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface hover:text-ink transition-colors disabled:opacity-50"
+            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface hover:text-ink transition-colors disabled:opacity-[0.45]"
           >
             {busy ? "…" : server.connected ? "Re-authenticate" : "Sign in"}
           </button>

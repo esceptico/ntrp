@@ -176,7 +176,7 @@ export function PaletteBody({
             }}
             placeholder={view.placeholder}
             spellCheck={false}
-            className="flex-1 min-w-0 h-8 bg-transparent text-md text-ink placeholder:text-faint outline-none"
+            className="flex-1 min-w-0 h-8 bg-transparent text-md text-ink placeholder:text-muted outline-none"
           />
         </div>
       </motion.div>
@@ -207,7 +207,7 @@ export function PaletteBody({
             transition={{ duration: MOTION.palette, ease: EASE_EMPHASIZED }}
           >
             {filtered.length === 0 ? (
-              <div className="grid place-items-center min-h-[120px] text-sm italic text-faint">
+              <div className="grid place-items-center min-h-[120px] text-sm italic text-muted">
                 Nothing matches.
               </div>
             ) : (

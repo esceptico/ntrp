@@ -88,7 +88,7 @@ export function ActivityHeader({
           size={ICON.SM}
           strokeWidth={2}
           className={clsx(
-            "ml-1 self-center transition-transform duration-200 text-faint",
+            "ml-1 self-center transition-transform duration-trace text-faint",
             expanded && "rotate-180",
           )}
         />

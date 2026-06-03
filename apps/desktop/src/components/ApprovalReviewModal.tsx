@@ -117,7 +117,7 @@ export function ApprovalReviewModal() {
                   {approval.preview}
                 </pre>
               ) : (
-                <div className="px-5 py-6 text-sm text-faint italic">
+                <div className="px-5 py-6 text-sm text-muted italic">
                   No diff or preview available.
                 </div>
               )}

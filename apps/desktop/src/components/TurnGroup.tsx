@@ -152,7 +152,7 @@ export function TurnGroup({
                 <ChevronDown
                   size={ICON.XS}
                   strokeWidth={2}
-                  className={clsx("transition-transform duration-200", expanded && "rotate-180")}
+                  className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
                 />
               </button>
             </div>

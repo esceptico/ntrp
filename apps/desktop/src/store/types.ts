@@ -20,6 +20,17 @@ import type { SessionViewState } from "./session-view";
 
 export type { SessionViewState } from "./session-view";
 
+export type SettingsTabId =
+  | "connection"
+  | "providers"
+  | "integrations"
+  | "models"
+  | "agent"
+  | "context"
+  | "tools"
+  | "mcp"
+  | "appearance";
+
 export type Role =
   | "user"
   | "assistant"
@@ -290,6 +301,7 @@ export interface State {
   error: string | null;
   draft: string;
   settingsOpen: boolean;
+  settingsTab: SettingsTabId | null;
   connectionDraft: AppConfig;
   connectionError: string | null;
   connectionSaving: boolean;
@@ -408,7 +420,7 @@ export interface Actions {
    *  message count come from disk; cumulative cost/tokens start fresh
    *  for the session view (server doesn't persist running totals). */
   hydrateUsageSnapshot: (snapshot: { lastPrompt: number; messageCount: number }) => void;
-  openSettings: (origin?: { x: number; y: number } | null) => void;
+  openSettings: (origin?: { x: number; y: number } | null, tab?: SettingsTabId) => void;
   closeSettings: () => void;
   setConnectionDraft: (patch: Partial<AppConfig>) => void;
   setConnectionError: (error: string | null) => void;

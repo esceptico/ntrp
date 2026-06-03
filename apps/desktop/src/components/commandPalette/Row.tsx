@@ -26,7 +26,7 @@ export function Row({
         onMouseMove={onHover}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
-        className="app-row flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-ink-soft"
+        className="app-row flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-ink-soft"
       >
         <span
           className={clsx(

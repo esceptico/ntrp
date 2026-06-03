@@ -29,7 +29,7 @@ export function ModelsTab() {
 
   if (!cfg) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-sm text-faint">Loading models…</div>;
+    return <div className="text-sm text-muted">Loading models…</div>;
   }
 
   if (!models) {
@@ -192,11 +192,11 @@ function Section({
     <div className="grid gap-2.5 py-3">
       <div className="grid gap-0.5">
         <div className="text-base font-medium text-ink">{title}</div>
-        <div className="text-xs text-faint leading-[1.4]">{description}</div>
+        <div className="text-xs text-muted leading-[1.4]">{description}</div>
       </div>
 
       <ModelReasoningPicker
-        buttonLabel={savingModel ? "Saving..." : undefined}
+        buttonLabel={savingModel ? "Saving…" : undefined}
         currentModel={current}
         currentEffort={currentReasoning}
         efforts={efforts}
