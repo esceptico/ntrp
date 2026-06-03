@@ -11,7 +11,9 @@ from ntrp.events.sse import (
     ThinkingEvent,
     ToolCallArgsEvent,
 )
+from ntrp.server import sse_stream
 from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.sse_stream import live_records
 
 
 def _seqs(records):
@@ -92,6 +94,23 @@ async def test_slow_subscriber_reset_uses_checkpoint_cursor():
 
 
 @pytest.mark.asyncio
+async def test_full_subscriber_queue_compacts_adjacent_text_deltas_before_closing():
+    bus = SessionBus(session_id="sess-1", subscriber_queue_size=3)
+    slow = bus.subscribe()
+
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="a"))
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="b"))
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="c"))
+    await bus.emit(TextMessageContentEvent(message_id="m1", delta="d"))
+
+    assert slow in bus._subscribers
+    compacted = slow.get_nowait()
+    assert compacted.seq == 4
+    assert compacted.event.delta == "abcd"
+    assert slow.empty()
+
+
+@pytest.mark.asyncio
 async def test_stream_reset_preempts_full_subscriber_queue():
     bus = SessionBus(session_id="sess-1", subscriber_queue_size=2)
     queue = bus.subscribe()
@@ -105,6 +124,51 @@ async def test_stream_reset_preempts_full_subscriber_queue():
     assert reset.event.reason == "manual_reset"
     assert reset.seq == 3
     assert queue.get_nowait() is None
+
+
+@pytest.mark.asyncio
+async def test_live_records_batches_backlogged_events_into_one_chunk():
+    bus = SessionBus(session_id="sess-1")
+    queue = bus.subscribe()
+    await bus.emit(ThinkingEvent(status="one"))
+    await bus.emit(ThinkingEvent(status="two"))
+    await bus.emit(ThinkingEvent(status="three"))
+
+    stream = live_records(
+        bus=bus,
+        queue=queue,
+        session_id="sess-1",
+        should_emit=lambda _event: True,
+        keepalive_interval=60,
+    )
+    chunk = await anext(stream)
+
+    assert chunk.count("\n\n") == 3
+    assert "one" in chunk
+    assert "two" in chunk
+    assert "three" in chunk
+    await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_records_respects_batch_byte_limit(monkeypatch):
+    monkeypatch.setattr(sse_stream, "LIVE_RECORD_BATCH_MAX_BYTES", 1)
+    bus = SessionBus(session_id="sess-1")
+    queue = bus.subscribe()
+    await bus.emit(ThinkingEvent(status="one"))
+    await bus.emit(ThinkingEvent(status="two"))
+
+    stream = sse_stream.live_records(
+        bus=bus,
+        queue=queue,
+        session_id="sess-1",
+        should_emit=lambda _event: True,
+        keepalive_interval=60,
+    )
+
+    assert (await anext(stream)).count("\n\n") == 1
+    assert (await anext(stream)).count("\n\n") == 1
+    await stream.aclose()
 
 
 def test_bus_registry_close_all_handles_full_subscriber_queues():

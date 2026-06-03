@@ -2,13 +2,20 @@ import asyncio
 import json
 from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import InitVar, dataclass, field
+from dataclasses import InitVar, dataclass, field, replace
 from typing import Protocol
 
-from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, SSEEvent, StreamResetEvent
+from ntrp.events.sse import (
+    EPHEMERAL_EVENT_TYPES,
+    ReasoningMessageContentEvent,
+    SSEEvent,
+    StreamResetEvent,
+    TextMessageContentEvent,
+    ToolCallArgsEvent,
+)
 from ntrp.logging import get_logger
 
-SSE_QUEUE_MAXSIZE = 256
+SSE_QUEUE_MAXSIZE = 2048
 SESSION_EVENT_RECORD_QUEUE_MAXSIZE = 10000
 # Sized for a single research turn that fans out to ~150 nested tool
 # calls (each emits START + ARGS + END + RESULT = 4 events, plus text
@@ -52,6 +59,68 @@ def stream_record_to_sse_string(session_id: str, record: StreamRecord, *, replay
     if replay:
         payload["replay"] = True
     return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _compact_adjacent_records(records: list[StreamRecord]) -> list[StreamRecord]:
+    compacted: list[StreamRecord] = []
+    for record in records:
+        if compacted:
+            merged = _merge_adjacent_record(compacted[-1], record)
+            if merged is not None:
+                compacted[-1] = merged
+                continue
+        compacted.append(record)
+    return compacted
+
+
+def _merge_adjacent_record(left: StreamRecord, right: StreamRecord) -> StreamRecord | None:
+    if left.session_id != right.session_id:
+        return None
+    merged_event = _merge_adjacent_event(left.event, right.event)
+    if merged_event is None:
+        return None
+    return StreamRecord(seq=right.seq, session_id=right.session_id, event=merged_event)
+
+
+def _merge_adjacent_event(left: SSEEvent, right: SSEEvent) -> SSEEvent | None:
+    if isinstance(left, TextMessageContentEvent) and isinstance(right, TextMessageContentEvent):
+        if (
+            left.message_id,
+            left.depth,
+            left.parent_id,
+        ) == (
+            right.message_id,
+            right.depth,
+            right.parent_id,
+        ):
+            return replace(right, delta=left.delta + right.delta)
+        return None
+
+    if isinstance(left, ReasoningMessageContentEvent) and isinstance(right, ReasoningMessageContentEvent):
+        if (
+            left.message_id,
+            left.depth,
+            left.parent_id,
+        ) == (
+            right.message_id,
+            right.depth,
+            right.parent_id,
+        ):
+            return replace(right, delta=left.delta + right.delta)
+        return None
+
+    if isinstance(left, ToolCallArgsEvent) and isinstance(right, ToolCallArgsEvent):
+        if (
+            left.tool_call_id,
+            left.depth,
+            left.parent_id,
+        ) == (
+            right.tool_call_id,
+            right.depth,
+            right.parent_id,
+        ):
+            return replace(right, delta=left.delta + right.delta)
+    return None
 
 
 class SessionEventWriter:
@@ -171,6 +240,8 @@ class SessionBus:
                 except asyncio.QueueFull:
                     if isinstance(record.event, StreamResetEvent):
                         self._close_reset_subscriber(queue, record)
+                    elif self._compact_and_enqueue(queue, record):
+                        continue
                     else:
                         self._close_slow_subscriber(queue)
 
@@ -202,9 +273,7 @@ class SessionBus:
         double-apply over the freshly loaded history)."""
         self._checkpoint_seq = self._next_seq - 1
 
-    def subscribe_with_replay(
-        self, after_seq: int | None = None
-    ) -> ReplaySubscription:
+    def subscribe_with_replay(self, after_seq: int | None = None) -> ReplaySubscription:
         """Atomically snapshot the replay buffer AND register a live queue.
         emit() never awaits, so no event can interleave between snapshot and
         queue registration.
@@ -266,6 +335,29 @@ class SessionBus:
             event=StreamResetEvent(reason="slow_consumer"),
         )
         self._close_queue(queue, terminal=reset_record)
+
+    @staticmethod
+    def _compact_and_enqueue(
+        queue: asyncio.Queue[StreamRecord | None],
+        incoming: StreamRecord,
+    ) -> bool:
+        records: list[StreamRecord] = []
+        while True:
+            try:
+                record = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if record is None:
+                return False
+            records.append(record)
+
+        compacted = _compact_adjacent_records([*records, incoming])
+        if len(compacted) > queue.maxsize:
+            return False
+
+        for record in compacted:
+            queue.put_nowait(record)
+        return True
 
     def _close_reset_subscriber(
         self,

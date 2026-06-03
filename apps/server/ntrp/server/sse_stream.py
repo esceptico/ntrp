@@ -7,6 +7,8 @@ from ntrp.events.sse import KeepaliveEvent, SSEEvent, StreamResetEvent
 from ntrp.server.bus import SessionBus, StreamRecord, stream_record_to_sse_string
 
 ShouldEmit = Callable[[SSEEvent], bool]
+LIVE_RECORD_BATCH_MAX = 128
+LIVE_RECORD_BATCH_MAX_BYTES = 64 * 1024
 
 
 def keepalive_chunk(session_id: str, latest_seq: int) -> str:
@@ -52,33 +54,66 @@ async def live_records(
     replay_upper_seq: int | None = None,
 ) -> AsyncGenerator[str]:
     last_event_at = time.monotonic()
+    pending: StreamRecord | None = None
 
     while True:
-        try:
-            record = await asyncio.wait_for(queue.get(), timeout=0.5)
-        except TimeoutError:
-            if time.monotonic() - last_event_at >= keepalive_interval:
-                last_event_at = time.monotonic()
-                yield keepalive_chunk(session_id, bus.next_seq - 1)
-            continue
+        if pending is None:
+            try:
+                record = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except TimeoutError:
+                if time.monotonic() - last_event_at >= keepalive_interval:
+                    last_event_at = time.monotonic()
+                    yield keepalive_chunk(session_id, bus.next_seq - 1)
+                continue
+        else:
+            record = pending
+            pending = None
 
         if record is None:
             break
 
-        if (
-            replay_upper_seq is not None
-            and record.seq <= replay_upper_seq
-            and not isinstance(record.event, StreamResetEvent)
-        ):
-            continue
-
-        event = record.event
-        if not should_emit(event):
-            last_event_at = time.monotonic()
-            continue
-
         last_event_at = time.monotonic()
-        yield stream_record_to_sse_string(session_id, record)
-        if isinstance(event, StreamResetEvent):
+        chunks: list[str] = []
+        chunk_bytes = 0
+        records_taken = 0
+        terminal = False
+
+        while record is not None:
+            records_taken += 1
+            if (
+                replay_upper_seq is not None
+                and record.seq <= replay_upper_seq
+                and not isinstance(record.event, StreamResetEvent)
+            ):
+                pass
+            else:
+                event = record.event
+                if should_emit(event):
+                    chunk = stream_record_to_sse_string(session_id, record)
+                    encoded_size = len(chunk.encode("utf-8"))
+                    if chunks and chunk_bytes + encoded_size > LIVE_RECORD_BATCH_MAX_BYTES:
+                        pending = record
+                        break
+
+                    chunks.append(chunk)
+                    chunk_bytes += encoded_size
+                    if isinstance(event, StreamResetEvent):
+                        terminal = True
+                        break
+
+            if records_taken >= LIVE_RECORD_BATCH_MAX:
+                break
+            try:
+                record = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if record is None:
+                terminal = True
+                break
+
+        if chunks:
+            yield "".join(chunks)
+
+        if terminal:
             break
         await asyncio.sleep(0)
