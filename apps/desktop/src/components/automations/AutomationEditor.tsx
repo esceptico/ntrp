@@ -550,149 +550,147 @@ function ScheduleChip({
                 ]}
               />
 
-              <motion.div
-                key={schedule.kind}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: MOTION.fast, ease: EASE_OUT }}
-                className="grid gap-2.5 content-start min-h-[216px]"
-              >
-                {schedule.kind === "at" && (
-                  <>
-                    <ScheduleField label="At">
+              <div className="grid">
+                <div
+                  aria-hidden={schedule.kind !== "at" || undefined}
+                  className={fieldStackCls(schedule.kind === "at")}
+                >
+                  <ScheduleField label="At">
+                    <input
+                      type="time"
+                      value={schedule.at}
+                      onChange={(e) => onChange({ ...schedule, at: e.target.value })}
+                      className={schedFieldCls}
+                    />
+                  </ScheduleField>
+                  <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
+                    <input
+                      value={schedule.days}
+                      onChange={(e) => onChange({ ...schedule, days: e.target.value })}
+                      placeholder="daily"
+                      spellCheck={false}
+                      className={schedFieldCls}
+                    />
+                  </ScheduleField>
+                </div>
+
+                <div
+                  aria-hidden={schedule.kind !== "every" || undefined}
+                  className={fieldStackCls(schedule.kind === "every")}
+                >
+                  <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
+                    <input
+                      value={schedule.every}
+                      onChange={(e) => onChange({ ...schedule, every: e.target.value })}
+                      placeholder="30m"
+                      spellCheck={false}
+                      className={schedFieldCls}
+                    />
+                  </ScheduleField>
+                  <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
+                    <input
+                      value={schedule.days}
+                      onChange={(e) => onChange({ ...schedule, days: e.target.value })}
+                      placeholder="weekdays"
+                      spellCheck={false}
+                      className={schedFieldCls}
+                    />
+                  </ScheduleField>
+                  <div className="grid grid-cols-2 gap-2">
+                    <ScheduleField label="Start">
                       <input
                         type="time"
-                        value={schedule.at}
-                        onChange={(e) => onChange({ ...schedule, at: e.target.value })}
+                        value={schedule.start}
+                        onChange={(e) => onChange({ ...schedule, start: e.target.value })}
                         className={schedFieldCls}
                       />
                     </ScheduleField>
-                    <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
+                    <ScheduleField label="End">
                       <input
-                        value={schedule.days}
-                        onChange={(e) => onChange({ ...schedule, days: e.target.value })}
-                        placeholder="daily"
-                        spellCheck={false}
+                        type="time"
+                        value={schedule.end}
+                        onChange={(e) => onChange({ ...schedule, end: e.target.value })}
                         className={schedFieldCls}
                       />
                     </ScheduleField>
-                  </>
-                )}
+                  </div>
+                </div>
 
-                {schedule.kind === "every" && (
-                  <>
-                    <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
+                <div
+                  aria-hidden={schedule.kind !== "event" || undefined}
+                  className={fieldStackCls(schedule.kind === "event")}
+                >
+                  <ScheduleField label="Event">
+                    <select
+                      value={schedule.event}
+                      onChange={(e) => onChange({ ...schedule, event: e.target.value as EventType })}
+                      className={schedFieldCls}
+                    >
+                      <option value="starts">starts</option>
+                      <option value="ends">ends</option>
+                      <option value="approaching">approaching</option>
+                    </select>
+                  </ScheduleField>
+                  {schedule.event === "approaching" && (
+                    <ScheduleField label="Lead time" hint="minutes before the event">
                       <input
-                        value={schedule.every}
-                        onChange={(e) => onChange({ ...schedule, every: e.target.value })}
-                        placeholder="30m"
+                        value={schedule.lead}
+                        onChange={(e) => onChange({ ...schedule, lead: e.target.value })}
+                        placeholder="15"
                         spellCheck={false}
                         className={schedFieldCls}
                       />
                     </ScheduleField>
-                    <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
-                      <input
-                        value={schedule.days}
-                        onChange={(e) => onChange({ ...schedule, days: e.target.value })}
-                        placeholder="weekdays"
-                        spellCheck={false}
-                        className={schedFieldCls}
+                  )}
+                </div>
+
+                <div
+                  aria-hidden={schedule.kind !== "message" || undefined}
+                  className={fieldStackCls(schedule.kind === "message")}
+                >
+                  <ScheduleField label="Channel" hint="Slack channel, e.g. feel-good-inc">
+                    <div className="relative">
+                      <Hash
+                        size={ICON.XS}
+                        strokeWidth={2}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
                       />
-                    </ScheduleField>
-                    <div className="grid grid-cols-2 gap-2">
-                      <ScheduleField label="Start">
-                        <input
-                          type="time"
-                          value={schedule.start}
-                          onChange={(e) => onChange({ ...schedule, start: e.target.value })}
-                          className={schedFieldCls}
-                        />
-                      </ScheduleField>
-                      <ScheduleField label="End">
-                        <input
-                          type="time"
-                          value={schedule.end}
-                          onChange={(e) => onChange({ ...schedule, end: e.target.value })}
-                          className={schedFieldCls}
-                        />
-                      </ScheduleField>
+                      <input
+                        value={schedule.channel}
+                        onChange={(e) => onChange({ ...schedule, channel: e.target.value })}
+                        placeholder="channel-name"
+                        spellCheck={false}
+                        className={`${schedFieldCls} pl-7`}
+                      />
                     </div>
-                  </>
-                )}
-
-                {schedule.kind === "event" && (
-                  <>
-                    <ScheduleField label="Event">
-                      <select
-                        value={schedule.event}
-                        onChange={(e) => onChange({ ...schedule, event: e.target.value as EventType })}
-                        className={schedFieldCls}
-                      >
-                        <option value="starts">starts</option>
-                        <option value="ends">ends</option>
-                        <option value="approaching">approaching</option>
-                      </select>
-                    </ScheduleField>
-                    {schedule.event === "approaching" && (
-                      <ScheduleField label="Lead time" hint="minutes before the event">
-                        <input
-                          value={schedule.lead}
-                          onChange={(e) => onChange({ ...schedule, lead: e.target.value })}
-                          placeholder="15"
-                          spellCheck={false}
-                          className={schedFieldCls}
-                        />
-                      </ScheduleField>
-                    )}
-                  </>
-                )}
-
-                {schedule.kind === "message" && (
-                  <>
-                    <ScheduleField label="Channel" hint="Slack channel, e.g. feel-good-inc">
-                      <div className="relative">
-                        <Hash
-                          size={ICON.XS}
-                          strokeWidth={2}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-                        />
-                        <input
-                          value={schedule.channel}
-                          onChange={(e) => onChange({ ...schedule, channel: e.target.value })}
-                          placeholder="channel-name"
-                          spellCheck={false}
-                          className={`${schedFieldCls} pl-7`}
-                        />
-                      </div>
-                    </ScheduleField>
-                    <ScheduleField label="From user" hint="optional — only this sender">
-                      <div className="relative">
-                        <AtSign
-                          size={ICON.XS}
-                          strokeWidth={2}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-                        />
-                        <input
-                          value={schedule.fromUser}
-                          onChange={(e) => onChange({ ...schedule, fromUser: e.target.value })}
-                          placeholder="username"
-                          spellCheck={false}
-                          className={`${schedFieldCls} pl-7`}
-                        />
-                      </div>
-                    </ScheduleField>
-                    <ScheduleField label="Keywords" hint="optional, any of — bug, error, broken">
-                      <input
-                        value={schedule.keywords}
-                        onChange={(e) => onChange({ ...schedule, keywords: e.target.value })}
-                        placeholder="bug, error"
-                        spellCheck={false}
-                        className={schedFieldCls}
+                  </ScheduleField>
+                  <ScheduleField label="From user" hint="optional — only this sender">
+                    <div className="relative">
+                      <AtSign
+                        size={ICON.XS}
+                        strokeWidth={2}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
                       />
-                    </ScheduleField>
-                  </>
-                )}
-              </motion.div>
+                      <input
+                        value={schedule.fromUser}
+                        onChange={(e) => onChange({ ...schedule, fromUser: e.target.value })}
+                        placeholder="username"
+                        spellCheck={false}
+                        className={`${schedFieldCls} pl-7`}
+                      />
+                    </div>
+                  </ScheduleField>
+                  <ScheduleField label="Keywords" hint="optional, any of — bug, error, broken">
+                    <input
+                      value={schedule.keywords}
+                      onChange={(e) => onChange({ ...schedule, keywords: e.target.value })}
+                      placeholder="bug, error"
+                      spellCheck={false}
+                      className={schedFieldCls}
+                    />
+                  </ScheduleField>
+                </div>
+              </div>
 
               <div className="flex items-center gap-1.5 pt-2.5 border-t border-line-soft text-xs text-faint">
                 {schedule.kind === "message" ? (
@@ -715,6 +713,15 @@ function ScheduleChip({
 
 const schedFieldCls =
   "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
+
+// All trigger-kind panels share one grid cell ([grid-area:1/1]) so the popover
+// is always as tall as the tallest panel — switching kinds can't change its
+// height (no jump). Inactive panels stay laid out (for sizing) but hidden.
+const fieldStackCls = (active: boolean) =>
+  clsx(
+    "[grid-area:1/1] grid gap-2.5 content-start",
+    active ? "opacity-100 transition-opacity duration-150 ease-out" : "invisible opacity-0",
+  );
 
 function ScheduleField({
   label,

@@ -59,7 +59,7 @@ export function Chip({
       aria-pressed={ariaPressed}
       {...rest}
       className={clsx(
-        "inline-flex items-center font-medium tracking-[-0.005em] transition-[background-color,border-color,box-shadow,color,transform] duration-check ease-out select-none active:scale-[0.97]",
+        "inline-flex items-center font-medium tracking-[-0.005em] transition-[background-color,border-color,box-shadow,color] duration-check ease-out select-none",
         sizeClass[size],
         styleFor(variant, tone, active),
         disabled && "opacity-50 cursor-not-allowed pointer-events-none",
