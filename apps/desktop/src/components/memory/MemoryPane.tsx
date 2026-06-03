@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import type { AppConfig } from "../../api";
 import { listScopes, type MemoryScope, type ScopeKind } from "../../api/memoryItems";
 import { useStore } from "../../store";
@@ -42,19 +43,17 @@ export function MemoryPane({
   const [graphFocus, setGraphFocus] = useState<string | null>(null);
   const direction = useTabDirection(ORDER, tab);
 
-  // Memory is scoped (user / project / session). The UI used to silently query only
-  // user scope, so project/session memory (most of it) was invisible. Load the scopes
-  // that actually hold claims and default to the busiest one.
+  // Memory is ONE connected store. The default view is everything (scope = null);
+  // scope is an optional FILTER, not a wall. (Scope isolation governs what the agent
+  // recalls, not what the human browses.) Load the scopes only to offer filter chips.
   const [scopes, setScopes] = useState<MemoryScope[]>([]);
-  const [scope, setScope] = useState<MemoryScopeSel | null>(null);
+  const [scope, setScope] = useState<MemoryScopeSel | null>(null); // null = All
   useEffect(() => {
     if (!config) return;
     let alive = true;
     listScopes(config)
       .then((r) => {
-        if (!alive || !r.scopes.length) return;
-        setScopes(r.scopes);
-        setScope((cur) => cur ?? { kind: r.scopes[0].scope_kind, key: r.scopes[0].scope_key });
+        if (alive) setScopes(r.scopes);
       })
       .catch(() => {});
     return () => {
@@ -91,37 +90,32 @@ export function MemoryPane({
     onTab("graph");
   };
 
-  const scopeSel = scope ?? { kind: "user" as ScopeKind, key: null };
+  const isActive = (s: MemoryScope | null) =>
+    s === null ? scope === null : scope?.kind === s.scope_kind && scope?.key === s.scope_key;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {scopes.length > 1 && (
-        <div className="flex items-center gap-2 px-1 pb-2">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-faint">Scope</span>
-          <select
-            value={`${scopeSel.kind}|${scopeSel.key ?? ""}`}
-            onChange={(e) => {
-              const [kind, key] = e.target.value.split("|");
-              setScope({ kind: kind as ScopeKind, key: key || null });
-            }}
-            className="rounded-md border border-line-soft bg-surface-soft/50 px-2 py-1 text-sm text-ink outline-none"
-          >
-            {scopes.map((s) => (
-              <option key={`${s.scope_kind}|${s.scope_key ?? ""}`} value={`${s.scope_kind}|${s.scope_key ?? ""}`}>
-                {scopeLabel(s)}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-1 px-1 pb-2">
+          <ScopeChip label="All" active={isActive(null)} onClick={() => setScope(null)} />
+          {scopes.map((s) => (
+            <ScopeChip
+              key={`${s.scope_kind}|${s.scope_key ?? ""}`}
+              label={scopeLabel(s)}
+              active={isActive(s)}
+              onClick={() => setScope({ kind: s.scope_kind, key: s.scope_key })}
+            />
+          ))}
         </div>
       )}
       <TabPanels value={tab} direction={direction} className="h-full min-h-0">
         {tab === "lenses" && (
-          <LensesView config={config} scope={scopeSel} onPeekClaim={peekClaim} />
+          <LensesView config={config} scope={scope} onPeekClaim={peekClaim} />
         )}
         {tab === "claims" && (
-          <ClaimsView config={config} scope={scopeSel} focusId={claimFocus} onProvenance={showProvenance} />
+          <ClaimsView config={config} scope={scope} focusId={claimFocus} onProvenance={showProvenance} />
         )}
-        {tab === "graph" && <GraphView config={config} scope={scopeSel} focusId={graphFocus} />}
+        {tab === "graph" && <GraphView config={config} scope={scope} focusId={graphFocus} />}
       </TabPanels>
     </div>
   );
@@ -129,4 +123,20 @@ export function MemoryPane({
 
 function useConfig(): AppConfig | null {
   return useStore((s) => s.config);
+}
+
+/** Scope filter chip — the app's pill language (matches the composer effort pills). */
+function ScopeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "h-6 px-2.5 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none",
+        active ? "bg-accent-soft text-accent-strong" : "text-muted hover:bg-surface-soft hover:text-ink",
+      )}
+    >
+      {label}
+    </button>
+  );
 }

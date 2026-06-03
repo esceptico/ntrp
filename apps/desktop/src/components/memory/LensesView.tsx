@@ -48,7 +48,7 @@ export function LensesView({
   onPeekClaim,
 }: {
   config: AppConfig;
-  scope: { kind: "user" | "project" | "session"; key: string | null };
+  scope: { kind: "user" | "project" | "session"; key: string | null } | null;
   onPeekClaim: (claimId: string) => void;
 }) {
   const [lenses, setLenses] = useState<LensWithCoverage[]>([]);
@@ -60,7 +60,7 @@ export function LensesView({
 
   const reloadList = useCallback(() => {
     setLoading(true);
-    listMemoryLenses(config, { scope_kind: scope.kind, scope_key: scope.key ?? undefined })
+    listMemoryLenses(config, { scope_kind: scope?.kind, scope_key: scope?.key ?? undefined })
       .then((r) => {
         setLenses(r.lenses);
         setError(null);
@@ -68,7 +68,7 @@ export function LensesView({
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [config, scope.kind, scope.key]);
+  }, [config, scope?.kind, scope?.key]);
 
   useEffect(() => {
     reloadList();
@@ -262,7 +262,7 @@ function Composer({
 
   if (phase === "seed") {
     return (
-      <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
+      <div className="surface-panel surface-popover mb-2 flex flex-col gap-2 p-2.5">
         <input
           ref={nameRef}
           value={name}
@@ -292,7 +292,7 @@ function Composer({
   }
 
   return (
-    <div className="glass-surface surface-popover mb-2 flex flex-col gap-2 p-2.5">
+    <div className="surface-panel surface-popover mb-2 flex flex-col gap-2 p-2.5">
       <textarea
         ref={markdownRef}
         value={markdown}
@@ -790,7 +790,7 @@ function CriterionRow({
   };
 
   return (
-    <div className="glass-surface surface-popover my-1 p-2.5">
+    <div className="surface-panel surface-popover my-1 p-2.5">
       <textarea
         ref={taRef}
         value={text}

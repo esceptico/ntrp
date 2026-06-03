@@ -20,7 +20,7 @@ export function GraphView({
   focusId,
 }: {
   config: AppConfig;
-  scope: { kind: "user" | "project" | "session"; key: string | null };
+  scope: { kind: "user" | "project" | "session"; key: string | null } | null;
   focusId: string | null;
 }) {
   const [rootId, setRootId] = useState<string | null>(focusId);
@@ -40,7 +40,7 @@ export function GraphView({
       // No root → whole-graph (default). A root → click-to-focus BFS.
       const req = id
         ? getMemoryGraph(config, id, { direction: "both", depth: 3 })
-        : getWholeGraph(config, { scope_kind: scope.kind, scope_key: scope.key ?? undefined });
+        : getWholeGraph(config, { scope_kind: scope?.kind, scope_key: scope?.key ?? undefined });
       req
         .then((g) => {
           // Drop a stale response: rootId may have changed (and a newer request
@@ -57,7 +57,7 @@ export function GraphView({
           if (alive()) setLoading(false);
         });
     },
-    [config, scope.kind, scope.key],
+    [config, scope?.kind, scope?.key],
   );
 
   useEffect(() => {
@@ -101,7 +101,7 @@ export function GraphView({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 28 }}
             transition={SPRING_MODAL}
-            className="glass-surface surface-popover absolute right-3 top-3 bottom-3 z-10 flex w-[300px] flex-col p-4"
+            className="surface-panel surface-popover absolute right-3 top-3 bottom-3 z-10 flex w-[300px] flex-col p-4"
           >
             <div className="flex items-start justify-between gap-2">
               <Badge tone="neutral" size="sm">

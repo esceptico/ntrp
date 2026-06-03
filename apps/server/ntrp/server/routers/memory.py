@@ -71,6 +71,15 @@ def _scope(scope_kind: str, scope_key: str | None) -> Scope:
         raise HTTPException(status_code=422, detail=str(e))
 
 
+def _scope_or_all(scope_kind: str, scope_key: str | None) -> Scope | None:
+    """`all` / empty → None (no scope filter): memory is ONE connected store the user
+    browses unified; scope is an optional filter, not a wall. Isolation governs what
+    the agent recalls, not what the human inspects."""
+    if not scope_kind or scope_kind == "all":
+        return None
+    return _scope(scope_kind, scope_key)
+
+
 def _scope_json(scope: Scope) -> dict:
     return {"kind": scope.kind.value, "key": scope.key}
 
@@ -212,14 +221,14 @@ async def list_scopes(knowledge: KnowledgeRuntime = Depends(_knowledge)):
 @router.get("/items")
 async def list_items(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "user",
+    scope_kind: str = "all",
     scope_key: str | None = None,
     subject: str | None = None,
     status: str = "active",
     valid_at: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
 ):
-    scope = _scope(scope_kind, scope_key)
+    scope = _scope_or_all(scope_kind, scope_key)
     # Empty status string => all statuses (store.query(status=None)).
     if status == "":
         status_enum: Status | None = None
@@ -259,10 +268,10 @@ async def get_item(item_id: str, knowledge: KnowledgeRuntime = Depends(_knowledg
 @router.get("/lenses")
 async def list_lenses(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "user",
+    scope_kind: str = "all",
     scope_key: str | None = None,
 ):
-    scope = _scope(scope_kind, scope_key)
+    scope = _scope_or_all(scope_kind, scope_key)
     rows = await knowledge.memory_retrieval.lens_registry.list_lenses(scope)
     return {"lenses": [{"lens": lens_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows]}
 
@@ -322,17 +331,16 @@ async def get_lens_page_status(
 @router.get("/graph")
 async def get_whole_graph(
     knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "user",
+    scope_kind: str = "all",
     scope_key: str | None = None,
     subject: str | None = None,
     roles: str | None = None,
-    limit: int = Query(default=500, ge=1, le=2000),
+    limit: int = Query(default=2000, ge=1, le=5000),
 ):
-    """All in-scope active claims + claim↔claim edges among them.
-
-    The default graph the UI loads (locked model §4). Lenses are never nodes.
+    """All active claims + claim↔claim edges among them, across all scopes by default
+    (one connected graph; scope is an optional filter). Lenses are never nodes.
     """
-    scope = _scope(scope_kind, scope_key)
+    scope = _scope_or_all(scope_kind, scope_key)
     store = knowledge.memory
 
     role_filter = _parse_roles(roles)
@@ -357,7 +365,7 @@ async def get_whole_graph(
     return {
         "nodes": [item_json(m) for m in nodes.values()],
         "edges": [edge_json(e) for e in edges],
-        "scope": _scope_json(scope),
+        "scope": _scope_json(scope) if scope else {"kind": "all", "key": None},
     }
 
 
