@@ -103,8 +103,8 @@ class CreateAutomationInput(BaseModel):
     name: str = Field(description="Short human-readable label (e.g. 'morning briefing', 'pre-meeting prep')")
     description: str = Field(description="What the agent should do (natural language task)")
     model: str | None = Field(default=None, description="Optional agent model override for this automation.")
-    trigger_type: Literal["time", "event"] = Field(
-        description="Trigger type: 'time' (scheduled or interval), 'event' (reacts to events like calendar_approaching, new_email)",
+    trigger_type: Literal["time", "event", "message"] = Field(
+        description="Trigger type: 'time' (scheduled or interval), 'event' (reacts to events like calendar_approaching), 'message' (reacts to a new Slack message in one or more channels)",
     )
     at: str | None = Field(
         default=None,
@@ -133,6 +133,18 @@ class CreateAutomationInput(BaseModel):
     lead_minutes: int | str | None = Field(
         default=None,
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
+    )
+    channels: list[str] | None = Field(
+        default=None,
+        description="For trigger_type='message': Slack channel names to watch (one or more, e.g. ['feel-good-inc', 'eng-bugs']). Required for message triggers.",
+    )
+    from_user: str | None = Field(
+        default=None,
+        description="For trigger_type='message': only react to messages from this Slack username/display name. Recommended — without it, anyone in the channel can drive an auto-approve run.",
+    )
+    contains: list[str] | None = Field(
+        default=None,
+        description="For trigger_type='message': only react when the message text contains any of these keywords (case-insensitive). Optional.",
     )
     auto_approve: bool = Field(
         default=False,
@@ -224,25 +236,35 @@ class RunAutomationInput(BaseModel):
 
 
 async def approve_create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ApprovalInfo | None:
-    try:
-        trigger, next_run = build_trigger(
-            args.trigger_type,
-            at=args.at,
-            days=args.days,
-            every=args.every,
-            event_type=args.event_type,
-            lead_minutes=args.lead_minutes,
-            start=args.start,
-            end=args.end,
-        )
-    except ValueError:
-        return None
+    next_run = None
+    if args.trigger_type == "message":
+        chans = ", ".join(f"#{c}" for c in (args.channels or [])) or "(no channel)"
+        schedule_label = f"On Slack message in {chans}"
+        if args.from_user:
+            schedule_label += f" from @{args.from_user}"
+        if args.contains:
+            schedule_label += f" containing {', '.join(args.contains)}"
+    else:
+        try:
+            trigger, next_run = build_trigger(
+                args.trigger_type,
+                at=args.at,
+                days=args.days,
+                every=args.every,
+                event_type=args.event_type,
+                lead_minutes=args.lead_minutes,
+                start=args.start,
+                end=args.end,
+            )
+        except ValueError:
+            return None
+        schedule_label = _triggers_label([trigger])
 
     # Multi-line preview the frontend can render as a structured card.
     # Order is intentional: name first, then schedule (what people scan
     # for), then auto-approve warning, then the full prompt body so reviewers
     # can read what'll actually run without expanding anything.
-    lines: list[str] = [f"Name: {args.name}", f"Schedule: {_triggers_label([trigger])}"]
+    lines: list[str] = [f"Name: {args.name}", f"Schedule: {schedule_label}"]
     if next_run:
         lines.append(f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}")
     if args.model:
@@ -288,11 +310,20 @@ async def create_automation(execution: ToolExecution, args: CreateAutomationInpu
         )
     except ValueError as e:
         return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+    message_triggers: list[dict] | None = None
+    if args.trigger_type == "message":
+        message_trigger: dict = {"type": "message", "source": "slack", "channels": args.channels or []}
+        if args.from_user:
+            message_trigger["from_user"] = args.from_user
+        if args.contains:
+            message_trigger["contains"] = args.contains
+        message_triggers = [message_trigger]
     try:
         automation = await svc.create(
             name=args.name,
             description=args.description,
             trigger_type=args.trigger_type,
+            triggers=message_triggers,
             at=args.at,
             days=args.days,
             every=args.every,

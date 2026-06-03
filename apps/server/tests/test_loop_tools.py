@@ -201,6 +201,54 @@ async def test_create_automation_passes_thread_id_and_read_history(store_and_svc
     assert created.read_history is True
 
 
+class _FakeSlack:
+    async def resolve_channel(self, name: str) -> tuple[str, str]:
+        return f"C-{name}", name
+
+    async def resolve_user(self, name: str) -> dict[str, str]:
+        return {"id": f"U-{name}", "name": name}
+
+
+@pytest.mark.asyncio
+async def test_create_automation_message_trigger_resolves_channels(tmp_path: Path):
+    from ntrp.automation.triggers import MessageTrigger
+    from ntrp.context.store import SessionStore
+    from ntrp.services.session import SessionService
+
+    conn = await database.connect(tmp_path / "automation.db")
+    store = AutomationStore(conn)
+    await store.init_schema()
+    session_conn = await database.connect(tmp_path / "sessions.db")
+    session_store = SessionStore(session_conn)
+    await session_store.init_schema()
+    svc = AutomationService(
+        store=store,
+        scheduler=Scheduler(store=store, build_deps=lambda: None),
+        session_service=SessionService(session_store),
+        get_slack_client=lambda: _FakeSlack(),
+    )
+    execution = _execution(svc, loop_task_id=None)
+    args = CreateAutomationInput(
+        name="bug watch",
+        description="triage bugs",
+        trigger_type="message",
+        channels=["feel-good-inc", "eng-bugs"],
+        from_user="sam",
+        contains=["bug", "error"],
+    )
+
+    result = await create_automation(execution, args)
+    assert not result.is_error, result.content
+
+    triggers = [t for a in await store.list_all() for t in a.triggers if isinstance(t, MessageTrigger)]
+    assert len(triggers) == 1
+    trigger = triggers[0]
+    assert trigger.channel_ids == ["C-feel-good-inc", "C-eng-bugs"]
+    assert trigger.from_user_id == "U-sam"
+    assert trigger.contains == ["bug", "error"]
+    await conn.close()
+
+
 @pytest.mark.asyncio
 async def test_create_automation_defaults_parent_from_loop_ctx(store_and_svc):
     store, svc = store_and_svc

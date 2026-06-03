@@ -368,6 +368,16 @@ class MessageTrigger:
         return [c["id"] for c in self.channels]
 
     @property
+    def label(self) -> str:
+        names = ", ".join(f"#{c['name']}" for c in self.channels) or "#?"
+        label = f"slack {names}"
+        if self.from_user_name:
+            label += f" from @{self.from_user_name}"
+        if self.contains:
+            label += f" ~ {', '.join(self.contains)}"
+        return label
+
+    @property
     def one_shot(self) -> bool:
         return False
 
