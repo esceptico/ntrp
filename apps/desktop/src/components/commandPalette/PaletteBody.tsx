@@ -9,7 +9,7 @@ import { Row } from "./Row";
 import { filterEntries, groupBySection } from "./filter";
 import { useEntries } from "./useEntries";
 import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
-import { ScrollBlurTop } from "../ScrollBlur";
+import { ScrollFadeTop } from "../ScrollBlur";
 
 // Directional page swap between hierarchy levels: pushing into a sub-view
 // enters from the right (+1), popping back enters from the left (-1). Mirrors
@@ -195,7 +195,7 @@ export function PaletteBody({
         layoutScroll
         className="overflow-y-auto overflow-x-hidden scroll-thin pb-2"
       >
-        <ScrollBlurTop />
+        <ScrollFadeTop />
         <AnimatePresence mode="wait" custom={direction} initial={false}>
           <motion.div
             key={pageKey}

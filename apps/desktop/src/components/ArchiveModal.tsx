@@ -12,7 +12,7 @@ import { PageModal } from "./PageModal";
 import { useMutationState } from "../lib/hooks";
 import { formatRelativePast } from "../lib/format";
 import { ICON } from "../lib/icons";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 
 export function ArchiveModal() {
   const open = useStore((s) => s.archiveOpen);
@@ -54,7 +54,7 @@ export function ArchiveModal() {
       }}
     >
       <div className="overflow-y-auto scroll-thin px-3 py-3">
-        <ScrollBlurTop />
+        <ScrollFadeTop />
         {filtered === null ? (
           <Empty>Loading…</Empty>
         ) : filtered.length === 0 ? (

@@ -24,7 +24,7 @@ import {
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 
 // Compact relative-time formatter. Codex's Cloud Tasks TUI uses
 // "2m ago" style strings — same idea here, sans the suffix because
@@ -476,7 +476,7 @@ export function AgentRightSidebar() {
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
-            <ScrollBlurTop />
+            <ScrollFadeTop />
             <div className="space-y-3">
               <ApprovalsRow />
               {todo && <TodoSidebarSection todo={todo} />}

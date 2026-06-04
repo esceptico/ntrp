@@ -4,7 +4,7 @@ import { Markdown } from "./Markdown";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 
 /** Generic markdown viewer modal. State lives in the store as `viewingMarkdown`
  *  so any code can pop the viewer with a `setViewingMarkdown({title, content, ...})`
@@ -43,7 +43,7 @@ export function MarkdownViewer() {
     >
       {view && (
         <div className="overflow-y-auto scroll-thin px-5 py-4">
-          <ScrollBlurTop />
+          <ScrollFadeTop />
           <Markdown content={view.content} className="text-md leading-[1.6] text-ink" />
         </div>
       )}

@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, Ref, ReactNode } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
-import { ScrollBlurTop } from "../ScrollBlur";
+import { ScrollFadeTop } from "../ScrollBlur";
 import { Badge, type BadgeTone } from "../Badge";
 
 // ─── Pane / list / detail shells ──────────────────────────────────────
@@ -18,7 +18,7 @@ export function PaneShell({
     <div className="grid grid-cols-[minmax(280px,360px)_minmax(0,1fr)] h-full">
       <div className="flex flex-col min-h-0">{list}</div>
       <div className="min-h-0 overflow-y-auto scroll-thin">
-        <ScrollBlurTop />
+        <ScrollFadeTop />
         {detail}
       </div>
     </div>
@@ -90,7 +90,7 @@ export function DetailShell({
     <div className="flex flex-col h-full">
       <div className="px-7 pt-6 pb-3">{header}</div>
       <div className="flex-1 min-h-0 px-7 overflow-y-auto scroll-thin">
-        <ScrollBlurTop />
+        <ScrollFadeTop />
         {body}
         <div className="mt-7 mb-6">{meta}</div>
       </div>

@@ -12,7 +12,7 @@ import {
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 
 const DIFF_LINE = "block px-2 min-w-max";
 const DIFF_ADD = "bg-[rgba(79,138,58,0.10)] text-[#2e6620] dark:bg-[rgba(135,154,57,0.16)] dark:text-[#afc463]";
@@ -101,7 +101,7 @@ export function ApprovalReviewModal() {
             </header>
 
             <div className="overflow-y-auto scroll-thin">
-              <ScrollBlurTop />
+              <ScrollFadeTop />
               {approval.diff ? (
                 <div className="font-mono text-xs leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
                   <div>

@@ -15,7 +15,7 @@ import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
@@ -125,7 +125,7 @@ export function SettingsModal() {
           </header>
 
           <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-[56px] pb-4">
-            <ScrollBlurTop />
+            <ScrollFadeTop />
             <TabPanels value={active} direction={direction} className="pt-1">
               {active === "connection" && (
                 <ConnectionTab

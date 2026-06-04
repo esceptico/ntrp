@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell,
@@ -40,7 +40,7 @@ import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
-import { ScrollBlurTop } from "./ScrollBlur";
+import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
 
@@ -73,6 +73,12 @@ export function AutomationsModal() {
   const systemCount = automationGroups?.internal.length ?? 0;
 
   const direction = useTabDirection(TAB_ORDER, tab);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    scrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [open, tab]);
 
   return (
     <>
@@ -107,28 +113,27 @@ export function AutomationsModal() {
           </Tabs>
 
           <div className="relative min-h-0 overflow-hidden">
-            <TabPanels
-              value={tab}
-              direction={direction}
-              className="h-full min-h-0 overflow-y-auto scroll-thin px-6 py-5"
-            >
-              <ScrollBlurTop />
-              {tab === "active" ? (
-                <ActiveList
-                  automations={automationGroups?.user ?? null}
-                  onEdit={(automation) => setEditor({ kind: "edit", automation })}
-                  onPickTemplate={() => setTab("templates")}
-                  onCreate={() => setEditor({ kind: "create" })}
-                />
-              ) : tab === "system" ? (
-                <SystemList automations={automationGroups?.internal ?? null} />
-              ) : (
-                <TemplatesList
-                  onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
-                  onPickSuggestion={(s) => setEditor({ kind: "create", preset: suggestionToPayload(s) })}
-                />
-              )}
-            </TabPanels>
+            {/* Scroll lives outside TabPanels — motion transform breaks sticky overlays. */}
+            <div ref={scrollRef} className="h-full min-h-0 overflow-y-auto scroll-thin">
+              <ScrollFadeTop key={tab} />
+              <TabPanels value={tab} direction={direction} className="px-6 py-5">
+                {tab === "active" ? (
+                  <ActiveList
+                    automations={automationGroups?.user ?? null}
+                    onEdit={(automation) => setEditor({ kind: "edit", automation })}
+                    onPickTemplate={() => setTab("templates")}
+                    onCreate={() => setEditor({ kind: "create" })}
+                  />
+                ) : tab === "system" ? (
+                  <SystemList automations={automationGroups?.internal ?? null} />
+                ) : (
+                  <TemplatesList
+                    onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
+                    onPickSuggestion={(s) => setEditor({ kind: "create", preset: suggestionToPayload(s) })}
+                  />
+                )}
+              </TabPanels>
+            </div>
           </div>
         </div>
       </PageModal>

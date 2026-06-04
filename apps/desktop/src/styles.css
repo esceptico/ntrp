@@ -446,11 +446,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-color: transparent;
 }
 
-/* Mask-based scroll edge fade — content itself dissolves instead of a
-   color veil being painted above it. */
-.scroll-fade-top {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
-          mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
+/* Mask-based scroll edge fade — content dissolves at the top instead of a
+   painted overlay (which bleeds past rounded panel corners). Toggled by
+   ScrollFadeTop via data-scroll-fade-top on the scroller. */
+[data-scroll-fade-top="true"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 48px);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 48px);
 }
 
 /* Scroll edge blur — pinned to the top of the scroll viewport with sticky so
@@ -470,14 +471,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   opacity: 1;
 }
 /* BlurEffect renders an absolutely-positioned wrapper; the sticky parent is
-   0-tall, so the band height and color veil live here. */
+   0-tall, so the band height and color veil live here.
+   --scroll-blur-bg defaults to --color-bg but is overridden to --color-surface
+   on .surface-panel so the veil matches whichever surface the scroller sits on. */
 .scroll-progressive-blur-layer {
   height: 72px;
   pointer-events: none !important;
   background: linear-gradient(
     to bottom,
-    color-mix(in oklab, var(--color-bg) 68%, transparent),
-    color-mix(in oklab, var(--color-bg) 22%, transparent) 58%,
+    color-mix(in oklab, var(--scroll-blur-bg, var(--color-bg)) 68%, transparent),
+    color-mix(in oklab, var(--scroll-blur-bg, var(--color-bg)) 22%, transparent) 58%,
     transparent
   );
 }
@@ -845,6 +848,7 @@ button.app-row:not(:disabled):active,
 @layer components {
 .surface-panel {
   --surface-radius: 16px;
+  --scroll-blur-bg: var(--color-surface);
 
   position: relative;
   isolation: isolate;
@@ -1087,18 +1091,23 @@ button.app-row:not(:disabled):active,
     inset 0 0 0 1px var(--ring-dark);
 }
 }
-/* Composer focus state: strengthen the panel ring without changing layout. */
+/* Composer focus state: strengthen the panel ring without changing layout.
+   Outer halo uses outline (not box-shadow spread) so it follows
+   the panel border-radius instead of a square spread footprint. */
+.composer-card.surface-panel {
+  --composer-focus-spread: 2px;
+}
 .composer-card.surface-panel:focus-within {
+  outline: var(--composer-focus-spread) solid var(--color-accent-soft);
+  outline-offset: 0;
   box-shadow:
     var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-light-strong),
-    0 0 0 3px var(--color-accent-soft);
+    inset 0 0 0 1px var(--ring-light-strong);
 }
 :root.dark .composer-card.surface-panel:focus-within {
   box-shadow:
     var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-dark-strong),
-    0 0 0 3px var(--color-accent-soft);
+    inset 0 0 0 1px var(--ring-dark-strong);
 }
 .composer-wrap {
   container-type: inline-size;

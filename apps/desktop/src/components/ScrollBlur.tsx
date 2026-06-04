@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import BlurEffect from "react-progressive-blur";
 
 /**
- * Scroll-edge blur for modal/list panes. Pinned to the top of the scroll
- * viewport with `position: sticky` so the blur's backdrop stays the live,
- * scrolling page. A transform-based pin (translateY by scrollTop) turns the
- * wrapper into a backdrop root and the blur samples nothing — only a flat veil.
+ * Progressive blur for scroll panes without a transformed surface-panel
+ * ancestor (main chat). Pinned with sticky so backdrop-filter samples the
+ * live scrolling content.
  */
 export function ScrollBlurTop() {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -42,4 +41,31 @@ export function ScrollBlurTop() {
       />
     </div>
   );
+}
+
+/**
+ * Mask-based scroll-edge fade for surface panels (modals, sidebars, command
+ * palette). backdrop-filter breaks inside composited .surface-panel layers;
+ * a painted overlay bleeds past rounded panel corners — masking the scroller
+ * keeps the fade inside its box.
+ */
+export function ScrollFadeTop() {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scroller = sentinelRef.current?.parentElement;
+    if (!scroller) return;
+
+    const onScroll = () => {
+      scroller.dataset.scrollFadeTop = scroller.scrollTop > 0 ? "true" : "false";
+    };
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      delete scroller.dataset.scrollFadeTop;
+    };
+  }, []);
+
+  return <div ref={sentinelRef} aria-hidden className="hidden" />;
 }
