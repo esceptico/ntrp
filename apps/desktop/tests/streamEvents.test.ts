@@ -2168,6 +2168,43 @@ test("keeps tool results when result arrives before delayed burst item renders",
   expect(item?.result).toBe("second result");
 });
 
+test("tool result child agent metadata attaches to activity item", async () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+  handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "call-research", tool_call_name: "research", timestamp: 2 });
+  handleServerEvent({
+    type: "TOOL_CALL_RESULT",
+    tool_call_id: "call-research",
+    name: "research",
+    content: "done",
+    preview: "done",
+    data: {
+      child_agent: {
+        child_run_id: "agent-123",
+        parent_tool_call_id: "call-research",
+        agent_type: "research",
+        wait: true,
+        status: "completed",
+      },
+    },
+    timestamp: 3,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  expect(activityId).toBeTruthy();
+  const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
+  expect(item?.semanticKind).toBe("agent");
+  expect(item?.childAgent).toEqual({
+    childRunId: "agent-123",
+    parentToolCallId: "call-research",
+    agentType: "research",
+    wait: true,
+    status: "completed",
+  });
+});
+
 test("merges duplicate buffered tool result patches before delayed render", async () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });

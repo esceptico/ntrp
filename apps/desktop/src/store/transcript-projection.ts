@@ -1,6 +1,7 @@
 import { type HistoryMessage, type ServerEvent } from "../api";
 import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
+import { childAgentFromToolResultData, type ToolResultData } from "./child-agent-metadata";
 import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
 import {
   reduceActiveActivityBackgrounded,
@@ -362,9 +363,14 @@ export function applyChatEventToTranscript(
       if (typeof event.duration_ms === "number" && event.duration_ms > 0) {
         patch.durationMs = event.duration_ms;
       }
-      const data = event.data as { usage?: ActivityItem["usage"]; cost?: number } | null;
+      const data = event.data as ToolResultData | null;
       if (data?.usage) patch.usage = data.usage;
       if (typeof data?.cost === "number") patch.cost = data.cost;
+      const childAgent = childAgentFromToolResultData(data);
+      if (childAgent) {
+        patch.childAgent = childAgent;
+        patch.semanticKind = SEMANTIC_KIND_AGENT;
+      }
       if (!s.mergeActivityItem(event.tool_call_id, patch)) {
         bufferActivityPatch(context, event.tool_call_id, patch);
       }
@@ -827,6 +833,7 @@ function activityPatchFromItem(item: ActivityItem): Partial<ActivityItem> {
     depth: item.depth,
     parentToolId: item.parentToolId,
     semanticKind: item.semanticKind,
+    childAgent: item.childAgent,
   };
   if (item.displayName) patch.displayName = item.displayName;
   return patch;

@@ -129,6 +129,14 @@ export interface BackgroundAgent {
   updatedAt: number;
 }
 
+export interface ChildAgentRef {
+  childRunId: string;
+  parentToolCallId?: string;
+  agentType: string;
+  wait: boolean;
+  status: string;
+}
+
 export interface ActivityItem {
   id: string;
   /** Tool name (used for display + inspector lookup). Despite the name this
@@ -174,6 +182,8 @@ export interface ActivityItem {
   /** Subagent USD cost (only populated when `semanticKind === "agent"`).
    *  Already rolled up into the parent run's `totalCost` server-side. */
   cost?: number;
+  /** Durable child-agent identity/control metadata from tool result data. */
+  childAgent?: ChildAgentRef;
 }
 
 export type ActivityLabel = "Calling" | "Called" | "Backgrounded" | "Stopped";
