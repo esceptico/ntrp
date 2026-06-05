@@ -194,6 +194,9 @@ def _background_event_recorder(session_service: SessionService):
                 task_id=task_id,
                 session_id=session_id,
                 parent_run_id=event.get("parent_run_id"),
+                parent_tool_call_id=event.get("parent_tool_call_id"),
+                agent_type=str(event.get("agent_type") or "background_research"),
+                wait=bool(event.get("wait")),
                 command=str(event.get("command") or ""),
             )
         elif bool(event.get("terminal")):
@@ -275,8 +278,6 @@ def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bo
     if expanded is None:
         return message, False
     return expanded, True
-
-
 
 
 def _is_anthropic(model: str) -> bool:
@@ -442,9 +443,7 @@ async def _prepare_messages(
     goal_context: dict | None = None,
     project_context: ProjectContext | None = None,
 ) -> list[dict]:
-    memory_context = await _retrieve_memory_context(
-        deps.memory_retrieval, user_message, project_context
-    )
+    memory_context = await _retrieve_memory_context(deps.memory_retrieval, user_message, project_context)
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
@@ -625,10 +624,7 @@ async def prepare_chat(
 
     stripped_message = message.strip()
     should_name_session = (
-        not session_state.name
-        and not is_init
-        and (stripped_message or images)
-        and not stripped_message.startswith("/")
+        not session_state.name and not is_init and (stripped_message or images) and not stripped_message.startswith("/")
     )
     session_name_task = (
         asyncio.create_task(generate_conversation_name(deps.chat_model, message, has_images=bool(images)))
@@ -641,7 +637,9 @@ async def prepare_chat(
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
     goal_context = await get_goal(session_state.session_id) if get_goal else None
-    project_record = await deps.session_service.get_project(session_state.project_id) if session_state.project_id else None
+    project_record = (
+        await deps.session_service.get_project(session_state.project_id) if session_state.project_id else None
+    )
     project_context = _project_context_from_record(project_record)
     messages = await _prepare_messages(
         deps,

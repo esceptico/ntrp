@@ -120,9 +120,7 @@ async def _event_stream(
             else:
                 rows = await list_pending(session_id)
                 durable_pending_approval_ids = {
-                    row["tool_call_id"]
-                    for row in rows
-                    if isinstance(row.get("tool_call_id"), str)
+                    row["tool_call_id"] for row in rows if isinstance(row.get("tool_call_id"), str)
                 }
         return tool_id in durable_pending_approval_ids
 
@@ -439,8 +437,12 @@ async def list_background_tasks(
         "tasks": [
             {
                 "task_id": tid,
+                "child_run_id": tid,
                 "session_id": session_id,
                 "parent_run_id": None,
+                "parent_tool_call_id": None,
+                "agent_type": "background_research",
+                "wait": False,
                 "status": "running",
                 "command": cmd,
                 "detail": None,

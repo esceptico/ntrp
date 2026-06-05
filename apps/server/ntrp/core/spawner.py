@@ -781,7 +781,14 @@ def create_spawn_fn(
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)
 
-        await registry.record_started(task_id=task_id, command=label, parent_run_id=calling_ctx.run.run_id)
+        await registry.record_started(
+            task_id=task_id,
+            command=label,
+            parent_run_id=calling_ctx.run.run_id,
+            parent_tool_call_id=parent_id,
+            agent_type=resolved_agent_type,
+            wait=should_wait,
+        )
         bg_task = asyncio.create_task(_run_background())
         registry.register(task_id, bg_task, command=label)
 

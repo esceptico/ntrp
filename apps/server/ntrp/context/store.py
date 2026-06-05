@@ -228,6 +228,9 @@ CREATE TABLE IF NOT EXISTS background_agent_runs (
     task_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
     parent_run_id TEXT,
+    parent_tool_call_id TEXT,
+    agent_type TEXT NOT NULL DEFAULT 'background_research',
+    wait INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
     command TEXT NOT NULL,
     detail TEXT,
@@ -419,8 +422,12 @@ class SessionStore:
     def _background_agent_payload(self, row: aiosqlite.Row) -> dict:
         return {
             "task_id": row["task_id"],
+            "child_run_id": row["task_id"],
             "session_id": row["session_id"],
             "parent_run_id": row["parent_run_id"],
+            "parent_tool_call_id": row["parent_tool_call_id"],
+            "agent_type": row["agent_type"] or "background_research",
+            "wait": bool(row["wait"]),
             "status": row["status"],
             "command": row["command"],
             "detail": row["detail"],
@@ -927,9 +934,7 @@ class SessionStore:
         # 5. Recreate triggers, then rebuild the index from content if needed.
         await self.conn.executescript(self._FTS_TRIGGERS)
         if needs_rebuild:
-            await self.conn.execute(
-                "INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild')"
-            )
+            await self.conn.execute("INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild')")
         await self.conn.commit()
 
     async def _migrate_chat_runs_schema(self) -> None:
@@ -1010,8 +1015,28 @@ class SessionStore:
         columns = {row["name"] for row in rows}
         pk_columns = [row["name"] for row in sorted(rows, key=lambda row: row["pk"]) if row["pk"]]
         if "result_text" in columns and pk_columns == ["session_id", "task_id"]:
+            changed = False
+            if "parent_tool_call_id" not in columns:
+                await self.conn.execute("ALTER TABLE background_agent_runs ADD COLUMN parent_tool_call_id TEXT")
+                changed = True
+            if "agent_type" not in columns:
+                await self.conn.execute(
+                    "ALTER TABLE background_agent_runs ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'background_research'"
+                )
+                changed = True
+            if "wait" not in columns:
+                await self.conn.execute("ALTER TABLE background_agent_runs ADD COLUMN wait INTEGER NOT NULL DEFAULT 0")
+                changed = True
+            if changed:
+                await self.conn.commit()
             return
 
+        result_text_expr = "result_text" if "result_text" in columns else "NULL"
+        parent_tool_call_expr = "parent_tool_call_id" if "parent_tool_call_id" in columns else "NULL"
+        agent_type_expr = (
+            "COALESCE(agent_type, 'background_research')" if "agent_type" in columns else "'background_research'"
+        )
+        wait_expr = "COALESCE(wait, 0)" if "wait" in columns else "0"
         await self.conn.execute("ALTER TABLE background_agent_runs RENAME TO background_agent_runs_old")
         await self.conn.execute(
             """
@@ -1019,6 +1044,9 @@ class SessionStore:
                 task_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
                 parent_run_id TEXT,
+                parent_tool_call_id TEXT,
+                agent_type TEXT NOT NULL DEFAULT 'background_research',
+                wait INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL,
                 command TEXT NOT NULL,
                 detail TEXT,
@@ -1035,15 +1063,16 @@ class SessionStore:
             """
         )
         await self.conn.execute(
-            """
+            f"""
             INSERT OR IGNORE INTO background_agent_runs (
-                task_id, session_id, parent_run_id, status, command,
-                detail, result_ref, result_text, created_at, started_at,
+                task_id, session_id, parent_run_id, parent_tool_call_id,
+                agent_type, wait, status, command, detail, result_ref, result_text, created_at, started_at,
                 updated_at, ended_at, cancel_requested_at, notified_at
             )
             SELECT
-                task_id, session_id, parent_run_id, status, command,
-                detail, result_ref, NULL, created_at, started_at,
+                task_id, session_id, parent_run_id, {parent_tool_call_expr},
+                {agent_type_expr}, {wait_expr}, status, command,
+                detail, result_ref, {result_text_expr}, created_at, started_at,
                 updated_at, ended_at, cancel_requested_at, notified_at
             FROM background_agent_runs_old
             """
@@ -1083,6 +1112,7 @@ class SessionStore:
         """Plain-text projection of a message for full-text search — the same
         text the agent reads, not the JSON envelope. Flattens content blocks
         (text/tool_use/tool_result) and drops image/base64 noise."""
+
         def walk(raw: Any) -> list[str]:
             if raw is None:
                 return []
@@ -1698,18 +1728,25 @@ class SessionStore:
         session_id: str,
         parent_run_id: str | None,
         command: str,
+        parent_tool_call_id: str | None = None,
+        agent_type: str = "background_research",
+        wait: bool = False,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         await self.conn.execute(
             """
             INSERT INTO background_agent_runs (
-                task_id, session_id, parent_run_id, status, command,
+                task_id, session_id, parent_run_id, parent_tool_call_id,
+                agent_type, wait, status, command,
                 created_at, started_at, updated_at
             )
-            VALUES (?, ?, ?, 'running', ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
             ON CONFLICT(session_id, task_id) DO UPDATE SET
                 session_id = excluded.session_id,
                 parent_run_id = excluded.parent_run_id,
+                parent_tool_call_id = excluded.parent_tool_call_id,
+                agent_type = excluded.agent_type,
+                wait = excluded.wait,
                 status = 'running',
                 command = excluded.command,
                 detail = NULL,
@@ -1720,7 +1757,7 @@ class SessionStore:
                 cancel_requested_at = NULL,
                 notified_at = NULL
             """,
-            (task_id, session_id, parent_run_id, command, now, now, now),
+            (task_id, session_id, parent_run_id, parent_tool_call_id, agent_type, int(wait), command, now, now, now),
         )
         await self.conn.commit()
         await self.record_background_agent_event(
@@ -2226,7 +2263,7 @@ class SessionStore:
             session_type=row["session_type"] or "chat",
             origin_automation_id=row["origin_automation_id"],
             project_id=row["project_id"],
-            chat_model=row["chat_model"] if "chat_model" in row.keys() else None,
+            chat_model=dict(row).get("chat_model"),
         )
 
         raw_messages, raw_metadata = row["messages"], row["metadata"]
@@ -2249,7 +2286,9 @@ class SessionStore:
             return None
         return await self.load_session(session_id)
 
-    async def list_sessions(self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET) -> list[dict]:
+    async def list_sessions(
+        self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET
+    ) -> list[dict]:
         if project_id is PROJECT_FILTER_UNSET:
             rows = await self.read_conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
         elif project_id is None:
@@ -2288,7 +2327,7 @@ class SessionStore:
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
                 "project_id": row["project_id"],
-                "chat_model": row["chat_model"] if "chat_model" in row.keys() else None,
+                "chat_model": dict(row).get("chat_model"),
             }
             for row in rows
         ]
@@ -2324,7 +2363,7 @@ class SessionStore:
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
                 "project_id": row["project_id"],
-                "chat_model": row["chat_model"] if "chat_model" in row.keys() else None,
+                "chat_model": dict(row).get("chat_model"),
             }
             for row in rows
         ]

@@ -686,6 +686,9 @@ async def test_background_agent_run_lifecycle(store: SessionStore):
         task_id="bg-1",
         session_id="sess-1",
         parent_run_id="run-1",
+        parent_tool_call_id="call-background",
+        agent_type="background_research",
+        wait=False,
         command="research task",
     )
     await store.record_background_agent_event(
@@ -705,6 +708,10 @@ async def test_background_agent_run_lifecycle(store: SessionStore):
 
     runs = await store.list_background_agent_runs("sess-1")
     assert runs[0]["task_id"] == "bg-1"
+    assert runs[0]["child_run_id"] == "bg-1"
+    assert runs[0]["parent_tool_call_id"] == "call-background"
+    assert runs[0]["agent_type"] == "background_research"
+    assert runs[0]["wait"] is False
     assert runs[0]["status"] == "completed"
     assert runs[0]["result_ref"] == "bg_results/bg-1.txt"
     assert await store.get_background_agent_result("sess-1", "bg-1") == "full result"
@@ -808,6 +815,11 @@ async def test_background_agent_schema_migrates_old_task_id_primary_key(tmp_path
 
     assert (await s.list_background_agent_runs("sess-1"))[0]["command"] == "old"
     assert (await s.list_background_agent_runs("sess-2"))[0]["command"] == "new"
+    migrated = (await s.list_background_agent_runs("sess-1"))[0]
+    assert migrated["child_run_id"] == "bg-1"
+    assert migrated["parent_tool_call_id"] is None
+    assert migrated["agent_type"] == "background_research"
+    assert migrated["wait"] is False
     assert await s.get_background_agent_result("sess-2", "bg-1") == "result"
 
     await read_conn.close()

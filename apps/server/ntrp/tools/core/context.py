@@ -159,6 +159,9 @@ class BackgroundTaskRegistry:
         result_ref: str | None = None,
         result_text: str | None = None,
         parent_run_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        agent_type: str | None = None,
+        wait: bool | None = None,
     ) -> None:
         if not self.record_event:
             return
@@ -167,6 +170,9 @@ class BackgroundTaskRegistry:
             task_id=task_id,
             session_id=self.session_id,
             parent_run_id=parent_run_id,
+            parent_tool_call_id=parent_tool_call_id,
+            agent_type=agent_type,
+            wait=wait,
             command=self._commands.get(task_id, ""),
             status=status,
             detail=detail,
@@ -175,12 +181,24 @@ class BackgroundTaskRegistry:
             terminal=terminal,
         )
 
-    async def record_started(self, *, task_id: str, command: str, parent_run_id: str | None = None) -> None:
+    async def record_started(
+        self,
+        *,
+        task_id: str,
+        command: str,
+        parent_run_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        agent_type: str | None = None,
+        wait: bool | None = None,
+    ) -> None:
         self._commands[task_id] = command
         await self._record(
             task_id=task_id,
             status="started",
             parent_run_id=parent_run_id,
+            parent_tool_call_id=parent_tool_call_id,
+            agent_type=agent_type,
+            wait=wait,
         )
 
     async def record_activity(self, task_id: str, detail: str) -> None:
@@ -209,10 +227,7 @@ class BackgroundTaskRegistry:
         return [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
 
     def to_rehydration_refs(self) -> list[dict[str, str]]:
-        return [
-            {"task_id": task_id, "command": command}
-            for task_id, command in sorted(self._commands.items())
-        ]
+        return [{"task_id": task_id, "command": command} for task_id, command in sorted(self._commands.items())]
 
     async def inject(self, messages: list[dict]) -> None:
         if self.on_result:
@@ -253,7 +268,7 @@ class BackgroundTaskRegistry:
         result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
 
         notification = (
-            f"<background_agent_result task_id=\"{task_id}\" status=\"{status}\">\n"
+            f'<background_agent_result task_id="{task_id}" status="{status}">\n'
             "This is a hidden completion event. The user cannot see this message.\n"
             "Write a visible assistant response now. Summarize the result directly for the user.\n"
             "If the result contains sources, IDs, links, or evidence, include the relevant ones inline.\n"
@@ -366,9 +381,7 @@ class ToolExecution:
         tool = self.ctx.registry.get(self.tool_name)
         action = tool.policy.action.value if tool else "write"
         scope = tool.policy.scope.value if tool else "internal"
-        expires_at = (
-            datetime.now(UTC) + timedelta(seconds=self.ctx.io.approval_timeout_seconds)
-        ).isoformat()
+        expires_at = (datetime.now(UTC) + timedelta(seconds=self.ctx.io.approval_timeout_seconds)).isoformat()
 
         await _approval_callback_best_effort(
             self.ctx.io.record_approval,

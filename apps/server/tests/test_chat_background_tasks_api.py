@@ -12,8 +12,12 @@ class _Store:
         return [
             {
                 "task_id": "bg-1",
+                "child_run_id": "bg-1",
                 "session_id": session_id,
                 "parent_run_id": "run-1",
+                "parent_tool_call_id": "call-background",
+                "agent_type": "background_research",
+                "wait": False,
                 "status": "running",
                 "command": "research",
                 "detail": "read files",
@@ -66,6 +70,10 @@ def test_background_tasks_endpoint_returns_durable_snapshot():
     assert response.status_code == 200
     assert response.json()["tasks"][0]["status"] == "running"
     assert response.json()["tasks"][0]["detail"] == "read files"
+    assert response.json()["tasks"][0]["child_run_id"] == "bg-1"
+    assert response.json()["tasks"][0]["parent_tool_call_id"] == "call-background"
+    assert response.json()["tasks"][0]["agent_type"] == "background_research"
+    assert response.json()["tasks"][0]["wait"] is False
 
 
 def test_background_task_cancel_requests_durable_cancel():

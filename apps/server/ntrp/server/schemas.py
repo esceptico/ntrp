@@ -65,8 +65,12 @@ class BackgroundTaskSessionStatusResponse(BaseModel):
 
 class BackgroundAgentRunResponse(BaseModel):
     task_id: str
+    child_run_id: str | None = None
     session_id: str
     parent_run_id: str | None = None
+    parent_tool_call_id: str | None = None
+    agent_type: str = "background_research"
+    wait: bool = False
     status: Literal[
         "running",
         "activity",
