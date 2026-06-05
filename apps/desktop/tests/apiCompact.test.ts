@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { apiWithConfig, compactSessionApi, listProjectsApi } from "../src/api.ts";
+import { apiWithConfig, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "../src/api.ts";
 import { runBuiltinCommand } from "../src/actions/builtins.ts";
 import { getState, setState } from "../src/store/index.ts";
 import { searchMemory } from "../src/api/memoryItems.ts";
@@ -70,6 +70,50 @@ test("standard API calls use the default timeout", async () => {
     body: undefined,
     timeout: 60_000,
   });
+});
+
+test("getChildAgentResultApi uses child-agent result route with wait params", async () => {
+  let request: { path: string; method?: string; body?: string; timeout?: number } | null = null;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, req: typeof request) => {
+          request = req;
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: {
+              task_id: "child-run-1",
+              child_run_id: "child-run-1",
+              session_id: "sess-1",
+              status: "completed",
+              terminal: true,
+              result: "done",
+              result_ref: "bg_results/child-run-1.txt",
+            },
+            text: "",
+          };
+        },
+      },
+    },
+  };
+
+  const result = await getChildAgentResultApi(
+    { serverUrl: "http://localhost:6877", apiKey: "" },
+    "sess-1",
+    "child-run-1",
+    { wait: true, timeoutSeconds: 2 },
+  );
+
+  expect(request).toEqual({
+    path: "/chat/child-agents/child-run-1/result?session_id=sess-1&wait=true&timeout_seconds=2",
+    method: "GET",
+    body: undefined,
+    timeout: 60_000,
+  });
+  expect(result.result).toBe("done");
 });
 
 test("desktop API bridge rejects when the renderer timeout elapses", async () => {

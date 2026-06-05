@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, Check, Copy, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
+import { getChildAgentResultApi, type ChildAgentResult } from "../api";
 import { highlight } from "../highlight";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
@@ -220,10 +221,51 @@ function AgentBody({
   item: ActivityItem;
   descendants: ActivityItem[];
 }) {
+  const config = useStore((s) => s.config);
+  const sessionId = useStore((s) => s.currentSessionId);
   const task = useMemo(() => extractTask(item.args) ?? item.target, [item.args, item.target]);
   const stats = useMemo(() => buildStats(descendants), [descendants]);
   const running = activityItemStatus(item) === "ongoing";
-  const result = item.result ?? "";
+  const childRunId = item.childAgent?.childRunId;
+  const [childResult, setChildResult] = useState<ChildAgentResult | null>(null);
+  const [childResultError, setChildResultError] = useState<string | null>(null);
+  const [childResultLoading, setChildResultLoading] = useState(false);
+  const shouldFetchChildResult = item.childAgent?.wait === false && !!childRunId && !!sessionId;
+
+  useEffect(() => {
+    if (!shouldFetchChildResult || !childRunId || !sessionId) {
+      setChildResult(null);
+      setChildResultError(null);
+      setChildResultLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setChildResult(null);
+    setChildResultLoading(true);
+    setChildResultError(null);
+    void getChildAgentResultApi(config, sessionId, childRunId)
+      .then((result) => {
+        if (!cancelled) setChildResult(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setChildResultError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setChildResultLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [childRunId, config, sessionId, shouldFetchChildResult]);
+
+  const matchingChildResult = childResult?.child_run_id === childRunId ? childResult : null;
+  const durableResult = matchingChildResult?.result?.trim() ? matchingChildResult.result : "";
+  const localResult = item.childAgent && item.childAgent.wait === false ? "" : (item.result ?? "");
+  const result = durableResult || localResult;
+  const childRunning =
+    matchingChildResult?.status === "running" ||
+    matchingChildResult?.status === "activity" ||
+    matchingChildResult?.status === "cancel_requested";
 
   return (
     <>
@@ -248,11 +290,24 @@ function AgentBody({
           <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
             Result
           </h3>
+          {item.childAgent && (
+            <span className="text-xs text-faint tabular-nums">
+              {item.childAgent.agentType} · {item.childAgent.childRunId.slice(0, 12)}
+            </span>
+          )}
           {result.length > 0 && (
             <CopyButton getValue={() => result} />
           )}
         </div>
-        {running ? (
+        {childResultError ? (
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-bad">
+            {childResultError}
+          </div>
+        ) : childResultLoading && result.trim().length === 0 ? (
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+            Loading result…
+          </div>
+        ) : running || childRunning ? (
           <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
             Working…
           </div>

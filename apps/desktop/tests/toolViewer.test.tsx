@@ -1,0 +1,185 @@
+import { afterEach, expect, test } from "bun:test";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { JSDOM } from "jsdom";
+import { ToolViewer } from "../src/components/ToolViewer.tsx";
+import { setState } from "../src/store/index.ts";
+import { createBackgroundAgentsDomainState } from "../src/store/background-agent-domain.ts";
+import type { ActivityItem } from "../src/store/types.ts";
+
+const originalWindow = globalThis.window;
+const originalDocument = globalThis.document;
+const originalAct = (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
+
+afterEach(() => {
+  globalThis.window = originalWindow;
+  globalThis.document = originalDocument;
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = originalAct;
+});
+
+test("agent inspector loads durable child-agent result by child run id", async () => {
+  const { appEl, root, restore } = setupDom();
+  const requests: string[] = [];
+  const item: ActivityItem = {
+    id: "call-bg",
+    kind: "background",
+    semanticKind: "agent",
+    target: "background",
+    args: JSON.stringify({ task: "research auth flow" }),
+    result: "Background task child-run-1 started: research auth flow",
+    status: "executed",
+    taskStatus: "completed",
+    childAgent: {
+      childRunId: "child-run-1",
+      parentToolCallId: "call-bg",
+      agentType: "background_research",
+      wait: false,
+      status: "completed",
+    },
+  };
+
+  globalThis.window.ntrpDesktop = {
+    api: {
+      request: async (_config: unknown, req: { path: string }) => {
+        requests.push(req.path);
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            task_id: "child-run-1",
+            child_run_id: "child-run-1",
+            session_id: "sess-1",
+            status: "completed",
+            terminal: true,
+            result: "final report",
+            result_ref: "bg_results/child-run-1.txt",
+          },
+          text: "",
+        };
+      },
+    },
+  };
+
+  setState({
+    config: { serverUrl: "http://localhost:6877", apiKey: "" },
+    currentSessionId: "sess-1",
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: { items: [item], label: "Called", done: true },
+        },
+      ],
+    ]),
+    order: ["activity-1"],
+    viewingTool: item,
+    backgroundAgents: createBackgroundAgentsDomainState(),
+  });
+
+  try {
+    await act(async () => {
+      root.render(<ToolViewer />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(requests).toEqual([
+      "/chat/child-agents/child-run-1/result?session_id=sess-1",
+    ]);
+    expect(appEl.textContent).toContain("final report");
+  } finally {
+    await act(async () => root.unmount());
+    restore();
+  }
+});
+
+test("agent inspector keeps waited child-agent local result without fetching durable row", async () => {
+  const { appEl, root, restore } = setupDom();
+  const requests: string[] = [];
+  const item: ActivityItem = {
+    id: "call-research",
+    kind: "research",
+    semanticKind: "agent",
+    target: "research",
+    args: JSON.stringify({ task: "research auth flow" }),
+    result: "local final report",
+    status: "executed",
+    taskStatus: "completed",
+    childAgent: {
+      childRunId: "child-run-waited",
+      parentToolCallId: "call-research",
+      agentType: "research",
+      wait: true,
+      status: "completed",
+    },
+  };
+
+  globalThis.window.ntrpDesktop = {
+    api: {
+      request: async (_config: unknown, req: { path: string }) => {
+        requests.push(req.path);
+        throw new Error("unexpected request");
+      },
+    },
+  };
+
+  setState({
+    config: { serverUrl: "http://localhost:6877", apiKey: "" },
+    currentSessionId: "sess-1",
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: { items: [item], label: "Called", done: true },
+        },
+      ],
+    ]),
+    order: ["activity-1"],
+    viewingTool: item,
+    backgroundAgents: createBackgroundAgentsDomainState(),
+  });
+
+  try {
+    await act(async () => {
+      root.render(<ToolViewer />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(requests).toEqual([]);
+    expect(appEl.textContent).toContain("local final report");
+  } finally {
+    await act(async () => root.unmount());
+    restore();
+  }
+});
+
+function setupDom(): { appEl: HTMLElement; root: Root; restore: () => void } {
+  const dom = new JSDOM('<!doctype html><div id="root"></div><div id="app"></div>', { url: "http://localhost" });
+  globalThis.window = dom.window as unknown as Window & typeof globalThis;
+  globalThis.document = dom.window.document;
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+  const rootEl = dom.window.document.getElementById("root");
+  const appEl = dom.window.document.getElementById("app");
+  if (!rootEl || !appEl) throw new Error("missing root");
+  return {
+    appEl,
+    root: createRoot(rootEl),
+    restore: () => {
+      globalThis.window = originalWindow;
+      globalThis.document = originalDocument;
+      (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = originalAct;
+    },
+  };
+}
