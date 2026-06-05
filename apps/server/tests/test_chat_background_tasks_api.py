@@ -87,3 +87,31 @@ def test_background_task_cancel_requests_durable_cancel():
     assert response.status_code == 200
     assert response.json()["status"] == "cancel_requested"
     assert runtime.session_service.store.cancelled == [("sess-1", "bg-1")]
+
+
+def test_child_agents_endpoint_returns_same_durable_snapshot():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).get("/chat/child-agents?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json()["tasks"][0]["child_run_id"] == "bg-1"
+    assert response.json()["tasks"][0]["parent_tool_call_id"] == "call-background"
+    assert response.json()["tasks"][0]["agent_type"] == "background_research"
+
+
+def test_child_agent_cancel_requests_same_durable_cancel():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).post("/chat/child-agents/bg-1/cancel?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancel_requested"
+    assert response.json()["child_run_id"] == "bg-1"
+    assert runtime.session_service.store.cancelled == [("sess-1", "bg-1")]

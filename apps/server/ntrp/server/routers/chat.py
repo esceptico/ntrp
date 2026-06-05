@@ -419,12 +419,11 @@ async def background_run(request: BackgroundRequest, run_registry: RunRegistry =
     return {"status": "backgrounding"}
 
 
-@router.get("/chat/background-tasks", response_model=BackgroundAgentRunsResponse)
-async def list_background_tasks(
+async def _list_child_agents(
     session_id: str,
-    runtime: Runtime = Depends(get_runtime),
-    run_registry: RunRegistry = Depends(require_run_registry),
-):
+    runtime: Runtime,
+    run_registry: RunRegistry,
+) -> dict:
     session_service = getattr(runtime, "session_service", None)
     store = getattr(session_service, "store", None)
     if store is not None:
@@ -459,6 +458,48 @@ async def list_background_tasks(
     }
 
 
+async def _cancel_child_agent(
+    child_run_id: str,
+    session_id: str,
+    runtime: Runtime,
+    run_registry: RunRegistry,
+) -> dict:
+    requested = False
+    session_service = getattr(runtime, "session_service", None)
+    store = getattr(session_service, "store", None)
+    if store is not None:
+        requested = await store.request_background_agent_cancel(session_id, child_run_id)
+
+    registry = run_registry.get_background_registry(session_id)
+    command = registry.cancel(child_run_id)
+    if command is None and not requested:
+        raise HTTPException(status_code=404, detail="Task not found or already done")
+    return {
+        "status": "cancelled" if command is not None else "cancel_requested",
+        "task_id": child_run_id,
+        "child_run_id": child_run_id,
+        "command": command,
+    }
+
+
+@router.get("/chat/background-tasks", response_model=BackgroundAgentRunsResponse)
+async def list_background_tasks(
+    session_id: str,
+    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    return await _list_child_agents(session_id, runtime, run_registry)
+
+
+@router.get("/chat/child-agents", response_model=BackgroundAgentRunsResponse)
+async def list_child_agents(
+    session_id: str,
+    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    return await _list_child_agents(session_id, runtime, run_registry)
+
+
 @router.post("/chat/background-tasks/{task_id}/cancel")
 async def cancel_background_task(
     task_id: str,
@@ -466,18 +507,14 @@ async def cancel_background_task(
     runtime: Runtime = Depends(get_runtime),
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
-    requested = False
-    session_service = getattr(runtime, "session_service", None)
-    store = getattr(session_service, "store", None)
-    if store is not None:
-        requested = await store.request_background_agent_cancel(session_id, task_id)
+    return await _cancel_child_agent(task_id, session_id, runtime, run_registry)
 
-    registry = run_registry.get_background_registry(session_id)
-    command = registry.cancel(task_id)
-    if command is None and not requested:
-        raise HTTPException(status_code=404, detail="Task not found or already done")
-    return {
-        "status": "cancelled" if command is not None else "cancel_requested",
-        "task_id": task_id,
-        "command": command,
-    }
+
+@router.post("/chat/child-agents/{child_run_id}/cancel")
+async def cancel_child_agent(
+    child_run_id: str,
+    session_id: str,
+    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    return await _cancel_child_agent(child_run_id, session_id, runtime, run_registry)
