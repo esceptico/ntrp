@@ -164,6 +164,69 @@ test("agent inspector keeps waited child-agent local result without fetching dur
   }
 });
 
+test("agent inspector activity tree labels nested child agents with type mode and id", async () => {
+  const { appEl, root, restore } = setupDom();
+  const rootItem: ActivityItem = {
+    id: "call-research",
+    kind: "research",
+    semanticKind: "agent",
+    target: "research",
+    args: JSON.stringify({ task: "research auth flow" }),
+    result: "root report",
+    status: "executed",
+    taskStatus: "completed",
+  };
+  const nestedAgent: ActivityItem = {
+    id: "call-bg",
+    kind: "background",
+    semanticKind: "agent",
+    target: "background",
+    displayName: "Nested research",
+    parentToolId: "call-research",
+    depth: 1,
+    status: "ongoing",
+    taskStatus: "running",
+    childAgent: {
+      childRunId: "child-run-2",
+      parentToolCallId: "call-bg",
+      agentType: "background_research",
+      wait: false,
+      status: "running",
+    },
+  };
+
+  setState({
+    config: { serverUrl: "http://localhost:6877", apiKey: "" },
+    currentSessionId: "sess-1",
+    messages: new Map([
+      [
+        "activity-1",
+        {
+          id: "activity-1",
+          role: "activity",
+          content: "",
+          activity: { items: [rootItem, nestedAgent], label: "Called", done: true },
+        },
+      ],
+    ]),
+    order: ["activity-1"],
+    viewingTool: rootItem,
+    backgroundAgents: createBackgroundAgentsDomainState(),
+  });
+
+  try {
+    await act(async () => {
+      root.render(<ToolViewer />);
+    });
+
+    expect(appEl.textContent).toContain("Nested research");
+    expect(appEl.textContent).toContain("background_research · detached · child-run-2");
+  } finally {
+    await act(async () => root.unmount());
+    restore();
+  }
+});
+
 function setupDom(): { appEl: HTMLElement; root: Root; restore: () => void } {
   const dom = new JSDOM('<!doctype html><div id="root"></div><div id="app"></div>', { url: "http://localhost" });
   globalThis.window = dom.window as unknown as Window & typeof globalThis;

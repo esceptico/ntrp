@@ -419,7 +419,7 @@ function ActivityTreeNode({
   const indent = ((item.depth ?? baseDepth) - baseDepth) * 16 + 12;
   const agent = isAgent(item);
   const label = agent ? item.displayName ?? friendlyAgentLabel(item.kind) : item.kind;
-  const detail = agent ? null : item.target;
+  const detail = agent ? childAgentTreeDetail(item) : item.target;
   const running = activityItemStatus(item) === "ongoing";
   return (
     <li className="m-0 p-0">
@@ -471,6 +471,12 @@ function ActivityTreeNode({
       />
     </li>
   );
+}
+
+function childAgentTreeDetail(item: ActivityItem): string | null {
+  if (!item.childAgent) return null;
+  const mode = item.childAgent.wait ? "awaited" : "detached";
+  return `${item.childAgent.agentType} · ${mode} · ${item.childAgent.childRunId.slice(0, 12)}`;
 }
 
 function buildStats(descendants: ActivityItem[]) {
