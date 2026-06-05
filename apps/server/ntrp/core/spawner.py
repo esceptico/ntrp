@@ -63,7 +63,11 @@ class SpawnResult:
     so the desktop can render per-agent budget breakdowns without polluting
     the parent's context size with the subagent's internals.
 
-    Background spawns return early (before the subagent has run), so their
+    `child_run_id`, `agent_type`, and `wait` are the generic child-agent
+    contract. Foreground/background execution are wait policies on that
+    contract, not separate entities.
+
+    Detached spawns return early (before the subagent has run), so their
     `usage` and `cost` are `None` — the eventual real result is delivered
     via the background-task registry on a separate channel.
     """
@@ -71,6 +75,25 @@ class SpawnResult:
     text: str
     usage: dict | None = None
     cost: float | None = None
+    child_run_id: str = ""
+    parent_tool_call_id: str | None = None
+    agent_type: str = "sub_agent"
+    wait: bool = True
+    status: str = "completed"
+
+    def child_agent_data(self) -> dict:
+        if not self.child_run_id:
+            return {}
+        return {
+            "child_agent": {
+                "child_run_id": self.child_run_id,
+                "parent_tool_call_id": self.parent_tool_call_id,
+                "agent_type": self.agent_type,
+                "wait": self.wait,
+                "status": self.status,
+            }
+        }
+
 
 _logger = get_logger(__name__)
 
@@ -147,9 +170,7 @@ def _clamp_for_salvage(msg: dict) -> dict:
     if isinstance(content, list):
         # Flatten to a string so we never re-emit huge multi-part blocks
         # to the salvage LLM. Crude but safe.
-        flat = "\n".join(
-            block.get("text", "") if isinstance(block, dict) else str(block) for block in content
-        )
+        flat = "\n".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
         if len(flat) <= _SALVAGE_TOOL_CHAR_LIMIT:
             return {**msg, "content": flat}
         head = flat[: _SALVAGE_TOOL_CHAR_LIMIT - 60]
@@ -265,12 +286,18 @@ def create_spawn_fn(
         isolation: IsolationLevel = IsolationLevel.FULL,
         silent: bool = False,
         background: bool = False,
+        wait: bool | None = None,
+        agent_type: str | None = None,
         kind: str = "sub-agent",
         extra_tools: Mapping[str, Tool] | None = None,
         compaction_prompt_context: str | None = None,
         include_tool_messages_in_compaction: bool = False,
         research_scope_id: str | None = None,
     ) -> str:
+        should_wait = (not background) if wait is None else wait
+        background = not should_wait
+        child_run_id = f"agent-{uuid4().hex[:10]}"
+        resolved_agent_type = agent_type or kind.replace("-", "_").replace(" ", "_")
         child_executor_source = executor
         child_registry = executor.registry
         if extra_tools:
@@ -282,9 +309,7 @@ def create_spawn_fn(
         child_state = _create_session_state(calling_ctx, isolation)
         child_model = model_override or model
         child_reasoning_effort = (
-            model_reasoning_efforts.get(child_model)
-            if model_reasoning_efforts is not None
-            else reasoning_effort
+            model_reasoning_efforts.get(child_model) if model_reasoning_efforts is not None else reasoning_effort
         )
 
         child_run = RunContext(
@@ -355,9 +380,7 @@ def create_spawn_fn(
         parent_emit = calling_ctx.io.emit if not silent else None
         lifecycle_task_id = parent_id or f"task-{uuid4().hex[:10]}"
         agent_label_task = (
-            asyncio.create_task(generate_agent_name(child_model, task))
-            if parent_emit and not background
-            else None
+            asyncio.create_task(generate_agent_name(child_model, task)) if parent_emit and not background else None
         )
         task_summary = task[:120]
         task_depth = current_depth + 1
@@ -500,12 +523,17 @@ def create_spawn_fn(
                     return f"[partial — sub-agent errored: {exc}]\n\n{summary}"
                 return _deterministic_salvage(child_messages, str(exc))
 
-        def _settle_with(text: str) -> SpawnResult:
+        def _settle_with(text: str, *, status: str = "completed") -> SpawnResult:
             """Build the final SpawnResult for the caller."""
             return SpawnResult(
                 text=text,
                 usage=sub_tracker.usage.to_dict(),
                 cost=sub_tracker.cost,
+                child_run_id=child_run_id,
+                parent_tool_call_id=parent_id,
+                agent_type=resolved_agent_type,
+                wait=should_wait,
+                status=status,
             )
 
         if not background:
@@ -601,7 +629,7 @@ def create_spawn_fn(
                             depth=task_depth,
                         )
                     )
-                return _settle_with(text)
+                return _settle_with(text, status="failed" if stream_failed else "completed")
             except asyncio.CancelledError:
                 run_state = (
                     calling_ctx.run_registry.get_run(calling_ctx.run.run_id)
@@ -633,7 +661,7 @@ def create_spawn_fn(
                                 depth=task_depth,
                             )
                         )
-                    return _settle_with(text)
+                    return _settle_with(text, status="cancelled")
                 await _settle_agent_label_update()
                 if parent_emit:
                     await parent_emit(
@@ -664,15 +692,15 @@ def create_spawn_fn(
                         )
                     )
                 _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)
-                summary = await _salvage_summary(
-                    child_model, child_messages, f"timed out after {timeout}s", task
-                )
+                summary = await _salvage_summary(child_model, child_messages, f"timed out after {timeout}s", task)
                 if summary:
                     return _settle_with(
-                        f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}"
+                        f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}",
+                        status="failed",
                     )
                 return _settle_with(
-                    _deterministic_salvage(child_messages, f"timed out after {timeout}s")
+                    _deterministic_salvage(child_messages, f"timed out after {timeout}s"),
+                    status="failed",
                 )
             finally:
                 if calling_ctx.run_registry is not None:
@@ -691,7 +719,7 @@ def create_spawn_fn(
                         await agent_label_task
 
         registry = calling_ctx.background_tasks
-        task_id = registry.generate_id()
+        task_id = child_run_id
         label = "Agent"
 
         async def _to_bg_events(event):
@@ -726,9 +754,7 @@ def create_spawn_fn(
                 # (e.g. cancelled mid-await), still emit the deterministic
                 # fallback so deliver_result always runs.
                 try:
-                    summary = await _salvage_summary(
-                        child_model, child_messages, f"timed out after {timeout}s", task
-                    )
+                    summary = await _salvage_summary(child_model, child_messages, f"timed out after {timeout}s", task)
                 except Exception as salvage_exc:
                     _logger.warning("Background salvage failed: %s", salvage_exc)
                     summary = ""
@@ -773,6 +799,13 @@ def create_spawn_fn(
         # Background path returns immediately — the real result is delivered
         # asynchronously via registry.deliver_result. Usage/cost belong to
         # the background task's own ledger, not this caller's tool result.
-        return SpawnResult(text=f"Background task {task_id} started: {task}")
+        return SpawnResult(
+            text=f"Background task {task_id} started: {task}",
+            child_run_id=child_run_id,
+            parent_tool_call_id=parent_id,
+            agent_type=resolved_agent_type,
+            wait=False,
+            status="running",
+        )
 
     return spawn_child

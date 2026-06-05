@@ -44,11 +44,12 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
         tools=tools,
         timeout=BACKGROUND_AGENT_TIMEOUT,
         parent_id=execution.tool_id,
-        background=True,
+        agent_type="background_research",
+        wait=False,
         kind="background",
     )
 
-    return ToolResult(content=spawn.text, preview=spawn.text[:80])
+    return ToolResult(content=spawn.text, preview=spawn.text[:80], data=spawn.child_agent_data() or None)
 
 
 class CancelBackgroundTaskInput(BaseModel):

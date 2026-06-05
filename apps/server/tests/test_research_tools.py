@@ -56,16 +56,12 @@ async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_
     ctx.services["store"] = session_store
     execution = ToolExecution(tool_id="research-1", tool_name="research", ctx=ctx)
 
-    result = await research_module.research(
-        execution, research_module.ResearchInput(task="x", depth="normal")
-    )
+    result = await research_module.research(execution, research_module.ResearchInput(task="x", depth="normal"))
 
     tool_names = {schema["function"]["name"] for schema in captured["tools"]}
     assert tool_names >= SCRATCHPAD_TOOL_NAMES
     assert result.data is not None
-    assert result.data["artifacts"] == [
-        {"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}
-    ]
+    assert result.data["artifacts"] == [{"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}]
 
 
 def _context(
@@ -105,7 +101,14 @@ async def test_research_spawns_child_with_research_ledger_helpers():
 
     async def spawn_fn(ctx, task, **kwargs):
         captured.update(kwargs)
-        return SpawnResult(text="done")
+        return SpawnResult(
+            text="done",
+            child_run_id="agent-research-1",
+            parent_tool_call_id="research-1",
+            agent_type="research",
+            wait=True,
+            status="completed",
+        )
 
     execution = ToolExecution(
         tool_id="research-1",
@@ -123,11 +126,25 @@ async def test_research_spawns_child_with_research_ledger_helpers():
     assert "research_note" in tool_names
     assert "research_outline" in tool_names
     assert "research_cover" in tool_names
-    assert set(captured["extra_tools"]) == {
-        "research_note",
-        "research_outline",
-        "research_cover",
-    } | SCRATCHPAD_TOOL_NAMES
+    assert captured["agent_type"] == "research"
+    assert captured["wait"] is True
+    assert result.data is not None
+    assert result.data["child_agent"] == {
+        "child_run_id": "agent-research-1",
+        "parent_tool_call_id": "research-1",
+        "agent_type": "research",
+        "wait": True,
+        "status": "completed",
+    }
+    assert (
+        set(captured["extra_tools"])
+        == {
+            "research_note",
+            "research_outline",
+            "research_cover",
+        }
+        | SCRATCHPAD_TOOL_NAMES
+    )
     assert captured["research_scope_id"] == "research-1"
 
 

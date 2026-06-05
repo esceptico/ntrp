@@ -117,7 +117,9 @@ async def test_salvage_summary_calls_llm_with_clamped_messages(monkeypatch):
             return CompletionResponse(
                 choices=[
                     Choice(
-                        message=Message(role="assistant", content="here is what i found", tool_calls=None, reasoning_content=None),
+                        message=Message(
+                            role="assistant", content="here is what i found", tool_calls=None, reasoning_content=None
+                        ),
                         finish_reason="stop",
                     )
                 ],
@@ -192,6 +194,7 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
         system_prompt="sys",
         tools=[],
         parent_id="call-research",
+        agent_type="research",
         timeout=1,
     )
 
@@ -203,6 +206,62 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
     assert task_events[0].parent_tool_call_id == "call-research"
     assert task_events[0].depth == 1
     assert task_events[1].status == "completed"
+    assert result.child_run_id
+    assert result.child_run_id != "call-research"
+    assert result.parent_tool_call_id == "call-research"
+    assert result.agent_type == "research"
+    assert result.wait is True
+    assert result.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_spawn_wait_false_returns_running_child_run(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    executor = make_executor()
+    bg_registry = BackgroundTaskRegistry(session_id="test")
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=bg_registry,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "background research",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-background",
+        agent_type="background_research",
+        wait=False,
+        timeout=1,
+    )
+
+    assert result.child_run_id
+    assert result.parent_tool_call_id == "call-background"
+    assert result.agent_type == "background_research"
+    assert result.wait is False
+    assert result.status == "running"
+    assert result.text == f"Background task {result.child_run_id} started: background research"
+
+    task = bg_registry._tasks[result.child_run_id]
+    await task
 
 
 @pytest.mark.asyncio
@@ -245,9 +304,7 @@ async def test_foreground_subagent_emits_generated_name_while_running(monkeypatc
 
     assert result.text == "done"
     task_events = [
-        event
-        for event in emitted
-        if isinstance(event, (TaskStartedEvent, TaskProgressEvent, TaskFinishedEvent))
+        event for event in emitted if isinstance(event, (TaskStartedEvent, TaskProgressEvent, TaskFinishedEvent))
     ]
     assert [event.type.value for event in task_events] == ["task_started", "task_progress", "task_finished"]
     # task_started carries a distinct slug initially (not empty, not yet the
@@ -512,7 +569,9 @@ async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
             return CompletionResponse(
                 choices=[
                     Choice(
-                        message=Message(role="assistant", content=salvage_text, tool_calls=None, reasoning_content=None),
+                        message=Message(
+                            role="assistant", content=salvage_text, tool_calls=None, reasoning_content=None
+                        ),
                         finish_reason="stop",
                     )
                 ],
@@ -677,9 +736,7 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
         def get_meta(self, name):
             return ToolMeta(name="finder", display_name="Finder", kind="tool")
 
-    monkeypatch.setattr(
-        "ntrp.core.spawner.NtrpToolExecutor", lambda *_args, **_kwargs: FinderExecutor()
-    )
+    monkeypatch.setattr("ntrp.core.spawner.NtrpToolExecutor", lambda *_args, **_kwargs: FinderExecutor())
 
     executor = make_executor()
     ctx = ToolContext(

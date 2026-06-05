@@ -60,7 +60,9 @@ def _format_ledger(
 
     active = [item for item in items if not item.done]
     done = [item for item in items if item.done]
-    return LEDGER_TEMPLATE.render(active=active, done=done, accessed=ledger.accessed_count, notes=notes, coverage=coverage)
+    return LEDGER_TEMPLATE.render(
+        active=active, done=done, accessed=ledger.accessed_count, notes=notes, coverage=coverage
+    )
 
 
 def _format_note(note) -> str:
@@ -181,11 +183,11 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
         exclude.add("research")
 
     tools = ctx.registry.get_schemas(read_only=True, capabilities=ctx.capabilities)
-    tools = [t for t in tools if t["function"]["name"] not in exclude and t["function"]["name"] not in RESEARCH_AGENT_TOOLS]
+    tools = [
+        t for t in tools if t["function"]["name"] not in exclude and t["function"]["name"] not in RESEARCH_AGENT_TOOLS
+    ]
     missing_research_agent_tools = {
-        name: agent_tool
-        for name, agent_tool in RESEARCH_AGENT_TOOLS.items()
-        if name not in ctx.registry
+        name: agent_tool for name, agent_tool in RESEARCH_AGENT_TOOLS.items() if name not in ctx.registry
     }
     tools.extend(agent_tool.to_dict(name) for name, agent_tool in RESEARCH_AGENT_TOOLS.items())
     prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
@@ -198,6 +200,8 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
             model_override=ctx.run.research_model,
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
+            agent_type="research",
+            wait=True,
             kind="research",
             extra_tools=missing_research_agent_tools,
             compaction_prompt_context="research",
@@ -211,7 +215,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
     # Carry the subagent's own usage + cost out via `data` so the desktop
     # can render a per-agent budget breakdown on its trace row. The cost
     # has already rolled into the caller's tracker inside spawn_fn.
-    data: dict = {}
+    data: dict = spawn.child_agent_data()
     if spawn.usage is not None:
         data["usage"] = spawn.usage
         data["cost"] = spawn.cost
@@ -242,7 +246,9 @@ async def research_note(execution: ToolExecution, args: ResearchNoteInput) -> To
         note = FactNote(claim=args.claim, source=args.source, quote=args.quote)
     elif args.kind == "dead_end":
         if not args.tried or not args.why_failed:
-            return ToolResult(content="dead_end notes require tried and why_failed", preview="Invalid note", is_error=True)
+            return ToolResult(
+                content="dead_end notes require tried and why_failed", preview="Invalid note", is_error=True
+            )
         note = DeadEndNote(tried=args.tried, why_failed=args.why_failed)
     elif args.kind == "contradiction":
         if not args.claim_a or not args.source_a or not args.claim_b or not args.source_b:
@@ -276,7 +282,9 @@ async def research_outline(execution: ToolExecution, args: ResearchOutlineInput)
     except ValueError as exc:
         return ToolResult(content=str(exc), preview="Invalid outline", is_error=True)
     ledger.set_outline(outline, scope=execution.ctx.run.research_scope_id or "default")
-    return ToolResult(content=f"Research outline set: {', '.join(outline.titles)}", preview=f"Outline {len(outline.titles)} sections")
+    return ToolResult(
+        content=f"Research outline set: {', '.join(outline.titles)}", preview=f"Outline {len(outline.titles)} sections"
+    )
 
 
 async def research_cover(execution: ToolExecution, args: ResearchCoverInput) -> ToolResult:
