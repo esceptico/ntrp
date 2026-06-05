@@ -7,6 +7,9 @@ from ntrp.server.runtime import get_runtime
 class _Store:
     def __init__(self):
         self.cancelled = []
+        self.status = "running"
+        self.result_text = None
+        self.result_ref = None
 
     async def list_background_agent_runs(self, session_id, include_terminal=True):
         return [
@@ -18,10 +21,10 @@ class _Store:
                 "parent_tool_call_id": "call-background",
                 "agent_type": "background_research",
                 "wait": False,
-                "status": "running",
+                "status": self.status,
                 "command": "research",
                 "detail": "read files",
-                "result_ref": None,
+                "result_ref": self.result_ref,
                 "created_at": "2026-05-15T00:00:00+00:00",
                 "started_at": "2026-05-15T00:00:00+00:00",
                 "updated_at": "2026-05-15T00:00:01+00:00",
@@ -34,6 +37,9 @@ class _Store:
     async def request_background_agent_cancel(self, session_id, task_id):
         self.cancelled.append((session_id, task_id))
         return True
+
+    async def get_background_agent_result(self, session_id, task_id):
+        return self.result_text
 
 
 class _SessionService:
@@ -115,3 +121,57 @@ def test_child_agent_cancel_requests_same_durable_cancel():
     assert response.json()["status"] == "cancel_requested"
     assert response.json()["child_run_id"] == "bg-1"
     assert runtime.session_service.store.cancelled == [("sess-1", "bg-1")]
+
+
+def test_child_agent_result_endpoint_returns_running_state_without_result():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).get("/chat/child-agents/bg-1/result?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "task_id": "bg-1",
+        "child_run_id": "bg-1",
+        "session_id": "sess-1",
+        "status": "running",
+        "terminal": False,
+        "result": None,
+        "result_ref": None,
+    }
+
+
+def test_child_agent_result_endpoint_returns_durable_result():
+    runtime = _Runtime()
+    runtime.session_service.store.status = "completed"
+    runtime.session_service.store.result_text = "final report"
+    runtime.session_service.store.result_ref = "bg_results/bg-1.txt"
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).get("/chat/child-agents/bg-1/result?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["terminal"] is True
+    assert response.json()["result"] == "final report"
+    assert response.json()["result_ref"] == "bg_results/bg-1.txt"
+
+
+def test_child_agent_result_endpoint_wait_timeout_returns_current_state():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).get(
+            "/chat/child-agents/bg-1/result?session_id=sess-1&wait=true&timeout_seconds=0.001"
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+    assert response.json()["terminal"] is False
+    assert response.json()["result"] is None

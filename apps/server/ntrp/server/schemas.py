@@ -95,6 +95,24 @@ class BackgroundAgentRunsResponse(BaseModel):
     tasks: list[BackgroundAgentRunResponse] = Field(default_factory=list)
 
 
+class ChildAgentResultResponse(BaseModel):
+    task_id: str
+    child_run_id: str
+    session_id: str
+    status: Literal[
+        "running",
+        "activity",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+        "cancel_requested",
+    ]
+    terminal: bool
+    result: str | None = None
+    result_ref: str | None = None
+
+
 class ChatRunsStatusResponse(BaseModel):
     observed_at: str
     total_retained: int

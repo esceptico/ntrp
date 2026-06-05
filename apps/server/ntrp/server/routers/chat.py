@@ -16,6 +16,7 @@ from ntrp.server.schemas import (
     CancelRequest,
     ChatRequest,
     ChatRunsStatusResponse,
+    ChildAgentResultResponse,
     ToolResultRequest,
 )
 from ntrp.server.sse_stream import keepalive_chunk, live_records, reset_chunk
@@ -26,6 +27,7 @@ from ntrp.services.chat import ChatIdempotencyConflict, submit_chat_message
 router = APIRouter(tags=["chat"])
 
 KEEPALIVE_INTERVAL = 5
+CHILD_AGENT_TERMINAL_STATUSES = {"completed", "failed", "cancelled", "interrupted"}
 
 
 def _keepalive(session_id: str, latest_seq: int) -> str:
@@ -458,6 +460,80 @@ async def _list_child_agents(
     }
 
 
+async def _child_agent_result_snapshot(
+    child_run_id: str,
+    session_id: str,
+    runtime: Runtime,
+    run_registry: RunRegistry,
+) -> dict | None:
+    session_service = getattr(runtime, "session_service", None)
+    store = getattr(session_service, "store", None)
+    if store is not None:
+        rows = await store.list_background_agent_runs(session_id)
+        row = next((item for item in rows if item["task_id"] == child_run_id), None)
+        if row is None:
+            return None
+        result = await store.get_background_agent_result(session_id, child_run_id)
+        status = row["status"]
+        return {
+            "task_id": row["task_id"],
+            "child_run_id": row.get("child_run_id") or row["task_id"],
+            "session_id": row["session_id"],
+            "status": status,
+            "terminal": status in CHILD_AGENT_TERMINAL_STATUSES,
+            "result": result,
+            "result_ref": row["result_ref"],
+        }
+
+    registry = run_registry.get_background_registry(session_id)
+    result = await registry.read_background_result(child_run_id)
+    if result is not None:
+        return {
+            "task_id": child_run_id,
+            "child_run_id": child_run_id,
+            "session_id": session_id,
+            "status": "completed",
+            "terminal": True,
+            "result": result,
+            "result_ref": None,
+        }
+
+    pending = dict(registry.list_pending())
+    if child_run_id not in pending:
+        return None
+    return {
+        "task_id": child_run_id,
+        "child_run_id": child_run_id,
+        "session_id": session_id,
+        "status": "running",
+        "terminal": False,
+        "result": None,
+        "result_ref": None,
+    }
+
+
+async def _get_child_agent_result(
+    child_run_id: str,
+    session_id: str,
+    runtime: Runtime,
+    run_registry: RunRegistry,
+    *,
+    wait: bool,
+    timeout_seconds: float,
+) -> dict:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        snapshot = await _child_agent_result_snapshot(child_run_id, session_id, runtime, run_registry)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Child agent not found")
+        if not wait or snapshot["terminal"] or snapshot["result"] is not None:
+            return snapshot
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return snapshot
+        await asyncio.sleep(min(0.25, remaining))
+
+
 async def _cancel_child_agent(
     child_run_id: str,
     session_id: str,
@@ -498,6 +574,25 @@ async def list_child_agents(
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
     return await _list_child_agents(session_id, runtime, run_registry)
+
+
+@router.get("/chat/child-agents/{child_run_id}/result", response_model=ChildAgentResultResponse)
+async def get_child_agent_result(
+    child_run_id: str,
+    session_id: str,
+    wait: bool = False,
+    timeout_seconds: Annotated[float, Query(ge=0, le=30)] = 0.0,
+    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    return await _get_child_agent_result(
+        child_run_id,
+        session_id,
+        runtime,
+        run_registry,
+        wait=wait,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 @router.post("/chat/background-tasks/{task_id}/cancel")
