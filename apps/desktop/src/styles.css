@@ -454,13 +454,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
           mask-image: linear-gradient(to bottom, transparent 0, #000 48px);
 }
 
-/* Scroll edge blur — pinned to the top of the scroll viewport with sticky so
-   the blur's backdrop stays the live, scrolling page. A transform-based pin
-   would turn this wrapper into a backdrop root and the blur would sample
-   nothing. */
+/* Scroll edge blur — pinned outside the scrolled content flow so short
+   histories cannot leave the blur band stranded below the window top. */
 .scroll-progressive-blur-top {
-  position: sticky;
+  position: absolute;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 5;
   height: 0;
   pointer-events: none;
@@ -470,7 +470,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .scroll-progressive-blur-top[data-scrolled="true"] {
   opacity: 1;
 }
-/* BlurEffect renders an absolutely-positioned wrapper; the sticky parent is
+/* BlurEffect renders an absolutely-positioned wrapper; the overlay parent is
    0-tall, so the band height and color veil live here.
    --scroll-blur-bg defaults to --color-bg but is overridden to --color-surface
    on .surface-panel so the veil matches whichever surface the scroller sits on. */

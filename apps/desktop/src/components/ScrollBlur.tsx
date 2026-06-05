@@ -1,23 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import BlurEffect from "react-progressive-blur";
 
 /**
  * Progressive blur for scroll panes without a transformed surface-panel
- * ancestor (main chat). Pinned with sticky so backdrop-filter samples the
- * live scrolling content.
+ * ancestor (main chat). Rendered outside the scrolled content flow so the
+ * band stays pinned to the pane top even when the history is short.
  */
-export function ScrollBlurTop() {
-  const sentinelRef = useRef<HTMLDivElement>(null);
+export function ScrollBlurTop({ scrollerRef }: { scrollerRef: RefObject<HTMLElement | null> }) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const el = sentinelRef.current;
-    const scroller = el?.parentElement;
-    if (!el || !scroller) return;
-    // Sticky pins inside the content box; offset by the scroller's top padding
-    // so the band lands at the padding-box top (the visual pane edge), not
-    // below the content inset.
-    el.style.top = `calc(-1 * ${getComputedStyle(scroller).paddingTop})`;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
     const onScroll = () => {
       const next = scroller.scrollTop > 0;
       setScrolled((prev) => (prev === next ? prev : next));
@@ -25,11 +20,10 @@ export function ScrollBlurTop() {
     onScroll();
     scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => scroller.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [scrollerRef]);
 
   return (
     <div
-      ref={sentinelRef}
       aria-hidden
       className="scroll-progressive-blur-top"
       data-scrolled={scrolled ? "true" : "false"}

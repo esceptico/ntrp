@@ -178,7 +178,6 @@ export function Messages() {
         onScroll={handleScroll}
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0"
       >
-        <ScrollBlurTop />
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3">
           {!sessionReady
             ? null
@@ -192,6 +191,7 @@ export function Messages() {
           <CompactionIndicator />
         </div>
       </div>
+      <ScrollBlurTop scrollerRef={scrollRef} />
       <AnimatePresence mode="wait">
         {!isNearBottom && order.length > 0 && (
           // Two discrete variants (round chevron vs. pill with count) swap
