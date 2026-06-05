@@ -234,6 +234,87 @@ async def test_history_skips_malformed_tool_calls_but_keeps_valid_calls(session_
 
 
 @pytest.mark.asyncio
+async def test_history_includes_tool_result_data(session_service: SessionService):
+    state = _state("sess-tool-result-data")
+    data = {
+        "child_agent": {
+            "child_run_id": "child-run-123456",
+            "parent_tool_call_id": "call-1",
+            "agent_type": "background_research",
+            "wait": False,
+            "status": "running",
+        }
+    }
+    await session_service.save(
+        state,
+        [
+            {"role": "user", "content": "research"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "function": {"name": "background", "arguments": '{"task":"research"}'},
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "Started background agent.",
+                "data": data,
+            },
+        ],
+    )
+
+    runtime = SimpleNamespace(run_registry=RunRegistry(), executor=None)
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-tool-result-data", limit=100, around_seq=None
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message["role"] == "tool"
+    assert tool_message["data"] == data
+
+
+@pytest.mark.asyncio
+async def test_history_omits_non_durable_tool_result_data(session_service: SessionService):
+    state = _state("sess-tool-large-data")
+    await session_service.save(
+        state,
+        [
+            {"role": "user", "content": "search"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "function": {"name": "search_text", "arguments": '{"query":"x"}'},
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "many matches",
+                "data": {"matches": [{"path": "a.py", "text": "x" * 1000}]},
+            },
+        ],
+    )
+
+    runtime = SimpleNamespace(run_registry=RunRegistry(), executor=None)
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-tool-large-data", limit=100, around_seq=None
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message["role"] == "tool"
+    assert "data" not in tool_message
+
+
+@pytest.mark.asyncio
 async def test_history_runtime_snapshot_keeps_live_tail_after_checkpoint(session_service: SessionService):
     state = _state("sess-live-tail")
     await session_service.save(state, [{"role": "user", "content": "hi", "client_id": "msg-1"}])

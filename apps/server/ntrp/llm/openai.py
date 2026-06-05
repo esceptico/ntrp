@@ -23,7 +23,7 @@ from ntrp.llm.openai_responses import complete_responses_completion, parse_respo
 from ntrp.llm.utils import blocks_to_text
 
 # Keys we attach for ntrp internals that must be stripped before an API call.
-_INTERNAL_MESSAGE_KEYS = frozenset({"client_id", "created_at", "message_id", "compaction"})
+_INTERNAL_MESSAGE_KEYS = frozenset({"client_id", "created_at", "message_id", "compaction", "data"})
 
 
 def _map_finish_reason(reason: str | None) -> FinishReason:

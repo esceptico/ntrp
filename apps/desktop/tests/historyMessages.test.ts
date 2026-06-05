@@ -147,6 +147,52 @@ test("keeps regular activity separate from persisted todo calls", () => {
   expect(items[2].activity?.items.map((item) => item.id)).toEqual(["tool-1"]);
 });
 
+test("rehydrates child agent metadata from persisted tool result data", () => {
+  const messages = [
+    { role: "user", content: "research it", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tools",
+      tool_calls: [
+        {
+          id: "agent-call-1",
+          name: "background",
+          arguments: '{"task":"research"}',
+          kind: "agent",
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: "Started background agent.",
+      id: "agent-result-1",
+      tool_call_id: "agent-call-1",
+      data: {
+        child_agent: {
+          child_run_id: "child-run-123456",
+          parent_tool_call_id: "agent-call-1",
+          agent_type: "background_research",
+          wait: false,
+          status: "running",
+        },
+      },
+    },
+  ] as HistoryMessage[];
+
+  const items = historyMessagesToUi(messages, null);
+  const activity = items.find((item) => item.role === "activity");
+
+  expect(activity?.activity?.items[0].semanticKind).toBe("agent");
+  expect(activity?.activity?.items[0].childAgent).toEqual({
+    childRunId: "child-run-123456",
+    parentToolCallId: "agent-call-1",
+    agentType: "background_research",
+    wait: false,
+    status: "running",
+  });
+});
+
 test("keeps persisted goal meta turns visually hidden", () => {
   const messages: HistoryMessage[] = [
     { role: "user", content: "Continue", id: "goal:goal-1:1", is_meta: true },

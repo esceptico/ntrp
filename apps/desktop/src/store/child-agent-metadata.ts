@@ -12,8 +12,14 @@ export type ToolResultData = {
   };
 };
 
-export function childAgentFromToolResultData(data: ToolResultData | null): ChildAgentRef | undefined {
-  const child = data?.child_agent;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+export function childAgentFromToolResultData(data: unknown): ChildAgentRef | undefined {
+  if (!isRecord(data)) return undefined;
+  const child = data.child_agent;
+  if (!isRecord(child)) return undefined;
   if (!child || typeof child.child_run_id !== "string" || !child.child_run_id) return undefined;
   return {
     childRunId: child.child_run_id,

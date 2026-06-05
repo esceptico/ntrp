@@ -76,6 +76,32 @@ def test_chat_completions_request_formats_image_blocks_as_data_urls():
     ]
 
 
+def test_chat_completions_request_strips_internal_tool_result_data():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare(
+        messages=[
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "Started background agent.",
+                "data": {"child_agent": {"child_run_id": "child-run-1"}},
+            }
+        ],
+        model="gpt-5.2",
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort=None,
+        response_format=None,
+    )
+
+    assert request["messages"] == [
+        {"role": "tool", "tool_call_id": "call_1", "content": "Started background agent."}
+    ]
+
+
 def test_responses_request_formats_image_blocks_as_input_images():
     client = OpenAIClient(api_key="test")
 

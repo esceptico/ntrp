@@ -8,6 +8,7 @@ from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
 from ntrp.core.llm_client import llm_client
 from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS, compact_tool_result_text
+from ntrp.core.tool_result_data import persistable_tool_result_data
 from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
@@ -364,6 +365,8 @@ async def get_session_history(
 
         if role == Role.TOOL and "tool_call_id" in msg:
             entry["tool_call_id"] = msg["tool_call_id"]
+            if result_data := persistable_tool_result_data(msg.get("data")):
+                entry["data"] = result_data
 
         # Stable client-side id (the same one we streamed in SSE for assistant
         # turns). Lets the desktop client key React components and reference

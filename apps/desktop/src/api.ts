@@ -130,6 +130,7 @@ export interface HistoryMessage {
   reasoning_content?: string;
   tool_calls?: HistoryToolCall[];
   tool_call_id?: string;
+  data?: unknown;
   images?: HistoryImage[];
   /** Stable client-side id (the same one we streamed for assistant turns).
    *  Available for messages saved after id-based persistence landed; older

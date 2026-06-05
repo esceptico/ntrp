@@ -463,10 +463,10 @@ export function rebuildTranscriptFromHistory(
   messages: HistoryMessage[],
   options: { activeRunId?: string | null; isNewestPage?: boolean } = {},
 ): UiMessage[] {
-  const resultsById = new Map<string, string>();
+  const resultsById = new Map<string, { content: string; data?: unknown }>();
   for (const msg of messages) {
     if (msg.role === "tool" && msg.tool_call_id) {
-      resultsById.set(msg.tool_call_id, msg.content);
+      resultsById.set(msg.tool_call_id, { content: msg.content, data: msg.data });
     }
   }
 
@@ -573,6 +573,8 @@ export function rebuildTranscriptFromHistory(
       if (activity) {
         for (const toolCall of activityCalls) {
           const args = toolCall.arguments || "";
+          const result = resultsById.get(toolCall.id);
+          const childAgent = childAgentFromToolResultData(result?.data);
           activity.items.push({
             id: toolCall.id,
             kind: toolCall.name,
@@ -580,8 +582,9 @@ export function rebuildTranscriptFromHistory(
               toolCall.kind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
             target: formatCallTarget(toolCall.name, args || "{}"),
             args,
-            result: resultsById.get(toolCall.id),
+            result: result?.content,
             status: "executed",
+            childAgent,
           });
         }
       }

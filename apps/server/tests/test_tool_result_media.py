@@ -22,6 +22,34 @@ class FakeRunner:
         )
 
 
+class DataRunner:
+    async def execute_all(self, _calls):
+        yield ToolCompleted(
+            tool_id="call_data",
+            name="background",
+            result="Started background agent.",
+            preview="Started",
+            duration_ms=1,
+            is_error=False,
+            data={"child_agent": {"child_run_id": "child-run-1", "wait": False}},
+            display_name="Background",
+        )
+
+
+class NonDurableDataRunner:
+    async def execute_all(self, _calls):
+        yield ToolCompleted(
+            tool_id="call_large",
+            name="search_text",
+            result="many matches",
+            preview="Matches",
+            duration_ms=1,
+            is_error=False,
+            data={"matches": [{"path": "a.py", "text": "x" * 1000}]},
+            display_name="SearchText",
+        )
+
+
 @pytest.mark.asyncio
 async def test_dispatch_tools_appends_meta_user_message_for_model_visible_images():
     raw = ToolCall(
@@ -40,3 +68,44 @@ async def test_dispatch_tools_appends_meta_user_message_for_model_visible_images
     assert messages[1]["is_meta"] is True
     assert messages[1]["client_id"] == "tool-media:call_1"
     assert messages[1]["content"][-1] == {"type": "image", "media_type": "image/png", "data": "ZmFrZXBuZw=="}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tools_persists_tool_result_data():
+    raw = ToolCall(
+        id="call_data",
+        type="function",
+        function=FunctionCall(name="background", arguments='{"task":"research"}'),
+    )
+    pending = PendingToolCall(tool_call=raw, name="background", args={"task": "research"})
+    messages = []
+
+    async for _event in dispatch_tools(DataRunner(), messages, [pending], [raw]):
+        pass
+
+    assert messages[0] == {
+        "role": Role.TOOL,
+        "tool_call_id": "call_data",
+        "content": "Started background agent.",
+        "data": {"child_agent": {"child_run_id": "child-run-1", "wait": False}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tools_omits_non_durable_tool_result_data():
+    raw = ToolCall(
+        id="call_large",
+        type="function",
+        function=FunctionCall(name="search_text", arguments='{"query":"x"}'),
+    )
+    pending = PendingToolCall(tool_call=raw, name="search_text", args={"query": "x"})
+    messages = []
+
+    async for _event in dispatch_tools(NonDurableDataRunner(), messages, [pending], [raw]):
+        pass
+
+    assert messages[0] == {
+        "role": Role.TOOL,
+        "tool_call_id": "call_large",
+        "content": "many matches",
+    }

@@ -6,6 +6,7 @@ from ntrp.agent.types.events import ToolCompleted, ToolStarted
 from ntrp.agent.types.llm import Role
 from ntrp.agent.types.tool_call import PendingToolCall, ToolCall
 from ntrp.core.content import ContentBlock, ContextContent
+from ntrp.core.tool_result_data import persistable_tool_result_data
 
 
 async def dispatch_tools(
@@ -15,21 +16,24 @@ async def dispatch_tools(
     raw_tool_calls: list[ToolCall],
 ) -> AsyncGenerator[ToolStarted | ToolCompleted]:
     results: dict[str, str] = {}
+    result_data: dict[str, dict] = {}
     model_content: dict[str, tuple[ContentBlock, ...]] = {}
 
     try:
         async for event in runner.execute_all(calls):
             if isinstance(event, ToolCompleted):
                 results[event.tool_id] = event.result
+                if data := persistable_tool_result_data(event.data):
+                    result_data[event.tool_id] = data
                 if event.model_content:
                     model_content[event.tool_id] = event.model_content
             yield event
     except asyncio.CancelledError:
-        _append_results(messages, raw_tool_calls, results, missing_content="Tool call cancelled.")
+        _append_results(messages, raw_tool_calls, results, result_data, missing_content="Tool call cancelled.")
         _append_model_content(messages, raw_tool_calls, model_content)
         raise
 
-    _append_results(messages, raw_tool_calls, results, missing_content="Tool call result missing.")
+    _append_results(messages, raw_tool_calls, results, result_data, missing_content="Tool call result missing.")
     _append_model_content(messages, raw_tool_calls, model_content)
 
 
@@ -37,17 +41,19 @@ def _append_results(
     messages: list[dict],
     tool_calls: list[ToolCall],
     results: dict[str, str],
+    result_data: dict[str, dict] | None = None,
     *,
     missing_content: str,
 ) -> None:
     for tc in tool_calls:
-        messages.append(
-            {
-                "role": Role.TOOL,
-                "tool_call_id": tc.id,
-                "content": results.get(tc.id, missing_content),
-            }
-        )
+        message = {
+            "role": Role.TOOL,
+            "tool_call_id": tc.id,
+            "content": results.get(tc.id, missing_content),
+        }
+        if result_data and tc.id in result_data:
+            message["data"] = result_data[tc.id]
+        messages.append(message)
 
 
 def _append_model_content(
