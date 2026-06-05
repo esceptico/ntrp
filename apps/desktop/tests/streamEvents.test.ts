@@ -12,6 +12,7 @@ import {
 } from "../src/hooks/useEvents.ts";
 import { cancelSubagent, loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
 import {
+  childAgentTaskToBackgroundSnapshot,
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
   RIGHT_PANEL_BODY_WIDTH,
@@ -2418,6 +2419,30 @@ test("right sidebar active background agents excludes terminal statuses", () => 
       updatedAt: 2,
     }),
   ).toBe(true);
+});
+
+test("right sidebar maps child-agent snapshots into active sidebar rows", () => {
+  expect(
+    childAgentTaskToBackgroundSnapshot({
+      task_id: "legacy-bg-id",
+      child_run_id: "child-run-1",
+      command: "research auth flow",
+      status: "running",
+      detail: "working",
+      parent_tool_call_id: "tool-call-1",
+      agent_type: "research",
+      wait: false,
+    }),
+  ).toEqual({
+    taskId: "child-run-1",
+    command: "research auth flow",
+    status: "running",
+    detail: "working",
+    resultRef: undefined,
+    parentToolCallId: "tool-call-1",
+    agentType: "research",
+    wait: false,
+  });
 });
 
 test("concurrent research agents share one activity block with distinct labels", () => {

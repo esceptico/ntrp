@@ -125,6 +125,9 @@ export interface BackgroundAgent {
   status: BackgroundAgentStatus;
   detail?: string;
   resultRef?: string;
+  parentToolCallId?: string;
+  agentType?: string;
+  wait?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -458,9 +461,12 @@ export interface Actions {
     agents: {
       taskId: string;
       command: string;
-      status?: BackgroundAgentStatus;
+      status?: BackgroundAgentStatus | string | null;
       detail?: string;
       resultRef?: string;
+      parentToolCallId?: string;
+      agentType?: string;
+      wait?: boolean;
     }[],
   ) => void;
   upsertBackgroundAgent: (

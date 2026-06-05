@@ -11,8 +11,9 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import {
-  cancelBackgroundTaskApi,
-  listBackgroundTasksApi,
+  cancelChildAgentApi,
+  listChildAgentsApi,
+  type BackgroundTaskSummary,
   type TodoStatus,
 } from "../api";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
@@ -24,6 +25,7 @@ import {
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
+import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
 import { ScrollFadeTop } from "./ScrollBlur";
 
 // Compact relative-time formatter. Codex's Cloud Tasks TUI uses
@@ -102,7 +104,30 @@ function readCollapsedPref(): boolean {
   return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "false";
 }
 
-function useBackgroundTasksPoll(sessionId: string | null): void {
+export function childAgentTaskToBackgroundSnapshot(
+  task: BackgroundTaskSummary,
+): BackgroundAgentSnapshot {
+  const status =
+    task.status === "completed" ||
+    task.status === "failed" ||
+    task.status === "cancelled" ||
+    task.status === "interrupted" ||
+    task.status === "cancel_requested"
+      ? task.status
+      : "running";
+  return {
+    taskId: task.child_run_id ?? task.task_id,
+    command: task.command,
+    status,
+    detail: task.detail ?? undefined,
+    resultRef: task.result_ref ?? undefined,
+    parentToolCallId: task.parent_tool_call_id ?? undefined,
+    agentType: task.agent_type ?? undefined,
+    wait: task.wait ?? undefined,
+  };
+}
+
+function useChildAgentsPoll(sessionId: string | null): void {
   const config = useStore((s) => s.config);
   const setBackgroundAgentsForSession = useStore((s) => s.setBackgroundAgentsForSession);
   const backgroundAgentsRefreshStarted = useStore((s) => s.backgroundAgentsRefreshStarted);
@@ -114,27 +139,11 @@ function useBackgroundTasksPoll(sessionId: string | null): void {
     const tick = async () => {
       backgroundAgentsRefreshStarted();
       try {
-        const tasks = await listBackgroundTasksApi(config, sessionId);
+        const tasks = await listChildAgentsApi(config, sessionId);
         if (!cancelled) {
           setBackgroundAgentsForSession(
             sessionId,
-            tasks.map((task) => {
-              const status =
-                task.status === "completed" ||
-                task.status === "failed" ||
-                task.status === "cancelled" ||
-                task.status === "interrupted" ||
-                task.status === "cancel_requested"
-                  ? task.status
-                  : "running";
-              return {
-                taskId: task.task_id,
-                command: task.command,
-                status,
-                detail: task.detail ?? undefined,
-                resultRef: task.result_ref ?? undefined,
-              };
-            }),
+            tasks.map(childAgentTaskToBackgroundSnapshot),
           );
         }
       } catch (error) {
@@ -228,7 +237,7 @@ function BackgroundAgentRow({ agent }: { agent: BackgroundAgent }) {
     if (agent.status !== "running" || cancelling) return;
     setCancelling(true);
     try {
-      await cancelBackgroundTaskApi(config, agent.sessionId, agent.taskId);
+      await cancelChildAgentApi(config, agent.sessionId, agent.taskId);
       upsertBackgroundAgent({ ...agent, status: "cancel_requested", updatedAt: Date.now() });
     } catch {
       setCancelling(false);
@@ -240,8 +249,9 @@ function BackgroundAgentRow({ agent }: { agent: BackgroundAgent }) {
   // which reads better than a UUID. Detail line shows the taskId trimmed
   // so users can still see it without it dominating.
   const title = agent.command || agent.taskId;
-  const subtitle =
-    agent.detail ?? (agent.command ? agent.taskId.slice(0, 12) : undefined);
+  const mode = agent.wait == null ? null : agent.wait ? "awaited" : "detached";
+  const meta = [agent.agentType, mode, agent.taskId.slice(0, 12)].filter(Boolean).join(" · ");
+  const subtitle = [agent.detail, meta || undefined].filter(Boolean).join(" · ") || undefined;
 
   return (
     <Row
@@ -389,7 +399,7 @@ export function AgentRightSidebar() {
       return next;
     });
 
-  useBackgroundTasksPoll(currentSessionId);
+  useChildAgentsPoll(currentSessionId);
 
   const agents = useMemo(
     () =>
@@ -528,7 +538,7 @@ export function AgentRightSidebar() {
                   <p className="text-xs text-muted leading-relaxed">
                     No active agents or automations.
                     <br />
-                    Background tasks will appear here.
+                    Child agents will appear here.
                   </p>
                 </div>
               )}

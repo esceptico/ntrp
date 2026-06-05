@@ -1253,8 +1253,12 @@ export function suggestionToPayload(s: AutomationSuggestion): CreateAutomationPa
 
 export interface BackgroundTaskSummary {
   task_id: string;
+  child_run_id?: string | null;
   session_id?: string;
   parent_run_id?: string | null;
+  parent_tool_call_id?: string | null;
+  agent_type?: string | null;
+  wait?: boolean | null;
   status?: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "cancel_requested" | string;
   command: string;
   detail?: string | null;
@@ -1272,6 +1276,17 @@ export async function listBackgroundTasksApi(
   return r.tasks;
 }
 
+export async function listChildAgentsApi(
+  config: AppConfig,
+  sessionId: string,
+): Promise<BackgroundTaskSummary[]> {
+  const r = await apiWithConfig<{ tasks: BackgroundTaskSummary[] }>(
+    config,
+    `/chat/child-agents?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  return r.tasks;
+}
+
 export async function cancelBackgroundTaskApi(
   config: AppConfig,
   sessionId: string,
@@ -1280,6 +1295,18 @@ export async function cancelBackgroundTaskApi(
   await apiWithConfig(
     config,
     `/chat/background-tasks/${encodeURIComponent(taskId)}/cancel?session_id=${encodeURIComponent(sessionId)}`,
+    { method: "POST" },
+  );
+}
+
+export async function cancelChildAgentApi(
+  config: AppConfig,
+  sessionId: string,
+  childRunId: string,
+): Promise<void> {
+  await apiWithConfig(
+    config,
+    `/chat/child-agents/${encodeURIComponent(childRunId)}/cancel?session_id=${encodeURIComponent(sessionId)}`,
     { method: "POST" },
   );
 }

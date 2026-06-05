@@ -191,6 +191,31 @@ test("background agent domain upserts rows and preserves missing running snapsho
   });
 });
 
+test("background agent domain keeps child-agent metadata from snapshots", () => {
+  const state = reduceBackgroundAgentsForSession(
+    createBackgroundAgentsDomainState(),
+    "session-1",
+    [
+      {
+        taskId: "child-run-1",
+        command: "research auth flow",
+        status: "running",
+        detail: "working",
+        agentType: "research",
+        wait: false,
+        parentToolCallId: "tool-call-1",
+      },
+    ],
+    1,
+  );
+
+  expect(state.rows["session-1:child-run-1"]).toMatchObject({
+    agentType: "research",
+    wait: false,
+    parentToolCallId: "tool-call-1",
+  });
+});
+
 test("background agent domain tracks refresh status", () => {
   const refreshing = reduceBackgroundAgentsRefreshStarted(
     createBackgroundAgentsDomainState(),

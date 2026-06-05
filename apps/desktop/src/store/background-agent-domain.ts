@@ -21,6 +21,9 @@ export interface BackgroundAgentSnapshot {
   status?: BackgroundAgentStatus | string | null;
   detail?: string;
   resultRef?: string;
+  parentToolCallId?: string;
+  agentType?: string;
+  wait?: boolean;
 }
 
 export type BackgroundAgentUpsert = Omit<BackgroundAgent, "createdAt"> & {
@@ -71,6 +74,9 @@ export function reduceBackgroundAgentsForSession(
       status: normalizeBackgroundAgentStatus(agent.status ?? prev?.status),
       detail: agent.detail ?? prev?.detail,
       resultRef: agent.resultRef ?? prev?.resultRef,
+      parentToolCallId: agent.parentToolCallId ?? prev?.parentToolCallId,
+      agentType: agent.agentType ?? prev?.agentType,
+      wait: agent.wait ?? prev?.wait,
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,
     };
@@ -136,6 +142,9 @@ function isEquivalentBackgroundAgent(
     prev.status === next.status &&
     prev.detail === next.detail &&
     prev.resultRef === next.resultRef &&
+    prev.parentToolCallId === next.parentToolCallId &&
+    prev.agentType === next.agentType &&
+    prev.wait === next.wait &&
     prev.createdAt === next.createdAt
   );
 }
