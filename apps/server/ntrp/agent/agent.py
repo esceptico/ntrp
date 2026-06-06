@@ -121,6 +121,12 @@ class Agent:
         result_text = ""
         try:
             while True:
+                # Step-boundary pause: block here while paused (resumable),
+                # then drain so any message injected during the pause is
+                # picked up on resume. Cancellation interrupts the wait.
+                if self.hooks.wait_while_paused:
+                    await self.hooks.wait_while_paused()
+
                 await self._drain_pending(messages)
 
                 if self.max_iterations is not None and step >= self.max_iterations:

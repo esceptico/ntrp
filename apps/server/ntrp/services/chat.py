@@ -1305,6 +1305,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             next_agent.hooks.on_response = _track_response
             next_agent.hooks.on_step_finish = _checkpoint
             next_agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
+            next_agent.hooks.wait_while_paused = run.wait_while_paused
             return next_agent
 
         async def _force_context_compaction() -> bool:

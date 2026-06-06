@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
+import { ArrowUp, Box, Check, ImagePlus, Pause, Pencil, Play, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
 import {
@@ -9,7 +9,9 @@ import {
   editGoalProposal,
   enqueueMessage,
   isBuiltin,
+  pauseRun,
   respondToAllApprovals,
+  resumeRun,
   runBuiltinCommand,
   sendMessage,
   stopRun,
@@ -69,6 +71,7 @@ export function Composer() {
   const draft = useStore((s) => s.draft);
   const setDraft = useStore((s) => s.setDraft);
   const running = useStore((s) => s.running);
+  const paused = useStore((s) => s.paused);
   const connected = useStore((s) => s.connected);
   const pendingApprovalCount = useStore((s) => s.pendingApprovals.length);
   const editingId = useStore((s) => s.editingId);
@@ -472,6 +475,23 @@ export function Composer() {
           <span className="flex-1" />
           <BudgetDial />
           <ModelReasoningChip />
+          {running && (
+            <button
+              type="button"
+              onClick={() => void (paused ? resumeRun() : pauseRun())}
+              aria-label={paused ? "Resume" : "Pause"}
+              title={paused ? "Resume run" : "Pause at the next step"}
+              className="grid place-items-center w-7 h-7 rounded-full text-muted hover:text-ink hover:bg-surface-soft transition-[background-color,color,transform] duration-fast ease-out active:scale-[0.92]"
+            >
+              <BlurSwap swapKey={paused ? "resume" : "pause"} blur={3}>
+                {paused ? (
+                  <Play size={ICON.SM} strokeWidth={0} fill="currentColor" />
+                ) : (
+                  <Pause size={ICON.SM} strokeWidth={0} fill="currentColor" />
+                )}
+              </BlurSwap>
+            </button>
+          )}
           {/* One persistent button so the glyph genuinely swaps (rotate+fade)
               between send and stop instead of the button remounting. */}
           <button

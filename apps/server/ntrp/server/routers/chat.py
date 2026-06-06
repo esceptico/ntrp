@@ -399,6 +399,34 @@ async def cancel_run(request: CancelRequest, run_registry: RunRegistry = Depends
     return {"status": "cancelling", "run_id": run_id, **result}
 
 
+def _resolve_run_id(request: CancelRequest, run_registry: RunRegistry) -> str:
+    run_id = request.run_id
+    if not run_id and request.session_id:
+        active = run_registry.get_active_run(request.session_id)
+        run_id = active.run_id if active else None
+    if not run_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run_id
+
+
+@router.post("/pause", status_code=202)
+async def pause_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+    run_id = _resolve_run_id(request, run_registry)
+    result = run_registry.pause_run(run_id)
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "paused" if result["paused"] else "not_paused", "run_id": run_id, **result}
+
+
+@router.post("/resume", status_code=202)
+async def resume_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+    run_id = _resolve_run_id(request, run_registry)
+    result = run_registry.resume_run(run_id)
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "resumed" if result["resumed"] else "not_resumed", "run_id": run_id, **result}
+
+
 @router.post("/chat/subagents/{tool_call_id}/cancel", status_code=202)
 async def cancel_subagent(
     tool_call_id: str,

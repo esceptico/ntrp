@@ -55,6 +55,10 @@ class RunState:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
     cancel_terminal_emitted: bool = False
+    # Step-boundary pause: the agent loop awaits `wait_while_paused()` at the
+    # top of each step. `_resume_event` is cleared to block, set to release.
+    paused: bool = False
+    _resume_event: "asyncio.Event | None" = None
     backgrounded: bool = False
     drain_task: asyncio.Task | None = None
     stop_reason: str | None = None
@@ -126,6 +130,35 @@ class RunState:
         self.inject_queue.clear()
         self.updated_at = datetime.now(UTC)
         return batch
+
+    def pause(self) -> bool:
+        """Request a step-boundary pause. No-op if not active or cancelled."""
+        if self.cancelled or self.status not in (RunStatus.PENDING, RunStatus.RUNNING):
+            return False
+        if self.paused:
+            return True
+        self.paused = True
+        if self._resume_event is None:
+            self._resume_event = asyncio.Event()
+        self._resume_event.clear()
+        self.updated_at = datetime.now(UTC)
+        return True
+
+    def resume(self) -> bool:
+        if not self.paused:
+            return False
+        self.paused = False
+        if self._resume_event is not None:
+            self._resume_event.set()
+        self.updated_at = datetime.now(UTC)
+        return True
+
+    async def wait_while_paused(self) -> None:
+        # Loop guards spurious wakeups; cancellation raises out of wait().
+        while self.paused:
+            if self._resume_event is None:
+                self._resume_event = asyncio.Event()
+            await self._resume_event.wait()
 
     def set_skip_approvals(self, value: bool) -> int:
         self.approval_controls.skip_approvals = value
@@ -302,6 +335,18 @@ class RunRegistry:
                     cancel_requested = True
 
         return {"found": True, "cancel_requested": cancel_requested}
+
+    def pause_run(self, run_id: str) -> dict[str, bool]:
+        run = self._runs.get(run_id)
+        if not run:
+            return {"found": False, "paused": False}
+        return {"found": True, "paused": run.pause()}
+
+    def resume_run(self, run_id: str) -> dict[str, bool]:
+        run = self._runs.get(run_id)
+        if not run:
+            return {"found": False, "resumed": False}
+        return {"found": True, "resumed": run.resume()}
 
     def register_subagent(self, run_id: str, tool_call_id: str, task: asyncio.Task) -> SubagentHandle | None:
         run = self._runs.get(run_id)

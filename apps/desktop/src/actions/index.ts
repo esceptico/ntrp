@@ -36,6 +36,8 @@ export {
   cancelSubagent,
   cancelQueuedMessage,
   enqueueMessage,
+  pauseRun,
+  resumeRun,
   sendMessage,
   stopRun,
 } from "./messages";

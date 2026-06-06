@@ -478,6 +478,24 @@ export async function cancelRun(
   });
 }
 
+export async function pauseRunApi(
+  config: AppConfig,
+  runId: string | null,
+  sessionId?: string | null,
+): Promise<void> {
+  const body = runId ? { run_id: runId } : { session_id: sessionId ?? null };
+  await apiWithConfig(config, "/pause", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function resumeRunApi(
+  config: AppConfig,
+  runId: string | null,
+  sessionId?: string | null,
+): Promise<void> {
+  const body = runId ? { run_id: runId } : { session_id: sessionId ?? null };
+  await apiWithConfig(config, "/resume", { method: "POST", body: JSON.stringify(body) });
+}
+
 export async function cancelSubagentApi(
   config: AppConfig,
   runId: string,

@@ -321,6 +321,8 @@ export interface State {
    *  surface a reconnecting/offline indicator. */
   connectionPhase: ConnectionPhase;
   running: boolean;
+  /** The active foreground run is paused at a step boundary (resumable). */
+  paused: boolean;
   error: string | null;
   draft: string;
   settingsOpen: boolean;
@@ -414,6 +416,7 @@ export interface Actions {
   upsertTodoList: (message: UiMessage, beforeId?: string | null) => void;
   truncateFrom: (id: string) => void;
   setConnected: (connected: boolean) => void;
+  setPaused: (paused: boolean) => void;
   setError: (error: string | null) => void;
   setDraft: (draft: string) => void;
   setEditingId: (id: string | null) => void;

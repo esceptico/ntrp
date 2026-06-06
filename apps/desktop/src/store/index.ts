@@ -146,6 +146,7 @@ export const useStore = create<State & Actions>((set) => ({
   connected: false,
   connectionPhase: "idle",
   running: false,
+  paused: false,
   error: null,
   draft: "",
   settingsOpen: false,
@@ -432,6 +433,7 @@ export const useStore = create<State & Actions>((set) => ({
     }),
 
   setConnected: (connected) => set({ connected }),
+  setPaused: (paused) => set({ paused }),
   setError: (error) => set({ error }),
   setDraft: (draft) => set({ draft }),
   setEditingId: (editingId) => set({ editingId }),
