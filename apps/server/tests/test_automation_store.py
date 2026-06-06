@@ -20,6 +20,53 @@ async def automation_store(tmp_path: Path):
     await conn.close()
 
 
+async def test_run_history_records_start_then_finish(automation_store: AutomationStore):
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    run_id = await automation_store.record_run_start("task-1", t0)
+    assert run_id > 0
+
+    runs = await automation_store.list_runs("task-1")
+    assert len(runs) == 1
+    assert runs[0]["status"] == "running"
+    assert runs[0]["ended_at"] is None
+
+    await automation_store.record_run_finish(
+        run_id,
+        status="completed",
+        result="did the thing",
+        error=None,
+        ended_at=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+    )
+    runs = await automation_store.list_runs("task-1")
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["result"] == "did the thing"
+    assert runs[0]["ended_at"] is not None
+
+
+async def test_run_history_newest_first_and_limited(automation_store: AutomationStore):
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for i in range(5):
+        await automation_store.record_run_start("task-2", base + timedelta(minutes=i))
+    runs = await automation_store.list_runs("task-2", limit=3)
+    assert len(runs) == 3
+    assert runs[0]["started_at"] > runs[1]["started_at"] > runs[2]["started_at"]
+
+
+async def test_run_history_truncates_long_result(automation_store: AutomationStore):
+    rid = await automation_store.record_run_start("task-3", datetime(2026, 1, 1, tzinfo=UTC))
+    await automation_store.record_run_finish(
+        rid,
+        status="failed",
+        result="x" * 5000,
+        error="boom",
+        ended_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    runs = await automation_store.list_runs("task-3")
+    assert runs[0]["status"] == "failed"
+    assert runs[0]["error"] == "boom"
+    assert len(runs[0]["result"]) <= 4001  # 4000 chars + ellipsis
+
+
 def _automation(
     task_id: str,
     *,

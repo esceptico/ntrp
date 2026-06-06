@@ -160,6 +160,20 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+
+-- Per-run history so the UI can show "did it fire, and what did it do?"
+-- (scheduled_tasks only keeps the LAST run). Self-contained columns, so it
+-- lives in _SCHEMA (CREATE TABLE before its INDEX) — no migration needed.
+CREATE TABLE IF NOT EXISTS automation_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    result TEXT,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_automation_runs_task ON automation_runs(task_id, started_at);
 -- thread_id-based indexes (idx_scheduled_tasks_kind_thread, thread_kind,
 -- parent, idempotency_*) are created inside the v5 migration block instead
 -- of here, since they reference columns that don't exist on pre-v5
@@ -327,6 +341,17 @@ WHERE task_id = ?
 """
 
 _SQL_CLEAR_RUNNING = "UPDATE scheduled_tasks SET running_since = NULL WHERE task_id = ?"
+
+_SQL_INSERT_RUN = (
+    "INSERT INTO automation_runs (task_id, started_at, status) VALUES (?, ?, 'running')"
+)
+_SQL_FINISH_RUN = (
+    "UPDATE automation_runs SET ended_at = ?, status = ?, result = ?, error = ? WHERE id = ?"
+)
+_SQL_LIST_RUNS = (
+    "SELECT id, task_id, started_at, ended_at, status, result, error "
+    "FROM automation_runs WHERE task_id = ? ORDER BY started_at DESC, id DESC LIMIT ?"
+)
 
 _SQL_DELETE = "DELETE FROM scheduled_tasks WHERE task_id = ?"
 
@@ -1164,6 +1189,44 @@ class AutomationStore:
             (last_run.isoformat(), next_run.isoformat() if next_run else None, result, task_id),
         )
         await self.conn.commit()
+
+    async def record_run_start(self, task_id: str, started_at: datetime) -> int:
+        cursor = await self.conn.execute(_SQL_INSERT_RUN, (task_id, started_at.isoformat()))
+        await self.conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    async def record_run_finish(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        result: str | None,
+        error: str | None,
+        ended_at: datetime,
+    ) -> None:
+        # Bound stored text so a chatty run can't bloat the history table.
+        clip = lambda s: s if s is None or len(s) <= 4000 else s[:4000] + "…"  # noqa: E731
+        await self.conn.execute(
+            _SQL_FINISH_RUN,
+            (ended_at.isoformat(), status, clip(result), clip(error), run_id),
+        )
+        await self.conn.commit()
+
+    async def list_runs(self, task_id: str, limit: int = 20) -> list[dict]:
+        cursor = await self.conn.execute(_SQL_LIST_RUNS, (task_id, limit))
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": row["id"],
+                "task_id": row["task_id"],
+                "started_at": row["started_at"],
+                "ended_at": row["ended_at"],
+                "status": row["status"],
+                "result": row["result"],
+                "error": row["error"],
+            }
+            for row in rows
+        ]
 
     async def delete(self, task_id: str) -> bool:
         cursor = await self.conn.execute(_SQL_DELETE, (task_id,))

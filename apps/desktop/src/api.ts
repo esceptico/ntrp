@@ -1207,6 +1207,28 @@ export async function listAutomationsApi(config: AppConfig): Promise<Automation[
   return r.automations;
 }
 
+export interface AutomationRun {
+  id: number;
+  task_id: string;
+  started_at: string;
+  ended_at: string | null;
+  status: string;
+  result: string | null;
+  error: string | null;
+}
+
+export async function listAutomationRunsApi(
+  config: AppConfig,
+  taskId: string,
+  limit = 30,
+): Promise<AutomationRun[]> {
+  const r = await apiWithConfig<{ runs: AutomationRun[] }>(
+    config,
+    `/automations/${encodeURIComponent(taskId)}/runs?limit=${limit}`,
+  );
+  return r.runs;
+}
+
 export async function createAutomationApi(
   config: AppConfig,
   payload: CreateAutomationPayload,

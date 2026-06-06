@@ -208,6 +208,16 @@ async def get_automation(task_id: str, svc: AutomationService = Depends(require_
     return _automation_to_dict(automation)
 
 
+@router.get("/automations/{task_id}/runs")
+async def list_automation_runs(
+    task_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    svc: AutomationService = Depends(require_automation_service),
+):
+    """Recent run history for an automation — did it fire, and what did it do?"""
+    return {"runs": await svc.store.list_runs(task_id, limit)}
+
+
 @router.post("/automations/{task_id}/toggle")
 async def toggle_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:

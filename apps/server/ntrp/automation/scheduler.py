@@ -416,6 +416,12 @@ class Scheduler:
         result: str | None = None
         success = False
         error_message = ""
+        started_at = datetime.now(UTC)
+        run_id: int | None = None
+        try:
+            run_id = await self.store.record_run_start(automation.task_id, started_at)
+        except Exception:
+            _logger.exception("Failed to record automation run start %s", automation.task_id)
         try:
             if self._is_session_bound(automation):
                 result = await self._run_session_bound(automation, context)
@@ -444,6 +450,17 @@ class Scheduler:
                     await self.store.set_enabled(automation.task_id, False)
             except Exception:
                 _logger.exception("Failed to update automation run result %s", automation.task_id)
+            if run_id is not None:
+                try:
+                    await self.store.record_run_finish(
+                        run_id,
+                        status="completed" if success else "failed",
+                        result=result,
+                        error=error_message or None,
+                        ended_at=now,
+                    )
+                except Exception:
+                    _logger.exception("Failed to record automation run finish %s", automation.task_id)
             if event_queue_id is not None:
                 try:
                     if success:

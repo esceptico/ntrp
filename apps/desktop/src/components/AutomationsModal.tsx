@@ -9,6 +9,7 @@ import {
   FileSearch,
   FileText,
   GitPullRequest,
+  History,
   Inbox,
   Mail,
   Play,
@@ -31,7 +32,14 @@ import {
   switchSession,
   toggleAutomation,
 } from "../actions";
-import { suggestionToPayload, type Automation, type AutomationSuggestion, type AutomationTrigger } from "../api";
+import {
+  listAutomationRunsApi,
+  suggestionToPayload,
+  type Automation,
+  type AutomationRun,
+  type AutomationSuggestion,
+  type AutomationTrigger,
+} from "../api";
 import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
@@ -400,6 +408,32 @@ export function SuggestionCard({
 
 // ─── Card: existing automation ──────────────────────────────────────
 
+function _runDuration(start: string, end: string): string {
+  const ms = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`;
+}
+
+/** Recent runs as a markdown digest, shown in the existing markdown viewer. */
+function formatRunsMarkdown(runs: AutomationRun[]): string {
+  if (runs.length === 0) return "_No runs recorded yet._";
+  return runs
+    .map((r) => {
+      const mark = r.status === "completed" ? "✓" : r.status === "failed" ? "✗" : "•";
+      const dur = r.ended_at ? _runDuration(r.started_at, r.ended_at) : "running";
+      const head = `**${mark} ${formatRelative(r.started_at)}** · ${r.status}${dur ? ` · ${dur}` : ""}`;
+      const detail = (r.error ?? r.result ?? "").trim();
+      const quoted = detail
+        ? "\n" + detail.split("\n").slice(0, 6).map((l) => `> ${l}`).join("\n")
+        : "";
+      return head + quoted;
+    })
+    .join("\n\n");
+}
+
 function AutomationCard({
   automation,
   onEdit,
@@ -407,6 +441,7 @@ function AutomationCard({
   automation: Automation;
   onEdit: () => void;
 }) {
+  const config = useStore((s) => s.config);
   const [busy, setBusy] = useState<"toggle" | "run" | "delete" | null>(null);
 
   const wrap = (action: typeof busy, fn: () => Promise<void>) => async () => {
@@ -433,6 +468,14 @@ function AutomationCard({
   const trigger = automation.triggers.map(formatTrigger).join(" · ") || "—";
   const hasResult = !!automation.last_result?.trim();
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
+  const showRunHistory = async () => {
+    const runs = await listAutomationRunsApi(config, automation.task_id, 30);
+    setMarkdownView({
+      title: automation.name || "Automation",
+      subtitle: "run history",
+      content: formatRunsMarkdown(runs),
+    });
+  };
   const sessions = useStore((s) => s.sessions);
   const closeAutomations = useStore((s) => s.closeAutomations);
   const channel = sessions.find((sx) => sx.origin_automation_id === automation.task_id) ?? null;
@@ -543,6 +586,11 @@ function AutomationCard({
               )}
             />
           )}
+          <CardAction
+            icon={History}
+            label="Run history"
+            onClick={stop(() => void showRunHistory())}
+          />
           <CardAction
             icon={Play}
             label="Run now"
