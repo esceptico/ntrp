@@ -20,7 +20,7 @@ from ntrp.agent import (
     ToolCompleted,
     ToolStarted,
 )
-from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
+from ntrp.constants import AGENT_MAX_CONCURRENT, SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
 from ntrp.context.prompts import RESEARCH_AGENT_COMPACTION_CONTEXT
 from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
@@ -804,6 +804,19 @@ def create_spawn_fn(
         registry = calling_ctx.background_tasks
         task_id = child_run_id
         label = "Agent"
+
+        # Horizontal fan-out guard: cap concurrent background agents per session
+        # so a runaway loop can't spawn unbounded detached agents.
+        if len(registry.list_pending()) >= AGENT_MAX_CONCURRENT:
+            return SpawnResult(
+                text=(
+                    f"Not started — already at the limit of {AGENT_MAX_CONCURRENT} concurrent "
+                    "background agents in this session. Wait for some to finish, then try again."
+                ),
+                agent_type=resolved_agent_type,
+                wait=should_wait,
+                status="failed",
+            )
 
         # Steering channel: the parent (or user) can send messages to this
         # running agent via registry.queue_injection(task_id, …); the agent

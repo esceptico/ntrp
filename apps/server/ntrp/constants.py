@@ -13,6 +13,9 @@ DEFAULT_LIST_LIMIT = 50
 # --- Agent Limits ---
 
 AGENT_MAX_DEPTH = 8
+# Max concurrent background agents per session — a horizontal fan-out guard
+# (depth is the vertical one) so a runaway loop can't spawn unbounded agents.
+AGENT_MAX_CONCURRENT = 16
 AGENT_MAX_ITERATIONS = None
 AGENT_MAX_TOOL_CALLS = None
 AGENT_MAX_WALL_TIME_SECONDS = None

@@ -641,6 +641,45 @@ async def test_background_agent_drains_steering_message_mid_run(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_background_spawn_rejected_at_concurrency_cap(monkeypatch):
+    from ntrp.constants import AGENT_MAX_CONCURRENT
+
+    bg_registry = BackgroundTaskRegistry(session_id="test")
+    fillers = [asyncio.create_task(asyncio.sleep(3600)) for _ in range(AGENT_MAX_CONCURRENT)]
+    for i, task in enumerate(fillers):
+        bg_registry.register(f"filler-{i}", task, command="busy")
+
+    class BoomLLM:
+        async def stream(self, *args, **kwargs):
+            raise AssertionError("must not spawn when at the concurrency cap")
+            yield  # pragma: no cover
+
+    monkeypatch.setattr(spawner_module, "llm_client", BoomLLM())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=bg_registry,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    try:
+        result = await spawn(ctx, "one too many", system_prompt="sys", tools=[], background=True, timeout=1)
+        assert result.status == "failed"
+        assert result.child_run_id == ""
+        assert "concurrent" in result.text.lower()
+        # No new task was registered.
+        assert len(bg_registry.list_pending()) == AGENT_MAX_CONCURRENT
+    finally:
+        for task in fillers:
+            task.cancel()
+        await asyncio.gather(*fillers, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_spawn_cost_budget_uses_parent_spend(monkeypatch):
     class FakeLLM:
         async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
