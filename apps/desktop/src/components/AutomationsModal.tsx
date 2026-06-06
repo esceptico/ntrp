@@ -483,14 +483,6 @@ function AutomationCard({
   const hasResult = !!automation.last_result?.trim();
   const recentStatuses = automation.recent_statuses ?? [];
   const lastStatus = automation.last_status ?? null;
-  // Rail color encodes state at a glance. Precedence: running > failed > on > paused.
-  const railTone = running
-    ? "bg-accent"
-    : lastStatus === "failed"
-      ? "bg-bad"
-      : automation.enabled
-        ? "bg-ok"
-        : "bg-line-strong";
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
   const showRunHistory = async () => {
     const runs = await listAutomationRunsApi(config, automation.task_id, 30);
@@ -533,29 +525,24 @@ function AutomationCard({
         }
       }}
       className={clsx(
-        "group/auto-card surface-panel surface-radius-sm relative grid grid-cols-[4px_minmax(0,1fr)] overflow-hidden focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
         editable && "cursor-pointer",
       )}
     >
-      {/* Status rail — color-codes state at a glance (running > failed > on >
-          paused) and is the enable/pause toggle. */}
-      <button
-        type="button"
-        onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
-        disabled={busy === "toggle"}
-        title={automation.enabled ? "Pause" : "Enable"}
-        aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
-        className={clsx(
-          "h-full w-full transition-colors duration-panel hover:opacity-80",
-          railTone,
-          running && "status-dot-breathe",
-          busy === "toggle" && "opacity-50",
-        )}
-      />
-
-      <div className="grid gap-2 py-3 pl-3 pr-3 min-w-0">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 min-w-0">
-          <div className="min-w-0 grid gap-1.5">
+      <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-2.5 min-w-0">
+        <button
+          type="button"
+          onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
+          disabled={busy === "toggle"}
+          title={automation.enabled ? "Pause" : "Enable"}
+          aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
+          className={clsx(
+            "mt-[5px] grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
+            automation.enabled ? "bg-ok" : "bg-transparent border border-line-strong hover:border-muted",
+            busy === "toggle" && "opacity-50",
+          )}
+        />
+        <div className="min-w-0 grid gap-1.5">
             <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
             </h4>
@@ -623,8 +610,8 @@ function AutomationCard({
           </div>
         </div>
 
-        {/* schedule (left) · outcome sparkline + last-status pip (right) */}
-        <div className="flex items-center justify-between gap-3 text-xs font-mono tabular-nums text-faint min-w-0">
+      {/* schedule (left) · outcome sparkline + last-status pip (right) */}
+      <div className="flex items-center justify-between gap-3 pl-[19px] text-xs font-mono tabular-nums text-faint min-w-0">
           <span className="min-w-0 truncate" title={trigger}>
             {[trigger, formatNext(automation)].filter(Boolean).join(" · ")}
           </span>
@@ -696,7 +683,6 @@ function AutomationCard({
                 </button>
               )
             )}
-          </div>
         </div>
       </div>
     </motion.article>
