@@ -31,8 +31,12 @@ from ntrp.server.sse_stream import replay_records as iter_replay_records
 router = APIRouter(tags=["automations"])
 
 
-def _automation_to_dict(a: Automation) -> dict:
+def _automation_to_dict(a: Automation, recent_statuses: list[str] | None = None) -> dict:
+    statuses = recent_statuses or []
     return {
+        # Newest-first run outcomes for the card's sparkline + last-status pip.
+        "recent_statuses": statuses,
+        "last_status": statuses[0] if statuses else None,
         "task_id": a.task_id,
         "name": a.name,
         "description": a.description,
@@ -86,7 +90,10 @@ async def create_automation(
 @router.get("/automations")
 async def list_automations(svc: AutomationService = Depends(require_automation_service)):
     automations = await svc.list_all()
-    return {"automations": [_automation_to_dict(a) for a in automations]}
+    statuses = await svc.store.recent_run_statuses([a.task_id for a in automations])
+    return {
+        "automations": [_automation_to_dict(a, statuses.get(a.task_id, [])) for a in automations]
+    }
 
 
 def _suggestion_to_response(s: AutomationSuggestion) -> AutomationSuggestionResponse:
@@ -205,7 +212,8 @@ async def get_automation(task_id: str, svc: AutomationService = Depends(require_
     except KeyError:
         raise HTTPException(status_code=404, detail="Automation not found")
 
-    return _automation_to_dict(automation)
+    statuses = await svc.store.recent_run_statuses([task_id])
+    return _automation_to_dict(automation, statuses.get(task_id, []))
 
 
 @router.get("/automations/{task_id}/runs")

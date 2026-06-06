@@ -352,6 +352,9 @@ _SQL_LIST_RUNS = (
     "SELECT id, task_id, started_at, ended_at, status, result, error "
     "FROM automation_runs WHERE task_id = ? ORDER BY started_at DESC, id DESC LIMIT ?"
 )
+_SQL_RECENT_STATUSES = (
+    "SELECT status FROM automation_runs WHERE task_id = ? ORDER BY started_at DESC, id DESC LIMIT ?"
+)
 
 _SQL_DELETE = "DELETE FROM scheduled_tasks WHERE task_id = ?"
 
@@ -1211,6 +1214,18 @@ class AutomationStore:
             (ended_at.isoformat(), status, clip(result), clip(error), run_id),
         )
         await self.conn.commit()
+
+    async def recent_run_statuses(
+        self, task_ids: list[str], per_task: int = 4
+    ) -> dict[str, list[str]]:
+        """Newest-first run statuses per task (for the card's sparkline/pip).
+        One small indexed query per task — bounded by the automation count."""
+        out: dict[str, list[str]] = {}
+        for task_id in task_ids:
+            cursor = await self.conn.execute(_SQL_RECENT_STATUSES, (task_id, per_task))
+            rows = await cursor.fetchall()
+            out[task_id] = [row["status"] for row in rows]
+        return out
 
     async def list_runs(self, task_id: str, limit: int = 20) -> list[dict]:
         cursor = await self.conn.execute(_SQL_LIST_RUNS, (task_id, limit))

@@ -1159,6 +1159,11 @@ export interface Automation {
   created_at: string;
   last_run_at: string | null;
   next_run_at: string | null;
+  /** Most recent run outcome ("completed" | "failed" | "running"), and the
+   *  last few statuses newest-first for the card sparkline. Null/empty until
+   *  the automation has fired since run-history landed. */
+  last_status?: string | null;
+  recent_statuses?: string[];
   /** Textual output from the most recent run (markdown). Null until the
    *  automation has actually run once. */
   last_result: string | null;

@@ -52,6 +52,29 @@ async def test_run_history_newest_first_and_limited(automation_store: Automation
     assert runs[0]["started_at"] > runs[1]["started_at"] > runs[2]["started_at"]
 
 
+async def test_recent_run_statuses_newest_first_per_task(automation_store: AutomationStore):
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    r1 = await automation_store.record_run_start("A", base)
+    await automation_store.record_run_finish(r1, status="completed", result="ok", error=None, ended_at=base)
+    r2 = await automation_store.record_run_start("A", base + timedelta(minutes=1))
+    await automation_store.record_run_finish(r2, status="failed", result=None, error="x", ended_at=base + timedelta(minutes=1))
+    await automation_store.record_run_start("A", base + timedelta(minutes=2))  # still running
+    await automation_store.record_run_start("B", base)
+
+    res = await automation_store.recent_run_statuses(["A", "B", "C"], per_task=4)
+    assert res["A"] == ["running", "failed", "completed"]  # newest first
+    assert res["B"] == ["running"]
+    assert res["C"] == []  # unknown task → empty, not missing
+
+
+async def test_recent_run_statuses_respects_per_task_cap(automation_store: AutomationStore):
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for i in range(6):
+        await automation_store.record_run_start("A", base + timedelta(minutes=i))
+    res = await automation_store.recent_run_statuses(["A"], per_task=4)
+    assert len(res["A"]) == 4
+
+
 async def test_run_history_truncates_long_result(automation_store: AutomationStore):
     rid = await automation_store.record_run_start("task-3", datetime(2026, 1, 1, tzinfo=UTC))
     await automation_store.record_run_finish(

@@ -50,6 +50,7 @@ import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
 import { BlurSwap } from "./BlurSwap";
+import { StatusDot } from "./StatusDot";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
@@ -410,6 +411,17 @@ export function SuggestionCard({
 
 // ─── Card: existing automation ──────────────────────────────────────
 
+/** Tailwind bg for a run-status sparkline dot. */
+function sparkTone(status: string): string {
+  return status === "completed"
+    ? "bg-ok"
+    : status === "failed"
+      ? "bg-bad"
+      : status === "running"
+        ? "bg-accent"
+        : "bg-muted";
+}
+
 function _runDuration(start: string, end: string): string {
   const ms = Date.parse(end) - Date.parse(start);
   if (!Number.isFinite(ms) || ms < 0) return "";
@@ -469,6 +481,16 @@ function AutomationCard({
   const running = automation.running_since != null;
   const trigger = automation.triggers.map(formatTrigger).join(" · ") || "—";
   const hasResult = !!automation.last_result?.trim();
+  const recentStatuses = automation.recent_statuses ?? [];
+  const lastStatus = automation.last_status ?? null;
+  // Rail color encodes state at a glance. Precedence: running > failed > on > paused.
+  const railTone = running
+    ? "bg-accent"
+    : lastStatus === "failed"
+      ? "bg-bad"
+      : automation.enabled
+        ? "bg-ok"
+        : "bg-line-strong";
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
   const showRunHistory = async () => {
     const runs = await listAutomationRunsApi(config, automation.task_id, 30);
@@ -511,131 +533,170 @@ function AutomationCard({
         }
       }}
       className={clsx(
-        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        "group/auto-card surface-panel surface-radius-sm relative grid grid-cols-[4px_minmax(0,1fr)] overflow-hidden focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
         editable && "cursor-pointer",
       )}
     >
-      <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-2.5 min-w-0">
-        <button
-          type="button"
-          onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
-          disabled={busy === "toggle"}
-          title={automation.enabled ? "Pause" : "Enable"}
-          aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
-          className={clsx(
-            "mt-[5px] grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
-            automation.enabled
-              ? "bg-ok"
-              : "bg-transparent border border-line-strong hover:border-muted",
-            busy === "toggle" && "opacity-50",
-          )}
-        />
-        <div className="min-w-0 grid gap-1.5">
-          <div className="grid gap-1.5 min-w-0">
+      {/* Status rail — color-codes state at a glance (running > failed > on >
+          paused) and is the enable/pause toggle. */}
+      <button
+        type="button"
+        onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
+        disabled={busy === "toggle"}
+        title={automation.enabled ? "Pause" : "Enable"}
+        aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
+        className={clsx(
+          "h-full w-full transition-colors duration-panel hover:opacity-80",
+          railTone,
+          running && "status-dot-breathe",
+          busy === "toggle" && "opacity-50",
+        )}
+      />
+
+      <div className="grid gap-2 py-3 pl-3 pr-3 min-w-0">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 min-w-0">
+          <div className="min-w-0 grid gap-1.5">
             <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
             </h4>
-            {(running || automation.builtin || trustLabel || isChannelAutomation(automation)) && (
+            {(running || trustLabel || isChannelAutomation(automation)) && (
               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 {running && (
-                  <Badge
-                    tone="accent"
-                    leading={<Circle size={5} strokeWidth={3} fill="currentColor" />}
-                  >
+                  <Badge tone="accent" leading={<Circle size={5} strokeWidth={3} fill="currentColor" />}>
                     running
                   </Badge>
                 )}
                 {isChannelAutomation(automation) && (
-                  <Badge
-                    tone="neutral"
-                    leading={<Radio size={9} strokeWidth={2.2} />}
-                  >
+                  <Badge tone="neutral" leading={<Radio size={9} strokeWidth={2.2} />}>
                     channel
                   </Badge>
                 )}
-                {automation.builtin && <Badge tone="neutral">builtin</Badge>}
                 {trustLabel && <Badge tone={automationTrustTone(automation)}>{trustLabel}</Badge>}
               </div>
             )}
+            <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
+              {automation.description || "No description."}
+            </p>
           </div>
-          <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
-            {automation.description || "No description."}
-          </p>
-        </div>
-        <div className="flex items-center gap-px self-start -mt-0.5 opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity duration-row ease-out">
-          {channel && (
+          <div className="flex items-center gap-px self-start -mt-0.5 opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity duration-row ease-out">
+            {channel && (
+              <CardAction
+                icon={Radio}
+                label="Open channel"
+                onClick={stop(() => {
+                  void switchSession(channel.session_id);
+                  closeAutomations();
+                })}
+              />
+            )}
+            {hasResult && (
+              <CardAction
+                icon={FileText}
+                label="View last run"
+                onClick={stop(() =>
+                  setMarkdownView({
+                    title: automation.name || "Automation",
+                    subtitle: automation.last_run_at
+                      ? `last run ${formatRelative(automation.last_run_at)}`
+                      : undefined,
+                    content: automation.last_result ?? "",
+                  }),
+                )}
+              />
+            )}
+            <CardAction icon={History} label="Run history" onClick={stop(() => void showRunHistory())} />
             <CardAction
-              icon={Radio}
-              label="Open channel"
-              onClick={stop(() => {
-                void switchSession(channel.session_id);
-                closeAutomations();
-              })}
+              icon={Play}
+              label="Run now"
+              onClick={stop(wrap("run", () => runAutomation(automation.task_id)))}
+              busy={busy === "run"}
+              disabled={!automation.enabled}
             />
-          )}
-          {hasResult && (
             <CardAction
-              icon={FileText}
-              label="View last run"
-              onClick={stop(() =>
-                setMarkdownView({
-                  title: automation.name || "Automation",
-                  subtitle: automation.last_run_at
-                    ? `last run ${formatRelative(automation.last_run_at)}`
-                    : undefined,
-                  content: automation.last_result ?? "",
-                }),
-              )}
+              icon={Trash2}
+              label="Delete"
+              onClick={stop(remove)}
+              busy={busy === "delete"}
+              disabled={automation.builtin}
+              danger
             />
-          )}
-          <CardAction
-            icon={History}
-            label="Run history"
-            onClick={stop(() => void showRunHistory())}
-          />
-          <CardAction
-            icon={Play}
-            label="Run now"
-            onClick={stop(wrap("run", () => runAutomation(automation.task_id)))}
-            busy={busy === "run"}
-            disabled={!automation.enabled}
-          />
-          <CardAction
-            icon={Trash2}
-            label="Delete"
-            onClick={stop(remove)}
-            busy={busy === "delete"}
-            disabled={automation.builtin}
-            danger
-          />
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-1 pl-[19px] text-xs font-mono tabular-nums text-faint">
-        <span className="min-w-0 truncate" title={trigger}>{trigger}</span>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {(() => {
-          const nextLabel = formatNext(automation);
-          return nextLabel ? (
-            <span title={automation.next_run_at ?? undefined}>{nextLabel}</span>
-          ) : null;
-        })()}
-        {hasResult && automation.last_run_at && (
-            <button
-              type="button"
-              onClick={stop(() =>
-                setMarkdownView({
-                  title: automation.name || "Automation",
-                  subtitle: `last run ${formatRelative(automation.last_run_at!)}`,
-                  content: automation.last_result ?? "",
-                }),
-              )}
-              className="font-mono tabular-nums text-faint hover:text-ink-soft underline-offset-2 hover:underline transition-colors"
-              title="View last run"
-            >
-              ran {formatRelative(automation.last_run_at)}
-            </button>
-        )}
+        {/* schedule (left) · outcome sparkline + last-status pip (right) */}
+        <div className="flex items-center justify-between gap-3 text-xs font-mono tabular-nums text-faint min-w-0">
+          <span className="min-w-0 truncate" title={trigger}>
+            {[trigger, formatNext(automation)].filter(Boolean).join(" · ")}
+          </span>
+          <div className="shrink-0 flex items-center gap-2">
+            {recentStatuses.length > 0 && (
+              <button
+                type="button"
+                onClick={stop(() => void showRunHistory())}
+                title="Run history"
+                aria-label="Run history"
+                className="inline-flex items-center gap-0.5 hover:opacity-80 transition-opacity"
+              >
+                {recentStatuses.slice(0, 4).reverse().map((s, i) => (
+                  <span key={i} className={clsx("w-1 h-1 rounded-[1px]", sparkTone(s))} />
+                ))}
+              </button>
+            )}
+            {lastStatus ? (
+              <button
+                type="button"
+                onClick={stop(() =>
+                  hasResult
+                    ? setMarkdownView({
+                        title: automation.name || "Automation",
+                        subtitle: automation.last_run_at
+                          ? `last run ${formatRelative(automation.last_run_at)}`
+                          : undefined,
+                        content: automation.last_result ?? "",
+                      })
+                    : void showRunHistory(),
+                )}
+                title={hasResult ? "View last run" : "Run history"}
+                className={clsx(
+                  "inline-flex items-center gap-1 transition-colors hover:text-ink-soft",
+                  lastStatus === "failed" && "text-bad",
+                )}
+              >
+                <StatusDot
+                  status={lastStatus as "completed" | "failed" | "running"}
+                  pulse={lastStatus === "running"}
+                />
+                <span>
+                  {lastStatus === "running"
+                    ? "running"
+                    : lastStatus === "failed"
+                      ? `failed${automation.last_run_at ? ` ${formatRelative(automation.last_run_at)}` : ""}`
+                      : automation.last_run_at
+                        ? formatRelative(automation.last_run_at)
+                        : "done"}
+                </span>
+              </button>
+            ) : (
+              automation.last_run_at && (
+                <button
+                  type="button"
+                  onClick={stop(() =>
+                    hasResult
+                      ? setMarkdownView({
+                          title: automation.name || "Automation",
+                          subtitle: `last run ${formatRelative(automation.last_run_at!)}`,
+                          content: automation.last_result ?? "",
+                        })
+                      : void showRunHistory(),
+                  )}
+                  className="hover:text-ink-soft transition-colors"
+                  title={hasResult ? "View last run" : "Run history"}
+                >
+                  ran {formatRelative(automation.last_run_at)}
+                </button>
+              )
+            )}
+          </div>
         </div>
       </div>
     </motion.article>
