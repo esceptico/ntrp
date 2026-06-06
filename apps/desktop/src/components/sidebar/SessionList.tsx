@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, ChevronDown, Folder, FolderPlus, Inbox, Plus, Search, Settings, X } from "lucide-react";
+import { Archive, ChevronDown, FolderPlus, Inbox, Plus, Search, Settings, X } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
@@ -76,8 +76,7 @@ export function SessionList() {
     <div className="group/sessions flex flex-col flex-1 min-h-0">
       <div className="px-2.5 pt-3 pb-1.5">
         <div className="flex items-center gap-2 pl-[8px] pr-[6px] h-[26px]">
-          <div className="min-w-0 flex-1 flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
-            <Folder size={ICON.XS} strokeWidth={2.1} />
+          <div className="min-w-0 flex-1 flex items-center text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
             <span className="truncate">Projects</span>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">
@@ -140,27 +139,26 @@ export function SessionList() {
             const isCollapsed = collapsedGroups.has(groupKey);
             return (
               <div key={groupKey}>
-                <div className="flex items-center gap-1 pr-[18px]">
+                <div className="group/prow flex items-center gap-1 pr-[18px]">
                   <button
                     type="button"
                     onClick={() => toggleGroup(groupKey)}
                     aria-expanded={!isCollapsed}
                     className={clsx(
-                      "flex-1 flex items-center gap-1 pl-[18px] pt-1.5 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint hover:text-muted transition-colors cursor-pointer select-none",
+                      "flex-1 flex items-center gap-1.5 pl-[18px] pt-1.5 pb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted hover:text-ink transition-colors cursor-pointer select-none",
                     )}
                   >
-                    <Folder size={ICON.XS} strokeWidth={2.1} />
                     <ChevronDown
                       size={ICON.XS}
                       strokeWidth={2.2}
                       className={clsx(
-                        "transition-transform duration-row",
+                        "shrink-0 text-faint transition-transform duration-row",
                         isCollapsed && "-rotate-90",
                       )}
                     />
                     <span className="truncate">{label}</span>
                   </button>
-                  <div className="flex items-center gap-0.5 shrink-0">
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/prow:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
                     {group.project && (
                       <button
                         type="button"
