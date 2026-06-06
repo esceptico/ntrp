@@ -1352,6 +1352,36 @@ export async function cancelChildAgentApi(
   );
 }
 
+export interface TodoOverride {
+  items: TodoListItem[];
+  explanation: string | null;
+  updated_at: string;
+}
+
+// Manual todo edits, persisted server-side so the agent sees them on its next
+// run. The agent's own update_todos clears the override (its list wins).
+export async function getTodoOverrideApi(
+  config: AppConfig,
+  sessionId: string,
+): Promise<TodoOverride | null> {
+  return apiWithConfig<TodoOverride | null>(config, `/sessions/${encodeURIComponent(sessionId)}/todo`);
+}
+
+export async function setTodoOverrideApi(
+  config: AppConfig,
+  sessionId: string,
+  items: TodoListItem[],
+): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/todo`, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function clearTodoOverrideApi(config: AppConfig, sessionId: string): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/todo`, { method: "DELETE" });
+}
+
 // Steer a running background agent — deliver a message into its loop at its
 // next step. sessionId is the PARENT session that owns the agent.
 export async function sendToChildAgentApi(

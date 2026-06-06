@@ -55,6 +55,12 @@ async def update_todos(execution: ToolExecution, args: UpdateTodosInput) -> Tool
             )
         )
 
+    # The agent's list supersedes any manual edit the user made (the override
+    # was already injected into this run's context).
+    session_service = execution.ctx.services.get("session")
+    if session_service is not None and hasattr(session_service, "clear_todo_override"):
+        await session_service.clear_todo_override(execution.ctx.session_state.session_id)
+
     return ToolResult(content="Todo list updated.", preview=preview, data=data)
 
 

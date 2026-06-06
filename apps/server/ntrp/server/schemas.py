@@ -154,6 +154,16 @@ class GoalProposalResponse(BaseModel):
     objective: str
 
 
+class TodoOverrideItem(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+    status: Literal["pending", "in_progress", "completed"]
+
+
+class SetTodoOverrideRequest(BaseModel):
+    items: list[TodoOverrideItem] = Field(default_factory=list, max_length=50)
+    explanation: str | None = Field(default=None, max_length=2_000)
+
+
 class UpdateSessionGoalRequest(BaseModel):
     status: Literal["active", "paused", "blocked", "budget_limited", "complete"] | None = None
     evidence: str | None = Field(default=None, max_length=20_000)

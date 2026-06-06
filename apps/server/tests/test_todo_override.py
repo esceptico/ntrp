@@ -1,0 +1,91 @@
+from datetime import UTC, datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+import ntrp.tools.todos as todos_module
+from ntrp.context.models import SessionData, SessionState
+from ntrp.server.app import app
+from ntrp.server.deps import require_session_service
+from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
+from ntrp.tools.core.registry import ToolRegistry
+
+
+class _TodoSessionService:
+    def __init__(self):
+        self.override: dict | None = None
+        self.cleared = 0
+
+    async def load(self, session_id: str | None = None):
+        return SessionData(
+            state=SessionState(session_id=session_id or "s1", started_at=datetime.now(UTC)),
+            messages=[],
+        )
+
+    async def set_todo_override(self, session_id, items, explanation=None):
+        self.override = {"items": items, "explanation": explanation, "updated_at": "now"}
+        return self.override
+
+    async def get_todo_override(self, session_id):
+        return self.override
+
+    async def clear_todo_override(self, session_id):
+        self.cleared += 1
+        had = self.override is not None
+        self.override = None
+        return had
+
+
+@pytest.mark.asyncio
+async def test_update_todos_clears_user_override():
+    svc = _TodoSessionService()
+    svc.override = {"items": [{"content": "user-added", "status": "pending"}]}
+    ctx = ToolContext(
+        session_state=SessionState(session_id="s1", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="r1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        services={"session": svc},
+    )
+    execution = ToolExecution(tool_id="t", tool_name="update_todos", ctx=ctx)
+
+    result = await todos_module.update_todos(
+        execution,
+        todos_module.UpdateTodosInput(items=[todos_module.TodoItemInput(content="agent task", status="pending")]),
+    )
+
+    assert "updated" in result.content.lower()
+    # The agent's list supersedes the user's manual edit.
+    assert svc.cleared == 1
+    assert svc.override is None
+
+
+def test_todo_override_endpoints_roundtrip():
+    svc = _TodoSessionService()
+    app.dependency_overrides[require_session_service] = lambda: svc
+    try:
+        client = TestClient(app)
+        r = client.post("/sessions/s1/todo", json={"items": [{"content": "buy milk", "status": "pending"}]})
+        assert r.status_code == 200
+        assert r.json()["items"] == [{"content": "buy milk", "status": "pending"}]
+
+        r = client.get("/sessions/s1/todo")
+        assert r.status_code == 200
+        assert r.json()["items"][0]["content"] == "buy milk"
+
+        r = client.delete("/sessions/s1/todo")
+        assert r.status_code == 200
+        assert r.json()["status"] == "cleared"
+        assert client.get("/sessions/s1/todo").json() is None
+    finally:
+        app.dependency_overrides.pop(require_session_service, None)
+
+
+def test_todo_override_rejects_bad_status():
+    svc = _TodoSessionService()
+    app.dependency_overrides[require_session_service] = lambda: svc
+    try:
+        r = TestClient(app).post("/sessions/s1/todo", json={"items": [{"content": "x", "status": "bogus"}]})
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.pop(require_session_service, None)

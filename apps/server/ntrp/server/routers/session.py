@@ -27,6 +27,7 @@ from ntrp.server.schemas import (
     SessionResponse,
     SetSessionAutoRequest,
     SetSessionGoalRequest,
+    SetTodoOverrideRequest,
     UpdateProjectRequest,
     UpdateSessionGoalRequest,
     UpdateSessionModelRequest,
@@ -598,6 +599,38 @@ async def clear_session_goal(
     if cleared:
         await _emit_goal_event(buses, session_id, None, event_store=svc.store)
     return {"status": "cleared", "session_id": session_id}
+
+
+@router.get("/sessions/{session_id}/todo")
+async def get_session_todo_override(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+):
+    return await svc.get_todo_override(session_id)
+
+
+@router.post("/sessions/{session_id}/todo")
+async def set_session_todo_override(
+    session_id: str,
+    req: SetTodoOverrideRequest,
+    svc: SessionService = Depends(require_session_service),
+):
+    if not await svc.load(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    items = [{"content": item.content, "status": item.status} for item in req.items]
+    result = await svc.set_todo_override(session_id, items, req.explanation)
+    if result is None:
+        raise HTTPException(status_code=500, detail="Failed to set todo override")
+    return result
+
+
+@router.delete("/sessions/{session_id}/todo")
+async def clear_session_todo_override(
+    session_id: str,
+    svc: SessionService = Depends(require_session_service),
+):
+    cleared = await svc.clear_todo_override(session_id)
+    return {"status": "cleared" if cleared else "noop", "session_id": session_id}
 
 
 @router.post("/session/clear")

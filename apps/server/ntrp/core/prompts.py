@@ -185,6 +185,12 @@ Evidence:
 Use current session history and goal evidence before searching external memory or files. Do not rediscover context already present above.
 Keep working toward this goal unless the user redirects you. Mark it complete only after concrete evidence. `complete_goal` takes no input; after it succeeds, send a visible concise completion report with the evidence and verification. If progress appears blocked, first exhaust viable local, repo, tool, or system steps. Use `block_goal` only when missing user or system input truly prevents progress. Reuse the same concise reason only if the same blocker still applies; the first two matching reports keep the goal active for automatic continuation, and the third marks it blocked.""")
 
+TODO_OVERRIDE_BLOCK = env.from_string("""## TODO LIST (edited by the user)
+The user manually edited the todo list. This is the current authoritative list — treat it as the source of truth over any earlier `update_todos` calls:
+{% for item in todo['items'] %}- [{{ item.status }}] {{ item.content }}
+{% endfor %}
+Work from this list. When you change it, call `update_todos` with the full new list (that supersedes the user's edit).""")
+
 TEMPORAL_REMINDER = env.from_string("Remember: today is {{ date }}.")
 
 INIT_INSTRUCTION = """Build a thorough profile of the user by deeply researching their data. Research first, present findings, confirm later.
@@ -275,6 +281,7 @@ def build_system_blocks(
     deferred_tools_context: str | None = None,
     goal_context: dict | None = None,
     project_context: object | None = None,
+    todo_override: dict | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -319,6 +326,9 @@ def build_system_blocks(
 
     if goal_context:
         blocks.append({"type": "text", "text": GOAL_BLOCK.render(goal=goal_context)})
+
+    if todo_override and todo_override.get("items"):
+        blocks.append({"type": "text", "text": TODO_OVERRIDE_BLOCK.render(todo=todo_override)})
 
     blocks.append({"type": "text", "text": TEMPORAL_REMINDER.render(date=date)})
 

@@ -454,6 +454,28 @@ async def test_session_goal_lifecycle(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_todo_override_lifecycle(store: SessionStore):
+    assert await store.get_todo_override("sess-1") is None
+
+    items = [{"content": "a", "status": "completed"}, {"content": "b", "status": "pending"}]
+    saved = await store.set_todo_override("sess-1", items, explanation="user edit")
+    assert saved["items"] == items
+    assert saved["explanation"] == "user edit"
+
+    loaded = await store.get_todo_override("sess-1")
+    assert loaded is not None
+    assert loaded["items"] == items
+
+    # Upsert replaces.
+    await store.set_todo_override("sess-1", [{"content": "c", "status": "in_progress"}])
+    assert (await store.get_todo_override("sess-1"))["items"] == [{"content": "c", "status": "in_progress"}]
+
+    assert await store.clear_todo_override("sess-1") is True
+    assert await store.get_todo_override("sess-1") is None
+    assert await store.clear_todo_override("sess-1") is False
+
+
+@pytest.mark.asyncio
 async def test_session_goal_budget_and_goal_id_guard(store: SessionStore):
     goal = await store.set_goal("sess-1", "Ship the goal feature", token_budget=100)
 

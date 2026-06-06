@@ -13,20 +13,17 @@ import {
 } from "lucide-react";
 import {
   cancelChildAgentApi,
+  clearTodoOverrideApi,
   getChildAgentResultApi,
+  getTodoOverrideApi,
   listChildAgentsApi,
   sendToChildAgentApi,
+  setTodoOverrideApi,
   type BackgroundTaskSummary,
   type TodoListItem,
   type TodoStatus,
 } from "../api";
-import {
-  clearTodoOverride,
-  loadTodoOverride,
-  nextTodoStatus,
-  saveTodoOverride,
-  todoSignature,
-} from "../lib/todoOverride";
+import { nextTodoStatus, todoSignature } from "../lib/todoOverride";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import {
   EASE_EMPHASIZED,
@@ -371,30 +368,46 @@ function TodoEditInput({
 }
 
 // Editable todo list. Agent-produced todos are the base; the user's manual
-// edits persist per session (localStorage) and survive until the agent emits
-// a different list. See lib/todoOverride.
+// edits persist server-side (so the agent sees them on its next run) and last
+// until the agent emits a different list, which supersedes them.
 function useEditableTodo(sessionId: string | null, todo: TodoListState) {
+  const config = useStore((s) => s.config);
   const agentItems = todo.items;
   const agentSig = useMemo(() => todoSignature(agentItems), [agentItems]);
-  const [items, setItems] = useState<TodoListItem[]>(
-    () => (sessionId ? loadTodoOverride(sessionId, agentSig) : null) ?? agentItems,
-  );
-  const [edited, setEdited] = useState(() => !!(sessionId && loadTodoOverride(sessionId, agentSig)));
+  const [items, setItems] = useState<TodoListItem[]>(agentItems);
+  const [edited, setEdited] = useState(false);
   const lastSig = useRef(agentSig);
 
-  // The agent changed the list — its update supersedes local edits.
+  // Load any persisted override on mount (the section remounts per session).
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    void getTodoOverrideApi(config, sessionId)
+      .then((override) => {
+        if (!cancelled && override) {
+          setItems(override.items);
+          setEdited(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, config]);
+
+  // The agent emitted a new list — it supersedes the manual edit (the server
+  // already cleared the override when update_todos ran).
   useEffect(() => {
     if (lastSig.current === agentSig) return;
     lastSig.current = agentSig;
-    if (sessionId) clearTodoOverride(sessionId);
     setItems(agentItems);
     setEdited(false);
-  }, [agentSig, agentItems, sessionId]);
+  }, [agentSig, agentItems]);
 
   const commit = (next: TodoListItem[]) => {
     setItems(next);
     setEdited(true);
-    if (sessionId) saveTodoOverride(sessionId, agentSig, next);
+    if (sessionId) void setTodoOverrideApi(config, sessionId, next).catch(() => {});
   };
 
   return {
@@ -407,9 +420,9 @@ function useEditableTodo(sessionId: string | null, todo: TodoListState) {
     cycle: (index: number) =>
       commit(items.map((item, i) => (i === index ? { ...item, status: nextTodoStatus(item.status) } : item))),
     reset: () => {
-      if (sessionId) clearTodoOverride(sessionId);
       setItems(agentItems);
       setEdited(false);
+      if (sessionId) void clearTodoOverrideApi(config, sessionId).catch(() => {});
     },
   };
 }

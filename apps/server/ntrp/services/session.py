@@ -320,6 +320,29 @@ class SessionService:
             _logger.warning("Failed to clear goal: %s", e)
             return False
 
+    async def set_todo_override(
+        self, session_id: str, items: list[dict], explanation: str | None = None
+    ) -> dict | None:
+        try:
+            return await self.store.set_todo_override(session_id, items, explanation)
+        except Exception as e:
+            _logger.warning("Failed to set todo override: %s", e)
+            return None
+
+    async def get_todo_override(self, session_id: str) -> dict | None:
+        try:
+            return await self.store.get_todo_override(session_id)
+        except Exception as e:
+            _logger.warning("Failed to load todo override: %s", e)
+            return None
+
+    async def clear_todo_override(self, session_id: str) -> bool:
+        try:
+            return await self.store.clear_todo_override(session_id)
+        except Exception as e:
+            _logger.warning("Failed to clear todo override: %s", e)
+            return False
+
     async def list_sessions(self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET) -> list[dict]:
         return await self.store.list_sessions(limit=limit, project_id=project_id)
 

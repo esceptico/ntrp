@@ -443,6 +443,7 @@ async def _prepare_messages(
     run_id: str | None = None,
     goal_context: dict | None = None,
     project_context: ProjectContext | None = None,
+    todo_override: dict | None = None,
 ) -> list[dict]:
     memory_context = await _retrieve_memory_context(deps.memory_retrieval, user_message, project_context)
 
@@ -464,6 +465,7 @@ async def _prepare_messages(
         deferred_tools_context=deferred_tools_context,
         goal_context=goal_context,
         project_context=project_context,
+        todo_override=todo_override,
         use_cache_control=_is_anthropic(deps.chat_model),
     )
 
@@ -638,6 +640,8 @@ async def prepare_chat(
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
     goal_context = await get_goal(session_state.session_id) if get_goal else None
+    get_todo_override = getattr(deps.session_service, "get_todo_override", None)
+    todo_override = await get_todo_override(session_state.session_id) if get_todo_override else None
     project_record = (
         await deps.session_service.get_project(session_state.project_id) if session_state.project_id else None
     )
@@ -655,6 +659,7 @@ async def prepare_chat(
         run_id=run.run_id,
         goal_context=goal_context,
         project_context=project_context,
+        todo_override=todo_override,
     )
 
     run.messages = messages
