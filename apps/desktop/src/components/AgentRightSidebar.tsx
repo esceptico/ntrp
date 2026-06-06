@@ -367,6 +367,18 @@ function TodoEditInput({
   );
 }
 
+interface EditableTodo {
+  key: string;
+  content: string;
+  status: TodoStatus;
+}
+
+// Todos carry no server id, so mint a stable key per item — editing text then
+// doesn't remount the row (no flash) and deleting animates the right row.
+let todoKeySeq = 0;
+const withTodoKeys = (items: TodoListItem[]): EditableTodo[] =>
+  items.map((item) => ({ key: `todo-${todoKeySeq++}`, content: item.content, status: item.status }));
+
 // Editable todo list. Agent-produced todos are the base; the user's manual
 // edits persist server-side (so the agent sees them on its next run) and last
 // until the agent emits a different list, which supersedes them.
@@ -374,7 +386,7 @@ function useEditableTodo(sessionId: string | null, todo: TodoListState) {
   const config = useStore((s) => s.config);
   const agentItems = todo.items;
   const agentSig = useMemo(() => todoSignature(agentItems), [agentItems]);
-  const [items, setItems] = useState<TodoListItem[]>(agentItems);
+  const [items, setItems] = useState<EditableTodo[]>(() => withTodoKeys(agentItems));
   const [edited, setEdited] = useState(false);
   const lastSig = useRef(agentSig);
 
@@ -385,7 +397,7 @@ function useEditableTodo(sessionId: string | null, todo: TodoListState) {
     void getTodoOverrideApi(config, sessionId)
       .then((override) => {
         if (!cancelled && override) {
-          setItems(override.items);
+          setItems(withTodoKeys(override.items));
           setEdited(true);
         }
       })
@@ -400,27 +412,33 @@ function useEditableTodo(sessionId: string | null, todo: TodoListState) {
   useEffect(() => {
     if (lastSig.current === agentSig) return;
     lastSig.current = agentSig;
-    setItems(agentItems);
+    setItems(withTodoKeys(agentItems));
     setEdited(false);
   }, [agentSig, agentItems]);
 
-  const commit = (next: TodoListItem[]) => {
+  const commit = (next: EditableTodo[]) => {
     setItems(next);
     setEdited(true);
-    if (sessionId) void setTodoOverrideApi(config, sessionId, next).catch(() => {});
+    if (sessionId) {
+      void setTodoOverrideApi(
+        config,
+        sessionId,
+        next.map(({ content, status }) => ({ content, status })),
+      ).catch(() => {});
+    }
   };
 
   return {
     items,
     edited,
-    add: (content: string) => commit([...items, { content, status: "pending" }]),
-    edit: (index: number, content: string) =>
-      commit(items.map((item, i) => (i === index ? { ...item, content } : item))),
-    remove: (index: number) => commit(items.filter((_, i) => i !== index)),
-    cycle: (index: number) =>
-      commit(items.map((item, i) => (i === index ? { ...item, status: nextTodoStatus(item.status) } : item))),
+    add: (content: string) => commit([...items, { key: `todo-${todoKeySeq++}`, content, status: "pending" }]),
+    edit: (key: string, content: string) =>
+      commit(items.map((item) => (item.key === key ? { ...item, content } : item))),
+    remove: (key: string) => commit(items.filter((item) => item.key !== key)),
+    cycle: (key: string) =>
+      commit(items.map((item) => (item.key === key ? { ...item, status: nextTodoStatus(item.status) } : item))),
     reset: () => {
-      setItems(agentItems);
+      setItems(withTodoKeys(agentItems));
       setEdited(false);
       if (sessionId) void clearTodoOverrideApi(config, sessionId).catch(() => {});
     },
@@ -429,7 +447,7 @@ function useEditableTodo(sessionId: string | null, todo: TodoListState) {
 
 function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionId: string | null }) {
   const { items, edited, add, edit, remove, cycle, reset } = useEditableTodo(sessionId, todo);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const completed = items.filter((item) => item.status === "completed").length;
 
@@ -462,45 +480,45 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
           </button>
         </div>
       </div>
-      <div className="flex flex-col gap-0.5">
-        <AnimatePresence initial={false}>
-          {items.map((item, index) => (
+      <div className="relative flex flex-col gap-0.5">
+        <AnimatePresence initial={false} mode="popLayout">
+          {items.map((item) => (
             <motion.div
-              key={`${index}-${item.content}`}
+              key={item.key}
               layout
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, height: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
               transition={{
                 layout: SPRING_ROW_ENTRY,
                 opacity: { duration: MOTION.row },
-                y: { duration: MOTION.fast },
-                height: { duration: MOTION.row },
+                y: { duration: MOTION.row },
+                scale: { duration: MOTION.fast },
               }}
-              className="group/todo flex min-w-0 items-start gap-1.5 overflow-hidden rounded px-1 -mx-1 hover:bg-surface-soft/40"
+              className="group/todo flex min-w-0 items-start gap-1.5 rounded px-1 -mx-1 hover:bg-surface-soft/40"
             >
               <button
                 type="button"
-                onClick={() => cycle(index)}
+                onClick={() => cycle(item.key)}
                 aria-label="Cycle status"
                 title="Cycle status"
                 className="mt-[1px] shrink-0 rounded"
               >
                 {todoStatusIcon(item.status)}
               </button>
-              {editingIndex === index ? (
+              {editingKey === item.key ? (
                 <TodoEditInput
                   initial={item.content}
                   onCommit={(value) => {
-                    if (value.trim()) edit(index, value.trim());
-                    setEditingIndex(null);
+                    if (value.trim()) edit(item.key, value.trim());
+                    setEditingKey(null);
                   }}
-                  onCancel={() => setEditingIndex(null)}
+                  onCancel={() => setEditingKey(null)}
                 />
               ) : (
                 <button
                   type="button"
-                  onClick={() => setEditingIndex(index)}
+                  onClick={() => setEditingKey(item.key)}
                   title="Edit"
                   className={clsx(
                     "min-w-0 flex-1 break-words text-left text-xs leading-[1.35] transition-colors hover:text-ink",
@@ -514,7 +532,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
               )}
               <button
                 type="button"
-                onClick={() => remove(index)}
+                onClick={() => remove(item.key)}
                 aria-label="Delete task"
                 title="Delete"
                 className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-opacity"
@@ -754,13 +772,15 @@ export function AgentRightSidebar() {
                 {hasBreadcrumb && parentId && (
                   <motion.div
                     key="breadcrumb"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
-                    className="overflow-hidden"
+                    initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+                    animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+                    exit={{ gridTemplateRows: "0fr", opacity: 0 }}
+                    transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+                    style={{ display: "grid" }}
                   >
-                    <ParentBreadcrumb parentId={parentId} parentName={parentName} />
+                    <div className="min-h-0 overflow-hidden">
+                      <ParentBreadcrumb parentId={parentId} parentName={parentName} />
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -781,19 +801,20 @@ export function AgentRightSidebar() {
                       count={agents.length}
                     />
                   )}
-                  <div>
-                    <AnimatePresence initial={false}>
+                  <div className="relative">
+                    <AnimatePresence initial={false} mode="popLayout">
                       {agents.map((agent) => (
                         <motion.div
                           key={`${agent.sessionId}:${agent.taskId}`}
                           layout
                           initial={{ opacity: 0, y: -4 }}
                           animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
+                          exit={{ opacity: 0, scale: 0.97 }}
                           transition={{
                             layout: SPRING_ROW_ENTRY,
                             opacity: { duration: MOTION.row },
-                            y: { duration: MOTION.fast },
+                            y: { duration: MOTION.row },
+                            scale: { duration: MOTION.fast },
                           }}
                         >
                           <SidebarAgentRow

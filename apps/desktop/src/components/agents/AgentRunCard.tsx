@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ArrowUpRight, Bot, SendHorizontal, Square } from "lucide-react";
 import { ICON } from "../../lib/icons";
-import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import {
   isActiveAgentStatus,
   type AgentRunStatus,
@@ -260,13 +260,14 @@ export function AgentRunRow({
         {composing && (
           <motion.div
             key="composer"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: MOTION.row, ease: EASE_OUT }}
-            className="overflow-hidden"
+            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
+            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+            style={{ display: "grid" }}
           >
-            <div className="mt-1.5 pl-[24px]">
+            <div className="min-h-0 overflow-hidden">
+              <div className="mt-1.5 pl-[24px]">
               <input
                 autoFocus
                 value={draft}
@@ -290,6 +291,7 @@ export function AgentRunRow({
                 spellCheck={false}
                 className="w-full h-7 px-2 rounded-md bg-surface-soft focus:bg-surface-sunken text-xs text-ink-soft placeholder:text-muted outline-none border border-transparent focus:border-line-soft transition-colors disabled:opacity-60"
               />
+            </div>
             </div>
           </motion.div>
         )}
