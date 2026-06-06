@@ -8,6 +8,7 @@ import {
   modalOriginTransform,
   ENTRY_PANEL,
   EASE_DECELERATE,
+  MOTION,
 } from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
@@ -65,7 +66,7 @@ export function ApprovalReviewModal() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: EASE_DECELERATE }}
+          transition={{ duration: MOTION.palette, ease: EASE_DECELERATE }}
           onClick={() => close(null)}
         >
           <motion.div

@@ -13,6 +13,7 @@ import { groupProjectSessions, primarySidebarSessions } from "../../lib/projects
 import { SessionRow } from "./SessionRow";
 import { SessionContextMenu, type ContextMenuState } from "./SessionContextMenu";
 import { ProjectSettingsModal } from "./ProjectSettingsModal";
+import { RowAction } from "./RowAction";
 
 export function SessionList() {
   useTimeTicker();
@@ -160,25 +161,17 @@ export function SessionList() {
                   </button>
                   <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/prow:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
                     {group.project && (
-                      <button
-                        type="button"
+                      <RowAction
+                        icon={<Settings size={ICON.SM} strokeWidth={2} />}
+                        label={`Project settings — ${group.project.name}`}
                         onClick={() => setEditingProjectId(group.project?.project_id ?? null)}
-                        aria-label={`Project settings for ${group.project.name}`}
-                        title="Project settings"
-                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
-                      >
-                        <Settings size={ICON.SM} strokeWidth={2} />
-                      </button>
+                      />
                     )}
-                    <button
-                      type="button"
+                    <RowAction
+                      icon={<Plus size={ICON.SM} strokeWidth={2} />}
+                      label={`New session in ${label}`}
                       onClick={() => void createSession(group.project?.project_id ?? null)}
-                      aria-label={`New session in ${label}`}
-                      title="New session"
-                      className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
-                    >
-                      <Plus size={ICON.SM} strokeWidth={2} />
-                    </button>
+                    />
                   </div>
                 </div>
                 <AnimatePresence initial={false}>

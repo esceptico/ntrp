@@ -105,14 +105,16 @@ export function LensesView({
         <AnimatePresence initial={false}>
           {composing && (
             <motion.div
-              layout
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, gridTemplateRows: "0fr" }}
+              animate={{ opacity: 1, gridTemplateRows: "1fr" }}
+              exit={{ opacity: 0, gridTemplateRows: "0fr" }}
               transition={SPRING_LAYOUT}
-              className="overflow-hidden px-2.5"
+              style={{ display: "grid" }}
+              className="px-2.5"
             >
-              <Composer config={config} onCreated={onCreated} onCancel={() => setComposing(false)} />
+              <div className="min-h-0 overflow-hidden">
+                <Composer config={config} onCreated={onCreated} onCancel={() => setComposing(false)} />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -916,14 +918,14 @@ export function GroupedProfiles({
             <AnimatePresence initial={false}>
               {isOpen && (
                 <motion.div
-                  layout
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
+                  initial={{ opacity: 0, gridTemplateRows: "0fr" }}
+                  animate={{ opacity: 1, gridTemplateRows: "1fr" }}
+                  exit={{ opacity: 0, gridTemplateRows: "0fr" }}
                   transition={SPRING_LAYOUT}
-                  className="overflow-hidden pl-6"
+                  style={{ display: "grid" }}
+                  className="pl-6"
                 >
-                  <div className="flex flex-col gap-2 py-0.5">
+                  <div className="min-h-0 overflow-hidden flex flex-col gap-2 py-0.5">
                     {g.synthesized && stripAnchors(g.markdown).trim() && (
                       <Markdown
                         content={stripAnchors(g.markdown).trim()}
@@ -1005,14 +1007,13 @@ function ClaimSources({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            layout
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, gridTemplateRows: "0fr" }}
+            animate={{ opacity: 1, gridTemplateRows: "1fr" }}
+            exit={{ opacity: 0, gridTemplateRows: "0fr" }}
             transition={SPRING_LAYOUT}
-            className="overflow-hidden"
+            style={{ display: "grid" }}
           >
-            <div className="mt-1 flex flex-col gap-0.5">
+            <div className="min-h-0 overflow-hidden mt-1 flex flex-col gap-0.5">
               {blocks.map((b) => (
                 <ClaimBlock
                   key={b.claim_id}

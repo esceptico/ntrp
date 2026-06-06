@@ -47,8 +47,8 @@ const stackVariants = {
   }),
   exit: ({ index, reason }: CardCustom) => {
     if (index !== 0) return { opacity: 0, scale: 0.96, y: 4 };
-    if (reason === "approve") return { opacity: 0, scale: 1.01, x: 32, y: -4 };
-    if (reason === "reject") return { opacity: 0, scale: 0.94, x: -32, y: 4 };
+    if (reason === "approve") return { opacity: 0, scale: 1, x: 32, y: -4 };
+    if (reason === "reject") return { opacity: 0, scale: 0.97, x: -32, y: 4 };
     return { opacity: 0, scale: 0.96, y: 4 };
   },
 };

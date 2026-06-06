@@ -17,7 +17,10 @@ export function StatusDot({
       className={clsx(
         // transition-colors eases the status color change (running→done→
         // failed) instead of hard-cutting; the breathe halo is a separate
-        // keyframe that just stops when `breathing` drops.
+        // keyframe that just stops when `breathing` drops. 300ms is a
+        // deliberately gentle crossfade for this 1.5px dot — slower than the
+        // interactive MOTION scale on purpose (a snappier flip reads as a
+        // glitch on something this small), like the decorative breathe loop.
         "inline-block w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-300 ease-out",
         statusDotClass(status),
         breathing && "status-dot-breathe",

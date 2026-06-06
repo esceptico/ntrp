@@ -79,7 +79,7 @@ function AgentGlyph({
             event.stopPropagation();
             onStop?.();
           }}
-          className="absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] group-hover/run:pointer-events-auto group-hover/run:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-[0.6]"
+          className="absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] duration-row ease-out group-hover/run:pointer-events-auto group-hover/run:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-[0.6]"
         >
           <Square size={ICON.XS} strokeWidth={2} />
         </button>
@@ -124,7 +124,7 @@ export function AgentRunCard({ run, onOpen, onStop, stopping }: AgentRunCardProp
       data-child-session-id={run.childSessionId}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <AgentGlyph status={run.status} size={18} onStop={onStop} stopping={stopping} />
+        <AgentGlyph status={run.status} size={ICON.LG} onStop={onStop} stopping={stopping} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
           {run.name}
         </span>
@@ -199,7 +199,7 @@ export function AgentRunRow({
       )}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <AgentGlyph status={run.status} size={16} onStop={onStop} stopping={stopping} />
+        <AgentGlyph status={run.status} size={ICON.MD} onStop={onStop} stopping={stopping} />
         {onOpen ? (
           <button
             type="button"

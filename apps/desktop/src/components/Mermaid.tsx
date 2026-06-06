@@ -7,6 +7,7 @@ import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
+  MOTION,
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
@@ -105,7 +106,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: EASE_DECELERATE }}
+                transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
                 onClick={() => setFullscreen(false)}
               >
                 <motion.div

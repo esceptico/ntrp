@@ -191,7 +191,7 @@ export function BudgetDial() {
             strokeDasharray={OUTER_C}
             strokeDashoffset={OUTER_C * (1 - tokenRatio)}
             transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-            style={{ transition: "stroke-dashoffset var(--duration-panel) ease-out, stroke var(--duration-panel) ease-out" }}
+            style={{ transition: "stroke-dashoffset var(--duration-panel) var(--ease-out-soft), stroke var(--duration-panel) var(--ease-out-soft)" }}
           />
           <circle
             cx={SIZE / 2}
@@ -204,7 +204,7 @@ export function BudgetDial() {
             strokeDasharray={INNER_C}
             strokeDashoffset={INNER_C * (1 - messageRatio)}
             transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-            style={{ transition: "stroke-dashoffset var(--duration-panel) ease-out, stroke var(--duration-panel) ease-out" }}
+            style={{ transition: "stroke-dashoffset var(--duration-panel) var(--ease-out-soft), stroke var(--duration-panel) var(--ease-out-soft)" }}
           />
         </svg>
         <span className="tracking-[-0.005em]">

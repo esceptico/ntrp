@@ -122,7 +122,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
   return (
     <div
       className={clsx(
-        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-row",
+        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-row ease-out",
         role === "user" && "justify-end",
       )}
     >
@@ -369,16 +369,18 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         {expanded && (
           <motion.div
             key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
             transition={{ duration: MOTION.panel, ease: EASE }}
-            style={{ overflow: "hidden" }}
+            style={{ display: "grid" }}
           >
-            <Markdown
-              content={smoothContent}
-              className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words [&_p]:m-0"
-            />
+            <div className="min-h-0 overflow-hidden">
+              <Markdown
+                content={smoothContent}
+                className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words [&_p]:m-0"
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

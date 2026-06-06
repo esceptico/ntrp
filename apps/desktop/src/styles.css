@@ -932,7 +932,7 @@ button.app-row:not(:disabled):active,
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  transition: background var(--duration-panel) ease, border-color var(--duration-panel) ease, box-shadow var(--duration-panel) ease;
+  transition: background var(--duration-panel) var(--ease-out-soft), border-color var(--duration-panel) var(--ease-out-soft), box-shadow var(--duration-panel) var(--ease-out-soft);
 }
 .switch-control:disabled {
   cursor: not-allowed;
@@ -955,8 +955,11 @@ button.app-row:not(:disabled):active,
   box-shadow: var(--gs-knob-shadow);
   pointer-events: none;
   /* Springy back-out so the knob overshoots slightly on flip, like a real
-     macOS switch. transform-only, so it stays GPU-composited. */
-  transition: transform var(--duration-panel) cubic-bezier(0.34, 1.56, 0.64, 1);
+     macOS switch. transform is GPU-composited; bg/shadow ease in step with
+     the track (dark-mode knob tint shifts on toggle). */
+  transition: transform var(--duration-panel) cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color var(--duration-panel) var(--ease-out-soft),
+    box-shadow var(--duration-panel) var(--ease-out-soft);
 }
 .switch-control:focus-visible {
   outline: none;
