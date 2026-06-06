@@ -9,7 +9,6 @@ import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { ConnectionStatus } from "./ConnectionStatus";
 import { Toaster } from "./Toaster";
 
 // The five "open from chrome" modals only mount when the user actually
@@ -199,7 +198,6 @@ export function App() {
       <CommandPalette />
       <MarkdownViewer />
       <ApprovalReviewModal />
-      <ConnectionStatus />
       <Toaster />
     </MotionConfig>
   );

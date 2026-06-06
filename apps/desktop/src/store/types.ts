@@ -12,7 +12,6 @@ import type {
   TodoListItem,
 } from "../api";
 import type { TransportDiagnosticsSnapshot } from "../lib/transportDiagnostics";
-import type { ConnectionPhase } from "./domains";
 import type { MessageSourceFocus } from "../lib/messageSourceFocus";
 import type { Toast } from "../lib/taskToast";
 import type { AutomationStreamDomainState } from "./automation-domain";
@@ -317,9 +316,6 @@ export interface State {
   /** Per-session UI state preserved across `setCurrentSession` swaps. */
   sessionCache: Map<string, CachedSessionState>;
   connected: boolean;
-  /** Live SSE transport phase, mirrored from chatStreamState so React can
-   *  surface a reconnecting/offline indicator. */
-  connectionPhase: ConnectionPhase;
   running: boolean;
   /** The active foreground run is paused at a step boundary (resumable). */
   paused: boolean;

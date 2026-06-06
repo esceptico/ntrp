@@ -281,13 +281,9 @@ function rewindCursorForTransientProjection(state: ChatStreamState): Map<string,
 }
 
 function updateChatStreamState(next: ChatStreamState): ChatStreamState {
-  const phaseChanged = next.connectionPhase !== chatStreamState.connectionPhase;
   chatStreamState = next;
   setState({
     transportDiagnostics: Object.fromEntries(chatStreamState.transportDiagnosticsBySession),
-    // Mirror the live SSE phase into the React store so a connection
-    // indicator can subscribe (chatStreamState lives outside React).
-    ...(phaseChanged ? { connectionPhase: next.connectionPhase } : {}),
   });
   return chatStreamState;
 }

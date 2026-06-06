@@ -144,7 +144,6 @@ export const useStore = create<State & Actions>((set) => ({
   unreadDoneSessionIds: new Set(),
   sessionCache: new Map(),
   connected: false,
-  connectionPhase: "idle",
   running: false,
   paused: false,
   error: null,
