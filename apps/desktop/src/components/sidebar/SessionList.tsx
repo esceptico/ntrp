@@ -8,6 +8,7 @@ import { compactSessionApi } from "../../api";
 import { archiveSession, createProject, createSession, loadHistory, moveSessionToProject } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
+import { ScrollFadeTop } from "../ScrollBlur";
 import { groupProjectSessions, primarySidebarSessions } from "../../lib/projects";
 import { SessionRow } from "./SessionRow";
 import { SessionContextMenu, type ContextMenuState } from "./SessionContextMenu";
@@ -112,6 +113,7 @@ export function SessionList() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
+        <ScrollFadeTop />
         {sessions.length === 0 && projects.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-muted">
             {connected ? "No sessions yet." : "Connect to load sessions."}

@@ -498,6 +498,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
+/* A scroller with a static bottom fade that should ALSO fade at the top once
+   scrolled (session list, settings list, memory list). A single mask-image
+   can't stack two rules, so combine both edges here; bare .scroll-fade-bottom
+   covers the at-top state, and ScrollFadeTop flips data-scroll-fade-top. */
+[data-scroll-fade-top="true"].scroll-fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 calc(100% - 24px), transparent 100%);
+}
 
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
@@ -901,16 +909,15 @@ button.app-row:not(:disabled):active,
 .switch-control {
   /* Light values: ink-derived alphas, same reason as .segmented-control —
      white-on-light vanished on flat panels. */
-  --gs-track-bg: rgba(20, 24, 28, 0.06);
-  --gs-track-border: rgba(20, 24, 28, 0.14);
-  --gs-track-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 1px 2px rgba(20, 24, 28, 0.04);
+  --gs-on: #34c759; /* macOS system green — the platform switch color */
+  --gs-track-bg: rgba(20, 24, 28, 0.08);
+  --gs-track-border: rgba(20, 24, 28, 0.06);
+  --gs-track-shadow: inset 0 0 0 0.5px rgba(20, 24, 28, 0.10);
   --gs-knob-bg: #ffffff;
-  --gs-knob-border: rgba(20, 24, 28, 0.10);
+  --gs-knob-border: transparent;
   --gs-knob-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.08),
-    0 2px 6px rgba(20, 24, 28, 0.06);
+    0 1px 2px rgba(20, 24, 28, 0.14),
+    0 0 0 0.5px rgba(20, 24, 28, 0.05);
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -932,12 +939,9 @@ button.app-row:not(:disabled):active,
   opacity: 0.5;
 }
 .switch-control.switch-control-on {
-  --gs-track-bg: color-mix(in oklab, var(--color-accent) 75%, rgba(255, 255, 255, 0.35));
-  --gs-track-border: color-mix(in oklab, var(--color-accent) 60%, rgba(255, 255, 255, 0.55));
-  --gs-knob-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
-    0 2px 8px rgba(31, 38, 135, 0.22);
+  --gs-track-bg: var(--gs-on);
+  --gs-track-border: color-mix(in oklab, var(--gs-on) 88%, #000);
+  --gs-track-shadow: inset 0 0 0 0.5px color-mix(in oklab, var(--gs-on) 70%, #000);
 }
 .switch-control-knob {
   position: absolute;
@@ -956,29 +960,25 @@ button.app-row:not(:disabled):active,
   outline: none;
   box-shadow:
     var(--gs-track-shadow),
-    0 0 0 3px var(--color-accent-soft);
+    0 0 0 3px color-mix(in oklab, var(--gs-on) 30%, transparent);
 }
 :root.dark .switch-control {
-  --gs-track-bg: rgba(255, 255, 255, 0.08);
-  --gs-track-border: rgba(255, 255, 255, 0.12);
-  --gs-track-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  --gs-knob-bg: rgba(255, 255, 255, 0.14);
-  --gs-knob-border: rgba(255, 255, 255, 0.22);
+  --gs-track-bg: rgba(255, 255, 255, 0.10);
+  --gs-track-border: rgba(255, 255, 255, 0.08);
+  --gs-track-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  --gs-knob-bg: #f5f5f7;
+  --gs-knob-border: transparent;
   --gs-knob-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 2px 8px rgba(0, 0, 0, 0.35);
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 0 0.5px rgba(0, 0, 0, 0.25);
 }
 :root.dark .switch-control.switch-control-on {
-  --gs-track-bg: color-mix(in oklab, var(--color-accent) 60%, rgba(255, 255, 255, 0.08));
-  --gs-track-border: color-mix(in oklab, var(--color-accent) 50%, rgba(255, 255, 255, 0.22));
-  --gs-knob-bg: rgba(255, 255, 255, 0.28);
-  --gs-knob-border: rgba(255, 255, 255, 0.4);
-  --gs-knob-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 2px 8px rgba(0, 0, 0, 0.4);
+  --gs-on: #30d158; /* macOS dark-mode green */
+  --gs-track-bg: var(--gs-on);
+  --gs-track-border: color-mix(in oklab, var(--gs-on) 80%, #000);
+  --gs-track-shadow: inset 0 0 0 0.5px color-mix(in oklab, var(--gs-on) 55%, #000);
+  --gs-knob-bg: #ffffff;
+  --gs-knob-border: transparent;
 }
 .surface-radius-sm { --surface-radius: 10px; }  /* cards in lists (automation cards, etc.) */
 .surface-radius-md { --surface-radius: 14px; }  /* panels: composer, modals, popovers, sidebars */
