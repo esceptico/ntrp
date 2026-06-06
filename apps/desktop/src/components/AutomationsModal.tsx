@@ -11,6 +11,7 @@ import {
   GitPullRequest,
   History,
   Inbox,
+  Loader2,
   Mail,
   Play,
   Plus,
@@ -48,6 +49,7 @@ import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
+import { BlurSwap } from "./BlurSwap";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
@@ -513,7 +515,7 @@ function AutomationCard({
         editable && "cursor-pointer",
       )}
     >
-      <div className="grid grid-cols-[10px_minmax(0,1fr)] items-start gap-2.5 min-w-0">
+      <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-2.5 min-w-0">
         <button
           type="button"
           onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
@@ -528,7 +530,7 @@ function AutomationCard({
             busy === "toggle" && "opacity-50",
           )}
         />
-        <div className="min-w-0 grid gap-1.5 pr-16">
+        <div className="min-w-0 grid gap-1.5">
           <div className="grid gap-1.5 min-w-0">
             <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
@@ -560,7 +562,7 @@ function AutomationCard({
             {automation.description || "No description."}
           </p>
         </div>
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-px opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity">
+        <div className="flex items-center gap-px self-start -mt-0.5 opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity duration-row ease-out">
           {channel && (
             <CardAction
               icon={Radio}
@@ -665,7 +667,13 @@ function CardAction({
       aria-label={label}
       title={label}
     >
-      <Icon size={ICON.XS} strokeWidth={2} />
+      <BlurSwap swapKey={busy ? "busy" : "idle"} blur={3}>
+        {busy ? (
+          <Loader2 size={ICON.XS} strokeWidth={2} className="animate-spin" />
+        ) : (
+          <Icon size={ICON.XS} strokeWidth={2} />
+        )}
+      </BlurSwap>
     </IconButton>
   );
 }
