@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Bot, Check, Copy, Square, X } from "lucide-react";
+import { ArrowRight, Bot, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
@@ -10,6 +10,7 @@ import { highlight } from "../highlight";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { humanizeAgentType } from "../lib/agentRun";
 import { Markdown } from "./Markdown";
+import { CopyGlyph } from "./CopyGlyph";
 import { IconButton } from "./IconButton";
 import { ScrollFadeTop } from "./ScrollBlur";
 import {
@@ -503,7 +504,7 @@ function CopyButton({ getValue }: { getValue: () => string }) {
         copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
       )}
     >
-      {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
+      <CopyGlyph copied={copied} size={ICON.XS} />
       {copied ? "Copied" : "Copy"}
     </button>
   );
@@ -576,7 +577,7 @@ function Section({
                 : "text-muted hover:bg-surface-soft hover:text-ink",
             )}
           >
-            {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
+            <CopyGlyph copied={copied} size={ICON.XS} />
             {copied ? "Copied" : "Copy"}
           </button>
         )}

@@ -3,12 +3,10 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   Box,
   Brain,
-  Check,
   CheckCircle2,
   ChevronDown,
   Circle,
   CircleDot,
-  Copy,
   GitBranch,
   ListChecks,
   Pencil,
@@ -19,6 +17,7 @@ import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
+import { CopyGlyph } from "./CopyGlyph";
 import type { SkillDescriptor, TodoStatus } from "../api";
 import { activityTraceStats } from "../lib/agent";
 import { branchAtMessage, viewSkill } from "../actions";
@@ -134,7 +133,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
         title="Copy"
         className={clsx(copied && "!text-ok hover:!text-ok")}
       >
-        {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={2} />}
+        <CopyGlyph copied={copied} size={ICON.SM} />
       </IconButton>
       {role === "assistant" && (
         <IconButton

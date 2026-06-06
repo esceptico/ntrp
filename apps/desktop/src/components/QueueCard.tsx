@@ -5,6 +5,7 @@ import { cancelQueuedMessage } from "../actions";
 import { useStore, type QueuedMessage } from "../store";
 import { ICON } from "../lib/icons";
 import { EASE_EMPHASIZED, EASE_HOVER, DURATION_PANEL, DURATION_POPOVER, MOTION } from "../lib/tokens/motion";
+import { BlurSwap } from "./BlurSwap";
 
 const CARD_TRANSITION = { duration: DURATION_PANEL, ease: EASE_EMPHASIZED };
 const ROW_TRANSITION = { duration: DURATION_POPOVER, ease: EASE_EMPHASIZED };
@@ -98,7 +99,13 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         aria-label="Cancel queued message"
         className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-[0.45] disabled:hover:bg-transparent disabled:hover:text-faint"
       >
-        {cancelling ? <Loader2 size={ICON.XS} strokeWidth={2} className="animate-spin" /> : <X size={ICON.XS} strokeWidth={2} />}
+        <BlurSwap swapKey={cancelling ? "loading" : "delete"} blur={3}>
+          {cancelling ? (
+            <Loader2 size={ICON.XS} strokeWidth={2} className="animate-spin" />
+          ) : (
+            <X size={ICON.XS} strokeWidth={2} />
+          )}
+        </BlurSwap>
       </button>
     </div>
   );

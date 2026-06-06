@@ -35,6 +35,7 @@ import {
 } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { ICON } from "../../lib/icons";
+import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
@@ -596,7 +597,13 @@ function CustomModelsPanel({
             disabled={!canSaveCustomModelDraft(draft) || creating}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
           >
-            {creating ? <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" /> : <Plus size={ICON.MD} strokeWidth={2} />}
+            <BlurSwap swapKey={creating ? "loading" : "add"} blur={3}>
+              {creating ? (
+                <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
+              ) : (
+                <Plus size={ICON.MD} strokeWidth={2} />
+              )}
+            </BlurSwap>
             Add
           </button>
         </div>

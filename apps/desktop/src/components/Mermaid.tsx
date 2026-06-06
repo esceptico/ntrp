@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 import {
@@ -10,6 +10,8 @@ import {
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
+import { BlurSwap } from "./BlurSwap";
+import { CopyGlyph } from "./CopyGlyph";
 import { IconButton } from "./IconButton";
 
 const RENDER_DEBOUNCE_MS = 400;
@@ -267,21 +269,19 @@ function PanelInner({
             label={copied ? "Copied" : "Copy source"}
             onClick={() => void onCopy()}
           >
-            {copied ? (
-              <Check size={ICON.SM} strokeWidth={2.4} className="text-ok" />
-            ) : (
-              <Copy size={ICON.SM} strokeWidth={2} />
-            )}
+            <CopyGlyph copied={copied} size={ICON.SM} checkClassName="text-ok" />
           </ToolbarButton>
           <ToolbarButton
             label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
             onClick={onToggleFullscreen}
           >
-            {fullscreen ? (
-              <Minimize2 size={ICON.SM} strokeWidth={2} />
-            ) : (
-              <Maximize2 size={ICON.SM} strokeWidth={2} />
-            )}
+            <BlurSwap swapKey={fullscreen ? "min" : "max"} blur={3}>
+              {fullscreen ? (
+                <Minimize2 size={ICON.SM} strokeWidth={2} />
+              ) : (
+                <Maximize2 size={ICON.SM} strokeWidth={2} />
+              )}
+            </BlurSwap>
           </ToolbarButton>
         </div>
       </header>
@@ -350,7 +350,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
           title={copied ? "Copied" : "Copy source"}
           className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-bad/25 text-bad cursor-pointer transition-[background-color,color,transform] duration-check ease-out hover:bg-bad-soft active:scale-[0.97]"
         >
-          {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
+          <CopyGlyph copied={copied} size={ICON.XS} />
         </button>
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>

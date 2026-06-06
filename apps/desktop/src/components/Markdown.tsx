@@ -5,7 +5,7 @@ import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { Check, Copy } from "lucide-react";
+import { CopyGlyph } from "./CopyGlyph";
 import clsx from "clsx";
 import bash from "highlight.js/lib/languages/bash";
 import javascript from "highlight.js/lib/languages/javascript";
@@ -196,7 +196,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label={copied ? "Copied" : "Copy code"}
       className={clsx("code-block-copy", copied && "copied")}
     >
-      {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={2} />}
+      <CopyGlyph copied={copied} size={ICON.SM} />
     </button>
   );
 }

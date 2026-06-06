@@ -6,8 +6,7 @@ import {
   CheckCircle2,
   Circle,
   CircleDot,
-  PanelRightClose,
-  PanelRightOpen,
+  MoreHorizontal,
   Plus,
   X,
 } from "lucide-react";
@@ -705,10 +704,12 @@ export function AgentRightSidebar() {
 
   return (
     <>
-      {/* Fixed-position toggle button — mirror of `.sidebar-toggle` for
-          the left panel. Stays in viewport-fixed coords regardless of
-          panel state; icon flips between Open/Close. Aligned vertically
-          with the macOS traffic lights (light center y = 25). */}
+      {/* Fixed-position dots toggle — the single open/close control for
+          the agent hub (mirror of `.sidebar-toggle`). Stays in viewport-
+          fixed coords regardless of panel state; when open it floats over
+          the panel header's right edge (z-60 > panel z-40). A running-
+          status dot rides alongside when the panel is collapsed and work
+          is active. Aligned with the macOS traffic lights (center y=25). */}
       <button
         type="button"
         onClick={toggleCollapsed}
@@ -717,14 +718,7 @@ export function AgentRightSidebar() {
         className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
       >
         {collapsed && activeCount > 0 && <StatusDot status="running" pulse />}
-        {collapsed && totalCount > 0 && (
-          <span className="text-xs tabular-nums text-faint">{totalCount}</span>
-        )}
-        {collapsed ? (
-          <PanelRightOpen size={ICON.MD} strokeWidth={2} />
-        ) : (
-          <PanelRightClose size={ICON.MD} strokeWidth={2} />
-        )}
+        <MoreHorizontal size={ICON.MD} strokeWidth={2} />
       </button>
 
       {/* Panel — always rendered, slides via `x` transform (GPU-
@@ -738,22 +732,15 @@ export function AgentRightSidebar() {
         className="surface-panel surface-radius-md absolute top-2 right-2 z-40 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
       >
         {/* Drag region height tuned so the "Active" label's vertical
-            center sits at viewport y=25 — same eye-line as the toggle
-            icon and the macOS traffic-light center. (panel top-2 = 8px,
-            label centered in h-[34px] → 8 + 17 = 25.) */}
-        <div className="drag-spacer flex items-center justify-between gap-2 px-3 h-[34px] shrink-0">
+            center sits at viewport y=25 — same eye-line as the fixed dots
+            toggle and the macOS traffic-light center. (panel top-2 = 8px,
+            label centered in h-[34px] → 8 + 17 = 25.) The dots toggle
+            (z-60, fixed right-14) floats over this header's right edge and
+            is the single open/close control — no redundant in-panel X. */}
+        <div className="drag-spacer flex items-center px-3 h-[34px] shrink-0">
           <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">
-            Active{totalCount > 0 ? ` · ${totalCount}` : ""}
+            Active
           </span>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label="Hide panel"
-            title="Hide panel"
-            className="grid place-items-center w-5 h-5 -mr-1 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
-          >
-            <X size={ICON.SM} strokeWidth={2} />
-          </button>
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">

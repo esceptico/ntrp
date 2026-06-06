@@ -7,12 +7,12 @@ import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
 import { IconButton } from "./IconButton";
+import { BlurSwap } from "./BlurSwap";
 import { ICON } from "../lib/icons";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
-  const Icon = sidebarHidden ? PanelLeftOpen : PanelLeftClose;
   return (
     <IconButton
       size="xs"
@@ -21,7 +21,13 @@ function SidebarToggle() {
       title={sidebarHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
     >
-      <Icon size={ICON.MD} strokeWidth={2} />
+      <BlurSwap swapKey={sidebarHidden ? "show" : "hide"} blur={3}>
+        {sidebarHidden ? (
+          <PanelLeftOpen size={ICON.MD} strokeWidth={2} />
+        ) : (
+          <PanelLeftClose size={ICON.MD} strokeWidth={2} />
+        )}
+      </BlurSwap>
     </IconButton>
   );
 }

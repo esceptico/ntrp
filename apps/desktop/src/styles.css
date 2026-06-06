@@ -506,10 +506,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 #app > div.absolute.inset-0 { -webkit-app-region: no-drag; }
 #app > div.absolute.inset-0 * { -webkit-app-region: no-drag; }
 
-/* ─── Scrollbars ───────────────────────────────────────────── */
-.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
+/* ─── Scrollbars ───────────────────────────────────────────────
+   Hidden app-wide. Scrolling still works (wheel / trackpad / keys);
+   the bar just isn't painted. The scroll-edge fade masks
+   (.scroll-fade-*, ScrollFadeTop) carry the "there's more" cue in
+   its place. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 /* Messages list — both the header (top) and composer (bottom) are
    absolute overlays. Padding clears them so content lands cleanly at
@@ -574,19 +577,6 @@ button.app-row:not(:disabled):active,
   background-color: color-mix(in oklab, white 2.5%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, white 6%, transparent);
 }
-
-/* Messages list scrollbar — always visible, draggable, slim. */
-.scroll-messages::-webkit-scrollbar { width: 8px; }
-.scroll-messages::-webkit-scrollbar-track { background: transparent; }
-.scroll-messages::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.16);
-  background-clip: padding-box;
-  border: 2px solid transparent;
-  border-radius: 4px;
-}
-.scroll-messages::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.32); background-clip: padding-box; }
-:root.dark .scroll-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
-:root.dark .scroll-messages::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); background-clip: padding-box; }
 
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
@@ -815,22 +805,6 @@ button.app-row:not(:disabled):active,
   text-align: left;
 }
 .md th { background: var(--color-surface-soft); font-weight: 600; }
-
-/* ─── Automations modal textarea scrollbar ─────────────────── */
-.auto-editor textarea::-webkit-scrollbar { width: 8px; }
-.auto-editor textarea::-webkit-scrollbar-track { background: transparent; }
-.auto-editor textarea::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  border: 2px solid var(--color-surface);
-}
-.auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); }
-
-:root.dark .auto-editor textarea::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--color-surface);
-}
-:root.dark .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
 /* The composer is a solid panel floating over the message scroll area.
    Surface treatment lives on `.surface-panel` (shared with the right
@@ -1632,9 +1606,6 @@ main[data-has-approval="false"] .scroll-messages {
     --color-faint: #89837c;
     --color-whisper: #625d58;
 }
-
-/* Scrollbar thumbs: lighter for visibility */
-:root.dark .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
 
 /* Selection */
 :root.dark ::selection { background: rgba(231, 138, 77, 0.28); }
