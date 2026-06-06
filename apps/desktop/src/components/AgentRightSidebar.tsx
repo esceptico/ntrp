@@ -6,9 +6,10 @@ import {
   CheckCircle2,
   Circle,
   CircleDot,
-  ListChecks,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
+  X,
 } from "lucide-react";
 import {
   cancelChildAgentApi,
@@ -16,8 +17,16 @@ import {
   listChildAgentsApi,
   sendToChildAgentApi,
   type BackgroundTaskSummary,
+  type TodoListItem,
   type TodoStatus,
 } from "../api";
+import {
+  clearTodoOverride,
+  loadTodoOverride,
+  nextTodoStatus,
+  saveTodoOverride,
+  todoSignature,
+} from "../lib/todoOverride";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import {
   EASE_EMPHASIZED,
@@ -312,54 +321,210 @@ function todoStatusIcon(status: TodoStatus) {
   return <Circle size={ICON.XS} strokeWidth={2} className="mt-[2px] shrink-0 text-faint" />;
 }
 
-function TodoSidebarSection({ todo }: { todo: TodoListState }) {
-  const completed = todo.items.filter((item) => item.status === "completed").length;
+// Inline single-line editor for a todo (edit existing or add new). Commits on
+// Enter/blur, cancels on Escape; the ref guards against the blur-after-unmount
+// double-fire (Enter -> commit -> unmount -> blur).
+function TodoEditInput({
+  initial,
+  placeholder,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  placeholder?: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const done = useRef(false);
+  const commit = () => {
+    if (done.current) return;
+    done.current = true;
+    onCommit(value);
+  };
+  const cancel = () => {
+    if (done.current) return;
+    done.current = true;
+    onCancel();
+  };
+  return (
+    <input
+      autoFocus
+      value={value}
+      placeholder={placeholder}
+      spellCheck={false}
+      aria-label={placeholder ?? "Edit task"}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+      onBlur={commit}
+      className="min-w-0 flex-1 bg-transparent border-0 p-0 text-xs leading-[1.35] text-ink-soft placeholder:text-muted outline-none"
+    />
+  );
+}
+
+// Editable todo list. Agent-produced todos are the base; the user's manual
+// edits persist per session (localStorage) and survive until the agent emits
+// a different list. See lib/todoOverride.
+function useEditableTodo(sessionId: string | null, todo: TodoListState) {
+  const agentItems = todo.items;
+  const agentSig = useMemo(() => todoSignature(agentItems), [agentItems]);
+  const [items, setItems] = useState<TodoListItem[]>(
+    () => (sessionId ? loadTodoOverride(sessionId, agentSig) : null) ?? agentItems,
+  );
+  const [edited, setEdited] = useState(() => !!(sessionId && loadTodoOverride(sessionId, agentSig)));
+  const lastSig = useRef(agentSig);
+
+  // The agent changed the list — its update supersedes local edits.
+  useEffect(() => {
+    if (lastSig.current === agentSig) return;
+    lastSig.current = agentSig;
+    if (sessionId) clearTodoOverride(sessionId);
+    setItems(agentItems);
+    setEdited(false);
+  }, [agentSig, agentItems, sessionId]);
+
+  const commit = (next: TodoListItem[]) => {
+    setItems(next);
+    setEdited(true);
+    if (sessionId) saveTodoOverride(sessionId, agentSig, next);
+  };
+
+  return {
+    items,
+    edited,
+    add: (content: string) => commit([...items, { content, status: "pending" }]),
+    edit: (index: number, content: string) =>
+      commit(items.map((item, i) => (i === index ? { ...item, content } : item))),
+    remove: (index: number) => commit(items.filter((_, i) => i !== index)),
+    cycle: (index: number) =>
+      commit(items.map((item, i) => (i === index ? { ...item, status: nextTodoStatus(item.status) } : item))),
+    reset: () => {
+      if (sessionId) clearTodoOverride(sessionId);
+      setItems(agentItems);
+      setEdited(false);
+    },
+  };
+}
+
+function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionId: string | null }) {
+  const { items, edited, add, edit, remove, cycle, reset } = useEditableTodo(sessionId, todo);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const completed = items.filter((item) => item.status === "completed").length;
 
   return (
     <section>
-      <SectionHeader label="Tasks" count={todo.items.length} />
-      <div className="rounded-[8px] border border-line-soft bg-surface-soft/45 px-2.5 py-2">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="inline-flex min-w-0 items-center gap-1.5">
-            <ListChecks size={ICON.XS} strokeWidth={2} className="shrink-0 text-muted" />
-            <span className="truncate text-xs font-medium text-ink-soft">Todo</span>
-          </div>
-          <span className="shrink-0 text-2xs tabular-nums text-faint">
-            {completed}/{todo.items.length}
+      <div className="flex items-center justify-between gap-2 px-0.5 pt-0.5 pb-1.5">
+        <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">Tasks</span>
+        <div className="flex items-center gap-1.5">
+          {edited && (
+            <button
+              type="button"
+              onClick={reset}
+              title="Reset to the agent's list"
+              className="text-2xs text-faint hover:text-ink transition-colors"
+            >
+              reset
+            </button>
+          )}
+          <span className="text-2xs tabular-nums text-faint">
+            {completed}/{items.length}
           </span>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            aria-label="Add a task"
+            title="Add a task"
+            className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+          >
+            <Plus size={ICON.XS} strokeWidth={2} />
+          </button>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <AnimatePresence initial={false}>
-            {todo.items.map((item, index) => (
-              <motion.div
-                key={`${index}-${item.content}`}
-                layout
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{
-                  layout: SPRING_ROW_ENTRY,
-                  opacity: { duration: MOTION.row },
-                  y: { duration: MOTION.fast },
-                  height: { duration: MOTION.row },
-                }}
-                className="flex min-w-0 items-start gap-1.5 overflow-hidden"
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <AnimatePresence initial={false}>
+          {items.map((item, index) => (
+            <motion.div
+              key={`${index}-${item.content}`}
+              layout
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{
+                layout: SPRING_ROW_ENTRY,
+                opacity: { duration: MOTION.row },
+                y: { duration: MOTION.fast },
+                height: { duration: MOTION.row },
+              }}
+              className="group/todo flex min-w-0 items-start gap-1.5 overflow-hidden rounded px-1 -mx-1 hover:bg-surface-soft/40"
+            >
+              <button
+                type="button"
+                onClick={() => cycle(index)}
+                aria-label="Cycle status"
+                title="Cycle status"
+                className="mt-[1px] shrink-0 rounded"
               >
                 {todoStatusIcon(item.status)}
-                <span
+              </button>
+              {editingIndex === index ? (
+                <TodoEditInput
+                  initial={item.content}
+                  onCommit={(value) => {
+                    if (value.trim()) edit(index, value.trim());
+                    setEditingIndex(null);
+                  }}
+                  onCancel={() => setEditingIndex(null)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditingIndex(index)}
+                  title="Edit"
                   className={clsx(
-                    "min-w-0 flex-1 break-words text-xs leading-[1.35] transition-colors",
+                    "min-w-0 flex-1 break-words text-left text-xs leading-[1.35] transition-colors hover:text-ink",
                     item.status === "completed" && "text-faint line-through",
                     item.status === "in_progress" && "font-medium text-ink-soft",
                     item.status === "pending" && "text-muted",
                   )}
                 >
                   {item.content}
-                </span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => remove(index)}
+                aria-label="Delete task"
+                title="Delete"
+                className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-opacity"
+              >
+                <X size={ICON.XS} strokeWidth={2} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {adding && (
+          <div className="flex min-w-0 items-start gap-1.5 px-1 -mx-1">
+            <Circle size={ICON.XS} strokeWidth={2} className="mt-[2px] shrink-0 text-faint" />
+            <TodoEditInput
+              initial=""
+              placeholder="New task…"
+              onCommit={(value) => {
+                if (value.trim()) add(value.trim());
+                setAdding(false);
+              }}
+              onCancel={() => setAdding(false)}
+            />
+          </div>
+        )}
       </div>
     </section>
   );
@@ -558,6 +723,15 @@ export function AgentRightSidebar() {
           <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">
             Active{totalCount > 0 ? ` · ${totalCount}` : ""}
           </span>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label="Hide panel"
+            title="Hide panel"
+            className="grid place-items-center w-5 h-5 -mr-1 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
+          >
+            <X size={ICON.SM} strokeWidth={2} />
+          </button>
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
@@ -578,7 +752,13 @@ export function AgentRightSidebar() {
                 )}
               </AnimatePresence>
               <ApprovalsRow />
-              {todo && <TodoSidebarSection todo={todo} />}
+              {todo && (
+                <TodoSidebarSection
+                  key={currentSessionId ?? "none"}
+                  todo={todo}
+                  sessionId={currentSessionId}
+                />
+              )}
 
               {hasAgents && (
                 <section>
