@@ -525,7 +525,7 @@ function AutomationCard({
         }
       }}
       className={clsx(
-        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 overflow-hidden focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
         editable && "cursor-pointer",
       )}
     >
@@ -543,7 +543,7 @@ function AutomationCard({
           )}
         />
         <div className="min-w-0 grid gap-1.5">
-          <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
+          <h4 className="m-0 min-w-0 max-w-full text-base font-medium tracking-[-0.005em] text-ink truncate">
             {automation.name || "Untitled"}
           </h4>
           {(running || trustLabel || isChannelAutomation(automation)) && (
@@ -561,53 +561,57 @@ function AutomationCard({
               {trustLabel && <Badge tone={automationTrustTone(automation)}>{trustLabel}</Badge>}
             </div>
           )}
-          <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
+          <p className="m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
             {automation.description || "No description."}
           </p>
         </div>
       </div>
 
-      {/* meta row: schedule + last-run outcome. On hover the row's actions slide
-          in over the right end — absolute, so they reserve no width and never
-          truncate the title/description. */}
-      <div className="relative flex items-center gap-3 pl-[19px] min-h-[26px] text-xs font-mono tabular-nums text-faint min-w-0">
-        <span className="min-w-0 flex-1 truncate" title={trigger}>
-          {[trigger, formatNext(automation)].filter(Boolean).join(" · ")}
-        </span>
-        <div className="shrink-0 flex items-center gap-2 transition-opacity duration-row group-hover/auto-card:opacity-0">
-          {recentStatuses.length > 0 && (
-            <span className="inline-flex items-center gap-0.5">
-              {recentStatuses.slice(0, 4).reverse().map((s, i) => (
-                <span key={i} className={clsx("w-1 h-1 rounded-[1px]", sparkTone(s))} />
-              ))}
-            </span>
-          )}
-          {lastStatus ? (
-            <span
-              className={clsx(
-                "inline-flex items-center gap-1",
-                lastStatus === "failed" && "text-bad",
-              )}
-            >
-              <StatusDot
-                status={lastStatus as "completed" | "failed" | "running"}
-                pulse={lastStatus === "running"}
-              />
-              <span>
-                {lastStatus === "running"
-                  ? "running"
-                  : lastStatus === "failed"
-                    ? `failed${automation.last_run_at ? ` ${formatRelative(automation.last_run_at)}` : ""}`
-                    : automation.last_run_at
-                      ? formatRelative(automation.last_run_at)
-                      : "done"}
+      {/* meta row: schedule + last-run outcome. On hover the whole meta fades
+          out and the row's actions take its place (pure opacity crossfade, like
+          SessionRow). The actions are absolute so they reserve no width — the
+          title/description stay full-width — and because the meta is gone when
+          they appear, nothing can ever sit underneath them. */}
+      <div className="relative flex items-center pl-[19px] min-h-[26px] text-xs font-mono tabular-nums text-faint min-w-0">
+        <div className="flex flex-1 items-center gap-3 min-w-0 transition-opacity duration-row group-hover/auto-card:opacity-0 group-focus-within/auto-card:opacity-0">
+          <span className="min-w-0 flex-1 truncate" title={trigger}>
+            {[trigger, formatNext(automation)].filter(Boolean).join(" · ")}
+          </span>
+          <div className="shrink-0 flex items-center gap-2">
+            {recentStatuses.length > 0 && (
+              <span className="inline-flex items-center gap-0.5">
+                {recentStatuses.slice(0, 4).reverse().map((s, i) => (
+                  <span key={i} className={clsx("w-1 h-1 rounded-[1px]", sparkTone(s))} />
+                ))}
               </span>
-            </span>
-          ) : (
-            automation.last_run_at && <span>ran {formatRelative(automation.last_run_at)}</span>
-          )}
+            )}
+            {lastStatus ? (
+              <span
+                className={clsx(
+                  "inline-flex items-center gap-1",
+                  lastStatus === "failed" && "text-bad",
+                )}
+              >
+                <StatusDot
+                  status={lastStatus as "completed" | "failed" | "running"}
+                  pulse={lastStatus === "running"}
+                />
+                <span>
+                  {lastStatus === "running"
+                    ? "running"
+                    : lastStatus === "failed"
+                      ? `failed${automation.last_run_at ? ` ${formatRelative(automation.last_run_at)}` : ""}`
+                      : automation.last_run_at
+                        ? formatRelative(automation.last_run_at)
+                        : "done"}
+                </span>
+              </span>
+            ) : (
+              automation.last_run_at && <span>ran {formatRelative(automation.last_run_at)}</span>
+            )}
+          </div>
         </div>
-        <div className="absolute inset-y-0 right-0 flex items-center gap-px pl-8 opacity-0 group-hover/auto-card:opacity-100 focus-within:opacity-100 transition-opacity duration-row ease-out bg-gradient-to-l from-[var(--color-surface)] via-[var(--color-surface)] to-transparent">
+        <div className="absolute inset-y-0 right-0 flex items-center gap-px opacity-0 pointer-events-none group-hover/auto-card:opacity-100 group-hover/auto-card:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-row ease-out">
           {channel && (
             <CardAction
               icon={Radio}
