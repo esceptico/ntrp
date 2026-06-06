@@ -148,8 +148,10 @@ export function cachedSessionFromHistory(
   const map = new Map<string, UiMessage>();
   const order: string[] = [];
   for (const item of items) {
+    // `order` is the render-key list — guard against a duplicate id slipping
+    // through (it would trigger React's "two children with the same key").
+    if (!map.has(item.id)) order.push(item.id);
     map.set(item.id, { ...item, suppressEntryMotion: true });
-    order.push(item.id);
   }
 
   const sessionView = reduceHistoryLoadSucceeded(

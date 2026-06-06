@@ -90,6 +90,15 @@ export function normalizeActivityGroups(
     if (!message) continue;
 
     if (message.role === "activity" && message.activity) {
+      // Already emitted this exact activity id — `sourceOrder` can list an
+      // id twice even though `sourceMessages` (a Map) holds one entry, e.g.
+      // a stale cached copy of the group lingering beside the freshly
+      // projected one during an active run, separated by a visible boundary
+      // so the positional `openActivityId` check misses it. Same id = same
+      // group already in place, so skip rather than push a duplicate React
+      // key (merging would double the group's items, since both order slots
+      // resolve to the same object).
+      if (messages.has(id)) continue;
       if (openActivityId) {
         mergeActivity(messages, openActivityId, message);
         activityRedirects.set(id, openActivityId);
@@ -100,6 +109,8 @@ export function normalizeActivityGroups(
       openActivityId = null;
     }
 
+    // Never emit the same id twice — `order` is the render-key list.
+    if (messages.has(id)) continue;
     messages.set(id, message);
     order.push(id);
   }
