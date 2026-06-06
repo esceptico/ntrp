@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import { DURATION_POPOVER, EASE_DECELERATE } from "../../lib/tokens/motion";
+import { RollingToken } from "../trace/RollingToken";
 
 /** Compact "two scales on one ring" budget meter. Outer arc = token
  *  pressure (parent context only — subagent internals don't count, per
@@ -206,7 +207,9 @@ export function BudgetDial() {
             style={{ transition: "stroke-dashoffset var(--duration-panel) ease-out, stroke var(--duration-panel) ease-out" }}
           />
         </svg>
-        <span className="tabular-nums tracking-[-0.005em]">{compactLabel}</span>
+        <span className="tracking-[-0.005em]">
+          <RollingToken value={compactLabel} mono />
+        </span>
       </button>
       {createPortal(
         <AnimatePresence>

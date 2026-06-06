@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, ChevronDown, Folder, FolderPlus, Plus, Search, Settings, X } from "lucide-react";
+import { Archive, ChevronDown, Folder, FolderPlus, Inbox, Plus, Search, Settings, X } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
@@ -115,9 +115,22 @@ export function SessionList() {
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
         <ScrollFadeTop />
         {sessions.length === 0 && projects.length === 0 ? (
-          <div className="px-3 py-3 text-sm italic text-muted">
-            {connected ? "No sessions yet." : "Connect to load sessions."}
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+            className="grid place-items-center gap-2.5 mt-10 px-3 text-center"
+          >
+            <span
+              aria-hidden
+              className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
+            >
+              <Inbox size={ICON.MD} strokeWidth={2} />
+            </span>
+            <p className="m-0 text-sm text-muted leading-snug">
+              {connected ? "No sessions yet." : "Connect to load sessions."}
+            </p>
+          </motion.div>
         ) : grouped.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-muted">No matches.</div>
         ) : (

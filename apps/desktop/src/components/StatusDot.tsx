@@ -15,7 +15,10 @@ export function StatusDot({
   return (
     <span
       className={clsx(
-        "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+        // transition-colors eases the status color change (running→done→
+        // failed) instead of hard-cutting; the breathe halo is a separate
+        // keyframe that just stops when `breathing` drops.
+        "inline-block w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-300 ease-out",
         statusDotClass(status),
         breathing && "status-dot-breathe",
       )}

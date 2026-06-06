@@ -954,7 +954,9 @@ button.app-row:not(:disabled):active,
   border: 1px solid var(--gs-knob-border);
   box-shadow: var(--gs-knob-shadow);
   pointer-events: none;
-  transition: transform var(--duration-panel) var(--ease-emphasized);
+  /* Springy back-out so the knob overshoots slightly on flip, like a real
+     macOS switch. transform-only, so it stays GPU-composited. */
+  transition: transform var(--duration-panel) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .switch-control:focus-visible {
   outline: none;

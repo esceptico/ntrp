@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import {
   ArrowLeft,
+  Bot,
   CheckCircle2,
   Circle,
   CircleDot,
@@ -842,13 +843,24 @@ export function AgentRightSidebar() {
               )}
 
               {!visible && approvalCount === 0 && !hasBreadcrumb && (
-                <div className="grid place-items-center min-h-[120px] px-3 text-center">
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+                  className="grid place-items-center gap-2.5 min-h-[120px] px-3 text-center"
+                >
+                  <span
+                    aria-hidden
+                    className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
+                  >
+                    <Bot size={ICON.MD} strokeWidth={2} />
+                  </span>
                   <p className="text-xs text-muted leading-relaxed">
                     No agents yet.
                     <br />
                     Background agents you start appear here.
                   </p>
-                </div>
+                </motion.div>
               )}
             </div>
           </div>
