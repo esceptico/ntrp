@@ -77,6 +77,7 @@ function ChatHeader() {
 
 export function Chat() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const rightPanelCollapsed = useStore((s) => s.prefs.rightPanelCollapsed);
   const sessionId = useStore((s) => s.currentSessionId);
   const hasApproval = useStore((s) => s.pendingApprovals.length > 0);
 
@@ -115,7 +116,8 @@ export function Chat() {
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized bg-bg overflow-hidden"
+      data-right-open={rightPanelCollapsed ? "false" : "true"}
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] transition-[left,right] duration-route ease-emphasized bg-bg overflow-hidden"
     >
       <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />

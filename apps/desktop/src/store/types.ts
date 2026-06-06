@@ -69,6 +69,10 @@ export interface Prefs {
   theme: ThemeChoice;
   palette: PaletteId;
   sidebarHidden: boolean;
+  /** Right panel (agents/todos/automations) collapsed. Shared so the chat
+   *  area can reflow its right edge to dock the panel instead of floating
+   *  over content. */
+  rightPanelCollapsed: boolean;
   /** Sidebar width in pixels. User-resizable via the right-edge drag
    *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the
    *  resize handler. Default matches the historic fixed width. */

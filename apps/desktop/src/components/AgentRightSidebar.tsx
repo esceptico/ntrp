@@ -63,13 +63,7 @@ export function latestTodoListFromMessages(
 export const RIGHT_PANEL_WIDTH = 320;
 export const RIGHT_PANEL_BODY_WIDTH = 304;
 
-const COLLAPSED_STORAGE_KEY = "ntrp:right-panel:collapsed";
 const RECENT_AGENT_LIMIT = 6;
-
-function readCollapsedPref(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "false";
-}
 
 export function childAgentTaskToBackgroundSnapshot(
   task: BackgroundTaskSummary,
@@ -631,14 +625,11 @@ export function AgentRightSidebar() {
   const backgroundAgentRows = useStore((s) => s.backgroundAgents.rows);
   const openAutomations = useStore((s) => s.openAutomations);
   const todo = useStore((s) => latestTodoListFromMessages(s.order, s.messages));
-  const [collapsed, setCollapsed] = useState(readCollapsedPref);
+  // Shared (in prefs) so the chat area can reflow to dock the panel.
+  const collapsed = useStore((s) => s.prefs.rightPanelCollapsed);
+  const setPref = useStore((s) => s.setPref);
 
-  const toggleCollapsed = () =>
-    setCollapsed((v) => {
-      const next = !v;
-      window.localStorage.setItem(COLLAPSED_STORAGE_KEY, String(next));
-      return next;
-    });
+  const toggleCollapsed = () => setPref("rightPanelCollapsed", !collapsed);
 
   // When viewing a child agent session, the roster is the *parent's* agents
   // (so the hub shows siblings + a back breadcrumb). Prefer the server's

@@ -18,6 +18,7 @@ export const DEFAULT_PREFS: Prefs = {
   theme: "system",
   palette: "notion",
   sidebarHidden: false,
+  rightPanelCollapsed: true,
   sidebarWidth: 272,
   quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
 };
