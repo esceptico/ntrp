@@ -551,6 +551,13 @@ async def _cancel_child_agent(
     command = registry.cancel(child_run_id)
     if command is None and not requested:
         raise HTTPException(status_code=404, detail="Task not found or already done")
+
+    # Cascade: cancelling an agent also stops everything it spawned, otherwise
+    # detached grandchildren (in their own session registries) keep running.
+    for desc_session, desc_task in run_registry.cancel_subtree(registry.child_session(child_run_id)):
+        if store is not None:
+            await store.request_background_agent_cancel(desc_session, desc_task)
+
     return {
         "status": "cancelled" if command is not None else "cancel_requested",
         "task_id": child_run_id,

@@ -142,6 +142,9 @@ class BackgroundTaskRegistry:
     # via the get_pending_messages hook. Mirrors RunState.inject_queue, but
     # keyed per background task instead of per top-level run.
     _inboxes: dict[str, list[dict]] = field(default_factory=dict)
+    # task_id -> the agent's own child session id, so a cancel can walk the
+    # spawn subtree (descendants run inside this session).
+    _child_sessions: dict[str, str] = field(default_factory=dict)
 
     def generate_id(self) -> str:
         return generate_slug(2)
@@ -150,6 +153,10 @@ class BackgroundTaskRegistry:
         self._tasks.pop(task_id, None)
         self._commands.pop(task_id, None)
         self._inboxes.pop(task_id, None)
+        self._child_sessions.pop(task_id, None)
+
+    def child_session(self, task_id: str) -> str | None:
+        return self._child_sessions.get(task_id)
 
     def queue_injection(self, task_id: str, message: dict) -> bool:
         """Queue a steering message for a running background agent. Returns
@@ -224,6 +231,8 @@ class BackgroundTaskRegistry:
         wait: bool | None = None,
     ) -> None:
         self._commands[task_id] = command
+        if child_session_id:
+            self._child_sessions[task_id] = child_session_id
         await self._record(
             task_id=task_id,
             status="started",

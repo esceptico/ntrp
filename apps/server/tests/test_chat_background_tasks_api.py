@@ -70,6 +70,12 @@ class _Runtime:
         self.steered.append((task_id, text))
         return self.agent_running
 
+    def child_session(self, task_id):
+        return None
+
+    def cancel_subtree(self, child_session_id):
+        return []
+
 
 def test_background_tasks_endpoint_returns_durable_snapshot():
     runtime = _Runtime()

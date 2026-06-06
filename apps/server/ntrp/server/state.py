@@ -185,6 +185,25 @@ class RunRegistry:
             self._bg_registries[session_id] = BackgroundTaskRegistry(session_id=session_id)
         return self._bg_registries[session_id]
 
+    def cancel_subtree(self, child_session_id: str | None) -> list[tuple[str, str]]:
+        """Cancel every background agent spawned within child_session_id and,
+        recursively, their descendants. A child agent's own spawns run inside
+        its child session, so the topology is `_bg_registries` keyed by session.
+        Returns (session_id, task_id) pairs cancelled so the caller can mirror
+        the cancel durably. Child session ids are unique per spawn → no cycles."""
+        cancelled: list[tuple[str, str]] = []
+        if not child_session_id:
+            return cancelled
+        registry = self._bg_registries.get(child_session_id)
+        if registry is None:
+            return cancelled
+        for task_id, _command in registry.list_pending():
+            grandchild_session = registry.child_session(task_id)
+            registry.cancel(task_id)
+            cancelled.append((child_session_id, task_id))
+            cancelled.extend(self.cancel_subtree(grandchild_session))
+        return cancelled
+
     def create_run(self, session_id: str) -> RunState:
         run_id = generate_slug(2)
         run = RunState(run_id=run_id, session_id=session_id)

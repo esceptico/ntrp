@@ -125,6 +125,32 @@ async def test_send_to_agent_unknown_id_lists_running_agents():
 
 
 @pytest.mark.asyncio
+async def test_cancel_subtree_cancels_descendant_background_agents():
+    from ntrp.server.state import RunRegistry
+
+    reg = RunRegistry()
+    # Agent A (session "P") spawned B, which runs in A's child session "P::a"
+    # and itself spawned C (running in "P::a::b").
+    rb = reg.get_background_registry("P::a")
+    task_b = await _register_live(rb, "agent-B", "b")
+    await rb.record_started(task_id="agent-B", command="b", child_session_id="P::a::b")
+    rc = reg.get_background_registry("P::a::b")
+    task_c = await _register_live(rc, "agent-C", "c")
+    await rc.record_started(task_id="agent-C", command="c", child_session_id="P::a::b::c")
+
+    try:
+        cancelled = reg.cancel_subtree("P::a")
+        assert set(cancelled) == {("P::a", "agent-B"), ("P::a::b", "agent-C")}
+        with pytest.raises(asyncio.CancelledError):
+            await task_b
+        with pytest.raises(asyncio.CancelledError):
+            await task_c
+    finally:
+        await _cancel(task_b)
+        await _cancel(task_c)
+
+
+@pytest.mark.asyncio
 async def test_queue_injection_skips_finished_agent():
     registry = BackgroundTaskRegistry(session_id="test")
     done = asyncio.create_task(asyncio.sleep(0))
