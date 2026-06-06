@@ -43,13 +43,16 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived_at TEXT,
     session_type TEXT NOT NULL DEFAULT 'chat',
     origin_automation_id TEXT,
+    parent_session_id TEXT,
+    parent_tool_call_id TEXT,
+    agent_type TEXT,
+    agent_status TEXT,
     project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL,
     chat_model TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
-
 CREATE TABLE IF NOT EXISTS session_messages (
     session_id TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -229,6 +232,7 @@ CREATE TABLE IF NOT EXISTS background_agent_runs (
     session_id TEXT NOT NULL,
     parent_run_id TEXT,
     parent_tool_call_id TEXT,
+    child_session_id TEXT,
     agent_type TEXT NOT NULL DEFAULT 'background_research',
     wait INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
@@ -281,9 +285,10 @@ CREATE TABLE IF NOT EXISTS session_goals (
 SQL_SAVE_SESSION = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id, project_id, chat_model
+    session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+    agent_type, agent_status, project_id, chat_model
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity,
     messages = excluded.messages,
@@ -291,6 +296,10 @@ ON CONFLICT(session_id) DO UPDATE SET
     name = excluded.name,
     session_type = excluded.session_type,
     origin_automation_id = excluded.origin_automation_id,
+    parent_session_id = excluded.parent_session_id,
+    parent_tool_call_id = excluded.parent_tool_call_id,
+    agent_type = excluded.agent_type,
+    agent_status = excluded.agent_status,
     project_id = sessions.project_id,
     chat_model = excluded.chat_model
 """
@@ -303,7 +312,8 @@ ORDER BY last_activity DESC LIMIT 1
 
 SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
-       session_type, origin_automation_id, project_id, chat_model,
+       session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+       agent_type, agent_status, project_id, chat_model,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL
@@ -313,7 +323,8 @@ LIMIT ?
 
 SQL_LIST_ARCHIVED = """
 SELECT session_id, started_at, last_activity, name, archived_at,
-       session_type, origin_automation_id, project_id, chat_model,
+       session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+       agent_type, agent_status, project_id, chat_model,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NOT NULL
@@ -328,12 +339,14 @@ SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
 SQL_UPSERT_PROGRESS = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
-    session_type, origin_automation_id, project_id, chat_model
+    session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+    agent_type, agent_status, project_id, chat_model
 )
-VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     messages = excluded.messages,
     last_activity = excluded.last_activity,
+    agent_status = excluded.agent_status,
     project_id = sessions.project_id
 """
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
@@ -423,6 +436,7 @@ class SessionStore:
         return {
             "task_id": row["task_id"],
             "child_run_id": row["task_id"],
+            "child_session_id": row["child_session_id"],
             "session_id": row["session_id"],
             "parent_run_id": row["parent_run_id"],
             "parent_tool_call_id": row["parent_tool_call_id"],
@@ -525,6 +539,10 @@ class SessionStore:
             "archived_at TEXT",
             "session_type TEXT NOT NULL DEFAULT 'chat'",
             "origin_automation_id TEXT",
+            "parent_session_id TEXT",
+            "parent_tool_call_id TEXT",
+            "agent_type TEXT",
+            "agent_status TEXT",
             "project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL",
             "chat_model TEXT",
         ):
@@ -535,6 +553,9 @@ class SessionStore:
                 pass
         await self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_project_activity ON sessions(project_id, last_activity DESC)"
+        )
+        await self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_parent_activity ON sessions(parent_session_id, started_at)"
         )
         await self._migrate_session_turns_schema()
         await self._migrate_session_messages_fts()
@@ -1019,6 +1040,9 @@ class SessionStore:
             if "parent_tool_call_id" not in columns:
                 await self.conn.execute("ALTER TABLE background_agent_runs ADD COLUMN parent_tool_call_id TEXT")
                 changed = True
+            if "child_session_id" not in columns:
+                await self.conn.execute("ALTER TABLE background_agent_runs ADD COLUMN child_session_id TEXT")
+                changed = True
             if "agent_type" not in columns:
                 await self.conn.execute(
                     "ALTER TABLE background_agent_runs ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'background_research'"
@@ -1033,6 +1057,7 @@ class SessionStore:
 
         result_text_expr = "result_text" if "result_text" in columns else "NULL"
         parent_tool_call_expr = "parent_tool_call_id" if "parent_tool_call_id" in columns else "NULL"
+        child_session_expr = "child_session_id" if "child_session_id" in columns else "NULL"
         agent_type_expr = (
             "COALESCE(agent_type, 'background_research')" if "agent_type" in columns else "'background_research'"
         )
@@ -1045,6 +1070,7 @@ class SessionStore:
                 session_id TEXT NOT NULL,
                 parent_run_id TEXT,
                 parent_tool_call_id TEXT,
+                child_session_id TEXT,
                 agent_type TEXT NOT NULL DEFAULT 'background_research',
                 wait INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL,
@@ -1065,12 +1091,12 @@ class SessionStore:
         await self.conn.execute(
             f"""
             INSERT OR IGNORE INTO background_agent_runs (
-                task_id, session_id, parent_run_id, parent_tool_call_id,
+                task_id, session_id, parent_run_id, parent_tool_call_id, child_session_id,
                 agent_type, wait, status, command, detail, result_ref, result_text, created_at, started_at,
                 updated_at, ended_at, cancel_requested_at, notified_at
             )
             SELECT
-                task_id, session_id, parent_run_id, {parent_tool_call_expr},
+                task_id, session_id, parent_run_id, {parent_tool_call_expr}, {child_session_expr},
                 {agent_type_expr}, {wait_expr}, status, command,
                 detail, result_ref, {result_text_expr}, created_at, started_at,
                 updated_at, ended_at, cancel_requested_at, notified_at
@@ -1305,6 +1331,10 @@ class SessionStore:
                     state.name,
                     state.session_type,
                     state.origin_automation_id,
+                    state.parent_session_id,
+                    state.parent_tool_call_id,
+                    state.agent_type,
+                    state.agent_status,
                     state.project_id,
                     state.chat_model,
                 ),
@@ -1729,6 +1759,7 @@ class SessionStore:
         parent_run_id: str | None,
         command: str,
         parent_tool_call_id: str | None = None,
+        child_session_id: str | None = None,
         agent_type: str = "background_research",
         wait: bool = False,
     ) -> None:
@@ -1736,15 +1767,16 @@ class SessionStore:
         await self.conn.execute(
             """
             INSERT INTO background_agent_runs (
-                task_id, session_id, parent_run_id, parent_tool_call_id,
+                task_id, session_id, parent_run_id, parent_tool_call_id, child_session_id,
                 agent_type, wait, status, command,
                 created_at, started_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
             ON CONFLICT(session_id, task_id) DO UPDATE SET
                 session_id = excluded.session_id,
                 parent_run_id = excluded.parent_run_id,
                 parent_tool_call_id = excluded.parent_tool_call_id,
+                child_session_id = excluded.child_session_id,
                 agent_type = excluded.agent_type,
                 wait = excluded.wait,
                 status = 'running',
@@ -1757,7 +1789,19 @@ class SessionStore:
                 cancel_requested_at = NULL,
                 notified_at = NULL
             """,
-            (task_id, session_id, parent_run_id, parent_tool_call_id, agent_type, int(wait), command, now, now, now),
+            (
+                task_id,
+                session_id,
+                parent_run_id,
+                parent_tool_call_id,
+                child_session_id,
+                agent_type,
+                int(wait),
+                command,
+                now,
+                now,
+                now,
+            ),
         )
         await self.conn.commit()
         await self.record_background_agent_event(
@@ -2232,6 +2276,10 @@ class SessionStore:
                     state.name,
                     state.session_type,
                     state.origin_automation_id,
+                    state.parent_session_id,
+                    state.parent_tool_call_id,
+                    state.agent_type,
+                    state.agent_status,
                     state.project_id,
                     state.chat_model,
                 ),
@@ -2262,6 +2310,10 @@ class SessionStore:
             name=name,
             session_type=row["session_type"] or "chat",
             origin_automation_id=row["origin_automation_id"],
+            parent_session_id=dict(row).get("parent_session_id"),
+            parent_tool_call_id=dict(row).get("parent_tool_call_id"),
+            agent_type=dict(row).get("agent_type"),
+            agent_status=dict(row).get("agent_status"),
             project_id=row["project_id"],
             chat_model=dict(row).get("chat_model"),
         )
@@ -2295,7 +2347,8 @@ class SessionStore:
             rows = await self.read_conn.execute_fetchall(
                 """
                 SELECT session_id, started_at, last_activity, name,
-                       session_type, origin_automation_id, project_id, chat_model,
+                       session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+                       agent_type, agent_status, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL AND project_id IS NULL
@@ -2308,7 +2361,8 @@ class SessionStore:
             rows = await self.read_conn.execute_fetchall(
                 """
                 SELECT session_id, started_at, last_activity, name,
-                       session_type, origin_automation_id, project_id, chat_model,
+                       session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+                       agent_type, agent_status, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL AND project_id = ?
@@ -2326,6 +2380,10 @@ class SessionStore:
                 "message_count": row["message_count"],
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
+                "parent_session_id": row["parent_session_id"],
+                "parent_tool_call_id": row["parent_tool_call_id"],
+                "agent_type": row["agent_type"],
+                "agent_status": row["agent_status"],
                 "project_id": row["project_id"],
                 "chat_model": dict(row).get("chat_model"),
             }
@@ -2362,6 +2420,10 @@ class SessionStore:
                 "archived_at": row["archived_at"],
                 "session_type": row["session_type"] or "chat",
                 "origin_automation_id": row["origin_automation_id"],
+                "parent_session_id": row["parent_session_id"],
+                "parent_tool_call_id": row["parent_tool_call_id"],
+                "agent_type": row["agent_type"],
+                "agent_status": row["agent_status"],
                 "project_id": row["project_id"],
                 "chat_model": dict(row).get("chat_model"),
             }

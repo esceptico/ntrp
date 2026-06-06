@@ -99,12 +99,61 @@ async def list_background_tasks(execution: ToolExecution, args: EmptyInput) -> T
     return ToolResult(content=content, preview=f"{len(pending)} tasks")
 
 
+class SendToAgentInput(BaseModel):
+    agent_id: str = Field(description="ID of the running background agent to message (from list_background_tasks).")
+    message: str = Field(description="The instruction/message to deliver. The agent receives it at its next step.")
+
+
+async def send_to_agent(execution: ToolExecution, args: SendToAgentInput) -> ToolResult:
+    if not args.message.strip():
+        return ToolResult(
+            content="Cannot send an empty steering message — provide a non-empty instruction.",
+            preview="Empty",
+            is_error=True,
+        )
+    registry = execution.ctx.background_tasks
+    delivered = registry.queue_steering(args.agent_id, args.message)
+    if delivered:
+        return ToolResult(
+            content=f"Queued for {args.agent_id}; it'll see this at its next step if it's still running.",
+            preview=f"Sent · {args.agent_id}",
+        )
+    # Self-correcting: a finished/unknown id dead-ends otherwise, so list the
+    # ids that ARE live instead of just failing.
+    pending = registry.list_pending()
+    if pending:
+        listing = "\n".join(f"- {tid}: {cmd}" for tid, cmd in pending)
+        return ToolResult(
+            content=f"No running agent with id '{args.agent_id}'. Currently running:\n{listing}",
+            preview="Not found",
+            is_error=True,
+        )
+    return ToolResult(
+        content=f"No running agent with id '{args.agent_id}' — nothing is running.",
+        preview="Not found",
+        is_error=True,
+    )
+
+
 background_tool = tool(
     display_name="Background",
     description=BACKGROUND_DESCRIPTION,
     input_model=BackgroundInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=background,
+    kind="agent",
+)
+
+send_to_agent_tool = tool(
+    display_name="Send to Agent",
+    description=(
+        "Send a message to a RUNNING background agent you spawned — to steer it, add context, "
+        "or correct course mid-run. Delivered at the agent's next step. Get IDs from "
+        "list_background_tasks; for a finished agent read its result instead."
+    ),
+    input_model=SendToAgentInput,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL),
+    execute=send_to_agent,
 )
 
 cancel_background_task_tool = tool(

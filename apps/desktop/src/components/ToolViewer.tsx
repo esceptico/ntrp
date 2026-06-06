@@ -8,6 +8,7 @@ import { useStore, type ActivityItem } from "../store";
 import { getChildAgentResultApi, type ChildAgentResult } from "../api";
 import { highlight } from "../highlight";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
+import { humanizeAgentType } from "../lib/agentRun";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { ScrollFadeTop } from "./ScrollBlur";
@@ -291,8 +292,8 @@ function AgentBody({
             Result
           </h3>
           {item.childAgent && (
-            <span className="text-xs text-faint tabular-nums">
-              {item.childAgent.agentType} · {item.childAgent.childRunId.slice(0, 12)}
+            <span className="text-xs text-faint" title={item.childAgent.childRunId}>
+              {humanizeAgentType(item.childAgent.agentType)} · {item.childAgent.wait ? "awaited" : "detached"}
             </span>
           )}
           {result.length > 0 && (
@@ -476,7 +477,7 @@ function ActivityTreeNode({
 function childAgentTreeDetail(item: ActivityItem): string | null {
   if (!item.childAgent) return null;
   const mode = item.childAgent.wait ? "awaited" : "detached";
-  return `${item.childAgent.agentType} · ${mode} · ${item.childAgent.childRunId.slice(0, 12)}`;
+  return `${humanizeAgentType(item.childAgent.agentType)} · ${mode}`;
 }
 
 function buildStats(descendants: ActivityItem[]) {

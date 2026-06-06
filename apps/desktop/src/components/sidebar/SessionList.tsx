@@ -8,7 +8,7 @@ import { compactSessionApi } from "../../api";
 import { archiveSession, createProject, createSession, loadHistory, moveSessionToProject } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
-import { groupProjectSessions } from "../../lib/projects";
+import { groupProjectSessions, primarySidebarSessions } from "../../lib/projects";
 import { SessionRow } from "./SessionRow";
 import { SessionContextMenu, type ContextMenuState } from "./SessionContextMenu";
 import { ProjectSettingsModal } from "./ProjectSettingsModal";
@@ -59,7 +59,14 @@ export function SessionList() {
     });
   };
 
-  const grouped = useMemo(() => groupProjectSessions(projects, sessions, query), [projects, sessions, query]);
+  const chatSessions = useMemo(
+    () => primarySidebarSessions(sessions),
+    [sessions],
+  );
+  const grouped = useMemo(
+    () => groupProjectSessions(projects, chatSessions, query),
+    [projects, chatSessions, query],
+  );
   const editingProject = projects.find((project) => project.project_id === editingProjectId) ?? null;
 
   const closeMenu = () => setMenu(null);
@@ -185,6 +192,8 @@ export function SessionList() {
                             }
                             unread={unreadDoneSessionIds.has(session.session_id)}
                             isChannel={session.session_type === "channel"}
+                            isAgent={false}
+                            depth={0}
                             renaming={renamingId === session.session_id}
                             onStartRename={() => setRenamingId(session.session_id)}
                             onCancelRename={() => setRenamingId(null)}

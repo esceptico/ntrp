@@ -58,9 +58,31 @@ test("continues assistant content by message id without moving prior text below 
   expect(assistantIds).toEqual(["assistant-1"]);
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
   expect(roles).toEqual(["assistant", "activity"]);
-  // Label derives from the call itself (name + primary arg), not a
+  // Label derives from the call itself (name + args), not a
   // server-sent description — so live and replayed transcripts always agree.
-  expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("ReadFile(app)");
+  expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe('ReadFile(path="app")');
+});
+
+test("live tool activity labels show all args after args arrive", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "search-1",
+    tool_call_name: "search_text",
+    display_name: "SearchText",
+  });
+
+  expect(getState().messages.get(getState().order[0])?.activity?.items[0]?.target).toBe("SearchText");
+
+  handleServerEvent({
+    type: "TOOL_CALL_ARGS",
+    tool_call_id: "search-1",
+    delta: '{"query":"ToolCallArgsEvent","path":"."}',
+  });
+
+  expect(getState().messages.get(getState().order[0])?.activity?.items[0]?.target).toBe(
+    'SearchText(query="ToolCallArgsEvent", path=".")',
+  );
 });
 
 test("live goal meta run stays visually hidden", () => {
@@ -186,7 +208,7 @@ test("live tool target matches persisted history formatting without description"
   handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-live-target" });
 
   const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
-  expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe("ReadFile(a)");
+  expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe('ReadFile(path="a")');
 });
 
 test("todo update stays hidden in chat but available to sidebar", () => {
@@ -541,7 +563,9 @@ test("rebuilds persisted transcript without replay animation marker", async () =
     expect(getState().order).toEqual(["user-1", "assistant-1", "assistant-1-activity"]);
     expect([...getState().messages.values()].every((message) => message.suppressEntryMotion)).toBe(true);
     expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].result).toBe("ok");
-    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe("ReadFile(a)");
+    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe(
+      'ReadFile(path="a")',
+    );
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
     (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
@@ -2292,6 +2316,7 @@ test("updates an agent activity item from task lifecycle events", () => {
     run_id: "run-1",
     task_id: "call-research",
     parent_tool_call_id: "call-research",
+    child_session_id: "session-child-1",
     name: "Research Event Systems",
     summary: "event systems",
     depth: 1,
@@ -2314,6 +2339,78 @@ test("updates an agent activity item from task lifecycle events", () => {
   expect(item?.taskStatus).toBe("completed");
   expect(item?.displayName).toBe("Research Event Systems");
   expect(item?.progress).toBe("done");
+  expect(item?.childAgent?.childSessionId).toBe("session-child-1");
+});
+
+test("task lifecycle updates right sidebar child-agent rows live", () => {
+  setState({ currentSessionId: "session-1" });
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+
+  handleServerEvent({
+    type: "task_started",
+    run_id: "run-1",
+    task_id: "call-research",
+    parent_tool_call_id: "call-research",
+    child_run_id: "child-run-1",
+    child_session_id: "session-child-1",
+    agent_type: "research",
+    wait: true,
+    name: "Research Event Systems",
+    summary: "event systems",
+    depth: 1,
+    timestamp: 2,
+  });
+
+  expect(getState().backgroundAgents.rows["session-1:child-run-1"]).toMatchObject({
+    taskId: "child-run-1",
+    sessionId: "session-1",
+    childSessionId: "session-child-1",
+    command: "Research Event Systems",
+    status: "running",
+    detail: "event systems",
+    parentToolCallId: "call-research",
+    agentType: "research",
+    wait: true,
+  });
+
+  handleServerEvent({
+    type: "task_progress",
+    run_id: "run-1",
+    task_id: "call-research",
+    parent_tool_call_id: "call-research",
+    child_run_id: "child-run-1",
+    child_session_id: "session-child-1",
+    agent_type: "research",
+    wait: true,
+    status: "running",
+    summary: "reading files",
+    depth: 1,
+    timestamp: 3,
+  });
+
+  expect(getState().backgroundAgents.rows["session-1:child-run-1"]).toMatchObject({
+    command: "Research Event Systems",
+    detail: "reading files",
+    status: "running",
+  });
+});
+
+test("old-session task lifecycle event does not update right sidebar", () => {
+  setState({ currentSessionId: "session-new" });
+
+  handleIncomingServerEvent({
+    type: "task_started",
+    session_id: "session-old",
+    run_id: "run-old",
+    task_id: "call-research",
+    child_run_id: "child-run-old",
+    child_session_id: "session-child-old",
+    name: "Old Research",
+    summary: "old work",
+    timestamp: 1,
+  });
+
+  expect(getState().backgroundAgents.rows).toEqual({});
 });
 
 test("task lifecycle updates subagent row by parent tool call id", () => {
@@ -2426,6 +2523,7 @@ test("right sidebar maps child-agent snapshots into active sidebar rows", () => 
     childAgentTaskToBackgroundSnapshot({
       task_id: "legacy-bg-id",
       child_run_id: "child-run-1",
+      child_session_id: "session-child-1",
       command: "research auth flow",
       status: "running",
       detail: "working",
@@ -2435,6 +2533,7 @@ test("right sidebar maps child-agent snapshots into active sidebar rows", () => 
     }),
   ).toEqual({
     taskId: "child-run-1",
+    childSessionId: "session-child-1",
     command: "research auth flow",
     status: "running",
     detail: "working",

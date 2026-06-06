@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { groupProjectSessions } from "../src/lib/projects.ts";
+import { groupProjectSessions, primarySidebarSessions } from "../src/lib/projects.ts";
 import type { Project, SessionListItem } from "../src/api.ts";
 
 const projects: Project[] = [
@@ -51,6 +51,17 @@ test("project session grouping keeps empty project folders visible", () => {
     { project: projects[0], sessions: [sessions[0]] },
     { project: projects[1], sessions: [] },
   ]);
+});
+
+test("primary sidebar excludes child agent sessions", () => {
+  const chat = session("chat", "main chat", "p1");
+  const agent = {
+    ...session("agent", "research child", "p1"),
+    session_type: "agent" as const,
+    parent_session_id: "chat",
+  };
+
+  expect(primarySidebarSessions([chat, agent])).toEqual([chat]);
 });
 
 function session(session_id: string, name: string, project_id: string | null): SessionListItem {

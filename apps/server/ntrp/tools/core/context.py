@@ -137,6 +137,11 @@ class BackgroundTaskRegistry:
     read_result: Callable[[str], Awaitable[str | None]] | None = None
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     _commands: dict[str, str] = field(default_factory=dict)
+    # Per-agent steering inbox: messages the parent (or user) sends to a
+    # running background agent, drained into the child's loop at its next step
+    # via the get_pending_messages hook. Mirrors RunState.inject_queue, but
+    # keyed per background task instead of per top-level run.
+    _inboxes: dict[str, list[dict]] = field(default_factory=dict)
 
     def generate_id(self) -> str:
         return generate_slug(2)
@@ -144,6 +149,30 @@ class BackgroundTaskRegistry:
     def _remove(self, task_id: str) -> None:
         self._tasks.pop(task_id, None)
         self._commands.pop(task_id, None)
+        self._inboxes.pop(task_id, None)
+
+    def queue_injection(self, task_id: str, message: dict) -> bool:
+        """Queue a steering message for a running background agent. Returns
+        False when no such agent is live (already finished or unknown)."""
+        task = self._tasks.get(task_id)
+        if task is None or task.done():
+            return False
+        self._inboxes.setdefault(task_id, []).append(message)
+        return True
+
+    def drain_injections(self, task_id: str) -> list[dict]:
+        batch = self._inboxes.get(task_id)
+        if not batch:
+            return []
+        self._inboxes[task_id] = []
+        return list(batch)
+
+    def queue_steering(self, task_id: str, text: str) -> bool:
+        """Queue a steering message (wrapped as a user turn) for a running
+        background agent. One front door for the tool + the HTTP route."""
+        return self.queue_injection(
+            task_id, {"role": "user", "content": f"<steering_message>\n{text}\n</steering_message>"}
+        )
 
     def register(self, task_id: str, task: asyncio.Task, command: str) -> None:
         self._tasks[task_id] = task
@@ -160,6 +189,7 @@ class BackgroundTaskRegistry:
         result_text: str | None = None,
         parent_run_id: str | None = None,
         parent_tool_call_id: str | None = None,
+        child_session_id: str | None = None,
         agent_type: str | None = None,
         wait: bool | None = None,
     ) -> None:
@@ -171,6 +201,7 @@ class BackgroundTaskRegistry:
             session_id=self.session_id,
             parent_run_id=parent_run_id,
             parent_tool_call_id=parent_tool_call_id,
+            child_session_id=child_session_id,
             agent_type=agent_type,
             wait=wait,
             command=self._commands.get(task_id, ""),
@@ -188,6 +219,7 @@ class BackgroundTaskRegistry:
         command: str,
         parent_run_id: str | None = None,
         parent_tool_call_id: str | None = None,
+        child_session_id: str | None = None,
         agent_type: str | None = None,
         wait: bool | None = None,
     ) -> None:
@@ -197,6 +229,7 @@ class BackgroundTaskRegistry:
             status="started",
             parent_run_id=parent_run_id,
             parent_tool_call_id=parent_tool_call_id,
+            child_session_id=child_session_id,
             agent_type=agent_type,
             wait=wait,
         )
@@ -263,6 +296,10 @@ class BackgroundTaskRegistry:
         label: str,
         status: str,
         emit: Callable[[Any], Awaitable[None]] | None,
+        child_session_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        agent_type: str | None = None,
+        wait: bool | None = None,
     ) -> None:
         path = self._write_result_file(task_id, result)
         result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
@@ -291,6 +328,11 @@ class BackgroundTaskRegistry:
                     event_id=f"bg:{task_id}:{status}",
                     task_id=task_id,
                     session_id=self.session_id,
+                    child_run_id=task_id,
+                    child_session_id=child_session_id,
+                    parent_tool_call_id=parent_tool_call_id,
+                    agent_type=agent_type,
+                    wait=wait,
                     command=label,
                     status=status,
                     result_ref=result_ref,

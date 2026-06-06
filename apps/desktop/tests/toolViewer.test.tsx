@@ -164,7 +164,7 @@ test("agent inspector keeps waited child-agent local result without fetching dur
   }
 });
 
-test("agent inspector activity tree labels nested child agents with type mode and id", async () => {
+test("agent inspector activity tree labels nested child agents with type and mode", async () => {
   const { appEl, root, restore } = setupDom();
   const rootItem: ActivityItem = {
     id: "call-research",
@@ -220,7 +220,9 @@ test("agent inspector activity tree labels nested child agents with type mode an
     });
 
     expect(appEl.textContent).toContain("Nested research");
-    expect(appEl.textContent).toContain("background_research · detached · child-run-2");
+    // De-id'd: humanized type + mode, no raw run id leaked into the label.
+    expect(appEl.textContent).toContain("Research · detached");
+    expect(appEl.textContent).not.toContain("child-run-2");
   } finally {
     await act(async () => root.unmount());
     restore();

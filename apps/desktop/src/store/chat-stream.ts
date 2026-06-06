@@ -10,6 +10,7 @@ import {
   type TranscriptProjectionState,
 } from "./transcript-projection";
 import { reduceRunThinking } from "./run-lifecycle";
+import { backgroundAgentKey, type BackgroundAgentUpsert } from "./background-agent-domain";
 
 export { runCancelledEffect } from "./transcript-projection";
 
@@ -17,6 +18,10 @@ type ServerEventEffect =
   | { type: "replay_gap"; sessionId: string }
   | TranscriptProjectionEffect;
 type HistoryReloader = (sessionId: string) => Promise<void>;
+type TaskLifecycleEvent = Extract<
+  ServerEvent,
+  { type: "task_started" | "task_progress" | "task_finished" }
+>;
 interface ServerEventCallbacks {
   resendQueuedMessage?: (text: string, images: QueuedMessage["images"]) => void | Promise<void>;
 }
@@ -508,7 +513,7 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
       });
       return;
     case "background_task":
-      s.upsertBackgroundAgent({
+      const agent: BackgroundAgentUpsert = {
         taskId: event.task_id,
         sessionId: event.session_id ?? s.currentSessionId ?? "",
         command: event.command,
@@ -520,8 +525,22 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
         detail: event.detail ?? undefined,
         resultRef: event.result_ref ?? undefined,
         updatedAt: ts,
-      });
+      };
+      if (event.child_session_id) agent.childSessionId = event.child_session_id;
+      if (event.parent_tool_call_id) agent.parentToolCallId = event.parent_tool_call_id;
+      if (event.agent_type) agent.agentType = event.agent_type;
+      if (event.wait != null) agent.wait = event.wait;
+      s.upsertBackgroundAgent(agent);
       return;
+    case "task_started":
+      upsertTaskLifecycleAgent(event, ts);
+      return applyTranscriptEvent(event);
+    case "task_progress":
+      upsertTaskLifecycleAgent(event, ts);
+      return applyTranscriptEvent(event);
+    case "task_finished":
+      upsertTaskLifecycleAgent(event, ts);
+      return applyTranscriptEvent(event);
     case "compaction_started":
       if (event.scope === "agent") return applyTranscriptEvent(event);
       if (event.replay) return;
@@ -541,6 +560,33 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
     default:
       return applyTranscriptEvent(event);
   }
+}
+
+function upsertTaskLifecycleAgent(event: TaskLifecycleEvent, updatedAt: number): void {
+  const s = getState();
+  const sessionId = event.session_id ?? s.currentSessionId ?? chatStreamState.projectionSessionId;
+  if (!sessionId) return;
+  const taskId = event.child_run_id || event.task_id;
+  const prev = s.backgroundAgents.rows[backgroundAgentKey(sessionId, taskId)];
+  const status =
+    event.type === "task_finished"
+      ? event.status
+      : event.type === "task_progress" && (event.status === "failed" || event.status === "cancelled")
+        ? event.status
+        : "running";
+  const agent: BackgroundAgentUpsert = {
+    taskId,
+    sessionId,
+    command: event.name || prev?.command || event.summary || event.task_id,
+    status,
+    detail: event.summary ?? prev?.detail,
+    updatedAt,
+  };
+  if (event.child_session_id) agent.childSessionId = event.child_session_id;
+  if (event.parent_tool_call_id) agent.parentToolCallId = event.parent_tool_call_id;
+  if (event.agent_type) agent.agentType = event.agent_type;
+  if (event.wait != null) agent.wait = event.wait;
+  s.upsertBackgroundAgent(agent);
 }
 
 export function eventStreamUrl(config: AppConfig, sessionId: string): string {

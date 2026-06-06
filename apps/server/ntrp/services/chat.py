@@ -195,6 +195,7 @@ def _background_event_recorder(session_service: SessionService):
                 session_id=session_id,
                 parent_run_id=event.get("parent_run_id"),
                 parent_tool_call_id=event.get("parent_tool_call_id"),
+                child_session_id=event.get("child_session_id"),
                 agent_type=str(event.get("agent_type") or "background_research"),
                 wait=bool(event.get("wait")),
                 command=str(event.get("command") or ""),

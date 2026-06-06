@@ -359,6 +359,11 @@ class BackgroundTaskEvent(SSEEvent):
     task_id: str = ""
     session_id: str = ""
     run_id: str | None = None
+    child_run_id: str | None = None
+    child_session_id: str | None = None
+    parent_tool_call_id: str | None = None
+    agent_type: str | None = None
+    wait: bool | None = None
     command: str = ""
     status: str = ""  # "started", "completed", "failed", "cancelled", "activity"
     detail: str | None = None
@@ -371,10 +376,15 @@ class BackgroundTaskEvent(SSEEvent):
 @dataclass(frozen=True)
 class TaskStartedEvent(SSEEvent):
     type: EventType = field(default=EventType.TASK_STARTED, init=False)
+    session_id: str = ""
     run_id: str = ""
     task_id: str = ""
     parent_task_id: str | None = None
     parent_tool_call_id: str | None = None
+    child_run_id: str | None = None
+    child_session_id: str | None = None
+    agent_type: str | None = None
+    wait: bool | None = None
     name: str = ""
     summary: str = ""
     depth: int = 0
@@ -383,10 +393,15 @@ class TaskStartedEvent(SSEEvent):
 @dataclass(frozen=True)
 class TaskProgressEvent(SSEEvent):
     type: EventType = field(default=EventType.TASK_PROGRESS, init=False)
+    session_id: str = ""
     run_id: str = ""
     task_id: str = ""
     parent_task_id: str | None = None
     parent_tool_call_id: str | None = None
+    child_run_id: str | None = None
+    child_session_id: str | None = None
+    agent_type: str | None = None
+    wait: bool | None = None
     name: str = ""
     status: str = "running"
     summary: str = ""
@@ -396,10 +411,15 @@ class TaskProgressEvent(SSEEvent):
 @dataclass(frozen=True)
 class TaskFinishedEvent(SSEEvent):
     type: EventType = field(default=EventType.TASK_FINISHED, init=False)
+    session_id: str = ""
     run_id: str = ""
     task_id: str = ""
     parent_task_id: str | None = None
     parent_tool_call_id: str | None = None
+    child_run_id: str | None = None
+    child_session_id: str | None = None
+    agent_type: str | None = None
+    wait: bool | None = None
     name: str = ""
     status: str = "completed"
     summary: str = ""

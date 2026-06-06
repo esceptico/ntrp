@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
 import clsx from "clsx";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useStore } from "../store";
+import { switchSession } from "../actions";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
@@ -33,13 +34,40 @@ function ChatHeader() {
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
 
+  // A child agent session gets a breadcrumb back to its parent in the header —
+  // the discoverable spot, mirroring the hub's "← parent" chip.
+  const parentId = session?.parent_session_id ?? null;
+  const isAgent = session?.session_type === "agent" || !!parentId;
+  const parentName =
+    (parentId ? sessions.find((s) => s.session_id === parentId)?.name : null)?.trim() || "parent session";
+
   return (
     <div
       className={clsx(
-        "chat-header flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
+        "chat-header flex items-center gap-2 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
     >
+      {isAgent && parentId && (
+        <>
+          <button
+            type="button"
+            onClick={() => void switchSession(parentId)}
+            title={`Back to ${parentName}`}
+            className="group/back shrink-0 inline-flex items-center gap-1 h-[26px] max-w-[180px] rounded-md px-1.5 -ml-0.5 text-sm text-muted hover:text-ink hover:bg-surface-soft transition-colors"
+          >
+            <ArrowLeft
+              size={ICON.SM}
+              strokeWidth={2}
+              className="shrink-0 text-faint transition-colors group-hover/back:text-ink"
+            />
+            <span className="truncate">{parentName}</span>
+          </button>
+          <span className="shrink-0 text-faint select-none" aria-hidden>
+            /
+          </span>
+        </>
+      )}
       <h1 className="m-0 min-w-0 flex-1 text-md font-semibold tracking-[-0.01em] text-ink truncate">
         {title}
       </h1>

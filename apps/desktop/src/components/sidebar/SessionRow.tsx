@@ -15,6 +15,8 @@ export function SessionRow({
   streaming,
   unread,
   isChannel,
+  isAgent,
+  depth = 0,
   renaming,
   onStartRename,
   onCancelRename,
@@ -28,6 +30,8 @@ export function SessionRow({
   streaming: boolean;
   unread: boolean;
   isChannel: boolean;
+  isAgent: boolean;
+  depth?: number;
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
@@ -57,7 +61,10 @@ export function SessionRow({
 
   if (renaming) {
     return (
-      <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]">
+      <div
+        className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]"
+        style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
+      >
         <span aria-hidden />
         <input
           ref={inputRef}
@@ -97,9 +104,11 @@ export function SessionRow({
       }}
       data-streaming={streaming ? "true" : undefined}
       data-active={active ? "true" : undefined}
+      data-depth={depth || undefined}
+      style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
       className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-ink-soft text-left cursor-pointer"
     >
-      <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} />
+      <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} isAgent={isAgent} />
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>

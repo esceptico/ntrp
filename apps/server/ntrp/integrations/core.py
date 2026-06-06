@@ -24,6 +24,7 @@ from ntrp.tools.background import (
     cancel_background_task_tool,
     get_background_result_tool,
     list_background_tasks_tool,
+    send_to_agent_tool,
 )
 from ntrp.tools.bash import bash_tool
 from ntrp.tools.deferred import load_tools_tool
@@ -62,6 +63,7 @@ SYSTEM = Integration(
         "edit_file": edit_file_tool,
         "current_time": current_time_tool,
         "research": research_tool,
+        "background": background_tool,
         "load_tools": load_tools_tool,
     },
 )
@@ -94,12 +96,12 @@ AUTOMATION = Integration(
 
 BACKGROUND = Integration(
     id="_background",
-    label="Background tasks",
+    label="Background task controls",
     tools={
-        "background": background_tool,
         "cancel_background_task": cancel_background_task_tool,
         "get_background_result": get_background_result_tool,
         "list_background_tasks": list_background_tasks_tool,
+        "send_to_agent": send_to_agent_tool,
     },
 )
 

@@ -167,6 +167,71 @@ test("agent trace row shows generated name but not prompt text", () => {
   expect(html).not.toContain("inspect current eval/test harness opportunities");
 });
 
+test("agent trace row with child session renders open-session affordance", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "call-research",
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          displayName: "Research Event Systems",
+          status: "ongoing",
+          childAgent: {
+            childRunId: "child-run-1",
+            childSessionId: "session-child-1",
+            agentType: "research",
+            wait: true,
+            status: "running",
+          },
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain("Open agent session");
+  expect(html).toContain('data-child-session-id="session-child-1"');
+});
+
+test("session-backed agent rows do not inline child tool rows", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        {
+          id: "call-research",
+          kind: "research",
+          semanticKind: "agent",
+          target: "research",
+          displayName: "Research Event Systems",
+          status: "executed",
+          childAgent: {
+            childRunId: "child-run-1",
+            childSessionId: "session-child-1",
+            agentType: "research",
+            wait: true,
+            status: "completed",
+          },
+        },
+        {
+          id: "child-tool",
+          kind: "read_file",
+          target: 'read_file(path="inside-child")',
+          parentToolId: "call-research",
+          depth: 1,
+          status: "executed",
+        },
+      ]}
+      motionDisabled
+    />,
+  );
+
+  expect(html).toContain("Research Event Systems");
+  expect(html).not.toContain("inside-child");
+});
+
 test("rolling activity keeps all agent rows while capping ordinary tool rows", () => {
   const html = renderToStaticMarkup(
     <ActivityTail

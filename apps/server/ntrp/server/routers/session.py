@@ -231,7 +231,7 @@ async def _emit_goal_event(
         await bus.emit(GoalUpdatedEvent(session_id=session_id, goal=goal))
 
 
-def _history_tool_calls(msg: dict, kind_for: Callable[[str], str]) -> list[dict]:
+def _history_tool_calls(msg: dict, tool_meta_for: Callable[[str], tuple[str, str | None]]) -> list[dict]:
     raw_tool_calls = msg.get("tool_calls") or []
     if not isinstance(raw_tool_calls, list):
         return []
@@ -248,14 +248,16 @@ def _history_tool_calls(msg: dict, kind_for: Callable[[str], str]) -> list[dict]
         if not isinstance(call_id, str) or not isinstance(name, str):
             continue
         arguments = function.get("arguments", "{}")
-        tool_calls.append(
-            {
-                "id": call_id,
-                "name": name,
-                "arguments": arguments if isinstance(arguments, str) else "{}",
-                "kind": kind_for(name),
-            }
-        )
+        kind, display_name = tool_meta_for(name)
+        item = {
+            "id": call_id,
+            "name": name,
+            "arguments": arguments if isinstance(arguments, str) else "{}",
+            "kind": kind,
+        }
+        if display_name:
+            item["display_name"] = display_name
+        tool_calls.append(item)
     return tool_calls
 
 
@@ -307,12 +309,14 @@ async def get_session_history(
     # Tools carry a `kind` ("tool" | "agent") that the desktop renderer uses
     # to pick a row surface. We thread it into the history payload so a
     # reloaded session keeps the same UI as the live stream.
-    def _kind_for(name: str) -> str:
+    def _tool_meta_for(name: str) -> tuple[str, str | None]:
         executor = getattr(runtime, "executor", None)
         if not executor:
-            return "tool"
+            return "tool", None
         tool = executor.registry.get(name)
-        return getattr(tool, "kind", "tool") if tool else "tool"
+        if not tool:
+            return "tool", None
+        return getattr(tool, "kind", "tool"), getattr(tool, "display_name", None)
 
     page = await svc.list_messages(
         sid,
@@ -357,7 +361,7 @@ async def get_session_history(
             entry = {"role": role, "content": content}
 
         if role == Role.ASSISTANT:
-            tool_calls = _history_tool_calls(msg, _kind_for)
+            tool_calls = _history_tool_calls(msg, _tool_meta_for)
             if tool_calls:
                 entry["tool_calls"] = tool_calls
         if role == Role.ASSISTANT and msg.get("reasoning_content"):

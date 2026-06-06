@@ -54,7 +54,7 @@ GROUP_DESCRIPTIONS: dict[str, str] = {
     "calendar": "Search/create/edit/delete calendar events. Use for meetings, schedule, availability, appointments, reminders, or rescheduling.",
     "slack": "Search Slack and read channels, DMs, threads, image files, and user profiles. Use for Slack messages, workspace history, coworkers, channels, DMs, threads, screenshots, images, or file IDs.",
     "_automation": "Create/list/update/delete/run autonomous scheduled or event-triggered tasks. Use for reminders, recurring checks, notifications, scheduled agents, or automation management.",
-    "_background": "Spawn, inspect, cancel, or read background agents. Use for long-running research/work that should continue while the main chat moves on.",
+    "_background": "Inspect, cancel, or read background agents. Use only when the user asks about an existing background task; spawning a background agent uses the always-available background() tool.",
     "_notifications": "Send a user-facing notification. Use when the user explicitly asks to be notified or an automation/background flow needs to alert them.",
     "_directives": "Update persistent behavior directives injected into the system prompt. Use when the user asks to change standing behavior, tone, or operating rules.",
     "_file_actions": "Write or edit local files. Use after inspecting files with read_file/list_files/find_files/search_text and deciding an exact file change is needed.",

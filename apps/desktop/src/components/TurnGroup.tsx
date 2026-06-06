@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
 import { turnHeaderLabel } from "../lib/turnHeader";
+import { turnHasActiveChildAgent } from "../lib/turnActiveAgents";
 import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 
@@ -55,7 +56,15 @@ export function TurnGroup({
   // collapse — render its children inline instead.
   const hasTools = children.some((child) => child.role === "activity");
 
-  const isDone = turn?.endedAt != null;
+  const hasActiveChildAgent = useStore((s) =>
+    turnHasActiveChildAgent({
+      childIds,
+      messages: s.messages,
+      backgroundAgents: s.backgroundAgents.rows,
+      sessionId: s.currentSessionId,
+    }),
+  );
+  const isDone = turn?.endedAt != null && !hasActiveChildAgent;
   // Default historic turns to collapsed; default in-progress turns to expanded.
   const [expanded, setExpanded] = useState(!isDone);
 

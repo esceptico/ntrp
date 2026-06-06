@@ -81,6 +81,17 @@ def _registry() -> ToolRegistry:
             input_model=SearchInput,
             policy=READ_INTERNAL_POLICY,
             execute=fake_search,
+            kind="agent",
+        ),
+        source="_system",
+    )
+    registry.register(
+        "cancel_background_task",
+        tool(
+            description="Cancel a background agent",
+            input_model=SearchInput,
+            policy=WRITE_INTERNAL_POLICY,
+            execute=fake_search,
         ),
         source="_background",
     )
@@ -329,9 +340,10 @@ async def test_deferred_middleware_hides_then_reveals_loaded_tools():
     names = {t["function"]["name"] for t in prepared.tools}
     assert "load_tools" in names
     assert "echo" in names
+    assert "background" in names
     assert "write_file" not in names
     assert "edit_file" not in names
-    assert "background" not in names
+    assert "cancel_background_task" not in names
     assert "notify" not in names
     assert "set_directives" not in names
     assert "slack_search" not in names
@@ -519,7 +531,7 @@ def test_deferred_prompt_lists_groups_and_tools():
     assert 'name="slack"' in prompt
     assert "slack_search" in prompt
     assert 'name="background"' in prompt
-    assert "background" in prompt
+    assert "cancel_background_task" in prompt
     assert 'name="notifications"' in prompt
     assert "notify" in prompt
     assert 'name="directives"' in prompt
@@ -553,7 +565,7 @@ def test_deferred_prompt_respects_allowed_tool_schemas():
 
 
 @pytest.mark.asyncio
-async def test_background_notifications_and_directives_load_by_group_aliases():
+async def test_background_controls_notifications_and_directives_load_by_group_aliases():
     registry = _registry()
     run = RunContext(run_id="run", deferred_tools_enabled=True)
     ctx = ToolContext(
@@ -582,7 +594,8 @@ async def test_background_notifications_and_directives_load_by_group_aliases():
     assert not background_result.is_error
     assert not notify_result.is_error
     assert not directives_result.is_error
-    assert "background" in run.loaded_tools
+    assert "cancel_background_task" in run.loaded_tools
+    assert "background" not in run.loaded_tools
     assert "notify" in run.loaded_tools
     assert "set_directives" in run.loaded_tools
 

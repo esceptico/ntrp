@@ -5,6 +5,10 @@ export interface ProjectSessionGroup {
   sessions: SessionListItem[];
 }
 
+export function primarySidebarSessions(sessions: SessionListItem[]): SessionListItem[] {
+  return sessions.filter((session) => session.session_type !== "agent");
+}
+
 export function groupProjectSessions(
   projects: Project[],
   sessions: SessionListItem[],

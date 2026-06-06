@@ -4,11 +4,13 @@ import { Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
 import { activityItemStatus, friendlyAgentLabel, isAgent } from "../../lib/agent";
-import { cancelSubagent } from "../../actions";
+import { cancelSubagent, switchSession } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
+import { AgentRunCard } from "../agents/AgentRunCard";
+import { agentRunFromActivityItem } from "../../lib/agentRun";
 
 export type { ActivityItem };
 
@@ -140,34 +142,41 @@ export function ActivityTail({
     return (
       <div className="relative overflow-hidden pl-3 mt-0.5">
         <AnimatePresence mode="popLayout" initial={false}>
-          {visible.map((item) => (
-            <motion.div
-              key={item.id}
-              data-activity-motion-row="true"
-              data-motion-suppressed={suppressMotion ? "true" : "false"}
-              layout={suppressMotion ? false : "position"}
-              initial={suppressMotion ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-              transition={
-                suppressMotion
-                  ? { duration: 0 }
-                  : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
-              }
-              style={{ height: `${ROW_HEIGHT_EM}em` }}
-              className="flex items-baseline min-w-0"
-            >
-              <ItemButton item={item} onOpen={setViewingTool} />
-            </motion.div>
-          ))}
+          {visible.map((item) => {
+            const card = isAgentCardItem(item);
+            return (
+              <motion.div
+                key={item.id}
+                data-activity-motion-row="true"
+                data-motion-suppressed={suppressMotion ? "true" : "false"}
+                layout={suppressMotion ? false : "position"}
+                initial={suppressMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+                transition={
+                  suppressMotion
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
+                }
+                style={card ? undefined : { height: `${ROW_HEIGHT_EM}em` }}
+                className={card ? "min-w-0 my-1" : "flex items-baseline min-w-0"}
+              >
+                <ItemButton item={item} onOpen={setViewingTool} />
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
     );
   }
 
   // Static (post-run) mode: the user-driven collapse toggle is a one-shot
-  // event, not a per-frame stream, so animating height here is fine.
-  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
+  // event, not a per-frame stream, so animating height here is fine. Agent
+  // cards are taller than a tool row, so an exact em count would clip them —
+  // measure to `auto` when any card is present, keep the precise height (and
+  // its tuned spring) for the common all-tool-rows case.
+  const hasCard = visible.some(isAgentCardItem);
+  const targetHeight = hasCard ? "auto" : `${visible.length * ROW_HEIGHT_EM}em`;
   return (
     <motion.div
       initial={false}
@@ -179,23 +188,25 @@ export function ActivityTail({
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
-      {visible.map((item) => (
-        <div
-          key={item.id}
-          style={{ height: `${ROW_HEIGHT_EM}em` }}
-          className="flex items-baseline min-w-0"
-        >
-          <ItemButton item={item} onOpen={setViewingTool} />
-        </div>
-      ))}
+      {visible.map((item) => {
+        const card = isAgentCardItem(item);
+        return (
+          <div
+            key={item.id}
+            style={card ? undefined : { height: `${ROW_HEIGHT_EM}em` }}
+            className={card ? "min-w-0 my-1" : "flex items-baseline min-w-0"}
+          >
+            <ItemButton item={item} onOpen={setViewingTool} />
+          </div>
+        );
+      })}
     </motion.div>
   );
 }
 
 /** Static-mode tree: post-run, expanded panel. Emit every item in DFS
- *  order (parent before children). The user wants to see what tools the
- *  sub-agent ran without clicking into the agent card — depth-based
- *  indent in `ItemButton` handles the visual hierarchy. */
+ *  order (parent before children). Session-backed child agents are leaves:
+ *  their internal tools now live in the child session, not the parent trace. */
 function buildStaticTree(items: ActivityItem[]): ActivityItem[] {
   const childrenByParent = new Map<string, ActivityItem[]>();
   for (const it of items) {
@@ -212,8 +223,22 @@ function buildStaticTree(items: ActivityItem[]): ActivityItem[] {
     if (seen.has(item.id)) return;
     seen.add(item.id);
     out.push(item);
+    if (isSessionBackedAgent(item)) {
+      markDescendantsSeen(item.id);
+      return;
+    }
     const kids = childrenByParent.get(item.id);
     if (kids) for (const k of kids) visit(k);
+  };
+
+  const markDescendantsSeen = (parentId: string) => {
+    const kids = childrenByParent.get(parentId);
+    if (!kids) return;
+    for (const kid of kids) {
+      if (seen.has(kid.id)) continue;
+      seen.add(kid.id);
+      markDescendantsSeen(kid.id);
+    }
   };
 
   for (const t of items.filter((it) => (it.depth ?? 0) === 0)) visit(t);
@@ -258,7 +283,7 @@ function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
     if (seen.has(item.id)) return;
     seen.add(item.id);
     out.push(item);
-    if (activityItemStatus(item) === "ongoing") {
+    if (activityItemStatus(item) === "ongoing" && !isSessionBackedAgent(item)) {
       const kids = childrenByParent.get(item.id);
       if (kids) for (const k of rollingLevel(kids, max)) include(k);
     }
@@ -281,6 +306,14 @@ function rollingLevel(items: ActivityItem[], max: number): ActivityItem[] {
   return items.filter((item) => pinnedAgentIds.has(item.id) || tailIds.has(item.id));
 }
 
+function isSessionBackedAgent(item: ActivityItem): boolean {
+  return isAgent(item) && !!item.childAgent?.childSessionId;
+}
+
+function isAgentCardItem(item: ActivityItem): boolean {
+  return isSessionBackedAgent(item);
+}
+
 function ItemButton({
   item,
   onOpen,
@@ -289,6 +322,18 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
+  if (isAgent(item) && isSessionBackedAgent(item)) {
+    const childSessionId = item.childAgent?.childSessionId;
+    const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
+    return (
+      <AgentRunCard
+        run={agentRunFromActivityItem(item)}
+        onOpen={childSessionId ? () => void switchSession(childSessionId) : undefined}
+        onStop={canStop ? () => { if (item.runId) void cancelSubagent(item.runId, item.id); } : undefined}
+        stopping={item.cancelRequested}
+      />
+    );
+  }
   if (isAgent(item)) {
     return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
   }
@@ -298,7 +343,7 @@ function ItemButton({
     <button
       type="button"
       onClick={() => onOpen(item)}
-      title={`${item.kind} — click to inspect`}
+      title={`${item.target || item.kind} — click to inspect`}
       data-state={running && !errored ? "running" : undefined}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       // No transition-colors here: when a tool finishes, the shine
@@ -338,6 +383,7 @@ function AgentButton({
   const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : traceStatus);
   const statusText = item.progress ?? status;
   const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
+  const childSessionId = item.childAgent?.childSessionId;
   return (
     <div
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
@@ -379,8 +425,15 @@ function AgentButton({
       </span>
       <button
         type="button"
-        onClick={() => onOpen(item)}
-        title={`${item.kind} — click to inspect`}
+        onClick={() => {
+          if (childSessionId) {
+            void switchSession(childSessionId);
+            return;
+          }
+          onOpen(item);
+        }}
+        title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
+        data-child-session-id={childSessionId}
         className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
       >
         <span

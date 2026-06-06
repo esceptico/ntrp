@@ -26,6 +26,10 @@ def session_row(state: SessionState, message_count: int) -> dict:
         "message_count": message_count,
         "session_type": state.session_type,
         "origin_automation_id": state.origin_automation_id,
+        "parent_session_id": state.parent_session_id,
+        "parent_tool_call_id": state.parent_tool_call_id,
+        "agent_type": state.agent_type,
+        "agent_status": state.agent_status,
         "project_id": state.project_id,
         "chat_model": state.chat_model,
     }
@@ -60,18 +64,27 @@ class SessionService:
     def create(
         self,
         name: str | None = None,
-        session_type: Literal["chat", "channel"] = "chat",
+        session_type: Literal["chat", "channel", "agent"] = "chat",
         origin_automation_id: str | None = None,
+        session_id: str | None = None,
+        parent_session_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        agent_type: str | None = None,
+        agent_status: str | None = None,
         project_id: str | None = None,
         chat_model: str | None = None,
     ) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
-            session_id=f"{now.strftime('%Y%m%d_%H%M%S')}_{now.microsecond // 1000:03d}",
+            session_id=session_id or f"{now.strftime('%Y%m%d_%H%M%S')}_{now.microsecond // 1000:03d}",
             started_at=now,
             name=name,
             session_type=session_type,
             origin_automation_id=origin_automation_id,
+            parent_session_id=parent_session_id,
+            parent_tool_call_id=parent_tool_call_id,
+            agent_type=agent_type,
+            agent_status=agent_status,
             project_id=project_id,
             chat_model=chat_model,
         )
@@ -79,8 +92,13 @@ class SessionService:
     async def provision(
         self,
         name: str | None = None,
-        session_type: Literal["chat", "channel"] = "chat",
+        session_type: Literal["chat", "channel", "agent"] = "chat",
         origin_automation_id: str | None = None,
+        session_id: str | None = None,
+        parent_session_id: str | None = None,
+        parent_tool_call_id: str | None = None,
+        agent_type: str | None = None,
+        agent_status: str | None = None,
         project_id: str | None = None,
         chat_model: str | None = None,
     ) -> SessionState:
@@ -92,11 +110,22 @@ class SessionService:
             name=name,
             session_type=session_type,
             origin_automation_id=origin_automation_id,
+            session_id=session_id,
+            parent_session_id=parent_session_id,
+            parent_tool_call_id=parent_tool_call_id,
+            agent_type=agent_type,
+            agent_status=agent_status,
             project_id=project_id,
             chat_model=chat_model,
         )
         await self.save(state, [])
         await self._publish(SessionCreatedEvent(session=session_row(state, 0)))
+        return state
+
+    async def provision_state(self, state: SessionState, messages: list[dict] | None = None) -> SessionState:
+        rows = messages or []
+        await self.save(state, rows)
+        await self._publish(SessionCreatedEvent(session=session_row(state, len(rows))))
         return state
 
     async def load(self, session_id: str | None = None) -> SessionData | None:
@@ -136,12 +165,11 @@ class SessionService:
         await self._announce_activity(session_state, messages)
 
     async def _announce_activity(self, session_state: SessionState, messages: list[dict]) -> None:
-        """Push a row delta for channel sessions so the sidebar bumps/re-sorts
-        a channel the user isn't viewing. Scoped to channels (and non-empty
-        saves) so ordinary chat streaming doesn't flood the global bus —
-        the user is already watching their own chat over its per-session
-        stream."""
-        if session_state.session_type != "channel" or not messages:
+        """Push a row delta for passive sessions so the sidebar bumps/re-sorts
+        rows the user might not be viewing. Ordinary chat streaming stays off
+        this global bus because the user is already watching it over the
+        per-session stream."""
+        if session_state.session_type not in {"channel", "agent"} or not messages:
             return
         await self._publish(SessionActivityEvent(session=session_row(session_state, len(messages))))
 

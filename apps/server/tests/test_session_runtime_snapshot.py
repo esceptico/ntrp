@@ -234,6 +234,51 @@ async def test_history_skips_malformed_tool_calls_but_keeps_valid_calls(session_
 
 
 @pytest.mark.asyncio
+async def test_history_includes_tool_display_name_when_executor_knows_tool(session_service: SessionService):
+    state = _state("sess-tool-display-name")
+    await session_service.save(
+        state,
+        [
+            {"role": "user", "content": "search"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "function": {
+                            "name": "search_text",
+                            "arguments": '{"query":"ToolCallArgsEvent","path":"."}',
+                        },
+                    },
+                ],
+            },
+        ],
+    )
+
+    class Registry:
+        def get(self, name: str):
+            if name == "search_text":
+                return SimpleNamespace(kind="tool", display_name="SearchText")
+            return None
+
+    runtime = SimpleNamespace(run_registry=RunRegistry(), executor=SimpleNamespace(registry=Registry()))
+    result = await get_session_history(
+        session_service, runtime, BusRegistry(), "sess-tool-display-name", limit=100, around_seq=None
+    )
+
+    assert result["messages"][-1]["tool_calls"] == [
+        {
+            "id": "call-1",
+            "name": "search_text",
+            "arguments": '{"query":"ToolCallArgsEvent","path":"."}',
+            "kind": "tool",
+            "display_name": "SearchText",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_history_includes_tool_result_data(session_service: SessionService):
     state = _state("sess-tool-result-data")
     data = {

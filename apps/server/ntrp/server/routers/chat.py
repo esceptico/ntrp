@@ -17,6 +17,7 @@ from ntrp.server.schemas import (
     ChatRequest,
     ChatRunsStatusResponse,
     ChildAgentResultResponse,
+    InjectChildAgentRequest,
     ToolResultRequest,
 )
 from ntrp.server.sse_stream import keepalive_chunk, live_records, reset_chunk
@@ -613,3 +614,19 @@ async def cancel_child_agent(
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
     return await _cancel_child_agent(child_run_id, session_id, runtime, run_registry)
+
+
+@router.post("/chat/child-agents/{child_run_id}/inject", status_code=202)
+async def inject_child_agent(
+    child_run_id: str,
+    session_id: str,
+    body: InjectChildAgentRequest,
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    """Steer a running background agent — deliver a message into its loop at
+    its next step. `session_id` is the PARENT session that owns the agent."""
+    registry = run_registry.get_background_registry(session_id)
+    delivered = registry.queue_steering(child_run_id, body.message)
+    if not delivered:
+        raise HTTPException(status_code=404, detail="Agent is not running")
+    return {"status": "delivered", "child_run_id": child_run_id}

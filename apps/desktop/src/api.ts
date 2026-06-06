@@ -57,7 +57,7 @@ export interface AppConfig {
   apiKey: string;
 }
 
-export type SessionType = "chat" | "channel";
+export type SessionType = "chat" | "channel" | "agent";
 
 export interface Project {
   project_id: string;
@@ -85,6 +85,10 @@ export interface SessionListItem {
   session_type?: SessionType;
   /** When set, the channel session was spawned by this automation. */
   origin_automation_id?: string | null;
+  parent_session_id?: string | null;
+  parent_tool_call_id?: string | null;
+  agent_type?: string | null;
+  agent_status?: string | null;
   active_run_id?: string | null;
   run_status?: RuntimeRunStatus | null;
   checkpoint_seq?: number;
@@ -114,6 +118,7 @@ export interface HistoryToolCall {
   id: string;
   name: string;
   arguments: string;
+  display_name?: string;
   /** Semantic kind ("tool" | "agent") for the row renderer. Server fills
    *  this from the tool registry at history-read time. */
   kind?: string;
@@ -243,6 +248,11 @@ export type ServerEvent = CommonServerEventFields & (
       task_id: string;
       session_id?: string;
       run_id?: string | null;
+      child_run_id?: string | null;
+      child_session_id?: string | null;
+      parent_tool_call_id?: string | null;
+      agent_type?: string | null;
+      wait?: boolean | null;
       command: string;
       status: "started" | "activity" | "completed" | "failed" | "cancelled" | "interrupted" | "cancel_requested" | string;
       detail?: string | null;
@@ -253,9 +263,9 @@ export type ServerEvent = CommonServerEventFields & (
     }
   | { type: "stream_reset"; reason: "replay_gap" | string }
   | { type: "stream_keepalive"; latest_seq: number }
-  | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
-  | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; status?: string; summary?: string; depth?: number }
-  | { type: "task_finished"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
+  | { type: "task_started"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; summary?: string; depth?: number }
+  | { type: "task_progress"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status?: string; summary?: string; depth?: number }
+  | { type: "task_finished"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
   | ({ type: "compaction_started"; run_id: string } & CompactionOwner)
   | ({ type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number } & CompactionOwner)
   | { type: "message_ingested"; client_id: string; run_id: string }
@@ -605,6 +615,10 @@ export interface ArchivedSession {
   project_id?: string | null;
   session_type?: SessionType;
   origin_automation_id?: string | null;
+  parent_session_id?: string | null;
+  parent_tool_call_id?: string | null;
+  agent_type?: string | null;
+  agent_status?: string | null;
 }
 
 export async function listArchivedSessionsApi(config: AppConfig): Promise<ArchivedSession[]> {
@@ -1255,6 +1269,7 @@ export function suggestionToPayload(s: AutomationSuggestion): CreateAutomationPa
 export interface BackgroundTaskSummary {
   task_id: string;
   child_run_id?: string | null;
+  child_session_id?: string | null;
   session_id?: string;
   parent_run_id?: string | null;
   parent_tool_call_id?: string | null;
@@ -1334,5 +1349,20 @@ export async function cancelChildAgentApi(
     config,
     `/chat/child-agents/${encodeURIComponent(childRunId)}/cancel?session_id=${encodeURIComponent(sessionId)}`,
     { method: "POST" },
+  );
+}
+
+// Steer a running background agent — deliver a message into its loop at its
+// next step. sessionId is the PARENT session that owns the agent.
+export async function sendToChildAgentApi(
+  config: AppConfig,
+  sessionId: string,
+  childRunId: string,
+  message: string,
+): Promise<void> {
+  await apiWithConfig(
+    config,
+    `/chat/child-agents/${encodeURIComponent(childRunId)}/inject?session_id=${encodeURIComponent(sessionId)}`,
+    { method: "POST", body: JSON.stringify({ message }) },
   );
 }

@@ -4,15 +4,18 @@ returning a bare error string."""
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+import ntrp.database as database
 from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, Result, StopReason, ToolCall, Usage
 from ntrp.agent.types.tools import ToolMeta
 from ntrp.agent.types.tools import ToolResult as AgentToolResult
 from ntrp.context.models import ProjectContext, SessionState
+from ntrp.context.store import SessionStore
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import (
     _clamp_for_salvage,
@@ -20,8 +23,9 @@ from ntrp.core.spawner import (
     _salvage_summary,
     create_spawn_fn,
 )
-from ntrp.events.sse import TaskFinishedEvent, TaskProgressEvent, TaskStartedEvent, TokenUsageEvent
+from ntrp.events.sse import BackgroundTaskEvent, TaskFinishedEvent, TaskProgressEvent, TaskStartedEvent, TokenUsageEvent
 from ntrp.server.state import RunRegistry
+from ntrp.services.session import SessionService
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
 
@@ -215,6 +219,80 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spawn_persists_child_agent_session(monkeypatch, tmp_path: Path):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    session_service = SessionService(store)
+    try:
+        emitted = []
+
+        async def emit(event):
+            emitted.append(event)
+
+        executor = make_executor()
+        parent = SessionState(session_id="parent", started_at=datetime.now(UTC), project_id=None)
+        ctx = ToolContext(
+            session_state=parent,
+            registry=executor.registry,
+            run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+            io=IOBridge(emit=emit),
+            services={"session": session_service},
+            background_tasks=BackgroundTaskRegistry(session_id="parent"),
+        )
+
+        spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+        result = await spawn(
+            ctx,
+            "research blockers",
+            system_prompt="sys",
+            tools=[],
+            parent_id="call-research",
+            agent_type="research",
+            timeout=1,
+        )
+
+        assert result.child_session_id
+        child = await session_service.load(result.child_session_id)
+        assert child is not None
+        assert child.state.session_type == "agent"
+        assert child.state.parent_session_id == "parent"
+        assert child.state.parent_tool_call_id == "call-research"
+        assert child.state.agent_type == "research"
+        assert child.state.agent_status == "completed"
+        assert [message["role"] for message in child.messages] == ["system", "user", "assistant"]
+        assert child.messages[-1]["content"] == "done"
+
+        rows = await store.list_sessions()
+        row = next(item for item in rows if item["session_id"] == result.child_session_id)
+        assert row["parent_session_id"] == "parent"
+        assert row["agent_status"] == "completed"
+
+        task_events = [event for event in emitted if isinstance(event, (TaskStartedEvent, TaskFinishedEvent))]
+        assert [event.child_session_id for event in task_events] == [result.child_session_id, result.child_session_id]
+        assert [event.child_run_id for event in task_events] == [result.child_run_id, result.child_run_id]
+    finally:
+        await read_conn.close()
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_spawn_wait_false_returns_running_child_run(monkeypatch):
     class FakeLLM:
         async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
@@ -258,10 +336,115 @@ async def test_spawn_wait_false_returns_running_child_run(monkeypatch):
     assert result.agent_type == "background_research"
     assert result.wait is False
     assert result.status == "running"
-    assert result.text == f"Background task {result.child_run_id} started: background research"
+    assert result.text == (
+        "Started a background agent to: background research\n"
+        "It runs independently — I'll surface the results automatically when it finishes."
+    )
+    assert result.child_run_id not in result.text
 
     task = bg_registry._tasks[result.child_run_id]
     await task
+
+
+@pytest.mark.asyncio
+async def test_spawn_wait_false_persists_child_session_and_background_snapshot(monkeypatch, tmp_path: Path):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    session_service = SessionService(store)
+    try:
+        async def record(**event):
+            status = event["status"]
+            if status == "started":
+                await store.record_background_agent_started(
+                    task_id=event["task_id"],
+                    session_id=event["session_id"],
+                    parent_run_id=event.get("parent_run_id"),
+                    parent_tool_call_id=event.get("parent_tool_call_id"),
+                    child_session_id=event.get("child_session_id"),
+                    agent_type=event.get("agent_type") or "background_research",
+                    wait=bool(event.get("wait")),
+                    command=event.get("command") or "",
+                )
+            elif event.get("terminal"):
+                await store.record_background_agent_finished(
+                    task_id=event["task_id"],
+                    session_id=event["session_id"],
+                    status=status,
+                    result_ref=event.get("result_ref"),
+                    result_text=event.get("result_text"),
+                )
+            else:
+                await store.record_background_agent_event(
+                    task_id=event["task_id"],
+                    session_id=event["session_id"],
+                    status=status,
+                    detail=event.get("detail"),
+                    result_ref=event.get("result_ref"),
+                )
+
+        emitted = []
+
+        async def emit(event):
+            emitted.append(event)
+
+        executor = make_executor()
+        bg_registry = BackgroundTaskRegistry(session_id="parent", record_event=record)
+        ctx = ToolContext(
+            session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+            registry=executor.registry,
+            run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+            io=IOBridge(emit=emit),
+            services={"session": session_service},
+            background_tasks=bg_registry,
+        )
+
+        spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+        result = await spawn(
+            ctx,
+            "background research",
+            system_prompt="sys",
+            tools=[],
+            parent_id="call-background",
+            agent_type="background_research",
+            wait=False,
+            timeout=1,
+        )
+
+        assert result.child_session_id
+        await bg_registry._tasks[result.child_run_id]
+
+        child = await session_service.load(result.child_session_id)
+        assert child is not None
+        assert child.state.session_type == "agent"
+        assert child.state.agent_status == "completed"
+
+        runs = await store.list_background_agent_runs("parent")
+        assert runs[0]["child_run_id"] == result.child_run_id
+        assert runs[0]["child_session_id"] == result.child_session_id
+
+        bg_events = [event for event in emitted if isinstance(event, BackgroundTaskEvent)]
+        assert bg_events[0].child_session_id == result.child_session_id
+        assert bg_events[0].child_run_id == result.child_run_id
+    finally:
+        await read_conn.close()
+        await conn.close()
 
 
 @pytest.mark.asyncio
@@ -363,6 +546,98 @@ async def test_foreground_subagent_cancel_returns_partial_summary(monkeypatch):
     assert "partial" in spawn_result.text.lower()
     assert "Partial summary." in spawn_result.text
     assert any(getattr(event, "status", None) == "cancelled" for event in emitted)
+
+
+@pytest.mark.asyncio
+async def test_background_agent_drains_steering_message_mid_run(monkeypatch):
+    """Parent→child steering, end to end: a message queued into a running
+    background agent's inbox is drained into its loop at the next step."""
+    captured: dict = {}
+    bg_registry = BackgroundTaskRegistry(session_id="test")
+
+    class SteeringLLM:
+        def __init__(self):
+            self.calls = 0
+
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            self.calls += 1
+            if self.calls == 1:
+                # The agent is live now — steer it. A tool call forces a
+                # second step, across whose boundary the inbox is drained.
+                task_id = next(iter(bg_registry._tasks))
+                assert bg_registry.queue_injection(
+                    task_id, {"role": "user", "content": "<steering_message>\nalso check pricing\n</steering_message>"}
+                )
+                yield CompletionResponse(
+                    choices=[
+                        Choice(
+                            message=Message(
+                                role="assistant",
+                                content=None,
+                                tool_calls=[
+                                    ToolCall(id="c1", type="function", function=FunctionCall(name="finder", arguments="{}"))
+                                ],
+                                reasoning_content=None,
+                            ),
+                            finish_reason="tool_calls",
+                        )
+                    ],
+                    usage=Usage(),
+                    model=model,
+                )
+                return
+            captured["messages"] = list(messages)
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", SteeringLLM())
+
+    class FinderExecutor:
+        async def execute(self, name, args, tool_call_id):
+            return AgentToolResult(content="ok", preview="ok", is_error=False)
+
+        def get_meta(self, name):
+            return ToolMeta(name="finder", display_name="Finder", kind="tool")
+
+    monkeypatch.setattr("ntrp.core.spawner.NtrpToolExecutor", lambda *_a, **_k: FinderExecutor())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=bg_registry,
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "background research",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-bg",
+        agent_type="background_research",
+        wait=False,
+        timeout=5,
+    )
+
+    await bg_registry._tasks[result.child_run_id]
+
+    steered = [
+        m for m in captured["messages"] if m.get("role") == "user" and "also check pricing" in (m.get("content") or "")
+    ]
+    assert steered, f"steering message was not drained into the child loop: {captured.get('messages')}"
+    # Drained exactly once — the inbox is empty afterward.
+    assert bg_registry.drain_injections(result.child_run_id) == []
 
 
 @pytest.mark.asyncio
@@ -489,7 +764,7 @@ async def test_background_spawn_rolls_cost_into_parent_tracker(monkeypatch):
 
     spawn = create_spawn_fn(executor=executor, model="claude-sonnet-4-6", max_depth=3, current_depth=0)
     result = await spawn(ctx, "task", system_prompt="sys", tools=[], background=True, timeout=1)
-    task_id = result.text.removeprefix("Background task ").split(" started:", 1)[0]
+    task_id = result.child_run_id
     task = bg_registry._tasks[task_id]
 
     await task

@@ -17,6 +17,7 @@ export interface BackgroundAgentsDomainState {
 
 export interface BackgroundAgentSnapshot {
   taskId: string;
+  childSessionId?: string;
   command: string;
   status?: BackgroundAgentStatus | string | null;
   detail?: string;
@@ -41,6 +42,10 @@ export function createBackgroundAgentsDomainState(): BackgroundAgentsDomainState
 
 export function backgroundAgentKey(sessionId: string, taskId: string): string {
   return `${sessionId}:${taskId}`;
+}
+
+export function isActiveBackgroundAgent(agent: Pick<BackgroundAgent, "status">): boolean {
+  return agent.status === "running" || agent.status === "cancel_requested";
 }
 
 export function reduceBackgroundAgentsRefreshStarted(
@@ -70,6 +75,7 @@ export function reduceBackgroundAgentsForSession(
     const next: BackgroundAgent = {
       taskId: agent.taskId,
       sessionId,
+      childSessionId: agent.childSessionId ?? prev?.childSessionId,
       command: agent.command,
       status: normalizeBackgroundAgentStatus(agent.status ?? prev?.status),
       detail: agent.detail ?? prev?.detail,
@@ -138,6 +144,7 @@ function isEquivalentBackgroundAgent(
   return (
     prev.taskId === next.taskId &&
     prev.sessionId === next.sessionId &&
+    prev.childSessionId === next.childSessionId &&
     prev.command === next.command &&
     prev.status === next.status &&
     prev.detail === next.detail &&

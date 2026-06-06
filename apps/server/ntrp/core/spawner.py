@@ -76,6 +76,7 @@ class SpawnResult:
     usage: dict | None = None
     cost: float | None = None
     child_run_id: str = ""
+    child_session_id: str | None = None
     parent_tool_call_id: str | None = None
     agent_type: str = "sub_agent"
     wait: bool = True
@@ -84,14 +85,17 @@ class SpawnResult:
     def child_agent_data(self) -> dict:
         if not self.child_run_id:
             return {}
+        child_agent = {
+            "child_run_id": self.child_run_id,
+            "parent_tool_call_id": self.parent_tool_call_id,
+            "agent_type": self.agent_type,
+            "wait": self.wait,
+            "status": self.status,
+        }
+        if self.child_session_id:
+            child_agent["child_session_id"] = self.child_session_id
         return {
-            "child_agent": {
-                "child_run_id": self.child_run_id,
-                "parent_tool_call_id": self.parent_tool_call_id,
-                "agent_type": self.agent_type,
-                "wait": self.wait,
-                "status": self.status,
-            }
+            "child_agent": child_agent,
         }
 
 
@@ -298,6 +302,10 @@ def create_spawn_fn(
         background = not should_wait
         child_run_id = f"agent-{uuid4().hex[:10]}"
         resolved_agent_type = agent_type or kind.replace("-", "_").replace(" ", "_")
+        task_summary = task[:120]
+        # A distinct slug still names parent activity rows immediately, so
+        # concurrent sub-agents do not collapse into N generic "Agent" rows.
+        agent_slug = generate_slug(2)
         child_executor_source = executor
         child_registry = executor.registry
         if extra_tools:
@@ -306,8 +314,17 @@ def create_spawn_fn(
 
         filtered_tools = tools or child_executor_source.get_tools()
         allowed_tool_names = tool_schema_names(filtered_tools)
-        child_state = _create_session_state(calling_ctx, isolation)
         child_model = model_override or model
+        child_state = _create_session_state(calling_ctx, isolation)
+        if child_state.session_id != calling_ctx.session_id:
+            child_state.name = task_summary or agent_slug
+            child_state.session_type = "agent"
+            child_state.parent_session_id = calling_ctx.session_id
+            child_state.parent_tool_call_id = parent_id
+            child_state.agent_type = resolved_agent_type
+            child_state.agent_status = "running"
+            child_state.project_id = calling_ctx.session_state.project_id
+            child_state.chat_model = child_model
         child_reasoning_effort = (
             model_reasoning_efforts.get(child_model) if model_reasoning_efforts is not None else reasoning_effort
         )
@@ -382,13 +399,7 @@ def create_spawn_fn(
         agent_label_task = (
             asyncio.create_task(generate_agent_name(child_model, task)) if parent_emit and not background else None
         )
-        task_summary = task[:120]
         task_depth = current_depth + 1
-        # A distinct slug names the agent immediately, so concurrent sub-agents
-        # render as separate rows from the first event instead of N identical
-        # generic "Research" rows. The async-generated descriptive label (if it
-        # arrives) replaces it via task_progress.
-        agent_slug = generate_slug(2)
 
         # Sub-agents reuse the parent's compactor so a long-running tool
         # sweep doesn't blow past the model's context window mid-run. The
@@ -483,6 +494,41 @@ def create_spawn_fn(
             {"role": Role.SYSTEM, "content": child_system_prompt},
             {"role": Role.USER, "content": task},
         ]
+        session_service = calling_ctx.services.get("session")
+        child_session_persisted = False
+
+        async def _provision_child_session() -> None:
+            nonlocal child_session_persisted
+            if child_session_persisted or child_state.session_id == calling_ctx.session_id:
+                return
+            provision_state = getattr(session_service, "provision_state", None)
+            if provision_state is None:
+                return
+            try:
+                await provision_state(child_state, [])
+                child_session_persisted = True
+            except Exception as exc:
+                _logger.warning("Failed to provision child agent session: %s", exc)
+
+        async def _save_child_session(status: str) -> None:
+            if child_state.session_id == calling_ctx.session_id:
+                return
+            save_child = getattr(session_service, "save", None)
+            if save_child is None:
+                return
+            child_state.agent_status = status
+            try:
+                await save_child(child_state, child_messages)
+            except Exception as exc:
+                _logger.warning("Failed to save child agent session: %s", exc)
+
+        async def _save_child_step(_step: int, _response, messages: list[dict]) -> None:
+            if messages is child_messages:
+                await _save_child_session("running")
+
+        await _provision_child_session()
+        if hasattr(sub_agent, "hooks"):
+            sub_agent.hooks.on_step_finish = _save_child_step
 
         def _foreground_child_events(event) -> tuple[SSEEvent, ...]:
             if isinstance(event, _REASONING_EVENTS):
@@ -530,6 +576,7 @@ def create_spawn_fn(
                 usage=sub_tracker.usage.to_dict(),
                 cost=sub_tracker.cost,
                 child_run_id=child_run_id,
+                child_session_id=child_state.session_id if child_session_persisted else None,
                 parent_tool_call_id=parent_id,
                 agent_type=resolved_agent_type,
                 wait=should_wait,
@@ -550,11 +597,18 @@ def create_spawn_fn(
                     _logger.debug("Failed to generate sub-agent label", exc_info=True)
                     return
                 if agent_label and agent_label != "Agent":
+                    child_state.name = agent_label
+                    await _save_child_session("running")
                     await parent_emit(
                         TaskProgressEvent(
+                            session_id=calling_ctx.session_id,
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            child_run_id=child_run_id,
+                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            agent_type=resolved_agent_type,
+                            wait=should_wait,
                             name=agent_label,
                             status="running",
                             summary=task_summary,
@@ -589,9 +643,14 @@ def create_spawn_fn(
                 if parent_emit:
                     await parent_emit(
                         TaskStartedEvent(
+                            session_id=calling_ctx.session_id,
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            child_run_id=child_run_id,
+                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            agent_type=resolved_agent_type,
+                            wait=should_wait,
                             # Name with the slug initially (distinct per agent) instead of the
                             # placeholder "Agent" — the async-generated descriptive label
                             # replaces it via task_progress when ready. Avoids N identical
@@ -617,12 +676,18 @@ def create_spawn_fn(
             try:
                 _agent_label, text = await asyncio.wait_for(stream_task, timeout=timeout)
                 await _settle_agent_label_update()
+                await _save_child_session("failed" if stream_failed else "completed")
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
+                            session_id=calling_ctx.session_id,
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            child_run_id=child_run_id,
+                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            agent_type=resolved_agent_type,
+                            wait=should_wait,
                             name=_event_agent_label(),
                             status="failed" if stream_failed else "completed",
                             summary="failed" if stream_failed else "completed",
@@ -649,12 +714,18 @@ def create_spawn_fn(
                         else _deterministic_cancel_salvage(child_messages)
                     )
                     await _settle_agent_label_update()
+                    await _save_child_session("cancelled")
                     if parent_emit:
                         await parent_emit(
                             TaskFinishedEvent(
+                                session_id=calling_ctx.session_id,
                                 run_id=calling_ctx.run.run_id,
                                 task_id=lifecycle_task_id,
                                 parent_tool_call_id=parent_id,
+                                child_run_id=child_run_id,
+                                child_session_id=child_state.session_id if child_session_persisted else None,
+                                agent_type=resolved_agent_type,
+                                wait=should_wait,
                                 name=_event_agent_label(),
                                 status="cancelled",
                                 summary="cancelled; partial summary returned",
@@ -663,12 +734,18 @@ def create_spawn_fn(
                         )
                     return _settle_with(text, status="cancelled")
                 await _settle_agent_label_update()
+                await _save_child_session("cancelled")
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
+                            session_id=calling_ctx.session_id,
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            child_run_id=child_run_id,
+                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            agent_type=resolved_agent_type,
+                            wait=should_wait,
                             name=_event_agent_label(),
                             status="cancelled",
                             summary="cancelled",
@@ -679,12 +756,18 @@ def create_spawn_fn(
             except TimeoutError:
                 # Same idea on timeout — try to salvage what we collected.
                 await _settle_agent_label_update()
+                await _save_child_session("failed")
                 if parent_emit:
                     await parent_emit(
                         TaskFinishedEvent(
+                            session_id=calling_ctx.session_id,
                             run_id=calling_ctx.run.run_id,
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
+                            child_run_id=child_run_id,
+                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            agent_type=resolved_agent_type,
+                            wait=should_wait,
                             name=_event_agent_label(),
                             status="failed",
                             summary=f"timed out after {timeout}s",
@@ -722,6 +805,16 @@ def create_spawn_fn(
         task_id = child_run_id
         label = "Agent"
 
+        # Steering channel: the parent (or user) can send messages to this
+        # running agent via registry.queue_injection(task_id, …); the agent
+        # drains them at its next step. `hasattr` guards test-fake agents.
+        if hasattr(sub_agent, "hooks"):
+
+            async def _drain_steering() -> list[dict]:
+                return registry.drain_injections(task_id)
+
+            sub_agent.hooks.get_pending_messages = _drain_steering
+
         async def _to_bg_events(event):
             if isinstance(event, ToolStarted):
                 detail = event.display_name or event.name
@@ -735,6 +828,11 @@ def create_spawn_fn(
                     task_id=task_id,
                     session_id=registry.session_id,
                     run_id=calling_ctx.run.run_id,
+                    child_run_id=child_run_id,
+                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    parent_tool_call_id=parent_id,
+                    agent_type=resolved_agent_type,
+                    wait=should_wait,
                     command=label,
                     status="activity",
                     detail=detail,
@@ -770,6 +868,14 @@ def create_spawn_fn(
                 result = f"Error: {e}"
                 status = "failed"
                 _logger.warning("Background task %s failed: %s", task_id, e)
+            # A steering message can land after the loop drained but before the
+            # task is marked done; it can't be honored now, so surface the drop
+            # instead of silently discarding it on cleanup.
+            if leftover := registry.drain_injections(task_id):
+                _logger.warning(
+                    "Dropped %d steering message(s) for finished background agent %s", len(leftover), task_id
+                )
+            await _save_child_session(status)
             try:
                 await registry.deliver_result(
                     task_id=task_id,
@@ -777,6 +883,10 @@ def create_spawn_fn(
                     label=label,
                     status=status,
                     emit=parent_emit,
+                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    parent_tool_call_id=parent_id,
+                    agent_type=resolved_agent_type,
+                    wait=should_wait,
                 )
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)
@@ -786,6 +896,7 @@ def create_spawn_fn(
             command=label,
             parent_run_id=calling_ctx.run.run_id,
             parent_tool_call_id=parent_id,
+            child_session_id=child_state.session_id if child_session_persisted else None,
             agent_type=resolved_agent_type,
             wait=should_wait,
         )
@@ -798,6 +909,11 @@ def create_spawn_fn(
                     task_id=task_id,
                     session_id=registry.session_id,
                     run_id=calling_ctx.run.run_id,
+                    child_run_id=child_run_id,
+                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    parent_tool_call_id=parent_id,
+                    agent_type=resolved_agent_type,
+                    wait=should_wait,
                     command=label,
                     status="started",
                 )
@@ -807,8 +923,12 @@ def create_spawn_fn(
         # asynchronously via registry.deliver_result. Usage/cost belong to
         # the background task's own ledger, not this caller's tool result.
         return SpawnResult(
-            text=f"Background task {task_id} started: {task}",
+            text=(
+                f"Started a background agent to: {task}\n"
+                "It runs independently — I'll surface the results automatically when it finishes."
+            ),
             child_run_id=child_run_id,
+            child_session_id=child_state.session_id if child_session_persisted else None,
             parent_tool_call_id=parent_id,
             agent_type=resolved_agent_type,
             wait=False,

@@ -3,6 +3,7 @@ import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { childAgentFromToolResultData, type ToolResultData } from "./child-agent-metadata";
 import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
+import type { ChildAgentRef } from "./types";
 import {
   reduceActiveActivityBackgrounded,
   reduceBackgroundedRunObserved,
@@ -46,9 +47,25 @@ export interface TranscriptProjectionRuntime {
 }
 
 const TODO_TOOL_NAME = "update_todos";
+type TaskLifecycleEvent = Extract<
+  ServerEvent,
+  { type: "task_started" | "task_progress" | "task_finished" }
+>;
 
 export function isTodoToolName(name: string | null | undefined): boolean {
   return name === TODO_TOOL_NAME;
+}
+
+function childAgentFromTaskEvent(event: TaskLifecycleEvent, status: string): ChildAgentRef | undefined {
+  if (!event.child_run_id && !event.child_session_id && !event.agent_type) return undefined;
+  return {
+    childRunId: event.child_run_id || event.task_id,
+    childSessionId: event.child_session_id || undefined,
+    parentToolCallId: event.parent_tool_call_id || undefined,
+    agentType: event.agent_type || "sub_agent",
+    wait: typeof event.wait === "boolean" ? event.wait : true,
+    status,
+  };
 }
 
 interface ProjectionContext {
@@ -402,6 +419,11 @@ export function applyChatEventToTranscript(
         taskStatus: "running",
         progress: event.summary ?? "running",
       };
+      const childAgent = childAgentFromTaskEvent(event, "running");
+      if (childAgent) {
+        patch.childAgent = childAgent;
+        patch.semanticKind = SEMANTIC_KIND_AGENT;
+      }
       if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
@@ -416,6 +438,11 @@ export function applyChatEventToTranscript(
         taskStatus,
         progress: event.summary ?? event.status ?? "running",
       };
+      const childAgent = childAgentFromTaskEvent(event, taskStatus);
+      if (childAgent) {
+        patch.childAgent = childAgent;
+        patch.semanticKind = SEMANTIC_KIND_AGENT;
+      }
       if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
@@ -429,6 +456,11 @@ export function applyChatEventToTranscript(
         progress: event.summary ?? event.status,
         cancelRequested: false,
       };
+      const childAgent = childAgentFromTaskEvent(event, event.status);
+      if (childAgent) {
+        patch.childAgent = childAgent;
+        patch.semanticKind = SEMANTIC_KIND_AGENT;
+      }
       if (event.name) patch.displayName = event.name;
       mergeOrBufferActivityPatch(context, [taskActivityItemId(event)], patch);
       break;
@@ -580,7 +612,7 @@ export function rebuildTranscriptFromHistory(
             kind: toolCall.name,
             semanticKind:
               toolCall.kind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
-            target: formatCallTarget(toolCall.name, args || "{}"),
+            target: formatCallTarget(toolCall.name, args || "{}", toolCall.display_name),
             args,
             result: result?.content,
             status: "executed",
@@ -966,47 +998,27 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
   }
 }
 
-// Args whose value IS the call's target — render it directly (e.g. bash →
-// the command, file tools → the path, web → the query) instead of the raw
-// `name(key="value")` serialization that reads like debug output. Ordered
-// by salience; first match wins.
-const PRIMARY_TARGET_ARG_KEYS = [
-  "command",
-  "cmd",
-  "file_path",
-  "path",
-  "filename",
-  "url",
-  "query",
-  "q",
-  "pattern",
-  "expression",
-];
+function toolLabel(name: string, displayName?: string): string {
+  return displayName || name;
+}
 
-function collapseTarget(text: string, max = 120): string {
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
+function renderArgValue(value: unknown): string {
+  const rendered = JSON.stringify(value);
+  return rendered === undefined ? String(value) : rendered;
 }
 
 function formatCallTarget(name: string, argsJson: string, displayName?: string): string {
-  const label = displayName || name;
+  const label = toolLabel(name, displayName);
   try {
     const parsed = JSON.parse(argsJson || "{}");
     if (parsed && typeof parsed === "object") {
       const args = parsed as Record<string, unknown>;
       const entries = Object.entries(args);
       if (entries.length === 0) return label;
-      for (const key of PRIMARY_TARGET_ARG_KEYS) {
-        const value = args[key];
-        if (typeof value === "string" && value.trim()) {
-          return `${label}(${collapseTarget(value, 100)})`;
-        }
-      }
       const parts = entries.map(([key, value]) => {
-        const rendered = typeof value === "string" ? `"${value}"` : JSON.stringify(value);
-        return `${key}=${rendered}`;
+        return `${key}=${renderArgValue(value)}`;
       });
-      return collapseTarget(`${label}(${parts.join(", ")})`);
+      return `${label}(${parts.join(", ")})`;
     }
   } catch {
     // Fall through to the display label.

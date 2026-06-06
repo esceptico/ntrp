@@ -1,4 +1,4 @@
-import { Radio } from "lucide-react";
+import { Bot, Radio } from "lucide-react";
 import { ICON } from "../../lib/icons";
 import { StatusDot } from "../AgentRightSidebar";
 
@@ -11,10 +11,12 @@ export function SessionStateIcon({
   streaming,
   unread,
   isChannel,
+  isAgent,
 }: {
   streaming: boolean;
   unread: boolean;
   isChannel: boolean;
+  isAgent: boolean;
 }) {
   if (streaming) {
     return (
@@ -38,6 +40,17 @@ export function SessionStateIcon({
         title="Channel — an automation posts its activity here; you can chat in it too"
       >
         <Radio size={ICON.SM} strokeWidth={2} />
+      </span>
+    );
+  }
+  if (isAgent) {
+    return (
+      <span
+        className="grid place-items-center w-4 h-4 text-faint"
+        aria-label="Agent"
+        title="Agent session"
+      >
+        <Bot size={ICON.SM} strokeWidth={2} />
       </span>
     );
   }

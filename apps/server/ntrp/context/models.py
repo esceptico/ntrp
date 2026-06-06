@@ -10,8 +10,12 @@ class SessionState:
     last_activity: datetime = field(default_factory=lambda: datetime.now(UTC))
     name: str | None = None
     auto_approve: set[str] = field(default_factory=set)
-    session_type: Literal["chat", "channel"] = "chat"
+    session_type: Literal["chat", "channel", "agent"] = "chat"
     origin_automation_id: str | None = None
+    parent_session_id: str | None = None
+    parent_tool_call_id: str | None = None
+    agent_type: str | None = None
+    agent_status: str | None = None
     project_id: str | None = None
     chat_model: str | None = None
 

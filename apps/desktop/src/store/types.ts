@@ -121,6 +121,7 @@ export type BackgroundAgentStatus =
 export interface BackgroundAgent {
   taskId: string;
   sessionId: string;
+  childSessionId?: string;
   command: string;
   status: BackgroundAgentStatus;
   detail?: string;
@@ -134,6 +135,7 @@ export interface BackgroundAgent {
 
 export interface ChildAgentRef {
   childRunId: string;
+  childSessionId?: string;
   parentToolCallId?: string;
   agentType: string;
   wait: boolean;

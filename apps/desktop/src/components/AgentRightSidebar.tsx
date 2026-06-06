@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import clsx from "clsx";
 import {
+  ArrowLeft,
   CheckCircle2,
   Circle,
   CircleDot,
   ListChecks,
   PanelRightClose,
   PanelRightOpen,
-  X,
 } from "lucide-react";
-import clsx from "clsx";
 import {
   cancelChildAgentApi,
+  getChildAgentResultApi,
   listChildAgentsApi,
+  sendToChildAgentApi,
   type BackgroundTaskSummary,
   type TodoStatus,
 } from "../api";
@@ -26,62 +28,20 @@ import {
 import { ICON } from "../lib/icons";
 import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
+import {
+  agentRunFromBackgroundAgent,
+  formatElapsed,
+  isActiveAgentStatus,
+  isAgentSessionId,
+  parentSessionIdOf,
+  resultSnippet,
+} from "../lib/agentRun";
+import { switchSession } from "../actions";
 import { ScrollFadeTop } from "./ScrollBlur";
-
-// Compact relative-time formatter. Codex's Cloud Tasks TUI uses
-// "2m ago" style strings — same idea here, sans the suffix because
-// space is tight in a 228px sidebar column.
-function formatElapsed(since: number | string): string {
-  const started = typeof since === "number" ? since : new Date(since).getTime();
-  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const mins = Math.floor(seconds / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  return `${hrs}h`;
-}
-
-// Status palette — only the dot carries color, not the row title.
-// Cribbed from Codex's Cloud Tasks (running/completed/failed/cancelled
-// map to the same conceptual buckets as their PENDING/READY/ERROR/...).
-function statusDotClass(status: BackgroundAgent["status"] | "running"): string {
-  // Both bg-* and text-* so the breathing-glow box-shadow (which uses
-  // `currentColor`) tints to the same hue as the dot fill.
-  switch (status) {
-    case "completed":
-      return "bg-ok text-ok";
-    case "failed":
-      return "bg-bad text-bad";
-    case "cancelled":
-      return "bg-faint text-faint";
-    default:
-      return "bg-accent text-accent";
-  }
-}
-
-export function isActiveBackgroundAgent(agent: BackgroundAgent): boolean {
-  return agent.status === "running" || agent.status === "cancel_requested";
-}
-
-export function StatusDot({
-  status,
-  pulse = false,
-}: {
-  status: BackgroundAgent["status"] | "running";
-  pulse?: boolean;
-}) {
-  const breathing = pulse && status === "running";
-  return (
-    <span
-      className={clsx(
-        "inline-block w-1.5 h-1.5 rounded-full shrink-0",
-        statusDotClass(status),
-        breathing && "status-dot-breathe",
-      )}
-      aria-hidden
-    />
-  );
-}
+import { StatusDot } from "./StatusDot";
+import { AgentRunRow } from "./agents/AgentRunCard";
+export { isActiveBackgroundAgent } from "../store/background-agent-domain";
+export { StatusDot } from "./StatusDot";
 
 export function latestTodoListFromMessages(
   order: string[],
@@ -98,6 +58,7 @@ export const RIGHT_PANEL_WIDTH = 320;
 export const RIGHT_PANEL_BODY_WIDTH = 304;
 
 const COLLAPSED_STORAGE_KEY = "ntrp:right-panel:collapsed";
+const RECENT_AGENT_LIMIT = 6;
 
 function readCollapsedPref(): boolean {
   if (typeof window === "undefined") return true;
@@ -117,6 +78,7 @@ export function childAgentTaskToBackgroundSnapshot(
       : "running";
   return {
     taskId: task.child_run_id ?? task.task_id,
+    childSessionId: task.child_session_id ?? undefined,
     command: task.command,
     status,
     detail: task.detail ?? undefined,
@@ -176,64 +138,85 @@ function useChildAgentsPoll(sessionId: string | null): void {
   ]);
 }
 
-// Row anatomy (one row = up to two lines):
-//   ● Task title              2m
-//     subtle command / detail
-//
-// All weight is carried by the dot color + title text. Time and
-// subtitle are dim. No icons in the row itself — Codex's pattern of
-// "bracketed status tag as leading token" maps cleanly to a colored
-// dot for a graphical UI. Cancel ✕ only on hover for running rows.
-function Row({
-  title,
-  subtitle,
-  status,
-  elapsed,
-  onCancel,
-  cancelling,
-}: {
-  title: string;
-  subtitle?: string;
-  status: BackgroundAgent["status"] | "running";
-  elapsed: string;
-  onCancel?: () => void;
-  cancelling?: boolean;
-}) {
-  const isRunning = status === "running";
-  return (
-    <div className="group/row py-1">
-      <div className="flex items-center gap-2 min-w-0">
-        <StatusDot status={status} pulse={isRunning} />
-        <span className="flex-1 truncate text-sm text-ink-soft tracking-[-0.005em] min-w-0">
-          {title}
-        </span>
-        <span className="text-xs text-faint tabular-nums shrink-0">{elapsed}</span>
-        {onCancel && isRunning && (
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={cancelling}
-            title="Cancel"
-            aria-label="Cancel"
-            className="grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/row:opacity-100 hover:text-bad transition-opacity disabled:opacity-[0.45]"
-          >
-            <X size={10} strokeWidth={2.2} />
-          </button>
-        )}
-      </div>
-      {subtitle && (
-        <div className="pl-[14px] truncate text-xs text-faint min-w-0">{subtitle}</div>
-      )}
-    </div>
-  );
+// Lazily fetch a one-line result preview for each terminal agent, once.
+// Running agents have no durable result yet, so they're skipped.
+function useChildAgentResults(
+  sessionId: string | null,
+  agents: BackgroundAgent[],
+): Record<string, string> {
+  const config = useStore((s) => s.config);
+  const [snippets, setSnippets] = useState<Record<string, string>>({});
+  const done = useRef<Set<string>>(new Set());
+  const inflight = useRef<Set<string>>(new Set());
+
+  // The panel mounts once and is reused across navigation, so reset the
+  // per-session caches when the roster session changes.
+  useEffect(() => {
+    done.current = new Set();
+    inflight.current = new Set();
+    setSnippets({});
+  }, [sessionId]);
+
+  // Include resultRef so the effect re-fires when a durable result lands
+  // after the agent went terminal (otherwise an empty first fetch never retries).
+  const terminalKeys = agents
+    .filter((agent) => !isActiveAgentStatus(agent.status))
+    .map((agent) => `${agent.taskId}:${agent.resultRef ?? ""}`)
+    .join(",");
+
+  useEffect(() => {
+    if (!sessionId) return;
+    for (const agent of agents) {
+      if (isActiveAgentStatus(agent.status)) continue;
+      const key = agent.taskId;
+      if (done.current.has(key) || inflight.current.has(key)) continue;
+      inflight.current.add(key);
+      void getChildAgentResultApi(config, sessionId, key)
+        .then((result) => {
+          const snippet = resultSnippet(result.result ?? undefined);
+          // Keyed + idempotent, so it's safe to apply even if the roster
+          // changed mid-flight. Only mark done once we actually have a
+          // preview, so a result written just after the agent goes terminal
+          // still resolves on a later poll instead of staying blank forever.
+          if (snippet) {
+            done.current.add(key);
+            setSnippets((prev) => ({ ...prev, [key]: snippet }));
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          inflight.current.delete(key);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, config, terminalKeys]);
+
+  return snippets;
 }
 
-function BackgroundAgentRow({ agent }: { agent: BackgroundAgent }) {
+// One agent row in the hub: the unified AgentRunRow, plus the per-row
+// cancel state and open-session wiring.
+function SidebarAgentRow({
+  agent,
+  resultPreview,
+  active,
+}: {
+  agent: BackgroundAgent;
+  resultPreview?: string;
+  active?: boolean;
+}) {
   const config = useStore((s) => s.config);
   const upsertBackgroundAgent = useStore((s) => s.upsertBackgroundAgent);
+  // The server's `command` is a generic "Agent" placeholder until an async
+  // labeler runs; the child session's own name (the task) is the better title.
+  const childName = useStore((s) =>
+    agent.childSessionId
+      ? s.sessions.find((session) => session.session_id === agent.childSessionId)?.name ?? null
+      : null,
+  );
   const [cancelling, setCancelling] = useState(false);
 
-  const cancel = async () => {
+  const stop = async () => {
     if (agent.status !== "running" || cancelling) return;
     setCancelling(true);
     try {
@@ -244,24 +227,59 @@ function BackgroundAgentRow({ agent }: { agent: BackgroundAgent }) {
     }
   };
 
-  // Prefer the command as the human-readable title; fall back to the
-  // taskId. Many agents are spawned with a short command like "ml-intern"
-  // which reads better than a UUID. Detail line shows the taskId trimmed
-  // so users can still see it without it dominating.
-  const title = agent.command || agent.taskId;
-  const mode = agent.wait == null ? null : agent.wait ? "awaited" : "detached";
-  const meta = [agent.agentType, mode, agent.taskId.slice(0, 12)].filter(Boolean).join(" · ");
-  const subtitle = [agent.detail, meta || undefined].filter(Boolean).join(" · ") || undefined;
+  const open = agent.childSessionId
+    ? () => void switchSession(agent.childSessionId as string)
+    : undefined;
+
+  // Return the promise (don't `void` it) so the composer can await delivery
+  // and restore the draft if the agent finished between render and send.
+  const send =
+    agent.status === "running"
+      ? (message: string) => sendToChildAgentApi(config, agent.sessionId, agent.taskId, message)
+      : undefined;
+
+  const run = agentRunFromBackgroundAgent(agent, resultPreview);
+  const named = childName?.trim() ? { ...run, name: childName.trim() } : run;
 
   return (
-    <Row
-      title={title}
-      subtitle={subtitle}
-      status={agent.status}
-      elapsed={formatElapsed(agent.createdAt)}
-      onCancel={cancel}
-      cancelling={cancelling}
+    <AgentRunRow
+      run={named}
+      onOpen={open}
+      onStop={agent.status === "running" ? stop : undefined}
+      stopping={cancelling}
+      active={active}
+      onSend={send}
     />
+  );
+}
+
+// Generic single-line row, used for running automations (title + dot +
+// elapsed, optional subtitle). Agents use AgentRunRow instead.
+function Row({
+  title,
+  subtitle,
+  status,
+  elapsed,
+}: {
+  title: string;
+  subtitle?: string;
+  status: BackgroundAgent["status"] | "running";
+  elapsed: string;
+}) {
+  const isRunning = status === "running";
+  return (
+    <div className="py-1">
+      <div className="flex items-center gap-2 min-w-0">
+        <StatusDot status={status} pulse={isRunning} />
+        <span className="flex-1 truncate text-sm text-ink-soft tracking-[-0.005em] min-w-0">
+          {title}
+        </span>
+        <span className="text-xs text-faint tabular-nums shrink-0">{elapsed}</span>
+      </div>
+      {subtitle && (
+        <div className="pl-[14px] truncate text-xs text-faint min-w-0">{subtitle}</div>
+      )}
+    </div>
   );
 }
 
@@ -383,8 +401,35 @@ function ApprovalsRow() {
   );
 }
 
+// Back-to-parent chip shown while viewing a child agent session — turns the
+// hub into the agent's breadcrumb + sibling switcher.
+function ParentBreadcrumb({
+  parentId,
+  parentName,
+}: {
+  parentId: string;
+  parentName: string | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => void switchSession(parentId)}
+      title={parentName ? `Back to ${parentName}` : "Back to parent session"}
+      className="group/bc flex w-full items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left text-xs text-muted transition-colors hover:bg-surface-soft/60 hover:text-ink"
+    >
+      <ArrowLeft
+        size={ICON.SM}
+        strokeWidth={2}
+        className="shrink-0 text-faint transition-colors group-hover/bc:text-ink"
+      />
+      <span className="truncate">{parentName ?? "Parent session"}</span>
+    </button>
+  );
+}
+
 export function AgentRightSidebar() {
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const sessions = useStore((s) => s.sessions);
   const automations = useStore((s) => s.automations);
   const automationStatuses = useStore((s) => s.automationStream.statuses);
   const backgroundAgentRows = useStore((s) => s.backgroundAgents.rows);
@@ -399,17 +444,43 @@ export function AgentRightSidebar() {
       return next;
     });
 
-  useChildAgentsPoll(currentSessionId);
+  // When viewing a child agent session, the roster is the *parent's* agents
+  // (so the hub shows siblings + a back breadcrumb). Prefer the server's
+  // immediate `parent_session_id`; fall back to parsing the child id
+  // (`${parentId}::${hex}`, nestable) when the record isn't loaded yet.
+  const currentSession = sessions.find((s) => s.session_id === currentSessionId);
+  const inAgentSession =
+    currentSession?.session_type === "agent" || isAgentSessionId(currentSessionId);
+  const parentId = inAgentSession
+    ? currentSession?.parent_session_id ?? parentSessionIdOf(currentSessionId)
+    : null;
+  const rosterSessionId = inAgentSession ? parentId : currentSessionId;
+  const parentName = sessions.find((s) => s.session_id === parentId)?.name ?? null;
 
-  const agents = useMemo(
-    () =>
-      Object.values(backgroundAgentRows)
-        .filter((agent) => !currentSessionId || agent.sessionId === currentSessionId)
-        .filter(isActiveBackgroundAgent)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, 8),
-    [backgroundAgentRows, currentSessionId],
-  );
+  useChildAgentsPoll(rosterSessionId);
+
+  const agents = useMemo(() => {
+    const all = Object.values(backgroundAgentRows).filter(
+      (agent) => agent.sessionId === rosterSessionId,
+    );
+    const active = all
+      .filter((agent) => isActiveAgentStatus(agent.status))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const terminal = all
+      .filter((agent) => !isActiveAgentStatus(agent.status))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const recent = terminal.slice(0, RECENT_AGENT_LIMIT);
+    // Always include the agent whose session we're viewing, even past the
+    // recent cap — hoist it to the top of recent so the highlighted row isn't
+    // stranded at the bottom.
+    if (inAgentSession) {
+      const current = terminal.find((agent) => agent.childSessionId === currentSessionId);
+      if (current && !recent.includes(current)) recent.unshift(current);
+    }
+    return [...active, ...recent];
+  }, [backgroundAgentRows, rosterSessionId, inAgentSession, currentSessionId]);
+
+  const resultSnippets = useChildAgentResults(rosterSessionId, agents);
 
   const runningAutomations = useMemo(
     () =>
@@ -424,6 +495,10 @@ export function AgentRightSidebar() {
 
   const approvalCount = useStore((s) => s.pendingApprovals.length);
 
+  const runningAgentCount = agents.filter((agent) =>
+    isActiveAgentStatus(agent.status),
+  ).length;
+  const hasBreadcrumb = inAgentSession && !!parentId;
   const hasTodo = todo != null;
   const hasAgents = agents.length > 0;
   const hasAutomations = runningAutomations.length > 0;
@@ -432,7 +507,7 @@ export function AgentRightSidebar() {
 
   const todoOpenCount = todo?.items.filter((item) => item.status !== "completed").length ?? 0;
   const totalCount = agents.length + runningAutomations.length + (todo?.items.length ?? 0);
-  const activeCount = agents.length + runningAutomations.length + todoOpenCount;
+  const activeCount = runningAgentCount + runningAutomations.length + todoOpenCount;
 
   // Right panel runs at a fixed width — it used to share the
   // `--sidebar-width` CSS var with the left rail, so dragging the left
@@ -488,21 +563,62 @@ export function AgentRightSidebar() {
           <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollFadeTop />
             <div className="space-y-3">
+              <AnimatePresence initial={false}>
+                {hasBreadcrumb && parentId && (
+                  <motion.div
+                    key="breadcrumb"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
+                    className="overflow-hidden"
+                  >
+                    <ParentBreadcrumb parentId={parentId} parentName={parentName} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <ApprovalsRow />
               {todo && <TodoSidebarSection todo={todo} />}
 
               {hasAgents && (
                 <section>
-                  {sectionCount > 1 && <SectionHeader label="Agents" count={agents.length} />}
+                  {(sectionCount > 1 || hasBreadcrumb) && (
+                    <SectionHeader
+                      label={hasBreadcrumb ? "Agents in this run" : "Agents"}
+                      count={agents.length}
+                    />
+                  )}
                   <div>
-                    {agents.map((agent) => (
-                      <BackgroundAgentRow
-                        key={`${agent.sessionId}:${agent.taskId}`}
-                        agent={agent}
-                      />
-                    ))}
+                    <AnimatePresence initial={false}>
+                      {agents.map((agent) => (
+                        <motion.div
+                          key={`${agent.sessionId}:${agent.taskId}`}
+                          layout
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          transition={{
+                            layout: SPRING_ROW_ENTRY,
+                            opacity: { duration: MOTION.row },
+                            y: { duration: MOTION.fast },
+                          }}
+                        >
+                          <SidebarAgentRow
+                            agent={agent}
+                            resultPreview={resultSnippets[agent.taskId]}
+                            active={inAgentSession && agent.childSessionId === currentSessionId}
+                          />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                   </div>
                 </section>
+              )}
+
+              {hasBreadcrumb && !hasAgents && (
+                <p className="px-3 py-2 text-center text-xs text-muted">
+                  No other agents in this run.
+                </p>
               )}
 
               {hasAutomations && (
@@ -533,12 +649,12 @@ export function AgentRightSidebar() {
                 </section>
               )}
 
-              {!visible && approvalCount === 0 && (
+              {!visible && approvalCount === 0 && !hasBreadcrumb && (
                 <div className="grid place-items-center min-h-[120px] px-3 text-center">
                   <p className="text-xs text-muted leading-relaxed">
-                    No active agents or automations.
+                    No agents yet.
                     <br />
-                    Child agents will appear here.
+                    Background agents you start appear here.
                   </p>
                 </div>
               )}

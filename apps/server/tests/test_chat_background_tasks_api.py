@@ -50,6 +50,8 @@ class _SessionService:
 class _Runtime:
     def __init__(self):
         self.session_service = _SessionService()
+        self.steered = []
+        self.agent_running = True
 
     @property
     def run_registry(self):
@@ -63,6 +65,10 @@ class _Runtime:
 
     def cancel(self, task_id):
         return None
+
+    def queue_steering(self, task_id, text):
+        self.steered.append((task_id, text))
+        return self.agent_running
 
 
 def test_background_tasks_endpoint_returns_durable_snapshot():
@@ -159,6 +165,52 @@ def test_child_agent_result_endpoint_returns_durable_result():
     assert response.json()["terminal"] is True
     assert response.json()["result"] == "final report"
     assert response.json()["result_ref"] == "bg_results/bg-1.txt"
+
+
+def test_inject_child_agent_delivers_to_running_agent():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).post(
+            "/chat/child-agents/bg-1/inject?session_id=sess-1",
+            json={"message": "also check pricing"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "delivered", "child_run_id": "bg-1"}
+    assert runtime.steered == [("bg-1", "also check pricing")]
+
+
+def test_inject_child_agent_404_when_not_running():
+    runtime = _Runtime()
+    runtime.agent_running = False
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).post(
+            "/chat/child-agents/bg-1/inject?session_id=sess-1",
+            json={"message": "too late"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 404
+
+
+def test_inject_child_agent_rejects_empty_message():
+    runtime = _Runtime()
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    try:
+        response = TestClient(app).post(
+            "/chat/child-agents/bg-1/inject?session_id=sess-1",
+            json={"message": ""},
+        )
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+
+    assert response.status_code == 422
+    assert runtime.steered == []
 
 
 def test_child_agent_result_endpoint_wait_timeout_returns_current_state():

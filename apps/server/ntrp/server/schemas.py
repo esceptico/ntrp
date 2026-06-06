@@ -41,6 +41,10 @@ class BackgroundRequest(BaseModel):
     run_id: str
 
 
+class InjectChildAgentRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=10000)
+
+
 class ChatRunStatusResponse(BaseModel):
     run_id: str
     session_id: str
@@ -66,6 +70,7 @@ class BackgroundTaskSessionStatusResponse(BaseModel):
 class BackgroundAgentRunResponse(BaseModel):
     task_id: str
     child_run_id: str | None = None
+    child_session_id: str | None = None
     session_id: str
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None

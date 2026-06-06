@@ -101,8 +101,15 @@ async def test_project_schema_migrates_existing_sessions_table(tmp_path: Path):
 
     columns = await conn.execute_fetchall("PRAGMA table_info(sessions)")
     indexes = await conn.execute_fetchall("PRAGMA index_list(sessions)")
-    assert "project_id" in {row["name"] for row in columns}
-    assert "idx_sessions_project_activity" in {row["name"] for row in indexes}
+    column_names = {row["name"] for row in columns}
+    assert "project_id" in column_names
+    assert "parent_session_id" in column_names
+    assert "parent_tool_call_id" in column_names
+    assert "agent_type" in column_names
+    assert "agent_status" in column_names
+    index_names = {row["name"] for row in indexes}
+    assert "idx_sessions_project_activity" in index_names
+    assert "idx_sessions_parent_activity" in index_names
 
     await read_conn.close()
     await conn.close()
@@ -687,6 +694,7 @@ async def test_background_agent_run_lifecycle(store: SessionStore):
         session_id="sess-1",
         parent_run_id="run-1",
         parent_tool_call_id="call-background",
+        child_session_id="sess-child-1",
         agent_type="background_research",
         wait=False,
         command="research task",
@@ -709,6 +717,7 @@ async def test_background_agent_run_lifecycle(store: SessionStore):
     runs = await store.list_background_agent_runs("sess-1")
     assert runs[0]["task_id"] == "bg-1"
     assert runs[0]["child_run_id"] == "bg-1"
+    assert runs[0]["child_session_id"] == "sess-child-1"
     assert runs[0]["parent_tool_call_id"] == "call-background"
     assert runs[0]["agent_type"] == "background_research"
     assert runs[0]["wait"] is False
@@ -1455,6 +1464,40 @@ async def test_channel_session_type_and_origin_roundtrip(store: SessionStore):
     assert loaded is not None
     assert loaded.state.session_type == "channel"
     assert loaded.state.origin_automation_id == "watcher-1"
+
+
+@pytest.mark.asyncio
+async def test_agent_session_parent_metadata_roundtrip(store: SessionStore):
+    project = await store.create_project(name="ntrp")
+    state = SessionState(
+        session_id="parent::agent",
+        started_at=datetime.now(UTC),
+        name="Research blockers",
+        session_type="agent",
+        parent_session_id="parent",
+        parent_tool_call_id="call-research",
+        agent_type="research",
+        agent_status="running",
+        project_id=project["project_id"],
+        chat_model="openai/gpt-5",
+    )
+    await store.save_session(state, [{"role": "user", "content": "research blockers"}])
+
+    loaded = await store.load_session("parent::agent")
+    assert loaded is not None
+    assert loaded.state.session_type == "agent"
+    assert loaded.state.parent_session_id == "parent"
+    assert loaded.state.parent_tool_call_id == "call-research"
+    assert loaded.state.agent_type == "research"
+    assert loaded.state.agent_status == "running"
+
+    rows = await store.list_sessions(project_id=project["project_id"])
+    row = rows[0]
+    assert row["session_id"] == "parent::agent"
+    assert row["parent_session_id"] == "parent"
+    assert row["parent_tool_call_id"] == "call-research"
+    assert row["agent_type"] == "research"
+    assert row["agent_status"] == "running"
 
 
 @pytest.mark.asyncio

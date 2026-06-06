@@ -147,6 +147,46 @@ test("keeps regular activity separate from persisted todo calls", () => {
   expect(items[2].activity?.items.map((item) => item.id)).toEqual(["tool-1"]);
 });
 
+test("shows all tool args in history activity labels", () => {
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "search and send", id: "user-1" },
+    {
+      role: "assistant",
+      content: "",
+      id: "assistant-tools",
+      tool_calls: [
+        {
+          id: "search-1",
+          name: "search_text",
+          display_name: "SearchText",
+          arguments: '{"query":"ToolCallArgsEvent","path":"."}',
+        },
+        {
+          id: "find-1",
+          name: "find_files",
+          display_name: "FindFiles",
+          arguments: '{"path":".","pattern":"*.tsx"}',
+        },
+        {
+          id: "email-1",
+          name: "send_email",
+          display_name: "SendEmail",
+          arguments: '{"account":"work","to":["me@example.com"],"subject":"Run summary","body":"..."}',
+        },
+      ],
+    },
+  ];
+
+  const items = historyMessagesToUi(messages, null);
+  const activity = items.find((item) => item.role === "activity");
+
+  expect(activity?.activity?.items.map((item) => item.target)).toEqual([
+    'SearchText(query="ToolCallArgsEvent", path=".")',
+    'FindFiles(path=".", pattern="*.tsx")',
+    'SendEmail(account="work", to=["me@example.com"], subject="Run summary", body="...")',
+  ]);
+});
+
 test("rehydrates child agent metadata from persisted tool result data", () => {
   const messages = [
     { role: "user", content: "research it", id: "user-1" },
@@ -171,6 +211,7 @@ test("rehydrates child agent metadata from persisted tool result data", () => {
       data: {
         child_agent: {
           child_run_id: "child-run-123456",
+          child_session_id: "session-child-1",
           parent_tool_call_id: "agent-call-1",
           agent_type: "background_research",
           wait: false,
@@ -186,6 +227,7 @@ test("rehydrates child agent metadata from persisted tool result data", () => {
   expect(activity?.activity?.items[0].semanticKind).toBe("agent");
   expect(activity?.activity?.items[0].childAgent).toEqual({
     childRunId: "child-run-123456",
+    childSessionId: "session-child-1",
     parentToolCallId: "agent-call-1",
     agentType: "background_research",
     wait: false,
