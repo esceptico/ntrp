@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ArrowUpRight, Bot, SendHorizontal, Square } from "lucide-react";
+import { ArrowUpRight, Bot, CornerUpLeft, SendHorizontal, Split, Square } from "lucide-react";
 import { ICON } from "../../lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import {
@@ -157,6 +157,47 @@ export function AgentRunCard({ run, onOpen, onStop, stopping }: AgentRunCardProp
 
 /** Dense sidebar row — same object, no card chrome (the panel is the surface).
  *  `active` marks the agent whose session you're currently viewing. */
+/** Handoff actions for a finished agent's result. */
+export interface AgentHandoff {
+  /** Drop the result into the parent composer to reply with it. */
+  onReply?: () => void | Promise<void>;
+  /** Seed a fresh agent/session with the result. */
+  onRoute?: () => void | Promise<void>;
+}
+
+function HandoffButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void | Promise<void>;
+  children: ReactNode;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={busy}
+      onClick={async (e) => {
+        e.stopPropagation();
+        if (busy) return;
+        setBusy(true);
+        try {
+          await onClick();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink transition-colors duration-check disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
+
 export function AgentRunRow({
   run,
   onOpen,
@@ -164,7 +205,12 @@ export function AgentRunRow({
   stopping,
   active,
   onSend,
-}: AgentRunCardProps & { active?: boolean; onSend?: (message: string) => void | Promise<void> }) {
+  handoff,
+}: AgentRunCardProps & {
+  active?: boolean;
+  onSend?: (message: string) => void | Promise<void>;
+  handoff?: AgentHandoff;
+}) {
   const running = isActiveAgentStatus(run.status);
   const meta = metaLine(run);
   const third = running ? run.progress : run.resultPreview;
@@ -231,6 +277,20 @@ export function AgentRunRow({
           >
             <SendHorizontal size={ICON.XS} strokeWidth={2} />
           </button>
+        )}
+        {!running && handoff && (handoff.onReply || handoff.onRoute) && (
+          <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/run:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
+            {handoff.onReply && (
+              <HandoffButton label="Reply with result" onClick={handoff.onReply}>
+                <CornerUpLeft size={ICON.XS} strokeWidth={2} />
+              </HandoffButton>
+            )}
+            {handoff.onRoute && (
+              <HandoffButton label="Route to a new agent" onClick={handoff.onRoute}>
+                <Split size={ICON.XS} strokeWidth={2} />
+              </HandoffButton>
+            )}
+          </span>
         )}
         <StatusDot status={run.status} pulse={running} />
         {run.elapsedLabel && (

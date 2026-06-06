@@ -32,7 +32,7 @@ import {
   SPRING_ROW_ENTRY,
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
-import { useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
+import { getState, useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
 import {
   agentRunFromBackgroundAgent,
@@ -42,7 +42,7 @@ import {
   parentSessionIdOf,
   resultSnippet,
 } from "../lib/agentRun";
-import { switchSession } from "../actions";
+import { createSession, sendMessage, switchSession } from "../actions";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunCard";
@@ -207,6 +207,7 @@ function SidebarAgentRow({
 }) {
   const config = useStore((s) => s.config);
   const upsertBackgroundAgent = useStore((s) => s.upsertBackgroundAgent);
+  const setDraft = useStore((s) => s.setDraft);
   // The server's `command` is a generic "Agent" placeholder until an async
   // labeler runs; the child session's own name (the task) is the better title.
   const childName = useStore((s) =>
@@ -238,6 +239,30 @@ function SidebarAgentRow({
       ? (message: string) => sendToChildAgentApi(config, agent.sessionId, agent.taskId, message)
       : undefined;
 
+  // Finished agents get handoff actions: drop the full result into the
+  // parent composer (reply), or seed a fresh session with it (route). The
+  // full result is fetched on demand — the row only caches a one-line preview.
+  const fetchResult = async (): Promise<string> => {
+    const r = await getChildAgentResultApi(config, agent.sessionId, agent.taskId);
+    return (r.result ?? "").trim();
+  };
+  const handoff = !isActiveAgentStatus(agent.status)
+    ? {
+        onReply: async () => {
+          const text = await fetchResult();
+          if (!text) return;
+          const prev = getState().draft;
+          setDraft(prev.trim() ? `${prev}\n\n${text}` : text);
+        },
+        onRoute: async () => {
+          const text = await fetchResult();
+          if (!text) return;
+          await createSession();
+          await sendMessage(text);
+        },
+      }
+    : undefined;
+
   const run = agentRunFromBackgroundAgent(agent, resultPreview);
   const named = childName?.trim() ? { ...run, name: childName.trim() } : run;
 
@@ -249,6 +274,7 @@ function SidebarAgentRow({
       stopping={cancelling}
       active={active}
       onSend={send}
+      handoff={handoff}
     />
   );
 }
