@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { CornerDownLeft } from "lucide-react";
+import { CornerDownLeft, MessageSquareText } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore, type ApprovalState } from "../store";
 import { respondToAllApprovals, respondToApproval } from "../actions";
 import { ICON } from "../lib/icons";
-import { originFromEvent } from "../lib/tokens/motion";
+import { EASE_OUT, MOTION, originFromEvent } from "../lib/tokens/motion";
 
 // Spring physics — tuned to feel like iOS 17 / Linear / Raycast: the
 // card moves with mass + damping, not a tween. Stiffness ~340 gives a
@@ -262,6 +262,15 @@ function ApprovalCard({
   const hasReviewable = !!(diff || longBody);
   const showBulk = isFront && totalPending > 1;
 
+  // Deny-with-reason: an inline reason the agent receives as guidance
+  // (respondToApproval forwards it as the rejection feedback the backend
+  // already turns into "User rejected this action and said: …"). The plain
+  // Reject button stays as the instant, no-reason path.
+  const [denyOpen, setDenyOpen] = useState(false);
+  const [denyReason, setDenyReason] = useState("");
+  const submitDeny = () =>
+    onDismissWith("reject", () => respondToApproval(toolId, false, denyReason.trim()));
+
   return (
     <div
       aria-hidden={!interactive || undefined}
@@ -324,6 +333,46 @@ function ApprovalCard({
         )
       )}
 
+      <AnimatePresence initial={false}>
+        {interactive && denyOpen && (
+          <motion.div
+            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
+            transition={{ duration: MOTION.panel, ease: EASE_OUT }}
+            style={{ display: "grid" }}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 pb-2">
+                <input
+                  autoFocus
+                  value={denyReason}
+                  onChange={(e) => setDenyReason(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitDeny();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setDenyOpen(false);
+                    }
+                  }}
+                  placeholder="Why? — sent to the agent as guidance"
+                  className="flex-1 min-w-0 h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-faint focus:outline-none focus:border-line-strong transition-colors duration-check"
+                />
+                <button
+                  type="button"
+                  onClick={submitDeny}
+                  className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <footer className="flex flex-wrap items-center gap-2 px-3 py-2 bg-surface-soft/35">
         {hasReviewable && (
           <button
@@ -357,6 +406,22 @@ function ApprovalCard({
             <span className="w-px h-5 bg-line-soft mx-0.5" aria-hidden />
           </>
         )}
+        <button
+          type="button"
+          tabIndex={interactive ? 0 : -1}
+          onClick={() => setDenyOpen((v) => !v)}
+          aria-label="Deny with reason"
+          aria-expanded={denyOpen}
+          title="Deny with reason"
+          className={
+            "grid place-items-center w-7 h-7 rounded-md transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97] " +
+            (denyOpen
+              ? "bg-surface text-ink"
+              : "text-muted hover:bg-surface hover:text-ink")
+          }
+        >
+          <MessageSquareText size={ICON.SM} strokeWidth={2} />
+        </button>
         <button
           type="button"
           tabIndex={interactive ? 0 : -1}
