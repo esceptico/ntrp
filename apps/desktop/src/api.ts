@@ -496,6 +496,17 @@ export async function resumeRunApi(
   await apiWithConfig(config, "/resume", { method: "POST", body: JSON.stringify(body) });
 }
 
+export async function pinToMemoryApi(
+  config: AppConfig,
+  fact: string,
+  projectId?: string | null,
+): Promise<{ written: boolean; item_id: string | null; reason: string }> {
+  return apiWithConfig(config, "/admin/memory/remember", {
+    method: "POST",
+    body: JSON.stringify({ fact, project_id: projectId ?? null }),
+  });
+}
+
 export async function cancelSubagentApi(
   config: AppConfig,
   runId: string,

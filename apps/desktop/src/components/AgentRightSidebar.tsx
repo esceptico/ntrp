@@ -17,6 +17,7 @@ import {
   getChildAgentResultApi,
   getTodoOverrideApi,
   listChildAgentsApi,
+  pinToMemoryApi,
   sendToChildAgentApi,
   setTodoOverrideApi,
   type BackgroundTaskSummary,
@@ -208,6 +209,10 @@ function SidebarAgentRow({
   const config = useStore((s) => s.config);
   const upsertBackgroundAgent = useStore((s) => s.upsertBackgroundAgent);
   const setDraft = useStore((s) => s.setDraft);
+  const pushToast = useStore((s) => s.pushToast);
+  const projectId = useStore(
+    (s) => s.sessions.find((session) => session.session_id === agent.sessionId)?.project_id ?? null,
+  );
   // The server's `command` is a generic "Agent" placeholder until an async
   // labeler runs; the child session's own name (the task) is the better title.
   const childName = useStore((s) =>
@@ -253,6 +258,27 @@ function SidebarAgentRow({
           if (!text) return;
           const prev = getState().draft;
           setDraft(prev.trim() ? `${prev}\n\n${text}` : text);
+        },
+        onPin: async () => {
+          const text = await fetchResult();
+          if (!text) return;
+          try {
+            const outcome = await pinToMemoryApi(config, text, projectId);
+            pushToast({
+              id: crypto.randomUUID(),
+              title: outcome.written ? "Pinned to memory" : "Already in memory",
+              status: "completed",
+              target: { kind: "session", sessionId: agent.sessionId },
+            });
+          } catch (error) {
+            pushToast({
+              id: crypto.randomUUID(),
+              title: "Couldn't pin to memory",
+              detail: error instanceof Error ? error.message : String(error),
+              status: "failed",
+              target: { kind: "session", sessionId: agent.sessionId },
+            });
+          }
         },
         onRoute: async () => {
           const text = await fetchResult();

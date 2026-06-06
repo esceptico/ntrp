@@ -22,10 +22,13 @@ from ntrp.memory.models import (
     LensRow,
     MemoryEdge,
     MemoryItem,
+    Provenance,
     Scope,
     ScopeKind,
+    SourceRef,
     Status,
 )
+from ntrp.memory.pipeline.write import WriteRequest, WriteSeam
 from ntrp.memory.pipeline.types import (
     CoverageAdvisory,
     PageEditKind,
@@ -45,6 +48,7 @@ from ntrp.server.schemas import (
     DraftLensBody,
     EditCriterionBody,
     MergeLensBody,
+    RememberBody,
     SetLensRenderModeBody,
     SplitLensBody,
     WriteBackOpsBody,
@@ -82,6 +86,24 @@ def _scope_or_all(scope_kind: str, scope_key: str | None) -> Scope | None:
 
 def _scope_json(scope: Scope) -> dict:
     return {"kind": scope.kind.value, "key": scope.key}
+
+
+def _pin_write_request(fact: str, project_id: str | None) -> WriteRequest:
+    """A USER_AUTHORED claim from a manual pin — same shape as the remember()
+    tool (bypass_admit, project scope when available, else USER)."""
+    scope = (
+        Scope(kind=ScopeKind.PROJECT, key=project_id)
+        if project_id
+        else Scope(kind=ScopeKind.USER)
+    )
+    return WriteRequest(
+        content=fact,
+        scope=scope,
+        provenance=Provenance.USER_AUTHORED,
+        source_refs=[SourceRef(kind="desktop_pin", ref="agent_result")],
+        valid_from=None,
+        bypass_admit=True,
+    )
 
 
 def item_json(m: MemoryItem) -> dict:
@@ -591,3 +613,16 @@ async def delete_lens(lens_id: str, knowledge: KnowledgeRuntime = Depends(_knowl
     if not deleted:
         raise HTTPException(status_code=404, detail="lens not found")
     return {"deleted": deleted}
+
+
+@router.post("/remember")
+async def remember(body: RememberBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
+    """Manual user-authored write — the desktop 'pin to memory' handoff. Enters
+    the same admit→write seam as the remember() tool (USER_AUTHORED, bypass_admit)."""
+    seam = knowledge.memory_service
+    if not isinstance(seam, WriteSeam):
+        raise HTTPException(status_code=503, detail="Memory write is not available")
+    outcome = await seam.admit_and_write(_pin_write_request(body.fact, body.project_id))
+    if not outcome.written and outcome.item_id is None and "Already known" not in outcome.reason:
+        raise HTTPException(status_code=422, detail=outcome.reason)
+    return {"written": outcome.written, "item_id": outcome.item_id, "reason": outcome.reason}

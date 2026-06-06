@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ArrowUpRight, Bot, CornerUpLeft, SendHorizontal, Split, Square } from "lucide-react";
+import { ArrowUpRight, Bot, Brain, CornerUpLeft, SendHorizontal, Split, Square } from "lucide-react";
 import { ICON } from "../../lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import {
@@ -161,6 +161,8 @@ export function AgentRunCard({ run, onOpen, onStop, stopping }: AgentRunCardProp
 export interface AgentHandoff {
   /** Drop the result into the parent composer to reply with it. */
   onReply?: () => void | Promise<void>;
+  /** Pin the result into long-term memory. */
+  onPin?: () => void | Promise<void>;
   /** Seed a fresh agent/session with the result. */
   onRoute?: () => void | Promise<void>;
 }
@@ -278,11 +280,16 @@ export function AgentRunRow({
             <SendHorizontal size={ICON.XS} strokeWidth={2} />
           </button>
         )}
-        {!running && handoff && (handoff.onReply || handoff.onRoute) && (
+        {!running && handoff && (handoff.onReply || handoff.onPin || handoff.onRoute) && (
           <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/run:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
             {handoff.onReply && (
               <HandoffButton label="Reply with result" onClick={handoff.onReply}>
                 <CornerUpLeft size={ICON.XS} strokeWidth={2} />
+              </HandoffButton>
+            )}
+            {handoff.onPin && (
+              <HandoffButton label="Pin to memory" onClick={handoff.onPin}>
+                <Brain size={ICON.XS} strokeWidth={2} />
               </HandoffButton>
             )}
             {handoff.onRoute && (

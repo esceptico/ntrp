@@ -471,6 +471,13 @@ class WriteBackOpsBody(BaseModel):
     ops: list[PageEditOpBody] = Field(default_factory=list, max_length=200)
 
 
+class RememberBody(BaseModel):
+    """Manual user-authored memory write (e.g. desktop 'pin to memory')."""
+
+    fact: str = Field(..., min_length=1, max_length=20_000)
+    project_id: str | None = None
+
+
 class DraftLensBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=500)
     scope_kind: Literal["user", "project", "session"] = "user"
