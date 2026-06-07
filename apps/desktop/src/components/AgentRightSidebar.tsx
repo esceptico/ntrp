@@ -45,6 +45,9 @@ import {
   resultSnippet,
 } from "../lib/agentRun";
 import { createSession, sendMessage, switchSession } from "../actions";
+import { useWorkflows } from "../hooks/useWorkflows";
+import { isActiveWorkflow } from "../store/workflow-domain";
+import { WorkflowPreviewRow } from "./workflow/WorkflowPreviewRow";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunRow";
@@ -703,6 +706,18 @@ export function AgentRightSidebar() {
 
   const resultSnippets = useChildAgentResults(rosterSessionId, agents);
 
+  const setViewingWorkflow = useStore((s) => s.setViewingWorkflow);
+  const workflows = useWorkflows(rosterSessionId);
+  const sortedWorkflows = useMemo(() => {
+    const active = workflows.filter(isActiveWorkflow).sort((a, b) => b.updatedAt - a.updatedAt);
+    const done = workflows
+      .filter((w) => !isActiveWorkflow(w))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, RECENT_AGENT_LIMIT);
+    return [...active, ...done];
+  }, [workflows]);
+  const runningWorkflowCount = workflows.filter(isActiveWorkflow).length;
+
   const runningAutomations = useMemo(
     () =>
       (automations ?? []).filter(
@@ -722,13 +737,16 @@ export function AgentRightSidebar() {
   const hasBreadcrumb = inAgentSession && !!parentId;
   const hasTodo = todo != null;
   const hasAgents = agents.length > 0;
+  const hasWorkflows = sortedWorkflows.length > 0;
   const hasAutomations = runningAutomations.length > 0;
-  const sectionCount = [hasTodo, hasAgents, hasAutomations].filter(Boolean).length;
-  const visible = hasTodo || hasAgents || hasAutomations;
+  const sectionCount = [hasTodo, hasAgents, hasWorkflows, hasAutomations].filter(Boolean).length;
+  const visible = hasTodo || hasAgents || hasWorkflows || hasAutomations;
 
   const todoOpenCount = todo?.items.filter((item) => item.status !== "completed").length ?? 0;
-  const totalCount = agents.length + runningAutomations.length + (todo?.items.length ?? 0);
-  const activeCount = runningAgentCount + runningAutomations.length + todoOpenCount;
+  const totalCount =
+    agents.length + sortedWorkflows.length + runningAutomations.length + (todo?.items.length ?? 0);
+  const activeCount =
+    runningAgentCount + runningWorkflowCount + runningAutomations.length + todoOpenCount;
 
   // Right panel runs at a fixed width — it used to share the
   // `--sidebar-width` CSS var with the left rail, so dragging the left
@@ -835,6 +853,45 @@ export function AgentRightSidebar() {
                             resultPreview={resultSnippets[agent.taskId]}
                             active={inAgentSession && agent.childSessionId === currentSessionId}
                           />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </section>
+              )}
+
+              {hasWorkflows && (
+                <section>
+                  {(sectionCount > 1 || hasBreadcrumb) && (
+                    <SectionHeader label="Workflows" count={sortedWorkflows.length} />
+                  )}
+                  <div className="relative">
+                    <AnimatePresence initial={false} mode="popLayout">
+                      {sortedWorkflows.map((wf) => (
+                        <motion.div
+                          key={wf.workflowId}
+                          layout
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.97 }}
+                          transition={{
+                            layout: SPRING_ROW_ENTRY,
+                            opacity: { duration: MOTION.row },
+                            y: { duration: MOTION.row },
+                            scale: { duration: MOTION.fast },
+                          }}
+                        >
+                          <div className="px-1.5 py-1">
+                            <WorkflowPreviewRow
+                              workflow={wf}
+                              onOpen={() =>
+                                setViewingWorkflow({
+                                  workflowId: wf.workflowId,
+                                  sessionId: wf.sessionId,
+                                })
+                              }
+                            />
+                          </div>
                         </motion.div>
                       ))}
                     </AnimatePresence>

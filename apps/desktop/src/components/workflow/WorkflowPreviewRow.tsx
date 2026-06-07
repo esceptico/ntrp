@@ -36,10 +36,10 @@ export function WorkflowPreviewRow({
   const elapsedLabel = durationMs > 0 ? formatDuration(durationMs) : "";
   const dotStatus = WORKFLOW_STATUS_TONE[workflow.status];
 
+  // Status is conveyed by the StatusDot; keep the meta to the shape of the run.
   const meta = [
     phaseCount > 0 ? `${phaseCount} ${plural(phaseCount, "phase")}` : null,
     `${agentCount} ${plural(agentCount, "agent")}`,
-    workflow.status,
   ]
     .filter(Boolean)
     .join(" · ");
