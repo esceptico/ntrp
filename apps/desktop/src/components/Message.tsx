@@ -226,7 +226,7 @@ function GoalMessageBubble({ objective }: { objective: string }) {
         <Target size={ICON.XS} strokeWidth={2} />
         <span>Goal</span>
       </div>
-      <div className="whitespace-pre-wrap break-words text-base leading-[1.45] text-ink">
+      <div className="whitespace-pre-wrap break-words text-base leading-[1.5] text-ink">
         {objective}
       </div>
     </div>
@@ -278,7 +278,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
       {goalMatch ? (
         <GoalMessageBubble objective={goalMatch} />
       ) : showBubble && (
-        <div className="surface-panel surface-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.45] break-words text-left">
+        <div className="surface-panel surface-radius-lg max-w-[75%] px-3.5 py-2 text-ink text-base leading-[1.5] break-words text-left">
           {skillMatch && (
             <>
               <SkillInlineToken skill={skillMatch.skill} />
@@ -321,7 +321,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       <Markdown
         content={smoothContent}
         streaming={isStreaming}
-        className="text-base leading-[1.45] text-ink break-words [&_p]:m-0"
+        className="text-base leading-[1.5] text-ink break-words"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
@@ -378,7 +378,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
             <div className="min-h-0 overflow-hidden">
               <Markdown
                 content={smoothContent}
-                className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words [&_p]:m-0"
+                className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words"
               />
             </div>
           </motion.div>

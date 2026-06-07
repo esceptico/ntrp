@@ -18,7 +18,7 @@ export function Sidebar() {
       {/* Drag region. Height tuned so nav rows start just below the
           macOS traffic-lights zone, not below a 38px chrome ribbon. */}
       <div className="drag-spacer shrink-0 h-[22px]" />
-      <nav className="flex flex-col gap-px px-2.5 pt-2">
+      <nav className="flex flex-col gap-0.5 px-2 pt-1.5">
         <NavRow
           icon={<Pencil size={ICON.LG} strokeWidth={2} />}
           label="New session"
@@ -36,7 +36,7 @@ export function Sidebar() {
         />
       </nav>
       <SessionList />
-      <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
+      <nav className="flex flex-col gap-0.5 px-2 pt-1 pb-2">
         <NavRow
           icon={<SettingsIcon size={ICON.LG} strokeWidth={2} />}
           label="Settings"

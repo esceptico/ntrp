@@ -27,14 +27,14 @@
        md  — emphasized body, chat messages
        lg  — h1, modal titles
        xl, 2xl — display headings */
-  --text-2xs: 11.5px;
-  --text-xs: 13px;
-  --text-sm: 14px;
-  --text-base: 15px;
-  --text-md: 16px;
-  --text-lg: 17.5px;
-  --text-xl: 19.5px;
-  --text-2xl: 21.5px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 12.5px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15.5px;
+  --text-xl: 17px;
+  --text-2xl: 18.5px;
 
   /* Light-mode neutrals. The chat scroll bg (`--color-bg`) is a
      subtle warm cream; content surfaces stay brighter so message
@@ -276,13 +276,13 @@ button:focus-visible,
   box-shadow: var(--focus-ring);
 }
 
-/* Standard text input — the h-9 bordered field used across Settings
+/* Standard text input — the h-8 bordered field used across Settings
    (Field, Providers, Integrations). Owns its own focus treatment
    (accent border + soft accent glow) rather than the global focus-ring;
    see the note above. Layout/width stays with the consumer. */
 .input-field {
-  height: 2.25rem;
-  padding-inline: 0.75rem;
+  height: 2rem;
+  padding-inline: 0.625rem;
   border-radius: 9px;
   border: 1px solid var(--color-line);
   background: var(--color-surface);
@@ -302,14 +302,14 @@ button:focus-visible,
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
-/* Compact variant — h-8, tighter radius/padding for grid-dense forms
+/* Compact variant — h-7, tighter radius/padding for grid-dense forms
    (MCP server config). Inherits .input-field's hover + accent-focus
    treatment so dense inputs match the rest of the app instead of a
    bespoke faint-border focus. */
 .input-field-sm {
-  height: 2rem;
+  height: 1.75rem;
   border-radius: 6px;
-  padding-inline: 0.625rem;
+  padding-inline: 0.5rem;
 }
 
 * {
@@ -527,7 +527,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    scroll=0; mask-image fades the thin gap below the floating composer
    card so text doesn't peek in the lift between card and viewport edge. */
 .scroll-messages {
-  padding-top: 100px;
+  padding-top: 88px;
   /* Padding must clear the composer (`--chat-bottom-h`) AND the
      bg-color fade above it (24px overshoot) AND leave a visible
      breathing gap, so the last message reads crisply at max scroll
@@ -589,11 +589,11 @@ button.app-row:not(:disabled):active,
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
 .md > *:last-child { margin-bottom: 0; }
-.md p { margin: 0 0 1em; }
-.md ul, .md ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
+.md p { margin: 0 0 0.55em; }
+.md ul, .md ol { margin: 0.25em 0 0.5em; padding-left: 1.3em; }
 .md ul { list-style: disc outside; }
 .md ol { list-style: decimal outside; }
-.md li { margin: 0.18em 0; }
+.md li { margin: 0.1em 0; }
 .md li > p { margin: 0; }
 .md li::marker { color: var(--color-faint); }
 .md code {
@@ -757,7 +757,7 @@ button.app-row:not(:disabled):active,
 }
 .md a:hover { text-decoration-color: var(--color-info); }
 .md h1, .md h2, .md h3, .md h4 {
-  margin: 0.8em 0 0.35em;
+  margin: 0.5em 0 0.22em;
   font-weight: 600;
   letter-spacing: -0.012em;
   line-height: 1.3;
@@ -769,8 +769,8 @@ button.app-row:not(:disabled):active,
 .md h4 { font-size: 1em; }
 .md blockquote {
   position: relative;
-  margin: 0.5em 0;
-  padding: 0 0 0 12px;
+  margin: 0.35em 0;
+  padding: 0 0 0 10px;
   border-left: 2px solid var(--color-line-strong);
   color: var(--color-muted);
   /* Hang the opening quotation mark into the gutter — only the punctuation
@@ -798,10 +798,10 @@ button.app-row:not(:disabled):active,
   margin-left: 0.05em;
   color: var(--color-line-strong);
 }
-.md hr { border: 0; border-top: 1px solid var(--color-line); margin: 1em 0; }
+.md hr { border: 0; border-top: 1px solid var(--color-line); margin: 0.7em 0; }
 .md table {
   border-collapse: collapse;
-  margin: 0.6em 0;
+  margin: 0.5em 0;
   font-size: var(--text-sm);
   display: block;
   overflow-x: auto;
