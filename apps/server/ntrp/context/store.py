@@ -2048,6 +2048,29 @@ class SessionStore:
         await self.conn.commit()
         return len(rows)
 
+    async def mark_interrupted_agent_sessions(self) -> int:
+        """A subagent session left 'running' after a restart can never resume —
+        its run died with the process — so the status is a lie that strands the
+        UI on a spinner until a manual reload. Flip orphaned agent sessions to
+        'interrupted' so a history load resolves them. Mirrors
+        mark_interrupted_background_agent_runs for the foreground/session path."""
+        rows = await self.conn.execute_fetchall(
+            """
+            SELECT session_id FROM sessions
+            WHERE session_type = 'agent' AND agent_status = 'running'
+            """,
+        )
+        if not rows:
+            return 0
+        await self.conn.execute(
+            """
+            UPDATE sessions SET agent_status = 'interrupted'
+            WHERE session_type = 'agent' AND agent_status = 'running'
+            """,
+        )
+        await self.conn.commit()
+        return len(rows)
+
     async def mark_interrupted_chat_queued_messages_retryable(self) -> int:
         now = datetime.now(UTC).isoformat()
         cursor = await self.conn.execute(

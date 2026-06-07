@@ -874,6 +874,37 @@ async def test_marks_running_background_agents_interrupted_on_startup(store: Ses
 
 
 @pytest.mark.asyncio
+async def test_marks_running_agent_sessions_interrupted_on_startup(store: SessionStore):
+    running = SessionState(
+        session_id="parent::abc",
+        started_at=datetime.now(UTC),
+        session_type="agent",
+        parent_session_id="parent",
+        agent_status="running",
+    )
+    done = SessionState(
+        session_id="parent::def",
+        started_at=datetime.now(UTC),
+        session_type="agent",
+        parent_session_id="parent",
+        agent_status="completed",
+    )
+    chat = SessionState(session_id="parent", started_at=datetime.now(UTC))
+    await store.save_session(running, [{"role": "user", "content": "x"}])
+    await store.save_session(done, [{"role": "user", "content": "x"}])
+    await store.save_session(chat, [{"role": "user", "content": "x"}])
+
+    changed = await store.mark_interrupted_agent_sessions()
+
+    rows = {row["session_id"]: row for row in await store.list_sessions()}
+    assert changed == 1
+    assert rows["parent::abc"]["agent_status"] == "interrupted"
+    # A finished agent session and a plain chat session are left untouched.
+    assert rows["parent::def"]["agent_status"] == "completed"
+    assert not rows["parent"]["agent_status"]
+
+
+@pytest.mark.asyncio
 async def test_session_events_round_trip_with_sequence(store: SessionStore):
     await store.record_session_event(
         StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="processing")),

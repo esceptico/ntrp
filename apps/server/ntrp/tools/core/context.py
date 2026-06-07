@@ -68,6 +68,11 @@ class RunContext:
     loop_task_id: str | None = None
     active_plan_ref: str | None = None
     research_scope_id: str | None = None
+    # Builds an IOBridge bound to a child (subagent) session's own SSE bus, so a
+    # spawned FULL subagent streams to its own session exactly like a normal run
+    # instead of the parent's bus. Set by the chat service (which owns the
+    # BusRegistry); None in non-chat/test paths (then a child reuses the parent io).
+    child_io_factory: "ChildIOFactory | None" = None
 
     def __post_init__(self) -> None:
         if self.budget is None:
@@ -107,6 +112,30 @@ class IOBridge:
     record_approval: Callable[..., Awaitable[None]] | None = None
     resolve_approval: Callable[..., Awaitable[None]] | None = None
     approval_timeout_seconds: int = 300
+
+
+@dataclass(frozen=True, slots=True)
+class ChildIOParams:
+    """What a child_io_factory needs to wire a subagent to its own session bus.
+    The child reuses the PARENT run's approval map + run_id so tool approvals
+    inside the subagent still resolve through the parent run's /tools/result."""
+
+    session_id: str
+    run_id: str
+    pending_approvals: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ChildSession:
+    """A subagent's own-session io plus the cleanup that drains + evicts its bus
+    when the run ends, so a child whose session is never opened doesn't leak its
+    durable-persist worker."""
+
+    io: IOBridge
+    aclose: Callable[[], Awaitable[None]]
+
+
+ChildIOFactory = Callable[[ChildIOParams], Awaitable[ChildSession]]
 
 
 async def _approval_callback_best_effort(

@@ -41,7 +41,7 @@ from ntrp.services.goal_continuation import (
 )
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
-from ntrp.tools.core.context import IOBridge
+from ntrp.tools.core.context import ChildIOParams, ChildSession, IOBridge
 from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
@@ -912,7 +912,7 @@ async def submit_chat_message(
             except Exception:
                 _logger.warning("Failed to mark chat idempotency error after pre-task setup failure", exc_info=True)
         raise
-    task = asyncio.create_task(run_chat(ctx, bus))
+    task = asyncio.create_task(run_chat(ctx, bus, buses))
     ctx.run.task = task
     _install_cancel_fallback(ctx.run, bus, run_registry, task)
     if client_id:
@@ -1168,7 +1168,7 @@ async def _handle_background_result(
         )
 
 
-async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
+async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
     session_state = ctx.session_state
@@ -1235,6 +1235,31 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             resolve_approval=resolve_approval,
             approval_timeout_seconds=ctx.config.approval_timeout_seconds,
         )
+
+        # A spawned FULL subagent gets its own session; this builds an io bound
+        # to THAT session's bus so it streams live exactly like a normal run
+        # (instead of the parent's bus). It reuses the parent run's approval
+        # plumbing + run_id so tool approvals inside the subagent still resolve
+        # through this run's /tools/result.
+        async def _child_io_factory(params: ChildIOParams) -> ChildSession:
+            await prime_bus_cursor_from_store(buses, params.session_id, ctx.session_service.store)
+            child_bus = buses.get_or_create(params.session_id)
+            child_io = IOBridge(
+                pending_approvals=params.pending_approvals,
+                emit=child_bus.emit,
+                record_approval=record_approval,
+                resolve_approval=resolve_approval,
+                approval_timeout_seconds=ctx.config.approval_timeout_seconds,
+            )
+
+            async def _aclose() -> None:
+                # Run finished: drain durable writes and drop the bus unless a
+                # client is still viewing the child session (subscribers keep it).
+                await buses.remove_if_idle(params.session_id, is_active=lambda: False)
+
+            return ChildSession(io=child_io, aclose=_aclose)
+
+        ctx.run.child_io_factory = _child_io_factory
 
         def _new_agent() -> Agent:
             return create_agent(

@@ -1048,7 +1048,7 @@ async def test_submit_message_after_cancel_starts_new_run(monkeypatch):
         def get_tools(self):
             return []
 
-    async def noop_run_chat(ctx, bus):
+    async def noop_run_chat(ctx, bus, buses):
         return None
 
     monkeypatch.setattr(chat_service, "run_chat", noop_run_chat)
@@ -1347,7 +1347,7 @@ async def test_submit_chat_message_primes_bus_cursor_from_durable_events(tmp_pat
         def get_tools(self):
             return []
 
-    async def hold_run(ctx, bus):
+    async def hold_run(ctx, bus, buses):
         await asyncio.sleep(60)
 
     monkeypatch.setattr(chat_service, "run_chat", hold_run)

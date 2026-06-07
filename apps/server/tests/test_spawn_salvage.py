@@ -11,12 +11,25 @@ from unittest.mock import AsyncMock
 import pytest
 
 import ntrp.database as database
-from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, Result, StopReason, ToolCall, Usage
+from ntrp.agent import (
+    Choice,
+    CompletionResponse,
+    FunctionCall,
+    Message,
+    Result,
+    StopReason,
+    TextDelta,
+    TextEnded,
+    TextStarted,
+    ToolCall,
+    Usage,
+)
 from ntrp.agent.types.tools import ToolMeta
 from ntrp.agent.types.tools import ToolResult as AgentToolResult
 from ntrp.context.models import ProjectContext, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.core import spawner as spawner_module
+from ntrp.core.isolation import IsolationLevel
 from ntrp.core.spawner import (
     _clamp_for_salvage,
     _deterministic_salvage,
@@ -26,8 +39,8 @@ from ntrp.core.spawner import (
 from ntrp.events.sse import BackgroundTaskEvent, TaskFinishedEvent, TaskProgressEvent, TaskStartedEvent, TokenUsageEvent
 from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
-from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
-from tests.helpers import make_executor
+from ntrp.tools.core.context import BackgroundTaskRegistry, ChildSession, IOBridge, RunContext, ToolContext
+from tests.helpers import make_executor, make_text_response
 
 
 class ParentTracker:
@@ -1144,3 +1157,204 @@ def test_clamp_for_salvage_handles_list_typed_content():
     assert isinstance(out["content"], str)
     assert len(out["content"]) < 5000
     assert "[clamped for salvage summary]" in out["content"]
+
+
+def _single_response_llm():
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    return FakeLLM()
+
+
+@pytest.mark.asyncio
+async def test_full_isolation_advertises_child_session_id_without_persistence(monkeypatch):
+    """FULL isolation always advertises child_session_id, decoupled from whether
+    the session row persisted. With no session service at all (as here) the child
+    is never written to disk — but the id is still a valid route, so it must reach
+    the UI or the agent card can't be opened/cleared."""
+    monkeypatch.setattr(spawner_module, "llm_client", _single_response_llm())
+
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="parent"),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx, "research", system_prompt="sys", tools=[], parent_id="call-x", agent_type="research", timeout=1
+    )
+
+    assert result.child_session_id
+    assert result.child_session_id.startswith("parent::")
+    task_events = [e for e in emitted if isinstance(e, (TaskStartedEvent, TaskFinishedEvent))]
+    assert task_events
+    assert all(e.child_session_id == result.child_session_id for e in task_events)
+
+
+@pytest.mark.asyncio
+async def test_shared_isolation_advertises_no_child_session(monkeypatch):
+    """SHARED isolation reuses the parent session — there is no distinct child
+    session to open, so child_session_id must be None everywhere."""
+    monkeypatch.setattr(spawner_module, "llm_client", _single_response_llm())
+
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="parent"),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "inline subtask",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-y",
+        agent_type="research",
+        isolation=IsolationLevel.SHARED,
+        timeout=1,
+    )
+
+    assert result.child_session_id is None
+    task_events = [e for e in emitted if isinstance(e, (TaskStartedEvent, TaskFinishedEvent))]
+    assert task_events
+    assert all(e.child_session_id is None for e in task_events)
+
+
+@pytest.mark.asyncio
+async def test_full_subagent_streams_to_own_child_bus(monkeypatch):
+    """A FULL subagent streams its OWN events to its CHILD session bus at depth 0
+    (un-nested), while the PARENT bus gets only the lifecycle events — so the
+    child session behaves exactly like a normal run instead of being static."""
+
+    class FakeAgent:
+        # No `hooks` attr → the spawner skips hook wiring; this agent just
+        # streams a small text turn so we can watch where its events land.
+        async def stream(self, messages):
+            yield TextStarted(depth=1, parent_id="call-research", message_id="m1")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="m1", content="child answer")
+            yield TextEnded(depth=1, parent_id="call-research", message_id="m1", content="child answer")
+            yield Result(text="child answer", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr(spawner_module, "Agent", lambda **kwargs: FakeAgent())
+
+    parent_emitted: list = []
+    child_emitted: list = []
+    closed: list = []
+
+    async def parent_emit(event):
+        parent_emitted.append(event)
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def factory(params):
+        async def _aclose():
+            closed.append(params.session_id)
+
+        return ChildSession(io=IOBridge(emit=child_emit), aclose=_aclose)
+
+    executor = make_executor()
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=run,
+        io=IOBridge(emit=parent_emit),
+        background_tasks=BackgroundTaskRegistry(session_id="parent"),
+        run_registry=RunRegistry(),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx, "research task", system_prompt="sys", tools=[], parent_id="call-research", agent_type="research", timeout=1
+    )
+
+    assert result.text == "child answer"
+    # Parent stream = lifecycle only (the parent renders the agent as a leaf).
+    assert [e.type.value for e in parent_emitted] == ["task_started", "task_finished"]
+    # Child bus = the agent's own stream, re-based to its session's frame
+    # (depth 0, no parent), and carrying NO lifecycle events.
+    assert child_emitted, "child session bus received no events"
+    assert all(getattr(e, "depth", 0) == 0 for e in child_emitted)
+    assert all(getattr(e, "parent_id", None) is None for e in child_emitted)
+    assert not any(isinstance(e, (TaskStartedEvent, TaskProgressEvent, TaskFinishedEvent)) for e in child_emitted)
+    # The child bus is drained/evicted once the run ends.
+    assert closed == [result.child_session_id]
+
+
+@pytest.mark.asyncio
+async def test_shared_subagent_does_not_use_child_bus(monkeypatch):
+    """SHARED isolation has no distinct child session, so the child_io_factory is
+    never called and the subagent keeps nesting into the parent's io."""
+
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield make_text_response("inline", model=model)
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    factory_calls: list = []
+
+    async def factory(params):
+        factory_calls.append(params.session_id)
+
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(), aclose=_aclose)
+
+    executor = make_executor()
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=run,
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="parent"),
+        run_registry=RunRegistry(),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "inline subtask",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-y",
+        agent_type="research",
+        isolation=IsolationLevel.SHARED,
+        timeout=1,
+    )
+
+    assert result.child_session_id is None
+    assert factory_calls == []

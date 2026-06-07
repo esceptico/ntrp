@@ -48,6 +48,7 @@ class Stores:
         await session_store.mark_interrupted_chat_queued_messages_retryable()
         await session_store.prune_expired_chat_idempotency_keys()
         await session_store.mark_interrupted_background_agent_runs()
+        await session_store.mark_interrupted_agent_sessions()
 
         automations = AutomationStore(conn)
         await automations.init_schema()

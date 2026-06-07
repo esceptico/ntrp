@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from inspect import isawaitable
 from uuid import uuid4
@@ -48,7 +48,7 @@ from ntrp.events.sse import (
 from ntrp.llm.models import get_model
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool
-from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import ChildIOParams, IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
 from ntrp.tools.executor import ToolExecutor
 
@@ -316,7 +316,12 @@ def create_spawn_fn(
         allowed_tool_names = tool_schema_names(filtered_tools)
         child_model = model_override or model
         child_state = _create_session_state(calling_ctx, isolation)
-        if child_state.session_id != calling_ctx.session_id:
+        # FULL isolation mints a distinct child session ({parent}::{hex}); SHARED
+        # reuses the parent's. Advertise child_session_id on this fact alone —
+        # not on whether the row already persisted — so a provisioning hiccup
+        # can't strip the id and leave the UI unable to open or clear the agent.
+        has_child_session = child_state.session_id != calling_ctx.session_id
+        if has_child_session:
             child_state.name = task_summary or agent_slug
             child_state.session_type = "agent"
             child_state.parent_session_id = calling_ctx.session_id
@@ -346,9 +351,29 @@ def create_spawn_fn(
             loaded_tools=set(calling_ctx.run.loaded_tools),
             allowed_tool_names=allowed_tool_names,
             research_scope_id=research_scope_id or calling_ctx.run.research_scope_id,
+            child_io_factory=calling_ctx.run.child_io_factory,
         )
 
-        if background or silent:
+        # A FULL subagent streams to its OWN session bus (built by the chat
+        # service's child_io_factory) so its session behaves exactly like a
+        # normal run — the parent gets only lifecycle events. SHARED subagents
+        # have no distinct session, so they keep nesting into the parent's io.
+        child_io: IOBridge | None = None
+        child_io_close = None
+        if has_child_session and calling_ctx.run.child_io_factory is not None:
+            child_session = await calling_ctx.run.child_io_factory(
+                ChildIOParams(
+                    session_id=child_state.session_id,
+                    run_id=calling_ctx.run.run_id,
+                    pending_approvals=calling_ctx.io.pending_approvals or {},
+                )
+            )
+            child_io = child_session.io
+            child_io_close = child_session.aclose
+            bg_io = child_io
+            if calling_ctx.run_registry is not None:
+                calling_ctx.run_registry.mark_session_active(child_state.session_id, calling_ctx.run.run_id)
+        elif background or silent:
             bg_io = IOBridge()
         else:
             bg_io = calling_ctx.io
@@ -535,6 +560,27 @@ def create_spawn_fn(
                 return ()
             return tuple(e for e in agent_events_to_sse(event) if not isinstance(e, _SUPPRESSED_NESTED_SSE))
 
+        def _noop_child_events(_event) -> tuple[SSEEvent, ...]:
+            # FULL subagent: none of the child's own stream goes to the parent
+            # (the parent renders session-backed agents as leaves) — it streams to
+            # the child bus instead, and the parent gets only lifecycle events.
+            return ()
+
+        def _rebase_for_child(sse: SSEEvent) -> SSEEvent:
+            # The child agent runs at the global recursion depth (task_depth) with
+            # parent_id pointing at the spawn call in the PARENT. Re-base onto the
+            # child session's own frame so its top level is depth 0 with no parent
+            # — the child session then renders un-nested, like any normal run.
+            depth = getattr(sse, "depth", None)
+            if depth is None:
+                return sse
+            sse_parent = getattr(sse, "parent_id", None)
+            return replace(
+                sse,
+                depth=max(0, depth - task_depth),
+                parent_id=None if sse_parent == parent_id else sse_parent,
+            )
+
         stream_failed = False
 
         async def _stream_to(to_events) -> str:
@@ -544,7 +590,11 @@ def create_spawn_fn(
                 async for event in sub_agent.stream(child_messages):
                     if isinstance(event, Result):
                         text = event.text
-                    elif parent_emit:
+                        continue
+                    if child_io is not None:
+                        for sse in agent_events_to_sse(event):
+                            await child_io.emit(_rebase_for_child(sse))
+                    if parent_emit:
                         mapped = to_events(event)
                         if isawaitable(mapped):
                             mapped = await mapped
@@ -576,7 +626,7 @@ def create_spawn_fn(
                 usage=sub_tracker.usage.to_dict(),
                 cost=sub_tracker.cost,
                 child_run_id=child_run_id,
-                child_session_id=child_state.session_id if child_session_persisted else None,
+                child_session_id=child_state.session_id if has_child_session else None,
                 parent_tool_call_id=parent_id,
                 agent_type=resolved_agent_type,
                 wait=should_wait,
@@ -606,7 +656,7 @@ def create_spawn_fn(
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             child_run_id=child_run_id,
-                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            child_session_id=child_state.session_id if has_child_session else None,
                             agent_type=resolved_agent_type,
                             wait=should_wait,
                             name=agent_label,
@@ -648,7 +698,7 @@ def create_spawn_fn(
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             child_run_id=child_run_id,
-                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            child_session_id=child_state.session_id if has_child_session else None,
                             agent_type=resolved_agent_type,
                             wait=should_wait,
                             # Name with the slug initially (distinct per agent) instead of the
@@ -662,7 +712,7 @@ def create_spawn_fn(
                     )
                 if parent_emit is not None and agent_label_task is not None:
                     label_update_task = asyncio.create_task(_emit_agent_label_when_ready())
-                text = await _stream_to(_foreground_child_events)
+                text = await _stream_to(_noop_child_events if child_io is not None else _foreground_child_events)
                 return _current_agent_label(), text
 
             stream_task = asyncio.create_task(_run_foreground())
@@ -685,7 +735,7 @@ def create_spawn_fn(
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             child_run_id=child_run_id,
-                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            child_session_id=child_state.session_id if has_child_session else None,
                             agent_type=resolved_agent_type,
                             wait=should_wait,
                             name=_event_agent_label(),
@@ -723,7 +773,7 @@ def create_spawn_fn(
                                 task_id=lifecycle_task_id,
                                 parent_tool_call_id=parent_id,
                                 child_run_id=child_run_id,
-                                child_session_id=child_state.session_id if child_session_persisted else None,
+                                child_session_id=child_state.session_id if has_child_session else None,
                                 agent_type=resolved_agent_type,
                                 wait=should_wait,
                                 name=_event_agent_label(),
@@ -743,7 +793,7 @@ def create_spawn_fn(
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             child_run_id=child_run_id,
-                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            child_session_id=child_state.session_id if has_child_session else None,
                             agent_type=resolved_agent_type,
                             wait=should_wait,
                             name=_event_agent_label(),
@@ -765,7 +815,7 @@ def create_spawn_fn(
                             task_id=lifecycle_task_id,
                             parent_tool_call_id=parent_id,
                             child_run_id=child_run_id,
-                            child_session_id=child_state.session_id if child_session_persisted else None,
+                            child_session_id=child_state.session_id if has_child_session else None,
                             agent_type=resolved_agent_type,
                             wait=should_wait,
                             name=_event_agent_label(),
@@ -788,6 +838,10 @@ def create_spawn_fn(
             finally:
                 if calling_ctx.run_registry is not None:
                     calling_ctx.run_registry.finish_subagent(calling_ctx.run.run_id, lifecycle_task_id)
+                    if child_io is not None:
+                        calling_ctx.run_registry.clear_session_active(child_state.session_id)
+                if child_io_close is not None:
+                    await child_io_close()
                 if not stream_task.done():
                     stream_task.cancel()
                     with suppress(asyncio.CancelledError):
@@ -842,7 +896,7 @@ def create_spawn_fn(
                     session_id=registry.session_id,
                     run_id=calling_ctx.run.run_id,
                     child_run_id=child_run_id,
-                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    child_session_id=child_state.session_id if has_child_session else None,
                     parent_tool_call_id=parent_id,
                     agent_type=resolved_agent_type,
                     wait=should_wait,
@@ -896,20 +950,25 @@ def create_spawn_fn(
                     label=label,
                     status=status,
                     emit=parent_emit,
-                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    child_session_id=child_state.session_id if has_child_session else None,
                     parent_tool_call_id=parent_id,
                     agent_type=resolved_agent_type,
                     wait=should_wait,
                 )
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)
+            finally:
+                if calling_ctx.run_registry is not None and child_io is not None:
+                    calling_ctx.run_registry.clear_session_active(child_state.session_id)
+                if child_io_close is not None:
+                    await child_io_close()
 
         await registry.record_started(
             task_id=task_id,
             command=label,
             parent_run_id=calling_ctx.run.run_id,
             parent_tool_call_id=parent_id,
-            child_session_id=child_state.session_id if child_session_persisted else None,
+            child_session_id=child_state.session_id if has_child_session else None,
             agent_type=resolved_agent_type,
             wait=should_wait,
         )
@@ -923,7 +982,7 @@ def create_spawn_fn(
                     session_id=registry.session_id,
                     run_id=calling_ctx.run.run_id,
                     child_run_id=child_run_id,
-                    child_session_id=child_state.session_id if child_session_persisted else None,
+                    child_session_id=child_state.session_id if has_child_session else None,
                     parent_tool_call_id=parent_id,
                     agent_type=resolved_agent_type,
                     wait=should_wait,
@@ -941,7 +1000,7 @@ def create_spawn_fn(
                 "It runs independently — I'll surface the results automatically when it finishes."
             ),
             child_run_id=child_run_id,
-            child_session_id=child_state.session_id if child_session_persisted else None,
+            child_session_id=child_state.session_id if has_child_session else None,
             parent_tool_call_id=parent_id,
             agent_type=resolved_agent_type,
             wait=False,

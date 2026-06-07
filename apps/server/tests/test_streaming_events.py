@@ -786,7 +786,7 @@ async def test_run_chat_keeps_backgrounded_run_active_until_drain_finishes(monke
     )
     bus = SessionBus(session_id="sess-bg")
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     assert registry.get_active_run("sess-bg") is run
     assert registry.get_accepting_run("sess-bg") is None
@@ -916,7 +916,7 @@ async def test_run_chat_emits_cancelled_when_task_cancelled_before_agent_loop():
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     events = []
     while not queue.empty():
@@ -981,7 +981,7 @@ async def test_run_chat_persists_budget_stop_reason(monkeypatch):
         run_registry=registry,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert service.statuses[-1][1] == RunStatus.COMPLETED.value
     assert service.statuses[-1][2] == StopReason.MAX_COST.value
@@ -1043,7 +1043,7 @@ async def test_run_chat_records_durable_message_count_for_trimmed_loop(monkeypat
         run_registry=registry,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert service.saved_metadata["last_message_count"] == 5
 
@@ -1108,7 +1108,7 @@ async def test_run_chat_final_save_failure_emits_error_not_finished(monkeypatch)
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     event_types = [record.event.type.value for record in bus._recent]
     run_error = next(record.event for record in bus._recent if record.event.type.value == "RUN_ERROR")
@@ -1185,7 +1185,7 @@ async def test_run_chat_completed_outbox_failure_does_not_reclassify_run(monkeyp
         enqueue_run_completed=failing_enqueue,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     event_types = [record.event.type.value for record in bus._recent]
     thinking = next(record.event for record in bus._recent if record.event.type.value == "thinking")
@@ -1264,6 +1264,7 @@ async def test_run_chat_completed_bus_failure_does_not_reclassify_run(monkeypatc
             run_registry=registry,
         ),
         FailingFinishedBus(session_id="sess-1"),
+        BusRegistry(),
     )
 
     assert service.statuses[-1]["status"] == RunStatus.COMPLETED.value
@@ -1335,7 +1336,7 @@ async def test_run_chat_emits_live_token_usage_after_model_response(monkeypatch)
     )
     bus = SessionBus(session_id="sess-1")
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     usage_events = [record.event for record in bus._recent if record.event.type.value == "token_usage"]
     assert len(usage_events) == 1
@@ -1411,7 +1412,7 @@ async def test_active_goal_dispatches_hidden_continuation_after_user_turn(monkey
         dispatch_session_message=dispatch,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert len(dispatched) == 1
     assert dispatched[0][0] == "sess-1"
@@ -1494,7 +1495,7 @@ async def test_goal_meta_run_dispatches_followup_even_without_tool_activity(monk
         dispatch_session_message=dispatch,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert len(dispatched) == 1
     assert dispatched[0][0][0] == "sess-1"
@@ -1541,7 +1542,7 @@ async def test_run_chat_does_not_overwrite_error_status(monkeypatch):
         run_registry=registry,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert service.statuses[-1] == (RunStatus.ERROR.value, "boom")
     assert all(status != RunStatus.COMPLETED.value for status, _ in service.statuses)
@@ -1618,7 +1619,7 @@ async def test_run_chat_surfaces_context_length_provider_error(monkeypatch):
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     run_error = next(record.event for record in bus._recent if record.event.type.value == "RUN_ERROR")
     assert run_error.code == "context_length_exceeded"
@@ -1700,7 +1701,7 @@ async def test_run_chat_final_save_failure_preserves_provider_error(monkeypatch)
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     run_errors = [record.event for record in bus._recent if record.event.type.value == "RUN_ERROR"]
     assert [event.code for event in run_errors] == ["context_length_exceeded"]
@@ -1762,7 +1763,7 @@ async def test_run_chat_provider_error_status_write_failure_is_not_silently_comp
     )
 
     with pytest.raises(RuntimeError, match="Failed to persist terminal status"):
-        await run_chat(ctx, bus)
+        await run_chat(ctx, bus, BusRegistry())
 
     run_errors = [record.event for record in bus._recent if record.event.type.value == "RUN_ERROR"]
     assert [event.code for event in run_errors] == ["context_length_exceeded"]
@@ -1887,7 +1888,7 @@ async def test_run_chat_compacts_and_retries_context_length_provider_error(monke
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     assert attempts == 2
     assert compactor.calls
@@ -1984,7 +1985,7 @@ async def test_context_retry_compacts_loop_prefix_into_persisted_summary(monkeyp
         run_registry=registry,
     )
 
-    await run_chat(ctx, SessionBus(session_id="sess-1"))
+    await run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry())
 
     assert compactor.seen[0] == [
         {"role": "system", "content": "system"},
@@ -2038,7 +2039,7 @@ async def test_cancelled_run_finally_drops_pending_without_persisting():
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     assert session_service.saved == []
     assert run.pending_injection_count == 0
@@ -2079,7 +2080,7 @@ async def test_cancelled_run_finally_does_not_clear_newer_replay_events():
         run_registry=registry,
     )
 
-    await run_chat(ctx, bus)
+    await run_chat(ctx, bus, BusRegistry())
 
     assert [record.event.type.value for record in bus._recent] == [
         "thinking",
@@ -2127,7 +2128,7 @@ async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monke
         run_registry=registry,
     )
 
-    task = asyncio.create_task(run_chat(ctx, SessionBus(session_id="sess-1")))
+    task = asyncio.create_task(run_chat(ctx, SessionBus(session_id="sess-1"), BusRegistry()))
     await asyncio.wait_for(stream_started.wait(), timeout=1)
     run.cancelled = True
 

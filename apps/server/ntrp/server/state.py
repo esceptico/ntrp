@@ -244,6 +244,17 @@ class RunRegistry:
         self._active_by_session[session_id] = run_id
         return run
 
+    def mark_session_active(self, session_id: str, run_id: str) -> None:
+        """Point a child (subagent) session id at its owning run so the event
+        stream treats it as active — without this, opening then leaving a running
+        child session mid-run lets remove_if_idle evict its SSE bus (it has no
+        RunState of its own), resetting the bus seq. Child ids are unique
+        ({parent}::{hex}), so this never clobbers a real top-level run."""
+        self._active_by_session[session_id] = run_id
+
+    def clear_session_active(self, session_id: str) -> None:
+        self._active_by_session.pop(session_id, None)
+
     @property
     def active_run_count(self) -> int:
         return len(self.list_active_runs())
