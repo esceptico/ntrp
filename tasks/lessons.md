@@ -1,5 +1,13 @@
 # Lessons
 
+## Subagent = first-class session; don't band-aid with polling (Jun 2026)
+
+I "fixed" no-live-updates-in-subagent-sessions with a 2s poll-refresh of the viewed child session (`useViewedAgentSessionRefresh` + `appendLatestForSession`). User: "not correct — subagent must look and work the same as default agent, no differences."
+
+Root: subagent events emit to the PARENT bus (foreground shares `calling_ctx.io`) / a throwaway `IOBridge` (background); the child session's own `SessionBus` is never fed, so `/chat/events/{childSessionId}` is silent → the viewed child is static. A poll is a special-case band-aid that makes subagents second-class.
+
+Rule: when a subagent/child concept already maps onto an existing first-class primitive (a session), stream it through the SAME machinery (its own bus + the normal `useEvents` path), not a parallel poll. Ties to [[feedback_no_special_casing_fit_general_primitives]]. Correct fix: route the child agent's events to its OWN session bus at **depth 0** (the desktop hard-gates `!event.depth`, so depth-1 events render blank/orphaned); the parent gets ONLY lifecycle (it treats session-backed agents as trace leaves). Non-obvious trap: bus idle-eviction is keyed on `get_active_run(session_id)` — a child session has no RunState, so navigating away mid-run silently evicts + recreates its bus with reset seq (replay drift); needs a lightweight active-session marker.
+
 ## React StrictMode: `useRef(true)` + cleanup-only-false "mounted" gate is broken in dev (Jun 2026)
 
 `const mounted = useRef(true); useEffect(() => () => { mounted.current = false; }, [])` is unsafe under `<StrictMode>` (enabled in src/main.tsx). Dev runs mount effects setup→cleanup→setup; the cleanup flips it false and the empty setup never restores true, so the ref is stuck `false` for the component's whole life in dev — every `if (mounted.current)` gate becomes a permanent no-op (stuck spinners, errors never shown, busy never clears). Bit twice: `LensEvidenceSearch`'s `mounted` and the shared `useMountedRef` hook (feeding `useMutationState`).
