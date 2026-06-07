@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from ntrp.orchestra.dynamic import run_script
 from ntrp.orchestra.engine import Orchestra
 from ntrp.orchestra.schema import coerce, extract_json
 
@@ -168,3 +169,37 @@ async def test_workflow_agents_exclude_spawn_tools():
     await o.agent("do thing")
     assert captured["exclude"] is not None
     assert {"workflow", "research", "background"} <= set(captured["exclude"])
+
+
+def test_coerce_dict_schema_is_lenient():
+    # A dict schema returns the parsed JSON (no pydantic validation).
+    assert coerce('here: {"facts": ["a", "b"]} done', {"facts": ["str"]}) == {"facts": ["a", "b"]}
+
+
+async def test_parallel_accepts_bare_coroutines():
+    # parallel([agent(a), agent(b)]) — no lambdas needed.
+    ctx, _ = _ctx_with(["a", "b"])
+    o = Orchestra.for_ctx(ctx)
+    results = await o.parallel([o.agent("x"), o.agent("y")])
+    assert results == ["a", "b"]
+
+
+async def test_run_script_fan_out_and_return():
+    ctx, _ = _ctx_with(["hello", "world"])
+    o = Orchestra.for_ctx(ctx)
+    result = await run_script(o, "parts = await parallel([agent('a'), agent('b')])\nreturn parts", {})
+    assert result == ["hello", "world"]
+
+
+async def test_run_script_uses_args_and_dict_schema():
+    ctx, _ = _ctx_with(['{"facts": ["x"]}'])
+    o = Orchestra.for_ctx(ctx)
+    result = await run_script(o, "return await agent(args['q'], schema={'facts': ['str']})", {"q": "what?"})
+    assert result == {"facts": ["x"]}
+
+
+async def test_run_script_syntax_error_propagates():
+    ctx, _ = _ctx_with(["x"])
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(SyntaxError):
+        await run_script(o, "this is not valid python !!!", {})

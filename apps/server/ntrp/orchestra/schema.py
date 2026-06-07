@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,13 +24,26 @@ def extract_json(text: str) -> str:
     return stripped
 
 
-def coerce(text: str, schema: type[BaseModel]) -> BaseModel:
-    return schema.model_validate_json(extract_json(text))
+def _is_model(schema: Any) -> bool:
+    return isinstance(schema, type) and issubclass(schema, BaseModel)
 
 
-def schema_instruction(schema: type[BaseModel]) -> str:
+def coerce(text: str, schema: Any) -> Any:
+    """Parse the agent's text into the requested shape.
+
+    `schema` is either a pydantic model (validated) or a plain dict describing the
+    desired JSON shape — the dict form is lenient (parsed, not validated) so that
+    dynamic workflow scripts stay free of pydantic boilerplate."""
+    raw = extract_json(text)
+    if _is_model(schema):
+        return schema.model_validate_json(raw)
+    return json.loads(raw)
+
+
+def schema_instruction(schema: Any) -> str:
+    shape = schema.model_json_schema() if _is_model(schema) else schema
     return (
-        "Return ONLY a JSON object that matches this JSON schema, with no prose, "
-        "no markdown fences, nothing else:\n"
-        f"{json.dumps(schema.model_json_schema())}"
+        "Return ONLY JSON matching this shape, with no prose, no markdown fences, "
+        "nothing else:\n"
+        f"{json.dumps(shape)}"
     )

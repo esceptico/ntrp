@@ -3,8 +3,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel
-
 from ntrp.constants import AGENT_MAX_CONCURRENT
 from ntrp.core.isolation import IsolationLevel
 from ntrp.logging import get_logger
@@ -15,6 +13,11 @@ _logger = get_logger(__name__)
 # Global across all Orchestra instances so the cap holds under nested/concurrent
 # workflows — a per-instance semaphore would let depth D run up to N*D agents.
 _GLOBAL_SEM = asyncio.Semaphore(AGENT_MAX_CONCURRENT)
+
+# Runaway guard for dynamic/looping scripts: one workflow can't spawn more than
+# this many agents. (A pure-Python loop with no spawns is still bounded by the
+# run's wall-time/cost budget and the tool's caller.)
+_MAX_WORKFLOW_SPAWNS = 200
 
 # Workflow workers are leaves: deny them the spawn tools so a workflow can't
 # re-enter itself or fan out uncontrolled subagents (least privilege + bounds
@@ -29,12 +32,16 @@ WORKFLOW_AGENT_PROMPT = (
 )
 
 Thunk = Callable[[], Awaitable[Any]]
+# A parallel unit may be a bare awaitable (e.g. agent("x")) or a thunk that
+# returns one (() => agent("x")). Accepting both keeps dynamic scripts simple —
+# `parallel([agent(a), agent(b)])` reads naturally, no lambdas required.
+Unit = Awaitable[Any] | Thunk
 Stage = Callable[[Any, Any, int], Awaitable[Any]]
 
 
-async def _safe(thunk: Thunk) -> Any:
+async def _safe(unit: Unit) -> Any:
     try:
-        return await thunk()
+        return await (unit() if callable(unit) else unit)
     except Exception as exc:
         _logger.warning("workflow unit failed: %s", exc)
         return None
@@ -74,12 +81,14 @@ class Orchestra:
         self,
         task: str,
         *,
-        schema: type[BaseModel] | None = None,
+        schema: Any = None,
         tools: list[dict] | None = None,
         model: str | None = None,
         system_prompt: str | None = None,
         phase: str | None = None,
     ) -> Any:
+        if self.spawn_count >= _MAX_WORKFLOW_SPAWNS:
+            raise RuntimeError(f"workflow exceeded {_MAX_WORKFLOW_SPAWNS} agent spawns (runaway guard)")
         self.spawn_count += 1
         active_phase = phase or self._phase
         prompt = task if schema is None else f"{task}\n\n{schema_instruction(schema)}"
@@ -100,11 +109,11 @@ class Orchestra:
             try:
                 return coerce(repaired, schema)
             except Exception as exc:
-                raise ValueError(f"workflow agent could not produce valid {schema.__name__}") from exc
+                raise ValueError("workflow agent could not produce JSON matching the requested schema") from exc
 
-    async def parallel(self, thunks: list[Thunk]) -> list[Any]:
+    async def parallel(self, units: list[Unit]) -> list[Any]:
         async with asyncio.TaskGroup() as tg:
-            tasks = [tg.create_task(_safe(thunk)) for thunk in thunks]
+            tasks = [tg.create_task(_safe(unit)) for unit in units]
         return [task.result() for task in tasks]
 
     async def pipeline(self, items: list[Any], *stages: Stage) -> list[Any]:

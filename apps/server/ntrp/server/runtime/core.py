@@ -202,7 +202,6 @@ class Runtime:
         self.stores = await Stores.connect(self.config)
         await self.knowledge.connect(self.stores)
         self._init_skills()
-        self._init_workflows()
         await self._init_notifiers()
         self._init_automation()
         await self._init_mcp()
@@ -219,11 +218,6 @@ class Runtime:
         self.skill_registry = SkillRegistry()
         self.skill_registry.load(get_skills_dirs())
         self.skill_service = SkillService(self.skill_registry)
-
-    def _init_workflows(self) -> None:
-        from ntrp.orchestra.registry import get_workflows_dirs, registry
-
-        registry.load(get_workflows_dirs())
 
     async def _init_notifiers(self) -> None:
         self.notifier_service = NotifierService(
