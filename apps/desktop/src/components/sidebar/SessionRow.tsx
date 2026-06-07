@@ -106,7 +106,7 @@ export function SessionRow({
       data-active={active ? "true" : undefined}
       data-depth={depth || undefined}
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
-      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-1.5 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
+      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
     >
       <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} isAgent={isAgent} />
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">

@@ -75,8 +75,8 @@ export function SessionList() {
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      <div className="px-2 pt-2 pb-1">
-        <div className="flex items-center gap-1.5 pl-[8px] pr-[6px] h-[24px]">
+      <div className="px-2.5 pt-3 pb-1.5">
+        <div className="flex items-center gap-2 pl-[8px] pr-[6px] h-[26px]">
           <div className="min-w-0 flex-1 flex items-center text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
             <span className="truncate">Projects</span>
           </div>
@@ -101,7 +101,7 @@ export function SessionList() {
           </div>
         </div>
         {searchActive && (
-          <div className="pt-1">
+          <div className="pt-1.5">
             <SessionSearch
               value={query}
               onChange={setQuery}
@@ -112,7 +112,7 @@ export function SessionList() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
         <ScrollFadeTop />
         {sessions.length === 0 && projects.length === 0 ? (
           <motion.div
@@ -134,19 +134,19 @@ export function SessionList() {
         ) : grouped.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-muted">No matches.</div>
         ) : (
-          grouped.map((group) => {
+          grouped.map((group, groupIndex) => {
             const groupKey = group.project?.project_id ?? "inbox";
             const label = group.project?.name ?? "Inbox";
             const isCollapsed = collapsedGroups.has(groupKey);
             return (
-              <div key={groupKey}>
+              <div key={groupKey} className={clsx(groupIndex > 0 && "mt-4")}>
                 <div className="group/prow flex items-center gap-1 pr-[18px]">
                   <button
                     type="button"
                     onClick={() => toggleGroup(groupKey)}
                     aria-expanded={!isCollapsed}
                     className={clsx(
-                      "flex-1 flex items-center gap-1 pl-[16px] pt-1 pb-0.5 text-2xs font-semibold uppercase tracking-[0.08em] text-muted hover:text-ink transition-colors cursor-pointer select-none",
+                      "flex-1 flex items-center gap-1.5 pl-[18px] pt-1.5 pb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted hover:text-ink transition-colors cursor-pointer select-none",
                     )}
                   >
                     <ChevronDown
@@ -184,7 +184,7 @@ export function SessionList() {
                       transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
                       style={{ display: "grid" }}
                     >
-                      <div className="px-2 flex flex-col gap-0 overflow-hidden min-h-0">
+                      <div className="px-2.5 flex flex-col gap-0 overflow-hidden min-h-0">
                         {group.sessions.map((session) => (
                           <SessionRow
                             key={session.session_id}

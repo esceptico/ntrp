@@ -28,13 +28,13 @@
        lg  — h1, modal titles
        xl, 2xl — display headings */
   --text-2xs: 11px;
-  --text-xs: 12px;
-  --text-sm: 12.5px;
-  --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 15.5px;
-  --text-xl: 17px;
-  --text-2xl: 18.5px;
+  --text-xs: 12.5px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16.5px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
 
   /* Light-mode neutrals. The chat scroll bg (`--color-bg`) is a
      subtle warm cream; content surfaces stay brighter so message
