@@ -1,16 +1,16 @@
 import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
+import { ArrowUpRight, Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
-import { activityItemStatus, friendlyAgentLabel, isAgent } from "../../lib/agent";
+import { activityItemStatus, isAgent } from "../../lib/agent";
 import { cancelSubagent, switchSession } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
-import { AgentRunCard } from "../agents/AgentRunCard";
-import { agentRunFromActivityItem } from "../../lib/agentRun";
+import { StatusDot } from "../StatusDot";
+import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
 
 export type { ActivityItem };
 
@@ -142,41 +142,36 @@ export function ActivityTail({
     return (
       <div className="relative overflow-hidden pl-3 mt-0.5">
         <AnimatePresence mode="popLayout" initial={false}>
-          {visible.map((item) => {
-            const card = isAgentCardItem(item);
-            return (
-              <motion.div
-                key={item.id}
-                data-activity-motion-row="true"
-                data-motion-suppressed={suppressMotion ? "true" : "false"}
-                layout={suppressMotion ? false : "position"}
-                initial={suppressMotion ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-                transition={
-                  suppressMotion
-                    ? { duration: 0 }
-                    : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
-                }
-                style={card ? undefined : { height: `${ROW_HEIGHT_EM}em` }}
-                className={card ? "min-w-0 my-1" : "flex items-baseline min-w-0"}
-              >
-                <ItemButton item={item} onOpen={setViewingTool} />
-              </motion.div>
-            );
-          })}
+          {visible.map((item) => (
+            <motion.div
+              key={item.id}
+              data-activity-motion-row="true"
+              data-motion-suppressed={suppressMotion ? "true" : "false"}
+              layout={suppressMotion ? false : "position"}
+              initial={suppressMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+              transition={
+                suppressMotion
+                  ? { duration: 0 }
+                  : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
+              }
+              style={{ height: `${ROW_HEIGHT_EM}em` }}
+              className="flex items-center min-w-0"
+            >
+              <ItemButton item={item} onOpen={setViewingTool} />
+            </motion.div>
+          ))}
         </AnimatePresence>
       </div>
     );
   }
 
   // Static (post-run) mode: the user-driven collapse toggle is a one-shot
-  // event, not a per-frame stream, so animating height here is fine. Agent
-  // cards are taller than a tool row, so an exact em count would clip them —
-  // measure to `auto` when any card is present, keep the precise height (and
-  // its tuned spring) for the common all-tool-rows case.
-  const hasCard = visible.some(isAgentCardItem);
-  const targetHeight = hasCard ? "auto" : `${visible.length * ROW_HEIGHT_EM}em`;
+  // event, not a per-frame stream, so animating height here is fine. Every
+  // row (tool or agent) is a uniform single line, so an exact em count is
+  // both correct and cheaper than measuring to `auto`.
+  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
   return (
     <motion.div
       initial={false}
@@ -188,18 +183,15 @@ export function ActivityTail({
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
-      {visible.map((item) => {
-        const card = isAgentCardItem(item);
-        return (
-          <div
-            key={item.id}
-            style={card ? undefined : { height: `${ROW_HEIGHT_EM}em` }}
-            className={card ? "min-w-0 my-1" : "flex items-baseline min-w-0"}
-          >
-            <ItemButton item={item} onOpen={setViewingTool} />
-          </div>
-        );
-      })}
+      {visible.map((item) => (
+        <div
+          key={item.id}
+          style={{ height: `${ROW_HEIGHT_EM}em` }}
+          className="flex items-center min-w-0"
+        >
+          <ItemButton item={item} onOpen={setViewingTool} />
+        </div>
+      ))}
     </motion.div>
   );
 }
@@ -310,10 +302,6 @@ function isSessionBackedAgent(item: ActivityItem): boolean {
   return isAgent(item) && !!item.childAgent?.childSessionId;
 }
 
-function isAgentCardItem(item: ActivityItem): boolean {
-  return isSessionBackedAgent(item);
-}
-
 function ItemButton({
   item,
   onOpen,
@@ -322,20 +310,8 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
-  if (isAgent(item) && isSessionBackedAgent(item)) {
-    const childSessionId = item.childAgent?.childSessionId;
-    const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
-    return (
-      <AgentRunCard
-        run={agentRunFromActivityItem(item)}
-        onOpen={childSessionId ? () => void switchSession(childSessionId) : undefined}
-        onStop={canStop ? () => { if (item.runId) void cancelSubagent(item.runId, item.id); } : undefined}
-        stopping={item.cancelRequested}
-      />
-    );
-  }
   if (isAgent(item)) {
-    return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
+    return <AgentRow item={item} depth={depth} onOpen={onOpen} />;
   }
   const running = activityItemStatus(item) === "ongoing";
   const errored = !!item.error;
@@ -368,7 +344,13 @@ function ItemButton({
   );
 }
 
-function AgentButton({
+// One row treatment for every agent in the trace — session-backed sub-agents
+// (clickable → open the child session) and inline tool-group agents alike. It's
+// a visual peer of the tool rows: same height + rhythm, a Bot glyph (accent
+// while running, muted when settled) carrying a stop-on-hover, the name, a faint
+// inline progress/result line, and status via the small StatusDot — no card
+// chrome, so the stack reads as one coherent list.
+function AgentRow({
   item,
   depth,
   onOpen,
@@ -377,26 +359,26 @@ function AgentButton({
   depth: number;
   onOpen: (item: ActivityItem) => void;
 }) {
-  const label = item.displayName ?? friendlyAgentLabel(item.kind);
-  const traceStatus = activityItemStatus(item);
-  const running = traceStatus === "ongoing";
-  const status = item.taskStatus ?? (traceStatus === "ongoing" ? "running" : traceStatus);
-  const statusText = item.progress ?? status;
+  const run = agentRunFromActivityItem(item);
+  const running = isActiveAgentStatus(run.status);
+  const childSessionId = run.childSessionId;
   const canStop = item.taskStatus === "running" && !!item.runId && !item.cancelRequested;
-  const childSessionId = item.childAgent?.childSessionId;
+  const detail = running ? run.progress : run.resultPreview;
+  const terminalBad = run.status === "failed" || run.status === "cancelled";
   return (
     <div
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
-      className="flex items-baseline gap-2 min-w-0 group/agent"
+      className="flex items-center gap-2 min-w-0 group/agent"
     >
       {depth > 0 && (
-        <span className="text-whisper select-none self-center" aria-hidden="true">↳</span>
+        <span className="text-whisper select-none" aria-hidden="true">↳</span>
       )}
-      <span className="relative grid place-items-center w-[18px] h-[18px] shrink-0 self-center">
+      <span className="relative grid place-items-center w-[18px] h-[18px] shrink-0">
         <span
           aria-hidden
           className={clsx(
-            "grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong transition-opacity",
+            "grid place-items-center w-[18px] h-[18px] rounded-md transition-opacity",
+            running ? "bg-accent-soft text-accent-strong" : "bg-surface-soft text-faint",
             canStop && "group-hover/agent:opacity-0",
           )}
         >
@@ -434,26 +416,35 @@ function AgentButton({
         }}
         title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
         data-child-session-id={childSessionId}
-        className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
+        className="flex items-center gap-2 min-w-0 flex-1 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
       >
         <span
           className={clsx(
-            "font-medium shrink-0 group-hover/agent:text-ink transition-colors",
-            running ? "text-ink-soft" : "text-faint",
+            "shrink truncate font-medium max-w-[18rem] group-hover/agent:text-ink transition-colors",
+            running ? "text-ink-soft" : terminalBad ? "text-bad" : "text-faint",
           )}
         >
-          {label}
+          {run.name}
         </span>
-        <span
-          className={clsx(
-            "text-faint shrink-0 max-w-[9rem] truncate",
-            (status === "failed" || status === "cancelled") && "text-bad",
-          )}
-        >
-          {statusText}
-        </span>
+        {detail && (
+          <span className={clsx("min-w-0 flex-1 truncate text-faint", running && "italic")}>
+            {detail}
+          </span>
+        )}
       </button>
-      {item.usage && traceStatus === "executed" && (
+      <StatusDot status={run.status} pulse={running} />
+      {run.elapsedLabel && (
+        <span className="shrink-0 text-2xs tabular-nums text-faint">{run.elapsedLabel}</span>
+      )}
+      {childSessionId && (
+        <ArrowUpRight
+          size={ICON.XS}
+          strokeWidth={2}
+          className="shrink-0 text-faint opacity-0 transition-opacity group-hover/agent:opacity-100"
+          aria-hidden
+        />
+      )}
+      {item.usage && activityItemStatus(item) === "executed" && !detail && (
         <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
       )}
     </div>

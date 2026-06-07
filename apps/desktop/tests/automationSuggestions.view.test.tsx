@@ -68,10 +68,11 @@ test("clicking a card seeds the editor with the mapped payload", async () => {
       root.render(<SuggestionCard suggestion={suggestion()} onPick={(s) => (picked = s)} />);
     });
 
-    const card = rootEl.querySelector('[data-suggestion="s1"]');
-    if (!card) throw new Error("missing suggestion card");
+    // The card's open action is the stretched accessible overlay <button>.
+    const trigger = rootEl.querySelector('[data-suggestion="s1"] button[aria-label^="Use suggestion"]');
+    if (!trigger) throw new Error("missing suggestion open button");
     await act(async () => {
-      card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     });
 
     expect(picked).not.toBeNull();

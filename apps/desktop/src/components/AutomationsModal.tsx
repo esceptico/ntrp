@@ -11,7 +11,6 @@ import {
   GitPullRequest,
   History,
   Inbox,
-  Loader2,
   Mail,
   Play,
   Plus,
@@ -39,18 +38,16 @@ import {
   type Automation,
   type AutomationRun,
   type AutomationSuggestion,
-  type AutomationTrigger,
 } from "../api";
 import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
+import { agentRunFromAutomation, formatRelative, formatTrigger } from "../lib/agentRun";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
+import { AgentRunContent, type AgentRunAction } from "./agents/AgentRunRow";
 import { Badge } from "./Badge";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
-import { IconButton } from "./IconButton";
-import { BlurSwap } from "./BlurSwap";
-import { StatusDot } from "./StatusDot";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
@@ -370,17 +367,16 @@ export function SuggestionCard({
       exit={{ opacity: 0, scale: 0.97 }}
       transition={SPRING_LAYOUT}
       data-suggestion={suggestion.id}
-      role="button"
-      tabIndex={0}
-      onClick={() => onPick(suggestion)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onPick(suggestion);
-        }
-      }}
-      className="group/suggestion surface-panel surface-radius-sm relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="group/suggestion surface-panel surface-radius-sm relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
+      {/* Stretched accessible click target (see AutomationCard) — a real button
+          over the card, below the dismiss control which is positioned above it. */}
+      <button
+        type="button"
+        aria-label={`Use suggestion: ${suggestion.name}`}
+        onClick={() => onPick(suggestion)}
+        className="absolute inset-0 cursor-pointer rounded-[inherit] focus:outline-none"
+      />
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1.5 pr-6">
         <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
@@ -401,7 +397,7 @@ export function SuggestionCard({
           e.stopPropagation();
           onDismiss(suggestion.id);
         }}
-        className="absolute top-2.5 right-2.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+        className="absolute top-2.5 right-2.5 z-[1] grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
       >
         <X size={ICON.XS} strokeWidth={2} />
       </button>
@@ -410,17 +406,6 @@ export function SuggestionCard({
 }
 
 // ─── Card: existing automation ──────────────────────────────────────
-
-/** Tailwind bg for a run-status sparkline dot. */
-function sparkTone(status: string): string {
-  return status === "completed"
-    ? "bg-ok"
-    : status === "failed"
-      ? "bg-bad"
-      : status === "running"
-        ? "bg-accent"
-        : "bg-muted";
-}
 
 function _runDuration(start: string, end: string): string {
   const ms = Date.parse(end) - Date.parse(start);
@@ -446,6 +431,42 @@ function formatRunsMarkdown(runs: AutomationRun[]): string {
       return head + quoted;
     })
     .join("\n\n");
+}
+
+/** The enable/pause toggle that occupies the leading glyph footprint — the
+ *  ONE always-visible control on an automation card (the agent Bot glyph's
+ *  counterpart). Forced muted, never green, so it reads as a control, not a
+ *  status; paused-ness is conveyed by the hollow ring + the "paused" meta. */
+function AutomationToggle({
+  enabled,
+  busy,
+  onToggle,
+}: {
+  enabled: boolean;
+  busy: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <span
+      className="relative z-[1] grid place-items-center shrink-0 self-center"
+      style={{ width: ICON.MD, height: ICON.MD }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={busy}
+        title={enabled ? "Pause" : "Enable"}
+        aria-label={enabled ? "Pause automation" : "Enable automation"}
+        className={clsx(
+          "grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
+          enabled
+            ? "bg-ink-soft hover:bg-ink"
+            : "bg-transparent border border-line-strong hover:border-muted",
+          busy && "opacity-50",
+        )}
+      />
+    </span>
+  );
 }
 
 function AutomationCard({
@@ -479,10 +500,7 @@ function AutomationCard({
   };
 
   const running = automation.running_since != null;
-  const trigger = automation.triggers.map(formatTrigger).join(" · ") || "—";
   const hasResult = !!automation.last_result?.trim();
-  const recentStatuses = automation.recent_statuses ?? [];
-  const lastStatus = automation.last_status ?? null;
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
   const showRunHistory = async () => {
     const runs = await listAutomationRunsApi(config, automation.task_id, 30);
@@ -497,15 +515,86 @@ function AutomationCard({
   const channel = sessions.find((sx) => sx.origin_automation_id === automation.task_id) ?? null;
   const trustLabel = automationTrustLabel(automation);
   const editable = !automation.builtin;
-  const open = () => {
-    if (editable) onEdit();
-  };
-  // Stop a click that originated from a nested action button from also
-  // triggering the card-level "open editor" navigation.
-  const stop = (handler: () => void) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    handler();
-  };
+
+  // The card's primary navigation: editable → open the editor; otherwise an
+  // automation with a bound channel → open that channel; otherwise inert.
+  const openChannel = channel
+    ? () => {
+        void switchSession(channel.session_id);
+        closeAutomations();
+      }
+    : undefined;
+  const open = editable ? onEdit : openChannel;
+
+  // One agent view-model, the same body. Automation runs aren't openable
+  // sessions, so the view's childSessionId is intentionally unset — the card
+  // wires its own open handler above.
+  const run = agentRunFromAutomation(automation);
+
+  // Per-instance affordances — NOT the hardcoded agent set. Builtins lose
+  // delete + click-to-edit; channel automations gain "Open channel".
+  const actions: AgentRunAction[] = [
+    {
+      icon: Play,
+      label: "Run now",
+      onClick: wrap("run", () => runAutomation(automation.task_id)),
+      busy: busy === "run",
+      disabled: !automation.enabled || running,
+    },
+    { icon: History, label: "Run history", onClick: () => showRunHistory() },
+    ...(hasResult
+      ? [
+          {
+            icon: FileText,
+            label: "View last run",
+            onClick: () =>
+              setMarkdownView({
+                title: automation.name || "Automation",
+                subtitle: automation.last_run_at
+                  ? `last run ${formatRelative(automation.last_run_at)}`
+                  : undefined,
+                content: automation.last_result ?? "",
+              }),
+          } satisfies AgentRunAction,
+        ]
+      : []),
+    ...(channel
+      ? [{ icon: Radio, label: "Open channel", onClick: openChannel! } satisfies AgentRunAction]
+      : []),
+    ...(!automation.builtin
+      ? [
+          {
+            icon: Trash2,
+            label: "Delete",
+            onClick: remove,
+            busy: busy === "delete",
+            danger: true,
+          } satisfies AgentRunAction,
+        ]
+      : []),
+  ];
+
+  const badges =
+    running || trustLabel || isChannelAutomation(automation) ? (
+      <>
+        {running && (
+          <Badge tone="accent" leading={<Circle size={5} strokeWidth={3} fill="currentColor" />}>
+            running
+          </Badge>
+        )}
+        {isChannelAutomation(automation) && (
+          <Badge tone="neutral" leading={<Radio size={9} strokeWidth={2.2} />}>
+            channel
+          </Badge>
+        )}
+        {trustLabel && <Badge tone={automationTrustTone(automation)}>{trustLabel}</Badge>}
+      </>
+    ) : null;
+
+  const interactive = !!open;
+  const openLabel = editable
+    ? `Edit ${automation.name || "automation"}`
+    : `Open ${automation.name || "automation"} channel`;
 
   return (
     <motion.article
@@ -514,184 +603,40 @@ function AutomationCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={SPRING_LAYOUT}
-      role={editable ? "button" : undefined}
-      tabIndex={editable ? 0 : -1}
-      onClick={editable ? open : undefined}
-      onKeyDown={(e) => {
-        if (!editable) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      }}
-      className={clsx(
-        "group/auto-card surface-panel surface-radius-sm relative grid gap-2 p-3.5 overflow-hidden focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
-        editable && "cursor-pointer",
-      )}
+      className="group/run surface-panel surface-radius-sm relative grid content-start gap-1.5 p-3.5 overflow-hidden focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
-      <div className="grid grid-cols-[10px_minmax(0,1fr)] items-start gap-2.5 min-w-0">
+      {/* Stretched, accessible click target: a real <button> over the whole card
+          (keyboard + screen-reader friendly), painted BELOW the toggle and the
+          hover-actions — which are positioned above it (z-[1] / absolute) so each
+          stays independently clickable. Replaces the old article[role="button"]
+          that illegally nested interactive buttons inside a button. */}
+      {interactive && (
         <button
           type="button"
-          onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
-          disabled={busy === "toggle"}
-          title={automation.enabled ? "Pause" : "Enable"}
-          aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
-          className={clsx(
-            "mt-[5px] grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
-            automation.enabled ? "bg-ok" : "bg-transparent border border-line-strong hover:border-muted",
-            busy === "toggle" && "opacity-50",
-          )}
+          aria-label={openLabel}
+          onClick={open}
+          className="absolute inset-0 cursor-pointer rounded-[inherit] focus:outline-none"
         />
-        <div className="min-w-0 grid gap-1.5">
-          <h4 className="m-0 min-w-0 max-w-full text-base font-medium tracking-[-0.005em] text-ink truncate">
-            {automation.name || "Untitled"}
-          </h4>
-          {(running || trustLabel || isChannelAutomation(automation)) && (
-            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-              {running && (
-                <Badge tone="accent" leading={<Circle size={5} strokeWidth={3} fill="currentColor" />}>
-                  running
-                </Badge>
-              )}
-              {isChannelAutomation(automation) && (
-                <Badge tone="neutral" leading={<Radio size={9} strokeWidth={2.2} />}>
-                  channel
-                </Badge>
-              )}
-              {trustLabel && <Badge tone={automationTrustTone(automation)}>{trustLabel}</Badge>}
-            </div>
-          )}
-          <p className="m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
-            {automation.description || "No description."}
-          </p>
-        </div>
-      </div>
-
-      {/* meta row: schedule + last-run outcome. On hover the whole meta fades
-          out and the row's actions take its place (pure opacity crossfade, like
-          SessionRow). The actions are absolute so they reserve no width — the
-          title/description stay full-width — and because the meta is gone when
-          they appear, nothing can ever sit underneath them. */}
-      <div className="relative flex items-center pl-[19px] min-h-[26px] text-xs font-mono tabular-nums text-faint min-w-0">
-        <div className="flex flex-1 items-center gap-3 min-w-0 transition-opacity duration-row group-hover/auto-card:opacity-0 group-focus-within/auto-card:opacity-0">
-          <span className="min-w-0 flex-1 truncate" title={trigger}>
-            {[trigger, formatNext(automation)].filter(Boolean).join(" · ")}
-          </span>
-          <div className="shrink-0 flex items-center gap-2">
-            {recentStatuses.length > 0 && (
-              <span className="inline-flex items-center gap-0.5">
-                {recentStatuses.slice(0, 4).reverse().map((s, i) => (
-                  <span key={i} className={clsx("w-1 h-1 rounded-[1px]", sparkTone(s))} />
-                ))}
-              </span>
-            )}
-            {lastStatus ? (
-              <span
-                className={clsx(
-                  "inline-flex items-center gap-1",
-                  lastStatus === "failed" && "text-bad",
-                )}
-              >
-                <StatusDot
-                  status={lastStatus as "completed" | "failed" | "running"}
-                  pulse={lastStatus === "running"}
-                />
-                <span>
-                  {lastStatus === "running"
-                    ? "running"
-                    : lastStatus === "failed"
-                      ? `failed${automation.last_run_at ? ` ${formatRelative(automation.last_run_at)}` : ""}`
-                      : automation.last_run_at
-                        ? formatRelative(automation.last_run_at)
-                        : "done"}
-                </span>
-              </span>
-            ) : (
-              automation.last_run_at && <span>ran {formatRelative(automation.last_run_at)}</span>
-            )}
-          </div>
-        </div>
-        <div className="absolute inset-y-0 right-0 flex items-center gap-px opacity-0 pointer-events-none group-hover/auto-card:opacity-100 group-hover/auto-card:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-row ease-out">
-          {channel && (
-            <CardAction
-              icon={Radio}
-              label="Open channel"
-              onClick={stop(() => {
-                void switchSession(channel.session_id);
-                closeAutomations();
-              })}
-            />
-          )}
-          {hasResult && (
-            <CardAction
-              icon={FileText}
-              label="View last run"
-              onClick={stop(() =>
-                setMarkdownView({
-                  title: automation.name || "Automation",
-                  subtitle: automation.last_run_at
-                    ? `last run ${formatRelative(automation.last_run_at)}`
-                    : undefined,
-                  content: automation.last_result ?? "",
-                }),
-              )}
-            />
-          )}
-          <CardAction icon={History} label="Run history" onClick={stop(() => void showRunHistory())} />
-          <CardAction
-            icon={Play}
-            label="Run now"
-            onClick={stop(wrap("run", () => runAutomation(automation.task_id)))}
-            busy={busy === "run"}
-            disabled={!automation.enabled}
+      )}
+      <AgentRunContent
+        run={run}
+        actions={actions}
+        leading={
+          <AutomationToggle
+            enabled={automation.enabled}
+            busy={busy === "toggle"}
+            onToggle={(e) => {
+              e.stopPropagation();
+              void wrap("toggle", () => toggleAutomation(automation.task_id))();
+            }}
           />
-          <CardAction
-            icon={Trash2}
-            label="Delete"
-            onClick={stop(remove)}
-            busy={busy === "delete"}
-            disabled={automation.builtin}
-            danger
-          />
-        </div>
-      </div>
+        }
+        badges={badges}
+      />
+      <p className="self-start pl-[24px] m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
+        {automation.description || "No description."}
+      </p>
     </motion.article>
-  );
-}
-
-function CardAction({
-  icon: Icon,
-  label,
-  onClick,
-  disabled,
-  busy,
-  danger,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onClick: (e: React.MouseEvent) => void;
-  disabled?: boolean;
-  busy?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <IconButton
-      size="sm"
-      tone="faint"
-      danger={danger}
-      onClick={onClick}
-      disabled={disabled || busy}
-      aria-label={label}
-      title={label}
-    >
-      <BlurSwap swapKey={busy ? "busy" : "idle"} blur={3}>
-        {busy ? (
-          <Loader2 size={ICON.XS} strokeWidth={2} className="animate-spin" />
-        ) : (
-          <Icon size={ICON.XS} strokeWidth={2} />
-        )}
-      </BlurSwap>
-    </IconButton>
   );
 }
 
@@ -724,52 +669,3 @@ function TemplateCard({
   );
 }
 
-// ─── helpers ────────────────────────────────────────────────────────
-
-function formatTrigger(t: AutomationTrigger): string {
-  if (t.type === "time") {
-    if (t.every) {
-      const win = t.start && t.end ? ` ${t.start}–${t.end}` : "";
-      const days = t.days ? ` · ${t.days}` : "";
-      return `every ${t.every}${win}${days}`;
-    }
-    if (t.at) {
-      const days = t.days ? ` · ${t.days}` : "";
-      return `at ${t.at}${days}`;
-    }
-    return "time";
-  }
-  if (t.type === "event") {
-    const lead = t.lead_minutes != null ? ` (${t.lead_minutes}m)` : "";
-    return `on:${t.event_type ?? "?"}${lead}`;
-  }
-  if (t.type === "idle") return `idle ${t.idle_minutes}m`;
-  if (t.type === "count") return `every ${t.every_n ?? t.threshold ?? "?"} turns`;
-  return t.type;
-}
-
-/** Build a human label for the "next run" slot on the card. Skips the
- *  slot for paused automations and avoids the "next 36d ago" oddity when
- *  the scheduler hasn't yet recomputed a next-run timestamp. */
-function formatNext(automation: Automation): string | null {
-  if (!automation.enabled) return "paused";
-  if (!automation.next_run_at) return null;
-  const t = new Date(automation.next_run_at).getTime();
-  if (!Number.isFinite(t)) return null;
-  if (t <= Date.now()) return "due now";
-  return `next ${formatRelative(automation.next_run_at)}`;
-}
-
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return iso;
-  const delta = then - Date.now();
-  const abs = Math.abs(delta);
-  const min = Math.round(abs / 60_000);
-  if (min < 1) return delta > 0 ? "<1m" : "now";
-  if (min < 60) return delta > 0 ? `in ${min}m` : `${min}m ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return delta > 0 ? `in ${h}h` : `${h}h ago`;
-  const d = Math.round(h / 24);
-  return delta > 0 ? `in ${d}d` : `${d}d ago`;
-}

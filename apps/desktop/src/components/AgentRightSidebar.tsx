@@ -20,6 +20,7 @@ import {
   pinToMemoryApi,
   sendToChildAgentApi,
   setTodoOverrideApi,
+  type Automation,
   type BackgroundTaskSummary,
   type TodoListItem,
   type TodoStatus,
@@ -36,8 +37,8 @@ import { ICON } from "../lib/icons";
 import { getState, useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
 import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
 import {
+  agentRunFromAutomation,
   agentRunFromBackgroundAgent,
-  formatElapsed,
   isActiveAgentStatus,
   isAgentSessionId,
   parentSessionIdOf,
@@ -46,7 +47,7 @@ import {
 import { createSession, sendMessage, switchSession } from "../actions";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
-import { AgentRunRow } from "./agents/AgentRunCard";
+import { AgentRunRow } from "./agents/AgentRunRow";
 export { isActiveBackgroundAgent } from "../store/background-agent-domain";
 export { StatusDot } from "./StatusDot";
 
@@ -305,53 +306,34 @@ function SidebarAgentRow({
   );
 }
 
-// Generic single-line row, used for running automations (title + dot +
-// elapsed, optional subtitle). Agents use AgentRunRow instead.
-function Row({
-  title,
-  subtitle,
-  status,
-  elapsed,
+// A running automation in the hub — the SAME agent body as a sub-agent run.
+// An automation is the same abstraction as a parent/child agent, so it flows
+// through the shared view-model and renders via AgentRunRow. The live stream
+// status (if any) overrides the default progress line.
+function SidebarAutomationRow({
+  automation,
+  streamStatus,
 }: {
-  title: string;
-  subtitle?: string;
-  status: BackgroundAgent["status"] | "running";
-  elapsed: string;
+  automation: Automation;
+  streamStatus: string | undefined;
 }) {
-  const isRunning = status === "running";
-  return (
-    <div className="py-1">
-      <div className="flex items-center gap-2 min-w-0">
-        <StatusDot status={status} pulse={isRunning} />
-        <span className="flex-1 truncate text-sm text-ink-soft tracking-[-0.005em] min-w-0">
-          {title}
-        </span>
-        <span className="text-xs text-faint tabular-nums shrink-0">{elapsed}</span>
-      </div>
-      {subtitle && (
-        <div className="pl-[14px] truncate text-xs text-faint min-w-0">{subtitle}</div>
-      )}
-    </div>
-  );
-}
+  const openAutomations = useStore((s) => s.openAutomations);
+  const sessions = useStore((s) => s.sessions);
+  const closeAutomations = useStore((s) => s.closeAutomations);
+  const channel =
+    sessions.find((sx) => sx.origin_automation_id === automation.task_id) ?? null;
 
-function AutomationRow({
-  name,
-  runningSince,
-  status,
-}: {
-  name: string;
-  runningSince: string;
-  status: string | undefined;
-}) {
-  return (
-    <Row
-      title={name}
-      subtitle={status}
-      status="running"
-      elapsed={formatElapsed(runningSince)}
-    />
-  );
+  const base = agentRunFromAutomation(automation);
+  const run = streamStatus ? { ...base, progress: streamStatus } : base;
+
+  const open = channel
+    ? () => {
+        void switchSession(channel.session_id);
+        closeAutomations();
+      }
+    : () => openAutomations();
+
+  return <AgentRunRow run={run} onOpen={open} />;
 }
 
 function todoStatusIcon(status: TodoStatus) {
@@ -883,11 +865,10 @@ export function AgentRightSidebar() {
                   ) : null}
                   <div>
                     {runningAutomations.map((automation) => (
-                      <AutomationRow
+                      <SidebarAutomationRow
                         key={automation.task_id}
-                        name={automation.name || automation.task_id}
-                        runningSince={automation.running_since!}
-                        status={automationStatuses[automation.task_id]}
+                        automation={automation}
+                        streamStatus={automationStatuses[automation.task_id]}
                       />
                     ))}
                   </div>

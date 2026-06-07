@@ -1,15 +1,68 @@
 import { describe, expect, it } from "bun:test";
 import {
   agentRunFromActivityItem,
+  agentRunFromAutomation,
   agentRunFromBackgroundAgent,
   humanizeAgentType,
   isActiveAgentStatus,
   isAgentSessionId,
   parentSessionIdOf,
+  resolveAutomationStatus,
   resultSnippet,
   statusDotClass,
 } from "../src/lib/agentRun.ts";
+import type { Automation } from "../src/api.ts";
 import type { ActivityItem, BackgroundAgent } from "../src/store/types.ts";
+
+function automation(overrides: Partial<Automation> = {}): Automation {
+  return {
+    task_id: "auto-1",
+    name: "Morning briefing",
+    description: "Check recent emails",
+    triggers: [{ type: "time", at: "10:00", days: "daily" }],
+    enabled: true,
+    last_status: null,
+    recent_statuses: [],
+    last_run_at: null,
+    next_run_at: null,
+    running_since: null,
+    builtin: false,
+    ...overrides,
+  } as Automation;
+}
+
+describe("agentRunFromAutomation", () => {
+  it("a running automation has NO progress line — the pulsing dot + 'running' badge convey it, so there is no duplicate 'running'", () => {
+    const run = agentRunFromAutomation(automation({ running_since: new Date().toISOString() }));
+    expect(run.status).toBe("running");
+    expect(run.progress).toBeUndefined();
+  });
+
+  it("never sets childSessionId (an automation run is not an openable session)", () => {
+    expect(agentRunFromAutomation(automation()).childSessionId).toBeUndefined();
+  });
+
+  it("carries the enabled facet so a paused automation can read muted, not green", () => {
+    expect(agentRunFromAutomation(automation({ enabled: false })).enabled).toBe(false);
+    expect(agentRunFromAutomation(automation({ enabled: true })).enabled).toBe(true);
+  });
+
+  it("maps schedule + result preview for a finished run", () => {
+    const run = agentRunFromAutomation(automation({ last_status: "completed", last_result: "Sent 3 nudges." }));
+    expect(run.status).toBe("completed");
+    expect(run.schedule).toContain("at 10:00");
+    expect(run.resultPreview).toBe("Sent 3 nudges.");
+  });
+});
+
+describe("resolveAutomationStatus", () => {
+  it("running beats last_status; failed/completed map through; never-run is idle", () => {
+    expect(resolveAutomationStatus(automation({ running_since: "now", last_status: "completed" }))).toBe("running");
+    expect(resolveAutomationStatus(automation({ last_status: "failed" }))).toBe("failed");
+    expect(resolveAutomationStatus(automation({ last_status: "completed" }))).toBe("completed");
+    expect(resolveAutomationStatus(automation({ last_status: null }))).toBe("interrupted");
+  });
+});
 
 describe("humanizeAgentType", () => {
   it("maps known types", () => {
