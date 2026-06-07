@@ -219,7 +219,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "run_cancelled"; run_id: string }
   | { type: "run_backgrounded"; run_id: string; session_id?: string }
   | { type: "RUN_ERROR"; run_id: string; message: string; code?: string; debug_id?: string | null; recoverable?: boolean }
-  | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool" }
+  | { type: "token_usage"; run_id: string; usage: { prompt: number; completion: number; total?: number; cache_read?: number; cache_write?: number }; cost?: number; message_count?: number | null; scope?: "run" | "tool"; task_id?: string | null }
   | { type: "thinking"; status: string; run_id?: string | null }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
@@ -263,9 +263,11 @@ export type ServerEvent = CommonServerEventFields & (
     }
   | { type: "stream_reset"; reason: "replay_gap" | string }
   | { type: "stream_keepalive"; latest_seq: number }
-  | { type: "task_started"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; summary?: string; depth?: number }
-  | { type: "task_progress"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status?: string; summary?: string; depth?: number }
-  | { type: "task_finished"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
+  | { type: "task_started"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; summary?: string; depth?: number; workflow_id?: string | null; phase?: string | null }
+  | { type: "task_progress"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status?: string; summary?: string; depth?: number; workflow_id?: string | null; phase?: string | null }
+  | { type: "task_finished"; session_id?: string | null; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; child_run_id?: string | null; child_session_id?: string | null; agent_type?: string | null; wait?: boolean | null; name?: string; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number; workflow_id?: string | null; phase?: string | null }
+  | { type: "workflow_started"; session_id?: string | null; run_id: string; workflow_id: string; parent_tool_call_id?: string | null; name?: string; description?: string }
+  | { type: "workflow_finished"; session_id?: string | null; run_id: string; workflow_id: string; status: "completed" | "failed"; summary?: string; agent_count?: number }
   | ({ type: "compaction_started"; run_id: string } & CompactionOwner)
   | ({ type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number } & CompactionOwner)
   | { type: "message_ingested"; client_id: string; run_id: string }

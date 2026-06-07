@@ -68,6 +68,8 @@ class EventType(StrEnum):
     THINKING = "thinking"
     APPROVAL_NEEDED = "approval_needed"
     BACKGROUND_TASK = "background_task"
+    WORKFLOW_STARTED = "workflow_started"
+    WORKFLOW_FINISHED = "workflow_finished"
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
     MESSAGE_INGESTED = "message_ingested"
@@ -388,6 +390,8 @@ class TaskStartedEvent(SSEEvent):
     name: str = ""
     summary: str = ""
     depth: int = 0
+    workflow_id: str | None = None
+    phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -406,6 +410,8 @@ class TaskProgressEvent(SSEEvent):
     status: str = "running"
     summary: str = ""
     depth: int = 0
+    workflow_id: str | None = None
+    phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -424,6 +430,30 @@ class TaskFinishedEvent(SSEEvent):
     status: str = "completed"
     summary: str = ""
     depth: int = 0
+    workflow_id: str | None = None
+    phase: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkflowStartedEvent(SSEEvent):
+    type: EventType = field(default=EventType.WORKFLOW_STARTED, init=False)
+    session_id: str = ""
+    run_id: str = ""
+    workflow_id: str = ""
+    parent_tool_call_id: str | None = None
+    name: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class WorkflowFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.WORKFLOW_FINISHED, init=False)
+    session_id: str = ""
+    run_id: str = ""
+    workflow_id: str = ""
+    status: str = "completed"
+    summary: str = ""
+    agent_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -519,6 +549,7 @@ class TokenUsageEvent(SSEEvent):
     cost: float = 0.0
     message_count: int | None = None
     scope: str = "run"
+    task_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -565,6 +596,8 @@ _EVENT_CLASSES = {
     EventType.TASK_STARTED.value: TaskStartedEvent,
     EventType.TASK_PROGRESS.value: TaskProgressEvent,
     EventType.TASK_FINISHED.value: TaskFinishedEvent,
+    EventType.WORKFLOW_STARTED.value: WorkflowStartedEvent,
+    EventType.WORKFLOW_FINISHED.value: WorkflowFinishedEvent,
     EventType.RUN_CANCELLED.value: RunCancelledEvent,
     EventType.RUN_BACKGROUNDED.value: RunBackgroundedEvent,
     EventType.MESSAGE_INGESTED.value: MessageIngestedEvent,

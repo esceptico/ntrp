@@ -11,6 +11,8 @@ import {
 } from "./transcript-projection";
 import { reduceRunThinking } from "./run-lifecycle";
 import { backgroundAgentKey, type BackgroundAgentUpsert } from "./background-agent-domain";
+import type { WorkflowTaskEventKind } from "./workflow-domain";
+import type { BackgroundAgentStatus } from "./types";
 
 export { runCancelledEffect } from "./transcript-projection";
 
@@ -22,6 +24,7 @@ type TaskLifecycleEvent = Extract<
   ServerEvent,
   { type: "task_started" | "task_progress" | "task_finished" }
 >;
+type TokenUsageEvent = Extract<ServerEvent, { type: "token_usage" }>;
 interface ServerEventCallbacks {
   resendQueuedMessage?: (text: string, images: QueuedMessage["images"]) => void | Promise<void>;
 }
@@ -534,12 +537,46 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
       return;
     case "task_started":
       upsertTaskLifecycleAgent(event, ts);
+      routeWorkflowTaskEvent(event, "started");
       return applyTranscriptEvent(event);
     case "task_progress":
       upsertTaskLifecycleAgent(event, ts);
+      routeWorkflowTaskEvent(event, "progress");
       return applyTranscriptEvent(event);
     case "task_finished":
       upsertTaskLifecycleAgent(event, ts);
+      routeWorkflowTaskEvent(event, "finished");
+      return applyTranscriptEvent(event);
+    case "workflow_started": {
+      const sessionId = event.session_id ?? s.currentSessionId ?? chatStreamState.projectionSessionId;
+      if (sessionId) {
+        s.workflowStarted({
+          workflowId: event.workflow_id,
+          sessionId,
+          runId: event.run_id,
+          parentToolCallId: event.parent_tool_call_id ?? undefined,
+          name: event.name,
+          description: event.description,
+          startedAt: ts,
+        });
+      }
+      return applyTranscriptEvent(event);
+    }
+    case "workflow_finished": {
+      const sessionId = event.session_id ?? s.currentSessionId ?? chatStreamState.projectionSessionId;
+      if (sessionId) {
+        s.workflowFinished({
+          workflowId: event.workflow_id,
+          sessionId,
+          status: event.status,
+          summary: event.summary,
+          agentCount: event.agent_count,
+        });
+      }
+      return applyTranscriptEvent(event);
+    }
+    case "token_usage":
+      routeWorkflowTokenUsage(event);
       return applyTranscriptEvent(event);
     case "compaction_started":
       if (event.scope === "agent") return applyTranscriptEvent(event);
@@ -587,6 +624,57 @@ function upsertTaskLifecycleAgent(event: TaskLifecycleEvent, updatedAt: number):
   if (event.agent_type) agent.agentType = event.agent_type;
   if (event.wait != null) agent.wait = event.wait;
   s.upsertBackgroundAgent(agent);
+}
+
+function routeWorkflowTaskEvent(event: TaskLifecycleEvent, kind: WorkflowTaskEventKind): void {
+  if (!event.workflow_id) return;
+  const s = getState();
+  const sessionId = event.session_id ?? s.currentSessionId ?? chatStreamState.projectionSessionId;
+  if (!sessionId) return;
+  const taskId = event.child_run_id || event.task_id;
+  const status: BackgroundAgentStatus | undefined =
+    event.type === "task_finished"
+      ? event.status
+      : event.type === "task_progress" && (event.status === "failed" || event.status === "cancelled")
+        ? event.status
+        : undefined;
+  s.workflowTaskEvent({
+    kind,
+    workflowId: event.workflow_id,
+    sessionId,
+    taskId,
+    phase: event.phase,
+    name: event.name,
+    agentType: event.agent_type ?? undefined,
+    detail: event.summary,
+    status,
+  });
+}
+
+/** token_usage carries `run_id` for the run-level budget. The workflow domain
+ *  only consumes per-agent spend, which arrives tagged with the originating
+ *  `task_id`/`workflow_id` (Phase 1 server tagging). Untagged usage events are
+ *  run-level and are ignored here — the transcript projection still consumes
+ *  them for the budget gauge. */
+function routeWorkflowTokenUsage(event: TokenUsageEvent): void {
+  const tagged = event as TokenUsageEvent & {
+    task_id?: string | null;
+    workflow_id?: string | null;
+    session_id?: string | null;
+    phase?: string | null;
+  };
+  if (!tagged.task_id || !tagged.workflow_id) return;
+  const s = getState();
+  const sessionId = tagged.session_id ?? s.currentSessionId ?? chatStreamState.projectionSessionId;
+  if (!sessionId) return;
+  s.workflowTokenUsage({
+    workflowId: tagged.workflow_id,
+    sessionId,
+    taskId: tagged.task_id,
+    phase: tagged.phase,
+    usage: event.usage,
+    cost: event.cost,
+  });
 }
 
 export function eventStreamUrl(config: AppConfig, sessionId: string): string {

@@ -40,6 +40,14 @@ import {
   type BackgroundAgentRefreshStatus,
 } from "./background-agent-domain";
 import {
+  createWorkflowsDomainState,
+  reduceWorkflowStarted,
+  reduceWorkflowFinished,
+  reduceWorkflowTaskEvent,
+  reduceWorkflowTokenUsage,
+  type WorkflowsDomainState,
+} from "./workflow-domain";
+import {
   reduceApprovalRequested,
   reduceApprovalResolved,
   reduceCancellingQueuedMessagesReset,
@@ -88,7 +96,10 @@ export type {
   BackgroundAgentRefreshStatus,
   BackgroundAgentsDomainState,
   AutomationStreamDomainState,
+  WorkflowsDomainState,
 };
+export type { Workflow, WorkflowAgent, WorkflowPhase } from "./workflow-domain";
+export { selectWorkflowsForSession } from "./workflow-domain";
 export {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   SIDEBAR_MAX_WIDTH,
@@ -166,6 +177,7 @@ export const useStore = create<State & Actions>((set) => ({
   selectedSkill: null,
   viewingMarkdown: null,
   viewingTool: null,
+  workflowViewer: null,
   pendingImages: [],
   serverConfig: null,
   serverModels: null,
@@ -190,6 +202,7 @@ export const useStore = create<State & Actions>((set) => ({
   modalOrigin: null,
   loops: [],
   backgroundAgents: createBackgroundAgentsDomainState(),
+  workflows: createWorkflowsDomainState(),
   goals: {},
   pendingGoalProposal: null,
   toasts: [],
@@ -592,6 +605,22 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({
       backgroundAgents: reduceBackgroundAgentUpsert(s.backgroundAgents, agent),
     })),
+  workflowStarted: (input) =>
+    set((s) => ({
+      workflows: reduceWorkflowStarted(s.workflows, input),
+    })),
+  workflowFinished: (input) =>
+    set((s) => ({
+      workflows: reduceWorkflowFinished(s.workflows, input),
+    })),
+  workflowTaskEvent: (input) =>
+    set((s) => ({
+      workflows: reduceWorkflowTaskEvent(s.workflows, input),
+    })),
+  workflowTokenUsage: (input) =>
+    set((s) => ({
+      workflows: reduceWorkflowTokenUsage(s.workflows, input),
+    })),
   setGoal: (sessionId, goal) =>
     set((s) => {
       const goals = { ...s.goals };
@@ -607,6 +636,7 @@ export const useStore = create<State & Actions>((set) => ({
   setSelectedSkill: (selectedSkill) => set({ selectedSkill }),
   setViewingMarkdown: (viewingMarkdown) => set({ viewingMarkdown }),
   setViewingTool: (viewingTool) => set({ viewingTool }),
+  setViewingWorkflow: (workflowViewer) => set({ workflowViewer }),
 
   addPendingImages: (images) =>
     set((s) => ({ pendingImages: [...s.pendingImages, ...images] })),

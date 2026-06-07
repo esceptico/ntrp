@@ -31,6 +31,9 @@ const MemoryModal = lazy(() =>
 const ToolViewer = lazy(() =>
   import("./ToolViewer").then((m) => ({ default: m.ToolViewer })),
 );
+const WorkflowPanel = lazy(() =>
+  import("./workflow/WorkflowPanel").then((m) => ({ default: m.WorkflowPanel })),
+);
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
@@ -193,6 +196,7 @@ export function App() {
           <ArchiveModal />
           <MemoryModal />
           <ToolViewer />
+          <WorkflowPanel />
         </Suspense>
       </ErrorBoundary>
       <CommandPalette />

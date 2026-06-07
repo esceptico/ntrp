@@ -16,6 +16,10 @@ import type { MessageSourceFocus } from "../lib/messageSourceFocus";
 import type { Toast } from "../lib/taskToast";
 import type { AutomationStreamDomainState } from "./automation-domain";
 import type { BackgroundAgentsDomainState } from "./background-agent-domain";
+import type {
+  WorkflowsDomainState,
+  WorkflowTokenUsageInput,
+} from "./workflow-domain";
 import type { SessionViewState } from "./session-view";
 
 export type { SessionViewState } from "./session-view";
@@ -271,6 +275,14 @@ export interface MarkdownViewState {
   sourcePath?: string;
 }
 
+/** Which workflow the WorkflowPanel overlay is showing. The session id is
+ *  captured so the panel can resolve the workflow even after the user
+ *  switches sessions. */
+export interface WorkflowViewerState {
+  workflowId: string;
+  sessionId: string;
+}
+
 /** Per-session view state cached across `setCurrentSession` switches.
  *  Snapshotted on switch-out, hydrated on switch-back, so flipping
  *  between sessions doesn't blank the UI while history reloads. The
@@ -375,6 +387,10 @@ export interface State {
   modalOrigin: { x: number; y: number } | null;
   loops: ServerLoop[];
   backgroundAgents: BackgroundAgentsDomainState;
+  workflows: WorkflowsDomainState;
+  /** The workflow currently open in the WorkflowPanel overlay. Null when
+   *  the overlay is closed. */
+  workflowViewer: WorkflowViewerState | null;
   goals: Record<string, SessionGoal>;
   pendingGoalProposal: PendingGoalProposal | null;
   toasts: Toast[];
@@ -487,6 +503,7 @@ export interface Actions {
   setSelectedSkill: (skill: SkillDescriptor | null) => void;
   setViewingMarkdown: (view: MarkdownViewState | null) => void;
   setViewingTool: (item: ActivityItem | null) => void;
+  setViewingWorkflow: (view: WorkflowViewerState | null) => void;
   addPendingImages: (images: ImageBlock[]) => void;
   removePendingImage: (index: number) => void;
   clearPendingImages: () => void;
@@ -507,6 +524,34 @@ export interface Actions {
   dismissToast: (id: string) => void;
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
+  workflowStarted: (input: {
+    workflowId: string;
+    sessionId: string;
+    runId: string;
+    parentToolCallId?: string;
+    name?: string;
+    description?: string;
+    startedAt?: number;
+  }) => void;
+  workflowFinished: (input: {
+    workflowId: string;
+    sessionId: string;
+    status: "completed" | "failed";
+    summary?: string;
+    agentCount?: number;
+  }) => void;
+  workflowTaskEvent: (input: {
+    kind: "started" | "progress" | "finished";
+    workflowId: string;
+    sessionId: string;
+    taskId: string;
+    phase?: string | null;
+    name?: string;
+    agentType?: string;
+    detail?: string;
+    status?: BackgroundAgentStatus;
+  }) => void;
+  workflowTokenUsage: (input: WorkflowTokenUsageInput) => void;
   setGoal: (sessionId: string, goal: SessionGoal | null) => void;
   setPendingGoalProposal: (proposal: PendingGoalProposal | null) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;

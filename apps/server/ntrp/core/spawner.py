@@ -297,6 +297,10 @@ def create_spawn_fn(
         compaction_prompt_context: str | None = None,
         include_tool_messages_in_compaction: bool = False,
         research_scope_id: str | None = None,
+        lifecycle_id: str | None = None,
+        workflow_id: str | None = None,
+        phase: str | None = None,
+        exclude_tools: frozenset[str] | None = None,
     ) -> str:
         should_wait = (not background) if wait is None else wait
         background = not should_wait
@@ -313,6 +317,8 @@ def create_spawn_fn(
             child_executor_source = executor.with_registry(child_registry)
 
         filtered_tools = tools or child_executor_source.get_tools()
+        if exclude_tools:
+            filtered_tools = [t for t in filtered_tools if t.get("function", {}).get("name") not in exclude_tools]
         allowed_tool_names = tool_schema_names(filtered_tools)
         child_model = model_override or model
         child_state = _create_session_state(calling_ctx, isolation)
@@ -420,7 +426,7 @@ def create_spawn_fn(
         )
 
         parent_emit = calling_ctx.io.emit if not silent else None
-        lifecycle_task_id = parent_id or f"task-{uuid4().hex[:10]}"
+        lifecycle_task_id = lifecycle_id or parent_id or f"task-{uuid4().hex[:10]}"
         agent_label_task = (
             asyncio.create_task(generate_agent_name(child_model, task)) if parent_emit and not background else None
         )
@@ -507,6 +513,7 @@ def create_spawn_fn(
                                 usage=response.usage.to_dict(),
                                 cost=cost,
                                 scope="tool",
+                                task_id=lifecycle_task_id,
                             )
                         )
 
@@ -663,6 +670,8 @@ def create_spawn_fn(
                             status="running",
                             summary=task_summary,
                             depth=task_depth,
+                            workflow_id=workflow_id,
+                            phase=phase,
                         )
                     )
 
@@ -708,6 +717,8 @@ def create_spawn_fn(
                             name=agent_slug,
                             summary=task_summary,
                             depth=task_depth,
+                            workflow_id=workflow_id,
+                            phase=phase,
                         )
                     )
                 if parent_emit is not None and agent_label_task is not None:
@@ -742,6 +753,8 @@ def create_spawn_fn(
                             status="failed" if stream_failed else "completed",
                             summary="failed" if stream_failed else "completed",
                             depth=task_depth,
+                            workflow_id=workflow_id,
+                            phase=phase,
                         )
                     )
                 return _settle_with(text, status="failed" if stream_failed else "completed")
@@ -780,6 +793,8 @@ def create_spawn_fn(
                                 status="cancelled",
                                 summary="cancelled; partial summary returned",
                                 depth=task_depth,
+                                workflow_id=workflow_id,
+                                phase=phase,
                             )
                         )
                     return _settle_with(text, status="cancelled")
@@ -800,6 +815,8 @@ def create_spawn_fn(
                             status="cancelled",
                             summary="cancelled",
                             depth=task_depth,
+                            workflow_id=workflow_id,
+                            phase=phase,
                         )
                     )
                 raise
@@ -822,6 +839,8 @@ def create_spawn_fn(
                             status="failed",
                             summary=f"timed out after {timeout}s",
                             depth=task_depth,
+                            workflow_id=workflow_id,
+                            phase=phase,
                         )
                     )
                 _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)

@@ -98,7 +98,9 @@ export function formatElapsed(since: number | string): string {
   return `${Math.floor(mins / 60)}h`;
 }
 
-function formatDuration(ms: number): string {
+// Compact ms-duration formatter ("45s", "2m", "3h"). Shared by the agent
+// view-models and the workflow surfaces.
+export function formatDuration(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const mins = Math.floor(seconds / 60);

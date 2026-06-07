@@ -11,6 +11,8 @@ import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
 import { StatusDot } from "../StatusDot";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
+import { useWorkflows } from "../../hooks/useWorkflows";
+import { WorkflowPreviewRow } from "../workflow/WorkflowPreviewRow";
 
 export type { ActivityItem };
 
@@ -310,6 +312,24 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
+  // A workflow tool call (the `workflow` tool spawns a fan-out orchestration)
+  // gets its own dense row that opens the WorkflowPanel overlay. Matched to its
+  // workflow via parent_tool_call_id === this tool-call id. Falls through to the
+  // normal agent/tool rendering until the workflow_started event lands.
+  const sessionId = useStore((s) => s.currentSessionId);
+  const setViewingWorkflow = useStore((s) => s.setViewingWorkflow);
+  const workflows = useWorkflows(sessionId);
+  const workflow = workflows.find((w) => w.parentToolCallId === item.id);
+  if (workflow) {
+    return (
+      <WorkflowPreviewRow
+        workflow={workflow}
+        onOpen={() =>
+          setViewingWorkflow({ workflowId: workflow.workflowId, sessionId: workflow.sessionId })
+        }
+      />
+    );
+  }
   if (isAgent(item)) {
     return <AgentRow item={item} depth={depth} onOpen={onOpen} />;
   }

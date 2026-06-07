@@ -178,7 +178,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
         await ctx.ledger.register(execution.tool_id, args.task, depth=args.depth)
 
     remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-    exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result"}
+    exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result", "workflow"}
     if args.depth == "quick" or remaining <= 1:
         exclude.add("research")
 
