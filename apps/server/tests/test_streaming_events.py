@@ -246,6 +246,93 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_full_subagent_forwards_tool_calls_to_parent_nested(monkeypatch):
+    """A FULL-isolation foreground subagent (own child bus) forwards its TOOL_CALL
+    lifecycle to the PARENT trace, re-parented under its own agent row
+    (parent_id == lifecycle_task_id, depth == task_depth + 1), while reasoning/text
+    stay on the child bus only."""
+    from ntrp.tools.core import ToolResult, tool
+    from ntrp.tools.core.context import ChildSession
+    from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
+    from tests.helpers import make_tool_response
+
+    class FakeLLM:
+        def __init__(self):
+            self.n = 0
+
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            self.n += 1
+            if self.n == 1:
+                yield ReasoningContentDelta("internal thought")
+                yield make_tool_response("ping", {})
+            else:
+                yield make_text_response("child answer", model=model)
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    async def ping_exec(execution, *args, **kwargs):
+        return ToolResult(content="pong", preview="pong")
+
+    ping_tool = tool(
+        display_name="Ping",
+        description="ping",
+        policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+        execute=ping_exec,
+    )
+
+    parent_emitted = []
+    child_emitted = []
+
+    async def parent_emit(event):
+        parent_emitted.append(event)
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def child_io_factory(_params):
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), aclose=_aclose)
+
+    executor = make_executor({"ping": ping_tool})
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3, child_io_factory=child_io_factory),
+        io=IOBridge(emit=parent_emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "workflow agent task",
+        system_prompt="sys",
+        parent_id="call-wf",
+        lifecycle_id="call-wf:agent1",
+        timeout=2,
+    )
+
+    assert result.text == "child answer"
+    types = [e.type.value for e in parent_emitted]
+    assert types[0] == "task_started"
+    assert types[-1] == "task_finished"
+
+    tool_starts = [e for e in parent_emitted if e.type.value == "TOOL_CALL_START"]
+    assert tool_starts, f"expected a forwarded tool call on the parent, got {types}"
+    ts = tool_starts[0]
+    # re-parented under the agent's own lifecycle row, one level deeper
+    assert ts.parent_id == "call-wf:agent1"
+    assert ts.depth == 2
+
+    # reasoning never reaches the parent trace
+    assert not any("REASONING" in t for t in types)
+    # the child's own bus still saw the full detail
+    assert any(e.type.value == "TOOL_CALL_START" for e in child_emitted)
+
+
+@pytest.mark.asyncio
 async def test_catchup_replay_emits_structural_events_only():
     """Catch-up replay (snapshot/durable) emits STRUCTURAL events only — never
     the ephemeral deltas (token text, tool args, reasoning) — even with
