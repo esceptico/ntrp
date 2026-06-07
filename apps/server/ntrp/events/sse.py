@@ -550,6 +550,9 @@ class TokenUsageEvent(SSEEvent):
     message_count: int | None = None
     scope: str = "run"
     task_id: str | None = None
+    child_run_id: str | None = None
+    workflow_id: str | None = None
+    phase: str | None = None
 
 
 @dataclass(frozen=True)

@@ -514,6 +514,9 @@ def create_spawn_fn(
                                 cost=cost,
                                 scope="tool",
                                 task_id=lifecycle_task_id,
+                                child_run_id=child_run_id,
+                                workflow_id=workflow_id,
+                                phase=phase,
                             )
                         )
 
@@ -567,25 +570,12 @@ def create_spawn_fn(
                 return ()
             return tuple(e for e in agent_events_to_sse(event) if not isinstance(e, _SUPPRESSED_NESTED_SSE))
 
-        def _full_parent_events(event) -> tuple[SSEEvent, ...]:
-            # FULL subagent: the full stream still goes to the child's own bus
-            # (see child_io.emit below). On the PARENT trace we forward only the
-            # tool-call lifecycle (no text/reasoning firehose), re-parented under
-            # THIS agent's row so the user can watch it work without opening its
-            # session. The child's own top-level events carry parent_id ==
-            # parent_id; point them at lifecycle_task_id (which == parent_id for
-            # research/SHARED, but is the agent's unique row for workflow agents)
-            # and nest one level under the agent row.
-            if isinstance(event, _REASONING_EVENTS):
-                return ()
-            out: list[SSEEvent] = []
-            for e in agent_events_to_sse(event):
-                if isinstance(e, _SUPPRESSED_NESTED_SSE):
-                    continue
-                if getattr(e, "depth", None) is not None and getattr(e, "parent_id", None) == parent_id:
-                    e = replace(e, parent_id=lifecycle_task_id, depth=task_depth + 1)
-                out.append(e)
-            return tuple(out)
+        def _noop_child_events(_event) -> tuple[SSEEvent, ...]:
+            # FULL subagent: none of the child's own stream goes to the parent
+            # (the parent renders session-backed agents as leaves) — it streams to
+            # the child bus instead, and the parent gets only lifecycle events.
+            # To watch a FULL agent's tool calls live, open its session (drill-in).
+            return ()
 
         def _rebase_for_child(sse: SSEEvent) -> SSEEvent:
             # The child agent runs at the global recursion depth (task_depth) with
@@ -737,7 +727,7 @@ def create_spawn_fn(
                     )
                 if parent_emit is not None and agent_label_task is not None:
                     label_update_task = asyncio.create_task(_emit_agent_label_when_ready())
-                text = await _stream_to(_full_parent_events if child_io is not None else _foreground_child_events)
+                text = await _stream_to(_noop_child_events if child_io is not None else _foreground_child_events)
                 return _current_agent_label(), text
 
             stream_task = asyncio.create_task(_run_foreground())

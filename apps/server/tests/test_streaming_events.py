@@ -246,11 +246,11 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_full_subagent_forwards_tool_calls_to_parent_nested(monkeypatch):
-    """A FULL-isolation foreground subagent (own child bus) forwards its TOOL_CALL
-    lifecycle to the PARENT trace, re-parented under its own agent row
-    (parent_id == lifecycle_task_id, depth == task_depth + 1), while reasoning/text
-    stay on the child bus only."""
+async def test_full_subagent_tool_calls_stay_on_child_bus(monkeypatch):
+    """A FULL-isolation foreground subagent streams its tool calls ONLY to its own
+    child session bus; the parent trace gets lifecycle events only (the parent
+    renders FULL agents as drill-in leaves). To watch a FULL agent's tool calls
+    live you open its session — they are never forwarded to the parent trace."""
     from ntrp.tools.core import ToolResult, tool
     from ntrp.tools.core.context import ChildSession
     from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
@@ -315,20 +315,11 @@ async def test_full_subagent_forwards_tool_calls_to_parent_nested(monkeypatch):
     )
 
     assert result.text == "child answer"
+    # Parent trace sees ONLY lifecycle — no tool calls, no reasoning leak.
     types = [e.type.value for e in parent_emitted]
-    assert types[0] == "task_started"
-    assert types[-1] == "task_finished"
-
-    tool_starts = [e for e in parent_emitted if e.type.value == "TOOL_CALL_START"]
-    assert tool_starts, f"expected a forwarded tool call on the parent, got {types}"
-    ts = tool_starts[0]
-    # re-parented under the agent's own lifecycle row, one level deeper
-    assert ts.parent_id == "call-wf:agent1"
-    assert ts.depth == 2
-
-    # reasoning never reaches the parent trace
-    assert not any("REASONING" in t for t in types)
-    # the child's own bus still saw the full detail
+    assert types == ["task_started", "task_finished"]
+    assert not any(e.type.value == "TOOL_CALL_START" for e in parent_emitted)
+    # The child's own bus carries the full detail — drill-in renders it live.
     assert any(e.type.value == "TOOL_CALL_START" for e in child_emitted)
 
 
