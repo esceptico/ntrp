@@ -25,22 +25,21 @@ class AutomationRuntime:
         *,
         stores: Stores,
         build_operator_deps: Callable[[], OperatorDeps],
-        get_memory: Callable[[], object | None],
-        get_memory_service: Callable[[], object | None],
-        get_pattern_finder: Callable[[], object | None],
+        get_records: Callable[[], object | None],
+        get_chat_connector: Callable[[], object | None],
         get_calendar_source: Callable[[], object | None],
         get_slack_client: Callable[[], object | None],
         get_cheap_llm: Callable[[], object | None],
         cheap_model: str | None,
         indexer: Indexer | None,
+        get_consolidate: Callable[[], object | None] = lambda: None,
     ):
         self.stores = stores
-        self.get_memory = get_memory
-        self.get_memory_service = get_memory_service
-        self.get_pattern_finder = get_pattern_finder
+        self.get_records = get_records
         self.get_calendar_source = get_calendar_source
         self.get_slack_client = get_slack_client
         self.get_cheap_llm = get_cheap_llm
+        self.get_consolidate = get_consolidate
         self.cheap_model = cheap_model
         self.scheduler = Scheduler(
             store=stores.automations,
@@ -57,7 +56,7 @@ class AutomationRuntime:
             automation_store=stores.automations,
             scheduler=self.scheduler,
             indexer=indexer,
-            get_memory_service=get_memory_service,
+            get_chat_connector=get_chat_connector,
         )
         self.monitor: Monitor | None = None
 
@@ -69,16 +68,12 @@ class AutomationRuntime:
 
     async def start_scheduler(self) -> None:
         self.scheduler.register_handler(
-            "pattern_finder_daily",
-            self._build_pattern_finder_daily_handler(),
-        )
-        self.scheduler.register_handler(
-            "skill_inducer_daily",
-            self._build_skill_inducer_daily_handler(),
-        )
-        self.scheduler.register_handler(
             "automation_suggester_daily",
             self._build_automation_suggester_handler(),
+        )
+        self.scheduler.register_handler(
+            "memory_consolidate",
+            self._build_memory_consolidate_handler(),
         )
 
         await seed_builtins(self.stores.automations)
@@ -86,56 +81,41 @@ class AutomationRuntime:
         self.scheduler.start()
         self.outbox_runtime.start()
 
-    def _build_pattern_finder_daily_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            pattern_finder = self.get_pattern_finder()
-            if not pattern_finder:
-                return None
-            # pass1 (episode -> observation) only. pass2 (observation -> claim via
-            # superset clustering + supersede) is deliberately NOT auto-run: claims
-            # are now born at write-time (connectors/claim_writer.py) with LLM dedup,
-            # so the clustering-based claim writer is a redundant second path that
-            # bypasses write-time dedup and emits supersede edges. The proper
-            # advisory/maintenance consolidation pass is deferred; pass2 stays
-            # callable from the admin endpoint for manual/testing use.
-            pass1 = await pattern_finder.run_pass1(window_days=7, scope="user")
-            return (
-                f"pass1_clusters={pass1.clusters_found}; observations={pass1.observations_written}; "
-                f"pass1_superseded={pass1.observations_superseded}"
-            )
-
-        return handler
-
-    def _build_skill_inducer_daily_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            pattern_finder = self.get_pattern_finder()
-            if not pattern_finder:
-                return None
-            inducer = getattr(pattern_finder, "skill_inducer", None)
-            if inducer is None:
-                return None
-            result = await inducer.run(window_days=30, scope="user")
-            return (
-                f"claims_considered={result.claims_considered}; toolable_claims={result.toolable_claims}; "
-                f"clusters={result.clusters_found}; proposals={result.proposals_written}"
-            )
-
-        return handler
-
     def _build_automation_suggester_handler(self):
         async def handler(context: dict | None) -> str | None:
             return await self._run_suggester()
 
         return handler
 
+    def _build_memory_consolidate_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            consolidate = self.get_consolidate()
+            if consolidate is None:
+                return "memory consolidation unavailable (no memory model configured)"
+            totals = {"merged": 0, "superseded": 0, "dropped": 0, "promoted": 0}
+            # run_once is O(delta)-bounded (200/call); loop so one scheduled run
+            # drains the day's backlog. Empty pass -> done.
+            for _ in range(8):
+                rep = await consolidate.run_once()
+                for k in totals:
+                    totals[k] += getattr(rep, k)
+                if rep.merged == rep.superseded == rep.dropped == rep.promoted == 0:
+                    break
+            return (
+                f"merged {totals['merged']}, superseded {totals['superseded']}, "
+                f"dropped {totals['dropped']}, promoted {totals['promoted']}"
+            )
+
+        return handler
+
     def _suggester_available(self) -> bool:
-        return self.get_memory() is not None and self.get_cheap_llm() is not None
+        return self.get_records() is not None and self.get_cheap_llm() is not None
 
     async def _run_suggester(self) -> str | None:
         if not self._suggester_available():
             return None
         suggester = AutomationSuggester(
-            memory=self.get_memory(),
+            records=self.get_records(),
             sessions=self.stores.sessions,
             automations=self.stores.automations,
             cheap_llm=self.get_cheap_llm(),

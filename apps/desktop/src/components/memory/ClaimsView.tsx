@@ -46,6 +46,7 @@ export function ClaimsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(focusId);
+  const [kindFilter, setKindFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (focusId) setSelectedId(focusId);
@@ -97,20 +98,51 @@ export function ClaimsView({
     };
   }, [query, config, runDefault, scope?.kind, scope?.key]);
 
+  const kindCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const it of items) c[it.canonical_subject] = (c[it.canonical_subject] ?? 0) + 1;
+    return c;
+  }, [items]);
+  const shown = kindFilter ? items.filter((i) => i.canonical_subject === kindFilter) : items;
+  // Consolidated kinds first (rule/skill/fact), then the raw firehose (note) last.
+  const kindOrder = ["rule", "skill", "fact", "preference", "action", "note"];
+  const presentKinds = Object.keys(kindCounts).sort(
+    (a, b) => (kindOrder.indexOf(a) + 1 || 99) - (kindOrder.indexOf(b) + 1 || 99),
+  );
+
   return (
     <PaneShell
       list={
         <ListColumn
-          toolbar={<SearchInput value={query} onChange={setQuery} placeholder="Search claims…" />}
-          items={items}
+          toolbar={
+            <div className="flex flex-col gap-2">
+              <SearchInput value={query} onChange={setQuery} placeholder="Search claims…" />
+              {presentKinds.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1">
+                  <KindChip label="All" count={items.length} active={kindFilter === null} onClick={() => setKindFilter(null)} />
+                  {presentKinds.map((k) => (
+                    <KindChip
+                      key={k}
+                      label={kindLabel(k)}
+                      count={kindCounts[k]}
+                      tone={kindTone(k)}
+                      active={kindFilter === k}
+                      onClick={() => setKindFilter(kindFilter === k ? null : k)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          }
+          items={shown}
           loading={loading}
           error={error ? <ListError title="Search failed" message={error} /> : undefined}
           empty={query.trim() ? "No claims match." : "No claims yet."}
           totalLabel={
             degraded
               ? "FTS unavailable — showing raw matches"
-              : items.length
-                ? `${items.length} claim${items.length === 1 ? "" : "s"}`
+              : shown.length
+                ? `${shown.length} ${kindFilter ? kindLabel(kindFilter).toLowerCase() : "claim"}${shown.length === 1 ? "" : "s"}`
                 : null
           }
           renderItem={(item) => (
@@ -134,6 +166,46 @@ export function ClaimsView({
   );
 }
 
+const _KIND_TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "bad"> = {
+  rule: "accent",
+  skill: "accent",
+  fact: "ok",
+  preference: "ok",
+  action: "neutral",
+  note: "neutral",
+};
+function kindTone(kind: string): "neutral" | "accent" | "ok" | "warn" | "bad" {
+  return _KIND_TONE[kind] ?? "neutral";
+}
+function kindLabel(kind: string): string {
+  return kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Note";
+}
+
+function KindChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  tone?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-6 px-2 rounded-full text-2xs font-medium tracking-[-0.005em] transition-colors select-none ${
+        active ? "bg-accent-soft text-accent-strong" : "text-muted hover:bg-surface-soft hover:text-ink"
+      }`}
+    >
+      {label} <span className="tabular-nums opacity-60">{count}</span>
+    </button>
+  );
+}
+
 function ClaimRow({ item, active, onSelect }: { item: MemoryItem; active: boolean; onSelect: () => void }) {
   return (
     <li>
@@ -145,6 +217,9 @@ function ClaimRow({ item, active, onSelect }: { item: MemoryItem; active: boolea
       >
         <span className="line-clamp-2 text-sm leading-snug text-ink">{truncate(item.content, 140)}</span>
         <span className="flex items-center gap-1.5">
+          <Badge tone={kindTone(item.canonical_subject)} size="sm">
+            {kindLabel(item.canonical_subject)}
+          </Badge>
           <Badge tone={provenanceTone(item.provenance)} size="sm">
             {provenanceLabel(item.provenance)}
           </Badge>

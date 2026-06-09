@@ -12,11 +12,11 @@ import {
 } from "../src/hooks/useEvents.ts";
 import { cancelSubagent, loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
 import {
-  childAgentTaskToBackgroundSnapshot,
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
   RIGHT_PANEL_BODY_WIDTH,
 } from "../src/components/AgentRightSidebar.tsx";
+import { childAgentTaskToBackgroundSnapshot } from "../src/lib/agentRun.ts";
 import { visibleMessageIds } from "../src/lib/messageVisibility.ts";
 import { getState, setState } from "../src/store/index.ts";
 import { createBackgroundAgentsDomainState } from "../src/store/background-agent-domain.ts";
@@ -2601,4 +2601,47 @@ test("concurrent research agents share one activity block with distinct labels",
     agents.some((a) => a.call === it.id),
   );
   expect(finalRows.every((r) => r.taskStatus === "completed")).toBe(true);
+});
+
+test("workflow token usage attributes to its agent and drill-in carries the child session", () => {
+  setState({ currentSessionId: "s1" });
+  handleServerEvent({
+    type: "workflow_started",
+    workflow_id: "wf1",
+    session_id: "s1",
+    run_id: "r1",
+    parent_tool_call_id: "call-wf",
+    name: "review-diff",
+  });
+  handleServerEvent({
+    type: "task_started",
+    session_id: "s1",
+    run_id: "r1",
+    task_id: "call-wf:a1",
+    child_run_id: "agent-1",
+    child_session_id: "s1::child1",
+    agent_type: "review",
+    workflow_id: "wf1",
+    phase: "review",
+    name: "map:core",
+  });
+  handleServerEvent({
+    type: "token_usage",
+    run_id: "r1",
+    workflow_id: "wf1",
+    child_run_id: "agent-1",
+    phase: "review",
+    usage: { prompt: 100, completion: 50, total: 150 },
+    cost: 0.01,
+  });
+
+  const wf = getState().workflows.rows["s1:wf1"];
+  expect(wf).toBeTruthy();
+  const agent = wf.phasesByName["review"]?.agentsByTaskId["agent-1"];
+  expect(agent).toBeTruthy();
+  // token attribution (the previously-dead routeWorkflowTokenUsage path)
+  expect(agent?.tokens?.total).toBe(150);
+  expect(agent?.cost).toBeCloseTo(0.01);
+  // drill-in target threaded through from the lifecycle event
+  expect(agent?.childSessionId).toBe("s1::child1");
 });

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -8,15 +9,32 @@ import aiosqlite
 from pydantic import BaseModel
 
 from ntrp.constants import (
+    RAW_TOOL_RESULT_INLINE_MAX_BYTES,
     SESSION_EVENT_DURABLE_RETENTION,
     SESSION_EVENT_PRUNE_INTERVAL,
     SESSION_HANDOFF_MARKER,
 )
 from ntrp.context.models import SessionData, SessionState
+from ntrp.core.raw_tool_results import (
+    RawToolResultBlob,
+    internal_blob_from_data,
+    persist_raw_tool_result,
+    preview_text,
+    read_raw_tool_result,
+    strip_internal_raw_tool_result_data,
+)
 from ntrp.events.sse import event_from_payload
+from ntrp.logging import get_logger
 from ntrp.server.bus import StreamRecord
 
+_logger = get_logger(__name__)
+
 LATEST_VISIBLE_ANCHOR_ROW_LIMIT = 1000
+# Hard bound on the string handed to the FTS5 MATCH parser. A very long query
+# makes the parser run super-linearly and peg a core for minutes WITHOUT raising
+# (so the except-fallback below never fires). Real search queries are short; an
+# oversized one (e.g. a whole document passed as a query) is truncated here.
+MAX_FTS_QUERY_CHARS = 500
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
@@ -163,6 +181,31 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_run
     ON tool_calls(run_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session_started
     ON tool_calls(session_id, started_at);
+
+CREATE TABLE IF NOT EXISTS tool_results (
+    tool_result_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    run_id TEXT,
+    tool_call_id TEXT NOT NULL,
+    tool_name TEXT,
+    content_sha256 TEXT NOT NULL,
+    content_bytes INTEGER NOT NULL,
+    stored_bytes INTEGER NOT NULL,
+    compression TEXT NOT NULL,
+    blob_ref TEXT NOT NULL,
+    blob_path TEXT NOT NULL,
+    preview TEXT,
+    retention_class TEXT NOT NULL DEFAULT 'session',
+    expires_at TEXT,
+    source_event_seq INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE(session_id, tool_call_id, content_sha256)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_results_session_created
+    ON tool_results(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tool_results_tool_call
+    ON tool_results(tool_call_id);
 
 CREATE TABLE IF NOT EXISTS research_artifacts (
     scope_id TEXT NOT NULL,
@@ -381,6 +424,14 @@ class SessionStore:
         self._session_write_locks: dict[str, asyncio.Lock] = {}
         # Durable-event writes per session since the last retention prune.
         self._events_since_prune: dict[str, int] = {}
+        # Optional semantic index over transcript rows (search.db). Attached by
+        # the knowledge runtime after the indexer is up; None -> FTS-only.
+        self._search_index: Any = None
+
+    def attach_search_index(self, idx: Any) -> None:
+        """Wire the runtime's SearchIndex so new transcript rows get embedded on
+        insert and search_messages can fuse FTS with vector hits. Idempotent."""
+        self._search_index = idx
 
     async def _session_write_lock(self, session_id: str) -> asyncio.Lock:
         async with self._session_locks_guard:
@@ -489,6 +540,27 @@ class SessionStore:
             "ended_at": row["ended_at"],
         }
 
+    def _tool_result_payload(self, row: aiosqlite.Row, *, content: str | None = None) -> dict:
+        return {
+            "tool_result_id": row["tool_result_id"],
+            "session_id": row["session_id"],
+            "run_id": row["run_id"],
+            "tool_call_id": row["tool_call_id"],
+            "tool_name": row["tool_name"],
+            "content_sha256": row["content_sha256"],
+            "content_bytes": row["content_bytes"],
+            "stored_bytes": row["stored_bytes"],
+            "compression": row["compression"],
+            "blob_ref": row["blob_ref"],
+            "blob_path": row["blob_path"],
+            "preview": row["preview"],
+            "retention_class": row["retention_class"],
+            "expires_at": row["expires_at"],
+            "source_event_seq": row["source_event_seq"],
+            "created_at": row["created_at"],
+            "content": content,
+        }
+
     def _tool_approval_payload(self, row: aiosqlite.Row) -> dict:
         return {
             "run_id": row["run_id"],
@@ -540,6 +612,7 @@ class SessionStore:
         }
 
     async def init_schema(self) -> None:
+        await self._pre_migrate_tool_results_schema()
         await self.conn.executescript(SCHEMA)
         for col in (
             "name TEXT",
@@ -573,6 +646,28 @@ class SessionStore:
         await self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_idempotency_expires ON chat_idempotency_keys(expires_at)"
         )
+        await self.conn.commit()
+
+    async def _pre_migrate_tool_results_schema(self) -> None:
+        rows = await self.conn.execute_fetchall("PRAGMA table_info(tool_results)")
+        if not rows:
+            return
+        columns = {row["name"] for row in rows}
+        expected = {"tool_result_id", "session_id", "tool_call_id", "content_bytes", "blob_path"}
+        if expected.issubset(columns):
+            return
+
+        existing = await self.conn.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tool_results_legacy%'"
+        )
+        existing_names = {row["name"] for row in existing}
+        legacy_name = "tool_results_legacy"
+        suffix = 2
+        while legacy_name in existing_names:
+            legacy_name = f"tool_results_legacy_{suffix}"
+            suffix += 1
+
+        await self.conn.execute(f"ALTER TABLE tool_results RENAME TO {legacy_name}")
         await self.conn.commit()
 
     async def create_project(
@@ -1259,6 +1354,18 @@ class SessionStore:
                     """,
                     (session_id, message_id, next_seq, role, message_json, client_id, created_at, search_text),
                 )
+                # Semantic index for hybrid transcript search. Fire-and-forget so
+                # a slow embed never blocks message persistence; new rows only.
+                if self._search_index is not None and search_text.strip():
+                    asyncio.create_task(
+                        self._search_index.upsert(
+                            source="transcript",
+                            source_id=f"{session_id}:{next_seq}",
+                            title=f"{role} @ {session_id}",
+                            content=search_text,
+                            metadata={"session_id": session_id, "seq": next_seq, "role": role},
+                        )
+                    )
                 next_seq += 1
         await self._rebuild_session_turns(session_id)
 
@@ -1620,6 +1727,7 @@ class SessionStore:
                 args_hash = excluded.args_hash,
                 status = excluded.status,
                 result_preview = NULL,
+                result_ref = NULL,
                 started_at = excluded.started_at,
                 ended_at = NULL
             """,
@@ -1698,6 +1806,17 @@ class SessionStore:
             (run_id,),
         )
         return [self._tool_call_payload(row) for row in rows]
+
+    async def get_tool_result(self, tool_result_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT * FROM tool_results WHERE tool_result_id = ?",
+            (tool_result_id,),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        content = await asyncio.to_thread(read_raw_tool_result, row["blob_path"], compression=row["compression"])
+        return self._tool_result_payload(row, content=content)
 
     async def record_tool_approval_requested(
         self,
@@ -2164,38 +2283,201 @@ class SessionStore:
             )
         return [self._chat_queued_message_payload(row) for row in rows]
 
-    async def record_session_event(self, record: StreamRecord) -> None:
-        sse = record.event.to_sse()
-        payload = json.loads(sse["data"])
-        event_json = await asyncio.to_thread(lambda: json.dumps(payload, default=str))
+    @staticmethod
+    def _tool_result_id(*, session_id: str, seq: int, tool_call_id: str, content_sha256: str) -> str:
+        seed = f"{session_id}\0{seq}\0{tool_call_id}\0{content_sha256}".encode()
+        return f"tr_{hashlib.sha256(seed).hexdigest()[:24]}"
+
+    @staticmethod
+    def _raw_tool_result_pointer_content(
+        *,
+        preview: str,
+        tool_result_id: str,
+        content_bytes: int,
+        content_sha256: str,
+    ) -> str:
+        prefix = preview_text(preview)
+        note = (
+            f"[Full raw tool result stored as {tool_result_id}; "
+            f"{content_bytes} bytes, sha256:{content_sha256[:12]}.]"
+        )
+        return f"{prefix}\n\n{note}" if prefix else note
+
+    @staticmethod
+    def _strip_empty_raw_tool_result_fields(payload: dict) -> dict:
+        for key in ("raw_ref", "content_sha256", "content_bytes", "retention_class"):
+            if payload.get(key) is None:
+                payload.pop(key, None)
+        return payload
+
+    @classmethod
+    def _prepare_durable_tool_result_payload(
+        cls,
+        *,
+        record: StreamRecord,
+        payload: dict,
+        now: str,
+    ) -> tuple[dict, tuple | None, tuple | None]:
+        if payload.get("type") != "TOOL_CALL_RESULT":
+            return payload, None, None
+
+        tool_call_id = payload.get("tool_call_id")
+        if not isinstance(tool_call_id, str) or not tool_call_id:
+            return payload, None, None
+
+        payload = dict(payload)
+        content = payload.get("content")
+        blob: RawToolResultBlob | None = internal_blob_from_data(payload.get("data"))
+        cleaned_data = strip_internal_raw_tool_result_data(payload.get("data"))
+        if cleaned_data is None:
+            payload.pop("data", None)
+        else:
+            payload["data"] = cleaned_data
+
+        if blob is None:
+            if not isinstance(content, str) or len(content.encode("utf-8")) <= RAW_TOOL_RESULT_INLINE_MAX_BYTES:
+                return cls._strip_empty_raw_tool_result_fields(payload), None, None
+            blob = persist_raw_tool_result(content)
+            preview = payload.get("preview") if isinstance(payload.get("preview"), str) else ""
+            preview = preview or preview_text(content)
+            payload["preview"] = preview_text(preview)
+            payload["content"] = cls._raw_tool_result_pointer_content(
+                preview=preview,
+                tool_result_id=cls._tool_result_id(
+                    session_id=record.session_id,
+                    seq=record.seq,
+                    tool_call_id=tool_call_id,
+                    content_sha256=blob.content_sha256,
+                ),
+                content_bytes=blob.content_bytes,
+                content_sha256=blob.content_sha256,
+            )
+
+        tool_result_id = cls._tool_result_id(
+            session_id=record.session_id,
+            seq=record.seq,
+            tool_call_id=tool_call_id,
+            content_sha256=blob.content_sha256,
+        )
         run_id = payload.get("run_id") if isinstance(payload.get("run_id"), str) else None
-        await self.conn.execute(
+        preview = payload.get("preview") if isinstance(payload.get("preview"), str) else ""
+        retention_class = "session"
+        payload["raw_ref"] = tool_result_id
+        payload["content_sha256"] = blob.content_sha256
+        payload["content_bytes"] = blob.content_bytes
+        payload["retention_class"] = retention_class
+
+        tool_result_row = (
+            tool_result_id,
+            record.session_id,
+            run_id,
+            tool_call_id,
+            payload.get("name") if isinstance(payload.get("name"), str) else None,
+            blob.content_sha256,
+            blob.content_bytes,
+            blob.stored_bytes,
+            blob.compression,
+            blob.blob_ref,
+            blob.blob_path,
+            preview_text(preview),
+            retention_class,
+            None,
+            record.seq,
+            now,
+        )
+        tool_call_ref_update = (tool_result_id, record.session_id, tool_call_id)
+        return payload, tool_result_row, tool_call_ref_update
+
+    async def record_session_event(self, record: StreamRecord) -> None:
+        await self.record_session_events([record])
+
+    async def record_session_events(self, records: list[StreamRecord]) -> None:
+        """Persist a batch of durable events in ONE transaction (one commit).
+
+        The SSE writer drains its queue and hands a batch here so a high-volume
+        run does not pay a commit (and its WAL fsync) per event on the single
+        shared write connection — which otherwise serializes ahead of, and
+        starves, request-path writes like POST /chat/message. Serialization +
+        JSON encoding run in a worker thread to keep the event loop free."""
+        if not records:
+            return
+
+        def _build_rows() -> tuple[list[tuple], list[tuple], list[tuple], dict[str, int]]:
+            now = datetime.now(UTC).isoformat()
+            rows: list[tuple] = []
+            tool_result_rows: list[tuple] = []
+            tool_call_ref_updates: list[tuple] = []
+            per_session: dict[str, int] = {}
+            for record in records:
+                sse = record.event.to_sse()
+                payload = json.loads(sse["data"])
+                payload, tool_result_row, tool_call_ref_update = self._prepare_durable_tool_result_payload(
+                    record=record,
+                    payload=payload,
+                    now=now,
+                )
+                if tool_result_row is not None:
+                    tool_result_rows.append(tool_result_row)
+                if tool_call_ref_update is not None:
+                    tool_call_ref_updates.append(tool_call_ref_update)
+                run_id = payload.get("run_id") if isinstance(payload.get("run_id"), str) else None
+                rows.append(
+                    (
+                        record.session_id,
+                        record.seq,
+                        str(payload.get("type") or sse["event"]),
+                        json.dumps(payload, default=str),
+                        run_id,
+                        now,
+                    )
+                )
+                per_session[record.session_id] = per_session.get(record.session_id, 0) + 1
+            return rows, tool_result_rows, tool_call_ref_updates, per_session
+
+        rows, tool_result_rows, tool_call_ref_updates, per_session = await asyncio.to_thread(_build_rows)
+        if tool_result_rows:
+            await self.conn.executemany(
+                """
+                INSERT OR IGNORE INTO tool_results (
+                    tool_result_id, session_id, run_id, tool_call_id, tool_name,
+                    content_sha256, content_bytes, stored_bytes, compression,
+                    blob_ref, blob_path, preview, retention_class, expires_at,
+                    source_event_seq, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                tool_result_rows,
+            )
+        if tool_call_ref_updates:
+            await self.conn.executemany(
+                """
+                UPDATE tool_calls
+                SET result_ref = ?
+                WHERE session_id = ? AND tool_call_id = ?
+                """,
+                tool_call_ref_updates,
+            )
+        await self.conn.executemany(
             """
             INSERT INTO session_events (
                 session_id, seq, event_type, event_json, run_id, created_at
             )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (
-                record.session_id,
-                record.seq,
-                str(payload.get("type") or sse["event"]),
-                event_json,
-                run_id,
-                datetime.now(UTC).isoformat(),
-            ),
+            rows,
         )
         await self.conn.commit()
 
         # Amortized retention: cap each session's durable event log to the
         # newest N rows. Trimming the oldest never touches an active run's
         # tail (its events are the newest), so no checkpoint guard is needed.
-        count = self._events_since_prune.get(record.session_id, 0) + 1
-        if count >= SESSION_EVENT_PRUNE_INTERVAL:
-            self._events_since_prune[record.session_id] = 0
-            await self.prune_session_events(record.session_id, SESSION_EVENT_DURABLE_RETENTION)
-        else:
-            self._events_since_prune[record.session_id] = count
+        for session_id, n in per_session.items():
+            count = self._events_since_prune.get(session_id, 0) + n
+            if count >= SESSION_EVENT_PRUNE_INTERVAL:
+                self._events_since_prune[session_id] = 0
+                await self.prune_session_events(session_id, SESSION_EVENT_DURABLE_RETENTION)
+            else:
+                self._events_since_prune[session_id] = count
 
     async def prune_session_events(self, session_id: str, keep: int = SESSION_EVENT_DURABLE_RETENTION) -> int:
         """Keep only the newest `keep` durable events for a session, deleting
@@ -2623,6 +2905,34 @@ class SessionStore:
             "after": messages[-1]["message_id"] if messages else None,
         }
 
+    async def messages_since(self, session_id: str, seq: int) -> list[dict]:
+        """Ordered transcript rows with seq > `seq` (oldest-first) for the
+        curator. Returns the same `_message_row_payload` shape as list_messages
+        (carries `seq`, `role`, parsed `message`)."""
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT * FROM session_messages
+            WHERE session_id = ? AND seq > ?
+            ORDER BY seq ASC
+            """,
+            (session_id, seq),
+        )
+        return [self._message_row_payload(row) for row in rows]
+
+    async def recent_session_scopes(self, limit: int) -> list[dict]:
+        """The `limit` most-recently-active live sessions (archived excluded),
+        as {session_id, project_id} — the curation sweep's worklist."""
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT session_id, project_id FROM sessions
+            WHERE archived_at IS NULL
+            ORDER BY last_activity DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [{"session_id": row["session_id"], "project_id": row["project_id"]} for row in rows]
+
     async def search_messages(
         self,
         query: str,
@@ -2633,7 +2943,8 @@ class SessionStore:
         since: str | None = None,
         until: str | None = None,
     ) -> dict:
-        """Full-text search across transcript messages (BM25-ranked).
+        """Hybrid search across transcript messages: FTS (BM25) fused with the
+        semantic index via RRF when a SearchIndex is attached, FTS-only otherwise.
 
         Returns {hits, has_more}. Each hit carries session_id + session name,
         seq, role, created_at, and a trimmed snippet. Scope to one chat with
@@ -2642,6 +2953,9 @@ class SessionStore:
         q = query.strip()
         if not q:
             return {"hits": [], "has_more": False}
+        # Bound the FTS5 parser input so an oversized/pathological query can't peg
+        # a core (it spins without raising, so the except-fallback below won't catch it).
+        q = q[:MAX_FTS_QUERY_CHARS]
         limit = max(1, min(limit, 100))
         offset = max(0, offset)
 
@@ -2657,7 +2971,13 @@ class SessionStore:
             where.append("m.created_at <= ?")
             params.append(until)
 
-        # Fetch limit+1 to detect a further page without a COUNT.
+        # FTS-only paginates directly in SQL (LIMIT limit+1 OFFSET offset — one
+        # extra row signals a further page). Hybrid over-fetches a larger pool
+        # with NO sql offset and paginates in Python after the RRF fusion.
+        if self._search_index is None:
+            fts_sql_limit, fts_sql_offset = limit + 1, offset
+        else:
+            fts_sql_limit, fts_sql_offset = max((limit + offset) * 4, 40), 0
         sql = f"""
             SELECT m.session_id AS session_id, s.name AS session_name,
                    m.seq AS seq, m.role AS role, m.created_at AS created_at,
@@ -2669,30 +2989,110 @@ class SessionStore:
             ORDER BY bm25(session_messages_fts), m.created_at DESC
             LIMIT ? OFFSET ?
         """
-        params.extend([limit + 1, offset])
+        params.extend([fts_sql_limit, fts_sql_offset])
 
         try:
-            rows = await self.read_conn.execute_fetchall(sql, tuple(params))
+            fts_rows = await self.read_conn.execute_fetchall(sql, tuple(params))
         except Exception:
             # Malformed FTS query (stray operators, unbalanced quotes). Retry
             # as a quoted phrase so user text never surfaces a SQL error.
             phrase = '"' + q.replace('"', '""') + '"'
             params[0] = phrase
-            rows = await self.read_conn.execute_fetchall(sql, tuple(params))
+            fts_rows = await self.read_conn.execute_fetchall(sql, tuple(params))
 
-        has_more = len(rows) > limit
-        hits = [
-            {
-                "session_id": r["session_id"],
-                "session_name": r["session_name"],
-                "seq": r["seq"],
-                "role": r["role"],
-                "created_at": r["created_at"],
-                "snippet": (r["snippet"] or "").strip(),
-            }
-            for r in rows[:limit]
+        if self._search_index is None:
+            has_more = len(fts_rows) > limit
+            hits = [self._search_hit(r) for r in fts_rows[:limit]]
+            return {"hits": hits, "has_more": has_more}
+
+        return await self._hybrid_search_messages(
+            q, fts_rows, limit=limit, offset=offset, session_id=session_id
+        )
+
+    @staticmethod
+    def _search_hit(r: Any, snippet: str | None = None) -> dict:
+        return {
+            "session_id": r["session_id"],
+            "session_name": r["session_name"],
+            "seq": r["seq"],
+            "role": r["role"],
+            "created_at": r["created_at"],
+            "snippet": (snippet if snippet is not None else (r["snippet"] or "")).strip(),
+        }
+
+    async def _hybrid_search_messages(
+        self,
+        query: str,
+        fts_rows: list[Any],
+        *,
+        limit: int,
+        offset: int,
+        session_id: str | None,
+    ) -> dict:
+        """Fuse the FTS ranking with the vector index via RRF, keyed on
+        (session_id, seq) so the two separate databases bridge in Python."""
+        from ntrp.constants import RRF_K
+        from ntrp.search.retrieval import rrf_merge
+
+        index = self._search_index
+        fts_ranked: list[tuple[tuple[str, int], float]] = [
+            ((r["session_id"], r["seq"]), 1.0) for r in fts_rows
         ]
+
+        vec_ranked: list[tuple[tuple[str, int], float]] = []
+        try:
+            embedding = await index.embedder.embed_one(query)
+            from ntrp.database import serialize_embedding
+
+            raw = await index.store.vector_search(
+                serialize_embedding(embedding), sources=["transcript"], limit=max(limit * 4, 40)
+            )
+            for item_id, score in raw:
+                item = await index.store.get_by_id(item_id)
+                meta = item.metadata if item and item.metadata else None
+                if not meta or "session_id" not in meta or "seq" not in meta:
+                    continue
+                if session_id is not None and meta["session_id"] != session_id:
+                    continue
+                vec_ranked.append(((meta["session_id"], int(meta["seq"])), score))
+        except Exception:
+            _logger.warning("transcript vector search failed; FTS-only fallback", exc_info=True)
+
+        fused = rrf_merge([fts_ranked, vec_ranked], k=RRF_K)
+        ordered_keys = sorted(fused, key=lambda key: fused[key], reverse=True)
+        page_keys = ordered_keys[offset : offset + limit]
+        has_more = len(ordered_keys) > offset + limit
+
+        # Hydrate snippet/role/created_at for the page from session_messages.
+        fts_by_key = {(r["session_id"], r["seq"]): r for r in fts_rows}
+        hits: list[dict] = []
+        for key in page_keys:
+            row = fts_by_key.get(key)
+            if row is not None:
+                hits.append(self._search_hit(row))
+            else:
+                hydrated = await self._hydrate_message_hit(key[0], key[1])
+                if hydrated is not None:
+                    hits.append(hydrated)
         return {"hits": hits, "has_more": has_more}
+
+    async def _hydrate_message_hit(self, session_id: str, seq: int) -> dict | None:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT m.session_id AS session_id, s.name AS session_name,
+                   m.seq AS seq, m.role AS role, m.created_at AS created_at,
+                   m.search_text AS search_text
+            FROM session_messages m
+            LEFT JOIN sessions s ON s.session_id = m.session_id
+            WHERE m.session_id = ? AND m.seq = ?
+            """,
+            (session_id, seq),
+        )
+        if not rows:
+            return None
+        r = rows[0]
+        snippet = (r["search_text"] or "").replace("\n", " ")[:160]
+        return self._search_hit(r, snippet=snippet)
 
     def _row_is_visible_user(self, row: Any) -> bool:
         if row["role"] != "user":

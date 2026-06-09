@@ -6,12 +6,12 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.logging import get_logger
+from ntrp.search.fts import build_fts_or_query
 from ntrp.search.migrations import run_migrations
 
 _logger = get_logger(__name__)
 
 SNIPPET_DISPLAY_LIMIT = 500
-DQ = '"'
 
 
 @dataclass
@@ -353,10 +353,9 @@ class SearchStore:
         if not self._has_fts:
             return []
 
-        terms = query.split()
-        if not terms:
+        fts_query = build_fts_or_query(query)
+        if not fts_query:
             return []
-        fts_query = " OR ".join(f'"{t.replace(DQ, DQ + DQ)}"' for t in terms)
 
         try:
             if sources:

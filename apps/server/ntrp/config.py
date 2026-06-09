@@ -9,6 +9,7 @@ from ntrp.constants import (
     AGENT_MAX_COST,
     AGENT_MAX_DEPTH,
     AGENT_MAX_ITERATIONS,
+    AGENT_MAX_OUTPUT_TOKENS,
     AGENT_MAX_TOOL_CALLS,
     AGENT_MAX_WALL_TIME_SECONDS,
 )
@@ -70,6 +71,7 @@ PERSIST_KEYS = frozenset(
         "agent_max_tool_calls",
         "agent_max_wall_time_seconds",
         "agent_max_cost",
+        "agent_max_output_tokens",
         "web_search",
         "deferred_tools",
     }
@@ -137,6 +139,7 @@ class Config(BaseSettings):
     agent_max_tool_calls: int | None = AGENT_MAX_TOOL_CALLS
     agent_max_wall_time_seconds: float | None = AGENT_MAX_WALL_TIME_SECONDS
     agent_max_cost: float | None = AGENT_MAX_COST
+    agent_max_output_tokens: int | None = AGENT_MAX_OUTPUT_TOKENS
     # Legacy global setting. New writes use model_reasoning_efforts so each
     # chat model keeps its own thinking level.
     reasoning_effort: str | None = None

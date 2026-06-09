@@ -86,6 +86,7 @@ async def test_runtime_research_runner_projects_internal_ledger_notes(monkeypatc
             agent_max_tool_calls=None,
             agent_max_wall_time_seconds=None,
             agent_max_cost=None,
+            agent_max_output_tokens=None,
             model_reasoning_efforts={},
             deferred_tools=False,
             compression_threshold=0.8,

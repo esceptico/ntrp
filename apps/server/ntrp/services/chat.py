@@ -40,8 +40,9 @@ from ntrp.services.goal_continuation import (
     goal_continuation_prompt,
 )
 from ntrp.services.session import SessionService
+from ntrp.services.token_directive import parse_token_budget
 from ntrp.skills.registry import SkillRegistry
-from ntrp.tools.core.context import ChildIOParams, ChildSession, IOBridge
+from ntrp.tools.core.context import ChildIOFactory, ChildIOParams, ChildSession, IOBridge
 from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
@@ -126,9 +127,8 @@ class ChatDeps:
     integration_errors: dict[str, str]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
-    memory: object | None = None
-    memory_service: object | None = None
-    memory_retrieval: object | None = None
+    memory_curator: object | None = None
+    memory_records: object | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: NotifierService | None = None
 
@@ -151,7 +151,7 @@ class ChatContext:
     project_context: ProjectContext | None = None
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
-    memory_ingest: object | None = None
+    memory_curator: object | None = None
 
 
 async def _apply_generated_session_name(ctx: ChatContext, bus: SessionBus) -> None:
@@ -378,56 +378,34 @@ def _is_meta_client_id(client_id: str | None) -> bool:
 # Below this many chars of user input there is nothing worth a scoped recall
 # (a bare "ok"/"thanks"). A routing floor, not a worth gate.
 _MEMORY_RECALL_FLOOR = 12
-# Token budget for the injected memory block — small by design (CONTRACTS §9).
-_MEMORY_TOKEN_BUDGET = 1500
+
+
+# Pinned records injected per scope into the hot path (small, zero-LLM).
+_PINNED_RECORD_LIMIT = 20
 
 
 async def _retrieve_memory_context(
-    memory_retrieval: object | None,
+    memory_records: object | None,
     user_message: str,
-    project_context: ProjectContext | None,
 ) -> str | None:
-    """Scope-filtered, cost-aware memory recall for the system prompt.
+    """Pinned records for the system prompt — the flat pool's durable bullets.
 
-    Scoped to the active project (else USER) and bounded by a small token
-    budget. Skips entirely on trivial/empty input so the hot path pays nothing.
-    The Retriever runs no LLM unless the recalled pool overflows the budget.
+    Pure DB I/O, zero LLM, zero per-turn vector. Skips on trivial/empty input so
+    the hot path pays nothing. Docs are gone; records are the memory pool.
     """
-    if memory_retrieval is None:
+    if memory_records is None:
         return None
     if not user_message or len(user_message.strip()) < _MEMORY_RECALL_FLOOR:
         return None
 
-    from ntrp.memory.models import Scope, ScopeKind
-    from ntrp.memory.pipeline.types import Retrieval
-
-    # lens_hint is STRUCTURAL, never sniffed from prose (§0/§3.7): a project-scoped
-    # chat hints the lens whose name matches the project. The expander resolves it
-    # by id/exact-name/FTS and returns None when no such lens exists, in which case
-    # retrieve runs unconstrained recall unchanged. Never an LLM/keyword decision.
-    lens_hint: str | None = None
-    if project_context is not None and project_context.project_id:
-        scope = Scope(kind=ScopeKind.PROJECT, key=str(project_context.project_id))
-        also = [Scope(kind=ScopeKind.USER)]
-        lens_hint = project_context.name or project_context.project_id
-    else:
-        scope = Scope(kind=ScopeKind.USER)
-        also = []
-
     try:
-        result = await memory_retrieval.retrieve(
-            Retrieval(
-                goal=user_message.strip(),
-                scope=scope,
-                also_scopes=also,
-                token_budget=_MEMORY_TOKEN_BUDGET,
-                lens_hint=lens_hint,
-            )
-        )
+        records = await memory_records.list(pinned_only=True, limit=_PINNED_RECORD_LIMIT)
     except Exception:
-        _logger.warning("memory retrieval failed", exc_info=True)
+        _logger.warning("pinned records load failed", exc_info=True)
         return None
-    return result.rendered or None
+    if not records:
+        return None
+    return "## Pinned\n\n" + "\n".join(f"- [{r.kind}] {r.text}" for r in records)
 
 
 async def _prepare_messages(
@@ -445,7 +423,7 @@ async def _prepare_messages(
     project_context: ProjectContext | None = None,
     todo_override: dict | None = None,
 ) -> list[dict]:
-    memory_context = await _retrieve_memory_context(deps.memory_retrieval, user_message, project_context)
+    memory_context = await _retrieve_memory_context(deps.memory_records, user_message)
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
@@ -636,6 +614,7 @@ async def prepare_chat(
     )
 
     run = registry.create_run(session_state.session_id)
+    run.token_budget = parse_token_budget(message)
 
     tools = deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
@@ -687,7 +666,7 @@ async def prepare_chat(
         project_context=project_context,
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
-        memory_ingest=deps.memory_retrieval,
+        memory_curator=deps.memory_curator,
     )
 
 
@@ -955,14 +934,12 @@ async def _record_completed_run(ctx: ChatContext, *, last_seq: int | None) -> No
     )
     await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
     ctx.run_registry.complete_run(ctx.run.run_id)
-    # Ingest this turn into memory (capture→admit→extract→reconcile). Fire-and-forget
-    # off the response path; the runtime tracks the task and swallows errors. Without
-    # this, chats never become memory (the trigger was never wired).
-    ingest = ctx.memory_ingest
-    if ingest is not None and hasattr(ingest, "schedule_ingest_session"):
-        from ntrp.memory.pipeline.types import BoundaryKind
-
-        ingest.schedule_ingest_session(ctx.session_state.session_id, BoundaryKind.SESSION)
+    # Curate this session into the durable memory doc (one LLM call, novelty-gated).
+    # Fire-and-forget off the response path; the curator tracks the task and
+    # swallows errors. Without this, chats never become memory.
+    curator = ctx.memory_curator
+    if curator is not None:
+        curator.schedule_curation(ctx.session_state.session_id)
 
 
 async def _drain_backgrounded(
@@ -1168,6 +1145,67 @@ async def _handle_background_result(
         )
 
 
+def make_child_io_factory(
+    buses: BusRegistry,
+    run_registry: RunRegistry,
+    *,
+    record_approval: Callable[..., Awaitable[None]],
+    resolve_approval: Callable[..., Awaitable[None]],
+    approval_timeout_seconds: int,
+) -> ChildIOFactory:
+    """Build the factory that gives a spawned FULL subagent its OWN session bus,
+    framed with the standard run lifecycle so the child session streams live
+    exactly like a top-level thread: RunStarted on open → content (text/tool/
+    reasoning, re-based to depth 0 by the spawner) → RunFinished/RunCancelled on
+    finish. The client's live-vs-done state is driven by that lifecycle, not the
+    content. The child reuses the parent run's approval plumbing + run_id — the
+    run id matches runtime.active_run (surfaced via mark_session_active →
+    get_active_run), so the load-time signal and the bus signal agree on one id.
+    `finish` is idempotent so the terminal frame is emitted exactly once."""
+
+    async def _child_io_factory(params: ChildIOParams) -> ChildSession:
+        # A freshly-spawned child has a brand-new session id with zero prior
+        # events, so there is no durable cursor to prime — get_or_create starts at
+        # seq 1. (prime_bus_cursor_from_store is for clients RECONNECTING to a
+        # stale session; doing it per spawn was 2 blocking DB reads for nothing.)
+        child_bus = buses.get_or_create(params.session_id)
+        child_io = IOBridge(
+            pending_approvals=params.pending_approvals,
+            emit=child_bus.emit,
+            record_approval=record_approval,
+            resolve_approval=resolve_approval,
+            approval_timeout_seconds=approval_timeout_seconds,
+        )
+        await child_bus.emit(RunStartedEvent(session_id=params.session_id, run_id=params.run_id))
+
+        finished = False
+
+        async def _finish(status: str) -> None:
+            nonlocal finished
+            if finished:
+                return
+            finished = True
+            if status == "cancelled":
+                await child_bus.emit(RunCancelledEvent(run_id=params.run_id))
+            else:
+                await child_bus.emit(RunFinishedEvent(run_id=params.run_id))
+
+        async def _aclose() -> None:
+            # Run finished: drain durable writes and drop the bus unless a client
+            # is still viewing the child session (subscribers keep it alive) OR its
+            # run is still active. Use the SAME liveness predicate as the SSE
+            # endpoint teardown (routers/chat.py) so the two paths agree — a
+            # `lambda: False` here raced a connecting viewer and reset the bus seq.
+            await buses.remove_if_idle(
+                params.session_id,
+                is_active=lambda: run_registry.get_active_run(params.session_id) is not None,
+            )
+
+        return ChildSession(io=child_io, finish=_finish, aclose=_aclose)
+
+    return _child_io_factory
+
+
 async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
@@ -1236,30 +1274,17 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
             approval_timeout_seconds=ctx.config.approval_timeout_seconds,
         )
 
-        # A spawned FULL subagent gets its own session; this builds an io bound
-        # to THAT session's bus so it streams live exactly like a normal run
-        # (instead of the parent's bus). It reuses the parent run's approval
-        # plumbing + run_id so tool approvals inside the subagent still resolve
-        # through this run's /tools/result.
-        async def _child_io_factory(params: ChildIOParams) -> ChildSession:
-            await prime_bus_cursor_from_store(buses, params.session_id, ctx.session_service.store)
-            child_bus = buses.get_or_create(params.session_id)
-            child_io = IOBridge(
-                pending_approvals=params.pending_approvals,
-                emit=child_bus.emit,
-                record_approval=record_approval,
-                resolve_approval=resolve_approval,
-                approval_timeout_seconds=ctx.config.approval_timeout_seconds,
-            )
-
-            async def _aclose() -> None:
-                # Run finished: drain durable writes and drop the bus unless a
-                # client is still viewing the child session (subscribers keep it).
-                await buses.remove_if_idle(params.session_id, is_active=lambda: False)
-
-            return ChildSession(io=child_io, aclose=_aclose)
-
-        ctx.run.child_io_factory = _child_io_factory
+        # A spawned FULL subagent gets its own session; this gives it an io bound
+        # to THAT session's bus, framed with the standard run lifecycle so the
+        # child session streams live exactly like a top-level thread. It reuses
+        # the parent run's approval plumbing + run_id.
+        child_io_factory = make_child_io_factory(
+            buses,
+            ctx.run_registry,
+            record_approval=record_approval,
+            resolve_approval=resolve_approval,
+            approval_timeout_seconds=ctx.config.approval_timeout_seconds,
+        )
 
         def _new_agent() -> Agent:
             return create_agent(
@@ -1278,6 +1303,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
                 initial_input_tokens=ctx.initial_input_tokens,
                 run_registry=ctx.run_registry,
                 project_context=ctx.project_context,
+                token_budget=run.token_budget,
+                child_io_factory=child_io_factory,
             )
 
         async def _track_response(response) -> None:
@@ -1330,7 +1357,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
             next_agent.hooks.on_response = _track_response
             next_agent.hooks.on_step_finish = _checkpoint
             next_agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
-            next_agent.hooks.wait_while_paused = run.wait_while_paused
             return next_agent
 
         async def _force_context_compaction() -> bool:

@@ -8,4 +8,6 @@ class StopReason(StrEnum):
     MAX_TOOL_CALLS = "max_tool_calls"
     MAX_WALL_TIME = "max_wall_time"
     MAX_COST = "max_cost"
+    MAX_TOKEN_BUDGET = "max_token_budget"
+    MAX_OUTPUT_LENGTH = "max_output_length"  # model hit its per-response max_tokens (truncated)
     CANCELLED = "cancelled"

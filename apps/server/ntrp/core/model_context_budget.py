@@ -3,7 +3,7 @@ from dataclasses import replace
 from ntrp.agent.model_request import ModelRequest, ModelRequestNext
 from ntrp.agent.types.llm import Role
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS
-from ntrp.core.tool_result_files import result_file_path
+from ntrp.core.tool_result_files import find_result_file
 
 HISTORY_TOOL_RESULT_PREVIEW_CHARS = OFFLOAD_PREVIEW_CHARS
 # Default preview length for the history-display compaction helper.
@@ -63,8 +63,8 @@ def _tool_result_stub(message: dict) -> str:
     retrieval = ""
     tool_call_id = message.get("tool_call_id")
     if tool_call_id:
-        path = result_file_path(tool_call_id)
-        if path.exists():
+        path = find_result_file(tool_call_id)
+        if path is not None:
             retrieval = f" Full output: read_file(path={str(path)!r}, offset=N)."
     return f"[Older {name} result cleared from context — {len(content)} chars, {line_count} lines.{retrieval}]"
 

@@ -492,6 +492,26 @@ async def test_create_agent_compaction_refreshes_deferred_schema():
     assert "slack_search" not in names
 
 
+def test_create_agent_wires_child_io_factory_onto_run_context():
+    # Regression: child_io_factory must land on the RunContext the SPAWNER reads
+    # (calling_ctx.run.child_io_factory), not on a RunState. The original bug was a
+    # dead write to ChatContext.run (a RunState with no such field), so drill-in
+    # never engaged and FULL subagents leaked their tool calls to the parent while
+    # their child sessions stayed empty.
+    async def factory(_params):
+        raise AssertionError("sentinel — never invoked")
+
+    agent = create_agent(
+        executor=_Executor(_registry()),
+        config=AgentConfig(model="test-model", research_model=None, max_depth=3),
+        tools=[],
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        run_id="run",
+        child_io_factory=factory,
+    )
+    assert agent._executor._ctx.run.child_io_factory is factory
+
+
 @pytest.mark.asyncio
 async def test_load_group_respects_run_allowed_names():
     registry = _registry()

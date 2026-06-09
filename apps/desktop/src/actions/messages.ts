@@ -3,8 +3,6 @@ import {
   cancelQueuedMessageApi,
   cancelRun,
   cancelSubagentApi,
-  pauseRunApi,
-  resumeRunApi,
 } from "../api";
 import { getState, setState, type ActivityItem, type ImageBlock } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
@@ -247,59 +245,6 @@ export async function cancelQueuedMessage(clientId: string): Promise<void> {
     s.removeQueuedMessage(clientId);
   } else {
     s.setQueuedMessageStatus(clientId, "sent");
-  }
-}
-
-/** Resolve the run to target for pause/resume — the tracked run id, else
- *  the session's active run (backgrounded runs the client never named). */
-function activeRunTarget(): { runId: string | null; sessionId: string | null } {
-  const s = getState();
-  const sessionId = s.currentSessionId;
-  const runId =
-    s.currentRunId ??
-    (sessionId
-      ? (s.sessions.find((session) => session.session_id === sessionId)?.active_run_id ?? null)
-      : null);
-  return { runId, sessionId };
-}
-
-/** Pause the active foreground run at its next step boundary (resumable). */
-export async function pauseRun(): Promise<void> {
-  const s = getState();
-  const { runId, sessionId } = activeRunTarget();
-  if (!runId && !sessionId) return;
-  s.setPaused(true); // optimistic
-  try {
-    await pauseRunApi(s.config, runId, sessionId);
-  } catch (error) {
-    s.setPaused(false); // revert on failure
-    if (getState().currentSessionId === sessionId) {
-      s.appendMessage({
-        id: crypto.randomUUID(),
-        role: "error",
-        content: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-}
-
-/** Resume a paused run. */
-export async function resumeRun(): Promise<void> {
-  const s = getState();
-  const { runId, sessionId } = activeRunTarget();
-  if (!runId && !sessionId) return;
-  s.setPaused(false); // optimistic
-  try {
-    await resumeRunApi(s.config, runId, sessionId);
-  } catch (error) {
-    s.setPaused(true); // revert on failure
-    if (getState().currentSessionId === sessionId) {
-      s.appendMessage({
-        id: crypto.randomUUID(),
-        role: "error",
-        content: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 }
 

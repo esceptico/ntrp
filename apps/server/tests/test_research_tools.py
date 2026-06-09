@@ -3,13 +3,16 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from pydantic import BaseModel
 
 import ntrp.database as database
 import ntrp.tools.research as research_module
-from ntrp.agent import SharedLedger
+from ntrp.agent import Result, SharedLedger, StopReason, Usage
 from ntrp.context.models import SessionState
+from ntrp.core.agent_types import apply_profile
 from ntrp.context.store import SessionStore
-from ntrp.core.spawner import SpawnResult
+from ntrp.core.spawner import SpawnResult, create_spawn_fn
+from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.executor import ToolExecutor
@@ -58,8 +61,9 @@ async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_
 
     result = await research_module.research(execution, research_module.ResearchInput(task="x", depth="normal"))
 
-    tool_names = {schema["function"]["name"] for schema in captured["tools"]}
-    assert tool_names >= SCRATCHPAD_TOOL_NAMES
+    # The scratchpad tools reach the child via the research AgentType profile's
+    # extra_tools (the spawner builds the actual toolset from the profile).
+    assert SCRATCHPAD_TOOL_NAMES <= set(captured["extra_tools"])
     assert result.data is not None
     assert result.data["artifacts"] == [{"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}]
 
@@ -121,11 +125,12 @@ async def test_research_spawns_child_with_research_ledger_helpers():
         research_module.ResearchInput(task="inspect research behavior", depth="normal"),
     )
 
-    tool_names = {schema["function"]["name"] for schema in captured["tools"]}
     assert result.content == "done"
-    assert "research_note" in tool_names
-    assert "research_outline" in tool_names
-    assert "research_cover" in tool_names
+    # research now hands the spawner a PROFILE (capability + ledger tools + spawn-tool
+    # excludes), not a pre-built tool list — the spawner builds the toolset from it.
+    assert "tools" not in captured
+    assert captured["actions"] == frozenset({ToolAction.READ})
+    assert {"background", "workflow"} <= captured["exclude_tools"]
     assert captured["agent_type"] == "research"
     assert captured["wait"] is True
     assert result.data is not None
@@ -149,33 +154,134 @@ async def test_research_spawns_child_with_research_ledger_helpers():
 
 
 @pytest.mark.asyncio
-async def test_nested_research_still_passes_ledger_helper_schemas():
+@pytest.mark.parametrize(
+    ("depth", "max_depth", "expect_research_excluded"),
+    [("quick", 3, True), ("normal", 3, False), ("normal", 2, True)],
+)
+async def test_research_depth_gate_excludes_nested_research(depth, max_depth, expect_research_excluded):
+    # Runtime-only logic that stays in research(): forbid nested research when the
+    # request is shallow (quick) or the remaining nesting depth is exhausted.
     captured = {}
-    registry = ToolExecutor().registry.copy_with(research_module.RESEARCH_AGENT_TOOLS)
-    ledger = SharedLedger()
 
     async def spawn_fn(ctx, task, **kwargs):
         captured.update(kwargs)
         return SpawnResult(text="done")
 
-    execution = ToolExecution(
-        tool_id="research-nested",
-        tool_name="research",
-        ctx=_context(ledger, registry=registry, spawn_fn=spawn_fn, research_scope_id="research-parent"),
-    )
+    ctx = _context(SharedLedger(), spawn_fn=spawn_fn)
+    ctx.run.max_depth = max_depth
+    execution = ToolExecution(tool_id="research-1", tool_name="research", ctx=ctx)
 
-    result = await research_module.research(
-        execution,
-        research_module.ResearchInput(task="inspect nested research behavior", depth="normal"),
-    )
+    await research_module.research(execution, research_module.ResearchInput(task="x", depth=depth))
 
-    tool_names = {schema["function"]["name"] for schema in captured["tools"]}
-    assert result.content == "done"
-    assert "research_note" in tool_names
-    assert "research_outline" in tool_names
-    assert "research_cover" in tool_names
-    assert captured["extra_tools"] == {}
-    assert captured["research_scope_id"] == "research-nested"
+    assert ("research" in captured["exclude_tools"]) is expect_research_excluded
+
+
+class _ToolInput(BaseModel):
+    q: str = ""
+
+
+async def _noop_tool(execution, args):
+    return ToolResult(content="", preview="")
+
+
+def _action_tool(action: ToolAction):
+    return tool(description="t", input_model=_ToolInput, policy=ToolPolicy(action=action, scope=ToolScope.INTERNAL), execute=_noop_tool)
+
+
+class _CapExecutor:
+    def __init__(self, registry: ToolRegistry):
+        self.registry = registry
+
+    @property
+    def tool_services(self):
+        return {}
+
+    def get_tools(self, **kwargs):
+        return self.registry.get_schemas(**kwargs)
+
+    def with_registry(self, registry: ToolRegistry):
+        return _CapExecutor(registry)
+
+
+def _base_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register("read_tool", _action_tool(ToolAction.READ), source="_system")
+    registry.register("write_tool", _action_tool(ToolAction.WRITE), source="_system")
+    registry.register("background", _action_tool(ToolAction.READ), source="_system")
+    registry.register("workflow", _action_tool(ToolAction.READ), source="_system")
+    return registry
+
+
+def _spawn_parent_ctx(registry: ToolRegistry) -> ToolContext:
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=RunContext(run_id="run", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="parent"),
+    )
+    ctx.spawn_fn = create_spawn_fn(executor=_CapExecutor(registry), model="test-model", max_depth=3, current_depth=0)
+    return ctx
+
+
+@pytest.mark.asyncio
+async def test_research_profile_builds_read_only_child_toolset(monkeypatch):
+    # End to end through the REAL spawner: the research AgentType profile yields a
+    # read-only child toolset that includes the ledger helpers and excludes the
+    # write tool (by capability) and the spawn tools (by name). This is the behavior
+    # that used to be assembled inline in research().
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    parent_ctx = _spawn_parent_ctx(_base_registry())
+    profile = apply_profile(research_module.RESEARCH_AGENT_TYPE, system_prompt="prompt")
+    await parent_ctx.spawn_fn(parent_ctx, task="research it", agent_type="research", **profile)
+
+    names = {schema["function"]["name"] for schema in captured["tools"]}
+    assert "read_tool" in names
+    assert SCRATCHPAD_TOOL_NAMES <= names
+    assert {"research_note", "research_outline", "research_cover"} <= names
+    assert "write_tool" not in names  # WRITE filtered by actions={READ}
+    assert "background" not in names  # excluded by the research spawn-tool set
+    assert "workflow" not in names
+
+
+@pytest.mark.asyncio
+async def test_nested_research_profile_does_not_double_register_ledger_tools(monkeypatch):
+    # Nested research: the ledger tools are already in the registry. research still
+    # passes its full extra_tools, and the spawner injects only the missing ones —
+    # so copy_with never re-registers a duplicate (which would raise), and the child
+    # still sees the ledger helpers exactly once.
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def stream(self, messages):
+            yield Result(text="done", stop_reason=StopReason.END_TURN, steps=1, usage=Usage())
+
+    monkeypatch.setattr("ntrp.core.spawner.Agent", FakeAgent)
+
+    registry = _base_registry().copy_with(dict(research_module.RESEARCH_AGENT_TOOLS))
+    parent_ctx = _spawn_parent_ctx(registry)
+    profile = apply_profile(research_module.RESEARCH_AGENT_TYPE, system_prompt="prompt")
+    result = await parent_ctx.spawn_fn(parent_ctx, task="nested research", agent_type="research", **profile)
+
+    assert result.text == "done"
+    names = {schema["function"]["name"] for schema in captured["tools"]}
+    assert {"research_note", "research_outline", "research_cover"} <= names
+    assert SCRATCHPAD_TOOL_NAMES <= names
+    assert "read_tool" in names
+    assert "write_tool" not in names
 
 
 @pytest.mark.asyncio

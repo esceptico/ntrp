@@ -6,7 +6,6 @@ belong to an Integration, including the ones ntrp ships out of the box.
 """
 
 from ntrp.integrations.base import Integration
-from ntrp.memory.lens import lens_tool
 from ntrp.skills.tool import create_skill_tool, use_skill_tool
 from ntrp.tools.automation import (
     create_automation_tool,
@@ -38,7 +37,7 @@ from ntrp.tools.files import (
     write_file_tool,
 )
 from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
-from ntrp.tools.memory import recall_tool, remember_tool
+from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
 from ntrp.tools.workflow import workflow_tool
@@ -145,14 +144,19 @@ SESSIONS = Integration(
     },
 )
 
-# remember()/recall()/lens() stay hidden until the knowledge runtime wires the
-# memory_write / memory_read / memory_lens services (each tool's permission), so
-# they never appear when memory is off. lens() is the single Stage-4 surface
-# (define/show/edit/delete/split/merge/list), gated by MEMORY_LENS_SERVICE.
+# remember/forget/recall stay hidden until the knowledge runtime wires the
+# memory_records service — each tool's permission — so they never appear when
+# memory is off. Lenses are NOT an agent tool (REST + the dreamer maintain them).
+# Transcript recall stays in the hybrid search_transcripts tool; recall here is
+# the record-layer lookup.
 MEMORY = Integration(
     id="_memory",
     label="Memory",
-    tools={"remember": remember_tool, "recall": recall_tool, "lens": lens_tool},
+    tools={
+        "remember": remember_tool,
+        "forget": forget_tool,
+        "recall": recall_tool,
+    },
 )
 
 CORE_INTEGRATIONS = [

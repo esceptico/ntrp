@@ -16,14 +16,30 @@ from ntrp.events.sse import (
 from ntrp.logging import get_logger
 
 SSE_QUEUE_MAXSIZE = 2048
-SESSION_EVENT_RECORD_QUEUE_MAXSIZE = 10000
-# Sized for a single research turn that fans out to ~150 nested tool
-# calls (each emits START + ARGS + END + RESULT = 4 events, plus text
-# deltas). Below this, an overflowing run loses early TOOL_CALL_START
-# events; the client then sees orphaned ARGS/END/RESULT and the tool
-# silently disappears from the activity panel. ~10k events × ~200B =
-# ~2MB per active session, which is fine for a single-user app.
-RECENT_BUFFER_MAX = 10000
+# The persist queue holds STRUCTURAL events only (ephemeral deltas are filtered
+# before submit), so it fills far slower than the raw event rate. Generous
+# headroom + backpressure-on-overflow (see SessionEventWriter.submit) means a
+# durable event is never dropped — only delayed if the disk writer falls behind.
+SESSION_EVENT_RECORD_QUEUE_MAXSIZE = 50000
+# In-memory replay buffer (ALL events incl. deltas) for short-gap reconnects.
+# Sized for a single research turn that fans out to ~150 nested tool calls (each
+# emits START + ARGS + END + RESULT = 4 events, plus text deltas). Below this, an
+# overflowing run evicts early events and a mid-run reconnect falls into a
+# replay_gap (full history reload). ~15k events × ~200B = ~3MB per active session.
+RECENT_BUFFER_MAX = 15000
+# Max durable events flushed in one transaction by the writer worker. Bounds the
+# size of a single commit while letting a backlog drain in few commits instead of
+# one-commit-per-event (which starves request-path writes on the shared conn).
+RECORD_WRITE_BATCH_MAX = 256
+# Hard ceiling on how long close() waits to flush pending durable events before
+# forcing the worker down. A slow/stuck DB write must never wedge server
+# shutdown (the recurring "can't stop the server"); on timeout the few unflushed
+# events are abandoned (the process is exiting anyway).
+CLOSE_DRAIN_TIMEOUT_SECONDS = 5.0
+# Attempts to persist a batch before abandoning it. A transient DB error (e.g. a
+# SQLITE_BUSY lock timeout) should be retried, not dropped — a dropped batch is
+# durable structural-event loss that desyncs a long-gap reconnect.
+RECORD_WRITE_RETRIES = 3
 _logger = get_logger(__name__)
 
 
@@ -126,41 +142,99 @@ def _merge_adjacent_event(left: SSEEvent, right: SSEEvent) -> SSEEvent | None:
 class SessionEventWriter:
     def __init__(
         self,
-        record_event: Callable[[StreamRecord], Awaitable[None]],
+        record_events: Callable[[list[StreamRecord]], Awaitable[None]],
         *,
         maxsize: int = SESSION_EVENT_RECORD_QUEUE_MAXSIZE,
+        close_timeout: float = CLOSE_DRAIN_TIMEOUT_SECONDS,
     ):
-        self._record_event = record_event
+        self._record_events = record_events
+        self._close_timeout = close_timeout
         self._queue: asyncio.Queue[StreamRecord | None] = asyncio.Queue(maxsize=maxsize)
         self._worker: asyncio.Task[None] | None = None
+        # Overflow holding area, drained into the queue in strict FIFO by a
+        # single pump task. See submit() for why order matters.
+        self._backlog: deque[StreamRecord] = deque()
+        self._pump: asyncio.Task[None] | None = None
 
     @property
     def queue_depth(self) -> int:
-        return self._queue.qsize()
+        return self._queue.qsize() + len(self._backlog)
 
     def submit(self, record: StreamRecord) -> None:
         self._ensure_worker()
+        # Only STRUCTURAL (durable) events reach here — ephemeral deltas are
+        # filtered upstream. Two invariants must hold:
+        #   1. No drops. Dropping one desyncs the client transcript on reconnect
+        #      (a tool stuck "running", a missing RUN_FINISHED).
+        #   2. Strict FIFO persistence. The resume path (durable_replay_records)
+        #      treats a HOLE in the durable ledger as an omitted ephemeral delta
+        #      by design. If a later seq persisted ahead of an earlier structural
+        #      one, that earlier seq would look like a hole and be silently
+        #      skipped on replay. So once anything is backlogged, everything
+        #      queues behind it — the writer never reorders structural events.
+        if self._backlog:
+            self._backlog.append(record)
+            return
         try:
             self._queue.put_nowait(record)
         except asyncio.QueueFull:
-            _logger.warning(
-                "session_event_persist_queue_full",
+            _logger.error(
+                "session_event_persist_queue_full; applying backpressure (not dropping)",
                 session_id=record.session_id,
                 seq=record.seq,
                 queue_size=self._queue.maxsize,
             )
+            self._backlog.append(record)
+            self._ensure_pump()
+
+    def _ensure_pump(self) -> None:
+        if self._pump is None or self._pump.done():
+            self._pump = asyncio.create_task(self._drain_backlog())
+
+    async def _drain_backlog(self) -> None:
+        # Single owner of the backlog→queue handoff, so puts stay in seq order.
+        # peek-then-pop (not pop-then-put) keeps the record visible to drain()
+        # until it has actually landed in the queue.
+        while self._backlog:
+            await self._queue.put(self._backlog[0])
+            self._backlog.popleft()
 
     async def drain(self) -> None:
         if self._worker is None:
             return
+        # Flush the FIFO backlog into the queue first (a new submit during drain
+        # may spawn a fresh pump), then wait for the worker to persist everything.
+        while self._pump is not None and not self._pump.done():
+            await self._pump
         await self._queue.join()
+
+    async def _drain_and_stop(self) -> None:
+        await self.drain()
+        await self._queue.put(None)
+        await self._worker
 
     async def close(self) -> None:
         if self._worker is None:
             return
-        await self.drain()
-        await self._queue.put(None)
-        await self._worker
+        try:
+            await asyncio.wait_for(self._drain_and_stop(), timeout=self._close_timeout)
+        except TimeoutError:
+            # A stuck/slow durable write must never wedge shutdown. Abandon the
+            # unflushed events (only in this dying process's buffer) and force
+            # the worker + pump down so close() always returns.
+            _logger.warning(
+                "session_event_writer_close_timeout; abandoning unflushed events to unblock shutdown",
+                unflushed=self.queue_depth,
+            )
+            for task in (self._pump, self._worker):
+                if task is not None and not task.done():
+                    task.cancel()
+                    # Await so the task's finally (task_done) actually runs before
+                    # we return; bounded so a wedged cancel can't re-hang close().
+                    try:
+                        await asyncio.wait_for(task, timeout=1.0)
+                    except (asyncio.CancelledError, Exception):
+                        pass
         self._worker = None
 
     def _ensure_worker(self) -> None:
@@ -168,22 +242,62 @@ class SessionEventWriter:
             self._worker = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
+        # Persist in BATCHES: drain everything already queued and write it in one
+        # transaction (one commit) instead of one commit per event. Under a
+        # high-volume run (research fan-out, child_io subagent streams), per-event
+        # commits monopolize the single shared write connection and starve
+        # request-path writes (POST /chat/message), which is what made chat
+        # requests time out until a reload. Batching cuts commits by 1-2 orders
+        # of magnitude. FIFO is preserved (queue is drained in order).
         while True:
-            record = await self._queue.get()
-            try:
-                if record is None:
-                    return
+            first = await self._queue.get()
+            if first is None:
+                self._queue.task_done()
+                return
+            batch = [first]
+            saw_sentinel = False
+            while len(batch) < RECORD_WRITE_BATCH_MAX:
                 try:
-                    await self._record_event(record)
-                except Exception as exc:
+                    nxt = self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if nxt is None:
+                    saw_sentinel = True
+                    break
+                batch.append(nxt)
+            try:
+                await self._write_batch(batch)
+            finally:
+                for _ in batch:
+                    self._queue.task_done()
+                if saw_sentinel:
+                    self._queue.task_done()
+            if saw_sentinel:
+                return
+
+    async def _write_batch(self, batch: list[StreamRecord]) -> None:
+        """Persist a batch, retrying transient failures with backoff before
+        giving up. Never raises — a permanently-failing batch is logged and
+        abandoned (the in-memory replay buffer still covers a short-gap
+        reconnect); the worker must keep draining either way."""
+        delay = 0.1
+        for attempt in range(1, RECORD_WRITE_RETRIES + 1):
+            try:
+                await self._record_events(batch)
+                return
+            except Exception as exc:
+                if attempt >= RECORD_WRITE_RETRIES:
                     _logger.warning(
-                        "session_event_persist_failed",
-                        session_id=record.session_id,
-                        seq=record.seq,
+                        "session_event_persist_failed_after_retries",
+                        session_id=batch[0].session_id,
+                        seqs=f"{batch[0].seq}..{batch[-1].seq}",
+                        count=len(batch),
+                        attempts=attempt,
                         error=str(exc),
                     )
-            finally:
-                self._queue.task_done()
+                    return
+                await asyncio.sleep(delay)
+                delay = min(delay * 4, 2.0)
 
 
 @dataclass
@@ -196,7 +310,7 @@ class SessionBus:
     initial_next_seq: InitVar[int] = 1
     initial_checkpoint_seq: InitVar[int] = 0
     record_queue_size: InitVar[int] = SESSION_EVENT_RECORD_QUEUE_MAXSIZE
-    record_event: Callable[[StreamRecord], Awaitable[None]] | None = None
+    record_events: Callable[[list[StreamRecord]], Awaitable[None]] | None = None
     _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
     _next_seq: int = field(default=1, init=False)
     # Highest seq that has been persisted to disk via session_service.save().
@@ -217,8 +331,8 @@ class SessionBus:
     def __post_init__(self, initial_next_seq: int, initial_checkpoint_seq: int, record_queue_size: int) -> None:
         self._next_seq = initial_next_seq
         self._checkpoint_seq = initial_checkpoint_seq
-        if self.record_event:
-            self._record_writer = SessionEventWriter(self.record_event, maxsize=record_queue_size)
+        if self.record_events:
+            self._record_writer = SessionEventWriter(self.record_events, maxsize=record_queue_size)
 
     @property
     def next_seq(self) -> int:
@@ -394,12 +508,12 @@ class BusRegistry:
     def __init__(
         self,
         *,
-        record_event: Callable[[StreamRecord], Awaitable[None]] | None = None,
+        record_events: Callable[[list[StreamRecord]], Awaitable[None]] | None = None,
     ):
         self._buses: dict[str, SessionBus] = {}
         self._next_seq_by_session: dict[str, int] = {}
         self._checkpoint_seq_by_session: dict[str, int] = {}
-        self._record_event = record_event
+        self._record_events = record_events
 
     def get_or_create(self, session_id: str) -> SessionBus:
         if session_id not in self._buses:
@@ -407,7 +521,7 @@ class BusRegistry:
                 session_id=session_id,
                 initial_next_seq=self._next_seq_by_session.get(session_id, 1),
                 initial_checkpoint_seq=self._checkpoint_seq_by_session.get(session_id, 0),
-                record_event=self._record_event,
+                record_events=self._record_events,
             )
         return self._buses[session_id]
 

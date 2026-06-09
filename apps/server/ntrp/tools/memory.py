@@ -1,177 +1,172 @@
-"""remember() tool — the user-facing entry to the memory write seam.
+"""Memory tools — the agent's ONLY entry to the record layer.
 
-A plain tool that enters the SAME admit->write path as any future writer (no
-privileged shortcut): it resolves scope + builds a SourceRef, then hands a single
-USER_AUTHORED claim to the shared WriteSeam (CONTRACTS.md §10). The seam runs the
-reconcile half (recall + ADD/NOOP/CONTRADICT) but skips the worth-gate
-(bypass_admit=True) because a user assertion is maximal-novelty.
+Plain tools over the flat RecordStore (atomic, self-contained records in
+`config.memory_db_path`):
 
-Input is deliberately small: {fact, valid_from}. No kind/confidence/tags/entities
-(v1 cruft the Stage-2 store has no columns for). provenance is fixed
-USER_AUTHORED, kind fixed CLAIM. Policy is WRITE/INTERNAL with no approval gate —
-memory never deletes, so there is nothing to guard. Registered only when the
-"memory_write" service is present (knowledge runtime wires it when memory is
-ready).
+- remember(text, kind?) -> RecordStore.add (write a record)
+- forget(query)         -> hybrid-search records, delete the best hit
+- recall(query)         -> hybrid record search (READ)
+
+There is NO lens tool — lenses are USER/system concepts maintained via REST and
+the dreamer, not an agent tool. Records are one flat pool: no scope, no project
+partition. Each tool only appears once `MEMORY_RECORDS_SERVICE` is wired by the
+knowledge runtime, so they stay hidden when memory is off.
+
+Self-correcting interface (the standing lesson): `forget` never requires the model
+to reproduce an opaque id — it searches by NL query and, on a near-miss, lists the
+other candidates instead of dead-ending.
 """
 
 from pydantic import BaseModel, Field
 
 from ntrp.logging import get_logger
-from ntrp.memory.models import Provenance, Scope, ScopeKind, SourceRef
-from ntrp.memory.pipeline.retrieve import Retriever
-from ntrp.memory.pipeline.types import Retrieval
-from ntrp.memory.pipeline.write import WriteRequest, WriteSeam
+from ntrp.memory.models import SourceRef
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 _logger = get_logger(__name__)
 
-MEMORY_WRITE_SERVICE = "memory_write"
-MEMORY_READ_SERVICE = "memory_read"
-
-_RECALL_TOKEN_BUDGET = 2000
+MEMORY_RECORDS_SERVICE = "memory_records"
 
 
 class RememberInput(BaseModel):
-    fact: str = Field(
+    text: str = Field(
         min_length=1,
         max_length=20_000,
         description=(
-            "A single durable fact to remember about the user or their world, "
-            "stated plainly and self-contained (resolve pronouns inline)."
+            "A single durable, self-contained statement to remember about the "
+            "user or their world, stated plainly (resolve pronouns inline)."
         ),
     )
-    valid_from: str | None = Field(
-        default=None,
-        description="Optional ISO-8601 instant the fact became true; defaults to now.",
+    kind: str = Field(
+        default="note",
+        description=(
+            "The record's function: fact | action | preference | note. Typed by "
+            "function, not subject. Defaults to note; any short label is accepted."
+        ),
     )
 
 
-def _resolve_scope(execution: ToolExecution) -> Scope:
-    """Scope from the active project (PROJECT/key=project_id) else USER scope.
-    Assigned from structural metadata, never LLM-inferred (CONTRACTS principle #4)."""
-    project = execution.ctx.project
-    if project is not None and project.project_id:
-        return Scope(kind=ScopeKind.PROJECT, key=str(project.project_id))
-    return Scope(kind=ScopeKind.USER)
-
-
-def _source_ref(execution: ToolExecution) -> SourceRef:
-    """Pointer back into the raw chat layer for this remember() call."""
-    ref = f"{execution.ctx.session_id}:{execution.tool_id}"
-    return SourceRef(kind="chat_turn", ref=ref)
-
-
-async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
-    seam = execution.ctx.services.get(MEMORY_WRITE_SERVICE)
-    if not isinstance(seam, WriteSeam):
-        return ToolResult(
-            content="Memory is not available.",
-            preview="Memory unavailable",
-            is_error=True,
-        )
-
-    request = WriteRequest(
-        content=args.fact,
-        scope=_resolve_scope(execution),
-        provenance=Provenance.USER_AUTHORED,
-        source_refs=[_source_ref(execution)],
-        valid_from=args.valid_from,
-        bypass_admit=True,
+class ForgetInput(BaseModel):
+    query: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description=(
+            "A natural-language description of the memory to forget. The "
+            "best-matching record is removed (no id required)."
+        ),
     )
-
-    outcome = await seam.admit_and_write(request)
-    if not outcome.written and outcome.item_id is None and "Already known" not in outcome.reason:
-        # A genuine failure (empty/reconcile error), not a NOOP corroboration.
-        return ToolResult(content=outcome.reason, preview="Not remembered", is_error=True)
-
-    preview = "Remembered" if outcome.written else "Already known"
-    return ToolResult(content=outcome.reason, preview=preview)
-
-
-def _resolve_recall_scopes(execution: ToolExecution) -> tuple[Scope, list[Scope]]:
-    """Recall scope + also_scopes, resolved structurally (never LLM-inferred).
-
-    In a project the primary scope is the project lens and USER rides along as an
-    also-scope; outside a project recall is USER-only. Mirrors the chat-side
-    injection scope in services/chat.py so the tool sees the same pool.
-    """
-    project = execution.ctx.project
-    if project is not None and project.project_id:
-        return (
-            Scope(kind=ScopeKind.PROJECT, key=str(project.project_id)),
-            [Scope(kind=ScopeKind.USER)],
-        )
-    return Scope(kind=ScopeKind.USER), []
 
 
 class RecallInput(BaseModel):
     query: str = Field(
         min_length=1,
-        max_length=4_000,
-        description=(
-            "A natural-language query or goal describing what you need to recall "
-            "from the user's long-term memory (e.g. a question, topic, or task)."
-        ),
+        max_length=20_000,
+        description="A natural-language query; returns the most relevant records.",
     )
+
+
+def _unavailable() -> ToolResult:
+    return ToolResult(
+        content="Memory is not available.",
+        preview="Memory unavailable",
+        is_error=True,
+    )
+
+
+def _render_records(records: list) -> str:
+    return "\n".join(f"- [{r.kind}] {r.text}" for r in records)
+
+
+async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
+    store = execution.ctx.services.get(MEMORY_RECORDS_SERVICE)
+    if store is None:
+        return _unavailable()
+
+    source = SourceRef(
+        kind="chat_turn", ref=f"{execution.ctx.session_id}:{execution.tool_id}"
+    )
+    await store.add(args.text, kind=args.kind, source_ref=source)
+    return ToolResult(content="Remembered", preview="Remembered")
+
+
+async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
+    store = execution.ctx.services.get(MEMORY_RECORDS_SERVICE)
+    if store is None:
+        return _unavailable()
+
+    hits = await store.search(args.query, limit=5)
+    if not hits:
+        return ToolResult(content="No matching memory to forget.", preview="Not found")
+
+    best = hits[0]
+    await store.delete(best.id)
+    others = hits[1:]
+    content = f"Forgot: {best.text}"
+    if others:
+        # Self-correcting: show what else matched so the model can refine rather
+        # than dead-end if it meant a different record.
+        content += "\n\nOther matches (not removed):\n" + _render_records(others)
+    return ToolResult(content=content, preview="Forgotten")
 
 
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
-    retriever = execution.ctx.services.get(MEMORY_READ_SERVICE)
-    if not isinstance(retriever, Retriever):
-        return ToolResult(
-            content="Memory is not available.",
-            preview="Memory unavailable",
-            is_error=True,
-        )
+    store = execution.ctx.services.get(MEMORY_RECORDS_SERVICE)
+    if store is None:
+        return _unavailable()
 
-    scope, also_scopes = _resolve_recall_scopes(execution)
-    result = await retriever.retrieve(
-        Retrieval(
-            goal=args.query,
-            scope=scope,
-            also_scopes=also_scopes,
-            token_budget=_RECALL_TOKEN_BUDGET,
-        )
-    )
-
-    if not result.rendered:
-        return ToolResult(content="No relevant memory found.", preview="Nothing recalled")
-    return ToolResult(content=result.rendered, preview=f"Recalled {len(result.items)} item(s)")
-
-
-recall_tool = tool(
-    display_name="Recall",
-    description=(
-        "Search the user's long-term memory for knowledge relevant to a query or "
-        "goal. Returns a compact, scope-filtered bundle of recalled facts. Use "
-        "when the current task needs context that may have been stored in a past "
-        "session and is not already in the MEMORY CONTEXT block."
-    ),
-    input_model=RecallInput,
-    policy=ToolPolicy(
-        action=ToolAction.READ,
-        scope=ToolScope.INTERNAL,
-        permissions=frozenset({MEMORY_READ_SERVICE}),
-    ),
-    execute=recall,
-)
+    hits = await store.search(args.query, limit=10)
+    if not hits:
+        return ToolResult(content="No matching memory.", preview="No matches")
+    return ToolResult(content=_render_records(hits), preview=f"{len(hits)} match(es)")
 
 
 remember_tool = tool(
     display_name="Remember",
     description=(
-        "Durably remember a single fact about the user or their world. Use for "
-        "stable preferences, decisions, and facts worth recalling in future "
-        "sessions — not transient task state. State one self-contained fact per "
-        "call. A repeat corroborates; a contradiction supersedes the old fact."
+        "Durably remember a single self-contained statement about the user or "
+        "their world. Use for stable preferences, decisions, and facts worth "
+        "recalling in future sessions — not transient task state. State one "
+        "statement per call; set `kind` to its function "
+        "(fact | action | preference | note)."
     ),
     input_model=RememberInput,
     policy=ToolPolicy(
         action=ToolAction.WRITE,
         scope=ToolScope.INTERNAL,
-        permissions=frozenset({MEMORY_WRITE_SERVICE}),
+        permissions=frozenset({MEMORY_RECORDS_SERVICE}),
     ),
     execute=remember,
+)
+
+forget_tool = tool(
+    display_name="Forget",
+    description=(
+        "Remove a previously-remembered record from long-term memory. Describe "
+        "what to forget in natural language; the best-matching record is removed."
+    ),
+    input_model=ForgetInput,
+    policy=ToolPolicy(
+        action=ToolAction.WRITE,
+        scope=ToolScope.INTERNAL,
+        permissions=frozenset({MEMORY_RECORDS_SERVICE}),
+    ),
+    execute=forget,
+)
+
+recall_tool = tool(
+    display_name="Recall",
+    description=(
+        "Search long-term memory for records relevant to a natural-language "
+        "query (hybrid lexical + semantic). Read-only; use it to look up what "
+        "the user has decided, prefers, or done before."
+    ),
+    input_model=RecallInput,
+    policy=ToolPolicy(
+        action=ToolAction.READ,
+        scope=ToolScope.INTERNAL,
+        permissions=frozenset({MEMORY_RECORDS_SERVICE}),
+    ),
+    execute=recall,
 )

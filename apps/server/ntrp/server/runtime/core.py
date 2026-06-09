@@ -92,28 +92,16 @@ class Runtime:
         return self.knowledge.indexer
 
     @property
-    def memory(self):
-        return self.knowledge.memory
+    def memory_curator(self):
+        return self.knowledge.memory_curator
 
     @property
-    def memory_service(self):
-        return self.knowledge.memory_service
+    def memory_records(self):
+        return self.knowledge._record_store
 
     @property
-    def memory_retrieval(self):
-        return self.knowledge.memory_retrieval
-
-    @property
-    def pattern_finder(self):
-        return self.knowledge.pattern_finder
-
-    @property
-    def lens_pass(self):
-        return self.knowledge.lens_pass
-
-    @property
-    def lens_author(self):
-        return self.knowledge.lens_author
+    def memory_lenses(self):
+        return self.knowledge._lens_store
 
     @property
     def search_index(self):
@@ -234,14 +222,14 @@ class Runtime:
         self.automation = AutomationRuntime(
             stores=self.stores,
             build_operator_deps=self.build_operator_deps,
-            get_memory=lambda: self.memory,
-            get_memory_service=lambda: self.memory_service,
-            get_pattern_finder=lambda: self.pattern_finder,
+            get_records=lambda: self.memory_records,
+            get_chat_connector=lambda: self.knowledge.chat_connector,
             get_calendar_source=lambda: self.integrations.get_client("calendar"),
             get_slack_client=lambda: self.integrations.get_client("slack"),
             get_cheap_llm=lambda: get_completion_client(self.config.memory_model) if self.config.memory_model else None,
             cheap_model=self.config.memory_model,
             indexer=self.indexer,
+            get_consolidate=lambda: self.knowledge._consolidate,
         )
 
     async def _init_mcp(self) -> None:
@@ -277,7 +265,7 @@ class Runtime:
 
     def get_available_integrations(self) -> list[str]:
         ids = list(self.integrations.clients.keys())
-        if self.memory:
+        if self.memory_records:
             ids.append("memory")
         return ids
 
@@ -303,9 +291,8 @@ class Runtime:
             integration_errors=self.get_integration_errors(),
             enqueue_run_completed=self.stores.outbox.enqueue_run_completed if self.stores else None,
             dispatch_session_message=self.dispatch_session_message,
-            memory=self.memory,
-            memory_service=self.memory_service,
-            memory_retrieval=self.memory_retrieval,
+            memory_curator=self.memory_curator,
+            memory_records=self.memory_records,
             skill_registry=self.skill_registry,
             notifier_service=self.notifier_service,
         )
@@ -325,9 +312,7 @@ class Runtime:
     def build_operator_deps(self) -> OperatorDeps:
         return OperatorDeps(
             executor=self.executor,
-            memory=self.memory,
-            memory_service=self.memory_service,
-            memory_retrieval=self.memory_retrieval,
+            memory_records=self.memory_records,
             config=AgentConfig.from_config(self.config),
             source_details={},
             create_session=self.stores.sessions.create,

@@ -3,54 +3,57 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from ntrp.orchestra.dynamic import run_script
-from ntrp.orchestra.engine import Orchestra
-from ntrp.orchestra.schema import coerce, extract_json
+from ntrp.agent import RunBudget
+from ntrp.orchestra.dynamic import format_script_traceback, run_script
+from ntrp.orchestra.engine import (
+    Orchestra,
+    TokenBudget,
+    WorkflowBudgetExceeded,
+    WorkflowSpawnLimit,
+    WorkflowStructuredOutputMissing,
+)
+from ntrp.orchestra.schema import model_from_schema
+from ntrp.tools.core.types import ToolAction
 
 
 class _Schema(BaseModel):
     value: int
 
 
-def _ctx_with(responses: list[str]):
+def _ctx_with(responses: list[str], budget: RunBudget | None = None, structured=None):
+    """A fake spawn_fn. `structured` simulates the worker calling structured_output:
+    a dict (those kwargs, every spawn), a list (per-spawn; None = didn't call it),
+    or None (never calls it). Calling the tool here validates + fills the sink,
+    exactly as the real agent loop would."""
     calls = {"i": 0}
 
-    async def spawn_fn(ctx, *, task, **kwargs):
+    async def spawn_fn(ctx, *, task, extra_tools=None, **kwargs):
         i = calls["i"]
         calls["i"] += 1
+        if extra_tools and structured is not None:
+            arg = structured[i] if isinstance(structured, list) else structured
+            if arg is not None:
+                await extra_tools["structured_output"].execute(SimpleNamespace(), **arg)
         text = responses[i] if i < len(responses) else responses[-1]
         return SimpleNamespace(text=text)
 
-    return SimpleNamespace(spawn_fn=spawn_fn), calls
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    if budget is not None:
+        ctx.run = SimpleNamespace(budget=budget)
+    return ctx, calls
 
 
-def test_extract_json_plain():
-    assert extract_json('{"value": 1}') == '{"value": 1}'
-
-
-def test_coerce_fenced():
-    assert coerce('```json\n{"value": 5}\n```', _Schema).value == 5
-
-
-def test_coerce_prose_wrapped():
-    assert coerce('Here you go: {"value": 7} done', _Schema).value == 7
-
-
-def test_coerce_invalid_raises():
+def test_model_from_schema_dict_roundtrip():
+    Model = model_from_schema({"clusters": [{"title": "str", "n": "int"}]})
+    m = Model(clusters=[{"title": "a", "n": 2}])
+    assert m.model_dump() == {"clusters": [{"title": "a", "n": 2}]}
     with pytest.raises(ValidationError):
-        coerce("not json at all", _Schema)
+        Model(clusters="not a list")
 
 
-def test_coerce_trailing_prose():
-    assert coerce('{"value": 1}\n\nLet me know if you need anything else.', _Schema).value == 1
-
-
-def test_coerce_two_objects_takes_first():
-    assert coerce('here {"value": 1} and also {"value": 2}', _Schema).value == 1
-
-
-def test_coerce_fenced_with_trailing():
-    assert coerce('```json\n{"value": 8}\n```\nthanks!', _Schema).value == 8
+def test_model_from_schema_rejects_unknown_leaf():
+    with pytest.raises(ValueError, match="unknown leaf type"):
+        model_from_schema({"x": "datetime"})
 
 
 async def test_agent_returns_text_without_schema():
@@ -59,33 +62,67 @@ async def test_agent_returns_text_without_schema():
     assert await o.agent("say hi") == "hello world"
 
 
-async def test_agent_coerces_schema():
-    ctx, _ = _ctx_with(['{"value": 42}'])
+async def test_agent_returns_structured_output_model():
+    # A pydantic schema → the validated model instance (via the structured_output tool).
+    ctx, _ = _ctx_with(["done"], structured={"value": 42})
     o = Orchestra.for_ctx(ctx)
     result = await o.agent("give me value", schema=_Schema)
+    assert isinstance(result, _Schema)
     assert result.value == 42
 
 
-async def test_agent_repairs_invalid_json_once():
-    ctx, calls = _ctx_with(["garbage", '{"value": 9}'])
+async def test_agent_returns_structured_output_dict():
+    # A dict schema → a plain dict (existing contract preserved).
+    ctx, _ = _ctx_with(["done"], structured={"facts": ["a", "b"]})
+    o = Orchestra.for_ctx(ctx)
+    result = await o.agent("research", schema={"facts": ["str"]})
+    assert result == {"facts": ["a", "b"]}
+
+
+async def test_agent_nudges_once_when_structured_output_missing():
+    # First spawn ignores the tool; the nudge spawn calls it.
+    ctx, calls = _ctx_with(["nope", "done"], structured=[None, {"value": 7}])
     o = Orchestra.for_ctx(ctx)
     result = await o.agent("give me value", schema=_Schema)
-    assert result.value == 9
-    assert calls["i"] == 2
+    assert result.value == 7
+    assert calls["i"] == 2  # initial + one nudge
 
 
-async def test_agent_raises_value_error_on_double_failure():
-    ctx, _ = _ctx_with(["garbage", "still garbage"])
+async def test_agent_raises_when_structured_output_never_called():
+    ctx, calls = _ctx_with(["nope", "still nope"], structured=None)
     o = Orchestra.for_ctx(ctx)
-    with pytest.raises(ValueError):
+    with pytest.raises(WorkflowStructuredOutputMissing):
         await o.agent("give me value", schema=_Schema)
+    assert calls["i"] == 2  # initial + nudge, then hard-fail (no prose parsing)
+    assert o.spawn_count == 2  # the nudge respawn counts toward the runaway guard
 
 
-async def test_parallel_swallows_double_failure_to_none():
-    ctx, _ = _ctx_with(["garbage", "still garbage"])
+async def test_structured_output_appended_to_tool_allowlist():
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, tools=None, extra_tools=None, **kwargs):
+        captured["tools"] = tools
+        if extra_tools:
+            await extra_tools["structured_output"].execute(SimpleNamespace(), value=1)
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
     o = Orchestra.for_ctx(ctx)
-    results = await o.parallel([(lambda: o.agent("x", schema=_Schema))])
-    assert results == [None]
+    await o.agent("x", schema=_Schema, tools=["slack_search"])
+    assert "structured_output" in captured["tools"]
+    assert "slack_search" in captured["tools"]
+
+
+async def test_parallel_reraises_missing_structured_output():
+    # A missing structured output is a contract violation — it aborts the fan-out,
+    # not swallowed to None.
+    ctx, _ = _ctx_with(["nope", "nope"], structured=None)
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group below
+        await o.parallel([(lambda: o.agent("x", schema=_Schema))])
+    exc = ei.value
+    flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]
+    assert any(isinstance(e, WorkflowStructuredOutputMissing) for e in flat)
 
 
 async def test_parallel_preserves_order_and_isolates_failures():
@@ -157,6 +194,21 @@ async def test_parallel_spawns_get_unique_lifecycle_ids():
     assert all(s and s.startswith("tool-1:") for s in seen)
 
 
+async def test_agent_forwards_tool_name_allowlist():
+    # The script writes tool NAMES; the engine forwards them verbatim and the
+    # spawner resolves them against the full toolset (see core/spawner.py).
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, tools=None, **kwargs):
+        captured["tools"] = tools
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    o = Orchestra.for_ctx(ctx)
+    await o.agent("do x", tools=["slack_search", "read_file"])
+    assert captured["tools"] == ["slack_search", "read_file"]
+
+
 async def test_workflow_agents_exclude_spawn_tools():
     captured = {}
 
@@ -171,9 +223,76 @@ async def test_workflow_agents_exclude_spawn_tools():
     assert {"workflow", "research", "background"} <= set(captured["exclude"])
 
 
-def test_coerce_dict_schema_is_lenient():
-    # A dict schema returns the parsed JSON (no pydantic validation).
-    assert coerce('here: {"facts": ["a", "b"]} done', {"facts": ["str"]}) == {"facts": ["a", "b"]}
+async def test_agent_type_threads_capability_and_persona():
+    # A read-only persona resolves to actions={READ} + the persona prompt + the
+    # agent_type label, none of which the script wrote.
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, actions=None, system_prompt=None, agent_type=None, **kwargs):
+        captured.update(actions=actions, system_prompt=system_prompt, agent_type=agent_type)
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    o = Orchestra.for_ctx(ctx)
+    await o.agent("review this", agent_type="reviewer")
+    assert captured["actions"] == frozenset({ToolAction.READ})
+    assert "code reviewer" in captured["system_prompt"]
+    assert captured["agent_type"] == "reviewer"
+
+
+async def test_builder_agent_type_is_full_capability():
+    # The capability axis is a set of actions, so a write-capable builder is just
+    # actions=None (full) — read-only is one value, not the axis.
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, actions=None, **kwargs):
+        captured["actions"] = actions
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    o = Orchestra.for_ctx(ctx)
+    await o.agent("build it", agent_type="builder")
+    assert captured["actions"] is None
+
+
+async def test_unknown_agent_type_raises_listing_options():
+    ctx, _ = _ctx_with(["ok"])
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(ValueError, match="unknown agent_type 'wizard'"):
+        await o.agent("x", agent_type="wizard")
+
+
+async def test_explicit_system_prompt_overrides_persona_but_keeps_capability():
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, system_prompt=None, actions=None, **kwargs):
+        captured.update(system_prompt=system_prompt, actions=actions)
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    o = Orchestra.for_ctx(ctx)
+    await o.agent("x", agent_type="reviewer", system_prompt="be a poet")
+    assert captured["system_prompt"] == "be a poet"
+    assert captured["actions"] == frozenset({ToolAction.READ})
+
+
+async def test_agent_type_with_schema_keeps_capability_and_note():
+    captured = {}
+
+    async def spawn_fn(ctx, *, task, system_prompt=None, actions=None, extra_tools=None, **kwargs):
+        captured.update(system_prompt=system_prompt, actions=actions, extra_tools=extra_tools)
+        if extra_tools:
+            await extra_tools["structured_output"].execute(SimpleNamespace(), value=1)
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    o = Orchestra.for_ctx(ctx)
+    out = await o.agent("review", agent_type="reviewer", schema=_Schema)
+    assert out.value == 1
+    assert captured["actions"] == frozenset({ToolAction.READ})
+    assert "code reviewer" in captured["system_prompt"]
+    assert "structured_output" in captured["system_prompt"]
+    assert "structured_output" in captured["extra_tools"]
 
 
 async def test_parallel_accepts_bare_coroutines():
@@ -192,7 +311,7 @@ async def test_run_script_fan_out_and_return():
 
 
 async def test_run_script_uses_args_and_dict_schema():
-    ctx, _ = _ctx_with(['{"facts": ["x"]}'])
+    ctx, _ = _ctx_with(["done"], structured={"facts": ["x"]})
     o = Orchestra.for_ctx(ctx)
     result = await run_script(o, "return await agent(args['q'], schema={'facts': ['str']})", {"q": "what?"})
     assert result == {"facts": ["x"]}
@@ -203,3 +322,113 @@ async def test_run_script_syntax_error_propagates():
     o = Orchestra.for_ctx(ctx)
     with pytest.raises(SyntaxError):
         await run_script(o, "this is not valid python !!!", {})
+
+
+async def test_spawn_cap_aborts_parallel_instead_of_silent_none(monkeypatch):
+    # The runaway guard must surface, not degrade to None the model misreads as a
+    # partial failure.
+    monkeypatch.setattr("ntrp.orchestra.engine._MAX_WORKFLOW_SPAWNS", 2)
+    ctx, _ = _ctx_with(["ok"])
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group below
+        await o.parallel([o.agent("a"), o.agent("b"), o.agent("c"), o.agent("d")])
+    exc = ei.value
+    flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]
+    assert any(isinstance(e, WorkflowSpawnLimit) for e in flat)
+    assert o.spawn_count == 2
+
+
+async def test_run_script_runtime_error_points_at_script_line():
+    ctx, _ = _ctx_with(["x"])
+    o = Orchestra.for_ctx(ctx)
+    script = "a = 1\nb = 2\nraise ValueError('boom')\nreturn a"
+    with pytest.raises(ValueError) as ei:
+        await run_script(o, script, {})
+    tb = format_script_traceback(ei.value, script)
+    assert "<workflow-script>" in tb
+    assert "line 3" in tb  # the raise is on the model's line 3, not 4
+    assert "raise ValueError('boom')" in tb  # source rendered from the passed script
+
+
+async def test_format_script_traceback_renders_the_passed_script_not_shared_state():
+    # Source comes from the script argument, not a process-global linecache, so
+    # concurrent workflows can't clobber each other's traceback source.
+    ctx, _ = _ctx_with(["x"])
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(ValueError) as ea:
+        await run_script(o, "raise ValueError('A')", {})
+    with pytest.raises(ValueError) as eb:
+        await run_script(o, "x = 1\nraise ValueError('B')", {})
+    tb_a = format_script_traceback(ea.value, "raise ValueError('A')")
+    tb_b = format_script_traceback(eb.value, "x = 1\nraise ValueError('B')")
+    assert "raise ValueError('A')" in tb_a and "line 1" in tb_a
+    assert "raise ValueError('B')" in tb_b and "line 2" in tb_b
+
+
+async def test_spawn_cap_traceback_surfaces_runaway_message(monkeypatch):
+    # When the cap fires inside parallel(), the TaskGroup wraps it in an
+    # ExceptionGroup — the leaf runaway-guard message must still surface.
+    monkeypatch.setattr("ntrp.orchestra.engine._MAX_WORKFLOW_SPAWNS", 1)
+    ctx, _ = _ctx_with(["ok"])
+    o = Orchestra.for_ctx(ctx)
+    script = "return await parallel([agent('a'), agent('b'), agent('c')])"
+    with pytest.raises(BaseException) as ei:  # noqa: PT011 — ExceptionGroup
+        await run_script(o, script, {})
+    tb = format_script_traceback(ei.value, script)
+    assert "runaway guard" in tb
+
+
+def test_token_budget_view_reads_live():
+    b = RunBudget(total=100, output_tokens=30)
+    v = TokenBudget(b)
+    assert v.total == 100
+    assert v.spent() == 30
+    assert v.remaining() == 70
+    b.output_tokens = 120  # live re-read, clamped at 0
+    assert v.spent() == 120
+    assert v.remaining() == 0
+    # No ceiling / no budget -> unbounded.
+    assert TokenBudget(RunBudget(total=None, output_tokens=50)).remaining() == float("inf")
+    none_view = TokenBudget(None)
+    assert none_view.total is None and none_view.spent() == 0 and none_view.remaining() == float("inf")
+
+
+async def test_spawn_denied_when_budget_exhausted():
+    ctx, _ = _ctx_with(["ok"], budget=RunBudget(total=100, output_tokens=100))
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(WorkflowBudgetExceeded):
+        await o.agent("x")
+
+
+async def test_budget_guard_aborts_parallel_instead_of_silent_none():
+    ctx, _ = _ctx_with(["ok"], budget=RunBudget(total=50, output_tokens=50))
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group
+        await o.parallel([o.agent("a"), o.agent("b")])
+    exc = ei.value
+    flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]
+    assert any(isinstance(e, WorkflowBudgetExceeded) for e in flat)
+
+
+async def test_budget_readable_in_script():
+    ctx, _ = _ctx_with(["x"], budget=RunBudget(total=100_000, output_tokens=10_000))
+    o = Orchestra.for_ctx(ctx)
+    result = await run_script(o, "return [budget.total, budget.spent(), budget.remaining()]", {})
+    assert result == [100_000, 10_000, 90_000]
+
+
+async def test_budget_unbounded_when_ctx_has_no_run():
+    # The orchestra ctx without a run (and thus no budget) is a valid "no ceiling"
+    # state — the script sees total None and infinite remaining.
+    ctx, _ = _ctx_with(["x"])
+    o = Orchestra.for_ctx(ctx)
+    result = await run_script(o, "return [budget.total, budget.remaining() == float('inf')]", {})
+    assert result == [None, True]
+
+
+async def test_run_script_syntax_error_line_is_script_relative():
+    ctx, _ = _ctx_with(["x"])
+    o = Orchestra.for_ctx(ctx)
+    with pytest.raises(SyntaxError) as ei:
+        await run_script(o, "x = 1\nfor in range(3):\n    pass", {})
+    assert ei.value.lineno == 2  # the bad line, not 3 (wrapper offset removed)

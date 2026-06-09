@@ -1279,7 +1279,10 @@ async def test_full_subagent_streams_to_own_child_bus(monkeypatch):
         async def _aclose():
             closed.append(params.session_id)
 
-        return ChildSession(io=IOBridge(emit=child_emit), aclose=_aclose)
+        async def _finish(_status):
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
 
     executor = make_executor()
     run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
@@ -1330,7 +1333,10 @@ async def test_shared_subagent_does_not_use_child_bus(monkeypatch):
         async def _aclose():
             return None
 
-        return ChildSession(io=IOBridge(), aclose=_aclose)
+        async def _finish(_status):
+            return None
+
+        return ChildSession(io=IOBridge(), finish=_finish, aclose=_aclose)
 
     executor = make_executor()
     run = RunContext(run_id="run-1", current_depth=0, max_depth=3)

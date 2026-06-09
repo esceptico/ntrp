@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { groupProjectSessions, primarySidebarSessions } from "../src/lib/projects.ts";
+import { groupSessions, primarySidebarSessions, type GroupOptions } from "../src/lib/projects.ts";
 import type { Project, SessionListItem } from "../src/api.ts";
 
 const projects: Project[] = [
@@ -32,24 +32,79 @@ const sessions: SessionListItem[] = [
   session("s3", "dex review", "p2"),
 ];
 
-test("project session grouping keeps inbox and project folders separate", () => {
-  expect(groupProjectSessions(projects, sessions, "")).toEqual([
-    { project: projects[0], sessions: [sessions[0]] },
-    { project: projects[1], sessions: [sessions[2]] },
-    { project: null, sessions: [sessions[1]] },
+function opts(overrides: Partial<GroupOptions> = {}): GroupOptions {
+  return {
+    groupBy: "project",
+    unreadOnly: false,
+    channelsOnly: false,
+    pinned: new Set(),
+    unread: new Set(),
+    active: new Set(),
+    ...overrides,
+  };
+}
+
+test("project grouping keeps inbox and project folders separate", () => {
+  expect(groupSessions(projects, sessions, opts())).toEqual([
+    { key: "p1", label: "ntrp", project: projects[0], sessions: [sessions[0]] },
+    { key: "p2", label: "dex", project: projects[1], sessions: [sessions[2]] },
+    { key: "inbox", label: "Inbox", project: null, sessions: [sessions[1]] },
   ]);
 });
 
-test("project session grouping filters by chat and project names", () => {
-  expect(groupProjectSessions(projects, sessions, "dex")).toEqual([
-    { project: projects[1], sessions: [sessions[2]] },
+test("empty project folders stay visible without a filter", () => {
+  expect(groupSessions(projects, [sessions[0]], opts())).toEqual([
+    { key: "p1", label: "ntrp", project: projects[0], sessions: [sessions[0]] },
+    { key: "p2", label: "dex", project: projects[1], sessions: [] },
   ]);
 });
 
-test("project session grouping keeps empty project folders visible", () => {
-  expect(groupProjectSessions(projects, [sessions[0]], "")).toEqual([
-    { project: projects[0], sessions: [sessions[0]] },
-    { project: projects[1], sessions: [] },
+test("a filter drops empty project folders", () => {
+  // unread filter that matches only s1 -> p2 (empty) should not appear
+  const groups = groupSessions(projects, sessions, opts({ unreadOnly: true, unread: new Set(["s1"]) }));
+  expect(groups).toEqual([
+    { key: "p1", label: "ntrp", project: projects[0], sessions: [sessions[0]] },
+  ]);
+});
+
+test("pinned sessions lift into a Pinned group and leave their normal group", () => {
+  const groups = groupSessions(projects, sessions, opts({ pinned: new Set(["s1"]) }));
+  expect(groups).toEqual([
+    { key: "__pinned", label: "Pinned", project: null, sessions: [sessions[0]], pinned: true },
+    { key: "p1", label: "ntrp", project: projects[0], sessions: [] },
+    { key: "p2", label: "dex", project: projects[1], sessions: [sessions[2]] },
+    { key: "inbox", label: "Inbox", project: null, sessions: [sessions[1]] },
+  ]);
+});
+
+test("pins survive an active filter (sticky pin-to-top)", () => {
+  // channelsOnly would hide s1 (a chat), but it is pinned, so it stays.
+  const groups = groupSessions(projects, sessions, opts({ channelsOnly: true, pinned: new Set(["s1"]) }));
+  expect(groups).toEqual([
+    { key: "__pinned", label: "Pinned", project: null, sessions: [sessions[0]], pinned: true },
+  ]);
+});
+
+test("group by type splits chats and channels", () => {
+  const channel = { ...session("c1", "alerts", null), session_type: "channel" as const };
+  const groups = groupSessions(projects, [sessions[0], channel], opts({ groupBy: "type" }));
+  expect(groups.map((g) => [g.key, g.sessions.map((s) => s.session_id)])).toEqual([
+    ["type:chat", ["s1"]],
+    ["type:channel", ["c1"]],
+  ]);
+});
+
+test("group by status assigns each session to one bucket by priority", () => {
+  // s1 active, s2 unread, s3 idle — active beats unread beats idle, no double-count.
+  const groups = groupSessions(
+    projects,
+    sessions,
+    opts({ groupBy: "status", active: new Set(["s1"]), unread: new Set(["s2"]) }),
+  );
+  expect(groups.map((g) => [g.key, g.sessions.map((s) => s.session_id)])).toEqual([
+    ["status:active", ["s1"]],
+    ["status:unread", ["s2"]],
+    ["status:idle", ["s3"]],
   ]);
 });
 

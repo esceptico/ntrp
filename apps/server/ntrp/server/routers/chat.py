@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import Annotated
@@ -238,6 +239,63 @@ async def chat_events(
     )
 
 
+# Event types that drive the client's in-memory workflows domain (the FleetView
+# cards). That domain is built only from live SSE events, so after a reload it is
+# empty and the cards collapse to bare tool rows. These events ARE persisted in
+# session_events, so we replay the relevant ones on history load to rehydrate it.
+_WORKFLOW_DOMAIN_EVENT_TYPES = frozenset(
+    {"workflow_started", "workflow_finished", "task_started", "task_progress", "task_finished", "token_usage"}
+)
+# task_* / token_usage events also fire for non-workflow runs; only those tagged
+# with a workflow_id belong to a workflow card.
+_WORKFLOW_TAGGED_EVENT_TYPES = frozenset({"task_started", "task_progress", "task_finished", "token_usage"})
+
+
+def reconstruct_workflow_events(
+    records: list[StreamRecord], session_id: str, *, max_seq: int | None = None
+) -> list[dict]:
+    """Filter a session's persisted event ledger down to the events that drive
+    the client's workflows domain, returned in the same payload shape the live
+    SSE stream delivers. task_*/token_usage events are kept only when tagged
+    with a workflow_id (they also fire for non-workflow runs).
+
+    `max_seq` bounds rehydration to the transcript checkpoint: events beyond it
+    belong to an in-flight workflow and are delivered by the live SSE tail, so
+    including them here would double-apply (and double-count token_usage, which
+    accumulates) once the stream re-delivers them."""
+    events: list[dict] = []
+    for record in records:
+        if max_seq is not None and record.seq > max_seq:
+            continue
+        event_type = record.event.type.value
+        if event_type not in _WORKFLOW_DOMAIN_EVENT_TYPES:
+            continue
+        payload = json.loads(record.event.to_sse()["data"])
+        if event_type in _WORKFLOW_TAGGED_EVENT_TYPES and not payload.get("workflow_id"):
+            continue
+        payload["seq"] = record.seq
+        payload["session_id"] = payload.get("session_id") or session_id
+        events.append(payload)
+    return events
+
+
+@router.get("/chat/{session_id}/workflows")
+async def get_session_workflow_events(session_id: str, request: Request):
+    """Persisted workflow-domain events for a session, so the client can rehydrate
+    its FleetView cards after a reload (the live workflows store is in-memory and
+    is otherwise lost when the transcript is rebuilt from history)."""
+    runtime = getattr(request.app.state, "runtime", None)
+    session_service = getattr(runtime, "session_service", None)
+    store = session_service.store if session_service else None
+    if store is None:
+        return {"events": []}
+    records = await store.list_session_events(session_id, after_seq=0, limit=50000)
+    # Bound to the transcript checkpoint so rehydration never overlaps the live
+    # SSE tail (which re-delivers events beyond the checkpoint on reconnect).
+    checkpoint_seq = await store.get_latest_session_checkpoint_seq(session_id)
+    return {"events": reconstruct_workflow_events(records, session_id, max_seq=checkpoint_seq)}
+
+
 @router.get("/chat/runs/status", response_model=ChatRunsStatusResponse)
 async def get_chat_runs_status(run_registry: RunRegistry = Depends(require_run_registry)):
     return run_registry.get_status()
@@ -407,24 +465,6 @@ def _resolve_run_id(request: CancelRequest, run_registry: RunRegistry) -> str:
     if not run_id:
         raise HTTPException(status_code=404, detail="Run not found")
     return run_id
-
-
-@router.post("/pause", status_code=202)
-async def pause_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
-    run_id = _resolve_run_id(request, run_registry)
-    result = run_registry.pause_run(run_id)
-    if not result["found"]:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return {"status": "paused" if result["paused"] else "not_paused", "run_id": run_id, **result}
-
-
-@router.post("/resume", status_code=202)
-async def resume_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
-    run_id = _resolve_run_id(request, run_registry)
-    result = run_registry.resume_run(run_id)
-    if not result["found"]:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return {"status": "resumed" if result["resumed"] else "not_resumed", "run_id": run_id, **result}
 
 
 @router.post("/chat/subagents/{tool_call_id}/cancel", status_code=202)

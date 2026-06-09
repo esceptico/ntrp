@@ -76,6 +76,7 @@ class ToolRegistry:
         capabilities: frozenset[str] = frozenset(),
         names: set[str] | None = None,
         read_only: bool | None = None,
+        actions: frozenset[ToolAction] | None = None,
     ) -> list[dict]:
         schemas = []
         for name, tool in self._tools.items():
@@ -85,6 +86,8 @@ class ToolRegistry:
             if names is not None and name not in names:
                 continue
             if read_only is not None and (tool.policy.action == ToolAction.READ) != read_only:
+                continue
+            if actions is not None and tool.policy.action not in actions:
                 continue
             if not tool.policy.permissions.issubset(capabilities):
                 continue

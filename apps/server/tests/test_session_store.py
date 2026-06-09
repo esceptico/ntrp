@@ -1,5 +1,6 @@
 """Session store tests — real SQLite, round-trip persistence."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -7,9 +8,11 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.constants import RAW_TOOL_RESULT_INLINE_MAX_BYTES
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.events.sse import ThinkingEvent
+from ntrp.core.raw_tool_results import RAW_TOOL_RESULT_DATA_KEY, persist_raw_tool_result
+from ntrp.events.sse import ThinkingEvent, ToolCallResultEvent
 from ntrp.server.bus import StreamRecord
 
 
@@ -110,6 +113,40 @@ async def test_project_schema_migrates_existing_sessions_table(tmp_path: Path):
     index_names = {row["name"] for row in indexes}
     assert "idx_sessions_project_activity" in index_names
     assert "idx_sessions_parent_activity" in index_names
+
+    await read_conn.close()
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_tool_results_schema_migrates_legacy_table(tmp_path: Path):
+    conn = await database.connect(tmp_path / "legacy-tool-results.db")
+    read_conn = await database.connect(tmp_path / "legacy-tool-results.db", readonly=True)
+    await conn.executescript(
+        """
+        CREATE TABLE tool_results (
+            content_hash TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            byte_len INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        INSERT INTO tool_results (content_hash, content, byte_len, created_at)
+        VALUES ('abc', 'legacy raw', 10, '2026-01-01T00:00:00+00:00');
+        """
+    )
+    await conn.commit()
+
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+
+    columns = await conn.execute_fetchall("PRAGMA table_info(tool_results)")
+    column_names = {row["name"] for row in columns}
+    assert "tool_result_id" in column_names
+    assert "content_bytes" in column_names
+    assert "blob_path" in column_names
+
+    legacy_rows = await conn.execute_fetchall("SELECT content_hash, content FROM tool_results_legacy")
+    assert [(row["content_hash"], row["content"]) for row in legacy_rows] == [("abc", "legacy raw")]
 
     await read_conn.close()
     await conn.close()
@@ -917,6 +954,101 @@ async def test_session_events_round_trip_with_sequence(store: SessionStore):
     assert isinstance(events[0].event, ThinkingEvent)
     assert events[0].event.status == "processing"
     assert await store.get_latest_session_event_seq("sess-1") == 7
+
+
+@pytest.mark.asyncio
+async def test_large_tool_result_event_spills_raw_content_to_manifest(store: SessionStore):
+    raw = "raw evidence line\n" * ((RAW_TOOL_RESULT_INLINE_MAX_BYTES // len("raw evidence line\n")) + 10)
+    await store.record_tool_call_started(
+        run_id="run-1",
+        session_id="sess-raw",
+        tool_call_id="call-raw",
+        tool_name="bash",
+        action="read",
+        scope="internal",
+    )
+
+    await store.record_session_event(
+        StreamRecord(
+            seq=12,
+            session_id="sess-raw",
+            event=ToolCallResultEvent(
+                tool_call_id="call-raw",
+                name="bash",
+                content=raw,
+                preview="raw evidence",
+            ),
+        )
+    )
+
+    rows = await store.read_conn.execute_fetchall("SELECT event_json FROM session_events WHERE session_id = 'sess-raw'")
+    payload = json.loads(rows[0]["event_json"])
+    assert payload["type"] == "TOOL_CALL_RESULT"
+    assert payload["content"] != raw
+    assert "raw_ref" in payload
+    assert payload["content_bytes"] == len(raw.encode("utf-8"))
+    assert len(rows[0]["event_json"]) < RAW_TOOL_RESULT_INLINE_MAX_BYTES
+
+    manifest = await store.get_tool_result(payload["raw_ref"])
+    assert manifest is not None
+    assert manifest["session_id"] == "sess-raw"
+    assert manifest["tool_call_id"] == "call-raw"
+    assert manifest["content"] == raw
+
+    tool_calls = await store.list_tool_calls(run_id="run-1")
+    assert tool_calls[0]["result_ref"] == payload["raw_ref"]
+
+    events = await store.list_session_events("sess-raw", after_seq=0)
+    assert events[0].event.tool_call_id == "call-raw"
+    assert events[0].event.raw_ref == payload["raw_ref"]
+    assert events[0].event.content != raw
+
+
+@pytest.mark.asyncio
+async def test_small_tool_result_event_stays_inline(store: SessionStore):
+    await store.record_session_event(
+        StreamRecord(
+            seq=13,
+            session_id="sess-small",
+            event=ToolCallResultEvent(tool_call_id="call-small", name="read_file", content="small raw result"),
+        )
+    )
+
+    rows = await store.read_conn.execute_fetchall("SELECT event_json FROM session_events WHERE session_id = 'sess-small'")
+    payload = json.loads(rows[0]["event_json"])
+    assert payload["content"] == "small raw result"
+    assert "raw_ref" not in payload
+    assert await store.get_tool_result("missing") is None
+
+
+@pytest.mark.asyncio
+async def test_offloaded_tool_result_event_registers_existing_raw_blob(store: SessionStore):
+    raw = "offloaded raw line\n" * 5000
+    blob = persist_raw_tool_result(raw)
+
+    await store.record_session_event(
+        StreamRecord(
+            seq=14,
+            session_id="sess-offload",
+            event=ToolCallResultEvent(
+                tool_call_id="call-offload",
+                name="bash",
+                content="compact head/tail preview",
+                preview="compact",
+                data=blob.to_internal_data(),
+            ),
+        )
+    )
+
+    rows = await store.read_conn.execute_fetchall("SELECT event_json FROM session_events WHERE session_id = 'sess-offload'")
+    payload = json.loads(rows[0]["event_json"])
+    assert payload["content"] == "compact head/tail preview"
+    assert payload["raw_ref"].startswith("tr_")
+    assert RAW_TOOL_RESULT_DATA_KEY not in payload.get("data", {})
+
+    manifest = await store.get_tool_result(payload["raw_ref"])
+    assert manifest is not None
+    assert manifest["content"] == raw
 
 
 @pytest.mark.asyncio

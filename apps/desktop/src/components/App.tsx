@@ -22,17 +22,11 @@ const SettingsModal = lazy(() =>
 const AutomationsModal = lazy(() =>
   import("./AutomationsModal").then((m) => ({ default: m.AutomationsModal })),
 );
-const ArchiveModal = lazy(() =>
-  import("./ArchiveModal").then((m) => ({ default: m.ArchiveModal })),
-);
 const MemoryModal = lazy(() =>
   import("./MemoryModal").then((m) => ({ default: m.MemoryModal })),
 );
 const ToolViewer = lazy(() =>
   import("./ToolViewer").then((m) => ({ default: m.ToolViewer })),
-);
-const WorkflowPanel = lazy(() =>
-  import("./workflow/WorkflowPanel").then((m) => ({ default: m.WorkflowPanel })),
 );
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
@@ -193,10 +187,8 @@ export function App() {
         <Suspense fallback={null}>
           <SettingsModal />
           <AutomationsModal />
-          <ArchiveModal />
           <MemoryModal />
           <ToolViewer />
-          <WorkflowPanel />
         </Suspense>
       </ErrorBoundary>
       <CommandPalette />

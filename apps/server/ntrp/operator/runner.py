@@ -21,15 +21,13 @@ from ntrp.tools.executor import ToolExecutor
 @dataclass(frozen=True)
 class OperatorDeps:
     executor: ToolExecutor
-    memory: object | None
-    memory_service: object | None
     config: AgentConfig
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
     notifiers: list[dict[str, str]]
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     skill_registry: SkillRegistry | None = None
-    memory_retrieval: object | None = None
+    memory_records: object | None = None
 
 
 @dataclass(frozen=True)
@@ -52,40 +50,30 @@ class RunResult:
 
 # Below this many chars of prompt there is nothing worth a scoped recall.
 _MEMORY_RECALL_FLOOR = 12
-_MEMORY_TOKEN_BUDGET = 1500
 
 
-async def _retrieve_memory_context(memory_retrieval: object | None, prompt: str) -> str | None:
-    """Cost-aware USER-scoped recall for an operator/automation run.
+async def _retrieve_memory_context(memory_records: object | None, prompt: str) -> str | None:
+    """Pinned records for an operator/automation run.
 
-    Automation runs act on behalf of the principal, so they recall the USER
-    scope (the durable, cross-session memory) rather than the ephemeral SESSION
-    scope they write into. Skips on trivial input; no LLM unless over budget.
+    Automation runs act on behalf of the principal; they inject the durable
+    pinned records (zero-LLM, zero per-run vector). Skips on trivial input.
     """
-    if memory_retrieval is None or not prompt or len(prompt.strip()) < _MEMORY_RECALL_FLOOR:
+    if memory_records is None or not prompt or len(prompt.strip()) < _MEMORY_RECALL_FLOOR:
         return None
-
-    from ntrp.memory.models import Scope, ScopeKind
-    from ntrp.memory.pipeline.types import Retrieval
-
     try:
-        result = await memory_retrieval.retrieve(
-            Retrieval(
-                goal=prompt.strip(),
-                scope=Scope(kind=ScopeKind.USER),
-                token_budget=_MEMORY_TOKEN_BUDGET,
-            )
-        )
+        records = await memory_records.list(pinned_only=True, limit=20)
     except Exception:
         return None
-    return result.rendered or None
+    if not records:
+        return None
+    return "## Pinned\n\n" + "\n".join(f"- [{r.kind}] {r.text}" for r in records)
 
 
 async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list[dict], str, str]:
     run_id = generate_slug(2)
     session_state = deps.create_session()
 
-    memory_context = await _retrieve_memory_context(deps.memory_retrieval, request.prompt)
+    memory_context = await _retrieve_memory_context(deps.memory_records, request.prompt)
 
     executor = deps.executor
     tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)

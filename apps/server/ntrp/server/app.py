@@ -11,6 +11,8 @@ from ntrp.agent import Role
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
+from ntrp.core.tool_result_files import prune_offload_store
+from ntrp.logging import get_logger
 from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.middleware import AuthMiddleware
@@ -28,6 +30,8 @@ from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime
 from ntrp.services.chat import submit_chat_message
+
+_logger = get_logger(__name__)
 
 
 def _loop_target_id(automation: Automation) -> str | None:
@@ -68,8 +72,16 @@ async def lifespan(app: FastAPI):
     runtime = Runtime()
     await runtime.connect()
     runtime.start_indexing()
+    # Bound the durable tool-result store on startup: prune offloaded results past
+    # the retention window so it can't accumulate across sessions (it had grown to
+    # ~5GB, which made an agent grepping it never converge — the CPU runaway).
+    # Best-effort: a store-permission/IO error must not block serving requests.
+    try:
+        await asyncio.to_thread(prune_offload_store)
+    except Exception:
+        _logger.warning("tool-result store prune failed on startup; continuing", exc_info=True)
     bus_registry = BusRegistry(
-        record_event=runtime.session_service.store.record_session_event if runtime.session_service else None,
+        record_events=runtime.session_service.store.record_session_events if runtime.session_service else None,
     )
     runtime.scheduler.set_bus_registry(bus_registry)
 

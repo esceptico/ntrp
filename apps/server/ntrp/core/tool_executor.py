@@ -12,6 +12,7 @@ from ntrp.constants import (
     OFFLOAD_PREVIEW_LINES,
     OFFLOAD_THRESHOLD,
 )
+from ntrp.core.raw_tool_results import persist_raw_tool_result
 from ntrp.core.tool_result_files import persist_result
 from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolScope
@@ -217,7 +218,9 @@ class NtrpToolExecutor:
         if len(content) <= OFFLOAD_THRESHOLD:
             return result
 
-        path = persist_result(tool_call_id, content)
+        path = persist_result(self._ctx.session_id, tool_call_id, content)
+        raw_blob = persist_raw_tool_result(content)
+        data = {**(result.data or {}), **raw_blob.to_internal_data()}
         lines = content.split("\n")
         total = len(lines)
         preview, preview_lines = _bounded_offload_preview(lines)
@@ -232,7 +235,7 @@ class NtrpToolExecutor:
             content=compact,
             preview=result.preview,
             is_error=result.is_error,
-            data=result.data,
+            data=data,
             model_content=result.model_content,
             source_ref=result.source_ref,
         )

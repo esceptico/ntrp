@@ -3,6 +3,7 @@ import { useStore } from "../store";
 import { fetchAutomations, fetchAutomationSuggestions, refreshLoops } from "../actions";
 import { type AppConfig, type SessionListItem } from "../api";
 import { createStallWatchdog } from "../lib/streamWatchdog";
+import { openSseStream } from "../lib/sseTransport";
 import { automationToast } from "../lib/taskToast";
 
 // The automation stream keepalives every 5s; treat ~3x silence as stalled.
@@ -26,7 +27,7 @@ type AutomationEvent =
   | { type: "stream_keepalive"; latest_seq: number; seq?: number }
   | { type: "stream_reset"; reason: string; seq?: number };
 
-function headersFor(config: AppConfig): HeadersInit {
+function headersFor(config: AppConfig): Record<string, string> {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 }
 
@@ -57,12 +58,11 @@ export function useAutomationEvents(): void {
   useEffect(() => {
     const controller = new AbortController();
     let disposed = false;
-    let afterSeq: number | undefined;
-
     const store = () => useStore.getState();
 
-    // A half-open automation stream silently drops session_created /
-    // progress events until reload; force a reconnect on prolonged silence.
+    // A half-open automation stream silently drops session_created / progress
+    // events until reload; force a reconnect on prolonged silence. Keepalives
+    // bump the watchdog, so real silence is a genuine stall.
     const watchdog = createStallWatchdog({
       stallMs: AUTOMATION_STALL_MS,
       checkMs: AUTOMATION_STALL_CHECK_MS,
@@ -71,105 +71,80 @@ export function useAutomationEvents(): void {
       },
     });
 
-    // Long-running SSE loop with reconnect on drop. Mirrors the chat
-    // events fallback in useEvents (the desktop preload's
-    // event-bridge is keyed to chat session_ids so we can't reuse it
-    // here — automations have their own URL).
-    void (async () => {
-      while (!disposed && !controller.signal.aborted) {
-        try {
-          store().automationStreamConnecting();
-          const response = await fetch(automationEventsUrl(config.serverUrl, afterSeq), {
-            headers: { ...headersFor(config), Accept: "text/event-stream" },
-            signal: controller.signal,
-          });
-          if (!response.ok || !response.body) {
-            throw new Error(`automation event stream failed: ${response.status}`);
-          }
-          store().automationStreamConnected();
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          while (!disposed && !controller.signal.aborted) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              try {
-                const event = JSON.parse(line.slice(6)) as AutomationEvent;
-                watchdog.bump();
-                afterSeq = reduceAutomationStreamCursor(afterSeq, event);
-                if (event.type === "automation_progress") {
-                  store().automationProgress(event.task_id, event.status);
-                  // The "starting..." status is the scheduler's fire signal —
-                  // server has just bumped next_run_at to the next slot.
-                  // Pull loops for the current session so the countdown chip
-                  // resets immediately instead of pinning at 0s until the
-                  // next 3s poll.
-                  if (event.status === "starting...") {
-                    const sid = useStore.getState().currentSessionId;
-                    if (sid) void refreshLoops(sid);
-                  }
-                } else if (event.type === "automation_finished") {
-                  store().automationFinished(event.task_id);
-                  const st = store();
-                  const auto =
-                    st.automations?.find((a) => a.task_id === event.task_id) ?? null;
-                  const toast = automationToast({
-                    taskId: event.task_id,
-                    name: auto?.name ?? null,
-                    result: event.result,
-                    automationsOpen: st.automationsOpen,
-                  });
-                  if (toast) st.pushToast(toast);
-                  // Refresh the automations list so the row leaves the
-                  // sidebar card immediately rather than after the next
-                  // 20s poll catches up to running_since going null.
-                  void fetchAutomations();
-                } else if (event.type === "automation_suggestions_updated") {
-                  // The background suggester recomputed the active set —
-                  // pull it so the "Suggested for you" section reflects the
-                  // new drafts without waiting for the next modal open.
-                  void fetchAutomationSuggestions();
-                } else if (event.type === "session_created") {
-                  // An automation just provisioned its channel session.
-                  // Prepend it so the sidebar row shows up live; the store
-                  // dedupes if bootstrap already loaded the same id.
-                  store().prependSession(event.session);
-                } else if (event.type === "session_activity") {
-                  // A channel the user may not be viewing got new content —
-                  // bump its sidebar row to the top with fresh metadata.
-                  store().patchSession(event.session);
-                } else if (event.type === "stream_reset") {
-                  void fetchAutomations();
-                  const sid = useStore.getState().currentSessionId;
-                  if (sid) void refreshLoops(sid);
-                }
-              } catch {
-                /* keep-alive / non-data line */
-              }
-            }
-          }
-          if (!disposed && !controller.signal.aborted) {
-            store().automationStreamStale();
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-          }
-        } catch (error) {
-          if (controller.signal.aborted) return;
-          store().automationStreamFailed(
-            error instanceof Error ? error.message : String(error),
-          );
-          // Backoff briefly before reconnecting so a server flap
-          // doesn't turn into a tight reconnect loop.
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+    const handle = (event: AutomationEvent) => {
+      watchdog.bump();
+      if (event.type === "automation_progress") {
+        store().automationProgress(event.task_id, event.status);
+        // "starting..." is the scheduler's fire signal — the server just bumped
+        // next_run_at, so pull loops to reset the countdown chip immediately
+        // instead of pinning at 0s until the next 3s poll.
+        if (event.status === "starting...") {
+          const sid = useStore.getState().currentSessionId;
+          if (sid) void refreshLoops(sid);
         }
+      } else if (event.type === "automation_finished") {
+        store().automationFinished(event.task_id);
+        const st = store();
+        const auto = st.automations?.find((a) => a.task_id === event.task_id) ?? null;
+        const toast = automationToast({
+          taskId: event.task_id,
+          name: auto?.name ?? null,
+          result: event.result,
+          automationsOpen: st.automationsOpen,
+        });
+        if (toast) st.pushToast(toast);
+        // Drop the row from the sidebar card immediately rather than after the
+        // next 20s poll catches up to running_since going null.
+        void fetchAutomations();
+      } else if (event.type === "automation_suggestions_updated") {
+        // The background suggester recomputed the active set — pull it so
+        // "Suggested for you" reflects the new drafts without a modal reopen.
+        void fetchAutomationSuggestions();
+      } else if (event.type === "session_created") {
+        // An automation just provisioned its channel session. Prepend it so the
+        // sidebar row shows up live; the store dedupes an already-loaded id.
+        store().prependSession(event.session);
+      } else if (event.type === "session_activity") {
+        // A channel the user may not be viewing got new content — bump its
+        // sidebar row to the top with fresh metadata.
+        store().patchSession(event.session);
+      } else if (event.type === "stream_reset") {
+        void fetchAutomations();
+        const sid = useStore.getState().currentSessionId;
+        if (sid) void refreshLoops(sid);
       }
-    })();
+    };
+
+    store().automationStreamConnecting();
+    void openSseStream<AutomationEvent>({
+      // Resume rides Last-Event-ID: the server stamps `id: {seq}` on every
+      // record + keepalive and honors the header, so fetch-event-source
+      // re-sends the last id on reconnect — no after_seq needed in the URL.
+      url: automationEventsUrl(config.serverUrl, undefined),
+      signal: controller.signal,
+      headers: headersFor(config),
+      // Keep receiving automation/notification updates while the window is
+      // backgrounded (matches the prior always-open loop).
+      openWhenHidden: true,
+      parse: (data) => {
+        try {
+          return JSON.parse(data) as AutomationEvent;
+        } catch {
+          return null;
+        }
+      },
+      onConnect: () => {
+        if (!disposed) store().automationStreamConnected();
+      },
+      onError: (message, fatal) => {
+        if (disposed) return;
+        if (fatal) store().automationStreamFailed(message);
+        else store().automationStreamStale();
+      },
+      onEvent: handle,
+    }).catch(() => {
+      /* aborted or fatal — already surfaced via onError */
+    });
 
     return () => {
       disposed = true;

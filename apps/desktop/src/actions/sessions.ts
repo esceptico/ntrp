@@ -109,6 +109,11 @@ export async function archiveSession(sessionId: string): Promise<void> {
   await archiveSessionApi(s.config, sessionId);
   const remaining = s.sessions.filter((sess) => sess.session_id !== sessionId);
   s.setSessions(remaining);
+  // A pinned session that's been archived no longer exists in the live list,
+  // so drop it from the pins rather than letting the id linger in prefs.
+  if (s.prefs.pinnedSessionIds.includes(sessionId)) {
+    s.setPref("pinnedSessionIds", s.prefs.pinnedSessionIds.filter((id) => id !== sessionId));
+  }
   // Invalidate archived list so the next open re-fetches.
   s.setArchivedSessions(null);
   if (s.currentSessionId === sessionId) {

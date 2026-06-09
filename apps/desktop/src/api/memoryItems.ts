@@ -114,14 +114,15 @@ export interface MemoryItemsResponse {
   items: MemoryItem[];
   limit: number;
 }
-export interface MemoryScope {
+// A scope summary row (distinct from `MemoryScope` = a claim's {kind,key}).
+export interface MemoryScopeSummary {
   scope_kind: ScopeKind;
   scope_key: string | null;
   count: number;
 }
 
 export function listScopes(config: AppConfig) {
-  return apiWithConfig<{ scopes: MemoryScope[] }>(config, `/admin/memory/scopes`);
+  return apiWithConfig<{ scopes: MemoryScopeSummary[] }>(config, `/admin/memory/scopes`);
 }
 
 export interface ListMemoryItemsParams extends ScopeParams {

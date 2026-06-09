@@ -1,6 +1,6 @@
 import type { BackgroundAgentStatus } from "./types";
 
-export type WorkflowStatus = "running" | "completed" | "failed";
+export type WorkflowStatus = "running" | "completed" | "failed" | "cancelled";
 
 export type WorkflowPhaseStatus = "pending" | "running" | "completed" | "failed";
 
@@ -17,6 +17,7 @@ export interface WorkflowAgent {
   phase: string;
   name?: string;
   agentType?: string;
+  childSessionId?: string;
   status: BackgroundAgentStatus;
   detail?: string;
   startedAt: number;
@@ -24,6 +25,7 @@ export interface WorkflowAgent {
   durationMs?: number;
   tokens?: WorkflowTokenUsage;
   cost?: number;
+  toolCount?: number;
 }
 
 export interface WorkflowPhase {
@@ -69,7 +71,7 @@ export interface WorkflowStartedInput {
 export interface WorkflowFinishedInput {
   workflowId: string;
   sessionId: string;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "cancelled";
   summary?: string;
   agentCount?: number;
 }
@@ -84,7 +86,9 @@ export interface WorkflowTaskEventInput {
   phase?: string | null;
   name?: string;
   agentType?: string;
+  childSessionId?: string;
   detail?: string;
+  toolCount?: number;
   /** Required for "finished"; ignored otherwise. */
   status?: BackgroundAgentStatus;
 }
@@ -169,6 +173,17 @@ export function reduceWorkflowFinished(
   return { ...state, rows: { ...state.rows, [key]: next } };
 }
 
+export function reduceWorkflowDismissed(
+  state: WorkflowsDomainState,
+  input: { sessionId: string; workflowId: string },
+): WorkflowsDomainState {
+  const key = workflowKey(input.sessionId, input.workflowId);
+  if (!(key in state.rows)) return state;
+  const rows = { ...state.rows };
+  delete rows[key];
+  return { ...state, rows };
+}
+
 export function reduceWorkflowTaskEvent(
   state: WorkflowsDomainState,
   input: WorkflowTaskEventInput,
@@ -191,6 +206,7 @@ export function reduceWorkflowTaskEvent(
     phase: phaseName,
     name: input.name ?? prevAgent?.name,
     agentType: input.agentType ?? prevAgent?.agentType,
+    childSessionId: input.childSessionId ?? prevAgent?.childSessionId,
     status,
     detail: input.detail ?? prevAgent?.detail,
     startedAt,
@@ -198,6 +214,7 @@ export function reduceWorkflowTaskEvent(
     durationMs: settled ? now - startedAt : prevAgent?.durationMs,
     tokens: prevAgent?.tokens,
     cost: prevAgent?.cost,
+    toolCount: input.toolCount ?? prevAgent?.toolCount,
   };
 
   const agentsByTaskId = { ...prevPhase?.agentsByTaskId, [input.taskId]: agent };

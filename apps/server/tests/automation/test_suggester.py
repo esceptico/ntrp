@@ -23,14 +23,9 @@ class StubCheapLLM:
         return _response(self.suggestion_set)
 
 
-class StubMemory:
-    async def distinct_subjects(self, scope):
-        return [("ntrp", 3), ("calendar", 1)]
-
-    async def query(self, *, scope, limit):
-        return [SimpleNamespace(content="User reviews ntrp PRs each morning")]
-
-    lens_files = SimpleNamespace(list=lambda: [])
+class StubRecords:
+    async def list(self, *, pinned_only=False, limit=30):
+        return [SimpleNamespace(kind="action", text="User reviews ntrp PRs each morning")]
 
 
 class StubSessions:
@@ -83,7 +78,7 @@ async def test_run_drops_invalid_and_persists_valid():
     automations = StubAutomations()
 
     suggester = AutomationSuggester(
-        memory=StubMemory(),
+        records=StubRecords(),
         sessions=StubSessions(),
         automations=automations,
         cheap_llm=cheap_llm,

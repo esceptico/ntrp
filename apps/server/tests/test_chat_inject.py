@@ -546,7 +546,7 @@ async def test_event_stream_seeds_persisted_cursor_without_client_cursor(tmp_pat
     await store.record_session_event(
         StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="checkpoint-evidence")),
     )
-    buses = BusRegistry(record_event=store.record_session_event)
+    buses = BusRegistry(record_events=store.record_session_events)
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, event_store=store)
     next_chunk = asyncio.create_task(anext(stream))
@@ -1353,7 +1353,7 @@ async def test_submit_chat_message_primes_bus_cursor_from_durable_events(tmp_pat
     monkeypatch.setattr(chat_service, "run_chat", hold_run)
 
     registry = RunRegistry()
-    buses = BusRegistry(record_event=store.record_session_event)
+    buses = BusRegistry(record_events=store.record_session_events)
     session_service = FakeSessionService(store)
     deps = ChatDeps(
         chat_model="gpt-5.2",

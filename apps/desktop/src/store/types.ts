@@ -33,7 +33,8 @@ export type SettingsTabId =
   | "context"
   | "tools"
   | "mcp"
-  | "appearance";
+  | "appearance"
+  | "archive";
 
 export type Role =
   | "user"
@@ -67,11 +68,21 @@ export type PaletteId =
   | "raycast"
   | "notion";
 
+export type SidebarGroupBy = "project" | "time" | "type" | "status";
+
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
   palette: PaletteId;
+  /** How the sidebar session list is grouped. */
+  sidebarGroupBy: SidebarGroupBy;
+  /** Sidebar filter: show only unread (finished, unseen) sessions. */
+  sidebarUnreadOnly: boolean;
+  /** Sidebar filter: show only channel sessions. */
+  sidebarChannelsOnly: boolean;
+  /** Session IDs pinned to the top of the sidebar, most-recent-pin first. */
+  pinnedSessionIds: string[];
   sidebarHidden: boolean;
   /** Right panel (agents/todos/automations) collapsed. Shared so the chat
    *  area can reflow its right edge to dock the panel instead of floating
@@ -197,6 +208,10 @@ export interface ActivityItem {
   cost?: number;
   /** Durable child-agent identity/control metadata from tool result data. */
   childAgent?: ChildAgentRef;
+  /** Real workflow id (from the workflow tool's result data) when
+   *  `semanticKind === "workflow"`. Lets the lifted card open the panel even
+   *  after reload, before any live workflow-domain event repopulates it. */
+  workflowId?: string;
 }
 
 export type ActivityLabel = "Calling" | "Called" | "Backgrounded" | "Stopped";
@@ -275,9 +290,9 @@ export interface MarkdownViewState {
   sourcePath?: string;
 }
 
-/** Which workflow the WorkflowPanel overlay is showing. The session id is
- *  captured so the panel can resolve the workflow even after the user
- *  switches sessions. */
+/** Which workflow is expanded/focused in the agent hub (right sidebar). Set by
+ *  clicking a workflow card (in the hub or the chat trace); the session id is
+ *  captured so it resolves even after switching sessions. */
 export interface WorkflowViewerState {
   workflowId: string;
   sessionId: string;
@@ -329,8 +344,6 @@ export interface State {
   sessionCache: Map<string, CachedSessionState>;
   connected: boolean;
   running: boolean;
-  /** The active foreground run is paused at a step boundary (resumable). */
-  paused: boolean;
   error: string | null;
   draft: string;
   settingsOpen: boolean;
@@ -358,7 +371,6 @@ export interface State {
   automationSuggestions: AutomationSuggestion[] | null;
   automationsOpen: boolean;
   automationStream: AutomationStreamDomainState;
-  archiveOpen: boolean;
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
   memoryOpen: boolean;
@@ -388,8 +400,7 @@ export interface State {
   loops: ServerLoop[];
   backgroundAgents: BackgroundAgentsDomainState;
   workflows: WorkflowsDomainState;
-  /** The workflow currently open in the WorkflowPanel overlay. Null when
-   *  the overlay is closed. */
+  /** The workflow expanded/focused in the agent hub. Null when none. */
   workflowViewer: WorkflowViewerState | null;
   goals: Record<string, SessionGoal>;
   pendingGoalProposal: PendingGoalProposal | null;
@@ -428,7 +439,6 @@ export interface Actions {
   upsertTodoList: (message: UiMessage, beforeId?: string | null) => void;
   truncateFrom: (id: string) => void;
   setConnected: (connected: boolean) => void;
-  setPaused: (paused: boolean) => void;
   setError: (error: string | null) => void;
   setDraft: (draft: string) => void;
   setEditingId: (id: string | null) => void;
@@ -524,39 +534,49 @@ export interface Actions {
   dismissToast: (id: string) => void;
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
-  workflowStarted: (input: {
-    workflowId: string;
-    sessionId: string;
-    runId: string;
-    parentToolCallId?: string;
-    name?: string;
-    description?: string;
-    startedAt?: number;
-  }) => void;
-  workflowFinished: (input: {
-    workflowId: string;
-    sessionId: string;
-    status: "completed" | "failed";
-    summary?: string;
-    agentCount?: number;
-  }) => void;
-  workflowTaskEvent: (input: {
-    kind: "started" | "progress" | "finished";
-    workflowId: string;
-    sessionId: string;
-    taskId: string;
-    phase?: string | null;
-    name?: string;
-    agentType?: string;
-    detail?: string;
-    status?: BackgroundAgentStatus;
-  }) => void;
-  workflowTokenUsage: (input: WorkflowTokenUsageInput) => void;
+  workflowStarted: (
+    input: {
+      workflowId: string;
+      sessionId: string;
+      runId: string;
+      parentToolCallId?: string;
+      name?: string;
+      description?: string;
+      startedAt?: number;
+    },
+    at?: number,
+  ) => void;
+  workflowFinished: (
+    input: {
+      workflowId: string;
+      sessionId: string;
+      status: "completed" | "failed" | "cancelled";
+      summary?: string;
+      agentCount?: number;
+    },
+    at?: number,
+  ) => void;
+  workflowTaskEvent: (
+    input: {
+      kind: "started" | "progress" | "finished";
+      workflowId: string;
+      sessionId: string;
+      taskId: string;
+      phase?: string | null;
+      name?: string;
+      agentType?: string;
+      childSessionId?: string;
+      toolCount?: number;
+      detail?: string;
+      status?: BackgroundAgentStatus;
+    },
+    at?: number,
+  ) => void;
+  workflowTokenUsage: (input: WorkflowTokenUsageInput, at?: number) => void;
+  dismissWorkflow: (sessionId: string, workflowId: string) => void;
   setGoal: (sessionId: string, goal: SessionGoal | null) => void;
   setPendingGoalProposal: (proposal: PendingGoalProposal | null) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
-  openArchive: (origin?: { x: number; y: number } | null) => void;
-  closeArchive: () => void;
   setCompacting: (compacting: boolean) => void;
   openMemory: (origin?: { x: number; y: number } | null) => void;
   closeMemory: () => void;

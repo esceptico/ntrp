@@ -1,628 +1,554 @@
-"""Memory UI router (Stage-5) — read + structured write-back over the frozen store.
+"""Memory router — the `/admin/memory` contract the desktop memory UI calls,
+served entirely from the live flat RecordStore + LensStore.
 
-Thin HTTP surface over `MemoryStore` (claim reads + the `lenses` registry),
-`LensRegistry`/`LensProjector` (lens lifecycle + projected page), `LensWriteBack`
-(anchored page edits), and `MemoryPipeline.retrieve` (ranked egress). Memory is
-claims-only; lenses are a separate registry of views (never graph nodes). The
-graph is claims + claim↔claim edges only.
+The bridge: the UI is "claims-centric" (MemoryItem, Lens, ProjectedPage,
+CoverageAdvisory) but the substrate is records + criterion-view lenses. A RECORD
+*is* a claim — `record.text` is the claim content; a lens's MEMBERS are the
+records its criterion scores in; a lens PAGE is the synthesized markdown over
+those members. There are NO scopes (one flat pool) and NO provenance edge table
+(records have no parents/children) — `/scopes` returns [], graph edges are [].
 
-Wiring: `require_knowledge_runtime` → `KnowledgeRuntime`. Reads use
-`knowledge.memory` (the store); lens/page/writeback/retrieve use
-`knowledge.memory_retrieval` (the pipeline, exposing `.lens_registry`,
-`.lens_projector`, `.lens_writeback`, `.retrieve`). Every route guards
-`knowledge.memory_ready` → 503 when the pipeline is not up.
+Synthesis is synchronous (one LLM call in LensStore.page), so `getLensPage`
+always returns a materialized ProjectedPage (never HTTP 202); `/page/status`
+reports `idle`. The UI's async-generation poll path simply never fires.
+
+Wiring: `require_knowledge_runtime` -> `KnowledgeRuntime._record_store` /
+`._lens_store`. 503 when memory is off.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
-from ntrp.memory.models import (
-    EdgeRole,
-    LensDetailLevel,
-    LensRenderMode,
-    LensRow,
-    MemoryEdge,
-    MemoryItem,
-    Provenance,
-    Scope,
-    ScopeKind,
-    SourceRef,
-    Status,
-)
-from ntrp.memory.pipeline.write import WriteRequest, WriteSeam
-from ntrp.memory.pipeline.types import (
-    CoverageAdvisory,
-    PageEditKind,
-    PageEditOp,
-    ProjectedGroup,
-    ProjectedPage,
-    RankedItem,
-    RenderedClaim,
-    Retrieval,
-    RetrievedContext,
-    WriteBackResult,
-)
+from ntrp.constants import GENERIC_RATIO
+from ntrp.memory.models import Record
 from ntrp.server.deps import require_knowledge_runtime
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
-from ntrp.server.schemas import (
-    CreateLensBody,
-    DraftLensBody,
-    EditCriterionBody,
-    MergeLensBody,
-    RememberBody,
-    SetLensRenderModeBody,
-    SplitLensBody,
-    WriteBackOpsBody,
-)
 
 router = APIRouter(prefix="/admin/memory", tags=["memory"])
 
-_MAX_GRAPH_DEPTH = 5
+
+def _record_store(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)):
+    if not knowledge._record_store:
+        raise HTTPException(status_code=503, detail="memory not ready")
+    return knowledge._record_store
 
 
-# --- shared helpers --------------------------------------------------
+def _lens_store(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)):
+    if not knowledge._lens_store:
+        raise HTTPException(status_code=503, detail="memory not ready")
+    return knowledge._lens_store
 
 
-def _knowledge(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)) -> KnowledgeRuntime:
-    if not knowledge.memory_ready:
-        raise HTTPException(status_code=503, detail="memory pipeline not ready")
-    return knowledge
+# --- JSON adapters (record <-> claim, lens, page) ----------------------------
+
+# The lens.ts color ramp / badges key on these exact strings — emit nothing else.
+_PROVENANCE_USER = "user_authored"
+_PROVENANCE_RECORDED = "recorded"
+_USER_SOURCE_KINDS = {"desktop_pin", "user", "user_authored"}
 
 
-def _scope(scope_kind: str, scope_key: str | None) -> Scope:
-    try:
-        return Scope(kind=ScopeKind(scope_kind), key=scope_key)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+def _provenance(r: Record) -> str:
+    if r.pinned:
+        return _PROVENANCE_USER
+    if r.source_ref is not None and r.source_ref.kind in _USER_SOURCE_KINDS:
+        return _PROVENANCE_USER
+    return _PROVENANCE_RECORDED
 
 
-def _scope_or_all(scope_kind: str, scope_key: str | None) -> Scope | None:
-    """`all` / empty → None (no scope filter): memory is ONE connected store the user
-    browses unified; scope is an optional filter, not a wall. Isolation governs what
-    the agent recalls, not what the human inspects."""
-    if not scope_kind or scope_kind == "all":
-        return None
-    return _scope(scope_kind, scope_key)
-
-
-def _scope_json(scope: Scope) -> dict:
-    return {"kind": scope.kind.value, "key": scope.key}
-
-
-def _pin_write_request(fact: str, project_id: str | None) -> WriteRequest:
-    """A USER_AUTHORED claim from a manual pin — same shape as the remember()
-    tool (bypass_admit, project scope when available, else USER)."""
-    scope = (
-        Scope(kind=ScopeKind.PROJECT, key=project_id)
-        if project_id
-        else Scope(kind=ScopeKind.USER)
-    )
-    return WriteRequest(
-        content=fact,
-        scope=scope,
-        provenance=Provenance.USER_AUTHORED,
-        source_refs=[SourceRef(kind="desktop_pin", ref="agent_result")],
-        valid_from=None,
-        bypass_admit=True,
-    )
-
-
-def item_json(m: MemoryItem) -> dict:
+def record_to_item_json(r: Record) -> dict:
+    """A Record rendered as the UI's `MemoryItem` (claims-only shape). Records
+    have no claims-era fields, so map deterministically: text->content,
+    kind->canonical_subject (keeps grouped bucketing meaningful), one flat
+    user/null scope, no edges."""
+    source_refs = []
+    if r.source_ref is not None:
+        source_refs.append(
+            {
+                "kind": r.source_ref.kind,
+                "ref": r.source_ref.ref,
+                "captured_at": r.source_ref.captured_at,
+            }
+        )
     return {
-        "id": m.id,
-        "content": m.content,
-        "canonical_subject": m.canonical_subject,
-        "scope": _scope_json(m.scope),
-        "provenance": m.provenance.value,
-        "status": m.status.value,
-        "valid_from": m.valid_from,
-        "invalid_at": m.invalid_at,
-        "source_refs": [r.to_dict() for r in m.source_refs],
-        "corroboration": m.corroboration,
-        "last_relevant_at": m.last_relevant_at,
-        "feedback": m.feedback.value,
-        "created_at": m.created_at,
-        "updated_at": m.updated_at,
+        "id": r.id,
+        "content": r.text,
+        "canonical_subject": r.kind,
+        "scope": {"kind": "user", "key": None},
+        "provenance": _provenance(r),
+        "status": "superseded" if r.superseded_by else "active",
+        "valid_from": r.created_at,
+        "invalid_at": None,
+        "source_refs": source_refs,
+        "corroboration": 1 + len(source_refs),
+        "last_relevant_at": r.last_confirmed_at,
+        "feedback": "confirmed" if r.pinned else "none",
+        "created_at": r.created_at,
+        "updated_at": r.last_confirmed_at,
     }
 
 
-def lens_json(lens: LensRow) -> dict:
+def rendered_claim_json(r: Record) -> dict:
+    """A member Record rendered as the UI's `RenderedClaim` (a lens-page block)."""
+    source_refs = []
+    if r.source_ref is not None:
+        source_refs.append(
+            {
+                "kind": r.source_ref.kind,
+                "ref": r.source_ref.ref,
+                "captured_at": r.source_ref.captured_at,
+            }
+        )
+    return {
+        "claim_id": r.id,
+        "content": r.text,
+        "provenance": _provenance(r),
+        "corroboration": 1 + len(source_refs),
+        "feedback": "confirmed" if r.pinned else "none",
+        "source_refs": source_refs,
+    }
+
+
+def lens_to_json(lens) -> dict:
+    """A LensStore `Lens` ({id,name,criterion,created_at}) rendered as the UI's
+    `Lens`. The synthesizer emits `## Name` sections, so render_mode is
+    grouped_by_subject (the page builder splits on those headings)."""
     return {
         "id": lens.id,
         "name": lens.name,
         "criterion": lens.criterion,
-        "entity_type": lens.entity_type,
-        "scope": _scope_json(lens.scope),
-        "detail_level": lens.detail_level.value,
-        "render_mode": lens.render_mode.value,
-        "provenance": lens.provenance.value,
-        "status": lens.status.value,
+        "entity_type": None,
+        "scope": {"kind": "user", "key": None},
+        "detail_level": "structured",
+        "render_mode": "grouped_by_subject",
+        "provenance": "user_authored",
+        "status": "active",
         "created_at": lens.created_at,
-        "updated_at": lens.updated_at,
+        "updated_at": lens.created_at,
     }
 
 
-def edge_json(e: MemoryEdge) -> dict:
+def coverage_json(lens_id: str, member_count: int, scope_pool: int) -> dict:
+    ratio = member_count / scope_pool if scope_pool else 0.0
+    generic = scope_pool > 0 and ratio >= GENERIC_RATIO
     return {
-        "child_id": e.child_id,
-        "parent_id": e.parent_id,
-        "role": e.role.value,
-        "position": e.position,
-        "created_at": e.created_at,
+        "lens_id": lens_id,
+        "scope_pool": scope_pool,
+        "member_count": member_count,
+        "ratio": ratio,
+        "generic": generic,
+        "suggestion": "split" if generic else "",
     }
 
 
-def coverage_json(c: CoverageAdvisory) -> dict:
-    return {
-        "lens_id": c.lens_id,
-        "scope_pool": c.scope_pool,
-        "member_count": c.member_count,
-        "ratio": c.ratio,
-        "generic": c.generic,
-        "suggestion": c.suggestion,
-    }
-
-
-def claim_block_json(b: RenderedClaim) -> dict:
-    return {
-        "claim_id": b.claim_id,
-        "content": b.content,
-        "provenance": b.provenance.value,
-        "corroboration": b.corroboration,
-        "feedback": b.feedback.value,
-        "source_refs": [r.to_dict() for r in b.source_refs],
-    }
-
-
-def group_json(g: ProjectedGroup) -> dict:
-    return {
-        "subject": g.subject,
-        "markdown": g.markdown,
-        "synthesized": g.synthesized,
-        "blocks": [claim_block_json(b) for b in g.blocks],
-    }
-
-
-def page_json(p: ProjectedPage) -> dict:
-    return {
-        "lens_id": p.lens_id,
-        "detail": p.detail.value,
-        "markdown": p.markdown,
-        "blocks": [claim_block_json(b) for b in p.blocks],
-        "synthesized": p.synthesized,
-        "coverage": coverage_json(p.coverage) if p.coverage else None,
-        "groups": [group_json(g) for g in p.groups] if p.groups is not None else None,
-    }
-
-
-def ranked_json(r: RankedItem) -> dict:
-    return {
-        "item": item_json(r.item),
-        "order_score": r.order_score,
-        "rrf": r.rrf,
-        "freshness": r.freshness,
-        "provenance_ord": r.provenance_ord,
-        "corroboration": r.corroboration,
-    }
-
-
-def _parse_detail(detail: str | None) -> LensDetailLevel | None:
-    if detail is None:
+def _split_subject_sections(markdown: str, members: list[Record]) -> list[dict] | None:
+    """Split the synthesized page on `## {subject}` headings into UI
+    `ProjectedGroup`s. The synthesizer emits NO per-claim anchors, so blocks can't
+    be mapped to a precise section — every group carries ALL member blocks (the
+    drill-down is the whole evidence pool). Returns None when the page has no `##`
+    sections (the UI then renders the flat markdown + blocks)."""
+    if not markdown:
         return None
-    try:
-        return LensDetailLevel(detail)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"invalid detail: {detail}")
-
-
-def _parse_roles(roles: str | None) -> set[EdgeRole] | None:
-    if not roles:
+    lines = markdown.split("\n")
+    sections: list[dict] = []
+    cur: dict | None = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if cur is not None:
+                sections.append(cur)
+            cur = {"subject": stripped[3:].strip(), "body": []}
+        elif cur is not None:
+            cur["body"].append(line)
+    if cur is not None:
+        sections.append(cur)
+    if not sections:
         return None
-    try:
-        parsed = {EdgeRole(r) for r in roles.split(",") if r}
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"invalid roles: {roles}")
-    return parsed or None
+    blocks = [rendered_claim_json(r) for r in members]
+    return [
+        {
+            "subject": s["subject"],
+            "markdown": "\n".join(s["body"]).strip(),
+            "synthesized": True,
+            "blocks": blocks,
+        }
+        for s in sections
+    ]
 
 
-async def _require_active_lens(store, lens_id: str) -> LensRow:
-    lens = await store.get_lens(lens_id)
-    if lens is None or lens.status.value != "active":
-        raise HTTPException(status_code=404, detail="lens not found or inactive")
-    return lens
+async def _projected_page(store, lens, *, detail: str, refresh: bool) -> dict:
+    """Build the UI's `ProjectedPage` for a lens: synthesized markdown +
+    member-record blocks + coverage + (grouped sections | None)."""
+    members = await store.members(lens.name, limit=200)
+    markdown = await store.page(lens.name, detail=detail, refresh=refresh)
+    blocks = [rendered_claim_json(r) for r in members]
+    groups = _split_subject_sections(markdown or "", members)
+    member_count = await store.member_count(lens.id)
+    scope_pool = await store._records.count_active()
+    return {
+        "lens_id": lens.id,
+        "detail": detail,
+        "markdown": markdown or "",
+        "blocks": blocks,
+        "synthesized": markdown is not None,
+        "coverage": coverage_json(lens.id, member_count, scope_pool),
+        "groups": groups,
+    }
 
 
-# --- 1: list claims/lenses -------------------------------------------
+# --- request bodies ----------------------------------------------------------
+
+
+class CreateLensBody(BaseModel):
+    name: str | None = None
+    criterion: str | None = None
+    definition_markdown: str | None = None
+    render_mode: str | None = None
+    scope_kind: str | None = None
+    scope_key: str | None = None
+
+
+class CriterionBody(BaseModel):
+    criterion: str
+
+
+class DraftLensBody(BaseModel):
+    name: str
+    scope_kind: str | None = None
+    scope_key: str | None = None
+
+
+class PageEditOp(BaseModel):
+    kind: str  # edit | reject | accept | include | edit_criterion
+    claim_id: str | None = None
+    new_text: str | None = None
+
+
+class WriteBackBody(BaseModel):
+    ops: list[PageEditOp]
+
+
+def _parse_definition(markdown: str) -> tuple[str, str]:
+    """Pull (name, criterion) out of a drafted lens markdown: the first `# Name`
+    heading is the name, the remainder is the criterion body. Falls back to the
+    first non-empty line as the name."""
+    lines = markdown.strip().split("\n")
+    name = ""
+    rest_start = 0
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("# "):
+            name = s[2:].strip()
+            rest_start = i + 1
+        else:
+            name = s
+            rest_start = i + 1
+        break
+    criterion = "\n".join(lines[rest_start:]).strip() or markdown.strip()
+    return name or "Untitled lens", criterion
+
+
+# --- 1: scopes (flat pool -> none) -------------------------------------------
 
 
 @router.get("/scopes")
-async def list_scopes(knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    """Scopes that hold active claims (+counts) so the UI can offer a scope switcher."""
-    return {"scopes": await knowledge.memory.scopes_with_counts()}
+async def list_scopes() -> dict:
+    """Records are ONE flat pool — no scope partition. Returning [] makes the
+    UI's scope-chip row vanish (it renders only when scopes.length > 1)."""
+    return {"scopes": []}
+
+
+# --- 2: claims (records) -----------------------------------------------------
+
+
+class RecordBody(BaseModel):
+    text: str
+    kind_tag: str = "note"
+
+
+class PinBody(BaseModel):
+    pinned: bool
+
+
+@router.post("/record")
+async def create_record(body: RecordBody, store=Depends(_record_store)) -> dict:
+    """Quick-capture write (the desktop pin-to-memory affordance): a single atomic
+    record into the flat pool. Pinning is a follow-up call so the record survives
+    consolidation decay."""
+    record = await store.add(body.text, kind=body.kind_tag)
+    return {"record": record_to_item_json(record)}
+
+
+@router.post("/record/{record_id}/pin")
+async def pin_record(record_id: str, body: PinBody, store=Depends(_record_store)) -> dict:
+    if not await store.set_pinned(record_id, body.pinned):
+        raise HTTPException(status_code=404, detail="record not found")
+    return {"ok": True, "pinned": body.pinned}
 
 
 @router.get("/items")
 async def list_items(
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "all",
+    status: str = Query(default=""),
+    limit: int = Query(default=100, ge=1, le=500),
+    store=Depends(_record_store),
+    # accepted-but-inert (flat pool has no scope/subject/valid_at filter)
+    scope_kind: str | None = None,
     scope_key: str | None = None,
     subject: str | None = None,
-    status: str = "active",
     valid_at: str | None = None,
-    limit: int = Query(default=100, ge=1, le=1000),
-):
-    scope = _scope_or_all(scope_kind, scope_key)
-    # Empty status string => all statuses (store.query(status=None)).
-    if status == "":
-        status_enum: Status | None = None
-    else:
-        try:
-            status_enum = Status(status)
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"invalid status: {status}")
-
-    items = await knowledge.memory.query(
-        scope=scope, status=status_enum, subject=subject, valid_at=valid_at, limit=limit
-    )
-    return {"items": [item_json(m) for m in items], "limit": limit}
-
-
-# --- 2: get one item + provenance edges ------------------------------
+) -> dict:
+    include_superseded = status == "" or status == "superseded"
+    records = await store.list(include_superseded=include_superseded, limit=limit)
+    if status == "superseded":
+        records = [r for r in records if r.superseded_by]
+    return {"items": [record_to_item_json(r) for r in records], "limit": limit}
 
 
 @router.get("/items/{item_id}")
-async def get_item(item_id: str, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    store = knowledge.memory
-    item = await store.get(item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="item not found")
-    parents = await store.list_edges(item_id, direction="from")
-    children = await store.list_edges(item_id, direction="to")
-    return {
-        "item": item_json(item),
-        "parents": [edge_json(e) for e in parents],
-        "children": [edge_json(e) for e in children],
-    }
+async def get_item(item_id: str, store=Depends(_record_store)) -> dict:
+    record = await store.get(item_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="claim not found")
+    return {"item": record_to_item_json(record), "parents": [], "children": []}
 
 
-# --- 3: list lenses (with coverage advisory) -------------------------
+# --- 3: lenses (with coverage) -----------------------------------------------
 
 
 @router.get("/lenses")
 async def list_lenses(
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "all",
+    store=Depends(_lens_store),
+    scope_kind: str | None = None,
     scope_key: str | None = None,
-):
-    scope = _scope_or_all(scope_kind, scope_key)
-    rows = await knowledge.memory_retrieval.lens_registry.list_lenses(scope)
-    return {"lenses": [{"lens": lens_json(lens), "coverage": coverage_json(cov)} for lens, cov in rows]}
+) -> dict:
+    scope_pool = await store._records.count_active()
+    out = []
+    for lens in await store.list():
+        member_count = await store.member_count(lens.id)
+        out.append(
+            {
+                "lens": lens_to_json(lens),
+                "coverage": coverage_json(lens.id, member_count, scope_pool),
+            }
+        )
+    return {"lenses": out}
 
 
-# --- 4: get a lens page ----------------------------------------------
+@router.post("/lenses/draft")
+async def draft_lens(body: DraftLensBody) -> dict:
+    """No LLM draft path on the records substrate — return an editable template
+    the UI drops into its textarea. `# {name}` is parsed back as the name on
+    create; the body is the criterion."""
+    name = body.name.strip()
+    markdown = (
+        f"# {name}\n\n"
+        f"## Belongs\n"
+        f"Records about {name}.\n"
+    )
+    return {"markdown": markdown}
+
+
+@router.post("/lenses")
+async def create_lens(body: CreateLensBody, store=Depends(_lens_store)) -> dict:
+    if body.definition_markdown is not None:
+        name, criterion = _parse_definition(body.definition_markdown)
+    elif body.name is not None:
+        name = body.name.strip()
+        criterion = (body.criterion or "").strip() or f"Records about {name}."
+    else:
+        raise HTTPException(status_code=422, detail="name or definition_markdown required")
+    if not name:
+        raise HTTPException(status_code=422, detail="lens name required")
+    if await store.get(name) is not None:
+        raise HTTPException(status_code=409, detail=f"lens {name!r} already exists")
+    lens = await store.create(name, criterion, background_backfill=True)
+    return {"lens": lens_to_json(lens)}
+
+
+@router.put("/lenses/{lens_id}/criterion")
+async def edit_criterion(lens_id: str, body: CriterionBody, store=Depends(_lens_store)) -> dict:
+    lens = await store.get_by_id(lens_id)
+    if lens is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+    updated = await store.update(lens.name, criterion=body.criterion, background_backfill=True)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+    return {"lens": lens_to_json(updated)}
+
+
+@router.delete("/lenses/{lens_id}")
+async def delete_lens(lens_id: str, store=Depends(_lens_store)) -> dict:
+    lens = await store.get_by_id(lens_id)
+    if lens is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+    deleted = await store.delete(lens.name)
+    return {"deleted": deleted}
+
+
+# --- 4: lens page (synchronous synthesis) ------------------------------------
 
 
 @router.get("/lenses/{lens_id}/page")
-async def get_lens_page(
+async def lens_page(
     lens_id: str,
-    response: Response,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-    detail: str | None = None,
-    refresh: bool = False,
-):
-    """Non-blocking lens page.
-
-    A clean cache hit returns the materialized page immediately (200). A
-    miss/dirty/refresh does NOT run synthesis on the request — it kicks off a
-    background generation and returns the live status with HTTP 202 (Accepted) so
-    the request never blocks on multi-call synthesis (Lens spec §6; the timeout
-    fix). The UI polls `/lenses/{id}/page/status` for progress and re-GETs when
-    ready. A missing lens -> 404.
-    """
-    detail_level = _parse_detail(detail)
-    if await knowledge.memory.get_lens(lens_id) is None:
+    detail: str = Query(default="structured", pattern="^(gist|structured|dossier)$"),
+    refresh: bool = Query(default=False),
+    store=Depends(_lens_store),
+) -> dict:
+    """The materialized `ProjectedPage`. Synthesis is one LLM call (synchronous),
+    so this always returns a page — never the async-generation status (HTTP 202).
+    The UI discriminates on a top-level `status` field, which a page never has."""
+    lens = await store.get_by_id(lens_id)
+    if lens is None:
         raise HTTPException(status_code=404, detail="lens not found")
-
-    result = await knowledge.memory_retrieval.lens_generator.ensure(lens_id, detail=detail_level, refresh=refresh)
-    if isinstance(result, ProjectedPage):
-        return page_json(result)
-    response.status_code = 202
-    return result.to_json()
+    return await _projected_page(store, lens, detail=detail, refresh=refresh)
 
 
 @router.get("/lenses/{lens_id}/page/status")
-async def get_lens_page_status(
-    lens_id: str,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-):
-    """Live generation status for a lens page (poll target for the UI progress).
-
-    Returns the current stage (creating/scoring/synthesizing/ready/error), the
-    subject + "i/n" while synthesizing, and any error. `status: "idle"` when no
-    generation has run (the page is either cached or never requested)."""
-    if await knowledge.memory.get_lens(lens_id) is None:
-        raise HTTPException(status_code=404, detail="lens not found")
-    status = knowledge.memory_retrieval.lens_generator.status(lens_id)
-    if status is None:
-        return {"lens_id": lens_id, "status": "idle"}
-    return status.to_json()
-
-
-# --- 5a: whole claim-graph (default view) ----------------------------
-
-
-@router.get("/graph")
-async def get_whole_graph(
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-    scope_kind: str = "all",
-    scope_key: str | None = None,
-    subject: str | None = None,
-    roles: str | None = None,
-    limit: int = Query(default=2000, ge=1, le=5000),
-):
-    """All active claims + claim↔claim edges among them, across all scopes by default
-    (one connected graph; scope is an optional filter). Lenses are never nodes.
-    """
-    scope = _scope_or_all(scope_kind, scope_key)
-    store = knowledge.memory
-
-    role_filter = _parse_roles(roles)
-    claims = await store.query(scope=scope, status=Status.ACTIVE, subject=subject, limit=limit)
-    nodes = {c.id: c for c in claims}
-
-    edge_keys: set[tuple] = set()
-    edges: list[MemoryEdge] = []
-    for cid in nodes:
-        for e in await store.list_edges(cid, direction="from"):
-            if role_filter is not None and e.role not in role_filter:
-                continue
-            # Claim↔claim edges only; keep edges whose both endpoints are in-scope.
-            if e.parent_id not in nodes:
-                continue
-            key = (e.child_id, e.parent_id, e.role.value)
-            if key in edge_keys:
-                continue
-            edge_keys.add(key)
-            edges.append(e)
-
+async def lens_page_status(lens_id: str) -> dict:
+    """Always idle — synthesis is synchronous, so the UI never polls this for a
+    real generation. Present only to satisfy the contract."""
     return {
-        "nodes": [item_json(m) for m in nodes.values()],
-        "edges": [edge_json(e) for e in edges],
-        "scope": _scope_json(scope) if scope else {"kind": "all", "key": None},
+        "lens_id": lens_id,
+        "status": "idle",
+        "subject": None,
+        "progress": None,
+        "error": None,
     }
 
 
-# --- 5: provenance graph (router-side BFS over edges) ----------------
+# --- 5: provenance graph (records have no edges) -----------------------------
+
+
+@router.get("/graph")
+async def whole_graph(
+    store=Depends(_record_store),
+    limit: int = Query(default=200, ge=1, le=1000),
+    scope_kind: str | None = None,
+    scope_key: str | None = None,
+    subject: str | None = None,
+    roles: str | None = None,
+) -> dict:
+    records = await store.list(limit=limit)
+    return {
+        "nodes": [record_to_item_json(r) for r in records],
+        "edges": [],
+        "scope": {"kind": "user", "key": None},
+    }
 
 
 @router.get("/items/{item_id}/graph")
-async def get_graph(
+async def item_graph(
     item_id: str,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-    direction: str = "both",
-    depth: int = 3,
+    direction: str = Query(default="both"),
+    depth: int = Query(default=3, ge=1, le=8),
     roles: str | None = None,
-):
-    if direction not in ("parents", "children", "both"):
-        raise HTTPException(status_code=422, detail=f"invalid direction: {direction}")
-    store = knowledge.memory
-    root = await store.get(item_id)
-    if root is None:
-        raise HTTPException(status_code=404, detail="item not found")
-
-    role_filter = _parse_roles(roles)
-
-    depth = max(0, min(depth, _MAX_GRAPH_DEPTH))
-    dirs = ["from"] if direction == "parents" else ["to"] if direction == "children" else ["from", "to"]
-
-    nodes: dict[str, MemoryItem] = {item_id: root}
-    edge_keys: set[tuple] = set()
-    edges: list[MemoryEdge] = []
-    frontier = {item_id}
-    for _ in range(depth):
-        if not frontier:
-            break
-        next_frontier: set[str] = set()
-        for node_id in frontier:
-            for d in dirs:
-                for e in await store.list_edges(node_id, direction=d):
-                    if role_filter is not None and e.role not in role_filter:
-                        continue
-                    key = (e.child_id, e.parent_id, e.role.value)
-                    if key in edge_keys:
-                        continue
-                    edge_keys.add(key)
-                    edges.append(e)
-                    for touched in (e.child_id, e.parent_id):
-                        if touched not in nodes:
-                            m = await store.get(touched)
-                            if m is not None:
-                                nodes[touched] = m
-                                next_frontier.add(touched)
-        frontier = next_frontier
-
+    store=Depends(_record_store),
+) -> dict:
+    record = await store.get(item_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="claim not found")
     return {
         "root_id": item_id,
-        "nodes": [item_json(m) for m in nodes.values()],
-        "edges": [edge_json(e) for e in edges],
+        "nodes": [record_to_item_json(record)],
+        "edges": [],
         "depth": depth,
         "direction": direction,
     }
 
 
-# --- 6: search -------------------------------------------------------
+# --- 6: search ---------------------------------------------------------------
 
 
 @router.get("/search")
 async def search(
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
     q: str = Query(..., min_length=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    include_inactive: bool = Query(default=False),
+    mode: str = Query(default="fts"),
+    store=Depends(_record_store),
     scope_kind: str | None = None,
     scope_key: str | None = None,
-    limit: int = Query(default=20, ge=1, le=200),
-    include_inactive: bool = False,
-    mode: str = "fts",
-):
-    if mode == "fts":
-        store = knowledge.memory_search or knowledge.memory
-        # Omitted scope_kind -> no scope filter (whole pool), so evidence search
-        # can surface any claim to Include. An explicit scope_kind still filters.
-        scope = _scope(scope_kind, scope_key) if scope_kind else None
-        items = await store.search(q, limit=limit, include_inactive=include_inactive, scope=scope)
-        return {
-            "mode": "fts",
-            "items": [item_json(m) for m in items],
-            "degraded": not store.has_fts,
-        }
-    if mode == "retrieve":
-        scope = _scope(scope_kind or "user", scope_key)
-        ctx: RetrievedContext = await knowledge.memory_retrieval.retrieve(Retrieval(goal=q, scope=scope))
-        return {
-            "mode": "retrieve",
-            "rendered": ctx.rendered,
-            "items": [ranked_json(r) for r in ctx.items],
-            "degraded": ctx.degraded,
-            "diagnostics": ctx.diagnostics,
-        }
-    raise HTTPException(status_code=422, detail=f"invalid mode: {mode}")
-
-
-# --- 7: lens page write-back -----------------------------------------
-
-
-@router.post("/lenses/{lens_id}/writeback")
-async def writeback(
-    lens_id: str,
-    body: WriteBackOpsBody,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-):
-    store = knowledge.memory
-    await _require_active_lens(store, lens_id)
-
-    ops: list[PageEditOp] = []
-    for op in body.ops:
-        kind = PageEditKind(op.kind)
-        if kind in (PageEditKind.EDIT, PageEditKind.REJECT, PageEditKind.ACCEPT, PageEditKind.INCLUDE) and not op.claim_id:
-            raise HTTPException(status_code=422, detail=f"{op.kind} requires claim_id")
-        if kind is PageEditKind.EDIT_CRITERION and not op.new_text:
-            raise HTTPException(status_code=422, detail=f"{op.kind} requires new_text")
-        ops.append(PageEditOp(kind=kind, claim_id=op.claim_id, new_text=op.new_text))
-
-    result: WriteBackResult = await knowledge.memory_retrieval.lens_writeback.apply(lens_id, ops)
+) -> dict:
+    records = await store.search(q, limit=limit, include_superseded=include_inactive)
     return {
-        "applied": [{"kind": k.value, "id": cid} for k, cid in result.applied],
-        "rejected": [
-            {
-                "op": {"kind": o.kind.value, "claim_id": o.claim_id, "new_text": o.new_text},
-                "reason": reason,
-            }
-            for o, reason in result.rejected
-        ],
-        "rederive_triggered": result.rederive_triggered,
+        "mode": "fts",
+        "items": [record_to_item_json(r) for r in records],
+        "degraded": store._search_index is None,
     }
 
 
-# --- 8: lens lifecycle (admin) ---------------------------------------
+# --- 7: lens page write-back -------------------------------------------------
 
 
-@router.post("/lenses/draft")
-async def draft_lens(body: DraftLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    scope = _scope(body.scope_kind, body.scope_key)
-    try:
-        markdown = await knowledge.memory_retrieval.lens_registry.draft_lens(body.name, scope)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    return {"markdown": markdown}
-
-
-@router.post("/lenses")
-async def create_lens(body: CreateLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    if body.definition_markdown is not None:
-        try:
-            lens = await knowledge.memory_retrieval.lens_registry.create_lens_from_markdown(body.definition_markdown)
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-        return {"lens": lens_json(lens)}
-    if body.name is None:
-        raise HTTPException(status_code=422, detail="name or definition_markdown required")
-    scope = _scope(body.scope_kind, body.scope_key)
-    lens = await knowledge.memory_retrieval.lens_registry.create_lens(
-        body.name,
-        body.criterion,
-        scope,
-        render_mode=LensRenderMode(body.render_mode),
-    )
-    return {"lens": lens_json(lens)}
-
-
-@router.put("/lenses/{lens_id}/render_mode")
-async def set_render_mode(
-    lens_id: str,
-    body: SetLensRenderModeBody,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-):
-    try:
-        lens = await knowledge.memory_retrieval.lens_registry.set_render_mode(lens_id, LensRenderMode(body.render_mode))
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return {"lens": lens_json(lens)}
-
-
-@router.put("/lenses/{lens_id}/criterion")
-async def edit_criterion(
-    lens_id: str,
-    body: EditCriterionBody,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-):
-    try:
-        lens = await knowledge.memory_retrieval.lens_registry.edit_criterion(lens_id, body.criterion)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return {"lens": lens_json(lens)}
-
-
-@router.post("/lenses/{lens_id}/split")
-async def split_lens(
-    lens_id: str,
-    body: SplitLensBody,
-    knowledge: KnowledgeRuntime = Depends(_knowledge),
-):
-    into = [(c.name, c.criterion) for c in body.into]
-    try:
-        children = await knowledge.memory_retrieval.lens_registry.split_lens(
-            lens_id, into, archive_parent=body.archive_parent
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return {"children": [lens_json(c) for c in children]}
-
-
-@router.post("/lenses/merge")
-async def merge_lenses(body: MergeLensBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    # scope is validated for symmetry; merge re-derives scope from the inputs.
-    _scope(body.scope_kind, body.scope_key)
-    try:
-        lens = await knowledge.memory_retrieval.lens_registry.merge_lenses(body.lens_ids, body.name, body.criterion)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return {"lens": lens_json(lens)}
-
-
-@router.delete("/lenses/{lens_id}")
-async def delete_lens(lens_id: str, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    deleted = await knowledge.memory_retrieval.lens_registry.delete_lens(lens_id)
-    if not deleted:
+@router.post("/lenses/{lens_id}/writeback")
+async def writeback(lens_id: str, body: WriteBackBody, knowledge=Depends(require_knowledge_runtime)) -> dict:
+    """Apply page edits to the underlying records + lens membership.
+      edit         -> supersede the record with new_text; the successor inherits
+                      the membership slot (triggers re-derive).
+      reject       -> drop the record from this lens (record survives).
+      accept       -> confirm the record (refresh freshness).
+      include      -> add the record to this lens's membership.
+      edit_criterion -> re-cut the lens (re-backfill membership).
+    """
+    if not knowledge._lens_store or not knowledge._record_store:
+        raise HTTPException(status_code=503, detail="memory not ready")
+    lenses = knowledge._lens_store
+    records = knowledge._record_store
+    lens = await lenses.get_by_id(lens_id)
+    if lens is None:
         raise HTTPException(status_code=404, detail="lens not found")
-    return {"deleted": deleted}
 
+    applied: list[dict] = []
+    rejected: list[dict] = []
+    rederive = False
 
-@router.post("/remember")
-async def remember(body: RememberBody, knowledge: KnowledgeRuntime = Depends(_knowledge)):
-    """Manual user-authored write — the desktop 'pin to memory' handoff. Enters
-    the same admit→write seam as the remember() tool (USER_AUTHORED, bypass_admit)."""
-    seam = knowledge.memory_service
-    if not isinstance(seam, WriteSeam):
-        raise HTTPException(status_code=503, detail="Memory write is not available")
-    outcome = await seam.admit_and_write(_pin_write_request(body.fact, body.project_id))
-    if not outcome.written and outcome.item_id is None and "Already known" not in outcome.reason:
-        raise HTTPException(status_code=422, detail=outcome.reason)
-    return {"written": outcome.written, "item_id": outcome.item_id, "reason": outcome.reason}
+    for op in body.ops:
+        kind = op.kind
+        if kind in ("edit", "reject", "accept", "include") and not op.claim_id:
+            rejected.append({"op": op.model_dump(), "reason": f"{kind} requires claim_id"})
+            continue
+        if kind == "edit":
+            if not (op.new_text and op.new_text.strip()):
+                rejected.append({"op": op.model_dump(), "reason": "edit requires new_text"})
+                continue
+            old = await records.get(op.claim_id)
+            if old is None:
+                rejected.append({"op": op.model_dump(), "reason": "claim not found"})
+                continue
+            successor = await records.supersede_with(
+                op.claim_id, text=op.new_text.strip(), kind=old.kind, source_ref=old.source_ref
+            )
+            await lenses.replace_member(lens.id, op.claim_id, successor.id)
+            applied.append({"kind": kind, "id": successor.id})
+            rederive = True
+        elif kind == "reject":
+            removed = await lenses.remove_member(lens.id, op.claim_id)
+            if removed:
+                applied.append({"kind": kind, "id": op.claim_id})
+            else:
+                rejected.append({"op": op.model_dump(), "reason": "claim is not a member"})
+        elif kind == "accept":
+            if await records.confirm(op.claim_id):
+                applied.append({"kind": kind, "id": op.claim_id})
+            else:
+                rejected.append({"op": op.model_dump(), "reason": "claim not found"})
+        elif kind == "include":
+            if await records.get(op.claim_id) is None:
+                rejected.append({"op": op.model_dump(), "reason": "claim not found"})
+                continue
+            await lenses.add_member(lens.id, op.claim_id)
+            applied.append({"kind": kind, "id": op.claim_id})
+            rederive = True
+        elif kind == "edit_criterion":
+            if not (op.new_text and op.new_text.strip()):
+                rejected.append({"op": op.model_dump(), "reason": "edit_criterion requires new_text"})
+                continue
+            await lenses.update(lens.name, criterion=op.new_text.strip())
+            applied.append({"kind": kind, "id": lens.id})
+            rederive = True
+        else:
+            rejected.append({"op": op.model_dump(), "reason": f"unknown op kind: {kind}"})
+
+    return {"applied": applied, "rejected": rejected, "rederive_triggered": rederive}

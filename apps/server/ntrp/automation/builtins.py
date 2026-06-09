@@ -8,8 +8,8 @@ from ntrp.automation.triggers import TimeTrigger, Trigger
 from ntrp.constants import (
     AUTOMATION_SUGGESTER_DAILY_AT,
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
-    BUILTIN_PATTERN_FINDER_DAILY_ID,
-    BUILTIN_SKILL_INDUCER_DAILY_ID,
+    BUILTIN_MEMORY_CONSOLIDATE_ID,
+    MEMORY_CONSOLIDATE_AT,
 )
 from ntrp.logging import get_logger
 
@@ -30,26 +30,6 @@ class BuiltinSpec:
 
 BUILTINS = [
     BuiltinSpec(
-        task_id=BUILTIN_PATTERN_FINDER_DAILY_ID,
-        name="Pattern Finder Daily",
-        description="Cluster recent memory episodes into observations and claims",
-        triggers=[
-            TimeTrigger(at="04:00", days="daily"),
-        ],
-        handler="pattern_finder_daily",
-        auto_approve=True,
-    ),
-    BuiltinSpec(
-        task_id=BUILTIN_SKILL_INDUCER_DAILY_ID,
-        name="Skill Inducer Daily",
-        description="Draft skill proposals from repeated toolable memory claims",
-        triggers=[
-            TimeTrigger(at="06:00", days="daily"),
-        ],
-        handler="skill_inducer_daily",
-        auto_approve=True,
-    ),
-    BuiltinSpec(
         task_id=BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
         name="Automation Suggester Daily",
         description="Draft contextual automation suggestions from memory, chats, and actions",
@@ -59,10 +39,24 @@ BUILTINS = [
         handler="automation_suggester_daily",
         auto_approve=True,
     ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_CONSOLIDATE_ID,
+        name="Memory Consolidation",
+        description="Sleep-time pass: merge duplicate records, supersede stale ones, and promote recurring patterns into higher-level facts/skills/rules.",
+        triggers=[
+            TimeTrigger(at=MEMORY_CONSOLIDATE_AT, days="daily"),
+        ],
+        handler="memory_consolidate",
+        auto_approve=True,
+    ),
 ]
 
 _CURRENT_BUILTIN_IDS = {spec.task_id for spec in BUILTINS}
-_KNOWLEDGE_HANDLERS = {spec.handler for spec in BUILTINS}
+# Handlers we seed today, plus retired ones whose registration is gone — both
+# must be swept so previously-seeded automations don't dangle on a missing
+# handler. (pattern_finder/skill_inducer died with the claims+lens pipeline.)
+_RETIRED_HANDLERS = {"pattern_finder_daily", "skill_inducer_daily"}
+_KNOWLEDGE_HANDLERS = {spec.handler for spec in BUILTINS} | _RETIRED_HANDLERS
 
 
 async def seed_builtins(store: AutomationStore) -> None:

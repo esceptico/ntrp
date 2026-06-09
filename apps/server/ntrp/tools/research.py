@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.agent.coverage import ResearchOutline
 from ntrp.agent.ledger import ContradictionNote, DeadEndNote, FactNote, GapNote, SharedLedger
+from ntrp.core.agent_types import AgentType, apply_profile, register_agent_type
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
 from ntrp.logging import get_logger
@@ -178,35 +179,27 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
         await ctx.ledger.register(execution.tool_id, args.task, depth=args.depth)
 
     remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-    exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result", "workflow"}
-    if args.depth == "quick" or remaining <= 1:
-        exclude.add("research")
-
-    tools = ctx.registry.get_schemas(read_only=True, capabilities=ctx.capabilities)
-    tools = [
-        t for t in tools if t["function"]["name"] not in exclude and t["function"]["name"] not in RESEARCH_AGENT_TOOLS
-    ]
-    missing_research_agent_tools = {
-        name: agent_tool for name, agent_tool in RESEARCH_AGENT_TOOLS.items() if name not in ctx.registry
-    }
-    tools.extend(agent_tool.to_dict(name) for name, agent_tool in RESEARCH_AGENT_TOOLS.items())
+    # Runtime-only: forbid nested research when shallow or nesting depth is exhausted.
+    extra_exclude = frozenset({"research"}) if (args.depth == "quick" or remaining <= 1) else frozenset()
     prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
+    # The read-only capability, the spawn-tool excludes, and the ledger toolset all
+    # come from the registered research AgentType; the spawner builds the actual
+    # toolset from that profile. Only the dynamic prompt + depth gate are per-call.
+    profile = apply_profile(RESEARCH_AGENT_TYPE, system_prompt=prompt, exclude_tools=extra_exclude)
     try:
         spawn = await ctx.spawn_fn(
             ctx,
             task=args.task,
-            system_prompt=prompt,
-            tools=tools,
             model_override=ctx.run.research_model,
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
             agent_type="research",
             wait=True,
             kind="research",
-            extra_tools=missing_research_agent_tools,
             compaction_prompt_context="research",
             include_tool_messages_in_compaction=True,
             research_scope_id=execution.tool_id,
+            **profile,
         )
     finally:
         if ctx.ledger:
@@ -347,3 +340,15 @@ RESEARCH_AGENT_TOOLS = {
     "read_research_artifact": read_research_artifact_tool,
     "list_research_artifacts": list_research_artifacts_tool,
 }
+
+# research is itself an AgentType in the shared registry: a read-only capability,
+# the spawn/background tools excluded, and its ledger tools as extras. The prompt
+# is left to the call site (research() renders it per-call from depth + live
+# ledger), and the depth-based self-exclusion of `research` is added at call time.
+RESEARCH_AGENT_TYPE = AgentType(
+    name="research",
+    actions=frozenset({ToolAction.READ}),
+    exclude=frozenset({"background", "cancel_background_task", "list_background_tasks", "get_background_result", "workflow"}),
+    extra_tools=RESEARCH_AGENT_TOOLS,
+)
+register_agent_type(RESEARCH_AGENT_TYPE)

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
-import { activityItemStatus, isAgent } from "../../lib/agent";
+import { activityItemStatus, isAgent, isWorkflow } from "../../lib/agent";
 import { cancelSubagent, switchSession } from "../../actions";
 // Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
 import { SPRING_LAYOUT } from "../../lib/tokens/motion";
@@ -12,9 +12,89 @@ import { ICON } from "../../lib/icons";
 import { StatusDot } from "../StatusDot";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
 import { useWorkflows } from "../../hooks/useWorkflows";
-import { WorkflowPreviewRow } from "../workflow/WorkflowPreviewRow";
+import { ExpandableWorkflowCard } from "../workflow/WorkflowDetail";
+import type { Workflow, WorkflowStatus } from "../../store/workflow-domain";
 
 export type { ActivityItem };
+
+// A workflow renders as its own card, NOT one of the "N calls". It is recognized
+// by the tool-call ITEM (semanticKind === "workflow"), which always exists — so
+// the card shows immediately and survives reload, independent of the streamed
+// workflow-domain events. When a live domain row IS present (parent_tool_call_id
+// match) it wins and supplies real phases/agents/tokens; otherwise we synthesize
+// a sparse Workflow from the item (title + status) so the card still renders.
+export function liftWorkflows(
+  items: ActivityItem[],
+  workflows: Workflow[],
+  sessionId: string | null,
+): { workflowRows: Workflow[]; rowItems: ActivityItem[] } {
+  // The tool-call items that ARE workflows — their entire subtree (leaf agents +
+  // those agents' tool calls, which the server rebases under this id) is
+  // contained in the card's drill-in, never shown as parent rows.
+  const workflowItemIds = new Set(
+    items
+      .filter((it) => isWorkflow(it) || workflows.some((w) => w.parentToolCallId === it.id))
+      .map((it) => it.id),
+  );
+  const byId = new Map(items.map((it) => [it.id, it] as const));
+  const insideWorkflow = (it: ActivityItem): boolean => {
+    let cur = it.parentToolId;
+    while (cur) {
+      if (workflowItemIds.has(cur)) return true;
+      cur = byId.get(cur)?.parentToolId;
+    }
+    return false;
+  };
+
+  const matched: Workflow[] = [];
+  const rest: ActivityItem[] = [];
+  for (const it of items) {
+    const domain = workflows.find((w) => w.parentToolCallId === it.id);
+    if (domain) matched.push(domain);
+    else if (isWorkflow(it)) matched.push(synthWorkflow(it, sessionId));
+    else if (insideWorkflow(it)) continue; // contained in the workflow, not a parent row
+    else rest.push(it);
+  }
+  return { workflowRows: matched, rowItems: rest };
+}
+
+function synthWorkflow(item: ActivityItem, sessionId: string | null): Workflow {
+  const now = Date.now();
+  const status = workflowStatusFromItem(item);
+  // Use the tool call's own duration so a settled card shows real elapsed (not
+  // 0s) even with no domain row; a running one ticks from now until the live
+  // domain takes over.
+  const settled = status !== "running";
+  const dur = item.durationMs ?? 0;
+  return {
+    workflowId: item.workflowId ?? item.id,
+    sessionId: sessionId ?? "",
+    runId: item.runId ?? "",
+    parentToolCallId: item.id,
+    name: workflowNameFromItem(item),
+    status,
+    phasesByName: {},
+    totalAgents: 0,
+    startedAt: settled ? now - dur : now,
+    completedAt: settled ? now : undefined,
+    updatedAt: now,
+  };
+}
+
+function workflowStatusFromItem(item: ActivityItem): WorkflowStatus {
+  if (activityItemStatus(item) === "ongoing") return "running";
+  return item.error ? "failed" : "completed";
+}
+
+function workflowNameFromItem(item: ActivityItem): string | undefined {
+  try {
+    const parsed = JSON.parse(item.args ?? "{}");
+    if (parsed && typeof parsed.title === "string" && parsed.title.trim()) return parsed.title.trim();
+  } catch {
+    // args not yet complete / not JSON — fall back to the generic card name.
+  }
+  return undefined;
+}
 
 const ROW_HEIGHT_EM = 1.4;
 const NEST_PX = 16;
@@ -124,9 +204,25 @@ export function ActivityTail({
   const streamReplaying = useStore((s) => s.streamReplaying);
   const suppressMotion = motionDisabled ?? streamReplaying;
 
+  const sessionId = useStore((s) => s.currentSessionId);
+  const workflows = useWorkflows(sessionId);
+
+  const { workflowRows, rowItems } = useMemo(
+    () => liftWorkflows(items, workflows, sessionId),
+    [items, workflows, sessionId],
+  );
+
   const visible = useMemo(
-    () => (rolling ? buildRollingList(items, max as number) : buildStaticTree(items)),
-    [items, max, rolling],
+    () => (rolling ? buildRollingList(rowItems, max as number) : buildStaticTree(rowItems)),
+    [rowItems, max, rolling],
+  );
+
+  const workflowBlock = workflowRows.length > 0 && (
+    <div className="mt-1 space-y-1">
+      {workflowRows.map((wf) => (
+        <ExpandableWorkflowCard key={wf.workflowId} workflow={wf} />
+      ))}
+    </div>
   );
 
   // Rolling (live) mode: do NOT animate the container's height. The chat's
@@ -142,7 +238,10 @@ export function ActivityTail({
   // `overflow: hidden` clips the exit slide so it doesn't leak above the row.
   if (rolling) {
     return (
-      <div className="relative overflow-hidden pl-3 mt-0.5">
+      <>
+        {workflowBlock}
+        {visible.length > 0 && (
+        <div className="relative overflow-hidden pl-3 mt-0.5">
         <AnimatePresence mode="popLayout" initial={false}>
           {visible.map((item) => (
             <motion.div
@@ -165,7 +264,9 @@ export function ActivityTail({
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+        </div>
+        )}
+      </>
     );
   }
 
@@ -175,7 +276,15 @@ export function ActivityTail({
   // both correct and cheaper than measuring to `auto`.
   const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
   return (
-    <motion.div
+    <>
+      {/* The workflow card is the turn's primary artifact, NOT a collapsible tool
+          row — keep it visible after the run finishes. (It used to live inside the
+          `collapsed` wrapper, so a finished `onlyWorkflows` turn, which has no
+          header toggle, hid the card with no way to bring it back.) The header
+          chevron still collapses the tool rows below. */}
+      {workflowBlock}
+      {visible.length > 0 && (
+      <motion.div
       initial={false}
       animate={{
         opacity: collapsed ? 0 : 1,
@@ -194,7 +303,9 @@ export function ActivityTail({
           <ItemButton item={item} onOpen={setViewingTool} />
         </div>
       ))}
-    </motion.div>
+      </motion.div>
+      )}
+    </>
   );
 }
 
@@ -312,24 +423,6 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
-  // A workflow tool call (the `workflow` tool spawns a fan-out orchestration)
-  // gets its own dense row that opens the WorkflowPanel overlay. Matched to its
-  // workflow via parent_tool_call_id === this tool-call id. Falls through to the
-  // normal agent/tool rendering until the workflow_started event lands.
-  const sessionId = useStore((s) => s.currentSessionId);
-  const setViewingWorkflow = useStore((s) => s.setViewingWorkflow);
-  const workflows = useWorkflows(sessionId);
-  const workflow = workflows.find((w) => w.parentToolCallId === item.id);
-  if (workflow) {
-    return (
-      <WorkflowPreviewRow
-        workflow={workflow}
-        onOpen={() =>
-          setViewingWorkflow({ workflowId: workflow.workflowId, sessionId: workflow.sessionId })
-        }
-      />
-    );
-  }
   if (isAgent(item)) {
     return <AgentRow item={item} depth={depth} onOpen={onOpen} />;
   }

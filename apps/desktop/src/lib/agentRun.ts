@@ -1,7 +1,35 @@
 import type { ActivityItem, BackgroundAgent } from "../store";
-import type { Automation, AutomationTrigger } from "../api";
+import type { Automation, AutomationTrigger, BackgroundTaskSummary } from "../api";
+import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
 import { isChannelAutomation } from "./automationFilters";
 import { activityItemStatus, extractTask, friendlyAgentLabel } from "./agent";
+
+/** Map a durable child-agent record (roster fetch) into the sidebar's snapshot
+ *  shape. Shared by the roster poll and the reconnect resync so both produce an
+ *  identical row. */
+export function childAgentTaskToBackgroundSnapshot(
+  task: BackgroundTaskSummary,
+): BackgroundAgentSnapshot {
+  const status =
+    task.status === "completed" ||
+    task.status === "failed" ||
+    task.status === "cancelled" ||
+    task.status === "interrupted" ||
+    task.status === "cancel_requested"
+      ? task.status
+      : "running";
+  return {
+    taskId: task.child_run_id ?? task.task_id,
+    childSessionId: task.child_session_id ?? undefined,
+    command: task.command,
+    status,
+    detail: task.detail ?? undefined,
+    resultRef: task.result_ref ?? undefined,
+    parentToolCallId: task.parent_tool_call_id ?? undefined,
+    agentType: task.agent_type ?? undefined,
+    wait: task.wait ?? undefined,
+  };
+}
 
 // One view-model for "a sub-agent run", shared by every surface that shows
 // one: the inline chat card, the right-sidebar agents hub, and the inspector.

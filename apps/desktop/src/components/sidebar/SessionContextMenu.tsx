@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, FolderInput, Pencil, Sparkles } from "lucide-react";
+import { Archive, FolderInput, Pencil, Pin, PinOff, Sparkles } from "lucide-react";
 import type { Project } from "../../api";
 import { ICON } from "../../lib/icons";
 
@@ -17,6 +17,8 @@ export function SessionContextMenu({
   onCompact,
   onArchive,
   onMoveProject,
+  onTogglePin,
+  isPinned,
   projects,
 }: {
   state: ContextMenuState;
@@ -25,6 +27,8 @@ export function SessionContextMenu({
   onCompact: () => void;
   onArchive: () => void;
   onMoveProject: (projectId: string | null) => void;
+  onTogglePin: () => void;
+  isPinned: boolean;
   projects: Project[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -70,6 +74,11 @@ export function SessionContextMenu({
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <ContextItem
+        icon={isPinned ? <PinOff size={ICON.MD} strokeWidth={2} /> : <Pin size={ICON.MD} strokeWidth={2} />}
+        label={isPinned ? "Unpin" : "Pin to top"}
+        onClick={onTogglePin}
+      />
       <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={2} />} label="Rename" onClick={onRename} />
       <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={2} />} label="Compact context" onClick={onCompact} />
       <ContextItem icon={<Archive size={ICON.MD} strokeWidth={2} />} label="Archive" onClick={onArchive} />

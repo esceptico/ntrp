@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, Pencil } from "lucide-react";
-import clsx from "clsx";
+import { MoreHorizontal } from "lucide-react";
 import { renameSession, switchSession } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { formatRelativePast } from "../../lib/format";
 import { SessionStateIcon } from "./SessionStateIcon";
-import { RowAction } from "./RowAction";
 
 export function SessionRow({
   sessionId,
@@ -20,7 +18,7 @@ export function SessionRow({
   renaming,
   onStartRename,
   onCancelRename,
-  onArchive,
+  onMenu,
   onContextMenu,
 }: {
   sessionId: string;
@@ -35,7 +33,7 @@ export function SessionRow({
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
-  onArchive: () => void;
+  onMenu: (pos: { x: number; y: number }) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(name ?? "");
@@ -106,36 +104,33 @@ export function SessionRow({
       data-active={active ? "true" : undefined}
       data-depth={depth || undefined}
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
-      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
+      className="app-row session-row group/row relative grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
     >
       <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} isAgent={isAgent} />
-      <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
+      {/* Title uses the full width at rest; on hover its right edge fades under
+          the overlaid time + ⋯ cluster (mask is color-independent, so it works
+          on any row background and needs no reserved gutter). */}
+      <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em] group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%_-_6.25rem),transparent_calc(100%_-_4.5rem))]">
         {name || "untitled"}
       </span>
-      <span className="relative shrink-0 h-[22px] w-[56px]">
-        {/* Default state: timestamp. Hover swaps to row actions. */}
-        <span className="absolute inset-0 flex items-center justify-end pr-[5px] transition-opacity duration-row group-hover/row:opacity-0 pointer-events-none">
-          <span
-            className={clsx(
-              "text-xs tabular-nums",
-              active ? "text-muted" : "text-faint",
-            )}
-          >
-            {formatRelativePast(lastActivity)}
-          </span>
+      <span className="absolute right-2 top-0 bottom-0 flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
+        <span className="text-xs tabular-nums text-faint">
+          {formatRelativePast(lastActivity)}
         </span>
-        <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-row">
-          <RowAction
-            icon={<Pencil size={ICON.SM} strokeWidth={2} />}
-            label="Rename"
-            onClick={onStartRename}
-          />
-          <RowAction
-            icon={<Archive size={ICON.SM} strokeWidth={2} />}
-            label="Archive"
-            onClick={onArchive}
-          />
-        </span>
+        <button
+          type="button"
+          aria-label="Session actions"
+          title="More"
+          onClick={(e) => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            onMenu({ x: r.left, y: r.bottom + 4 });
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="grid place-items-center w-5 h-5 shrink-0 rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+        >
+          <MoreHorizontal size={ICON.SM} strokeWidth={2} />
+        </button>
       </span>
     </div>
   );

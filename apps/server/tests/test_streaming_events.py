@@ -289,11 +289,16 @@ async def test_full_subagent_tool_calls_stay_on_child_bus(monkeypatch):
     async def child_emit(event):
         child_emitted.append(event)
 
+    child_finished: list = []
+
     async def child_io_factory(_params):
         async def _aclose():
             return None
 
-        return ChildSession(io=IOBridge(emit=child_emit), aclose=_aclose)
+        async def _finish(status):
+            child_finished.append(status)
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
 
     executor = make_executor({"ping": ping_tool})
     ctx = ToolContext(
@@ -321,6 +326,100 @@ async def test_full_subagent_tool_calls_stay_on_child_bus(monkeypatch):
     assert not any(e.type.value == "TOOL_CALL_START" for e in parent_emitted)
     # The child's own bus carries the full detail — drill-in renders it live.
     assert any(e.type.value == "TOOL_CALL_START" for e in child_emitted)
+    # The finish event rolls up the per-agent tool-call count (one ping call).
+    assert parent_emitted[-1].tool_count == 1
+    # And the spawner closes the child's run framing on a terminal status, so the
+    # viewed session collapses live → done instead of streaming forever.
+    assert child_finished == ["completed"]
+
+
+@pytest.mark.asyncio
+async def test_child_io_factory_frames_full_run_lifecycle_on_child_bus():
+    """The production contract: a spawned child session's OWN bus carries the
+    standard run lifecycle — RunStarted when it opens, RunFinished when it ends —
+    so the client renders it live then collapses to done, exactly like a
+    top-level thread. (The desktop gates live-vs-done on this lifecycle, not on
+    content.) finish() is idempotent, so the terminal frame fires exactly once."""
+    from unittest.mock import AsyncMock
+
+    from ntrp.services.chat import make_child_io_factory
+    from ntrp.tools.core.context import ChildIOParams
+
+    buses = BusRegistry()
+    factory = make_child_io_factory(
+        buses,
+        SimpleNamespace(get_active_run=lambda _sid: None),
+        record_approval=AsyncMock(),
+        resolve_approval=AsyncMock(),
+        approval_timeout_seconds=300,
+    )
+
+    child = await factory(ChildIOParams(session_id="parent::abc", run_id="run-1", pending_approvals={}))
+    child_bus = buses.get("parent::abc")
+
+    # Opening the child = a live run: RunStarted lands on its OWN bus, first,
+    # carrying the same run_id the runtime snapshot surfaces for the session.
+    assert [type(r.event).__name__ for r in child_bus._recent] == ["RunStartedEvent"]
+    assert child_bus._recent[0].event.run_id == "run-1"
+    assert child_bus._recent[0].event.session_id == "parent::abc"
+
+    await child.finish("completed")
+    await child.finish("completed")  # idempotent — no second terminal frame
+    assert [type(r.event).__name__ for r in child_bus._recent] == ["RunStartedEvent", "RunFinishedEvent"]
+    assert child_bus._recent[1].event.run_id == "run-1"
+
+
+@pytest.mark.asyncio
+async def test_child_io_factory_emits_run_cancelled_on_cancel():
+    """A cancelled subagent collapses the viewed child session via RunCancelled,
+    not RunFinished — so the desktop reads it as cancelled, not completed."""
+    from unittest.mock import AsyncMock
+
+    from ntrp.services.chat import make_child_io_factory
+    from ntrp.tools.core.context import ChildIOParams
+
+    buses = BusRegistry()
+    factory = make_child_io_factory(
+        buses,
+        SimpleNamespace(get_active_run=lambda _sid: None),
+        record_approval=AsyncMock(),
+        resolve_approval=AsyncMock(),
+        approval_timeout_seconds=300,
+    )
+    child = await factory(ChildIOParams(session_id="p::x", run_id="r1", pending_approvals={}))
+    await child.finish("cancelled")
+    assert [type(r.event).__name__ for r in buses.get("p::x")._recent] == ["RunStartedEvent", "RunCancelledEvent"]
+
+
+@pytest.mark.asyncio
+async def test_child_io_factory_aclose_keeps_bus_while_run_active():
+    """aclose() must NOT evict a child bus while its run is still active — it uses
+    the SAME liveness predicate as the SSE endpoint (run_registry.get_active_run),
+    so a connecting viewer can't have the bus reset out from under it. The old
+    `is_active=lambda: False` raced that window and reset the bus seq."""
+    from unittest.mock import AsyncMock
+
+    from ntrp.services.chat import make_child_io_factory
+    from ntrp.tools.core.context import ChildIOParams
+
+    active = {"on": True}
+    buses = BusRegistry()
+    factory = make_child_io_factory(
+        buses,
+        SimpleNamespace(get_active_run=lambda _sid: object() if active["on"] else None),
+        record_approval=AsyncMock(),
+        resolve_approval=AsyncMock(),
+        approval_timeout_seconds=300,
+    )
+    child = await factory(ChildIOParams(session_id="p::live", run_id="r1", pending_approvals={}))
+    assert buses.get("p::live") is not None
+
+    await child.aclose()  # run still active, no subscribers → bus KEPT
+    assert buses.get("p::live") is not None
+
+    active["on"] = False
+    await child.aclose()  # run done, no subscribers → bus evicted
+    assert buses.get("p::live") is None
 
 
 @pytest.mark.asyncio
@@ -2177,7 +2276,16 @@ async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monke
     stream_started = asyncio.Event()
     release = asyncio.Event()
 
+    class NoopStore:
+        async def record_background_agent_started(self, **kwargs):
+            return None
+
+        async def record_background_agent_finished(self, **kwargs):
+            return None
+
     class NoopSessionService:
+        store = NoopStore()
+
         async def save(self, session_state, messages, metadata=None):
             return None
 
@@ -2527,10 +2635,10 @@ async def test_automation_event_stream_resumes_after_durable_cursor(monkeypatch)
 
     recorded = []
 
-    async def record_event(record):
-        recorded.append(record)
+    async def record_events(records):
+        recorded.extend(records)
 
-    buses = BusRegistry(record_event=record_event)
+    buses = BusRegistry(record_events=record_events)
     stream = _automation_event_stream(buses, event_store=EventStore())
     try:
         chunk = await anext(stream)

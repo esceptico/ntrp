@@ -8,6 +8,10 @@ Root: subagent events emit to the PARENT bus (foreground shares `calling_ctx.io`
 
 Rule: when a subagent/child concept already maps onto an existing first-class primitive (a session), stream it through the SAME machinery (its own bus + the normal `useEvents` path), not a parallel poll. Ties to [[feedback_no_special_casing_fit_general_primitives]]. Correct fix: route the child agent's events to its OWN session bus at **depth 0** (the desktop hard-gates `!event.depth`, so depth-1 events render blank/orphaned); the parent gets ONLY lifecycle (it treats session-backed agents as trace leaves). Non-obvious trap: bus idle-eviction is keyed on `get_active_run(session_id)` — a child session has no RunState, so navigating away mid-run silently evicts + recreates its bus with reset seq (replay drift); needs a lightweight active-session marker.
 
+## Subagent live view is gated on RUN LIFECYCLE, not content (Jun 2026)
+
+Shipped the above "stream to child bus" fix routing only CONTENT events (text/tool/reasoning). User: STILL static "Worked". The desktop renders a viewed session live-vs-collapsed off the RUN LIFECYCLE, not content: `TurnGroup` collapses to "Worked" when `turn.endedAt != null`; `endedAt` is cleared to null (→ live) ONLY when `runtime.active_run` is foreground on load (history-response.ts), and set by `RUN_FINISHED` on the bus (transcript-projection `endTurn`). A child that streams content but has no run framing loads as done → "Worked". Fix is SERVER-ONLY (client already handles these events — "it's the same events"): emit `RunStarted`/`RunFinished` on the child bus AND surface `runtime.active_run` (mark_session_active → get_active_run → _session_runtime_snapshot). Use the **PARENT run_id** for the bus events — it matches the marker's runtime.active_run, so the load-time signal and the bus signal agree on one id. (A child chat_run with a distinct child_run_id MISMATCHES the marker's parent run_id → `RUN_FINISHED` gated out → spinner never stops; that was my first wrong cut.) Orchestra/workflow agents run via `ctx.spawn_fn` (= spawn_child), so ONE spawner/factory fix covers both. Rule: to make a derived session "work like a normal session," replicate its full RUN LIFECYCLE (RunStarted/RunFinished + runtime.active_run), not just content; verify against the client's live-vs-done gate (`turn.endedAt`/`currentRunId`), not "events arrive."
+
 ## React StrictMode: `useRef(true)` + cleanup-only-false "mounted" gate is broken in dev (Jun 2026)
 
 `const mounted = useRef(true); useEffect(() => () => { mounted.current = false; }, [])` is unsafe under `<StrictMode>` (enabled in src/main.tsx). Dev runs mount effects setup→cleanup→setup; the cleanup flips it false and the empty setup never restores true, so the ref is stuck `false` for the component's whole life in dev — every `if (mounted.current)` gate becomes a permanent no-op (stuck spinners, errors never shown, busy never clears). Bit twice: `LensEvidenceSearch`'s `mounted` and the shared `useMountedRef` hook (feeding `useMutationState`).
@@ -84,3 +88,93 @@ in one pass forces every consumer through review at once and makes the diff
 unreadable. Phase 4 (color) deferred its alias-retirement entirely because
 per-palette `:root.palette-*` blocks still override the defaults — aliases are
 load-bearing until a separate palette-block sweep lands.
+
+### Hooks go above the early return — always
+Adding `useStore` / `useWorkflows` *below* `ActivityMessage`'s early
+`if (!message?.activity) return null` introduced a Rules-of-Hooks violation:
+3 hooks ran on the null path, 5 on the full path, so React crashes on the
+transition between them. `tsc` and the existing test suite were both green —
+the bug only fires at runtime when a message flips between empty/non-empty
+activity. Rule: when adding a hook to a component that has any early return,
+put it (and every hook) above the return, even if the data it needs is only
+used after the guard — compute the non-hook parts later. A review agent caught
+this, not the tests; render-tests that never exercise the early-return branch
+won't either.
+
+### Don't key process-global caches on a fixed name under concurrency
+The dynamic-workflow traceback first rendered source via
+`linecache.cache["<workflow-script>"]` — a single shared key, overwritten per
+run. Two concurrent workflows (background + foreground) clobber each other, so
+one run's error renders another run's source text (read lazily at format time,
+after `await`s yield control). Fix: pass the script string into
+`format_script_traceback` and render source from it directly — no shared global
+state. When a "cache" is keyed on a constant and read across `await` points,
+assume interleaving will corrupt it; key per-run or pass the data explicitly.
+
+### Never overwrite a durable doc with raw, unguarded LLM output
+The memory Curator wrote `resp.choices[0].message.content or ""` straight over
+`user.md`. A content-less but non-erroring completion (refusal, content filter,
+truncation, reasoning-only finish → `content=None`/`""`/whitespace) collapsed to
+`""`, atomically blanked the whole doc, AND advanced the watermark so the lost
+turns never re-curated — silent, permanent memory loss, exactly the durability
+the rebuild exists to provide. Fix: `_complete` returns `None` for any falsy/
+whitespace body so it takes the failure path (no write, watermark not advanced,
+retried next session). Rule: any path that overwrites durable state with a full
+LLM response must treat empty/blank output as a FAILURE, not as "the new value" —
+guard before the write, and only advance progress markers after a real write. An
+adversarial review agent caught this (3 independent verifiers converged on it);
+the builder's own tests passed because no test exercised the empty-response path.
+
+### Workflow agents with a strict `schema` silently drop huge free-text outputs
+Two recon agents asked for a large structured object via `agent({schema})` and
+"completed without calling StructuredOutput" — the whole result was lost (null).
+Big, discursive architecture dumps don't reliably round-trip through the forced
+StructuredOutput tool. Rule: use `schema` only for compact, enumerable results
+(findings lists, verdicts); for long prose/maps, let the agent return plain text
+and parse/synthesize in a later step. Recovered both by re-running them schema-less.
+
+### Workflow leaf-agent tools: model passes NAMES, not schemas
+A dynamic workflow that wrote `agent(q, tools=['slack_search','slack_thread',...])`
+came back empty for every agent. Root cause: `agent(tools=...)` → spawner
+expected tool-schema DICTS, so `"slack_search".get("function")` raised
+AttributeError, which `_safe` swallowed to None inside `parallel()` — surfacing
+as "subagents came back empty/null (tool access weirdness)", not a crash. Two
+fixes: (1) spawner resolves a list of name strings against the full toolset
+(self-correcting interface — the model thinks in names); (2) the tool
+description now says agents inherit ALL tools by default and `tools=` only
+RESTRICTS. The model had passed tools trying to *grant* access; default-None
+already grants everything. Instance of [[feedback_self_correcting_tool_interfaces]]:
+when the model's natural input shape differs from the interface, accept the
+natural shape — don't let a type mismatch fail silently through an error sink.
+
+### Verify the REAL failure mode, not a seed that bypasses the broken layer
+The workflow card "didn't render" for three rounds because each time I verified by
+SEEDING the client workflow domain directly — which masked the actual bug. Real
+root cause was two chained breaks: (1) liftWorkflows gated entirely on the domain
+(`if workflows.length === 0 return no-lift`), never consulting the always-present
+tool-call ITEM; (2) the domain is an SSE-stream-only projection with no durable
+rehydration — on reload the event cursor sits at the checkpoint and the
+`workflow_started`/`task_*` rows (seq ≤ checkpoint) are never replayed, and
+loadHistory never repopulates it. So the card only existed in a narrow same-turn
+window; any reload dropped it. Seeding the domain injected exactly the rows the
+real flow never produced. Lesson: when verifying a fix, reproduce the user's
+ACTUAL state (here: empty domain after reload), not a convenient fixture that
+pre-populates the layer under test. If you can't run the true end-to-end path
+(server was import-broken), at least seed only the INPUT the real path produces
+(the tool-call item) and leave the suspect layer (the domain) empty. The robust
+fix made the card item-driven (renders from the tool call, enriches from the
+domain when live) so it no longer depends on the fragile/un-rehydrated stream.
+
+### Tests that construct the object directly mask broken production wiring
+The child_io drill-in feature shipped "fixed" (1197 tests passing) but never worked
+in production for ~2 rounds: chat.py set `child_io_factory` on a `RunState`, but the
+spawner reads it off the agent's `RunContext` — different objects, so it was a dead
+write. Every streaming test passed because each constructs `RunContext(child_io_factory=
+...)` ITSELF, exercising the spawner in isolation but never the real
+`run_chat → create_agent → tool_ctx.run` wiring that was broken. Same shape as the
+workflow-domain bug earlier this session (seeded the domain, never the real reload
+path). Rule: for a wiring/integration bug, add at least one test that exercises the
+PRODUCTION assembly (here: `create_agent(child_io_factory=f)` → assert it lands on the
+run the consumer reads), not just the consumer fed a hand-built input. When two
+dataclasses both plausibly hold a field (RunState vs RunContext), assert object
+identity — `a.x is the_thing` — at the seam.

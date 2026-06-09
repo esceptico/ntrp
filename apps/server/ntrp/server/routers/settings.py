@@ -27,7 +27,7 @@ router = APIRouter(tags=["settings"])
 
 def _config_response(rt: Runtime) -> dict:
     config = rt.config
-    memory_connected = rt.memory is not None
+    memory_connected = rt.memory_records is not None
     web_client = rt.integrations.get_client("web")
     web_provider = getattr(web_client, "provider", "unknown") if web_client else "none"
     reasoning_efforts = list(get_model(config.chat_model).reasoning_efforts) if config.chat_model else []
@@ -79,11 +79,6 @@ def _config_response(rt: Runtime) -> dict:
     integrations["memory"] = {
         "enabled": config.memory,
         "connected": memory_connected,
-        **(
-            {"error": "Embedding model required — configure an OpenAI or Google embedding model"}
-            if config.memory and not memory_connected
-            else {}
-        ),
     }
 
     # Resolve the chat model's hard token ceiling so the desktop can render

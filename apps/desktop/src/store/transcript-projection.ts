@@ -1,5 +1,17 @@
 import { type HistoryMessage, type ServerEvent } from "../api";
 import { SEMANTIC_KIND_AGENT } from "../lib/agent";
+
+// Keep any non-"tool" semantic kind ("agent", "workflow") on the activity item;
+// only plain tools collapse to undefined. The trace branches on this to render
+// agent rows and workflow cards instead of generic tool rows.
+function liftedKind(kind: string | undefined): string | undefined {
+  return kind && kind !== "tool" ? kind : undefined;
+}
+
+function workflowIdFromData(data: unknown): string | undefined {
+  const wid = (data as { workflow_id?: unknown } | null | undefined)?.workflow_id;
+  return typeof wid === "string" ? wid : undefined;
+}
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { childAgentFromToolResultData, type ToolResultData } from "./child-agent-metadata";
 import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
@@ -369,11 +381,13 @@ export function applyChatEventToTranscript(
       if (isTodoToolName(event.name)) break;
       const result = event.content ?? event.preview ?? "";
       const patch: Partial<ActivityItem> = { result, status: "executed" };
-      if (event.kind === SEMANTIC_KIND_AGENT) patch.semanticKind = SEMANTIC_KIND_AGENT;
-      // Agent task lifecycle events may have replaced the generic tool label
-      // ("Research") with the generated agent name; don't clobber it when the
-      // final tool result arrives with static executor metadata.
-      if (event.display_name && event.kind !== SEMANTIC_KIND_AGENT) patch.displayName = event.display_name;
+      if (liftedKind(event.kind)) patch.semanticKind = liftedKind(event.kind);
+      const wid = workflowIdFromData(event.data);
+      if (wid) patch.workflowId = wid;
+      // Agent/workflow lifecycle events may have replaced the generic tool label
+      // ("Research") with the generated name; don't clobber it when the final
+      // tool result arrives with static executor metadata.
+      if (event.display_name && !liftedKind(event.kind)) patch.displayName = event.display_name;
       if (event.parent_id) patch.parentToolId = event.parent_id;
       if (event.depth != null) patch.depth = event.depth || undefined;
       if (event.is_error) patch.error = true;
@@ -610,8 +624,8 @@ export function rebuildTranscriptFromHistory(
           activity.items.push({
             id: toolCall.id,
             kind: toolCall.name,
-            semanticKind:
-              toolCall.kind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
+            semanticKind: liftedKind(toolCall.kind),
+            workflowId: workflowIdFromData(result?.data),
             target: formatCallTarget(toolCall.name, args || "{}", toolCall.display_name),
             args,
             result: result?.content,
@@ -839,7 +853,7 @@ function activityItemFromPending(id: string, pending: PendingToolCall): Activity
   return {
     id,
     kind: pending.name,
-    semanticKind: pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
+    semanticKind: liftedKind(pending.semanticKind),
     displayName: pending.displayName,
     target: formatCallTarget(pending.name, pending.argsBuffer || "{}", pending.displayName),
     args: pending.argsBuffer,
@@ -856,7 +870,7 @@ function activityPatchFromPending(pending: PendingToolCall): Partial<ActivityIte
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
   };
-  if (pending.semanticKind === SEMANTIC_KIND_AGENT) patch.semanticKind = SEMANTIC_KIND_AGENT;
+  if (liftedKind(pending.semanticKind)) patch.semanticKind = liftedKind(pending.semanticKind);
   if (pending.displayName) patch.displayName = pending.displayName;
   return patch;
 }

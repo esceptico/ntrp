@@ -604,31 +604,48 @@ def test_scheduler_constructor_has_no_learning_recorder(automation_store: Automa
         )
 
 @pytest.mark.asyncio
-async def test_seed_builtins_schedules_new_memory_jobs(automation_store: AutomationStore):
+async def test_seed_builtins_schedules_suggester_job(automation_store: AutomationStore):
     from ntrp.automation.builtins import seed_builtins
-    from ntrp.constants import BUILTIN_PATTERN_FINDER_DAILY_ID, BUILTIN_SKILL_INDUCER_DAILY_ID
+    from ntrp.constants import BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID
 
     await seed_builtins(automation_store)
 
-    pattern = await automation_store.get(BUILTIN_PATTERN_FINDER_DAILY_ID)
-    skills = await automation_store.get(BUILTIN_SKILL_INDUCER_DAILY_ID)
-    assert pattern is not None
-    assert skills is not None
-    assert pattern.enabled is True
-    assert skills.enabled is True
-    assert pattern.next_run_at is not None
-    assert skills.next_run_at is not None
+    suggester = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
+    assert suggester is not None
+    assert suggester.enabled is True
+    assert suggester.next_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_seed_builtins_removes_retired_pipeline_jobs(automation_store: AutomationStore):
+    from ntrp.automation.builtins import seed_builtins
+
+    # A pattern_finder builtin seeded by an older version must be garbage-collected
+    # now that its handler registration is gone (claims+lens pipeline removed).
+    retired = _automation(
+        "builtin:pattern-finder-daily",
+        name="Pattern Finder Daily",
+        handler="pattern_finder_daily",
+        builtin=True,
+        enabled=True,
+        next_run_at=None,
+    )
+    await automation_store.save(retired)
+
+    await seed_builtins(automation_store)
+
+    assert await automation_store.get("builtin:pattern-finder-daily") is None
 
 
 @pytest.mark.asyncio
 async def test_seed_builtins_repairs_missing_next_run_at(automation_store: AutomationStore):
     from ntrp.automation.builtins import seed_builtins
-    from ntrp.constants import BUILTIN_PATTERN_FINDER_DAILY_ID
+    from ntrp.constants import BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID
 
     automation = _automation(
-        BUILTIN_PATTERN_FINDER_DAILY_ID,
-        name="Pattern Finder Daily",
-        handler="pattern_finder_daily",
+        BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
+        name="Automation Suggester Daily",
+        handler="automation_suggester_daily",
         builtin=True,
         enabled=True,
         next_run_at=None,
@@ -637,6 +654,6 @@ async def test_seed_builtins_repairs_missing_next_run_at(automation_store: Autom
 
     await seed_builtins(automation_store)
 
-    repaired = await automation_store.get(BUILTIN_PATTERN_FINDER_DAILY_ID)
+    repaired = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
     assert repaired is not None
     assert repaired.next_run_at is not None

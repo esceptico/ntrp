@@ -24,14 +24,14 @@ class RuntimeOutbox:
         automation_store: AutomationStore,
         scheduler: Scheduler,
         indexer: Indexer | None,
-        get_memory_service: Callable[[], object | None],
+        get_chat_connector: Callable[[], object | None],
     ):
         self.worker = OutboxWorker(outbox_store)
         self.outbox_store = outbox_store
         self.automation_store = automation_store
         self.scheduler = scheduler
         self.indexer = indexer
-        self._get_memory_service = get_memory_service
+        self._get_chat_connector_fn = get_chat_connector
         self._register_handlers()
 
     def start(self) -> None:
@@ -54,8 +54,7 @@ class RuntimeOutbox:
         await self.scheduler.handle_run_completed(run_completed)
 
     def _get_chat_connector(self):
-        memory_service = self._get_memory_service()
-        return getattr(memory_service, "chat_connector", None) if memory_service else None
+        return self._get_chat_connector_fn()
 
     async def get_status(self) -> dict:
         worker_running = self.worker.is_running

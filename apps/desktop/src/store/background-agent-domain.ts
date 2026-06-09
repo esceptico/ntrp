@@ -137,6 +137,33 @@ export function reduceBackgroundAgentOpenItems(
   return { ...state, openItemIds: new Set(openItemIds) };
 }
 
+// A workflow's leaf agents live here too (keyed by `parentToolCallId` === the
+// workflow's tool call) AND inside the workflow's drill-in. The sidebar hides
+// them from the top-level roster while the workflow exists; dismissing the
+// workflow must cascade here, or they resurface as orphan rows with no dismiss.
+export function reduceBackgroundAgentsDismissedByParent(
+  state: BackgroundAgentsDomainState,
+  sessionId: string,
+  parentToolCallId: string,
+): BackgroundAgentsDomainState {
+  const removeKeys = Object.keys(state.rows).filter((key) => {
+    const agent = state.rows[key];
+    return agent.sessionId === sessionId && agent.parentToolCallId === parentToolCallId;
+  });
+  if (removeKeys.length === 0) return state;
+
+  const rows = { ...state.rows };
+  for (const key of removeKeys) delete rows[key];
+
+  let openItemIds = state.openItemIds;
+  if (removeKeys.some((key) => openItemIds.has(key))) {
+    openItemIds = new Set(openItemIds);
+    for (const key of removeKeys) openItemIds.delete(key);
+  }
+
+  return { ...state, rows, openItemIds };
+}
+
 function isEquivalentBackgroundAgent(
   prev: BackgroundAgent,
   next: BackgroundAgent,

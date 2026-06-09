@@ -978,10 +978,35 @@ async def test_offloaded_result_persisted_to_file(session_store: SessionStore):
 
     # full result saved to a durable file, recovered via the normal read_file tool by path
     assert "read_file" in result.content
-    path = trf.result_file_path("call-7")
+    path = trf.result_file_path("sess-1", "call-7")
     assert str(path) in result.content
     assert path.exists()
     assert path.read_text() == big
+    # offload is session-scoped, not a global pile (the 5GB runaway came from a
+    # flat global store), and locatable by id without the session.
+    assert path.parent == trf.session_results_dir("sess-1")
+    assert trf.find_result_file("call-7") == path
+
+
+def test_prune_offload_store_drops_old_keeps_recent(monkeypatch, tmp_path):
+    import os
+    import time
+
+    import ntrp.core.tool_result_files as trf
+
+    monkeypatch.setattr(trf, "RESULTS_BASE", tmp_path / "tool-results")
+    old = trf.persist_result("old-sess", "call-old", "x" * 100)
+    new = trf.persist_result("new-sess", "call-new", "y" * 100)
+    past = time.time() - (trf.RESULTS_MAX_AGE_SECONDS + 3600)
+    os.utime(old, (past, past))
+
+    removed = trf.prune_offload_store()
+
+    assert removed == 1
+    assert not old.exists()
+    assert new.exists()
+    assert not (trf.RESULTS_BASE / "old-sess").exists()  # empty session dir swept
+    assert trf.find_result_file("call-new") == new  # still locatable by id
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.middleware import ToolMiddleware
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.core.types import ToolOverrideDecision
+from ntrp.tools.core.types import ToolAction, ToolOverrideDecision
 from ntrp.tools.discover import discover_user_tools
 
 _logger = get_logger(__name__)
@@ -90,10 +90,15 @@ class ToolExecutor:
 
         return await self.registry.execute(tool_name, execution, arguments)
 
-    def get_tools(self, read_only: bool | None = None) -> list[dict]:
+    def get_tools(
+        self,
+        read_only: bool | None = None,
+        actions: frozenset[ToolAction] | None = None,
+    ) -> list[dict]:
         return self.registry.get_schemas(
             capabilities=frozenset(self._get_services()),
             read_only=read_only,
+            actions=actions,
         )
 
     def get_tool_metadata(self) -> list[dict]:

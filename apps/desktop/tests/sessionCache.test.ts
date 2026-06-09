@@ -289,7 +289,14 @@ test("switchSession preserves cached preview until canonical history replaces it
       text: "",
     });
     await switching;
-    expect(requests).toEqual(["/session/history?session_id=A", "/sessions/A/goal"]);
+    // loadHistory rehydrates the workflows + subagent-roster domains (in-memory,
+    // otherwise empty after a fresh load) right after setting the transcript.
+    expect(requests).toEqual([
+      "/session/history?session_id=A",
+      "/chat/A/workflows",
+      "/chat/child-agents?session_id=A",
+      "/sessions/A/goal",
+    ]);
 
     expect(getState().messages.get("server-a-1")?.content).toBe("canonical A");
     expect(getState().messages.has("a-1")).toBe(false);

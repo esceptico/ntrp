@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   createWorkflowsDomainState,
+  reduceWorkflowDismissed,
   reduceWorkflowStarted,
   reduceWorkflowFinished,
   reduceWorkflowTaskEvent,
@@ -238,4 +239,13 @@ test("selectWorkflowsForSession is scoped to the session", () => {
   expect(selectWorkflowsForSession(state, SESSION).map((w) => w.workflowId)).toEqual([WORKFLOW]);
   expect(selectWorkflowsForSession(state, "session-2").map((w) => w.workflowId)).toEqual(["wf-2"]);
   expect(selectWorkflowsForSession(state, "nope")).toHaveLength(0);
+});
+
+test("reduceWorkflowDismissed removes the row; no-op if absent", () => {
+  const state = startedWorkflow();
+  expect(selectWorkflowsForSession(state, SESSION)).toHaveLength(1);
+  const after = reduceWorkflowDismissed(state, { sessionId: SESSION, workflowId: WORKFLOW });
+  expect(selectWorkflowsForSession(after, SESSION)).toHaveLength(0);
+  // dismissing an unknown id returns the same state reference (cheap no-op)
+  expect(reduceWorkflowDismissed(after, { sessionId: SESSION, workflowId: "nope" })).toBe(after);
 });

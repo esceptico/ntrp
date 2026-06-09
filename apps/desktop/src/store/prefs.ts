@@ -8,7 +8,7 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const PREFS_VERSION = 8;
+const PREFS_VERSION = 9;
 
 const RETIRED_PALETTES = new Set(["vercel", "github", "linear", "catppuccin"]);
 
@@ -17,6 +17,10 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingIntensity: "normal",
   theme: "system",
   palette: "notion",
+  sidebarGroupBy: "project",
+  sidebarUnreadOnly: false,
+  sidebarChannelsOnly: false,
+  pinnedSessionIds: [],
   sidebarHidden: false,
   rightPanelCollapsed: true,
   sidebarWidth: 272,

@@ -49,6 +49,7 @@ from ntrp.llm.models import get_model
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool
 from ntrp.tools.core.context import ChildIOParams, IOBridge, RunContext, ToolContext
+from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
 from ntrp.tools.executor import ToolExecutor
 
@@ -300,6 +301,7 @@ def create_spawn_fn(
         lifecycle_id: str | None = None,
         workflow_id: str | None = None,
         phase: str | None = None,
+        actions: frozenset[ToolAction] | None = None,
         exclude_tools: frozenset[str] | None = None,
     ) -> str:
         should_wait = (not background) if wait is None else wait
@@ -313,10 +315,32 @@ def create_spawn_fn(
         child_executor_source = executor
         child_registry = executor.registry
         if extra_tools:
-            child_registry = executor.registry.copy_with(dict(extra_tools))
-            child_executor_source = executor.with_registry(child_registry)
+            # Inject only tools not already registered. A specialized agent type
+            # (research) carries its full toolset and re-passes it on every spawn,
+            # but a NESTED spawn already inherited those tools — and copy_with raises
+            # on duplicates. The inherited ones still surface via get_tools below.
+            missing = {name: t for name, t in extra_tools.items() if name not in executor.registry}
+            if missing:
+                child_registry = executor.registry.copy_with(missing)
+                child_executor_source = executor.with_registry(child_registry)
 
-        filtered_tools = tools or child_executor_source.get_tools()
+        # `actions` is the agent-type capability filter ({READ} for analysts, None
+        # for full): it narrows the base toolset to those ToolActions, the same way
+        # research read-only-filtered its tools. extra_tools (merged into the child
+        # registry above) and exclude_tools then add/remove on top.
+        full_tools = child_executor_source.get_tools(actions=actions)
+        # `tools` is either schema dicts (research/background pass these) or a
+        # name allowlist a workflow author wrote, e.g. ["slack_search", ...].
+        # Resolve names against the full toolset so a name-restricted agent still
+        # gets WORKING tools — passing raw name strings as schemas would make
+        # every downstream `t.get("function")` raise and the agent come back empty.
+        if tools is None:
+            filtered_tools = full_tools
+        elif tools and all(isinstance(t, str) for t in tools):
+            wanted = set(tools)
+            filtered_tools = [t for t in full_tools if t.get("function", {}).get("name") in wanted]
+        else:
+            filtered_tools = tools
         if exclude_tools:
             filtered_tools = [t for t in filtered_tools if t.get("function", {}).get("name") not in exclude_tools]
         allowed_tool_names = tool_schema_names(filtered_tools)
@@ -366,6 +390,7 @@ def create_spawn_fn(
         # have no distinct session, so they keep nesting into the parent's io.
         child_io: IOBridge | None = None
         child_io_close = None
+        child_io_finish = None
         if has_child_session and calling_ctx.run.child_io_factory is not None:
             child_session = await calling_ctx.run.child_io_factory(
                 ChildIOParams(
@@ -376,6 +401,7 @@ def create_spawn_fn(
             )
             child_io = child_session.io
             child_io_close = child_session.aclose
+            child_io_finish = child_session.finish
             bg_io = child_io
             if calling_ctx.run_registry is not None:
                 calling_ctx.run_registry.mark_session_active(child_state.session_id, calling_ctx.run.run_id)
@@ -549,13 +575,18 @@ def create_spawn_fn(
             if child_state.session_id == calling_ctx.session_id:
                 return
             save_child = getattr(session_service, "save", None)
-            if save_child is None:
-                return
-            child_state.agent_status = status
-            try:
-                await save_child(child_state, child_messages)
-            except Exception as exc:
-                _logger.warning("Failed to save child agent session: %s", exc)
+            if save_child is not None:
+                child_state.agent_status = status
+                try:
+                    await save_child(child_state, child_messages)
+                except Exception as exc:
+                    _logger.warning("Failed to save child agent session: %s", exc)
+            # Close the child session's run framing on a terminal status (once),
+            # independent of message persistence: records the durable run status +
+            # emits RunFinished/RunCancelled on the child bus so the viewed session
+            # collapses from live → done instead of streaming forever.
+            if child_io_finish is not None and status != "running":
+                await child_io_finish(status)
 
         async def _save_child_step(_step: int, _response, messages: list[dict]) -> None:
             if messages is child_messages:
@@ -593,15 +624,18 @@ def create_spawn_fn(
             )
 
         stream_failed = False
+        tool_call_count = 0
 
         async def _stream_to(to_events) -> str:
-            nonlocal stream_failed
+            nonlocal stream_failed, tool_call_count
             text = ""
             try:
                 async for event in sub_agent.stream(child_messages):
                     if isinstance(event, Result):
                         text = event.text
                         continue
+                    if isinstance(event, ToolCompleted):
+                        tool_call_count += 1
                     if child_io is not None:
                         for sse in agent_events_to_sse(event):
                             await child_io.emit(_rebase_for_child(sse))
@@ -759,6 +793,7 @@ def create_spawn_fn(
                             depth=task_depth,
                             workflow_id=workflow_id,
                             phase=phase,
+                            tool_count=tool_call_count,
                         )
                     )
                 return _settle_with(text, status="failed" if stream_failed else "completed")
@@ -799,6 +834,7 @@ def create_spawn_fn(
                                 depth=task_depth,
                                 workflow_id=workflow_id,
                                 phase=phase,
+                                tool_count=tool_call_count,
                             )
                         )
                     return _settle_with(text, status="cancelled")
@@ -821,6 +857,7 @@ def create_spawn_fn(
                             depth=task_depth,
                             workflow_id=workflow_id,
                             phase=phase,
+                            tool_count=tool_call_count,
                         )
                     )
                 raise
@@ -845,6 +882,7 @@ def create_spawn_fn(
                             depth=task_depth,
                             workflow_id=workflow_id,
                             phase=phase,
+                            tool_count=tool_call_count,
                         )
                     )
                 _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)
@@ -965,8 +1003,8 @@ def create_spawn_fn(
                 _logger.warning(
                     "Dropped %d steering message(s) for finished background agent %s", len(leftover), task_id
                 )
-            await _save_child_session(status)
             try:
+                await _save_child_session(status)
                 await registry.deliver_result(
                     task_id=task_id,
                     result=result,
@@ -981,6 +1019,11 @@ def create_spawn_fn(
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)
             finally:
+                # Idempotent terminal frame on the child bus so a viewed background
+                # session collapses live→done even if save/deliver raised above
+                # (foreground does this via _save_child_session; background must too).
+                if child_io_finish is not None and status != "running":
+                    await child_io_finish(status)
                 if calling_ctx.run_registry is not None and child_io is not None:
                     calling_ctx.run_registry.clear_session_active(child_state.session_id)
                 if child_io_close is not None:

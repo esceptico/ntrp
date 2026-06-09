@@ -16,7 +16,8 @@ import {
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
-import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
+import { ActivityHeader, ActivityTail, ActivityTrace, liftWorkflows } from "./trace/ActivityTrace";
+import { useWorkflows } from "../hooks/useWorkflows";
 import { CopyGlyph } from "./CopyGlyph";
 import type { SkillDescriptor, TodoStatus } from "../api";
 import { activityTraceStats } from "../lib/agent";
@@ -469,6 +470,9 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const message = useMessage(id);
   const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
+  // Hooks must run unconditionally — keep them above the early return.
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const workflows = useWorkflows(currentSessionId);
   if (!message?.activity || message.activity.items.length === 0) return null;
   const { items, done } = message.activity;
 
@@ -480,7 +484,13 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   // producing a visible flicker.
   const collapsed = done && !expanded;
   const max = done ? undefined : 3;
-  const { totalCount, activeCount } = activityTraceStats(items);
+  // Count over post-lift rows so the header matches what ActivityTail renders —
+  // a workflow tool call is lifted into a card, not counted as one of the calls.
+  const { workflowRows, rowItems } = liftWorkflows(items, workflows, currentSessionId);
+  const { totalCount, activeCount } = activityTraceStats(rowItems);
+  // A turn whose only activity is a workflow shows just the card — no
+  // "Running/Worked N calls" tool-call header, no row chrome.
+  const onlyWorkflows = rowItems.length === 0 && workflowRows.length > 0;
 
   return (
     <article
@@ -494,16 +504,18 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
       data-source-index={message.sourceIndex}
     >
       <ActivityTrace>
-        <ActivityHeader
-          done={done}
-          label={message.activity.label}
-          count={totalCount}
-          activeCount={activeCount}
-          backgrounded={!!message.activity.backgrounded}
-          motionDisabled={message.suppressEntryMotion}
-          onToggle={done ? () => setExpanded((v) => !v) : undefined}
-          expanded={expanded}
-        />
+        {!onlyWorkflows && (
+          <ActivityHeader
+            done={done}
+            label={message.activity.label}
+            count={totalCount}
+            activeCount={activeCount}
+            backgrounded={!!message.activity.backgrounded}
+            motionDisabled={message.suppressEntryMotion}
+            onToggle={done ? () => setExpanded((v) => !v) : undefined}
+            expanded={expanded}
+          />
+        )}
         <ActivityTail
           items={items}
           max={max}

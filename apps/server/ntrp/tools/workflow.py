@@ -1,12 +1,12 @@
+import asyncio
 import json
-import traceback
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from ntrp.events.sse import WorkflowFinishedEvent, WorkflowStartedEvent
-from ntrp.orchestra.dynamic import run_script
+from ntrp.orchestra.dynamic import format_script_traceback, run_script
 from ntrp.orchestra.engine import Orchestra
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -77,6 +77,14 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
 
     try:
         result = await run_script(orchestra, args.script, args.args)
+    except asyncio.CancelledError:
+        # User stopped the run. CancelledError is a BaseException, so without this
+        # it would skip both excepts below and never settle the workflow row —
+        # leaving it "running" with a free-running clock. Shield the settle so a
+        # second cancellation mid-emit can't drop the terminal event, then re-raise
+        # so the tool executor still sees the cancellation.
+        await asyncio.shield(_finish("cancelled", "stopped by user"))
+        raise
     except SyntaxError as exc:
         await _finish("failed", f"script did not compile: {exc}")
         # Self-correcting: hand back the exact compile error so the model can fix + retry.
@@ -87,7 +95,9 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
         )
     except Exception as exc:
         await _finish("failed", str(exc)[:200])
-        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=4))
+        # Trimmed to the script's own frames with rebased line numbers, so the
+        # model sees the line it wrote — the whole point of a self-correcting tool.
+        tb = format_script_traceback(exc, args.script)
         return ToolResult(
             content=f"Workflow raised {type(exc).__name__}: {exc}\n\n{tb}\nFix the script and call again.",
             preview="Workflow failed",
@@ -107,13 +117,36 @@ Run a custom multi-agent workflow you author on the fly — a harness built for 
 Pass a Python `script` that orchestrates subagents and returns a result. Each agent runs
 in its own context window; you compose them.
 
+Each agent inherits ALL your tools by default (slack, gmail, files, web, etc.) — so for a
+research/search task you just write agent("...") and it can use them. Give each agent a
+tight, self-contained task; its final message IS the return value, so ask for the raw
+answer (or JSON), no preamble.
+
 In scope (no imports needed):
-- await agent(task, schema=None, model=None) -> the subagent's answer as a string, or a
-  parsed object when `schema` is given. `schema` is a plain dict describing the JSON shape,
-  e.g. {"bugs": [{"file": "str", "line": "int", "issue": "str"}]}.
-- await parallel([...]) -> run agent() calls (or any awaitables) concurrently; returns a
-  list (a failed item is None). e.g. await parallel([agent(q) for q in questions]).
+- await agent(task, *, schema=None, model=None, agent_type=None, system_prompt=None,
+  tools=None) -> the subagent's answer as a string, or a parsed object when `schema` is
+  given (default: prose — only pass `schema` when you'll consume the fields in code, e.g.
+  count votes or filter by a field). All keyword-only. `schema` is a plain dict shape, e.g.
+  {"bugs": [{"file": "str", "line": "int"}]}. `agent_type` picks a ready-made type — each is
+  a TOOL PROFILE plus a persona: "reviewer"/"explorer"/"planner"/"verifier" are READ-ONLY
+  (read/search only, can't write or run bash — use for analysis), "builder" is full access
+  (writes files, runs tools — use to make changes). `system_prompt` sets a custom persona
+  (wins over agent_type's, but its tool profile still applies). `tools` is an OPTIONAL
+  allowlist of tool NAMES to further RESTRICT this agent (e.g. tools=["slack_search",
+  "read_file"]); omit it to keep the type's default access — do NOT pass it just to "grant"
+  tools, they're already there.
+- await parallel([...]) -> run agent() calls (or any awaitables) concurrently with a
+  barrier; returns a list (a failed item is None). e.g. await parallel([agent(q) for q in qs]).
+- await pipeline(items, stage1, stage2, ...) -> run each item through the stages with no
+  barrier between items; each stage is `async (prev, item, index) -> next` (3 args), and a
+  stage returning None drops that item. Returns the list of final results.
 - phase(title) / log(msg) -> progress labels shown in the UI.
+- budget -> the run's token pool: budget.total (the ceiling, or None if uncapped),
+  budget.spent() (output tokens used so far across the whole run), budget.remaining()
+  (total - spent, or inf if uncapped). Scale fan-out to it: a loop guards on
+  `while budget.total and budget.remaining() > 50_000: ...`; once spent reaches total,
+  further agent() spawns are denied. Reusable sub-routines are just `async def` helpers in
+  your script — define and call them like normal Python.
 - args -> the dict you passed in. `json` is available. End with `return <result>`.
 
 Patterns:
@@ -140,5 +173,7 @@ workflow_tool = tool(
     input_model=WorkflowInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=run_workflow,
-    kind="agent",
+    # "workflow" (not "agent") so the desktop renders it as a workflow card from
+    # the tool call itself — independent of the streamed workflow-domain events.
+    kind="workflow",
 )

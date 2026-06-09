@@ -27,10 +27,13 @@ from mcp.shared.auth import (
 )
 
 from ntrp.logging import get_logger
+from ntrp.settings import NTRP_DIR
 
 _logger = get_logger(__name__)
 
-OAUTH_DIR = Path.home() / ".ntrp" / "mcp_oauth"
+# Respect NTRP_DIR like all other persistent state (was hardcoded to ~/.ntrp,
+# which breaks when NTRP_DIR is redirected, e.g. a remote/containerized server).
+OAUTH_DIR = NTRP_DIR / "mcp_oauth"
 LOGIN_TIMEOUT = 120
 
 

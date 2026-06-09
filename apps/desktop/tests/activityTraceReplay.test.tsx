@@ -1,10 +1,12 @@
 import { beforeEach, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ActivityHeader, ActivityTail } from "../src/components/trace/ActivityTrace.tsx";
+import { ActivityHeader, ActivityTail, liftWorkflows } from "../src/components/trace/ActivityTrace.tsx";
+import { WorkflowProgressCard } from "../src/components/workflow/WorkflowProgress.tsx";
 import { activityTraceStats } from "../src/lib/agent.ts";
 import { turnHeaderLabel } from "../src/lib/turnHeader.ts";
 import { setState } from "../src/store/index.ts";
+import { type Workflow } from "../src/store/workflow-domain.ts";
 
 const items = [
   {
@@ -268,6 +270,116 @@ test("rolling activity keeps all agent rows while capping ordinary tool rows", (
   expect(html).toContain("Agent Four");
   expect(html).toContain("WebSearch(query=&#x27;latest&#x27;)");
   expect(html).not.toContain("ReadFile(path=&#x27;old&#x27;)");
+});
+
+function makeWorkflow(overrides: Partial<Workflow> = {}): Workflow {
+  return {
+    workflowId: "wf-1",
+    sessionId: "sess-1",
+    runId: "run-1",
+    parentToolCallId: "wf-tool-call",
+    name: "Review feature",
+    status: "running",
+    phasesByName: {
+      Review: { name: "Review", status: "running", agentsByTaskId: {}, startedAt: 1, completedAt: null },
+      Verify: { name: "Verify", status: "pending", agentsByTaskId: {}, startedAt: null, completedAt: null },
+    },
+    totalAgents: 5,
+    startedAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  };
+}
+
+test("liftWorkflows: a live domain row wins and is pulled out, rest stays", () => {
+  const { workflowRows, rowItems } = liftWorkflows(
+    [
+      { id: "wf-tool-call", kind: "workflow", target: 'workflow(title="x")' },
+      { id: "plain-tool", kind: "read_file", target: 'read_file(path="keep")' },
+    ],
+    [makeWorkflow()],
+    "sess-1",
+  );
+
+  expect(workflowRows.map((w) => w.workflowId)).toEqual(["wf-1"]);
+  expect(rowItems.map((i) => i.id)).toEqual(["plain-tool"]);
+});
+
+test("liftWorkflows lifts a workflow item even with an EMPTY domain (synthesized card)", () => {
+  // The decisive case the old domain-gated lift failed: no workflow_started event
+  // reached the client (the real reload state), but the tool-call item is tagged
+  // semanticKind="workflow" — so the card must still render from the item alone.
+  const { workflowRows, rowItems } = liftWorkflows(
+    [
+      {
+        id: "wf-1",
+        kind: "workflow",
+        semanticKind: "workflow",
+        target: "workflow(...)",
+        args: '{"title":"Dex Slack research"}',
+        status: "executed",
+      },
+      { id: "plain", kind: "read_file", target: "read_file" },
+    ],
+    [],
+    "sess-1",
+  );
+
+  expect(workflowRows).toHaveLength(1);
+  expect(workflowRows[0].name).toBe("Dex Slack research"); // title parsed from args
+  expect(workflowRows[0].status).toBe("completed"); // from item.status
+  expect(workflowRows[0].parentToolCallId).toBe("wf-1");
+  expect(rowItems.map((i) => i.id)).toEqual(["plain"]);
+});
+
+test("liftWorkflows contains a workflow's leaked subtree (no parent tool rows)", () => {
+  // The server rebases a workflow leaf-agent's tool calls under the workflow's
+  // tool-call id (depth 1). They belong in the card's drill-in, NOT as parent
+  // rows — and must not inflate the "N calls" header.
+  const { workflowRows, rowItems } = liftWorkflows(
+    [
+      { id: "wf", kind: "workflow", semanticKind: "workflow", target: "workflow(...)", args: '{"title":"X"}', status: "ongoing" },
+      { id: "t1", kind: "list_files", target: "ListFiles(...)", parentToolId: "wf", depth: 1, status: "executed" },
+      { id: "t2", kind: "bash", target: "Bash(...)", parentToolId: "t1", depth: 2, status: "executed" }, // transitive
+      { id: "outside", kind: "read_file", target: "read_file", status: "executed" },
+    ],
+    [],
+    "sess-1",
+  );
+
+  expect(workflowRows).toHaveLength(1);
+  expect(rowItems.map((i) => i.id)).toEqual(["outside"]); // wf + its whole subtree contained
+});
+
+test("liftWorkflows leaves non-workflow items untouched", () => {
+  const items = [{ id: "a", kind: "read_file", target: "read_file" }];
+  const plain = liftWorkflows(items, [], "sess-1");
+  expect(plain.workflowRows).toEqual([]);
+  expect(plain.rowItems.map((i) => i.id)).toEqual(["a"]);
+  // A workflow domain row whose parent tool-call isn't present is ignored.
+  const unmatched = liftWorkflows(items, [makeWorkflow({ parentToolCallId: "absent" })], "sess-1");
+  expect(unmatched.workflowRows).toEqual([]);
+  expect(unmatched.rowItems.map((i) => i.id)).toEqual(["a"]);
+});
+
+test("workflow progress card renders status + a segmented phase bar, not a tool row", () => {
+  const html = renderToStaticMarkup(
+    <WorkflowProgressCard workflow={makeWorkflow()} onOpen={() => {}} />,
+  );
+
+  // Name + status badge + open affordance on a bordered card surface.
+  expect(html).toContain("Review feature");
+  expect(html).toContain("running"); // status badge
+  expect(html).toContain("group/workflow");
+  expect(html).toContain("border-line-soft");
+  expect(html).toContain("Review feature — open");
+  // Real progress: a segment per phase (Review running → accent, Verify pending →
+  // sunken) plus the agent-completion fraction.
+  expect(html).toContain("bg-accent");
+  expect(html).toContain("bg-surface-sunken");
+  expect(html).toContain("0/5");
+  // It is NOT the flat font-mono tool-line used by ordinary tool rows.
+  expect(html).not.toContain("tool-line");
 });
 
 test("activity stats include subagent rows and their child tools", () => {

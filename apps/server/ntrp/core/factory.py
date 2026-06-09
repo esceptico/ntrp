@@ -14,7 +14,14 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.llm.models import get_model
-from ntrp.tools.core.context import ApprovalControls, BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import (
+    ApprovalControls,
+    BackgroundTaskRegistry,
+    ChildIOFactory,
+    IOBridge,
+    RunContext,
+    ToolContext,
+)
 from ntrp.tools.deferred import tool_schema_names
 from ntrp.tools.executor import ToolExecutor
 
@@ -31,6 +38,7 @@ class AgentConfig:
     max_tool_calls: int | None = None
     max_wall_time_seconds: float | None = None
     max_cost: float | None = None
+    max_output_tokens: int | None = None
     reasoning_effort: str | None = None
     model_reasoning_efforts: dict[str, str] | None = None
     deferred_tools: bool = True
@@ -47,6 +55,7 @@ class AgentConfig:
             max_tool_calls=config.agent_max_tool_calls,
             max_wall_time_seconds=config.agent_max_wall_time_seconds,
             max_cost=config.agent_max_cost,
+            max_output_tokens=config.agent_max_output_tokens,
             reasoning_effort=config.reasoning_effort_for(model or config.chat_model),
             model_reasoning_efforts=dict(config.model_reasoning_efforts),
             deferred_tools=config.deferred_tools,
@@ -77,11 +86,19 @@ def create_agent(
     initial_input_tokens: int | None = None,
     run_registry: "RunRegistry | None" = None,
     project_context: ProjectContext | None = None,
+    token_budget: int | None = None,
+    child_io_factory: ChildIOFactory | None = None,
 ) -> Agent:
     started_at = monotonic()
-    budget = RunBudget()
+    # Per-turn directive ("+500k") overrides the configured default ceiling.
+    budget = RunBudget(total=token_budget if token_budget is not None else config.max_output_tokens)
     run_ctx = RunContext(
         run_id=run_id,
+        # Wire the child-session factory onto the RunContext the SPAWNER actually
+        # reads (calling_ctx.run). Without it child_io never engages → FULL
+        # subagents run foreground (tools leak to the parent, child sessions stay
+        # empty). The spawner propagates this to every descendant run.
+        child_io_factory=child_io_factory,
         max_depth=config.max_depth,
         max_iterations=config.max_iterations,
         max_tool_calls=config.max_tool_calls,

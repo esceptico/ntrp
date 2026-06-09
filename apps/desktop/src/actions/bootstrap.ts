@@ -1,6 +1,8 @@
 import { apiWithConfig, checkHealth, listProjectsApi, loadInitialConfig, type SessionListItem } from "../api";
 import { getState } from "../store";
+import { isAgentSessionId, parentSessionIdOf } from "../lib/agentRun";
 import { fetchAutomations } from "./automations";
+import { refreshChildAgents } from "./childAgents";
 import { fetchGoal } from "./goals";
 import { loadHistory } from "./history";
 import { refreshLoops } from "./loops";
@@ -37,6 +39,11 @@ export function reloadAllCollections(sessionId: string | null): void {
     if (sessionId && getState().currentSessionId === sessionId) {
       void refreshLoops(sessionId);
       void fetchGoal(sessionId).catch(() => {});
+      // The background-agent roster has live deltas (BackgroundTaskEvent) but no
+      // replay on reconnect, so resync it here for the session whose roster the
+      // sidebar shows (the parent when a child agent is open).
+      const rosterSessionId = isAgentSessionId(sessionId) ? parentSessionIdOf(sessionId) : sessionId;
+      if (rosterSessionId) void refreshChildAgents(rosterSessionId);
     }
   }, RESYNC_DEBOUNCE_MS);
 }

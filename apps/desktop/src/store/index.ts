@@ -33,6 +33,7 @@ import {
 import {
   createBackgroundAgentsDomainState,
   reduceBackgroundAgentUpsert,
+  reduceBackgroundAgentsDismissedByParent,
   reduceBackgroundAgentsForSession,
   reduceBackgroundAgentsRefreshFailed,
   reduceBackgroundAgentsRefreshStarted,
@@ -41,10 +42,12 @@ import {
 } from "./background-agent-domain";
 import {
   createWorkflowsDomainState,
+  reduceWorkflowDismissed,
   reduceWorkflowStarted,
   reduceWorkflowFinished,
   reduceWorkflowTaskEvent,
   reduceWorkflowTokenUsage,
+  workflowKey,
   type WorkflowsDomainState,
 } from "./workflow-domain";
 import {
@@ -156,7 +159,6 @@ export const useStore = create<State & Actions>((set) => ({
   sessionCache: new Map(),
   connected: false,
   running: false,
-  paused: false,
   error: null,
   draft: "",
   settingsOpen: false,
@@ -185,7 +187,6 @@ export const useStore = create<State & Actions>((set) => ({
   automationSuggestions: null,
   automationsOpen: false,
   automationStream: createAutomationStreamDomainState(),
-  archiveOpen: false,
   archivedSessions: null,
   compacting: false,
   memoryOpen: false,
@@ -445,7 +446,6 @@ export const useStore = create<State & Actions>((set) => ({
     }),
 
   setConnected: (connected) => set({ connected }),
-  setPaused: (paused) => set({ paused }),
   setError: (error) => set({ error }),
   setDraft: (draft) => set({ draft }),
   setEditingId: (editingId) => set({ editingId }),
@@ -605,22 +605,34 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({
       backgroundAgents: reduceBackgroundAgentUpsert(s.backgroundAgents, agent),
     })),
-  workflowStarted: (input) =>
+  workflowStarted: (input, at) =>
     set((s) => ({
-      workflows: reduceWorkflowStarted(s.workflows, input),
+      workflows: reduceWorkflowStarted(s.workflows, input, at),
     })),
-  workflowFinished: (input) =>
+  workflowFinished: (input, at) =>
     set((s) => ({
-      workflows: reduceWorkflowFinished(s.workflows, input),
+      workflows: reduceWorkflowFinished(s.workflows, input, at),
     })),
-  workflowTaskEvent: (input) =>
+  workflowTaskEvent: (input, at) =>
     set((s) => ({
-      workflows: reduceWorkflowTaskEvent(s.workflows, input),
+      workflows: reduceWorkflowTaskEvent(s.workflows, input, at),
     })),
-  workflowTokenUsage: (input) =>
+  workflowTokenUsage: (input, at) =>
     set((s) => ({
-      workflows: reduceWorkflowTokenUsage(s.workflows, input),
+      workflows: reduceWorkflowTokenUsage(s.workflows, input, at),
     })),
+  dismissWorkflow: (sessionId, workflowId) =>
+    set((s) => {
+      // Cascade to the workflow's leaf agents (matched by its tool-call id), so
+      // they don't resurface in the roster as orphans once the workflow is gone.
+      const parentToolCallId = s.workflows.rows[workflowKey(sessionId, workflowId)]?.parentToolCallId;
+      return {
+        workflows: reduceWorkflowDismissed(s.workflows, { sessionId, workflowId }),
+        backgroundAgents: parentToolCallId
+          ? reduceBackgroundAgentsDismissedByParent(s.backgroundAgents, sessionId, parentToolCallId)
+          : s.backgroundAgents,
+      };
+    }),
   setGoal: (sessionId, goal) =>
     set((s) => {
       const goals = { ...s.goals };
@@ -683,8 +695,6 @@ export const useStore = create<State & Actions>((set) => ({
   dismissToast: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
-  openArchive: (origin) => set({ archiveOpen: true, modalOrigin: origin ?? null }),
-  closeArchive: () => set({ archiveOpen: false }),
   setCompacting: (compacting) => set({ compacting }),
   openMemory: (origin) => set({ memoryOpen: true, modalOrigin: origin ?? null }),
   closeMemory: () => set({ memoryOpen: false }),

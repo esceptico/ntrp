@@ -9,7 +9,6 @@ type RunLifecyclePatch = Partial<
   Pick<
     State,
     | "running"
-    | "paused"
     | "currentRunId"
     | "thinkingRunId"
     | "thinkingStatus"
@@ -49,8 +48,6 @@ export function reduceRunStarted(
 
   return {
     running: appliesToCurrentSession ? true : state.running,
-    // A fresh run is never stale-paused.
-    paused: appliesToCurrentSession ? false : state.paused,
     currentRunId: appliesToCurrentSession ? input.runId : state.currentRunId,
     thinkingRunId: appliesToCurrentSession ? null : state.thinkingRunId,
     thinkingStatus: appliesToCurrentSession ? null : state.thinkingStatus,

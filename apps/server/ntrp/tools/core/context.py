@@ -117,8 +117,11 @@ class IOBridge:
 @dataclass(frozen=True, slots=True)
 class ChildIOParams:
     """What a child_io_factory needs to wire a subagent to its own session bus.
-    The child reuses the PARENT run's approval map + run_id so tool approvals
-    inside the subagent still resolve through the parent run's /tools/result."""
+    The child reuses the PARENT run's approval map + run_id: approvals resolve
+    through the parent run's /tools/result, and the parent run_id frames the
+    child session's bus (RunStarted/RunFinished) consistently with the
+    runtime.active_run the parent run surfaces via mark_session_active — so the
+    viewed child renders live exactly like a normal run."""
 
     session_id: str
     run_id: str
@@ -127,11 +130,13 @@ class ChildIOParams:
 
 @dataclass(frozen=True, slots=True)
 class ChildSession:
-    """A subagent's own-session io plus the cleanup that drains + evicts its bus
-    when the run ends, so a child whose session is never opened doesn't leak its
+    """A subagent's own-session io, the terminal `finish(status)` that closes its
+    run framing (durable status + RunFinished/RunCancelled on its bus), and the
+    cleanup that drains + evicts its bus so a never-opened child doesn't leak its
     durable-persist worker."""
 
     io: IOBridge
+    finish: Callable[[str], Awaitable[None]]
     aclose: Callable[[], Awaitable[None]]
 
 

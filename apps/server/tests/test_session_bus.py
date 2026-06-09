@@ -12,7 +12,7 @@ from ntrp.events.sse import (
     ToolCallArgsEvent,
 )
 from ntrp.server import sse_stream
-from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import BusRegistry, SessionBus, SessionEventWriter, StreamRecord
 from ntrp.server.sse_stream import live_records
 
 
@@ -28,10 +28,10 @@ def _events(records):
 async def test_ephemeral_delta_events_are_not_persisted_durably():
     persisted: list[EventType] = []
 
-    async def collector(record):
-        persisted.append(record.event.type)
+    async def collector(records):
+        persisted.extend(record.event.type for record in records)
 
-    bus = SessionBus(session_id="sess-1", record_event=collector)
+    bus = SessionBus(session_id="sess-1", record_events=collector)
     await bus.emit(TextMessageStartEvent(message_id="m1"))
     await bus.emit(TextMessageContentEvent(message_id="m1", delta="he"))
     await bus.emit(TextMessageContentEvent(message_id="m1", delta="llo"))
@@ -211,10 +211,10 @@ async def test_subscribe_with_replay_returns_buffered_records_to_new_subscribers
 async def test_bus_registry_records_emitted_events():
     recorded = []
 
-    async def record_event(record):
-        recorded.append(record)
+    async def record_events(records):
+        recorded.extend(records)
 
-    registry = BusRegistry(record_event=record_event)
+    registry = BusRegistry(record_events=record_events)
     bus = registry.get_or_create("sess-1")
     await bus.emit(ThinkingEvent(status="saved"))
     await bus.drain_record_tasks()
@@ -230,11 +230,11 @@ async def test_event_persistence_uses_one_bounded_writer_queue():
     release = asyncio.Event()
     recorded = []
 
-    async def record_event(record):
-        recorded.append(record)
+    async def record_events(records):
+        recorded.extend(records)
         await release.wait()
 
-    bus = SessionBus(session_id="sess-1", record_event=record_event, record_queue_size=2)
+    bus = SessionBus(session_id="sess-1", record_events=record_events, record_queue_size=2)
 
     await bus.emit(ThinkingEvent(status="one"))
     await asyncio.sleep(0)
@@ -255,15 +255,64 @@ async def test_event_persistence_uses_one_bounded_writer_queue():
 
 
 @pytest.mark.asyncio
+async def test_writer_close_times_out_instead_of_hanging_on_stuck_write():
+    # A slow/stuck durable write must never wedge close() — that is what hangs
+    # server shutdown ("can't stop the server"). close() abandons the unflushed
+    # event and forces the worker down within close_timeout.
+    started = asyncio.Event()
+
+    async def stuck_record(records):
+        started.set()
+        await asyncio.Event().wait()  # never returns
+
+    writer = SessionEventWriter(stuck_record, close_timeout=0.2)
+    writer.submit(StreamRecord(seq=1, session_id="s", event=ThinkingEvent(status="x")))
+    await asyncio.wait_for(started.wait(), timeout=1)  # worker is now stuck mid-write
+
+    # Must return promptly instead of blocking on the stuck write.
+    await asyncio.wait_for(writer.close(), timeout=2)
+    assert writer._worker is None
+
+
+@pytest.mark.asyncio
+async def test_overflowing_writer_queue_persists_all_structural_events_in_order():
+    # Structural (durable) events must NOT be dropped when the persist queue is
+    # full — losing one (e.g. RUN_FINISHED / TOOL_CALL_RESULT) desyncs the client.
+    # AND they must persist in strict seq order: the resume path treats a hole in
+    # the durable ledger as an omitted ephemeral delta, so a structural event that
+    # jumped ahead of an earlier one would make that earlier seq look like a hole
+    # and be silently skipped on replay. The writer applies FIFO backpressure.
+    release = asyncio.Event()
+    recorded = []
+
+    async def record_events(records):
+        await release.wait()
+        recorded.extend(records)
+
+    bus = SessionBus(session_id="sess-1", record_events=record_events, record_queue_size=2)
+
+    # Emit far more than the queue holds while the writer is blocked, forcing overflow.
+    for i in range(8):
+        await bus.emit(ThinkingEvent(status=f"e{i}"))
+
+    release.set()
+    await bus.drain_record_tasks()
+
+    # All 8 persisted (none dropped), in the exact seq order they were emitted.
+    assert [r.event.status for r in recorded] == [f"e{i}" for i in range(8)]
+    assert [r.seq for r in recorded] == sorted(r.seq for r in recorded)
+
+
+@pytest.mark.asyncio
 async def test_emit_does_not_wait_for_persistence_before_live_delivery():
     release = asyncio.Event()
     recorded = []
 
-    async def record_event(record):
+    async def record_events(records):
         await release.wait()
-        recorded.append(record)
+        recorded.extend(records)
 
-    bus = SessionBus(session_id="sess-1", record_event=record_event)
+    bus = SessionBus(session_id="sess-1", record_events=record_events)
     queue = bus.subscribe()
 
     emit_task = asyncio.create_task(bus.emit(ThinkingEvent(status="live")))
@@ -284,11 +333,11 @@ async def test_registry_idle_remove_waits_for_event_persistence():
     release = asyncio.Event()
     recorded = []
 
-    async def record_event(record):
+    async def record_events(records):
         await release.wait()
-        recorded.append(record)
+        recorded.extend(records)
 
-    registry = BusRegistry(record_event=record_event)
+    registry = BusRegistry(record_events=record_events)
     bus = registry.get_or_create("sess-1")
     emit_task = asyncio.create_task(bus.emit(ThinkingEvent(status="persist-me")))
     await asyncio.sleep(0)

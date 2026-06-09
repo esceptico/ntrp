@@ -27,7 +27,13 @@ from ntrp.agent.types.events import (
     ToolInputStarted,
     ToolStarted,
 )
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, Role, ToolCallStreamDelta
+from ntrp.agent.types.llm import (
+    CompletionResponse,
+    FinishReason,
+    ReasoningContentDelta,
+    Role,
+    ToolCallStreamDelta,
+)
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
@@ -53,6 +59,13 @@ AgentEvent = (
 @dataclass
 class RunBudget:
     tool_calls: int = 0
+    # Cumulative output (completion) tokens across the whole run subtree — the
+    # same RunBudget instance is shared by the top agent and every spawned child
+    # (see core/spawner.py), so this is the turn's total spend. `total` is the
+    # optional hard ceiling; once spent reaches it, further LLM steps and spawns
+    # are denied.
+    output_tokens: int = 0
+    total: int | None = None
 
 
 class Agent:
@@ -121,12 +134,6 @@ class Agent:
         result_text = ""
         try:
             while True:
-                # Step-boundary pause: block here while paused (resumable),
-                # then drain so any message injected during the pause is
-                # picked up on resume. Cancellation interrupts the wait.
-                if self.hooks.wait_while_paused:
-                    await self.hooks.wait_while_paused()
-
                 await self._drain_pending(messages)
 
                 if self.max_iterations is not None and step >= self.max_iterations:
@@ -153,6 +160,14 @@ class Agent:
                     if response_message.tool_calls:
                         self._append_budget_denials(messages, response_message.tool_calls, reason)
                     yield self._result(result_text, reason, step)
+                    return
+
+                # Model hit its per-response max_tokens mid-generation. Tool calls in a
+                # truncated response are unreliable, and looping just re-truncates (a
+                # runaway). Surface the partial text and stop.
+                if self._last_response.choices[0].finish_reason == FinishReason.LENGTH:
+                    result_text = (response_message.content or "").strip()
+                    yield self._result(result_text, StopReason.MAX_OUTPUT_LENGTH, step)
                     return
 
                 if not response_message.tool_calls:
@@ -224,6 +239,8 @@ class Agent:
             return StopReason.MAX_WALL_TIME
         if self.max_cost is not None and self._current_cost() >= self.max_cost:
             return StopReason.MAX_COST
+        if self._budget.total is not None and self._budget.output_tokens >= self._budget.total:
+            return StopReason.MAX_TOKEN_BUDGET
         return None
 
     def _current_cost(self) -> float:
@@ -250,6 +267,8 @@ class Agent:
             return "Tool call denied: max wall-time budget exceeded."
         if reason == StopReason.MAX_COST:
             return "Tool call denied: max cost budget exceeded."
+        if reason == StopReason.MAX_TOKEN_BUDGET:
+            return f"Tool call denied: max output-token budget of {self._budget.total} exceeded."
         return f"Tool call denied: {reason.value}."
 
     async def _drain_pending(self, messages: list[dict]) -> None:
@@ -443,6 +462,7 @@ class Agent:
 
         self._last_response = response
         self._usage += response.usage
+        self._budget.output_tokens += response.usage.completion_tokens
         if self.cost_calculator:
             self._cost += self.cost_calculator(response)
         if reasoning_started:

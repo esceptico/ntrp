@@ -1,12 +1,14 @@
 import {
   apiWithConfig,
   type HistoryMessage,
+  type ServerEvent,
   type SessionRuntimeSnapshot,
 } from "../api";
 import { getState, setState } from "../store";
 import {
   clearReplayGapBlockForSession,
   lastEventSeqForSession,
+  rehydrateWorkflows,
   setEventCursorForSession,
 } from "../store/chat-stream";
 import {
@@ -33,6 +35,7 @@ import {
   type HistoryResponse,
 } from "../store/history-response";
 import { isForegroundRunStatus } from "../lib/runStatus";
+import { refreshChildAgents } from "./childAgents";
 
 export { historyMessagesToUi };
 
@@ -240,6 +243,20 @@ export async function refreshCachedActiveSessionHistories(
   await Promise.all(sessionIds.map((sessionId) => refreshCachedSessionHistory(sessionId, options)));
 }
 
+async function rehydrateSessionWorkflows(sessionId: string): Promise<void> {
+  try {
+    const { events } = await apiWithConfig<{ events: ServerEvent[] }>(
+      getState().config,
+      `/chat/${encodeURIComponent(sessionId)}/workflows`,
+    );
+    // A session switch may have landed while the fetch was in flight.
+    if (getState().currentSessionId !== sessionId) return;
+    if (events.length) rehydrateWorkflows(events);
+  } catch {
+    // Best-effort: if this fails the cards just won't rehydrate on reload.
+  }
+}
+
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
   const mode = options.mode ?? "replace";
@@ -300,6 +317,15 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
         messageCount: usage.message_count,
       });
     }
+    // The workflows (FleetView) domain is in-memory, built only from live SSE
+    // events, so a fresh transcript load leaves it empty and the cards collapse.
+    // Replay the persisted workflow events to rebuild it. Non-blocking so the
+    // transcript renders immediately; guarded against a session switch.
+    void rehydrateSessionWorkflows(sessionId);
+    // Same shape for the subagent roster: it's built from live events + a 5s
+    // poll, so a freshly-loaded session shows an empty roster until the first
+    // poll tick. Rehydrate it now (idempotent with the poll) to close that gap.
+    void refreshChildAgents(sessionId);
   }
   applyPendingHistoryToolResults(sessionId);
   if (mode === "replace") {

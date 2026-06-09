@@ -6,6 +6,7 @@ from typing import Literal
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import PROJECT_FILTER_UNSET, SessionStore
 from ntrp.core.compactor import compact_messages, compactable_range
+from ntrp.core.tool_result_files import purge_session_results
 from ntrp.events.sse import SessionActivityEvent, SessionCreatedEvent, SSEEvent
 from ntrp.logging import get_logger
 
@@ -387,6 +388,12 @@ class SessionService:
             until=until,
         )
 
+    async def messages_since(self, session_id: str, seq: int) -> list[dict]:
+        return await self.store.messages_since(session_id, seq)
+
+    async def recent_session_scopes(self, limit: int) -> list[dict]:
+        return await self.store.recent_session_scopes(limit)
+
     async def list_turns(self, session_id: str, limit: int = 100) -> list[dict]:
         return await self.store.list_session_turns(session_id, limit=limit)
 
@@ -496,7 +503,12 @@ class SessionService:
         return {"user_message": user_message, "reverted_count": reverted_count}
 
     async def permanently_delete(self, session_id: str) -> bool:
-        return await self.store.permanently_delete_session(session_id)
+        deleted = await self.store.permanently_delete_session(session_id)
+        if deleted:
+            # Drop the session's offloaded tool-result files too, so the store
+            # doesn't keep dead sessions' data around.
+            purge_session_results(session_id)
+        return deleted
 
     async def branch(
         self,

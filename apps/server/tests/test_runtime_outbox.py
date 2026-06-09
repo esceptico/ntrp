@@ -84,7 +84,7 @@ class _Indexer:
         self.index = _Index()
 
 
-def _runtime_outbox(indexer=None, memory_service=None):
+def _runtime_outbox(indexer=None, chat_connector=None):
     outbox_store = _OutboxStore()
     automation_store = _AutomationStore()
     scheduler = _Scheduler()
@@ -93,7 +93,7 @@ def _runtime_outbox(indexer=None, memory_service=None):
         automation_store=automation_store,
         scheduler=scheduler,
         indexer=indexer,
-        get_memory_service=lambda: memory_service,
+        get_chat_connector=lambda: chat_connector,
     )
     return runtime_outbox, outbox_store, automation_store, scheduler
 

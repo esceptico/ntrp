@@ -16,12 +16,10 @@ import {
   clearTodoOverrideApi,
   getChildAgentResultApi,
   getTodoOverrideApi,
-  listChildAgentsApi,
   pinToMemoryApi,
   sendToChildAgentApi,
   setTodoOverrideApi,
   type Automation,
-  type BackgroundTaskSummary,
   type TodoListItem,
   type TodoStatus,
 } from "../api";
@@ -35,7 +33,6 @@ import {
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import { getState, useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
-import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
 import {
   agentRunFromAutomation,
   agentRunFromBackgroundAgent,
@@ -44,10 +41,10 @@ import {
   parentSessionIdOf,
   resultSnippet,
 } from "../lib/agentRun";
-import { createSession, sendMessage, switchSession } from "../actions";
+import { createSession, refreshChildAgents, sendMessage, switchSession } from "../actions";
 import { useWorkflows } from "../hooks/useWorkflows";
 import { isActiveWorkflow } from "../store/workflow-domain";
-import { WorkflowPreviewRow } from "./workflow/WorkflowPreviewRow";
+import { ExpandableWorkflowCard } from "./workflow/WorkflowDetail";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunRow";
@@ -70,77 +67,24 @@ export const RIGHT_PANEL_BODY_WIDTH = 304;
 
 const RECENT_AGENT_LIMIT = 6;
 
-export function childAgentTaskToBackgroundSnapshot(
-  task: BackgroundTaskSummary,
-): BackgroundAgentSnapshot {
-  const status =
-    task.status === "completed" ||
-    task.status === "failed" ||
-    task.status === "cancelled" ||
-    task.status === "interrupted" ||
-    task.status === "cancel_requested"
-      ? task.status
-      : "running";
-  return {
-    taskId: task.child_run_id ?? task.task_id,
-    childSessionId: task.child_session_id ?? undefined,
-    command: task.command,
-    status,
-    detail: task.detail ?? undefined,
-    resultRef: task.result_ref ?? undefined,
-    parentToolCallId: task.parent_tool_call_id ?? undefined,
-    agentType: task.agent_type ?? undefined,
-    wait: task.wait ?? undefined,
-  };
-}
-
 function useChildAgentsPoll(sessionId: string | null): void {
-  const config = useStore((s) => s.config);
-  const setBackgroundAgentsForSession = useStore((s) => s.setBackgroundAgentsForSession);
-  const backgroundAgentsRefreshStarted = useStore((s) => s.backgroundAgentsRefreshStarted);
-  const backgroundAgentsRefreshFailed = useStore((s) => s.backgroundAgentsRefreshFailed);
-
+  // Live BackgroundTaskEvents already keep the roster current for the session
+  // being viewed; this poll is the fallback for the cases events don't cover
+  // (agents spawned in the parent while a child is open, terminal status missed
+  // while disconnected). Reconnect resync lives in reloadAllCollections.
   useEffect(() => {
     if (!sessionId) return;
-    let cancelled = false;
-    const tick = async () => {
-      backgroundAgentsRefreshStarted();
-      try {
-        const tasks = await listChildAgentsApi(config, sessionId);
-        if (!cancelled) {
-          setBackgroundAgentsForSession(
-            sessionId,
-            tasks.map(childAgentTaskToBackgroundSnapshot),
-          );
-        }
-      } catch (error) {
-        if (!cancelled) {
-          backgroundAgentsRefreshFailed(
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-      }
+    const tick = () => {
+      if (document.visibilityState === "visible") void refreshChildAgents(sessionId);
     };
-    void tick();
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void tick();
-    }, 5000);
-    const onVis = () => {
-      if (document.visibilityState === "visible") void tick();
-    };
-    document.addEventListener("visibilitychange", onVis);
+    void refreshChildAgents(sessionId);
+    const id = window.setInterval(tick, 5000);
+    document.addEventListener("visibilitychange", tick);
     return () => {
-      cancelled = true;
       window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVis);
+      document.removeEventListener("visibilitychange", tick);
     };
-  }, [
-    backgroundAgentsRefreshFailed,
-    backgroundAgentsRefreshStarted,
-    config,
-    sessionId,
-    setBackgroundAgentsForSession,
-  ]);
+  }, [sessionId]);
 }
 
 // Lazily fetch a one-line result preview for each terminal agent, once.
@@ -214,9 +158,6 @@ function SidebarAgentRow({
   const upsertBackgroundAgent = useStore((s) => s.upsertBackgroundAgent);
   const setDraft = useStore((s) => s.setDraft);
   const pushToast = useStore((s) => s.pushToast);
-  const projectId = useStore(
-    (s) => s.sessions.find((session) => session.session_id === agent.sessionId)?.project_id ?? null,
-  );
   // The server's `command` is a generic "Agent" placeholder until an async
   // labeler runs; the child session's own name (the task) is the better title.
   const childName = useStore((s) =>
@@ -267,7 +208,7 @@ function SidebarAgentRow({
           const text = await fetchResult();
           if (!text) return;
           try {
-            const outcome = await pinToMemoryApi(config, text, projectId);
+            const outcome = await pinToMemoryApi(config, text);
             pushToast({
               id: crypto.randomUUID(),
               title: outcome.written ? "Pinned to memory" : "Already in memory",
@@ -683,9 +624,21 @@ export function AgentRightSidebar() {
 
   useChildAgentsPoll(rosterSessionId);
 
+  const workflows = useWorkflows(rosterSessionId);
+  const dismissWorkflow = useStore((s) => s.dismissWorkflow);
+  // A workflow's leaf agents are spawned with parent_id = the workflow's tool
+  // call, so they share its parentToolCallId. They belong INSIDE the workflow
+  // (its drill-in), not the top-level roster.
+  const workflowParentIds = useMemo(
+    () => new Set(workflows.map((w) => w.parentToolCallId).filter(Boolean)),
+    [workflows],
+  );
+
   const agents = useMemo(() => {
     const all = Object.values(backgroundAgentRows).filter(
-      (agent) => agent.sessionId === rosterSessionId,
+      (agent) =>
+        agent.sessionId === rosterSessionId &&
+        !(agent.parentToolCallId && workflowParentIds.has(agent.parentToolCallId)),
     );
     const active = all
       .filter((agent) => isActiveAgentStatus(agent.status))
@@ -702,12 +655,10 @@ export function AgentRightSidebar() {
       if (current && !recent.includes(current)) recent.unshift(current);
     }
     return [...active, ...recent];
-  }, [backgroundAgentRows, rosterSessionId, inAgentSession, currentSessionId]);
+  }, [backgroundAgentRows, rosterSessionId, inAgentSession, currentSessionId, workflowParentIds]);
 
   const resultSnippets = useChildAgentResults(rosterSessionId, agents);
 
-  const setViewingWorkflow = useStore((s) => s.setViewingWorkflow);
-  const workflows = useWorkflows(rosterSessionId);
   const sortedWorkflows = useMemo(() => {
     const active = workflows.filter(isActiveWorkflow).sort((a, b) => b.updatedAt - a.updatedAt);
     const done = workflows
@@ -782,7 +733,7 @@ export function AgentRightSidebar() {
         animate={{ x: collapsed ? panelTranslateWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
         style={{ width: RIGHT_PANEL_BODY_WIDTH }}
-        className="surface-panel surface-radius-md absolute top-2 right-2 z-40 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden"
+        className="surface-panel surface-radius-md absolute top-2 bottom-2 right-2 z-40 flex flex-col overflow-hidden"
       >
         {/* Drag region height tuned so the "Active" label's vertical
             center sits at viewport y=25 — same eye-line as the fixed dots
@@ -795,8 +746,8 @@ export function AgentRightSidebar() {
             Active
           </span>
         </div>
-        <div className="flex min-h-0 flex-col">
-          <div className="min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollFadeTop />
             <div className="space-y-3">
               <AnimatePresence initial={false}>
@@ -881,16 +832,19 @@ export function AgentRightSidebar() {
                             scale: { duration: MOTION.fast },
                           }}
                         >
-                          <div className="px-1.5 py-1">
-                            <WorkflowPreviewRow
-                              workflow={wf}
-                              onOpen={() =>
-                                setViewingWorkflow({
-                                  workflowId: wf.workflowId,
-                                  sessionId: wf.sessionId,
-                                })
-                              }
-                            />
+                          <div className="group/wfrow relative py-0.5">
+                            <ExpandableWorkflowCard workflow={wf} />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                dismissWorkflow(wf.sessionId, wf.workflowId);
+                              }}
+                              title="Dismiss"
+                              className="absolute -right-1 -top-1 grid place-items-center w-5 h-5 rounded-full border border-line-soft bg-surface text-faint opacity-0 transition-opacity hover:text-bad group-hover/wfrow:opacity-100"
+                            >
+                              <X size={ICON.XS} strokeWidth={2} />
+                            </button>
                           </div>
                         </motion.div>
                       ))}

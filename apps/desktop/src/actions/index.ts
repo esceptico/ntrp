@@ -3,6 +3,7 @@
 // feature in sibling files.
 
 export { truncatePrompt } from "./_shared";
+export { refreshChildAgents } from "./childAgents";
 export {
   historyMessagesToUi,
   loadHistory,
@@ -36,8 +37,6 @@ export {
   cancelSubagent,
   cancelQueuedMessage,
   enqueueMessage,
-  pauseRun,
-  resumeRun,
   sendMessage,
   stopRun,
 } from "./messages";

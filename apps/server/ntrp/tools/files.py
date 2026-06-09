@@ -47,6 +47,21 @@ _OFFLOAD_READ_LIMIT = 100
 _DEFAULT_ENTRY_LIMIT = 200
 _DEFAULT_MATCH_LIMIT = 100
 _RG_TIMEOUT_SECONDS = 20
+# Searches respect ignore files (ripgrep's default) and additionally skip the
+# universal CPU sinks. ntrp used to pass --no-ignore, so every search walked
+# .git/node_modules/.venv/build AND the multi-GB tool-result store — one agent
+# grepping that in a loop pegs a core. Real harnesses (ripgrep default, Claude
+# Code's grep) respect ignores + exclude VCS; matching that keeps every search
+# bounded regardless of where the server's disk lives. The offload store is
+# excluded separately via an .ignore marker (see core/tool_result_files.py), so
+# even a search rooted AT the store skips it while an explicit single-file read
+# still works.
+_RG_EXCLUDE_GLOBS = (
+    "!**/.git/**",
+    "!**/node_modules/**",
+    "!**/.venv/**",
+    "!**/__pycache__/**",
+)
 
 
 def _session_cwd(execution: ToolExecution) -> str | None:
@@ -266,7 +281,9 @@ class FindFilesInput(BaseModel):
 
 
 def _find_files_with_rg(root: Path, args: FindFilesInput) -> list[dict]:
-    command = ["--files", "--color", "never", "--no-ignore", "--glob", args.pattern]
+    command = ["--files", "--color", "never", "--glob", args.pattern]
+    for glob in _RG_EXCLUDE_GLOBS:
+        command.extend(["--glob", glob])
     if args.include_hidden:
         command.append("--hidden")
 
@@ -356,8 +373,9 @@ def _search_text_with_rg(root: Path, args: SearchTextInput) -> list[dict]:
         "--color",
         "never",
         "--no-heading",
-        "--no-ignore",
     ]
+    for glob in _RG_EXCLUDE_GLOBS:
+        command.extend(["--glob", glob])
     if args.file_glob:
         command.extend(["--glob", args.file_glob])
     command.extend(["--", args.query, target])

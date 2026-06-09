@@ -9,7 +9,6 @@ from ntrp.automation.prompts import AUTOMATION_SUGGESTER_SYSTEM
 from ntrp.automation.triggers import Trigger, build_trigger
 from ntrp.constants import MAX_AUTOMATION_SUGGESTIONS
 from ntrp.logging import get_logger
-from ntrp.memory.models import Scope, ScopeKind
 
 _logger = get_logger(__name__)
 
@@ -54,15 +53,13 @@ class SuggestionSet(BaseModel):
     suggestions: list[SuggestionDraft]
 
 
-_USER_SCOPE = Scope(kind=ScopeKind.USER)
-_MAX_SUBJECTS = 30
-_MAX_CLAIMS = 40
 _MAX_SESSIONS = 20
+_MAX_MEMORY_RECORDS = 30
 
 
 class AutomationSuggester:
-    def __init__(self, *, memory, sessions, automations, cheap_llm, model):
-        self.memory = memory
+    def __init__(self, *, records, sessions, automations, cheap_llm, model):
+        self.records = records
         self.sessions = sessions
         self.automations = automations
         self.cheap_llm = cheap_llm
@@ -132,17 +129,9 @@ class AutomationSuggester:
     async def _gather(self) -> str:
         sections: list[str] = []
 
-        subjects = await self._memory_subjects()
-        if subjects:
-            sections.append("Memory subjects (subject — active claims):\n" + subjects)
-
-        claims = await self._recent_claims()
-        if claims:
-            sections.append("Recent active claims:\n" + claims)
-
-        lenses = self._active_lenses()
-        if lenses:
-            sections.append("Active lenses:\n" + lenses)
+        memory = await self._memory_records()
+        if memory:
+            sections.append("Memory (durable user facts):\n" + memory)
 
         chats = await self._recent_sessions()
         if chats:
@@ -160,29 +149,13 @@ class AutomationSuggester:
             return "No signal available."
         return "\n\n".join(sections)
 
-    async def _memory_subjects(self) -> str:
+    async def _memory_records(self) -> str:
         try:
-            rows = await self.memory.distinct_subjects(_USER_SCOPE)
+            records = await self.records.list(limit=_MAX_MEMORY_RECORDS)
         except Exception as e:
-            _logger.debug("gather distinct_subjects failed: %s", e)
+            _logger.debug("gather memory records failed: %s", e)
             return ""
-        return "\n".join(f"- {subject} ({count})" for subject, count in rows[:_MAX_SUBJECTS])
-
-    async def _recent_claims(self) -> str:
-        try:
-            items = await self.memory.query(scope=_USER_SCOPE, limit=_MAX_CLAIMS)
-        except Exception as e:
-            _logger.debug("gather query claims failed: %s", e)
-            return ""
-        return "\n".join(f"- {item.content}" for item in items)
-
-    def _active_lenses(self) -> str:
-        try:
-            lenses = self.memory.lens_files.list()
-        except Exception as e:
-            _logger.debug("gather lenses failed: %s", e)
-            return ""
-        return "\n".join(f"- {lens.name}" for lens in lenses)
+        return "\n".join(f"- [{r.kind}] {r.text}" for r in records)
 
     async def _recent_sessions(self) -> str:
         try:

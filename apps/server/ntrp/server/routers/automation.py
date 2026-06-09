@@ -1,7 +1,7 @@
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
@@ -186,16 +186,38 @@ async def _automation_event_stream(bus_registry: BusRegistry, after_seq: int | N
         bus.unsubscribe(queue)
 
 
+def _effective_after_seq(query_after_seq: int | None, last_event_id: str | None) -> int | None:
+    """Resume cursor from the query param OR the standard Last-Event-ID header
+    (re-sent by SSE clients like @microsoft/fetch-event-source on reconnect),
+    whichever is higher. A malformed header is ignored rather than failing the
+    reconnect — at worst the client replays from the query cursor / live."""
+    header_after_seq: int | None = None
+    if last_event_id is not None:
+        try:
+            parsed = int(last_event_id.strip())
+        except ValueError:
+            parsed = -1
+        if parsed >= 0:
+            header_after_seq = parsed
+    if query_after_seq is None:
+        return header_after_seq
+    if header_after_seq is None:
+        return query_after_seq
+    return max(query_after_seq, header_after_seq)
+
+
 @router.get("/automations/events")
 async def automation_events(
     runtime: Runtime = Depends(get_runtime),
     bus_registry: BusRegistry = Depends(get_bus_registry),
     after_seq: Annotated[int | None, Query(ge=0)] = None,
+    last_event_id: Annotated[str | None, Header()] = None,
 ):
+    effective_after_seq = _effective_after_seq(after_seq, last_event_id)
     session_service = getattr(runtime, "session_service", None)
     event_store = session_service.store if session_service else None
     return SSEStreamingResponse(
-        _automation_event_stream(bus_registry, after_seq=after_seq, event_store=event_store),
+        _automation_event_stream(bus_registry, after_seq=effective_after_seq, event_store=event_store),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -5,6 +5,7 @@ import {
   Brain,
   Copy,
   Eraser,
+  FolderPlus,
   GitBranch,
   MessageSquare,
   Monitor,
@@ -26,6 +27,7 @@ import { useStore } from "../../store";
 import {
   archiveSession,
   branchAtMessage,
+  createProject,
   createSession,
   loadHistory,
   renameSession,
@@ -46,7 +48,6 @@ export function useEntries(): CommandEntry[] {
   const config = useStore((s) => s.config);
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
-  const openArchive = useStore((s) => s.openArchive);
   const openMemory = useStore((s) => s.openMemory);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -72,6 +73,14 @@ export function useEntries(): CommandEntry[] {
       shortcut: "⌘N",
       run: () => createSession(),
       search: "new session create chat",
+    });
+    entries.push({
+      id: "suggested:new-project",
+      section: "suggested",
+      label: "New project",
+      icon: FolderPlus,
+      run: () => void createProject(),
+      search: "new project create folder group",
     });
     entries.push({
       id: "suggested:toggle-sidebar",
@@ -152,7 +161,7 @@ export function useEntries(): CommandEntry[] {
       section: "open",
       label: "Archived sessions",
       icon: Archive,
-      run: openArchive,
+      run: () => openSettings(null, "archive"),
       search: "archive archived",
     });
     entries.push({
@@ -305,7 +314,6 @@ export function useEntries(): CommandEntry[] {
     config,
     openSettings,
     openAutomations,
-    openArchive,
     openMemory,
     toggleSidebar,
     sidebarHidden,

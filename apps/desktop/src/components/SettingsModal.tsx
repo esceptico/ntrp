@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
+import { Archive, Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import { useStore } from "../store";
 import type { SettingsTabId } from "../store/types";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
@@ -12,6 +12,7 @@ import { ContextTab } from "./settings/ContextTab";
 import { MCPTab } from "./settings/mcp/MCPTab";
 import { ToolsTab } from "./settings/ToolsTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
+import { ArchiveTab } from "./settings/ArchiveTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
@@ -37,6 +38,7 @@ const TABS: Tab[] = [
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "mcp", label: "MCP servers", icon: Boxes },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "archive", label: "Archived", icon: Archive },
 ];
 
 const SETTINGS_TAB_IDS = TABS.map((t) => t.id);
@@ -62,11 +64,12 @@ export function SettingsModal() {
     void fetchServerConfig();
   }, [open]);
 
-  // Deep-link: when a caller passes a tab to openSettings, jump there as
-  // the modal opens. Only honored on open so manual tab switches aren't
-  // clobbered while the modal stays mounted.
+  // Deep-link: each time the modal opens, land on the requested tab (e.g.
+  // ⌘K → Archived) or fall back to Connection. Resetting on every open keeps
+  // a one-off deep-link from stickily hijacking the next normal open, while
+  // manual tab switches still persist while the modal stays mounted.
   useEffect(() => {
-    if (open && requestedTab) setActive(requestedTab);
+    if (open) setActive(requestedTab ?? "connection");
   }, [open, requestedTab]);
 
   function close() {
@@ -145,6 +148,7 @@ export function SettingsModal() {
               {active === "tools" && <ToolsTab />}
               {active === "mcp" && <MCPTab />}
               {active === "appearance" && <AppearanceTab />}
+              {active === "archive" && <ArchiveTab />}
             </TabPanels>
           </div>
         </div>

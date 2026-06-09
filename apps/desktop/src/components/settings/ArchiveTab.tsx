@@ -1,0 +1,180 @@
+import { useEffect, useMemo, useState } from "react";
+import { ArchiveRestore, Search, Trash2 } from "lucide-react";
+import clsx from "clsx";
+import { useStore } from "../../store";
+import {
+  fetchArchivedSessions,
+  permanentlyDeleteSession,
+  restoreArchivedSession,
+} from "../../actions";
+import type { ArchivedSession } from "../../api";
+import { useMutationState } from "../../lib/hooks";
+import { formatRelativePast } from "../../lib/format";
+import { ICON } from "../../lib/icons";
+
+export function ArchiveTab() {
+  const archived = useStore((s) => s.archivedSessions);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    void fetchArchivedSessions();
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!archived) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return archived;
+    return archived.filter((s) => (s.name ?? "untitled").toLowerCase().includes(q));
+  }, [archived, query]);
+
+  const archivedCount = archived?.length ?? 0;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="m-0 text-sm text-muted leading-[1.5]">
+          {archivedCount > 0
+            ? `${archivedCount} archived session${archivedCount === 1 ? "" : "s"}. Restore one to bring it back, or delete it for good.`
+            : "Sessions you archive show up here."}
+        </p>
+        {archivedCount > 0 && <SearchInput value={query} onChange={setQuery} />}
+      </div>
+
+      {filtered === null ? (
+        <Empty>Loading…</Empty>
+      ) : filtered.length === 0 ? (
+        <Empty>
+          {archived && archived.length > 0
+            ? "No matches."
+            : "Nothing here. Archived sessions will show up in this view."}
+        </Empty>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {filtered.map((s) => (
+            <ArchivedRow key={s.session_id} session={s} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ArchivedRow({ session }: { session: ArchivedSession }) {
+  const { busy: anyBusy, error, run } = useMutationState();
+  const [busyOp, setBusyOp] = useState<"restore" | "delete" | null>(null);
+
+  const trigger = async (op: "restore" | "delete", fn: () => Promise<void>) => {
+    if (anyBusy) return;
+    setBusyOp(op);
+    await run(fn);
+    setBusyOp(null);
+  };
+
+  const onRestore = () =>
+    void trigger("restore", () => restoreArchivedSession(session.session_id));
+  const onDelete = () => {
+    if (!confirm("Permanently delete this session? This cannot be undone.")) return;
+    void trigger("delete", () => permanentlyDeleteSession(session.session_id));
+  };
+
+  return (
+    <li className="app-row group flex items-center gap-3 px-3 py-2 rounded-[10px]">
+      <div className="min-w-0 flex-1">
+        <div className="text-base font-medium text-ink tracking-[-0.005em] truncate">
+          {session.name || "untitled"}
+        </div>
+        <div className="text-xs text-faint tabular-nums">
+          archived {formatRelativePast(session.archived_at)} ago · {session.message_count} msg
+          {session.message_count === 1 ? "" : "s"}
+        </div>
+        {error && (
+          <div className="mt-1 text-xs text-bad truncate" title={error}>
+            {error}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <RowAction
+          icon={<ArchiveRestore size={ICON.XS} strokeWidth={2} />}
+          label="Restore"
+          onClick={onRestore}
+          busy={busyOp === "restore"}
+        />
+        <RowAction
+          icon={<Trash2 size={ICON.XS} strokeWidth={2} />}
+          label="Delete"
+          onClick={onDelete}
+          busy={busyOp === "delete"}
+          danger
+        />
+      </div>
+    </li>
+  );
+}
+
+function RowAction({
+  icon,
+  label,
+  onClick,
+  busy,
+  danger,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  busy?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className={clsx(
+        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
+        busy
+          ? "text-faint cursor-wait"
+          : danger
+            ? "text-ink-soft hover:bg-bad-soft hover:text-bad"
+            : "text-ink-soft hover:bg-surface-soft hover:text-ink",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid place-items-center min-h-[200px] text-base italic text-muted">
+      {children}
+    </div>
+  );
+}
+
+function SearchInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative w-[200px] shrink-0">
+      <Search
+        size={ICON.XS}
+        strokeWidth={2}
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Filter…"
+        spellCheck={false}
+        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-muted outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
+      />
+    </div>
+  );
+}

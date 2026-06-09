@@ -23,6 +23,13 @@ from ntrp.agent.types.llm import (
 from ntrp.agent.types.usage import Usage
 
 
+@pytest.fixture(autouse=True)
+def isolate_raw_tool_result_blobs(monkeypatch, tmp_path):
+    import ntrp.core.raw_tool_results as raw_tool_results
+
+    monkeypatch.setattr(raw_tool_results, "RAW_TOOL_RESULTS_BASE", tmp_path / "raw-tool-results")
+
+
 def completion_response(content: str) -> CompletionResponse:
     """Wrap a JSON/string payload in the CompletionResponse shape the pipeline
     reads (response.choices[0].message.content)."""

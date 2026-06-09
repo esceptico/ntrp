@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import BASH_TIMEOUT
+from ntrp.constants import BASH_MAX_OUTPUT_CHARS, BASH_TIMEOUT
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolPolicy, ToolScope
@@ -139,6 +139,11 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = BA
 
         if result.returncode != 0:
             output += f"\n[exit code: {result.returncode}]"
+
+        if len(output) > BASH_MAX_OUTPUT_CHARS:
+            half = BASH_MAX_OUTPUT_CHARS // 2
+            omitted = len(output) - BASH_MAX_OUTPUT_CHARS
+            output = f"{output[:half]}\n\n[... {omitted} chars elided ...]\n\n{output[-half:]}"
 
         return output if output else "(no output)"
 

@@ -92,9 +92,10 @@ class EventType(StrEnum):
     SESSION_ACTIVITY = "session_activity"
 
 
-# Token-level delta events are ephemeral transport: their cumulative content
-# is recoverable from terminal events (TEXT_MESSAGE_END.content,
-# TOOL_CALL_RESULT.content), so they are streamed live and held in the
+# Token-level delta events are ephemeral transport: their cumulative text is
+# recoverable from terminal events. Oversized tool-result raw bodies may be
+# recovered through TOOL_CALL_RESULT.raw_ref rather than TOOL_CALL_RESULT.content,
+# so token deltas are streamed live and held in the
 # in-memory replay buffer but NOT persisted to the durable session_events
 # table. Every mature streaming server (Letta, Vercel AI SDK, OpenAI,
 # LangGraph) keeps per-token deltas ephemeral and persists only the final
@@ -286,6 +287,10 @@ class ToolCallResultEvent(SSEEvent):
     parent_id: str | None = None
     kind: str = "tool"
     is_error: bool = False
+    raw_ref: str | None = None
+    content_sha256: str | None = None
+    content_bytes: int | None = None
+    retention_class: str | None = None
 
 
 # ─── Reasoning (AG-UI Start / Content / End + outer Start/End) ───────
@@ -432,6 +437,7 @@ class TaskFinishedEvent(SSEEvent):
     depth: int = 0
     workflow_id: str | None = None
     phase: str | None = None
+    tool_count: int | None = None
 
 
 @dataclass(frozen=True)

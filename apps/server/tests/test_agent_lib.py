@@ -17,6 +17,7 @@ from ntrp.agent import (
     Message,
     Result,
     Role,
+    RunBudget,
     SharedLedger,
     SpawnContext,
     StopReason,
@@ -463,6 +464,32 @@ async def test_max_iterations_stops_with_reason():
 
 
 @pytest.mark.asyncio
+async def test_truncated_response_stops_instead_of_looping_on_tool_calls():
+    # A model that hits its per-response max_tokens (finish_reason=length) WITH
+    # pending tool calls must STOP, not execute the truncated calls and loop. Only
+    # one response is queued, so a loop would exhaust FakeLLM and fail the test.
+    truncated = CompletionResponse(
+        choices=[
+            Choice(
+                message=Message(
+                    role=Role.ASSISTANT, content="partial", tool_calls=[_tc("c1", "t", {})], reasoning_content=None
+                ),
+                finish_reason="length",
+            )
+        ],
+        usage=Usage(prompt_tokens=10, completion_tokens=5),
+        model="test",
+    )
+    llm = FakeLLM([truncated])
+    executor = FakeExecutor({"t": ToolResult(content="r", preview="r")})
+    agent = _make_agent(llm, executor)
+    result = await agent.run(_msgs())
+    assert result.stop_reason == StopReason.MAX_OUTPUT_LENGTH
+    assert llm.call_count == 1  # did not loop
+    assert executor.call_log == []  # did not execute the truncated tool call
+
+
+@pytest.mark.asyncio
 async def test_max_depth_stops_before_calling_llm():
     llm = FakeLLM([_response(text="unreached")])
     agent = _make_agent(llm, FakeExecutor({}), max_depth=2, current_depth=2)
@@ -591,6 +618,39 @@ async def test_max_cost_stops_after_tool_dispatch_when_shared_cost_rolls_up():
     assert result.stop_reason == StopReason.MAX_COST
     assert llm.call_count == 1
     assert executor.call_log == [("t", {})]
+
+
+@pytest.mark.asyncio
+async def test_max_token_budget_stops_after_model_response_before_tool_dispatch():
+    llm = FakeLLM([_response(tool_calls=[_tc("c1", "t", {})], usage=Usage(completion_tokens=100))])
+    executor = FakeExecutor({"t": ToolResult(content="r", preview="r")})
+    agent = _make_agent(llm, executor, budget=RunBudget(total=50))
+
+    messages = _msgs()
+    result = await agent.run(messages)
+
+    assert result.stop_reason == StopReason.MAX_TOKEN_BUDGET
+    assert executor.call_log == []  # stopped before dispatch
+    assert [m for m in messages if m["role"] == "tool"] == [
+        {
+            "role": "tool",
+            "tool_call_id": "c1",
+            "content": "Tool call denied: max output-token budget of 50 exceeded.",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_output_tokens_accumulate_into_shared_budget_across_agents():
+    # The same RunBudget instance is shared by the top agent and every spawned
+    # child (core/spawner.py), so accumulating at the single chokepoint makes it
+    # the cumulative subtree spend.
+    budget = RunBudget()
+    for _ in range(2):
+        llm = FakeLLM([_response(text="done", usage=Usage(completion_tokens=40))])
+        agent = _make_agent(llm, FakeExecutor({}), budget=budget)
+        await agent.run(_msgs())
+    assert budget.output_tokens == 80
 
 
 # ============================================================
