@@ -23,6 +23,10 @@ class SkillMeta:
     source: str | None = None
     version: str | None = None
     reviewed_at: str | None = None
+    # "skill" = a markdown playbook the agent reads + follows itself.
+    # "workflow" = a runnable Orchestra preset; its dir holds a workflow.py the
+    # `workflow` tool executes verbatim. Same registry, two flavors.
+    kind: str = "skill"
 
 
 @dataclass
@@ -135,6 +139,7 @@ class SkillRegistry:
                 source=_optional_string(frontmatter.get("source")),
                 version=_optional_string(frontmatter.get("version")),
                 reviewed_at=reviewed_at,
+                kind="workflow" if frontmatter.get("kind") == "workflow" else "skill",
             )
 
     def list_all(self) -> list[SkillMeta]:
@@ -156,6 +161,18 @@ class SkillRegistry:
             return None
         _, body = parsed
         return body.strip()
+
+    def load_workflow_script(self, name: str) -> str | None:
+        """The Orchestra script for a workflow-kind preset (its workflow.py),
+        loaded verbatim. None if the name isn't a workflow preset or has no
+        script file."""
+        meta = self._skills.get(name)
+        if not meta or meta.kind != "workflow":
+            return None
+        try:
+            return (meta.path / "workflow.py").read_text()
+        except OSError:
+            return None
 
     def render_skill_xml(self, name: str, args: str = "", *, args_label: str = "ARGUMENTS") -> str | None:
         meta = self.get(name)

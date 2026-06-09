@@ -14,12 +14,24 @@ from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 
 
 class WorkflowInput(BaseModel):
-    script: str = Field(
-        description="Python orchestration script. Uses await agent()/parallel()/pipeline(), "
-        "phase(), log(), `args`, `json`, and `return`s a result. See the tool description."
+    script: str | None = Field(
+        default=None,
+        description="Python orchestration script (inline). Uses await agent()/parallel()/pipeline(), "
+        "phase(), log(), `args`, `json`, and `return`s a result. Omit when running a saved preset by `name`.",
+    )
+    name: str | None = Field(
+        default=None,
+        description="Name of a saved workflow preset to run (e.g. 'audit'). Pass its parameters via `args`. "
+        "Omit when passing an inline `script`. Use one of `script` or `name`, not both.",
     )
     title: str = Field(default="workflow", description="Short label for this run, shown in the UI.")
     args: dict = Field(default_factory=dict, description="Values exposed to the script as `args`.")
+
+
+class SaveWorkflowInput(BaseModel):
+    name: str = Field(description="Preset name: lowercase letters/digits/hyphens, starts with a letter (e.g. 'memory-audit').")
+    description: str = Field(description="One line — when to use this preset and what `args` it expects.")
+    script: str = Field(description="The full Python workflow script to save (the same script you'd pass to `workflow`).")
 
 
 def _jsonable(value: Any) -> Any:
@@ -46,8 +58,35 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
     if ctx.spawn_fn is None:
         return ToolResult(content="Error: spawn capability not available", preview="No spawn", is_error=True)
 
+    # Resolve the script: an inline `script`, or a saved preset by `name`.
+    script = args.script
+    if args.name:
+        if script:
+            return ToolResult(
+                content="Pass either `script` (inline) or `name` (a saved preset), not both.",
+                preview="Conflicting inputs",
+                is_error=True,
+            )
+        registry = ctx.services.get("skill_registry")
+        if registry is None:
+            return ToolResult(content="Error: skill registry not available.", preview="Unavailable", is_error=True)
+        script = registry.load_workflow_script(args.name)
+        if script is None:
+            presets = ", ".join(m.name for m in registry.list_all() if m.kind == "workflow")
+            return ToolResult(
+                content=f"No workflow preset named '{args.name}'. Saved presets: {presets or '(none)'}.",
+                preview="Unknown preset",
+                is_error=True,
+            )
+    if not script:
+        return ToolResult(
+            content="Pass a `script` (inline Python) or a saved preset `name`.",
+            preview="No script",
+            is_error=True,
+        )
+
     workflow_id = f"wf-{uuid4().hex[:10]}"
-    title = args.title or "workflow"
+    title = args.title or args.name or "workflow"
     emit = ctx.io.emit
     if emit:
         await emit(
@@ -76,7 +115,7 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
             )
 
     try:
-        result = await run_script(orchestra, args.script, args.args)
+        result = await run_script(orchestra, script, args.args)
     except asyncio.CancelledError:
         # User stopped the run. CancelledError is a BaseException, so without this
         # it would skip both excepts below and never settle the workflow row —
@@ -97,7 +136,7 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
         await _finish("failed", str(exc)[:200])
         # Trimmed to the script's own frames with rebased line numbers, so the
         # model sees the line it wrote — the whole point of a self-correcting tool.
-        tb = format_script_traceback(exc, args.script)
+        tb = format_script_traceback(exc, script)
         return ToolResult(
             content=f"Workflow raised {type(exc).__name__}: {exc}\n\n{tb}\nFix the script and call again.",
             preview="Workflow failed",
@@ -113,9 +152,20 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
 
 
 WORKFLOW_DESCRIPTION = """\
-Run a custom multi-agent workflow you author on the fly — a harness built for this task.
-Pass a Python `script` that orchestrates subagents and returns a result. Each agent runs
-in its own context window; you compose them.
+Run a multi-agent workflow: either an inline `script` you author, or a saved preset by `name`.
+Each agent runs in its own context window; you compose them.
+
+PREFER A PRESET when one fits the task's shape — run it by `name` (pass parameters via `args`)
+instead of hand-writing a script: `audit` (find -> verify -> rank issues over a target),
+`investigate` (parallel readers -> a cited answer), `panel` (diverge into N takes -> judge ->
+pick). e.g. workflow(name="audit", args={"target": "apps/server", "depth": "normal"}). Save any
+good run as a reusable preset with the save_workflow tool.
+
+When you DO author a script, keep each agent prompt TERSE and push specifics into `args` or let
+agents DISCOVER them — do NOT hardcode long lists of ids/paths/PR numbers inline (it bloats
+tokens and defeats caching). Pass args={"prs": [941, 956]} and read args["prs"]; don't paste the
+numbers into every prompt. Pass `model` to an agent only when a cheaper/stronger configured tier
+clearly fits a step (cheap finders, strong synthesis); default omits it and inherits the run's model.
 
 Each agent inherits ALL your tools by default (slack, gmail, files, web, etc.) — so for a
 research/search task you just write agent("...") and it can use them. Give each agent a
@@ -171,9 +221,33 @@ workflow_tool = tool(
     display_name="Workflow",
     description=WORKFLOW_DESCRIPTION,
     input_model=WorkflowInput,
-    policy=ToolPolicy(action=ToolAction.EXECUTE, scope=ToolScope.INTERNAL),
+    policy=ToolPolicy(action=ToolAction.EXECUTE, scope=ToolScope.INTERNAL, permissions=frozenset({"skill_registry"})),
     execute=run_workflow,
     # "workflow" (not "agent") so the desktop renders it as a workflow card from
     # the tool call itself — independent of the streamed workflow-domain events.
     kind="workflow",
+)
+
+
+async def run_save_workflow(execution: ToolExecution, args: SaveWorkflowInput) -> ToolResult:
+    svc = execution.ctx.services.get("skill_service")
+    if svc is None:
+        return ToolResult(content="Error: skill service not available.", preview="Unavailable", is_error=True)
+    try:
+        meta = svc.save_workflow(args.name, args.description, args.script)
+    except ValueError as exc:
+        return ToolResult(content=f"Could not save preset: {exc}", preview="Save failed", is_error=True)
+    return ToolResult(
+        content=f"Saved workflow preset '{meta.name}'. Run it with workflow(name=\"{meta.name}\", args={{...}}).",
+        preview=f"Saved preset {meta.name}",
+    )
+
+
+save_workflow_tool = tool(
+    display_name="Save Workflow",
+    description="Save a workflow script as a reusable preset (a workflow-skill at ~/.ntrp/skills/<name>/). "
+    "Afterwards run it with workflow(name=...). Use when the user asks to save/remember a workflow they liked.",
+    input_model=SaveWorkflowInput,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, permissions=frozenset({"skill_service"})),
+    execute=run_save_workflow,
 )

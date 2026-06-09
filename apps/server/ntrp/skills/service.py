@@ -2,6 +2,8 @@ import re
 from datetime import date
 from pathlib import Path
 
+import yaml
+
 from ntrp.settings import NTRP_DIR
 from ntrp.skills.installer import install_from_github
 from ntrp.skills.registry import SkillMeta, SkillRegistry
@@ -70,10 +72,21 @@ class SkillService:
         self._registry.reload(get_skills_dirs())
         return self._registry.get(name)
 
-    def create(self, name: str, description: str, body: str, *, source: str | None = None) -> SkillMeta:
+    def create(
+        self,
+        name: str,
+        description: str,
+        body: str,
+        *,
+        source: str | None = None,
+        kind: str = "skill",
+        workflow_script: str | None = None,
+    ) -> SkillMeta:
         """Write a new global skill (~/.ntrp/skills/<name>/SKILL.md) from
         inline content. Used by the propose-skill flow when the user accepts
-        a proposal card. Raises ValueError on invalid input or name conflict.
+        a proposal card. With kind="workflow" + workflow_script, also writes a
+        runnable workflow.py preset alongside it. Raises ValueError on invalid
+        input or name conflict.
         """
         if not _SKILL_NAME_RE.fullmatch(name):
             raise ValueError(
@@ -84,6 +97,8 @@ class SkillService:
             raise ValueError("Skill description is required.")
         if not body.strip():
             raise ValueError("Skill body is required.")
+        if kind == "workflow" and not (workflow_script and workflow_script.strip()):
+            raise ValueError("A workflow preset requires a non-empty script.")
         if self._registry.get(name) is not None:
             raise ValueError(f"Skill '{name}' already exists.")
 
@@ -93,17 +108,22 @@ class SkillService:
         # Strip a stray leading/trailing newline so the file's shape stays
         # consistent regardless of how the model formatted its JSON value.
         normalized_body = body.strip()
-        source_value = source.strip().replace("\r", " ").replace("\n", " ") if source else ""
-        source_line = f"source: {source_value}\n" if source_value else ""
-        content = (
-            "---\n"
-            f"name: {name}\n"
-            f"description: {description.strip()}\n"
-            f"{source_line}"
-            "---\n\n"
-            f"{normalized_body}\n"
-        )
+        # Emit frontmatter through a real YAML serializer, not f-strings: a
+        # description with a colon (`Audit a target: find, verify`) or other YAML
+        # metacharacters would otherwise produce an unparseable SKILL.md that
+        # silently fails to reload.
+        front: dict[str, str] = {"name": name, "description": description.strip()}
+        if kind != "skill":
+            front["kind"] = kind
+        if source:
+            front["source"] = source.strip().replace("\r", " ").replace("\n", " ")
+        fm = yaml.safe_dump(front, sort_keys=False, allow_unicode=True).strip()
+        content = f"---\n{fm}\n---\n\n{normalized_body}\n"
         skill_md.write_text(content)
+        if kind == "workflow":
+            # Validated non-blank above; normalize like the body so a saved
+            # preset round-trips to the same script it was created from.
+            (target_dir / "workflow.py").write_text(workflow_script.strip() + "\n")
 
         self._registry.reload(get_skills_dirs())
         meta = self._registry.get(name)
@@ -111,6 +131,19 @@ class SkillService:
             # Shouldn't happen — we just wrote the file. Surface clearly.
             raise RuntimeError(f"Failed to load created skill '{name}'.")
         return meta
+
+    def save_workflow(self, name: str, description: str, script: str) -> SkillMeta:
+        """Persist an Orchestra script as a reusable global workflow preset
+        (~/.ntrp/skills/<name>/ with kind: workflow + workflow.py). Afterwards
+        it runs via the `workflow` tool's `name` arg. create() validates the
+        script is non-empty."""
+        body = (
+            f"Workflow preset — run it with the `workflow` tool: "
+            f'`workflow(name="{name}", args={{...}})`.\n\n{description.strip()}'
+        )
+        return self.create(
+            name, description, body, source="workflow-preset", kind="workflow", workflow_script=script
+        )
 
     def remove(self, name: str) -> bool:
         return self._registry.remove(name)

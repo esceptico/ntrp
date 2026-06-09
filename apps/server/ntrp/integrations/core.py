@@ -40,7 +40,6 @@ from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
-from ntrp.tools.workflow import workflow_tool
 from ntrp.tools.sessions import (
     create_session_tool,
     list_recent_sessions_tool,
@@ -49,6 +48,7 @@ from ntrp.tools.sessions import (
 )
 from ntrp.tools.time import current_time_tool
 from ntrp.tools.todos import update_todos_tool
+from ntrp.tools.workflow import save_workflow_tool, workflow_tool
 
 SYSTEM = Integration(
     id="_system",
@@ -64,6 +64,7 @@ SYSTEM = Integration(
         "current_time": current_time_tool,
         "research": research_tool,
         "workflow": workflow_tool,
+        "save_workflow": save_workflow_tool,
         "background": background_tool,
         "load_tools": load_tools_tool,
     },
