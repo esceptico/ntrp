@@ -171,7 +171,7 @@ workflow_tool = tool(
     display_name="Workflow",
     description=WORKFLOW_DESCRIPTION,
     input_model=WorkflowInput,
-    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+    policy=ToolPolicy(action=ToolAction.EXECUTE, scope=ToolScope.INTERNAL),
     execute=run_workflow,
     # "workflow" (not "agent") so the desktop renders it as a workflow card from
     # the tool call itself — independent of the streamed workflow-domain events.

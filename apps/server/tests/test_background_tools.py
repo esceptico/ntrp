@@ -85,6 +85,17 @@ def test_background_tool_is_agent_kind():
     assert background_module.background_tool.kind == "agent"
 
 
+def test_background_registry_reservations_count_toward_cap():
+    registry = BackgroundTaskRegistry(session_id="test")
+
+    assert registry.reserve("task-1", command="Agent", limit=1)
+    assert registry.pending_count == 1
+    assert not registry.reserve("task-2", command="Agent", limit=1)
+
+    registry.release("task-1")
+    assert registry.pending_count == 0
+
+
 @pytest.mark.asyncio
 async def test_send_to_agent_delivers_to_running_agent():
     registry = BackgroundTaskRegistry(session_id="test")

@@ -134,7 +134,7 @@ class Config(BaseSettings):
     tool_overrides: dict[str, ToolOverrideDecision] = Field(default_factory=dict)
 
     # Agent
-    max_depth: int = AGENT_MAX_DEPTH
+    max_depth: int = Field(default=AGENT_MAX_DEPTH, gt=0)
     agent_max_iterations: int | None = AGENT_MAX_ITERATIONS
     agent_max_tool_calls: int | None = AGENT_MAX_TOOL_CALLS
     agent_max_wall_time_seconds: float | None = AGENT_MAX_WALL_TIME_SECONDS

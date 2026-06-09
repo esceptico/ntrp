@@ -24,7 +24,7 @@ from ntrp.server.schemas import (
 from ntrp.server.sse_stream import keepalive_chunk, live_records, reset_chunk
 from ntrp.server.sse_stream import replay_records as iter_replay_records
 from ntrp.server.state import RunRegistry, RunStatus
-from ntrp.services.chat import ChatIdempotencyConflict, submit_chat_message
+from ntrp.services.chat import ChatIdempotencyConflict, ChatSessionNotFound, submit_chat_message
 
 router = APIRouter(tags=["chat"])
 
@@ -312,7 +312,7 @@ async def chat_message(
         raise HTTPException(status_code=400, detail="session_id required")
 
     images = [img.model_dump() for img in request.images] if request.images else None
-    context = request.context or None
+    context = [ctx.model_dump(exclude_none=True) for ctx in request.context] if request.context else None
 
     chat_model = await runtime.resolve_session_chat_model(session_id)
     try:
@@ -332,6 +332,11 @@ async def chat_message(
         raise HTTPException(
             status_code=409,
             detail={"code": e.code, "message": e.message, "client_id": e.client_id},
+        ) from e
+    except ChatSessionNotFound as e:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": e.code, "message": e.message, "session_id": e.session_id},
         ) from e
     except Exception as e:
         debug_id = f"err_{int(time.time() * 1000)}"

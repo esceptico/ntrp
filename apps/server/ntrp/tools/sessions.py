@@ -34,6 +34,10 @@ _DEFAULT_MESSAGE_LIMIT = 50
 _MAX_MESSAGE_LIMIT = 200
 
 
+def _active_project_id(execution: ToolExecution) -> str | None:
+    return execution.ctx.session_state.project_id
+
+
 class ListRecentSessionsInput(BaseModel):
     limit: int = Field(
         default=_DEFAULT_LIST_LIMIT,
@@ -56,7 +60,7 @@ class SearchTranscriptsInput(BaseModel):
     query: str = Field(
         description=(
             "Full-text query across chat transcripts (FTS5 syntax: bare words "
-            "are AND-ed; quote \"exact phrases\"). Searches the readable message "
+            'are AND-ed; quote "exact phrases"). Searches the readable message '
             "text, not JSON. Returns ranked snippets with session_id + seq so "
             "you can read_session(around_seq=...) for context."
         )
@@ -142,8 +146,7 @@ class ReadSessionInput(BaseModel):
     around_seq: int | None = Field(
         default=None,
         description=(
-            "Center the page on this seq (e.g. a hit's seq from "
-            "search_transcripts) to read the surrounding context."
+            "Center the page on this seq (e.g. a hit's seq from search_transcripts) to read the surrounding context."
         ),
     )
 
@@ -209,21 +212,19 @@ def _format_when(raw) -> str:
 # --- Executors ---
 
 
-async def list_recent_sessions(
-    execution: ToolExecution, args: ListRecentSessionsInput
-) -> ToolResult:
+async def list_recent_sessions(execution: ToolExecution, args: ListRecentSessionsInput) -> ToolResult:
     svc = execution.ctx.services.get("session")
     if svc is None:
         return ToolResult(content="Session service unavailable.", preview="Unavailable", is_error=True)
 
-    sessions = await svc.list_sessions(limit=args.limit * 2 if args.within_days else args.limit)
+    sessions = await svc.list_sessions(
+        limit=args.limit * 2 if args.within_days else args.limit,
+        project_id=_active_project_id(execution),
+    )
 
     if args.within_days is not None:
         cutoff = datetime.now(UTC) - timedelta(days=args.within_days)
-        sessions = [
-            s for s in sessions
-            if (when := _parse_when(s.get("last_activity"))) is not None and when >= cutoff
-        ]
+        sessions = [s for s in sessions if (when := _parse_when(s.get("last_activity"))) is not None and when >= cutoff]
     sessions = sessions[: args.limit]
 
     if not sessions:
@@ -249,7 +250,12 @@ async def create_session(execution: ToolExecution, args: CreateSessionInput) -> 
         return ToolResult(content="Session service unavailable.", preview="Unavailable", is_error=True)
 
     origin = execution.ctx.run.loop_task_id
-    state = await svc.provision(name=args.name, session_type=args.session_type, origin_automation_id=origin)
+    state = await svc.provision(
+        name=args.name,
+        session_type=args.session_type,
+        origin_automation_id=origin,
+        project_id=_active_project_id(execution),
+    )
 
     lines = [
         f"Created {args.session_type}: {state.name}",
@@ -283,6 +289,7 @@ async def read_session(execution: ToolExecution, args: ReadSessionInput) -> Tool
             after_seq=args.after_seq,
             before_seq=args.before_seq,
             around_seq=args.around_seq,
+            project_id=_active_project_id(execution),
         )
     except Exception as e:
         return ToolResult(
@@ -358,6 +365,7 @@ async def search_transcripts(execution: ToolExecution, args: SearchTranscriptsIn
             offset=args.offset,
             session_id=args.session_id,
             since=since,
+            project_id=_active_project_id(execution),
         )
     except Exception as e:
         return ToolResult(

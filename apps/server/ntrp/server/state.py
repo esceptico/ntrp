@@ -56,6 +56,7 @@ class RunState:
     cancelled: bool = False
     cancel_terminal_emitted: bool = False
     backgrounded: bool = False
+    accepting_injections: bool = True
     drain_task: asyncio.Task | None = None
     stop_reason: str | None = None
     # When the run was triggered by a loop, this is the loop's automation
@@ -101,12 +102,15 @@ class RunState:
     def pending_injection_count(self) -> int:
         return len(self.inject_queue)
 
-    def queue_injection(self, message: dict) -> None:
+    def queue_injection(self, message: dict) -> bool:
+        if not self.accepting_injections or self.cancelled or self.backgrounded:
+            return False
         client_id = message.get("client_id")
         if isinstance(client_id, str) and any(entry.get("client_id") == client_id for entry in self.inject_queue):
-            return
+            return True
         self.inject_queue.append(message)
         self.updated_at = datetime.now(UTC)
+        return True
 
     def queue_injections(self, messages: list[dict]) -> None:
         if not messages:
@@ -131,6 +135,10 @@ class RunState:
         self.updated_at = datetime.now(UTC)
         return batch
 
+    def close_injections(self) -> list[dict]:
+        self.accepting_injections = False
+        return self.drain_injections()
+
     def set_skip_approvals(self, value: bool) -> int:
         self.approval_controls.skip_approvals = value
         if not value:
@@ -139,12 +147,14 @@ class RunState:
         for tool_id, future in list(self.pending_approvals.items()):
             if future.done():
                 continue
-            future.set_result({
-                "type": "tool_response",
-                "tool_id": tool_id,
-                "result": "",
-                "approved": True,
-            })
+            future.set_result(
+                {
+                    "type": "tool_response",
+                    "tool_id": tool_id,
+                    "result": "",
+                    "approved": True,
+                }
+            )
             resolved += 1
         return resolved
 
@@ -176,6 +186,7 @@ class RunRegistry:
     def __init__(self):
         self._runs: dict[str, RunState] = {}
         self._active_by_session: dict[str, str] = {}
+        self._session_locks: dict[str, asyncio.Lock] = {}
         self._bg_registries: dict[str, BackgroundTaskRegistry] = {}
         # `(session_id, client_id) -> (run_id, registered_at)`. A duplicate
         # `/chat/message` POST within OTID_DEDUP_TTL returns the existing
@@ -188,6 +199,13 @@ class RunRegistry:
         if session_id not in self._bg_registries:
             self._bg_registries[session_id] = BackgroundTaskRegistry(session_id=session_id)
         return self._bg_registries[session_id]
+
+    def session_lock(self, session_id: str) -> asyncio.Lock:
+        lock = self._session_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._session_locks[session_id] = lock
+        return lock
 
     def cancel_subtree(self, child_session_id: str | None) -> list[tuple[str, str]]:
         """Cancel every background agent spawned within child_session_id and,
@@ -252,7 +270,7 @@ class RunRegistry:
 
     def get_accepting_run(self, session_id: str) -> RunState | None:
         run = self.get_active_run(session_id)
-        if run and not run.cancelled and not run.backgrounded:
+        if run and run.accepting_injections and not run.cancelled and not run.backgrounded:
             return run
         return None
 
@@ -285,6 +303,7 @@ class RunRegistry:
         run = self._runs.get(run_id)
         if run:
             run.status = RunStatus.COMPLETED
+            run.accepting_injections = False
             run.updated_at = datetime.now(UTC)
             if self._active_by_session.get(run.session_id) == run_id:
                 self._active_by_session.pop(run.session_id, None)
@@ -296,6 +315,7 @@ class RunRegistry:
             return {"found": False, "cancel_requested": False}
 
         run.cancelled = True
+        run.accepting_injections = False
         run.updated_at = datetime.now(UTC)
         is_current = self._active_by_session.get(run.session_id) == run_id
 
@@ -355,6 +375,7 @@ class RunRegistry:
 
         run.cancelled = True
         run.cancel_terminal_emitted = True
+        run.accepting_injections = False
         run.status = RunStatus.CANCELLED
         run.updated_at = datetime.now(UTC)
         if self._active_by_session.get(run.session_id) == run_id:
@@ -367,11 +388,13 @@ class RunRegistry:
         for run in self._runs.values():
             if run.status in (RunStatus.PENDING, RunStatus.RUNNING) and run.task and not run.task.done():
                 run.cancelled = True
+                run.accepting_injections = False
                 run.status = RunStatus.CANCELLED
                 run.task.cancel()
                 tasks.append(run.task)
             if run.drain_task and not run.drain_task.done():
                 run.cancelled = True
+                run.accepting_injections = False
                 run.drain_task.cancel()
                 tasks.append(run.drain_task)
             for handle in run.subagents.values():
@@ -390,6 +413,7 @@ class RunRegistry:
         run = self._runs.get(run_id)
         if run:
             run.status = RunStatus.ERROR
+            run.accepting_injections = False
             run.updated_at = datetime.now(UTC)
             if self._active_by_session.get(run.session_id) == run_id:
                 self._active_by_session.pop(run.session_id, None)
@@ -415,6 +439,7 @@ class RunRegistry:
             has_runs = any(r.session_id == session_id for r in self._runs.values())
             if not has_runs:
                 self._bg_registries.pop(session_id, None)
+                self._session_locks.pop(session_id, None)
 
         return len(to_remove)
 

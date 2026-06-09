@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from ntrp.core.content import ContextContent
 from ntrp.tools.core.types import ToolOverrideDecision
 
 # --- Chat / run ---
@@ -15,7 +16,7 @@ class ImageBlock(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field("", max_length=100_000)
     images: list[ImageBlock] = Field(default_factory=list)
-    context: list[dict] = Field(default_factory=list)
+    context: list[ContextContent] = Field(default_factory=list)
     skip_approvals: bool = False
     session_id: str | None = None
     client_id: str | None = None
@@ -399,7 +400,7 @@ class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
     research_model: str | None = None
     memory_model: str | None = None
-    max_depth: int | None = None
+    max_depth: int | None = Field(default=None, gt=0)
     reasoning_model: str | None = None
     reasoning_effort: str | None = None
     compression_threshold: float | None = None

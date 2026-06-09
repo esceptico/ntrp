@@ -61,6 +61,14 @@ class ChatIdempotencyConflict(Exception):
         self.message = "A different chat request already used this client_id."
 
 
+class ChatSessionNotFound(Exception):
+    def __init__(self, session_id: str):
+        super().__init__("session_not_found")
+        self.session_id = session_id
+        self.code = "session_not_found"
+        self.message = f"Session {session_id!r} was not found."
+
+
 def _chat_request_hash(
     *,
     session_id: str,
@@ -574,7 +582,7 @@ async def prepare_chat(
     if session_id:
         session_data = await deps.session_service.load(session_id)
         if not session_data:
-            session_data = SessionData(deps.session_service.create(chat_model=deps.chat_model), [])
+            raise ChatSessionNotFound(session_id)
     else:
         session_data = await _resolve_session(deps)
     session_state = session_data.state
@@ -755,6 +763,37 @@ async def submit_chat_message(
     client_id: str | None = None,
     session_service: SessionService | None = None,
 ) -> dict[str, str]:
+    load_session = getattr(session_service, "load", None)
+    if load_session is not None and await load_session(session_id) is None:
+        raise ChatSessionNotFound(session_id)
+    async with run_registry.session_lock(session_id):
+        return await _submit_chat_message_locked(
+            run_registry,
+            build_deps,
+            buses,
+            message=message,
+            session_id=session_id,
+            skip_approvals=skip_approvals,
+            images=images,
+            context=context,
+            client_id=client_id,
+            session_service=session_service,
+        )
+
+
+async def _submit_chat_message_locked(
+    run_registry: RunRegistry,
+    build_deps: Callable[[], ChatDeps],
+    buses: BusRegistry,
+    *,
+    message: str,
+    session_id: str,
+    skip_approvals: bool | None = False,
+    images: list[dict] | None = None,
+    context: list[dict] | None = None,
+    client_id: str | None = None,
+    session_service: SessionService | None = None,
+) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
     is_meta_client = _is_meta_client_id(client_id)
     request_hash = _chat_request_hash(
@@ -802,7 +841,10 @@ async def submit_chat_message(
             entry["client_id"] = client_id
             if is_meta_client:
                 entry["is_meta"] = True
-        if client_id and session_service:
+        queued = active_run.queue_injection(entry)
+        if not queued:
+            active_run = None
+        elif client_id and session_service:
             try:
                 await _record_queued_message(
                     session_service,
@@ -822,13 +864,14 @@ async def submit_chat_message(
                     await session_service.mark_chat_queued_message_cancelled(client_id)
                 except Exception:
                     _logger.warning("Failed to cancel queued chat message after enqueue failure", exc_info=True)
+                active_run.cancel_injection(client_id)
                 raise
-        if loop_task_id and not active_run.loop_task_id:
-            active_run.loop_task_id = loop_task_id
-        active_run.queue_injection(entry)
-        if client_id:
-            run_registry.register_otid(session_id, client_id, active_run.run_id)
-        return {"run_id": active_run.run_id, "session_id": session_id, "status": "queued"}
+        if active_run is not None:
+            if loop_task_id and not active_run.loop_task_id:
+                active_run.loop_task_id = loop_task_id
+            if client_id:
+                run_registry.register_otid(session_id, client_id, active_run.run_id)
+            return {"run_id": active_run.run_id, "session_id": session_id, "status": "queued"}
 
     deps = build_deps()
     cursor_service = session_service or deps.session_service
@@ -891,6 +934,21 @@ async def submit_chat_message(
             except Exception:
                 _logger.warning("Failed to mark chat idempotency error after pre-task setup failure", exc_info=True)
         raise
+    if ctx.run.cancelled:
+        ctx.run.accepting_injections = False
+        await bus.emit(RunCancelledEvent(run_id=ctx.run.run_id))
+        run_registry.finish_cancelled(ctx.run.run_id)
+        await _record_run_status(
+            deps.session_service,
+            ctx.run.run_id,
+            RunStatus.CANCELLED.value,
+            stop_reason="cancelled",
+            last_seq=bus.next_seq - 1,
+        )
+        await _update_run_client_idempotency(deps.session_service, ctx.run, RunStatus.CANCELLED.value)
+        if client_id:
+            run_registry.register_otid(session_id, client_id, ctx.run.run_id)
+        return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id, "status": "cancelled"}
     task = asyncio.create_task(run_chat(ctx, bus, buses))
     ctx.run.task = task
     _install_cancel_fallback(ctx.run, bus, run_registry, task)
@@ -1529,11 +1587,11 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
     finally:
         if not run.backgrounded:
             if run.cancelled:
-                run.drain_injections()
+                run.close_injections()
                 run.usage = tracker.usage
                 run_finished = True
             else:
-                pending_messages = run.drain_injections()
+                pending_messages = run.close_injections()
                 if pending_messages:
                     # Emit ingestion events for any client-stamped entries so the
                     # frontend queue UI clears, then absorb them into history.

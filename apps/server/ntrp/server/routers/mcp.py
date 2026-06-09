@@ -368,6 +368,9 @@ async def remove_mcp_server(
         raise HTTPException(status_code=500, detail=str(e))
 
     # Clean up OAuth tokens if any
-    clear_tokens(name)
+    try:
+        clear_tokens(name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     return {"status": "removed", "name": name}

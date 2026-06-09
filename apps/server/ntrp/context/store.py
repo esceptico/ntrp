@@ -1314,6 +1314,13 @@ class SessionStore:
         # cache of the compacted model context. Rewrites update known rows
         # and append new ones, but must not delete raw pre-compaction rows.
         if not messages:
+            if self._search_index is not None:
+                rows = await self.conn.execute_fetchall(
+                    "SELECT seq, role FROM session_messages WHERE session_id = ?",
+                    (session_id,),
+                )
+                for row in rows:
+                    self._schedule_transcript_index_update(session_id, int(row["seq"]), str(row["role"] or ""), "")
             await self.conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
             await self.conn.execute("DELETE FROM session_turns WHERE session_id = ?", (session_id,))
             return
@@ -1337,6 +1344,7 @@ class SessionStore:
             search_text = self._flatten_message_text(msg)
 
             if message_id in existing:
+                seq = existing[message_id]
                 await self.conn.execute(
                     """
                     UPDATE session_messages
@@ -1345,7 +1353,9 @@ class SessionStore:
                     """,
                     (role, message_json, client_id, created_at, search_text, session_id, message_id),
                 )
+                self._schedule_transcript_index_update(session_id, seq, role, search_text)
             else:
+                seq = next_seq
                 await self.conn.execute(
                     """
                     INSERT INTO session_messages
@@ -1355,19 +1365,33 @@ class SessionStore:
                     (session_id, message_id, next_seq, role, message_json, client_id, created_at, search_text),
                 )
                 # Semantic index for hybrid transcript search. Fire-and-forget so
-                # a slow embed never blocks message persistence; new rows only.
-                if self._search_index is not None and search_text.strip():
-                    asyncio.create_task(
-                        self._search_index.upsert(
-                            source="transcript",
-                            source_id=f"{session_id}:{next_seq}",
-                            title=f"{role} @ {session_id}",
-                            content=search_text,
-                            metadata={"session_id": session_id, "seq": next_seq, "role": role},
-                        )
-                    )
+                # a slow embed never blocks message persistence.
+                self._schedule_transcript_index_update(session_id, seq, role, search_text)
                 next_seq += 1
         await self._rebuild_session_turns(session_id)
+
+    def _schedule_transcript_index_update(self, session_id: str, seq: int, role: str, search_text: str) -> None:
+        index = self._search_index
+        if index is None:
+            return
+
+        async def _update() -> None:
+            source_id = f"{session_id}:{seq}"
+            try:
+                if search_text.strip():
+                    await index.upsert(
+                        source="transcript",
+                        source_id=source_id,
+                        title=f"{role} @ {session_id}",
+                        content=search_text,
+                        metadata={"session_id": session_id, "seq": seq, "role": role},
+                    )
+                else:
+                    await index.delete("transcript", source_id)
+            except Exception:
+                _logger.warning("Failed to update transcript semantic index", exc_info=True)
+
+        asyncio.create_task(_update())
 
     def _message_row_payload(self, row: aiosqlite.Row) -> dict:
         return {
@@ -2798,7 +2822,16 @@ class SessionStore:
         around_seq: int | None = None,
         before_seq: int | None = None,
         after_seq: int | None = None,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
     ) -> dict:
+        if project_id is not PROJECT_FILTER_UNSET and not await self._session_matches_project(session_id, project_id):
+            return {
+                "messages": [],
+                "has_more_before": False,
+                "has_more_after": False,
+                "before": None,
+                "after": None,
+            }
         await self._ensure_session_messages(session_id)
         limit = max(1, min(limit, 250))
 
@@ -2942,6 +2975,7 @@ class SessionStore:
         session_id: str | None = None,
         since: str | None = None,
         until: str | None = None,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
     ) -> dict:
         """Hybrid search across transcript messages: FTS (BM25) fused with the
         semantic index via RRF when a SearchIndex is attached, FTS-only otherwise.
@@ -2970,6 +3004,12 @@ class SessionStore:
         if until is not None:
             where.append("m.created_at <= ?")
             params.append(until)
+        if project_id is not PROJECT_FILTER_UNSET:
+            if project_id is None:
+                where.append("s.project_id IS NULL")
+            else:
+                where.append("s.project_id = ?")
+                params.append(project_id)
 
         # FTS-only paginates directly in SQL (LIMIT limit+1 OFFSET offset — one
         # extra row signals a further page). Hybrid over-fetches a larger pool
@@ -3006,7 +3046,14 @@ class SessionStore:
             return {"hits": hits, "has_more": has_more}
 
         return await self._hybrid_search_messages(
-            q, fts_rows, limit=limit, offset=offset, session_id=session_id
+            q,
+            fts_rows,
+            limit=limit,
+            offset=offset,
+            session_id=session_id,
+            since=since,
+            until=until,
+            project_id=project_id,
         )
 
     @staticmethod
@@ -3028,6 +3075,9 @@ class SessionStore:
         limit: int,
         offset: int,
         session_id: str | None,
+        since: str | None,
+        until: str | None,
+        project_id: str | None | object,
     ) -> dict:
         """Fuse the FTS ranking with the vector index via RRF, keyed on
         (session_id, seq) so the two separate databases bridge in Python."""
@@ -3035,9 +3085,7 @@ class SessionStore:
         from ntrp.search.retrieval import rrf_merge
 
         index = self._search_index
-        fts_ranked: list[tuple[tuple[str, int], float]] = [
-            ((r["session_id"], r["seq"]), 1.0) for r in fts_rows
-        ]
+        fts_ranked: list[tuple[tuple[str, int], float]] = [((r["session_id"], r["seq"]), 1.0) for r in fts_rows]
 
         vec_ranked: list[tuple[tuple[str, int], float]] = []
         try:
@@ -3054,7 +3102,17 @@ class SessionStore:
                     continue
                 if session_id is not None and meta["session_id"] != session_id:
                     continue
-                vec_ranked.append(((meta["session_id"], int(meta["seq"])), score))
+                key = (meta["session_id"], int(meta["seq"]))
+                if not await self._message_matches_search_scope(
+                    key[0],
+                    key[1],
+                    since=since,
+                    until=until,
+                    project_id=project_id,
+                    indexed_content=item.content if item else None,
+                ):
+                    continue
+                vec_ranked.append((key, score))
         except Exception:
             _logger.warning("transcript vector search failed; FTS-only fallback", exc_info=True)
 
@@ -3071,12 +3129,70 @@ class SessionStore:
             if row is not None:
                 hits.append(self._search_hit(row))
             else:
-                hydrated = await self._hydrate_message_hit(key[0], key[1])
+                hydrated = await self._hydrate_message_hit(
+                    key[0], key[1], since=since, until=until, project_id=project_id
+                )
                 if hydrated is not None:
                     hits.append(hydrated)
         return {"hits": hits, "has_more": has_more}
 
-    async def _hydrate_message_hit(self, session_id: str, seq: int) -> dict | None:
+    async def _message_matches_search_scope(
+        self,
+        session_id: str,
+        seq: int,
+        *,
+        since: str | None,
+        until: str | None,
+        project_id: str | None | object,
+        indexed_content: str | None = None,
+    ) -> bool:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT m.created_at AS created_at, m.search_text AS search_text, s.project_id AS project_id
+            FROM session_messages m
+            LEFT JOIN sessions s ON s.session_id = m.session_id
+            WHERE m.session_id = ? AND m.seq = ?
+            LIMIT 1
+            """,
+            (session_id, seq),
+        )
+        if not rows:
+            return False
+        row = rows[0]
+        if since is not None and row["created_at"] < since:
+            return False
+        if until is not None and row["created_at"] > until:
+            return False
+        if project_id is not PROJECT_FILTER_UNSET and row["project_id"] != project_id:
+            return False
+        if indexed_content is not None and (row["search_text"] or "").strip() != indexed_content.strip():
+            return False
+        return True
+
+    async def _session_matches_project(self, session_id: str, project_id: str | None | object) -> bool:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT project_id FROM sessions WHERE session_id = ? LIMIT 1",
+            (session_id,),
+        )
+        return bool(rows) and rows[0]["project_id"] == project_id
+
+    async def _hydrate_message_hit(
+        self,
+        session_id: str,
+        seq: int,
+        *,
+        since: str | None = None,
+        until: str | None = None,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
+    ) -> dict | None:
+        if not await self._message_matches_search_scope(
+            session_id,
+            seq,
+            since=since,
+            until=until,
+            project_id=project_id,
+        ):
+            return None
         rows = await self.read_conn.execute_fetchall(
             """
             SELECT m.session_id AS session_id, s.name AS session_name,

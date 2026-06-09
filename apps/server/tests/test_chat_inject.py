@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -357,6 +358,11 @@ def test_chat_request_accepts_client_id():
 def test_chat_request_client_id_optional():
     req = ChatRequest(message="hi")
     assert req.client_id is None
+
+
+def test_chat_request_rejects_malformed_context_block():
+    with pytest.raises(ValidationError):
+        ChatRequest(message="hi", context=[{"type": "context", "content": "missing content_type"}])
 
 
 @pytest.mark.asyncio
@@ -814,6 +820,148 @@ async def test_active_run_auto_message_resolves_pending_approval():
         "result": "",
         "approved": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_messages_share_one_top_level_run(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+
+    class FakeSessionService:
+        store = _EmptyEventStore()
+
+        async def load(self, session_id=None):
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            return SessionData(state=state, messages=[])
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    async def hold_run(ctx, bus, buses):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(chat_service, "run_chat", hold_run)
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=FakeSessionService(),
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+
+    try:
+        first, second = await asyncio.gather(
+            chat_service.submit_chat_message(
+                registry, lambda: deps, BusRegistry(), message="first", session_id="sess-1"
+            ),
+            chat_service.submit_chat_message(
+                registry, lambda: deps, BusRegistry(), message="second", session_id="sess-1"
+            ),
+        )
+        run = registry.get_run(first["run_id"])
+
+        assert first["run_id"] == second["run_id"]
+        assert run is not None
+        assert len([r for r in registry.list_active_runs() if r.session_id == "sess-1"]) == 1
+        assert run.messages[-1]["content"] == "first"
+        assert run.inject_queue == [{"role": "user", "content": "second"}]
+    finally:
+        for run in registry.list_active_runs():
+            if run.task:
+                run.task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await run.task
+
+
+@pytest.mark.asyncio
+async def test_submit_cancelled_during_setup_does_not_start_task(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+
+    class FakeSessionService:
+        store = _EmptyEventStore()
+
+        async def load(self, session_id=None):
+            state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
+            return SessionData(state=state, messages=[])
+
+        async def record_chat_run_started(self, run_id, session_id, metadata=None):
+            return None
+
+        async def record_chat_run_status(self, run_id, status, **kwargs):
+            return None
+
+        async def save_progress(self, session_state, messages):
+            active = registry.get_active_run(session_state.session_id)
+            assert active is not None
+            registry.cancel_run(active.run_id)
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    async def fail_if_started(ctx, bus, buses):
+        raise AssertionError("cancelled setup must not start run_chat")
+
+    monkeypatch.setattr(chat_service, "run_chat", fail_if_started)
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=FakeSessionService(),
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+
+    result = await chat_service.submit_chat_message(
+        registry, lambda: deps, BusRegistry(), message="hi", session_id="sess-1"
+    )
+    run = registry.get_run(result["run_id"])
+
+    assert result["status"] == "cancelled"
+    assert run is not None
+    assert run.task is None
+    assert run.status == RunStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_closed_run_is_not_accepting_for_final_drain_window():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    run.queue_injection({"role": "user", "content": "queued"})
+
+    assert run.close_injections() == [{"role": "user", "content": "queued"}]
+    assert run.queue_injection({"role": "user", "content": "too late"}) is False
+    assert registry.get_accepting_run("sess-1") is None
+
+
+@pytest.mark.asyncio
+async def test_submit_missing_session_is_rejected_before_new_session(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    class MissingSessionService:
+        async def load(self, session_id=None):
+            return None
+
+    with pytest.raises(chat_service.ChatSessionNotFound):
+        await chat_service.submit_chat_message(
+            RunRegistry(),
+            lambda: None,
+            BusRegistry(),
+            message="hi",
+            session_id="stale",
+            session_service=MissingSessionService(),
+        )
 
 
 def _drain_factory(bus: SessionBus, run: RunState):

@@ -33,6 +33,7 @@ from ntrp.tools.core.types import ApprovalInfo, ToolAction, ToolOverrideDecision
 from ntrp.tools.discover import discover_user_tools
 from ntrp.tools.executor import ToolExecutor
 from ntrp.tools.todos import update_todos_tool
+from ntrp.tools.workflow import workflow_tool
 
 READ_INTERNAL_POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL)
 WRITE_INTERNAL_APPROVAL_POLICY = ToolPolicy(
@@ -83,6 +84,10 @@ def test_all_registered_tools_have_policy():
     executor = ToolExecutor()
     for name, tool_obj in executor.registry.tools.items():
         assert isinstance(tool_obj.policy, ToolPolicy), name
+
+
+def test_workflow_tool_is_execute_policy():
+    assert workflow_tool.policy.action == ToolAction.EXECUTE
 
 
 def test_tool_overrides_hide_deny_and_patch_approval_policy():
@@ -200,6 +205,7 @@ async def test_tool_override_ask_with_ui_connected_still_requires_approval():
 @pytest.mark.asyncio
 async def test_tool_override_deny_blocks_in_headless_run():
     """DENY is enforced upstream (registry.execute), independent of skip_approvals."""
+
     async def handler(execution, args):
         return ToolResult(content="should not run")
 
@@ -811,6 +817,35 @@ async def test_ntrp_tool_executor_policy_offload_false_keeps_large_result_inline
     assert result.content == large_content
     assert result.preview == "large"
     assert not result.is_error
+
+
+@pytest.mark.asyncio
+async def test_ntrp_tool_executor_rejects_registered_tool_outside_run_allowlist():
+    called = False
+
+    async def hidden(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+        nonlocal called
+        called = True
+        return ToolResult(content="secret", preview="secret")
+
+    registry = ToolRegistry()
+    registry.register(
+        "hidden",
+        tool(
+            description="Hidden tool.",
+            execute=hidden,
+            policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+        ),
+    )
+    ctx = _make_tool_context(registry)
+    ctx.run.allowed_tool_names = {"visible"}
+    executor = NtrpToolExecutor(ToolExecutor().with_registry(registry), ctx)
+
+    result = await executor.execute("hidden", {}, "call-1")
+
+    assert result.is_error
+    assert result.preview == "Tool not allowed"
+    assert called is False
 
 
 @pytest.mark.asyncio

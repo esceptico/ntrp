@@ -922,7 +922,13 @@ def create_spawn_fn(
 
         # Horizontal fan-out guard: cap concurrent background agents per session
         # so a runaway loop can't spawn unbounded detached agents.
-        if len(registry.list_pending()) >= AGENT_MAX_CONCURRENT:
+        reserved = registry.reserve(
+            task_id,
+            command=label,
+            limit=AGENT_MAX_CONCURRENT,
+            child_session_id=child_state.session_id if has_child_session else None,
+        )
+        if not reserved:
             return SpawnResult(
                 text=(
                     f"Not started — already at the limit of {AGENT_MAX_CONCURRENT} concurrent "
@@ -1029,17 +1035,21 @@ def create_spawn_fn(
                 if child_io_close is not None:
                     await child_io_close()
 
-        await registry.record_started(
-            task_id=task_id,
-            command=label,
-            parent_run_id=calling_ctx.run.run_id,
-            parent_tool_call_id=parent_id,
-            child_session_id=child_state.session_id if has_child_session else None,
-            agent_type=resolved_agent_type,
-            wait=should_wait,
-        )
-        bg_task = asyncio.create_task(_run_background())
-        registry.register(task_id, bg_task, command=label)
+        try:
+            await registry.record_started(
+                task_id=task_id,
+                command=label,
+                parent_run_id=calling_ctx.run.run_id,
+                parent_tool_call_id=parent_id,
+                child_session_id=child_state.session_id if has_child_session else None,
+                agent_type=resolved_agent_type,
+                wait=should_wait,
+            )
+            bg_task = asyncio.create_task(_run_background())
+            registry.register(task_id, bg_task, command=label)
+        except BaseException:
+            registry.release(task_id)
+            raise
 
         if calling_ctx.io.emit:
             await calling_ctx.io.emit(

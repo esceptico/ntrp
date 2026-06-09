@@ -23,13 +23,20 @@ async def store(tmp_path: Path):
     await conn.close()
 
 
-def _state(session_id: str, name: str | None = None) -> SessionState:
-    return SessionState(session_id=session_id, started_at=datetime.now(UTC), name=name)
+def _state(session_id: str, name: str | None = None, project_id: str | None = None) -> SessionState:
+    return SessionState(session_id=session_id, started_at=datetime.now(UTC), name=name, project_id=project_id)
 
 
-async def _seed(store: SessionStore, session_id: str, texts: list[str], *, name: str | None = None):
+async def _seed(
+    store: SessionStore,
+    session_id: str,
+    texts: list[str],
+    *,
+    name: str | None = None,
+    project_id: str | None = None,
+):
     msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": t} for i, t in enumerate(texts)]
-    await store.save_session(_state(session_id, name=name), msgs)
+    await store.save_session(_state(session_id, name=name, project_id=project_id), msgs)
 
 
 @pytest.mark.asyncio
@@ -58,6 +65,32 @@ async def test_search_scoped_to_session(store: SessionStore):
     scoped = await store.search_messages("keyword", session_id="s2")
     assert len(scoped["hits"]) == 1
     assert scoped["hits"][0]["session_id"] == "s2"
+
+
+@pytest.mark.asyncio
+async def test_search_scoped_to_project(store: SessionStore):
+    project_a = await store.create_project(name="A")
+    project_b = await store.create_project(name="B")
+    await _seed(store, "s1", ["shared keyword here"], project_id=project_a["project_id"])
+    await _seed(store, "s2", ["shared keyword also here"], project_id=project_b["project_id"])
+
+    scoped = await store.search_messages("keyword", project_id=project_a["project_id"])
+
+    assert len(scoped["hits"]) == 1
+    assert scoped["hits"][0]["session_id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_list_session_messages_scoped_to_project(store: SessionStore):
+    project_a = await store.create_project(name="A")
+    project_b = await store.create_project(name="B")
+    await _seed(store, "s1", ["project private"], project_id=project_a["project_id"])
+
+    wrong = await store.list_session_messages("s1", project_id=project_b["project_id"])
+    right = await store.list_session_messages("s1", project_id=project_a["project_id"])
+
+    assert wrong["messages"] == []
+    assert len(right["messages"]) == 1
 
 
 @pytest.mark.asyncio

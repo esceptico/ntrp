@@ -344,7 +344,9 @@ class SessionService:
             _logger.warning("Failed to clear todo override: %s", e)
             return False
 
-    async def list_sessions(self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET) -> list[dict]:
+    async def list_sessions(
+        self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET
+    ) -> list[dict]:
         return await self.store.list_sessions(limit=limit, project_id=project_id)
 
     async def list_messages(
@@ -357,6 +359,7 @@ class SessionService:
         around_seq: int | None = None,
         before_seq: int | None = None,
         after_seq: int | None = None,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
     ) -> dict:
         return await self.store.list_session_messages(
             session_id,
@@ -367,6 +370,7 @@ class SessionService:
             around_seq=around_seq,
             before_seq=before_seq,
             after_seq=after_seq,
+            project_id=project_id,
         )
 
     async def search_messages(
@@ -378,6 +382,7 @@ class SessionService:
         session_id: str | None = None,
         since: str | None = None,
         until: str | None = None,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
     ) -> dict:
         return await self.store.search_messages(
             query,
@@ -386,6 +391,7 @@ class SessionService:
             session_id=session_id,
             since=since,
             until=until,
+            project_id=project_id,
         )
 
     async def messages_since(self, session_id: str, seq: int) -> list[dict]:

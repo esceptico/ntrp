@@ -1,9 +1,11 @@
 import pytest
+from pydantic import ValidationError
 
 from ntrp.config import Config
 from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.server.runtime.core import Runtime
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
+from ntrp.server.schemas import UpdateConfigRequest
 
 
 class _Integrations:
@@ -31,6 +33,16 @@ async def _noop_reset():
 
 async def _noop_sync_mcp(_config=None):
     return None
+
+
+def test_config_rejects_non_positive_max_depth():
+    with pytest.raises(ValidationError):
+        Config(memory=False, max_depth=0)
+
+
+def test_update_config_request_rejects_non_positive_max_depth():
+    with pytest.raises(ValidationError):
+        UpdateConfigRequest(max_depth=0)
 
 
 @pytest.mark.asyncio

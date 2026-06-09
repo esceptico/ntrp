@@ -32,18 +32,25 @@ class _StubSessionService:
     def __init__(self, sessions: list[dict], messages: dict[str, list[dict]] | None = None):
         self._sessions = sessions
         self._messages = messages or {}
+        self.calls: list[tuple[str, dict]] = []
 
-    async def list_sessions(self, limit: int = 20) -> list[dict]:
+    async def list_sessions(self, limit: int = 20, **kwargs) -> list[dict]:
+        self.calls.append(("list_sessions", kwargs))
         return list(self._sessions[:limit])
 
     async def list_messages(self, session_id: str, limit: int = 100, **kwargs) -> dict:
+        self.calls.append(("list_messages", kwargs))
         msgs = self._messages.get(session_id, [])
         return {"messages": list(msgs[:limit])}
 
+    async def search_messages(self, query: str, **kwargs) -> dict:
+        self.calls.append(("search_messages", kwargs))
+        return {"hits": [], "has_more": False}
 
-def _make_execution(services: dict | None = None) -> ToolExecution:
+
+def _make_execution(services: dict | None = None, *, project_id: str | None = None) -> ToolExecution:
     ctx = ToolContext(
-        session_state=SessionState(session_id="cur", started_at=datetime.now(UTC)),
+        session_state=SessionState(session_id="cur", started_at=datetime.now(UTC), project_id=project_id),
         registry=ToolRegistry(),
         run=RunContext(run_id="run-1"),
         io=IOBridge(),
@@ -86,6 +93,23 @@ async def test_list_recent_sessions_returns_formatted_list():
 
 
 @pytest.mark.asyncio
+async def test_session_tools_pass_active_project_scope():
+    service = _StubSessionService(
+        sessions=[
+            {"session_id": "s1", "name": "Scoped", "last_activity": datetime.now(UTC).isoformat(), "message_count": 1}
+        ],
+        messages={"s1": [{"seq": 0, "role": "user", "message": {"role": "user", "content": "hi"}}]},
+    )
+    execution = _make_execution(services={"session": service}, project_id="proj-1")
+
+    await list_recent_sessions(execution, ListRecentSessionsInput())
+    await read_session(execution, ReadSessionInput(session_id="s1"))
+
+    assert ("list_sessions", {"project_id": "proj-1"}) in service.calls
+    assert any(name == "list_messages" and kwargs.get("project_id") == "proj-1" for name, kwargs in service.calls)
+
+
+@pytest.mark.asyncio
 async def test_list_recent_sessions_filters_by_within_days():
     now = datetime.now(UTC)
     service = _StubSessionService(
@@ -106,9 +130,7 @@ async def test_list_recent_sessions_filters_by_within_days():
     )
     execution = _make_execution(services={"session": service})
 
-    result = await list_recent_sessions(
-        execution, ListRecentSessionsInput(limit=20, within_days=7)
-    )
+    result = await list_recent_sessions(execution, ListRecentSessionsInput(limit=20, within_days=7))
 
     assert "recent" in result.content
     assert "old" not in result.content
@@ -138,9 +160,7 @@ async def test_read_session_truncates_long_content():
     )
     execution = _make_execution(services={"session": service})
 
-    result = await read_session(
-        execution, ReadSessionInput(session_id="s1", content_chars=100)
-    )
+    result = await read_session(execution, ReadSessionInput(session_id="s1", content_chars=100))
 
     assert not result.is_error
     assert "[user]" in result.content
@@ -165,9 +185,7 @@ async def test_read_session_role_filter():
     )
     execution = _make_execution(services={"session": service})
 
-    result = await read_session(
-        execution, ReadSessionInput(session_id="s1", role_filter="user")
-    )
+    result = await read_session(execution, ReadSessionInput(session_id="s1", role_filter="user"))
 
     assert "[user]" in result.content
     assert "[assistant]" not in result.content
@@ -236,9 +254,7 @@ async def test_create_session_chat_type_when_requested():
     svc = _CapturingSessionService()
     execution = _execution_with_loop({"session": svc})
 
-    result = await create_session(
-        execution, CreateSessionInput(name="adhoc", session_type="chat")
-    )
+    result = await create_session(execution, CreateSessionInput(name="adhoc", session_type="chat"))
 
     assert not result.is_error
     assert svc.created[0].session_type == "chat"

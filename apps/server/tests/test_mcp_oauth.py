@@ -1,4 +1,5 @@
 import json
+import stat
 import time
 
 import pytest
@@ -44,6 +45,21 @@ def test_metadata_roundtrip(oauth_dir):
     meta = storage.get_metadata()
     assert meta is not None
     assert str(meta.token_endpoint) == TOKEN_ENDPOINT
+
+
+def test_token_storage_rejects_path_traversal_server_name(oauth_dir):
+    with pytest.raises(ValueError):
+        MCPTokenStorage("../outside")
+
+
+async def test_token_storage_uses_private_permissions(oauth_dir):
+    from mcp.shared.auth import OAuthToken
+
+    storage = MCPTokenStorage("langsmith")
+    await storage.set_tokens(OAuthToken(access_token="tok", token_type="Bearer"))
+
+    assert stat.S_IMODE(oauth_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE((oauth_dir / "langsmith.json").stat().st_mode) == 0o600
 
 
 def test_provider_preloads_token_endpoint(oauth_dir):

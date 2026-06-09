@@ -55,6 +55,13 @@ class NtrpToolExecutor:
                 preview="Unknown tool",
             )
 
+        if self._ctx.run.allowed_tool_names is not None and name not in self._ctx.run.allowed_tool_names:
+            return ToolResult(
+                content=f"Tool {name!r} is not available in this run. Use only tools exposed in the system prompt.",
+                preview="Tool not allowed",
+                is_error=True,
+            )
+
         if (
             self._ctx.run.deferred_tools_enabled
             and is_deferred_tool(name, self._executor.registry)

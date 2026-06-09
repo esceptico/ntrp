@@ -1,6 +1,7 @@
 import asyncio
 import html
 import json
+import re
 import time
 import urllib.parse
 import webbrowser
@@ -35,11 +36,18 @@ _logger = get_logger(__name__)
 # which breaks when NTRP_DIR is redirected, e.g. a remote/containerized server).
 OAUTH_DIR = NTRP_DIR / "mcp_oauth"
 LOGIN_TIMEOUT = 120
+_SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+
+
+def _token_path(server_name: str) -> Path:
+    if not _SERVER_NAME_RE.fullmatch(server_name):
+        raise ValueError("Invalid MCP server name for OAuth token storage")
+    return OAUTH_DIR / f"{server_name}.json"
 
 
 class MCPTokenStorage:
     def __init__(self, server_name: str):
-        self._path = OAUTH_DIR / f"{server_name}.json"
+        self._path = _token_path(server_name)
 
     def _read(self) -> dict:
         if self._path.exists():
@@ -50,8 +58,10 @@ class MCPTokenStorage:
         return {}
 
     def _write(self, data: dict) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._path.parent.chmod(0o700)
         self._path.write_text(json.dumps(data, indent=2))
+        self._path.chmod(0o600)
 
     async def get_tokens(self) -> OAuthToken | None:
         data = self._read()
@@ -288,6 +298,6 @@ def run_mcp_oauth(server_name: str, server_url: str, opts: OAuthOptions) -> None
 
 
 def clear_tokens(server_name: str) -> None:
-    path = OAUTH_DIR / f"{server_name}.json"
+    path = _token_path(server_name)
     if path.exists():
         path.unlink()

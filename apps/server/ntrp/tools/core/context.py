@@ -171,6 +171,7 @@ class BackgroundTaskRegistry:
     read_result: Callable[[str], Awaitable[str | None]] | None = None
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     _commands: dict[str, str] = field(default_factory=dict)
+    _reserved: set[str] = field(default_factory=set)
     # Per-agent steering inbox: messages the parent (or user) sends to a
     # running background agent, drained into the child's loop at its next step
     # via the get_pending_messages hook. Mirrors RunState.inject_queue, but
@@ -186,8 +187,31 @@ class BackgroundTaskRegistry:
     def _remove(self, task_id: str) -> None:
         self._tasks.pop(task_id, None)
         self._commands.pop(task_id, None)
+        self._reserved.discard(task_id)
         self._inboxes.pop(task_id, None)
         self._child_sessions.pop(task_id, None)
+
+    def reserve(
+        self,
+        task_id: str,
+        *,
+        command: str,
+        limit: int,
+        child_session_id: str | None = None,
+    ) -> bool:
+        if task_id in self._tasks or task_id in self._reserved:
+            return False
+        if self.pending_count >= limit:
+            return False
+        self._reserved.add(task_id)
+        self._commands[task_id] = command
+        if child_session_id:
+            self._child_sessions[task_id] = child_session_id
+        return True
+
+    def release(self, task_id: str) -> None:
+        if task_id in self._reserved:
+            self._remove(task_id)
 
     def child_session(self, task_id: str) -> str | None:
         return self._child_sessions.get(task_id)
@@ -216,6 +240,7 @@ class BackgroundTaskRegistry:
         )
 
     def register(self, task_id: str, task: asyncio.Task, command: str) -> None:
+        self._reserved.discard(task_id)
         self._tasks[task_id] = task
         self._commands[task_id] = command
         task.add_done_callback(lambda _: self._remove(task_id))
@@ -300,7 +325,9 @@ class BackgroundTaskRegistry:
         return command
 
     def list_pending(self) -> list[tuple[str, str]]:
-        return [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
+        pending = [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
+        pending.extend((tid, self._commands.get(tid, "")) for tid in self._reserved)
+        return pending
 
     def to_rehydration_refs(self) -> list[dict[str, str]]:
         return [{"task_id": task_id, "command": command} for task_id, command in sorted(self._commands.items())]
@@ -313,7 +340,7 @@ class BackgroundTaskRegistry:
 
     @property
     def pending_count(self) -> int:
-        return sum(1 for t in self._tasks.values() if not t.done())
+        return sum(1 for t in self._tasks.values() if not t.done()) + len(self._reserved)
 
     def _write_result_file(self, task_id: str, content: str) -> Path:
         result_dir = RESULT_BASE / self.session_id / "bg_results"
