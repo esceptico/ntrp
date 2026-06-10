@@ -152,17 +152,34 @@ export function WorkflowDetail({
   onOpenAgent: (childSessionId: string) => void;
 }) {
   const phases = Object.values(workflow.phasesByName);
+  // The why of a settled run (the failure reason, "stopped by user") only
+  // travels in the finished event's summary — without this line it's invisible
+  // outside the tool result.
+  const summary = !isActiveWorkflow(workflow) && workflow.summary ? (
+    <div
+      className={clsx(
+        "px-2 py-1 text-2xs break-words",
+        workflow.status === "failed" ? "text-bad" : "text-muted",
+      )}
+    >
+      {workflow.summary}
+    </div>
+  ) : null;
 
   if (phases.length === 0) {
     return (
-      <div className="px-2 py-3 text-2xs text-faint">
-        {isActiveWorkflow(workflow) ? "Spinning up agents…" : "No agents ran."}
+      <div className="py-1.5">
+        <div className="px-2 text-2xs text-faint">
+          {isActiveWorkflow(workflow) ? "Spinning up agents…" : "No agents ran."}
+        </div>
+        {summary}
       </div>
     );
   }
 
   return (
     <div className="mt-0.5 space-y-1">
+      {summary}
       {phases.map((phase) => (
         <PhaseGroup key={phase.name} phase={phase} onOpenAgent={onOpenAgent} />
       ))}

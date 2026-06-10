@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { ChevronRight, Workflow as WorkflowIcon } from "lucide-react";
+import { ChevronRight, Square, Workflow as WorkflowIcon } from "lucide-react";
 import { ICON } from "../../lib/icons";
 import { useTimeTicker } from "../../lib/hooks";
 import { formatDuration } from "../../lib/agentRun";
+import { stopRun } from "../../actions";
 import {
   isActiveWorkflow,
   type Workflow,
@@ -75,7 +76,23 @@ export function sumTokens(workflow: Workflow): number {
 export function formatTokens(total: number): string {
   if (total < 1000) return `${total}`;
   if (total < 10_000) return `${(total / 1000).toFixed(1)}k`;
-  return `${Math.round(total / 1000)}k`;
+  if (total < 1_000_000) return `${Math.round(total / 1000)}k`;
+  return `${(total / 1_000_000).toFixed(1)}M`;
+}
+
+export function sumCost(workflow: Workflow): number {
+  let total = 0;
+  for (const phase of Object.values(workflow.phasesByName)) {
+    for (const agent of Object.values(phase.agentsByTaskId)) {
+      total += agent.cost ?? 0;
+    }
+  }
+  return total;
+}
+
+export function formatCost(cost: number): string {
+  if (cost < 0.01) return "<$0.01";
+  return `$${cost >= 100 ? Math.round(cost) : cost.toFixed(2)}`;
 }
 
 export function plural(n: number, word: string): string {
@@ -122,12 +139,14 @@ export function WorkflowProgressCard({
   const durationMs = (workflow.completedAt ?? Date.now()) - workflow.startedAt;
   const elapsedLabel = durationMs > 0 ? formatDuration(durationMs) : "";
   const totalTokens = sumTokens(workflow);
+  const totalCost = sumCost(workflow);
 
   // Stats live on line 2 with the progress bar so line 1 is pure identity and
   // the name keeps its room in the narrow (~268px) sidebar.
   const meta = [
     elapsedLabel || null,
     totalTokens > 0 ? `Σ ${formatTokens(totalTokens)}` : null,
+    totalCost > 0 ? formatCost(totalCost) : null,
     total > 0 ? `${done}/${total}` : null,
   ]
     .filter(Boolean)
@@ -137,7 +156,7 @@ export function WorkflowProgressCard({
     <button
       type="button"
       onClick={onOpen}
-      title={`${workflow.name ?? "Workflow"} — open`}
+      title={workflow.description ?? `${workflow.name ?? "Workflow"} — open`}
       className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left cursor-pointer transition-colors hover:border-line hover:bg-surface-sunken"
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -161,6 +180,31 @@ export function WorkflowProgressCard({
         <Badge size="sm" tone={WORKFLOW_BADGE_TONE[workflow.status]}>
           {statusWord(workflow.status)}
         </Badge>
+        {running && (
+          // span[role=button]: the card root is already a <button>, and nested
+          // buttons are invalid HTML. Stops the parent run — the workflow is
+          // awaited by it, so this is the kill switch for a runaway fan-out.
+          <span
+            role="button"
+            tabIndex={0}
+            title="Stop run"
+            aria-label="Stop run"
+            onClick={(e) => {
+              e.stopPropagation();
+              void stopRun();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                void stopRun();
+              }
+            }}
+            className="grid place-items-center w-5 h-5 shrink-0 rounded text-faint transition-colors hover:bg-bad-soft hover:text-bad"
+          >
+            <Square size={ICON.XS} strokeWidth={2} fill="currentColor" />
+          </span>
+        )}
         <ChevronRight
           size={ICON.XS}
           strokeWidth={2}

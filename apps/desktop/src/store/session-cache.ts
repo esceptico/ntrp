@@ -126,10 +126,31 @@ function mergeActivity(messages: Map<string, UiMessage>, targetId: string, sourc
   const target = messages.get(targetId);
   if (!target?.activity || !source.activity) return;
   const done = target.activity.done && source.activity.done;
+  // The groups being merged can be two BUILDS of the same turn — the live
+  // projection's (uuid id) sitting next to a history rebuild's (`…-activity`
+  // id) after a cached-history refresh. Their items share tool-call ids, so a
+  // plain concat doubles every row (and renders the workflow card twice).
+  // Dedupe by item id: first occurrence wins, a duplicate only fills in
+  // fields the kept copy is missing (e.g. a result the live copy lacks).
+  const items = target.activity.items.slice();
+  const indexById = new Map(items.map((item, index) => [item.id, index] as const));
+  for (const item of source.activity.items) {
+    const at = indexById.get(item.id);
+    if (at === undefined) {
+      indexById.set(item.id, items.length);
+      items.push(item);
+      continue;
+    }
+    const kept = items[at];
+    const filler = Object.fromEntries(
+      Object.entries(item).filter(([key, value]) => value !== undefined && kept[key as keyof typeof kept] === undefined),
+    );
+    items[at] = { ...kept, ...filler };
+  }
   messages.set(targetId, {
     ...target,
     activity: {
-      items: [...target.activity.items, ...source.activity.items],
+      items,
       done,
       label: done ? source.activity.label : "Calling",
     },

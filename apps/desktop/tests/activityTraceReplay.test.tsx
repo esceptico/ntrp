@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ActivityHeader, ActivityTail, liftWorkflows } from "../src/components/trace/ActivityTrace.tsx";
+import { ActivityHeader, ActivityTail, liftWorkflows, orderedTraceEntries } from "../src/components/trace/ActivityTrace.tsx";
 import { WorkflowProgressCard } from "../src/components/workflow/WorkflowProgress.tsx";
 import { activityTraceStats } from "../src/lib/agent.ts";
 import { turnHeaderLabel } from "../src/lib/turnHeader.ts";
@@ -360,6 +360,49 @@ test("liftWorkflows leaves non-workflow items untouched", () => {
   const unmatched = liftWorkflows(items, [makeWorkflow({ parentToolCallId: "absent" })], "sess-1");
   expect(unmatched.workflowRows).toEqual([]);
   expect(unmatched.rowItems.map((i) => i.id)).toEqual(["a"]);
+});
+
+test("orderedTraceEntries keeps the workflow card at its chronological position", () => {
+  // workflow called AFTER two setup tools and BEFORE one more — the card must
+  // sit between the rows segments, not lifted above the whole trace.
+  const entries = orderedTraceEntries(
+    [
+      { id: "a", kind: "slack_thread", target: "SlackThread(...)" },
+      { id: "b", kind: "load_tools", target: 'Load Tools(group="slack")' },
+      { id: "wf-tool-call", kind: "workflow", target: "workflow(...)" },
+      { id: "c", kind: "read_file", target: "read_file" },
+    ],
+    [makeWorkflow()],
+    "sess-1",
+  );
+
+  expect(entries.map((e) => e.kind)).toEqual(["rows", "workflow", "rows"]);
+  expect(entries[0].kind === "rows" && entries[0].items.map((i) => i.id)).toEqual(["a", "b"]);
+  expect(entries[1].kind === "workflow" && entries[1].workflow.workflowId).toBe("wf-1");
+  expect(entries[2].kind === "rows" && entries[2].items.map((i) => i.id)).toEqual(["c"]);
+});
+
+test("ActivityTail renders the workflow card after the rows that precede it", () => {
+  const html = renderToStaticMarkup(
+    <ActivityTail
+      items={[
+        { id: "a", kind: "slack_thread", target: "SlackThread(...)", status: "executed" },
+        {
+          id: "wf-1",
+          kind: "workflow",
+          semanticKind: "workflow",
+          target: "workflow(...)",
+          args: '{"title":"cross-reference"}',
+          status: "ongoing",
+        },
+      ]}
+      max={3}
+      motionDisabled
+    />,
+  );
+
+  expect(html.indexOf("SlackThread")).toBeGreaterThan(-1);
+  expect(html.indexOf("group/workflow")).toBeGreaterThan(html.indexOf("SlackThread"));
 });
 
 test("workflow progress card renders status + a segmented phase bar, not a tool row", () => {

@@ -56,3 +56,50 @@ test("normalizeActivityGroups still merges distinct consecutive activities", () 
   expect(out.messages.get("a1")?.activity?.items.map((i) => i.id)).toEqual(["t1", "t2"]);
   expect(out.activeActivityId).toBe("a1");
 });
+
+// Regression: a live-built activity (uuid id) and a history rebuild of the SAME
+// turn (`msg-…-activity` id) can sit adjacent after a cached-history refresh.
+// Their items share tool-call ids — merging must dedupe by item id, not concat
+// (the concat rendered every row twice and the workflow card twice).
+test("normalizeActivityGroups dedupes same-id items when merging two builds of one turn", () => {
+  const live: UiMessage = {
+    id: "uuid-live",
+    role: "activity",
+    content: "",
+    activity: {
+      label: "Calling",
+      done: false,
+      items: [
+        { id: "call_lt1", kind: "load_tools", target: 'Load Tools(group="slack")', status: "ongoing" },
+        { id: "call_wf", kind: "workflow", semanticKind: "workflow", target: "workflow(...)", status: "ongoing" },
+      ],
+    },
+  };
+  const history: UiMessage = {
+    id: "msg-1-activity",
+    role: "activity",
+    content: "",
+    activity: {
+      label: "Called",
+      done: true,
+      items: [
+        { id: "call_lt1", kind: "load_tools", target: 'Load Tools(group="slack")', status: "executed", result: "ok" },
+        { id: "call_wf", kind: "workflow", semanticKind: "workflow", target: "workflow(...)", status: "executed" },
+        { id: "call_new", kind: "read_file", target: "read_file", status: "executed" },
+      ],
+    },
+  };
+  const messages = new Map<string, UiMessage>([
+    ["uuid-live", live],
+    ["msg-1-activity", history],
+  ]);
+
+  const out = normalizeActivityGroups(messages, ["uuid-live", "msg-1-activity"], "uuid-live");
+
+  const items = out.messages.get("uuid-live")?.activity?.items ?? [];
+  expect(items.map((i) => i.id)).toEqual(["call_lt1", "call_wf", "call_new"]);
+  // First occurrence (live) wins on conflicts; the duplicate only fills gaps.
+  expect(items[0].status).toBe("ongoing");
+  expect(items[0].result).toBe("ok");
+  expect(items[1].semanticKind).toBe("workflow");
+});

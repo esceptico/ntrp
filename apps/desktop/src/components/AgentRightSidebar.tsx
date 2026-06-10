@@ -43,7 +43,7 @@ import {
 } from "../lib/agentRun";
 import { createSession, refreshChildAgents, sendMessage, switchSession } from "../actions";
 import { useWorkflows } from "../hooks/useWorkflows";
-import { isActiveWorkflow } from "../store/workflow-domain";
+import { isActiveWorkflow, workflowKey } from "../store/workflow-domain";
 import { ExpandableWorkflowCard } from "./workflow/WorkflowDetail";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
@@ -659,15 +659,26 @@ export function AgentRightSidebar() {
 
   const resultSnippets = useChildAgentResults(rosterSessionId, agents);
 
+  // Dismissed keys (persisted in prefs) hide cards from the hub only — the
+  // domain rows live on so the chat-trace card keeps its data, and the
+  // UNfiltered `workflows` above still contains leaf agents via
+  // workflowParentIds (a dismissed workflow's agents must not resurface as
+  // roster orphans).
+  const dismissedWorkflows = useStore((s) => s.prefs.dismissedWorkflows);
+  const visibleWorkflows = useMemo(() => {
+    const dismissed = new Set(dismissedWorkflows);
+    return workflows.filter((w) => !dismissed.has(workflowKey(w.sessionId, w.workflowId)));
+  }, [workflows, dismissedWorkflows]);
+
   const sortedWorkflows = useMemo(() => {
-    const active = workflows.filter(isActiveWorkflow).sort((a, b) => b.updatedAt - a.updatedAt);
-    const done = workflows
+    const active = visibleWorkflows.filter(isActiveWorkflow).sort((a, b) => b.updatedAt - a.updatedAt);
+    const done = visibleWorkflows
       .filter((w) => !isActiveWorkflow(w))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, RECENT_AGENT_LIMIT);
     return [...active, ...done];
-  }, [workflows]);
-  const runningWorkflowCount = workflows.filter(isActiveWorkflow).length;
+  }, [visibleWorkflows]);
+  const runningWorkflowCount = visibleWorkflows.filter(isActiveWorkflow).length;
 
   const runningAutomations = useMemo(
     () =>

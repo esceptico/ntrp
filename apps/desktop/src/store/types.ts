@@ -83,6 +83,8 @@ export interface Prefs {
   sidebarChannelsOnly: boolean;
   /** Session IDs pinned to the top of the sidebar, most-recent-pin first. */
   pinnedSessionIds: string[];
+  /** `${sessionId}:${workflowId}` keys hidden from the sidebar hub (capped FIFO). */
+  dismissedWorkflows: string[];
   sidebarHidden: boolean;
   /** Right panel (agents/todos/automations) collapsed. Shared so the chat
    *  area can reflow its right edge to dock the panel instead of floating

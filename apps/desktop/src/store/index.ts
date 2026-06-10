@@ -33,7 +33,6 @@ import {
 import {
   createBackgroundAgentsDomainState,
   reduceBackgroundAgentUpsert,
-  reduceBackgroundAgentsDismissedByParent,
   reduceBackgroundAgentsForSession,
   reduceBackgroundAgentsRefreshFailed,
   reduceBackgroundAgentsRefreshStarted,
@@ -41,8 +40,8 @@ import {
   type BackgroundAgentRefreshStatus,
 } from "./background-agent-domain";
 import {
+  appendDismissedWorkflow,
   createWorkflowsDomainState,
-  reduceWorkflowDismissed,
   reduceWorkflowStarted,
   reduceWorkflowFinished,
   reduceWorkflowTaskEvent,
@@ -623,15 +622,18 @@ export const useStore = create<State & Actions>((set) => ({
     })),
   dismissWorkflow: (sessionId, workflowId) =>
     set((s) => {
-      // Cascade to the workflow's leaf agents (matched by its tool-call id), so
-      // they don't resurface in the roster as orphans once the workflow is gone.
-      const parentToolCallId = s.workflows.rows[workflowKey(sessionId, workflowId)]?.parentToolCallId;
-      return {
-        workflows: reduceWorkflowDismissed(s.workflows, { sessionId, workflowId }),
-        backgroundAgents: parentToolCallId
-          ? reduceBackgroundAgentsDismissedByParent(s.backgroundAgents, sessionId, parentToolCallId)
-          : s.backgroundAgents,
-      };
+      // Dismissal is sidebar visibility, not domain deletion: the row stays so
+      // the chat-trace card keeps its phases/tokens (and its leaf agents stay
+      // contained under it), while the persisted key keeps rehydration from
+      // resurfacing the card in the hub after a reload.
+      const dismissedWorkflows = appendDismissedWorkflow(
+        s.prefs.dismissedWorkflows,
+        workflowKey(sessionId, workflowId),
+      );
+      if (dismissedWorkflows === s.prefs.dismissedWorkflows) return s;
+      const prefs = { ...s.prefs, dismissedWorkflows };
+      persistPrefs(prefs);
+      return { prefs };
     }),
   setGoal: (sessionId, goal) =>
     set((s) => {
@@ -719,3 +721,10 @@ export const useStore = create<State & Actions>((set) => ({
 // Helpers for use outside React (e.g. inside event-stream handlers).
 export const getState = useStore.getState;
 export const setState = useStore.setState;
+
+// Console / preview-harness escape hatch: lets pixel verification and debugging
+// seed state without a live server. The renderer runs no untrusted scripts, so
+// exposing the store costs nothing.
+if (typeof window !== "undefined") {
+  (window as unknown as { __ntrp?: unknown }).__ntrp = { useStore, getState, setState };
+}

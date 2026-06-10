@@ -26,6 +26,10 @@ export interface WorkflowAgent {
   tokens?: WorkflowTokenUsage;
   cost?: number;
   toolCount?: number;
+  /** Ledger seq of the last token_usage event applied. Token spend ACCUMULATES,
+   *  so replays (history rehydration over a live-built row, revisiting a
+   *  session) must be skipped rather than re-added — seq is the dedupe key. */
+  lastTokenSeq?: number;
 }
 
 export interface WorkflowPhase {
@@ -98,6 +102,8 @@ export interface WorkflowTokenUsageInput {
   sessionId: string;
   taskId: string;
   phase?: string | null;
+  /** Session-ledger seq of the originating event; used to skip replays. */
+  seq?: number;
   usage: {
     prompt: number;
     completion: number;
@@ -173,15 +179,15 @@ export function reduceWorkflowFinished(
   return { ...state, rows: { ...state.rows, [key]: next } };
 }
 
-export function reduceWorkflowDismissed(
-  state: WorkflowsDomainState,
-  input: { sessionId: string; workflowId: string },
-): WorkflowsDomainState {
-  const key = workflowKey(input.sessionId, input.workflowId);
-  if (!(key in state.rows)) return state;
-  const rows = { ...state.rows };
-  delete rows[key];
-  return { ...state, rows };
+// Dismissal is a sidebar-visibility concern, persisted in prefs — NOT domain
+// deletion. The row stays so the chat-trace card keeps its phases/tokens, and
+// the persisted key keeps rehydration from resurfacing the card after reload.
+export const DISMISSED_WORKFLOWS_CAP = 300;
+
+export function appendDismissedWorkflow(list: string[], key: string): string[] {
+  if (list.includes(key)) return list;
+  const next = [...list, key];
+  return next.length > DISMISSED_WORKFLOWS_CAP ? next.slice(-DISMISSED_WORKFLOWS_CAP) : next;
 }
 
 export function reduceWorkflowTaskEvent(
@@ -244,11 +250,18 @@ export function reduceWorkflowTokenUsage(
   const prevPhase = workflow.phasesByName[phaseName];
   const prevAgent = prevPhase?.agentsByTaskId[input.taskId];
   if (!prevPhase || !prevAgent) return state;
+  // Accumulation is not idempotent: rehydration replays the persisted ledger
+  // over whatever live events already built, so an already-applied seq must
+  // not be re-added (it would double Σ tokens on every session revisit).
+  if (input.seq != null && prevAgent.lastTokenSeq != null && input.seq <= prevAgent.lastTokenSeq) {
+    return state;
+  }
 
   const agent: WorkflowAgent = {
     ...prevAgent,
     tokens: accumulateTokens(prevAgent.tokens, input.usage),
     cost: addCost(prevAgent.cost, input.cost),
+    lastTokenSeq: input.seq ?? prevAgent.lastTokenSeq,
   };
   const agentsByTaskId = { ...prevPhase.agentsByTaskId, [input.taskId]: agent };
   const phase: WorkflowPhase = { ...prevPhase, agentsByTaskId };

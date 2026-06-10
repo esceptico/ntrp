@@ -21,6 +21,7 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarUnreadOnly: false,
   sidebarChannelsOnly: false,
   pinnedSessionIds: [],
+  dismissedWorkflows: [],
   sidebarHidden: false,
   rightPanelCollapsed: true,
   sidebarWidth: 272,

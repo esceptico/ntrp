@@ -427,6 +427,11 @@ export function applyChatEventToTranscript(
     }
 
     case "task_started": {
+      // Workflow leaf tasks render inside the workflow CARD (workflows
+      // domain), not as item patches — taskActivityItemId resolves to the
+      // workflow's own tool call, so patching would flip its semanticKind to
+      // "agent" and let the leaf agents fight over its displayName.
+      if (event.workflow_id) break;
       const patch: Partial<ActivityItem> = {
         runId: event.run_id,
         status: "ongoing",
@@ -444,6 +449,7 @@ export function applyChatEventToTranscript(
     }
 
     case "task_progress": {
+      if (event.workflow_id) break; // see task_started — card-owned, not an item patch
       const taskStatus =
         event.status === "failed" || event.status === "cancelled" ? event.status : "running";
       const patch: Partial<ActivityItem> = {
@@ -463,6 +469,7 @@ export function applyChatEventToTranscript(
     }
 
     case "task_finished": {
+      if (event.workflow_id) break; // see task_started — card-owned, not an item patch
       const patch: Partial<ActivityItem> = {
         runId: event.run_id,
         status: "executed",

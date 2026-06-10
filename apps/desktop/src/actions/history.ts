@@ -249,8 +249,9 @@ async function rehydrateSessionWorkflows(sessionId: string): Promise<void> {
       getState().config,
       `/chat/${encodeURIComponent(sessionId)}/workflows`,
     );
-    // A session switch may have landed while the fetch was in flight.
-    if (getState().currentSessionId !== sessionId) return;
+    // Apply even if the user switched sessions while the fetch was in flight:
+    // rows are keyed by session and token replays dedupe by seq, so this just
+    // pre-warms the cards for when they switch back.
     if (events.length) rehydrateWorkflows(events);
   } catch {
     // Best-effort: if this fails the cards just won't rehydrate on reload.

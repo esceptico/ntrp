@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   createWorkflowsDomainState,
-  reduceWorkflowDismissed,
+  appendDismissedWorkflow,
+  DISMISSED_WORKFLOWS_CAP,
   reduceWorkflowStarted,
   reduceWorkflowFinished,
   reduceWorkflowTaskEvent,
@@ -132,6 +133,44 @@ test("token_usage with task_id accumulates tokens and cost on the matching agent
   expect(agent.cost).toBeCloseTo(0.03, 5);
 });
 
+test("token_usage replays (same or older seq) are skipped — rehydration must not double-count", () => {
+  let state = startedWorkflow(1000);
+  state = reduceWorkflowTaskEvent(
+    state,
+    { kind: "started", workflowId: WORKFLOW, sessionId: SESSION, taskId: "task-a", phase: "gather" },
+    2000,
+  );
+
+  const usage = {
+    workflowId: WORKFLOW,
+    sessionId: SESSION,
+    taskId: "task-a",
+    phase: "gather",
+    seq: 7,
+    usage: { prompt: 100, completion: 20 },
+    cost: 0.01,
+  };
+  state = reduceWorkflowTokenUsage(state, usage, 3000);
+  // Rehydration replaying the persisted ledger over the live-built row.
+  state = reduceWorkflowTokenUsage(state, usage, 3001);
+  state = reduceWorkflowTokenUsage(state, { ...usage, seq: 6 }, 3002);
+
+  let agent = state.rows[workflowKey(SESSION, WORKFLOW)].phasesByName.gather.agentsByTaskId["task-a"];
+  expect(agent.tokens?.total).toBe(120);
+  expect(agent.cost).toBeCloseTo(0.01, 5);
+  expect(agent.lastTokenSeq).toBe(7);
+
+  // A genuinely new event (higher seq) still accumulates.
+  state = reduceWorkflowTokenUsage(state, { ...usage, seq: 8 }, 3003);
+  agent = state.rows[workflowKey(SESSION, WORKFLOW)].phasesByName.gather.agentsByTaskId["task-a"];
+  expect(agent.tokens?.total).toBe(240);
+
+  // Seq-less events (older server / synthetic) keep the legacy accumulate path.
+  state = reduceWorkflowTokenUsage(state, { ...usage, seq: undefined }, 3004);
+  agent = state.rows[workflowKey(SESSION, WORKFLOW)].phasesByName.gather.agentsByTaskId["task-a"];
+  expect(agent.tokens?.total).toBe(360);
+});
+
 test("token_usage for an unknown agent is a no-op", () => {
   let state = startedWorkflow(1000);
   const before = state;
@@ -241,11 +280,15 @@ test("selectWorkflowsForSession is scoped to the session", () => {
   expect(selectWorkflowsForSession(state, "nope")).toHaveLength(0);
 });
 
-test("reduceWorkflowDismissed removes the row; no-op if absent", () => {
-  const state = startedWorkflow();
-  expect(selectWorkflowsForSession(state, SESSION)).toHaveLength(1);
-  const after = reduceWorkflowDismissed(state, { sessionId: SESSION, workflowId: WORKFLOW });
-  expect(selectWorkflowsForSession(after, SESSION)).toHaveLength(0);
-  // dismissing an unknown id returns the same state reference (cheap no-op)
-  expect(reduceWorkflowDismissed(after, { sessionId: SESSION, workflowId: "nope" })).toBe(after);
+test("appendDismissedWorkflow dedupes, caps, and is a cheap no-op on repeats", () => {
+  const once = appendDismissedWorkflow([], "s1:wf-1");
+  expect(once).toEqual(["s1:wf-1"]);
+  // Repeat returns the same reference (callers skip the persist).
+  expect(appendDismissedWorkflow(once, "s1:wf-1")).toBe(once);
+  // Cap drops the oldest keys.
+  const full = Array.from({ length: DISMISSED_WORKFLOWS_CAP }, (_, i) => `s1:wf-${i}`);
+  const over = appendDismissedWorkflow(full, "s1:wf-new");
+  expect(over).toHaveLength(DISMISSED_WORKFLOWS_CAP);
+  expect(over[0]).toBe("s1:wf-1");
+  expect(over[over.length - 1]).toBe("s1:wf-new");
 });

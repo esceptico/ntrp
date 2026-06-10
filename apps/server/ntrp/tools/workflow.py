@@ -24,7 +24,10 @@ class WorkflowInput(BaseModel):
         description="Name of a saved workflow preset to run (e.g. 'audit'). Pass its parameters via `args`. "
         "Omit when passing an inline `script`. Use one of `script` or `name`, not both.",
     )
-    title: str = Field(default="workflow", description="Short label for this run, shown in the UI.")
+    title: str | None = Field(
+        default=None,
+        description="Short label for this run, shown in the UI. Defaults to the preset name when running by `name`.",
+    )
     args: dict = Field(default_factory=dict, description="Values exposed to the script as `args`.")
 
 
@@ -60,6 +63,7 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
 
     # Resolve the script: an inline `script`, or a saved preset by `name`.
     script = args.script
+    description = None
     if args.name:
         if script:
             return ToolResult(
@@ -71,7 +75,9 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
         if registry is None:
             return ToolResult(content="Error: skill registry not available.", preview="Unavailable", is_error=True)
         script = registry.load_workflow_script(args.name)
-        if script is None:
+        if script is not None:
+            description = registry.get(args.name).description
+        else:
             presets = ", ".join(m.name for m in registry.list_all() if m.kind == "workflow")
             return ToolResult(
                 content=f"No workflow preset named '{args.name}'. Saved presets: {presets or '(none)'}.",
@@ -96,6 +102,7 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
                 workflow_id=workflow_id,
                 parent_tool_call_id=execution.tool_id,
                 name=title,
+                description=description or "",
             )
         )
 
@@ -165,7 +172,8 @@ When you DO author a script, keep each agent prompt TERSE and push specifics int
 agents DISCOVER them — do NOT hardcode long lists of ids/paths/PR numbers inline (it bloats
 tokens and defeats caching). Pass args={"prs": [941, 956]} and read args["prs"]; don't paste the
 numbers into every prompt. Pass `model` to an agent only when a cheaper/stronger configured tier
-clearly fits a step (cheap finders, strong synthesis); default omits it and inherits the run's model.
+clearly fits a step (cheap finders, strong synthesis); default omits it and inherits the configured
+workflow model (falls back to the chat model).
 
 Each agent inherits ALL your tools by default (slack, gmail, files, web, etc.) — so for a
 research/search task you just write agent("...") and it can use them. Give each agent a

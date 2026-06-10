@@ -23,11 +23,19 @@ export type { ActivityItem };
 // workflow-domain events. When a live domain row IS present (parent_tool_call_id
 // match) it wins and supplies real phases/agents/tokens; otherwise we synthesize
 // a sparse Workflow from the item (title + status) so the card still renders.
-export function liftWorkflows(
+
+export type TraceEntry =
+  | { kind: "workflow"; workflow: Workflow }
+  | { kind: "rows"; items: ActivityItem[] };
+
+// The trace in chronological order: runs of ordinary tool rows, with each
+// workflow card at the position its tool call actually holds — a workflow
+// called after setup tools renders after their rows, not lifted above them.
+export function orderedTraceEntries(
   items: ActivityItem[],
   workflows: Workflow[],
   sessionId: string | null,
-): { workflowRows: Workflow[]; rowItems: ActivityItem[] } {
+): TraceEntry[] {
   // The tool-call items that ARE workflows — their entire subtree (leaf agents +
   // those agents' tool calls, which the server rebases under this id) is
   // contained in the card's drill-in, never shown as parent rows.
@@ -46,16 +54,44 @@ export function liftWorkflows(
     return false;
   };
 
-  const matched: Workflow[] = [];
-  const rest: ActivityItem[] = [];
+  const entries: TraceEntry[] = [];
+  let segment: ActivityItem[] = [];
+  const flush = () => {
+    if (segment.length > 0) {
+      entries.push({ kind: "rows", items: segment });
+      segment = [];
+    }
+  };
   for (const it of items) {
     const domain = workflows.find((w) => w.parentToolCallId === it.id);
-    if (domain) matched.push(domain);
-    else if (isWorkflow(it)) matched.push(synthWorkflow(it, sessionId));
-    else if (insideWorkflow(it)) continue; // contained in the workflow, not a parent row
-    else rest.push(it);
+    if (domain) {
+      flush();
+      entries.push({ kind: "workflow", workflow: domain });
+    } else if (isWorkflow(it)) {
+      flush();
+      entries.push({ kind: "workflow", workflow: synthWorkflow(it, sessionId) });
+    } else if (insideWorkflow(it)) {
+      continue; // contained in the workflow, not a parent row
+    } else {
+      segment.push(it);
+    }
   }
-  return { workflowRows: matched, rowItems: rest };
+  flush();
+  return entries;
+}
+
+/** Flat view over orderedTraceEntries for callers that only need the split
+ *  (e.g. the header's "N calls" count over post-lift rows). */
+export function liftWorkflows(
+  items: ActivityItem[],
+  workflows: Workflow[],
+  sessionId: string | null,
+): { workflowRows: Workflow[]; rowItems: ActivityItem[] } {
+  const entries = orderedTraceEntries(items, workflows, sessionId);
+  return {
+    workflowRows: entries.filter((e) => e.kind === "workflow").map((e) => e.workflow),
+    rowItems: entries.flatMap((e) => (e.kind === "rows" ? e.items : [])),
+  };
 }
 
 function synthWorkflow(item: ActivityItem, sessionId: string | null): Workflow {
@@ -207,22 +243,11 @@ export function ActivityTail({
   const sessionId = useStore((s) => s.currentSessionId);
   const workflows = useWorkflows(sessionId);
 
-  const { workflowRows, rowItems } = useMemo(
-    () => liftWorkflows(items, workflows, sessionId),
+  // Chronological entries: rows segments interleaved with workflow cards at
+  // the position their tool call holds in the trace.
+  const entries = useMemo(
+    () => orderedTraceEntries(items, workflows, sessionId),
     [items, workflows, sessionId],
-  );
-
-  const visible = useMemo(
-    () => (rolling ? buildRollingList(rowItems, max as number) : buildStaticTree(rowItems)),
-    [rowItems, max, rolling],
-  );
-
-  const workflowBlock = workflowRows.length > 0 && (
-    <div className="mt-1 space-y-1">
-      {workflowRows.map((wf) => (
-        <ExpandableWorkflowCard key={wf.workflowId} workflow={wf} />
-      ))}
-    </div>
   );
 
   // Rolling (live) mode: do NOT animate the container's height. The chat's
@@ -236,35 +261,45 @@ export function ActivityTail({
   // to `position: absolute`. Without a positioned ancestor they snap to the
   // scroll viewport at (0, 0) and pile up as ghosts at the top of the chat.
   // `overflow: hidden` clips the exit slide so it doesn't leak above the row.
+  //
+  // Entry keys: cards key by workflowId; rows segments by position. Segments
+  // only shift when a new workflow card lands between them, so the remount
+  // that index-keying implies happens exactly at that boundary and nowhere
+  // else (appending rows to the last segment keeps its index).
   if (rolling) {
     return (
       <>
-        {workflowBlock}
-        {visible.length > 0 && (
-        <div className="relative overflow-hidden pl-3 mt-0.5">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {visible.map((item) => (
-            <motion.div
-              key={item.id}
-              data-activity-motion-row="true"
-              data-motion-suppressed={suppressMotion ? "true" : "false"}
-              layout={suppressMotion ? false : "position"}
-              initial={suppressMotion ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-              transition={
-                suppressMotion
-                  ? { duration: 0 }
-                  : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
-              }
-              style={{ height: `${ROW_HEIGHT_EM}em` }}
-              className="flex items-center min-w-0"
-            >
-              <ItemButton item={item} onOpen={setViewingTool} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        </div>
+        {entries.map((entry, i) =>
+          entry.kind === "workflow" ? (
+            <div key={`wf:${entry.workflow.workflowId}`} className="mt-1 space-y-1">
+              <ExpandableWorkflowCard workflow={entry.workflow} />
+            </div>
+          ) : (
+            <div key={`rows:${i}`} className="relative overflow-hidden pl-3 mt-0.5">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {buildRollingList(entry.items, max as number).map((item) => (
+                  <motion.div
+                    key={item.id}
+                    data-activity-motion-row="true"
+                    data-motion-suppressed={suppressMotion ? "true" : "false"}
+                    layout={suppressMotion ? false : "position"}
+                    initial={suppressMotion ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+                    transition={
+                      suppressMotion
+                        ? { duration: 0 }
+                        : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
+                    }
+                    style={{ height: `${ROW_HEIGHT_EM}em` }}
+                    className="flex items-center min-w-0"
+                  >
+                    <ItemButton item={item} onOpen={setViewingTool} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          ),
         )}
       </>
     );
@@ -274,37 +309,46 @@ export function ActivityTail({
   // event, not a per-frame stream, so animating height here is fine. Every
   // row (tool or agent) is a uniform single line, so an exact em count is
   // both correct and cheaper than measuring to `auto`.
-  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
+  //
+  // Workflow cards are the turn's primary artifact, NOT collapsible tool rows —
+  // they stay visible after the run finishes (a finished `onlyWorkflows` turn
+  // has no header toggle, so hiding them would leave no way back). The header
+  // chevron collapses only the rows segments around them.
   return (
     <>
-      {/* The workflow card is the turn's primary artifact, NOT a collapsible tool
-          row — keep it visible after the run finishes. (It used to live inside the
-          `collapsed` wrapper, so a finished `onlyWorkflows` turn, which has no
-          header toggle, hid the card with no way to bring it back.) The header
-          chevron still collapses the tool rows below. */}
-      {workflowBlock}
-      {visible.length > 0 && (
-      <motion.div
-      initial={false}
-      animate={{
-        opacity: collapsed ? 0 : 1,
-        height: collapsed ? 0 : targetHeight,
-      }}
-      transition={suppressMotion ? { duration: 0 } : SPRING_LAYOUT}
-      style={{ overflow: "hidden" }}
-      className="pl-3 mt-0.5"
-    >
-      {visible.map((item) => (
-        <div
-          key={item.id}
-          style={{ height: `${ROW_HEIGHT_EM}em` }}
-          className="flex items-center min-w-0"
-        >
-          <ItemButton item={item} onOpen={setViewingTool} />
-        </div>
-      ))}
-      </motion.div>
-      )}
+      {entries.map((entry, i) => {
+        if (entry.kind === "workflow") {
+          return (
+            <div key={`wf:${entry.workflow.workflowId}`} className="mt-1 space-y-1">
+              <ExpandableWorkflowCard workflow={entry.workflow} />
+            </div>
+          );
+        }
+        const visible = buildStaticTree(entry.items);
+        return (
+          <motion.div
+            key={`rows:${i}`}
+            initial={false}
+            animate={{
+              opacity: collapsed ? 0 : 1,
+              height: collapsed ? 0 : `${visible.length * ROW_HEIGHT_EM}em`,
+            }}
+            transition={suppressMotion ? { duration: 0 } : SPRING_LAYOUT}
+            style={{ overflow: "hidden" }}
+            className="pl-3 mt-0.5"
+          >
+            {visible.map((item) => (
+              <div
+                key={item.id}
+                style={{ height: `${ROW_HEIGHT_EM}em` }}
+                className="flex items-center min-w-0"
+              >
+                <ItemButton item={item} onOpen={setViewingTool} />
+              </div>
+            ))}
+          </motion.div>
+        );
+      })}
     </>
   );
 }

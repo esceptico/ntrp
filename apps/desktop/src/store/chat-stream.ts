@@ -687,6 +687,7 @@ function routeWorkflowTokenUsage(event: TokenUsageEvent, ts: number): void {
       sessionId,
       taskId,
       phase: tagged.phase,
+      seq: typeof event.seq === "number" ? event.seq : undefined,
       usage: event.usage,
       cost: event.cost,
     },
