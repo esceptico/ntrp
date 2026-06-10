@@ -106,6 +106,22 @@ async def test_run_workflow_preset_resolves_and_carries_description(registry: Sk
     assert finished.status == "completed"
 
 
+@pytest.mark.asyncio
+async def test_run_workflow_started_event_carries_declared_phases(registry: SkillRegistry):
+    events: list = []
+    ctx = make_ctx(registry, events)
+    execution = ToolExecution(tool_id="t1", tool_name="workflow", ctx=ctx)
+
+    result = await run_workflow(
+        execution,
+        WorkflowInput(script="return 'ok'", title="planned", phases=["find", "verify"]),
+    )
+
+    assert result.is_error is None or result.is_error is False
+    started = next(e for e in events if type(e).__name__ == "WorkflowStartedEvent")
+    assert started.phases == ["find", "verify"]
+
+
 def test_save_workflow_round_trips_yaml_hostile_description(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(skill_service_module, "NTRP_DIR", tmp_path)
     registry = SkillRegistry()

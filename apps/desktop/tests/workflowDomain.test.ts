@@ -244,6 +244,47 @@ test("missing phase defaults to a single 'default' bucket", () => {
   expect(workflow.phasesByName.default.agentsByTaskId["task-a"].phase).toBe("default");
 });
 
+test("declared phases seed as a pending plan, fill in, and prune if never run", () => {
+  let state = reduceWorkflowStarted(
+    createWorkflowsDomainState(),
+    { workflowId: WORKFLOW, sessionId: SESSION, runId: "run-1", phases: ["find", "verify", "rank"] },
+    1000,
+  );
+  let workflow = state.rows[workflowKey(SESSION, WORKFLOW)];
+  expect(Object.keys(workflow.phasesByName)).toEqual(["find", "verify", "rank"]);
+  expect(workflow.phasesByName.find.status).toBe("pending");
+
+  state = reduceWorkflowTaskEvent(
+    state,
+    { kind: "started", workflowId: WORKFLOW, sessionId: SESSION, taskId: "task-a", phase: "find" },
+    2000,
+  );
+  // A replayed started event (rehydration) keeps the built phases, not a reseed.
+  state = reduceWorkflowStarted(
+    state,
+    { workflowId: WORKFLOW, sessionId: SESSION, runId: "run-1", phases: ["find", "verify", "rank"] },
+    2001,
+  );
+  workflow = state.rows[workflowKey(SESSION, WORKFLOW)];
+  expect(workflow.phasesByName.find.status).toBe("running");
+
+  state = reduceWorkflowTaskEvent(
+    state,
+    { kind: "finished", workflowId: WORKFLOW, sessionId: SESSION, taskId: "task-a", phase: "find", status: "completed" },
+    3000,
+  );
+  // The script exits early — verify/rank never ran and must not read as
+  // eternally pending on a settled run.
+  state = reduceWorkflowFinished(
+    state,
+    { workflowId: WORKFLOW, sessionId: SESSION, status: "completed" },
+    9000,
+  );
+  workflow = state.rows[workflowKey(SESSION, WORKFLOW)];
+  expect(Object.keys(workflow.phasesByName)).toEqual(["find"]);
+  expect(workflow.phasesByName.find.status).toBe("completed");
+});
+
 test("workflow_finished settles status, summary and agent count", () => {
   let state = startedWorkflow(1000);
   state = reduceWorkflowFinished(

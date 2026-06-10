@@ -449,6 +449,9 @@ class WorkflowStartedEvent(SSEEvent):
     parent_tool_call_id: str | None = None
     name: str = ""
     description: str = ""
+    # The declared plan: phase titles in order, so the UI can render the whole
+    # run as pending segments before the first agent spawns.
+    phases: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

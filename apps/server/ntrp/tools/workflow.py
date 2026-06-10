@@ -28,6 +28,12 @@ class WorkflowInput(BaseModel):
         default=None,
         description="Short label for this run, shown in the UI. Defaults to the preset name when running by `name`.",
     )
+    phases: list[str] = Field(
+        default_factory=list,
+        description="The plan: your script's phase titles in order (2-4), EXACTLY matching its phase() calls. "
+        "The UI renders them as pending segments before any agent spawns. "
+        "Declare these with an inline `script`; omit when running a preset by `name` (presets title their own phases).",
+    )
     args: dict = Field(default_factory=dict, description="Values exposed to the script as `args`.")
 
 
@@ -103,6 +109,7 @@ async def run_workflow(execution: ToolExecution, args: WorkflowInput) -> ToolRes
                 parent_tool_call_id=execution.tool_id,
                 name=title,
                 description=description or "",
+                phases=args.phases,
             )
         )
 
@@ -168,7 +175,9 @@ instead of hand-writing a script: `audit` (find -> verify -> rank issues over a 
 pick). e.g. workflow(name="audit", args={"target": "apps/server", "depth": "normal"}). Save any
 good run as a reusable preset with the save_workflow tool.
 
-When you DO author a script, keep each agent prompt TERSE and push specifics into `args` or let
+When you DO author a script, plan before code: decide its 2-4 stages first, declare them in the
+`phases` input (the UI shows the plan immediately), and structure the script around phase() calls
+with the SAME titles. Keep each agent prompt TERSE and push specifics into `args` or let
 agents DISCOVER them — do NOT hardcode long lists of ids/paths/PR numbers inline (it bloats
 tokens and defeats caching). Pass args={"prs": [941, 956]} and read args["prs"]; don't paste the
 numbers into every prompt. Pass `model` to an agent only when a cheaper/stronger configured tier
@@ -182,7 +191,7 @@ answer (or JSON), no preamble.
 
 In scope (no imports needed):
 - await agent(task, *, schema=None, model=None, agent_type=None, system_prompt=None,
-  tools=None) -> the subagent's answer as a string, or a parsed object when `schema` is
+  tools=None, phase=None) -> the subagent's answer as a string, or a parsed object when `schema` is
   given (default: prose — only pass `schema` when you'll consume the fields in code, e.g.
   count votes or filter by a field). All keyword-only. `schema` is a plain dict shape, e.g.
   {"bugs": [{"file": "str", "line": "int"}]}. `agent_type` picks a ready-made type — each is
@@ -198,7 +207,10 @@ In scope (no imports needed):
 - await pipeline(items, stage1, stage2, ...) -> run each item through the stages with no
   barrier between items; each stage is `async (prev, item, index) -> next` (3 args), and a
   stage returning None drops that item. Returns the list of final results.
-- phase(title) / log(msg) -> progress labels shown in the UI.
+- phase(title) / log(msg) -> progress labels shown in the UI. phase() sets a GLOBAL current
+  label that agents snapshot at call time — fine for top-level sequential code, but inside
+  pipeline() stages (or any concurrently-running chains) it races: pass phase="..." to each
+  agent() there explicitly.
 - budget -> the run's token pool: budget.total (the ceiling, or None if uncapped),
   budget.spent() (output tokens used so far across the whole run), budget.remaining()
   (total - spent, or inf if uncapped). Scale fan-out to it: a loop guards on
@@ -212,7 +224,7 @@ Patterns:
 - adversarial verify: votes = await parallel([agent("Refute, default refuted=true: " + claim, schema={"refuted": "bool"}) for _ in range(3)]); keep if most say not refuted
 - loop until done: while not done: r = await agent(...); update done
 
-Example:
+Example (called with phases=["research", "synthesize"], args={"questions": [...]}):
   phase("research")
   notes = await parallel([
       agent(f"Research: {q}. Return key facts.", schema={"facts": ["str"]})

@@ -69,6 +69,9 @@ export interface WorkflowStartedInput {
   parentToolCallId?: string;
   name?: string;
   description?: string;
+  /** Declared plan: phase titles in order, rendered as pending segments
+   *  before the first agent spawns. */
+  phases?: string[];
   startedAt?: number;
 }
 
@@ -135,6 +138,18 @@ export function selectWorkflowsForSession(
   return Object.values(state.rows).filter((workflow) => workflow.sessionId === sessionId);
 }
 
+// The declared plan renders as pending segments immediately; phase() calls fill
+// them in (same name = same bucket, insertion order preserved). A replayed
+// started event over a live-built row keeps the built phases — seeding is for
+// the fresh-row case only.
+function seedPhases(titles: string[] | undefined): Record<string, WorkflowPhase> {
+  const phases: Record<string, WorkflowPhase> = {};
+  for (const name of titles ?? []) {
+    phases[name] = { name, status: "pending", agentsByTaskId: {}, startedAt: null, completedAt: null };
+  }
+  return phases;
+}
+
 export function reduceWorkflowStarted(
   state: WorkflowsDomainState,
   input: WorkflowStartedInput,
@@ -150,7 +165,7 @@ export function reduceWorkflowStarted(
     name: input.name ?? prev?.name,
     description: input.description ?? prev?.description,
     status: prev?.status ?? "running",
-    phasesByName: prev?.phasesByName ?? {},
+    phasesByName: prev?.phasesByName ?? seedPhases(input.phases),
     totalAgents: prev?.totalAgents ?? 0,
     summary: prev?.summary,
     startedAt: prev?.startedAt ?? input.startedAt ?? now,
@@ -168,10 +183,18 @@ export function reduceWorkflowFinished(
   const key = workflowKey(input.sessionId, input.workflowId);
   const prev = state.rows[key];
   if (!prev) return state;
+  // Declared phases the script never reached (early exit, failure) would
+  // otherwise read as eternally "pending" on a settled run.
+  const phasesByName = Object.fromEntries(
+    Object.entries(prev.phasesByName).filter(
+      ([, phase]) => Object.keys(phase.agentsByTaskId).length > 0,
+    ),
+  );
   const next: Workflow = {
     ...prev,
     status: input.status,
     summary: input.summary ?? prev.summary,
+    phasesByName,
     totalAgents: input.agentCount ?? prev.totalAgents,
     completedAt: now,
     updatedAt: now,

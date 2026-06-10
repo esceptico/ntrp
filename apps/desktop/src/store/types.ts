@@ -18,6 +18,7 @@ import type { AutomationStreamDomainState } from "./automation-domain";
 import type { BackgroundAgentsDomainState } from "./background-agent-domain";
 import type {
   WorkflowsDomainState,
+  WorkflowStartedInput,
   WorkflowTokenUsageInput,
 } from "./workflow-domain";
 import type { SessionViewState } from "./session-view";
@@ -536,18 +537,7 @@ export interface Actions {
   dismissToast: (id: string) => void;
   backgroundAgentsRefreshStarted: () => void;
   backgroundAgentsRefreshFailed: (error: string) => void;
-  workflowStarted: (
-    input: {
-      workflowId: string;
-      sessionId: string;
-      runId: string;
-      parentToolCallId?: string;
-      name?: string;
-      description?: string;
-      startedAt?: number;
-    },
-    at?: number,
-  ) => void;
+  workflowStarted: (input: WorkflowStartedInput, at?: number) => void;
   workflowFinished: (
     input: {
       workflowId: string;

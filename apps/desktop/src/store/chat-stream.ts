@@ -558,6 +558,7 @@ function applyServerEvent(event: ServerEvent): ServerEventEffect | undefined {
             parentToolCallId: event.parent_tool_call_id ?? undefined,
             name: event.name,
             description: event.description,
+            phases: event.phases,
           },
           ts,
         );
@@ -716,6 +717,7 @@ export function rehydrateWorkflows(events: ServerEvent[]): void {
               parentToolCallId: event.parent_tool_call_id ?? undefined,
               name: event.name,
               description: event.description,
+              phases: event.phases,
             },
             ts,
           );
