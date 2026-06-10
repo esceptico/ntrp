@@ -5,12 +5,16 @@ import type { ModelGroup } from "../../api";
 import { ModelReasoningPicker } from "../ComposerSelectors";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
-type ModelKind = "research_model" | "memory_model";
+type ModelKind = "research_model" | "workflow_model" | "memory_model";
 
 const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
   research_model: {
     title: "Research",
     description: "Used by research-style sub-agents and deeper investigations.",
+  },
+  workflow_model: {
+    title: "Workflows",
+    description: "Default for workflow agents; a script's explicit per-agent model still wins.",
   },
   memory_model: {
     title: "Memory",
@@ -18,7 +22,7 @@ const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
   },
 };
 
-const SETTINGS_MODEL_KINDS: ModelKind[] = ["research_model", "memory_model"];
+const SETTINGS_MODEL_KINDS: ModelKind[] = ["research_model", "workflow_model", "memory_model"];
 
 export function ModelsTab() {
   const connected = useStore((s) => s.connected);
@@ -111,6 +115,8 @@ export function ModelsTab() {
         />
         {SETTINGS_MODEL_KINDS.map((kind) => {
           const current = cfg[kind];
+          // Absent until the server restarts onto a build that ships this key.
+          if (current === undefined) return null;
           const meta = KIND_LABELS[kind];
           return (
             <Section

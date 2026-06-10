@@ -969,6 +969,8 @@ export interface ServerConfig {
   compaction_token_limit: number;
   compaction_token_trigger: number;
   research_model: string;
+  /** Default model for workflow agents; optional until the server ships the key. */
+  workflow_model?: string;
   memory_model: string;
   embedding_model: string;
   web_search: "auto" | "exa" | "ddgs" | "none";
@@ -1013,6 +1015,7 @@ export async function getServerModels(config: AppConfig): Promise<ModelsResponse
 export type ServerConfigPatch = Partial<{
   chat_model: string;
   research_model: string;
+  workflow_model: string;
   memory_model: string;
   max_depth: number;
   reasoning_model: string;

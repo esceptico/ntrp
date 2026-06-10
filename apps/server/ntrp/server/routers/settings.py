@@ -99,6 +99,7 @@ def _config_response(rt: Runtime) -> dict:
         "compaction_token_limit": compaction_token_limit,
         "compaction_token_trigger": compaction_token_trigger,
         "research_model": config.research_model,
+        "workflow_model": config.workflow_model,
         "memory_model": config.memory_model,
         "embedding_model": config.embedding_model,
         "web_search": config.web_search,
@@ -173,6 +174,7 @@ async def get_models(runtime: Runtime = Depends(get_runtime)):
         },
         "chat_model": config.chat_model,
         "research_model": config.research_model,
+        "workflow_model": config.workflow_model,
         "memory_model": config.memory_model,
     }
 
@@ -239,6 +241,7 @@ async def delete_custom_model(
             active_models={
                 "chat_model": config.chat_model,
                 "research_model": config.research_model,
+                "workflow_model": config.workflow_model,
                 "memory_model": config.memory_model,
             },
         )

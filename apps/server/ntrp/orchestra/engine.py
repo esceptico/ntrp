@@ -121,6 +121,10 @@ class Orchestra:
         run = getattr(ctx, "run", None)
         self._budget = getattr(run, "budget", None)
         self.budget_view = TokenBudget(self._budget)
+        # Default model for workflow agents (config.workflow_model, falls back
+        # to the chat model server-side). A script's explicit agent(model=...)
+        # still wins.
+        self._default_model = getattr(run, "workflow_model", None)
 
     @classmethod
     def for_ctx(
@@ -252,7 +256,7 @@ class Orchestra:
                 task=task,
                 system_prompt=system_prompt,
                 tools=tools,
-                model_override=model,
+                model_override=model or self._default_model,
                 parent_id=self.parent_id,
                 isolation=IsolationLevel.FULL,
                 agent_type=agent_type_label or phase or "workflow",

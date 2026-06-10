@@ -62,6 +62,7 @@ class RunContext:
     extra_auto_approve: set[str] = field(default_factory=set)
     approval_controls: ApprovalControls = field(default_factory=ApprovalControls)
     research_model: str | None = None
+    workflow_model: str | None = None
     deferred_tools_enabled: bool = False
     loaded_tools: set[str] = field(default_factory=set)
     allowed_tool_names: set[str] | None = None

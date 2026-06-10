@@ -66,7 +66,7 @@ class ConfigService:
             else:
                 settings["provider_keys"] = provider_keys
 
-            for key in ("chat_model", "research_model", "memory_model"):
+            for key in ("chat_model", "research_model", "workflow_model", "memory_model"):
                 if (val := settings.get(key)) and val in provider_models:
                     settings.pop(key)
             _remove_model_reasoning_settings(settings, set(provider_models))
@@ -77,7 +77,7 @@ class ConfigService:
         provider_models = get_models_by_provider(provider)
 
         def mutate(settings: dict) -> None:
-            for key in ("chat_model", "research_model", "memory_model"):
+            for key in ("chat_model", "research_model", "workflow_model", "memory_model"):
                 if (val := settings.get(key)) and val in provider_models:
                     settings.pop(key)
             _remove_model_reasoning_settings(settings, set(provider_models))
@@ -216,7 +216,7 @@ class ConfigService:
             else:
                 settings.pop("custom_model_keys", None)
 
-            for key in ("chat_model", "research_model", "memory_model"):
+            for key in ("chat_model", "research_model", "workflow_model", "memory_model"):
                 if active_models.get(key) == model_id:
                     settings.pop(key, None)
             _remove_model_reasoning_settings(settings, {model_id})

@@ -399,6 +399,7 @@ class IntegrationToggles(BaseModel):
 class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
     research_model: str | None = None
+    workflow_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = Field(default=None, gt=0)
     reasoning_model: str | None = None

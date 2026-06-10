@@ -52,6 +52,7 @@ PERSIST_KEYS = frozenset(
     {
         "chat_model",
         "research_model",
+        "workflow_model",
         "memory_model",
         "embedding_model",
         "memory",
@@ -107,6 +108,7 @@ class Config(BaseSettings):
     # Model IDs
     chat_model: str | None = None
     research_model: str | None = None
+    workflow_model: str | None = None
     memory_model: str | None = None
     embedding_model: str | None = None
 
@@ -195,6 +197,8 @@ class Config(BaseSettings):
             self.memory_model = self.chat_model
         if not self.research_model and self.chat_model:
             self.research_model = self.chat_model
+        if not self.workflow_model and self.chat_model:
+            self.workflow_model = self.chat_model
 
     def _migrate_legacy_reasoning_effort(self) -> None:
         if not self.reasoning_effort or not self.chat_model or self.model_reasoning_efforts:
@@ -212,7 +216,7 @@ class Config(BaseSettings):
                 self.embedding_model = embedding
                 return
 
-    @field_validator("chat_model", "research_model", "memory_model")
+    @field_validator("chat_model", "research_model", "workflow_model", "memory_model")
     @classmethod
     def _validate_model(cls, v: str | None) -> str | None:
         if v is None:

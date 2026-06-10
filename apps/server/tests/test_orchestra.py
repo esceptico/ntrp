@@ -432,3 +432,23 @@ async def test_run_script_syntax_error_line_is_script_relative():
     with pytest.raises(SyntaxError) as ei:
         await run_script(o, "x = 1\nfor in range(3):\n    pass", {})
     assert ei.value.lineno == 2  # the bad line, not 3 (wrapper offset removed)
+
+
+@pytest.mark.asyncio
+async def test_agent_inherits_workflow_model_unless_overridden():
+    seen: list[str | None] = []
+
+    async def spawn_fn(ctx, *, task, model_override=None, **kwargs):
+        seen.append(model_override)
+        return SimpleNamespace(text="ok")
+
+    ctx = SimpleNamespace(
+        spawn_fn=spawn_fn,
+        run=SimpleNamespace(budget=None, workflow_model="cheap-model"),
+    )
+    orchestra = Orchestra.for_ctx(ctx)
+
+    await orchestra.agent("task one")
+    await orchestra.agent("task two", model="strong-model")
+
+    assert seen == ["cheap-model", "strong-model"]

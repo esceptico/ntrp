@@ -34,6 +34,7 @@ class AgentConfig:
     model: str
     research_model: str | None
     max_depth: int
+    workflow_model: str | None = None
     max_iterations: int | None = None
     max_tool_calls: int | None = None
     max_wall_time_seconds: float | None = None
@@ -50,6 +51,7 @@ class AgentConfig:
         return cls(
             model=model or config.chat_model,
             research_model=config.research_model,
+            workflow_model=config.workflow_model,
             max_depth=config.max_depth,
             max_iterations=config.agent_max_iterations,
             max_tool_calls=config.agent_max_tool_calls,
@@ -108,6 +110,7 @@ def create_agent(
         extra_auto_approve=extra_auto_approve or set(),
         approval_controls=approval_controls or ApprovalControls(),
         research_model=config.research_model,
+        workflow_model=config.workflow_model,
         deferred_tools_enabled=config.deferred_tools,
         loaded_tools=loaded_tools if loaded_tools is not None else set(),
         allowed_tool_names=tool_schema_names(tools),
