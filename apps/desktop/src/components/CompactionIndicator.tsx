@@ -12,13 +12,13 @@ export function CompactionIndicator() {
 
 export function CompactionIndicatorContent({ compacting }: { compacting: boolean }) {
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence>
       {compacting ? (
         <motion.div
           key="compacting"
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -2 }}
+          exit={{ opacity: 0, y: -2, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
           transition={{ duration: MOTION.palette, ease: EASE_OUT }}
           className="flex items-center gap-2 my-1"
         >

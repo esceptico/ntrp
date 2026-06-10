@@ -28,6 +28,12 @@ export const SPRING_TAP_RELEASE = { type: "spring", stiffness: 400, damping: 22,
  *  Used by `TurnGroup`'s work-block stagger. Snappier than SPRING_MODAL;
  *  livelier than SPRING_CARD. */
 export const SPRING_ROW_ENTRY = { type: "spring", stiffness: 360, damping: 28, mass: 0.8 } as const;
+/** Trace ticker rows. Heavier damping than ROW_ENTRY — zero overshoot so
+ *  the most-fired animation in the app never wobbles mid-stream. */
+export const SPRING_TRACE_ROW = { type: "spring", stiffness: 350, damping: 40, mass: 0.8 } as const;
+/** Approval-stack cards (deck promotion, queue collapse). User-tuned:
+ *  quick settle, no overshoot. */
+export const SPRING_STACK = { type: "spring", stiffness: 340, damping: 32, mass: 0.9 } as const;
 
 // ─── Eases (cubic-bezier tuples) ─────────────────────────────
 
@@ -68,6 +74,27 @@ export const DURATION_ROUTE = MOTION.route;
 // ─── Panel entry curve ───────────────────────────────────────
 
 export const ENTRY_PANEL = SPRING_MODAL;
+
+// ─── Blur-dissolve vocabulary ────────────────────────────────
+// House enter/exit poses: content rises into focus, exits dissolve.
+// Spread + override per surface (`{ ...RISE_IN, y: -4 }`); pick duration
+// from MOTION per tier. Exits run FASTER than entrances (fast/row vs
+// row/panel). Keep blur ≤4px — these are content-sized elements, and
+// fill-rate cost scales with area.
+
+/** Entrance pose — pair with `animate={RISE_SETTLED}`. */
+export const RISE_IN = { opacity: 0, y: 6, filter: "blur(3px)" } as const;
+export const RISE_SETTLED = { opacity: 1, y: 0, filter: "blur(0px)" } as const;
+/** Exit pose for sections/banners/popunders — quicker, dissolving. */
+export const DISSOLVE_OUT = { opacity: 0, scale: 0.97, filter: "blur(3px)" } as const;
+/** Exit pose for popLayout list rows — the removed row dissolves while
+ *  siblings FLIP up via their `layout` springs. */
+export const ROW_EXIT = { opacity: 0, scale: 0.96, filter: "blur(4px)" } as const;
+
+/** Shared modal panel pose — the single source for hand-rolled modal
+ *  entrances (PageModal, ToolViewer, Mermaid) so the pose can't drift
+ *  per call site. Pair with ENTRY_PANEL. */
+export const POSE_MODAL = { opacity: 0, scale: 0.96, y: 6 } as const;
 
 // ─── Spatial origin helpers ──────────────────────────────────
 

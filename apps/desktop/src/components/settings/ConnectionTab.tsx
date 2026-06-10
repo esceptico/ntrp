@@ -1,5 +1,6 @@
 import { Field } from "./Field";
 import type { AppConfig } from "../../api";
+import { BlurSwap } from "../BlurSwap";
 import { SettingsInlineError } from "./SettingsNotice";
 
 export function ConnectionTab({
@@ -46,9 +47,11 @@ export function ConnectionTab({
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
         >
-          {saving ? "Checking…" : "Save & reconnect"}
+          <BlurSwap swapKey={saving ? "checking" : "save"} blur={2}>
+            {saving ? "Checking…" : "Save & reconnect"}
+          </BlurSwap>
         </button>
       </div>
     </form>

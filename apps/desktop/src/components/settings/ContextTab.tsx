@@ -3,6 +3,7 @@ import { NumberField, PercentField } from "./Field";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ServerConfig, ServerConfigPatch } from "../../api";
 import { useStore } from "../../store";
+import { BlurSwap } from "../BlurSwap";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type Draft = Pick<
@@ -131,9 +132,11 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
         <button
           type="submit"
           disabled={!dirty || saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
         >
-          {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          <BlurSwap swapKey={saving ? "saving" : dirty ? "save" : "saved"} blur={2}>
+            {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          </BlurSwap>
         </button>
       </div>
     </form>

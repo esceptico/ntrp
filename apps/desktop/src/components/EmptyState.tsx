@@ -1,11 +1,18 @@
+import { motion } from "motion/react";
 import { Sparkles } from "lucide-react";
 import { useStore } from "../store";
+import { EASE_DECELERATE, MOTION, RISE_IN, RISE_SETTLED } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 
 export function EmptyState() {
   const connected = useStore((s) => s.connected);
   return (
-    <div className="mt-[14vh] mx-auto grid gap-5 justify-items-center text-center">
+    <motion.div
+      initial={RISE_IN}
+      animate={RISE_SETTLED}
+      transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+      className="mt-[14vh] mx-auto grid gap-5 justify-items-center text-center"
+    >
       <span
         aria-hidden
         className="grid place-items-center w-12 h-12 rounded-2xl bg-accent-soft text-accent-strong"
@@ -22,6 +29,6 @@ export function EmptyState() {
             : "Open settings to point ntrp at your server."}
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 }

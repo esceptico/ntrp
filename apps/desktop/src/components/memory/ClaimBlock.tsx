@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Check, GitFork, Pencil, X } from "lucide-react";
 import type { PageEditKind, RenderedClaim } from "../../api/memoryItems";
-import { SPRING_CARD, SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION, ROW_EXIT, SPRING_CARD, SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { Badge } from "../Badge";
 import { feedbackTone, provenanceLabel, provenanceTone } from "./lens";
@@ -14,6 +14,16 @@ export interface ClaimOp {
   new_text?: string;
 }
 
+// Exit pose, resolved from AnimatePresence's `custom` (the block is already
+// removed when it plays): "reject" leaves left, "supersede" dissolves in place.
+const claimExit = {
+  exit: (how: "supersede" | "reject" | null) => ({
+    ...ROW_EXIT,
+    ...(how === "reject" ? { x: -24 } : null),
+    transition: { duration: MOTION.row, ease: EASE_OUT },
+  }),
+};
+
 /** One claim-backed line in a lens page. At rest it's prose with a faint
  *  accent gutter on hover; clicking lifts it into an inline editor offering
  *  Edit (supersede with new text), Supersede (explicit successor), Accept
@@ -23,32 +33,31 @@ export function ClaimBlock({
   block,
   editing,
   busy,
-  exiting,
   onOpen,
   onClose,
   onCommit,
   onPeek,
+  ref,
 }: {
   block: RenderedClaim;
   editing: boolean;
   busy: boolean;
-  /** "supersede" = old line collapses out as successor takes its place;
-   *  "reject" = leaves left. Drives the direction-encoded exit. */
-  exiting: "supersede" | "reject" | null;
   onOpen: () => void;
   onClose: () => void;
   onCommit: (op: ClaimOp) => void;
   /** Peel into the claim detail (provenance / lenses). */
   onPeek: () => void;
+  /** Forwarded so popLayout can measure the row when it pops out on exit. */
+  ref?: React.Ref<HTMLDivElement>;
 }) {
-  const exitVariant = exiting === "reject" ? { opacity: 0, x: -24, height: 0, marginBottom: 0 } : { opacity: 0, height: 0, marginBottom: 0 };
-
   return (
     <motion.div
+      ref={ref}
       layout="position"
       initial={false}
-      exit={exitVariant}
-      transition={{ layout: SPRING_LAYOUT, default: SPRING_CARD }}
+      exit="exit"
+      variants={claimExit}
+      transition={{ layout: SPRING_LAYOUT }}
       className="relative"
     >
       {editing ? (
@@ -184,7 +193,7 @@ function ClaimEditor({
             disabled={busy || !dirty}
             onClick={() => onCommit({ kind: "edit", claim_id: block.claim_id, new_text: text.trim() })}
             title="Supersede with the edited text"
-            className="inline-flex h-6 items-center gap-1 rounded-md bg-ink px-2.5 text-xs font-medium text-on-ink transition-opacity hover:opacity-90 disabled:opacity-[0.45]"
+            className="inline-flex h-6 items-center gap-1 rounded-md bg-ink px-2.5 text-xs font-medium text-on-ink transition-[opacity,scale] duration-check ease-out active:scale-[0.97] hover:opacity-90 disabled:opacity-[0.45]"
           >
             <Pencil size={ICON.XS} strokeWidth={2.2} /> Save
           </button>
@@ -214,7 +223,7 @@ function EditorBtn({
       disabled={disabled}
       title={title}
       className={[
-        "inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors disabled:opacity-[0.45]",
+        "inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
         danger ? "hover:bg-bad-soft hover:text-bad" : "hover:bg-surface-soft hover:text-ink",
       ].join(" ")}
     >

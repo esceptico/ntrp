@@ -5,6 +5,7 @@ import type { AppConfig } from "../../api";
 import { getMemoryGraph, getWholeGraph, type MemoryItem } from "../../api/memoryItems";
 import { SPRING_MODAL } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
+import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
 import { Badge } from "../Badge";
 import { MemoryGraph, type CenterRequest, type GraphPayload } from "./MemoryGraph";
@@ -92,50 +93,56 @@ export function GraphView({
         <MemoryGraph graph={graph} rootId={rootId} selectedId={selected?.id ?? null} onSelect={onSelect} centerRequest={center} />
       )}
 
-      {/* Peel-in inspector — sibling-anchored panel, slides from the right. */}
+      {/* Peel-in inspector — sibling-anchored panel, slides from the right.
+          Keyed statically so the slide plays only on open/close; node-to-node
+          selection blur-swaps the content in place instead of re-sliding. */}
       <AnimatePresence>
         {selected && (
           <motion.div
-            key={selected.id}
+            key="inspector"
             initial={{ opacity: 0, x: 28 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 28 }}
             transition={SPRING_MODAL}
             className="surface-panel surface-popover absolute right-3 top-3 bottom-3 z-10 flex w-[300px] flex-col p-4"
           >
-            <div className="flex items-start justify-between gap-2">
-              <Badge tone="neutral" size="sm">
-                {selected.canonical_subject}
-              </Badge>
-              <IconButton onClick={() => setSelected(null)} aria-label="Close" size="sm">
-                <X size={ICON.SM} strokeWidth={2} />
-              </IconButton>
-            </div>
-            <p className="mt-3 text-sm leading-[1.5] text-ink">{selected.content}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <Badge tone={provenanceTone(selected.provenance)} size="sm">
-                {provenanceLabel(selected.provenance)}
-              </Badge>
-              <Badge tone="neutral" size="sm">
-                {scopeLabel(selected.scope)}
-              </Badge>
-              {selected.corroboration > 0 && (
-                <span className="text-2xs text-faint tabular-nums">×{selected.corroboration}</span>
-              )}
-            </div>
-            <div className="mt-auto pt-3 text-2xs text-faint">
-              created {relativeTime(selected.created_at)}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setRootId(selected.id);
-                setCenter({ id: selected.id, nonce: Date.now() });
-              }}
-              className="mt-2 inline-flex h-7 items-center justify-center rounded-md bg-surface-soft text-sm text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink"
-            >
-              Center here
-            </button>
+            <BlurSwap swapKey={selected.id} blur={3} className="min-h-0 flex-1 *:h-full *:w-full">
+              <div className="flex h-full min-w-0 flex-col">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge tone="neutral" size="sm">
+                    {selected.canonical_subject}
+                  </Badge>
+                  <IconButton onClick={() => setSelected(null)} aria-label="Close" size="sm">
+                    <X size={ICON.SM} strokeWidth={2} />
+                  </IconButton>
+                </div>
+                <p className="mt-3 text-sm leading-[1.5] text-ink">{selected.content}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <Badge tone={provenanceTone(selected.provenance)} size="sm">
+                    {provenanceLabel(selected.provenance)}
+                  </Badge>
+                  <Badge tone="neutral" size="sm">
+                    {scopeLabel(selected.scope)}
+                  </Badge>
+                  {selected.corroboration > 0 && (
+                    <span className="text-2xs text-faint tabular-nums">×{selected.corroboration}</span>
+                  )}
+                </div>
+                <div className="mt-auto pt-3 text-2xs text-faint">
+                  created {relativeTime(selected.created_at)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRootId(selected.id);
+                    setCenter({ id: selected.id, nonce: Date.now() });
+                  }}
+                  className="mt-2 inline-flex h-7 items-center justify-center rounded-md bg-surface-soft text-sm text-ink-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] hover:bg-surface-sunken hover:text-ink"
+                >
+                  Center here
+                </button>
+              </div>
+            </BlurSwap>
           </motion.div>
         )}
       </AnimatePresence>

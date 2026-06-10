@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, SlidersHorizontal } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import type { SidebarGroupBy } from "../../store/types";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 
 const GROUP_OPTIONS: { value: SidebarGroupBy; label: string }[] = [
@@ -29,18 +31,24 @@ export function SidebarFilters() {
   const active = groupBy !== "project" || unreadOnly || channelsOnly;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPos((p) => (p.ready ? { ...p, ready: false } : p));
+      return;
+    }
     const trigger = triggerRef.current;
     const el = popRef.current;
     if (!trigger || !el) return;
     const tr = trigger.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
+    // offsetWidth/offsetHeight: layout box, unaffected by the in-flight
+    // entrance transform (getBoundingClientRect would read the scaled size).
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
     const margin = 8;
     const left = Math.max(
       margin,
-      Math.min(tr.right - rect.width, window.innerWidth - rect.width - margin),
+      Math.min(tr.right - width, window.innerWidth - width - margin),
     );
-    const top = Math.max(margin, Math.min(tr.bottom + 4, window.innerHeight - rect.height - margin));
+    const top = Math.max(margin, Math.min(tr.bottom + 4, window.innerHeight - height - margin));
     setPos({ left, top, ready: true });
   }, [open]);
 
@@ -84,32 +92,40 @@ export function SidebarFilters() {
       >
         <SlidersHorizontal size={ICON.SM} strokeWidth={2} />
       </button>
-      {open && root &&
+      {root &&
         createPortal(
-          <div
-            ref={popRef}
-            className="surface-panel surface-popover fixed z-50 w-[200px] py-1.5"
-            style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
-          >
-            <SectionLabel>Group by</SectionLabel>
-            {GROUP_OPTIONS.map((opt) => (
-              <PopRow
-                key={opt.value}
-                selected={groupBy === opt.value}
-                onClick={() => setPref("sidebarGroupBy", opt.value)}
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                ref={popRef}
+                initial={{ opacity: 0, scale: 0.97, y: -4 }}
+                animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
+                exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                transition={SPRING_POPOVER}
+                className="surface-panel surface-popover fixed z-50 w-[200px] py-1.5"
+                style={{ left: pos.left, top: pos.top, transformOrigin: "top right" }}
               >
-                {opt.label}
-              </PopRow>
-            ))}
-            <div className="my-1 h-px bg-line-soft" />
-            <SectionLabel>Filter</SectionLabel>
-            <PopRow selected={unreadOnly} onClick={() => setPref("sidebarUnreadOnly", !unreadOnly)}>
-              Unread only
-            </PopRow>
-            <PopRow selected={channelsOnly} onClick={() => setPref("sidebarChannelsOnly", !channelsOnly)}>
-              Channels only
-            </PopRow>
-          </div>,
+                <SectionLabel>Group by</SectionLabel>
+                {GROUP_OPTIONS.map((opt) => (
+                  <PopRow
+                    key={opt.value}
+                    selected={groupBy === opt.value}
+                    onClick={() => setPref("sidebarGroupBy", opt.value)}
+                  >
+                    {opt.label}
+                  </PopRow>
+                ))}
+                <div className="my-1 h-px bg-line-soft" />
+                <SectionLabel>Filter</SectionLabel>
+                <PopRow selected={unreadOnly} onClick={() => setPref("sidebarUnreadOnly", !unreadOnly)}>
+                  Unread only
+                </PopRow>
+                <PopRow selected={channelsOnly} onClick={() => setPref("sidebarChannelsOnly", !channelsOnly)}>
+                  Channels only
+                </PopRow>
+              </motion.div>
+            )}
+          </AnimatePresence>,
           root,
         )}
     </>

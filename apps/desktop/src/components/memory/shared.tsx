@@ -194,7 +194,7 @@ export function PrimaryBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
+      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
     >
       {children}
     </button>
@@ -217,7 +217,7 @@ export function GhostBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-[0.45]"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
     >
       {children}
     </button>
@@ -238,7 +238,7 @@ export function DangerBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-colors disabled:opacity-[0.45]"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
     >
       {children}
     </button>

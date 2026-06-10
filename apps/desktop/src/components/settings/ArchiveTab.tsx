@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
+import { EASE_OUT, MOTION, ROW_EXIT, SPRING_LAYOUT } from "../../lib/tokens/motion";
 import {
   fetchArchivedSessions,
   permanentlyDeleteSession,
@@ -49,17 +51,29 @@ export function ArchiveTab() {
             : "Nothing here. Archived sessions will show up in this view."}
         </Empty>
       ) : (
-        <ul className="flex flex-col gap-1">
-          {filtered.map((s) => (
-            <ArchivedRow key={s.session_id} session={s} />
-          ))}
+        // Keyed by query so filter keystrokes swap the list instantly (no
+        // exits, no FLIP); restore/delete under a stable query still animates.
+        <ul key={query} className="flex flex-col gap-1">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {filtered.map((s) => (
+              <ArchivedRow key={s.session_id} session={s} />
+            ))}
+          </AnimatePresence>
         </ul>
       )}
     </div>
   );
 }
 
-function ArchivedRow({ session }: { session: ArchivedSession }) {
+// `ref` reaches the li so AnimatePresence popLayout can measure the row
+// before popping it out of the layout on exit.
+function ArchivedRow({
+  session,
+  ref,
+}: {
+  session: ArchivedSession;
+  ref?: React.Ref<HTMLLIElement>;
+}) {
   const { busy: anyBusy, error, run } = useMutationState();
   const [busyOp, setBusyOp] = useState<"restore" | "delete" | null>(null);
 
@@ -78,7 +92,13 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
   };
 
   return (
-    <li className="app-row group flex items-center gap-3 px-3 py-2 rounded-[10px]">
+    <motion.li
+      ref={ref}
+      layout
+      exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+      transition={{ layout: SPRING_LAYOUT }}
+      className="app-row group flex items-center gap-3 px-3 py-2 rounded-[10px]"
+    >
       <div className="min-w-0 flex-1">
         <div className="text-base font-medium text-ink tracking-[-0.005em] truncate">
           {session.name || "untitled"}
@@ -108,7 +128,7 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
           danger
         />
       </div>
-    </li>
+    </motion.li>
   );
 }
 
@@ -131,7 +151,7 @@ function RowAction({
       onClick={onClick}
       disabled={busy}
       className={clsx(
-        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
+        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]",
         busy
           ? "text-faint cursor-wait"
           : danger

@@ -37,7 +37,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         ref={ref}
         type={type ?? "button"}
         className={clsx(
-          "grid place-items-center transition-[background-color,color,transform] duration-check ease-out hover:bg-surface-soft active:scale-[0.97]",
+          "grid place-items-center transition-[background-color,color,transform,scale] duration-check ease-out hover:bg-surface-soft active:scale-[0.97]",
           "disabled:opacity-[0.45] disabled:cursor-not-allowed",
           TONE[tone],
           danger ? "hover:text-bad" : "hover:text-ink",

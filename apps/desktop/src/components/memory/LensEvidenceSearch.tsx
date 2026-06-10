@@ -4,7 +4,7 @@ import { ExternalLink, Loader2, Plus, Search, SlidersHorizontal, X } from "lucid
 import type { AppConfig } from "../../api";
 import { searchMemory, writebackLens, type Lens, type MemoryItem } from "../../api/memoryItems";
 import { ICON } from "../../lib/icons";
-import { MOTION, SPRING_LAYOUT, SPRING_POPOVER } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION, SPRING_LAYOUT, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { Badge } from "../Badge";
 import { GhostBtn, SearchInput } from "./shared";
 
@@ -129,19 +129,27 @@ export function LensEvidenceSearch({
 
   return (
     <div className="mt-2">
+      {/* Trigger sits outside the presence: removed instantly on open (no flow
+          jump under the entering panel), fades in as the panel dissolves on close. */}
       {!open && (
-        <GhostBtn onClick={() => setOpen(true)} title="Find entries">
-          <Search size={ICON.XS} strokeWidth={2.2} />
-          <span>Find entries</span>
-        </GhostBtn>
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: MOTION.check, ease: EASE_OUT }}
+        >
+          <GhostBtn onClick={() => setOpen(true)} title="Find entries">
+            <Search size={ICON.XS} strokeWidth={2.2} />
+            <span>Find entries</span>
+          </GhostBtn>
+        </motion.span>
       )}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
             key="panel"
             initial={{ opacity: 0, scale: 0.98, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -4 }}
+            exit={{ opacity: 0, scale: 0.98, y: -4, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
             transition={SPRING_POPOVER}
             style={{ transformOrigin: "top" }}
             onKeyDown={(e) => {
@@ -211,11 +219,11 @@ export function LensEvidenceSearch({
                       layout
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.98 }}
+                      exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
                       transition={{
                         layout: SPRING_LAYOUT,
-                        opacity: { duration: MOTION.row },
-                        y: { duration: MOTION.fast },
+                        opacity: { duration: MOTION.row, ease: EASE_OUT },
+                        y: { duration: MOTION.fast, ease: EASE_OUT },
                       }}
                       className="group/ev rounded-md px-2 py-1.5 transition-colors hover:bg-surface-soft/60"
                     >

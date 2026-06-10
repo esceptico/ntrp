@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import type { MCPServer } from "../../../api";
+import { BlurSwap } from "../../BlurSwap";
 import { LabeledField } from "../Field";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -38,9 +39,11 @@ export function OAuthStatus({
             type="button"
             onClick={onReauthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface hover:text-ink transition-colors disabled:opacity-[0.45]"
+            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
-            {busy ? "…" : server.connected ? "Re-authenticate" : "Sign in"}
+            <BlurSwap swapKey={busy ? "busy" : server.connected ? "reauth" : "signin"} blur={2}>
+              {busy ? "…" : server.connected ? "Re-authenticate" : "Sign in"}
+            </BlurSwap>
           </button>
         </div>
         {(server.client_name || server.client_id || server.scope) && (

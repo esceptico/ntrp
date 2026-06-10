@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { cancelQueuedMessage } from "../actions";
 import { useStore, type QueuedMessage } from "../store";
 import { ICON } from "../lib/icons";
-import { EASE_EMPHASIZED, EASE_HOVER, DURATION_PANEL, DURATION_POPOVER, MOTION } from "../lib/tokens/motion";
+import { EASE_EMPHASIZED, EASE_HOVER, EASE_OUT, DURATION_PANEL, DURATION_POPOVER, MOTION, ROW_EXIT } from "../lib/tokens/motion";
 import { BlurSwap } from "./BlurSwap";
 
 const CARD_TRANSITION = { duration: DURATION_PANEL, ease: EASE_EMPHASIZED };
@@ -19,9 +19,9 @@ const ROW_TRANSITION = { duration: DURATION_POPOVER, ease: EASE_EMPHASIZED };
  *  - Card: rises out from behind the composer on first add, sinks back
  *    on last remove. `layout` smooths height as rows are added /
  *    removed mid-life.
- *  - Row: fade + slight rise on enter, collapse height on exit. The
- *    height collapse is what makes neighbors slide up instead of
- *    snapping. */
+ *  - Row: fade + slight rise on enter; popLayout pops the exiting row
+ *    out of flow so it dissolves in place while neighbors FLIP up via
+ *    their `layout` springs. */
 export function QueueCard() {
   const queued = useStore((s) => s.queuedMessages);
   return (
@@ -37,16 +37,15 @@ export function QueueCard() {
           className="queue-card pointer-events-auto relative mx-4 -mb-3 rounded-t-[12px] rounded-b-[14px] border border-line border-b-0 bg-surface shadow-[var(--shadow-sm)]"
         >
           <motion.div layout className="flex flex-col gap-1 px-3 pt-2 pb-5">
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="popLayout">
               {queued.map((message) => (
                 <motion.div
                   key={message.clientId}
                   layout
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0 }}
+                  exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
                   transition={ROW_TRANSITION}
-                  className="overflow-hidden"
                 >
                   <QueueRow message={message} />
                 </motion.div>
@@ -97,7 +96,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         disabled={disabled}
         title={cancelling ? "Cancelling…" : "Cancel"}
         aria-label="Cancel queued message"
-        className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-[0.45] disabled:hover:bg-transparent disabled:hover:text-faint"
+        className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-[color,background-color,scale] duration-check ease-out active:scale-[0.92] disabled:opacity-[0.45] disabled:hover:bg-transparent disabled:hover:text-faint"
       >
         <BlurSwap swapKey={cancelling ? "loading" : "delete"} blur={3}>
           {cancelling ? (

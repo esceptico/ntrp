@@ -23,20 +23,21 @@ export function Breadcrumbs({
             key={`${i}:${crumb.id}`}
             layout
             initial={{ opacity: 0, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -4 }}
-            transition={{
-              duration: MOTION.check,
-              ease: EASE_EMPHASIZED,
-              delay: i * 0.02,
+            animate={{
+              opacity: 1,
+              x: 0,
+              // Stagger scoped to the entrance only — exits lead, not lag.
+              transition: { duration: MOTION.check, ease: EASE_EMPHASIZED, delay: i * 0.02 },
             }}
+            exit={{ opacity: 0, x: -4 }}
+            transition={{ duration: MOTION.check, ease: EASE_EMPHASIZED }}
             className="flex items-center gap-1"
           >
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onJump(i)}
-              className="h-6 px-2 rounded-md bg-surface-soft text-xs text-ink-soft hover:text-ink hover:bg-surface-sunken transition-colors whitespace-nowrap"
+              className="h-6 px-2 rounded-md bg-surface-soft text-xs text-ink-soft hover:text-ink hover:bg-surface-sunken transition-colors duration-check ease-out whitespace-nowrap"
             >
               {crumb.label}
             </button>

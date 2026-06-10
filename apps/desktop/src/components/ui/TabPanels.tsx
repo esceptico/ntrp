@@ -4,8 +4,9 @@ import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
 
 // Directional content swap: the new panel enters from the side you're moving
 // toward, the old one leaves the opposite way. Small offset — restraint over
-// theatrics.
-const VARIANTS = {
+// theatrics, and no blur on directional slides. Single source for page-level
+// slides (tab panels, palette hierarchy pages).
+export const SLIDE_PAGE_VARIANTS = {
   enter: (dir: number) => ({ opacity: 0, x: dir * 16 }),
   center: { opacity: 1, x: 0 },
   exit: (dir: number) => ({ opacity: 0, x: dir * -16 }),
@@ -41,7 +42,7 @@ export function TabPanels({
       <motion.div
         key={value}
         custom={direction}
-        variants={VARIANTS}
+        variants={SLIDE_PAGE_VARIANTS}
         initial="enter"
         animate="center"
         exit="exit"

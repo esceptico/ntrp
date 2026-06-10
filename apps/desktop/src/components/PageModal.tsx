@@ -5,7 +5,9 @@ import { X } from "lucide-react";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
+  EASE_OUT,
   MOTION,
+  POSE_MODAL,
 } from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
@@ -84,9 +86,13 @@ export function PageModal({
         >
           <motion.div
             className={`surface-panel surface-radius-md ${size} grid ${grid} overflow-hidden`}
-            initial={{ opacity: 0, scale: 0.95, y: 6 }}
+            initial={POSE_MODAL}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 6 }}
+            exit={{
+              opacity: 0,
+              scale: 0.98,
+              transition: { duration: MOTION.fast, ease: EASE_OUT },
+            }}
             transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >

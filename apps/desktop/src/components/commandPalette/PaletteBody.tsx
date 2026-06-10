@@ -10,16 +10,7 @@ import { filterEntries, groupBySection } from "./filter";
 import { useEntries } from "./useEntries";
 import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
 import { ScrollFadeTop } from "../ScrollBlur";
-
-// Directional page swap between hierarchy levels: pushing into a sub-view
-// enters from the right (+1), popping back enters from the left (-1). Mirrors
-// TabPanels' offset/curve so the palette and the rest of the app speak one
-// motion language.
-const PAGE_VARIANTS = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 16 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -16 }),
-};
+import { SLIDE_PAGE_VARIANTS } from "../ui/TabPanels";
 
 export function PaletteBody({
   query,
@@ -187,8 +178,11 @@ export function PaletteBody({
           CommandPalette.tsx `layout`): as the page content below changes
           height, the panel's box animates to match. Inside, page content is
           swapped directionally via AnimatePresence (mode="wait" so the two
-          pages never overlap inside the scroll area). overflow-x-hidden keeps
-          the x-slide from spawning a horizontal scrollbar. */}
+          pages never overlap inside the scroll area). Pushing into a sub-view
+          enters from the right (+1), popping back from the left (-1) — the
+          shared SLIDE_PAGE_VARIANTS so palette pages and tab panels stay on
+          one literal. overflow-x-hidden keeps the x-slide from spawning a
+          horizontal scrollbar. */}
       <motion.div
         ref={listRef}
         layout={morph}
@@ -200,7 +194,7 @@ export function PaletteBody({
           <motion.div
             key={pageKey}
             custom={direction}
-            variants={PAGE_VARIANTS}
+            variants={SLIDE_PAGE_VARIANTS}
             initial="enter"
             animate="center"
             exit="exit"

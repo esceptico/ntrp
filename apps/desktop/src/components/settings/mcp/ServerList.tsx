@@ -36,7 +36,7 @@ export function ServerList({
               <button
                 type="button"
                 onClick={onAdd}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
               >
                 <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
               </button>

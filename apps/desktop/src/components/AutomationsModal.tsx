@@ -21,7 +21,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
-import { SPRING_LAYOUT } from "../lib/tokens/motion";
+import {
+  SPRING_LAYOUT,
+  ROW_EXIT,
+  RISE_IN,
+  RISE_SETTLED,
+  EASE_DECELERATE,
+  EASE_OUT,
+  MOTION,
+} from "../lib/tokens/motion";
 import { useStore } from "../store";
 import {
   deleteAutomation,
@@ -100,7 +108,7 @@ export function AutomationsModal() {
             <button
               type="button"
               onClick={() => setEditor({ kind: "create" })}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
             >
               <Plus size={ICON.XS} strokeWidth={2.2} />
               New
@@ -201,14 +209,14 @@ function ActiveList({
           <button
             type="button"
             onClick={onPickTemplate}
-            className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft text-sm font-medium text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+            className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft text-sm font-medium text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
           >
             Browse templates
           </button>
           <button
             type="button"
             onClick={onCreate}
-            className="inline-flex items-center h-8 px-3 rounded-md text-sm font-medium text-muted hover:text-ink transition-colors"
+            className="inline-flex items-center h-8 px-3 rounded-md text-sm font-medium text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
           >
             Start from scratch
           </button>
@@ -326,9 +334,18 @@ export function SuggestionsSection({
   onPick: (suggestion: AutomationSuggestion) => void;
   onDismiss?: (id: string) => void;
 }) {
+  // Suggestions resolve async after the templates paint. Rise the section in
+  // only when it arrives late — on tab revisits the data is already loaded
+  // and the section mounts statically with the rest of the panel.
+  const arrivedLate = useRef(!suggestions || suggestions.length === 0);
   if (!suggestions || suggestions.length === 0) return null;
   return (
-    <section className="grid gap-2">
+    <motion.section
+      initial={arrivedLate.current ? RISE_IN : false}
+      animate={RISE_SETTLED}
+      transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+      className="grid gap-2"
+    >
       <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-muted">
         Suggested for you
       </h3>
@@ -344,7 +361,7 @@ export function SuggestionsSection({
           ))}
         </AnimatePresence>
       </div>
-    </section>
+    </motion.section>
   );
 }
 
@@ -364,10 +381,10 @@ export function SuggestionCard({
       layout
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
+      exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_LAYOUT}
       data-suggestion={suggestion.id}
-      className="group/suggestion surface-panel surface-radius-sm relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="group/suggestion surface-panel surface-radius-sm relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[scale] duration-check ease-out has-[button:active]:scale-[0.99]"
     >
       {/* Stretched accessible click target (see AutomationCard) — a real button
           over the card, below the dismiss control which is positioned above it. */}
@@ -601,9 +618,12 @@ function AutomationCard({
       layout
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
+      exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_LAYOUT}
-      className="group/run surface-panel surface-radius-sm relative grid content-start gap-1.5 p-3.5 overflow-hidden focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className={clsx(
+        "group/run surface-panel surface-radius-sm relative grid content-start gap-1.5 p-3.5 overflow-hidden focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        interactive && "transition-[scale] duration-check ease-out has-[>button:active]:scale-[0.99]",
+      )}
     >
       {/* Stretched, accessible click target: a real <button> over the whole card
           (keyboard + screen-reader friendly), painted BELOW the toggle and the
@@ -654,7 +674,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={onPick}
-      className="surface-panel surface-radius-sm cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="surface-panel surface-radius-sm cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[scale] duration-check ease-out active:scale-[0.99]"
     >
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">

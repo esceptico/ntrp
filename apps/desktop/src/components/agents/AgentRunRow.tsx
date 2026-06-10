@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import clsx from "clsx";
 import {
   Bot,
@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ICON } from "../../lib/icons";
-import { EASE_EMPHASIZED, EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import {
   isActiveAgentStatus,
   statusDotClass,
@@ -21,6 +21,7 @@ import {
 } from "../../lib/agentRun";
 import { BlurSwap } from "../BlurSwap";
 import { StatusDot } from "../StatusDot";
+import { Collapse } from "../ui/Collapse";
 
 // <AgentRunRow> — the dense borderless row for the right-sidebar agents hub.
 // The activity trace renders its own coherent agent row (trace/ActivityTrace),
@@ -74,7 +75,7 @@ function AgentGlyph({
       <span
         aria-hidden
         className={clsx(
-          "grid place-items-center rounded-md transition-opacity",
+          "grid place-items-center rounded-md transition-opacity duration-row ease-out",
           glyphToneClass(status),
           canStop && "group-hover/run:opacity-0",
         )}
@@ -92,7 +93,7 @@ function AgentGlyph({
             event.stopPropagation();
             onStop?.();
           }}
-          className="absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] duration-row ease-out group-hover/run:pointer-events-auto group-hover/run:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-[0.6]"
+          className="absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color,scale] duration-row ease-out group-hover/run:pointer-events-auto group-hover/run:opacity-100 hover:text-bad active:scale-[0.97] focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-[0.6]"
         >
           <Square size={ICON.XS} strokeWidth={2} />
         </button>
@@ -155,7 +156,7 @@ function ActionButton({ action }: { action: AgentRunAction }) {
         }
       }}
       className={clsx(
-        "grid place-items-center w-4 h-4 rounded text-faint transition-colors duration-check disabled:opacity-50",
+        "grid place-items-center w-4 h-4 rounded text-faint transition-[color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-50",
         action.danger ? "hover:text-bad" : "hover:text-ink",
       )}
     >
@@ -331,7 +332,7 @@ export function AgentRunContent({
                   aria-label="Send a message to this agent"
                   title="Send a message to this agent"
                   className={clsx(
-                    "grid place-items-center w-4 h-4 rounded text-faint transition-colors hover:text-ink",
+                    "grid place-items-center w-4 h-4 rounded text-faint transition-[color,scale] duration-check ease-out active:scale-[0.97] hover:text-ink",
                     composing && "text-ink",
                   )}
                 >
@@ -367,46 +368,33 @@ export function AgentRunContent({
             ))}
         </div>
       )}
-      <AnimatePresence initial={false}>
-        {composing && (
-          <motion.div
-            key="composer"
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-            style={{ display: "grid" }}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div className="mt-1.5 pl-[24px]">
-                <input
-                  autoFocus
-                  value={draft}
-                  disabled={sending}
-                  aria-label="Message this agent"
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void submit();
-                    } else if (event.key === "Escape") {
-                      event.preventDefault();
-                      setComposing(false);
-                      setDraft("");
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!draft.trim()) setComposing(false);
-                  }}
-                  placeholder="Message this agent…"
-                  spellCheck={false}
-                  className="w-full h-7 px-2 rounded-md bg-surface-soft focus:bg-surface-sunken text-xs text-ink-soft placeholder:text-muted outline-none border border-transparent focus:border-line-soft transition-colors disabled:opacity-60"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Collapse open={composing}>
+        <div className="mt-1.5 pl-[24px]">
+          <input
+            autoFocus
+            value={draft}
+            disabled={sending}
+            aria-label="Message this agent"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submit();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setComposing(false);
+                setDraft("");
+              }
+            }}
+            onBlur={() => {
+              if (!draft.trim()) setComposing(false);
+            }}
+            placeholder="Message this agent…"
+            spellCheck={false}
+            className="w-full h-7 px-2 rounded-md bg-surface-soft focus:bg-surface-sunken text-xs text-ink-soft placeholder:text-muted outline-none border border-transparent focus:border-line-soft transition-colors duration-check disabled:opacity-60"
+          />
+        </div>
+      </Collapse>
     </>
   );
 }

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "motion/react";
 import { Archive, FolderInput, Pencil, Pin, PinOff, Sparkles } from "lucide-react";
 import type { Project } from "../../api";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 
 export interface ContextMenuState {
@@ -39,10 +41,11 @@ export function SessionContextMenu({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
+    // offsetWidth/offsetHeight: layout box, unaffected by the in-flight
+    // entrance transform (getBoundingClientRect would read the scaled size).
     const margin = 8;
-    const left = Math.min(state.x, window.innerWidth - rect.width - margin);
-    const top = Math.min(state.y, window.innerHeight - rect.height - margin);
+    const left = Math.min(state.x, window.innerWidth - el.offsetWidth - margin);
+    const top = Math.min(state.y, window.innerHeight - el.offsetHeight - margin);
     setPos({ left: Math.max(margin, left), top: Math.max(margin, top), ready: true });
   }, [state.x, state.y]);
 
@@ -67,11 +70,20 @@ export function SessionContextMenu({
   const root = document.querySelector("#app");
   if (!root) return null;
 
+  // Grow from the clamped anchor corner — if the menu was pushed left/up to
+  // fit the viewport, the cursor sits at its right/bottom edge instead.
+  const originX = pos.left < state.x ? "right" : "left";
+  const originY = pos.top < state.y ? "bottom" : "top";
+
   return createPortal(
-    <div
+    <motion.div
       ref={ref}
+      initial={{ opacity: 0, scale: 0.97, y: -4 }}
+      animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
+      exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+      transition={SPRING_POPOVER}
       className="surface-panel surface-popover fixed z-50 w-[220px] py-1"
-      style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
+      style={{ left: pos.left, top: pos.top, transformOrigin: `${originY} ${originX}` }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <ContextItem
@@ -92,7 +104,7 @@ export function SessionContextMenu({
           onClick={() => onMoveProject(project.project_id)}
         />
       ))}
-    </div>,
+    </motion.div>,
     root,
   );
 }

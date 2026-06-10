@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../../store";
 import { type MCPServer, listMCPServersApi } from "../../../api";
+import { TabPanels } from "../../ui/TabPanels";
 import { ServerForm } from "./ServerForm";
 import { ServerList } from "./ServerList";
 
@@ -28,47 +29,48 @@ export function MCPTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (view.kind === "add") {
-    return (
-      <ServerForm
-        mode="add"
-        onClose={() => setView({ kind: "list" })}
-        onSaved={async () => {
-          await refresh();
-          setView({ kind: "list" });
-        }}
-      />
-    );
-  }
-  if (view.kind === "edit") {
-    const server = servers?.find((s) => s.name === view.name);
-    if (!server) {
-      setView({ kind: "list" });
-      return null;
-    }
-    return (
-      <ServerForm
-        mode="edit"
-        server={server}
-        onClose={() => setView({ kind: "list" })}
-        onSaved={async () => {
-          await refresh();
-        }}
-        onRemoved={async () => {
-          await refresh();
-          setView({ kind: "list" });
-        }}
-      />
-    );
+  const editing = view.kind === "edit" ? servers?.find((s) => s.name === view.name) : undefined;
+  if (view.kind === "edit" && !editing) {
+    setView({ kind: "list" });
+    return null;
   }
 
   return (
-    <ServerList
-      servers={servers}
-      loadError={loadError}
-      onAdd={() => setView({ kind: "add" })}
-      onEdit={(name) => setView({ kind: "edit", name })}
-      onChanged={refresh}
-    />
+    <TabPanels
+      value={view.kind === "edit" ? `edit:${view.name}` : view.kind}
+      direction={view.kind === "list" ? -1 : 1}
+    >
+      {view.kind === "add" ? (
+        <ServerForm
+          mode="add"
+          onClose={() => setView({ kind: "list" })}
+          onSaved={async () => {
+            await refresh();
+            setView({ kind: "list" });
+          }}
+        />
+      ) : view.kind === "edit" && editing ? (
+        <ServerForm
+          mode="edit"
+          server={editing}
+          onClose={() => setView({ kind: "list" })}
+          onSaved={async () => {
+            await refresh();
+          }}
+          onRemoved={async () => {
+            await refresh();
+            setView({ kind: "list" });
+          }}
+        />
+      ) : (
+        <ServerList
+          servers={servers}
+          loadError={loadError}
+          onAdd={() => setView({ kind: "add" })}
+          onEdit={(name) => setView({ kind: "edit", name })}
+          onChanged={refresh}
+        />
+      )}
+    </TabPanels>
   );
 }

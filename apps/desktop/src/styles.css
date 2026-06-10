@@ -82,9 +82,8 @@
   --shadow-md: 0 0 0 0.5px rgba(0, 0, 0, 0.045), 0 3px 14px rgba(0, 0, 0, 0.045), 0 10px 34px rgba(0, 0, 0, 0.028);
   --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 3px 12px rgba(0, 0, 0, 0.04), 0 12px 34px rgba(0, 0, 0, 0.065), 0 22px 56px rgba(0, 0, 0, 0.035);
 
-  --animate-roll-in: rollIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --animate-fade-in: fadeIn 200ms ease-out;
-  --animate-pop-in: popIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-roll-in: rollIn var(--duration-palette) var(--ease-out-soft);
+  --animate-fade-in: fadeIn var(--duration-trace) var(--ease-out-soft);
   --animate-pulse-soft: pulseSoft 1.2s ease-in-out infinite;
 
   /* Motion duration tokens — drive all transition-duration values through
@@ -102,6 +101,20 @@
 
   --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* CSS mirrors of the remaining motion.ts eases — keep in sync. */
+  --ease-hover: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  /* Springy back-out for physical toggles (switch knob). */
+  --ease-back-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Remap Tailwind's ease-out utility onto the house curve so the 24+
+     `ease-out` call sites speak the same dialect as EASE_OUT in motion.ts. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Bare transition utilities (transition-colors etc.) inherit the token
+     scale instead of Tailwind's stock 150ms cubic-bezier(0.4,0,0.2,1) —
+     one timing language on adjacent controls. */
+  --default-transition-duration: var(--duration-row);
+  --default-transition-timing-function: var(--ease-out-soft);
 }
 
 @keyframes pulseSoft {
@@ -109,16 +122,12 @@
   50% { opacity: 1; transform: scale(1); }
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes popIn {
-  from { opacity: 0; transform: scale(0.96) translateY(4px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: translateY(2px); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 @keyframes rollIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 /* ─── Status dot breathing light ─────────────────────────────
@@ -173,14 +182,6 @@
 }
 @keyframes skeleton-shimmer {
   to { transform: translateX(100%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .skeleton::after {
-    animation: none;
-  }
-  .status-dot-breathe {
-    animation: none;
-  }
 }
 
 /* ─── Base ─────────────────────────────────────────────────── */
@@ -412,7 +413,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    Spec: docs/internal/apple-design-intel.md "Tap / Active States". */
 .sidebar button:not(:disabled) {
   transition:
-    scale var(--duration-check) cubic-bezier(0.25, 0.1, 0.25, 1),
+    scale var(--duration-check) ease,
     background-color var(--duration-palette) ease,
     color var(--duration-palette) ease,
     border-color var(--duration-palette) ease,
@@ -485,11 +486,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   );
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .scroll-progressive-blur-top {
-    transition: none;
-  }
-}
 .scroll-fade-bottom {
   -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
           mask-image: linear-gradient(to top, transparent 0, #000 24px);
@@ -693,12 +689,6 @@ button.app-row:not(:disabled):active,
   color: var(--color-accent);
   opacity: 1;
   background-color: var(--color-accent-soft);
-  animation: codeCopyFlash var(--duration-palette) ease-out;
-}
-@keyframes codeCopyFlash {
-  0%   { transform: scale(0.92); }
-  60%  { transform: scale(1.04); }
-  100% { transform: scale(1); }
 }
 /* The pre inside the wrapper takes the bottom rounded corners visually
    via the wrapper's overflow: hidden, so we strip its own chrome. */
@@ -710,15 +700,27 @@ button.app-row:not(:disabled):active,
 .md pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; color: var(--color-ink); }
 .assistant-message[data-streaming="true"] .md pre.streaming-code {
   border-color: color-mix(in oklab, var(--color-line-soft) 78%, var(--color-accent));
-  background:
-    linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-accent) 5%, transparent), transparent),
-    var(--color-code-bg);
-  background-size: 240% 100%, auto;
+}
+/* Sheen rides an absolutely-positioned overlay swept via transform —
+   compositor-only, same pattern as .skeleton::after — instead of
+   animating background-position across the whole pre (full-block
+   repaint per frame exactly while streaming relayout is busiest). */
+.assistant-message[data-streaming="true"] .md .code-block:has(pre.streaming-code)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 35%,
+    color-mix(in oklab, var(--color-accent) 5%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
   animation: streamingCodeSheen 2.4s ease-in-out infinite;
 }
 @keyframes streamingCodeSheen {
-  0% { background-position: 120% 0, 0 0; }
-  100% { background-position: -120% 0, 0 0; }
+  to { transform: translateX(100%); }
 }
 
 /* ─── Syntax highlighting (highlight.js classes) ───────────── */
@@ -839,7 +841,7 @@ button.app-row:not(:disabled):active,
   box-shadow:
     var(--shadow-linen-modal),
     inset 0 0 0 1px var(--ring-light);
-  transition: box-shadow var(--duration-row) cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow var(--duration-row) var(--ease-hover);
 }
 :root.dark .surface-panel,
 .surface-panel[data-tone="dark"] {
@@ -957,7 +959,7 @@ button.app-row:not(:disabled):active,
   /* Springy back-out so the knob overshoots slightly on flip, like a real
      macOS switch. transform is GPU-composited; bg/shadow ease in step with
      the track (dark-mode knob tint shifts on toggle). */
-  transition: transform var(--duration-panel) cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform var(--duration-panel) var(--ease-back-out),
     background-color var(--duration-panel) var(--ease-out-soft),
     box-shadow var(--duration-panel) var(--ease-out-soft);
 }
@@ -1040,7 +1042,7 @@ button.app-row:not(:disabled):active,
   box-shadow:
     var(--shadow-linen-rest),
     inset 0 0 0 1px var(--ring-light-soft);
-  transition: box-shadow var(--duration-row) cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow var(--duration-row) var(--ease-hover);
 }
 
 .surface-card:hover {
@@ -1244,24 +1246,33 @@ button.app-row:not(:disabled):active,
    The halo covers a *much* larger area than the rim arc, so it
    uses a quartered alpha (--breath-peak) — the rim "55%" looks fine
    on a 1px line but reads as a glow-bomb at the same value here. */
+/* The halo is pre-rendered as a static box-shadow on a ::before and only
+   its opacity loops — compositor-only, vs animating box-shadow on the
+   whole composer card (repaint per frame for the entire run). The card
+   keeps its own resting shadow untouched underneath. */
 .composer-card[data-thinking="true"][data-thinking-style="breath"] {
   --breath-peak: calc(var(--thinking-peak) / 4);
+}
+.composer-card[data-thinking="true"][data-thinking-style="breath"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 24px 2px color-mix(in oklab, var(--color-accent) var(--breath-peak), transparent);
+  opacity: 0;
   animation: composerBreath var(--thinking-duration) ease-in-out infinite;
+  transition: opacity var(--duration-panel) ease-out;
 }
 @keyframes composerBreath {
-  0%, 100% { box-shadow: var(--shadow-md); }
-  50% {
-    box-shadow:
-      var(--shadow-md),
-      0 0 24px 2px color-mix(in oklab, var(--color-accent) var(--breath-peak), transparent);
-  }
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
-/* Breath leaving: stop the animation and let box-shadow transition
-   back to the panel base over panel-duration. Keeps the halo dissolving instead
-   of snapping off mid-cycle. */
-.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="breath"] {
+/* Breath leaving: stop the loop and fade the halo out over the
+   panel-duration hold instead of snapping off mid-cycle. */
+.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="breath"]::before {
   animation: none;
-  transition: box-shadow var(--duration-panel) ease-out;
+  opacity: 0;
 }
 
 /* Variant: hue-cycle — no motion, border color drifts toward accent. */
@@ -1426,6 +1437,13 @@ main[data-has-approval="false"] .scroll-messages {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+  /* Exempt indeterminate-wait spinners: a frozen spinner is an ambiguous
+     loading cue. Small-glyph rotation conveys state, not decoration —
+     conventionally allowed under reduced motion. */
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 

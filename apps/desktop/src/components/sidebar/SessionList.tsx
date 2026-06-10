@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Inbox, MoreHorizontal, Pin, Plus, Settings } from "lucide-react";
 import clsx from "clsx";
-import { MOTION, EASE_EMPHASIZED } from "../../lib/tokens/motion";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "../../lib/tokens/motion";
 import { useStore } from "../../store";
 import { compactSessionApi } from "../../api";
 import type { SessionListItem } from "../../api";
@@ -200,25 +200,23 @@ export function SessionList() {
                   {!isCollapsed && (
                     <motion.div
                       key="rows"
-                      initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-                      animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-                      exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-                      transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                      style={{ display: "grid" }}
+                      initial={{ opacity: 0, y: -4, filter: "blur(2px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                      transition={{ duration: MOTION.row, ease: EASE_OUT }}
                     >
-                      <div className="px-2.5 flex flex-col gap-0 overflow-hidden min-h-0">
+                      <div className="px-2.5 flex flex-col gap-0">
                         {head.map(renderRow)}
                         <AnimatePresence initial={false}>
                           {isExpanded && rest.length > 0 && (
                             <motion.div
                               key="more"
-                              initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-                              animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-                              exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-                              transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                              style={{ display: "grid" }}
+                              initial={{ opacity: 0, y: -4, filter: "blur(2px)" }}
+                              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                              exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                              transition={{ duration: MOTION.row, ease: EASE_OUT }}
                             >
-                              <div className="overflow-hidden min-h-0">{rest.map(renderRow)}</div>
+                              {rest.map(renderRow)}
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -250,52 +248,54 @@ export function SessionList() {
         )}
       </div>
 
-      {menu && (
-        <SessionContextMenu
-          state={menu}
-          onClose={closeMenu}
-          isPinned={pinnedSet.has(menu.sessionId)}
-          onTogglePin={() => {
-            togglePin(menu.sessionId);
-            closeMenu();
-          }}
-          onRename={() => {
-            setRenamingId(menu.sessionId);
-            closeMenu();
-          }}
-          onCompact={async () => {
-            const sessionId = menu.sessionId;
-            closeMenu();
-            const cfg = useStore.getState().config;
-            try {
-              const result = await compactSessionApi(cfg, sessionId);
-              if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
-                await loadHistory(sessionId);
+      <AnimatePresence>
+        {menu && (
+          <SessionContextMenu
+            state={menu}
+            onClose={closeMenu}
+            isPinned={pinnedSet.has(menu.sessionId)}
+            onTogglePin={() => {
+              togglePin(menu.sessionId);
+              closeMenu();
+            }}
+            onRename={() => {
+              setRenamingId(menu.sessionId);
+              closeMenu();
+            }}
+            onCompact={async () => {
+              const sessionId = menu.sessionId;
+              closeMenu();
+              const cfg = useStore.getState().config;
+              try {
+                const result = await compactSessionApi(cfg, sessionId);
+                if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
+                  await loadHistory(sessionId);
+                }
+              } catch {
+                /* ignore */
               }
-            } catch {
-              /* ignore */
-            }
-          }}
-          onArchive={async () => {
-            closeMenu();
-            try {
-              await archiveSession(menu.sessionId);
-            } catch {
-              /* ignore */
-            }
-          }}
-          onMoveProject={async (projectId) => {
-            const sessionId = menu.sessionId;
-            closeMenu();
-            try {
-              await moveSessionToProject(sessionId, projectId);
-            } catch {
-              /* ignore */
-            }
-          }}
-          projects={projects}
-        />
-      )}
+            }}
+            onArchive={async () => {
+              closeMenu();
+              try {
+                await archiveSession(menu.sessionId);
+              } catch {
+                /* ignore */
+              }
+            }}
+            onMoveProject={async (projectId) => {
+              const sessionId = menu.sessionId;
+              closeMenu();
+              try {
+                await moveSessionToProject(sessionId, projectId);
+              } catch {
+                /* ignore */
+              }
+            }}
+            projects={projects}
+          />
+        )}
+      </AnimatePresence>
       <ProjectSettingsModal project={editingProject} onClose={() => setEditingProjectId(null)} />
     </div>
   );

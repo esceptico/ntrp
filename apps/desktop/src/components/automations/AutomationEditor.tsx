@@ -26,6 +26,9 @@ import {
   EASE_OUT,
   SPRING_POPOVER,
   MOTION,
+  RISE_IN,
+  RISE_SETTLED,
+  DISSOLVE_OUT,
 } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
@@ -33,8 +36,6 @@ import { SegmentedControl } from "../SegmentedControl";
 import { Chip } from "../Chip";
 import { SwitchControl } from "../SwitchControl";
 import { BlurSwap } from "../BlurSwap";
-
-const MODAL_BACKDROP_DURATION = 0.2;
 
 export type EditorSeed =
   | { kind: "create"; preset?: CreateAutomationPayload }
@@ -334,7 +335,7 @@ export function AutomationEditor({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: MODAL_BACKDROP_DURATION, ease: EASE_DECELERATE }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
           onClick={onClose}
         >
           <motion.div
@@ -375,32 +376,55 @@ export function AutomationEditor({
               />
             </div>
 
-            {unsafeAutoApprove && (
-              <div className="mx-5 mb-3 flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-warn-soft border border-warn/20">
-                <TriangleAlert size={ICON.SM} strokeWidth={2} className="mt-0.5 shrink-0 text-warn" />
-                <span className="text-sm text-warn leading-[1.4]">
-                  Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
-                  Anyone who can post to this channel can drive a full-tool, unattended run. Set a
-                  sender, or turn Auto-Approve off.
-                </span>
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {unsafeAutoApprove && (
+                <motion.div
+                  key="unsafe"
+                  initial={RISE_IN}
+                  animate={RISE_SETTLED}
+                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                  className="mx-5 mb-3 flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-warn-soft border border-warn/20"
+                >
+                  <TriangleAlert size={ICON.SM} strokeWidth={2} className="mt-0.5 shrink-0 text-warn" />
+                  <span className="text-sm text-warn leading-[1.4]">
+                    Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
+                    Anyone who can post to this channel can drive a full-tool, unattended run. Set a
+                    sender, or turn Auto-Approve off.
+                  </span>
+                </motion.div>
+              )}
 
-            {isMessage && (
-              <div className="mx-5 mb-3 px-3 py-2.5 rounded-[10px] bg-surface-soft border border-line-soft">
-                <span className="text-sm text-muted leading-[1.4]">
-                  To search a specific repo, move this automation's channel to the target project
-                  from the sidebar after it's created.
-                </span>
-              </div>
-            )}
+              {isMessage && (
+                <motion.div
+                  key="message-info"
+                  initial={RISE_IN}
+                  animate={RISE_SETTLED}
+                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                  className="mx-5 mb-3 px-3 py-2.5 rounded-[10px] bg-surface-soft border border-line-soft"
+                >
+                  <span className="text-sm text-muted leading-[1.4]">
+                    To search a specific repo, move this automation's channel to the target project
+                    from the sidebar after it's created.
+                  </span>
+                </motion.div>
+              )}
 
-            {error && (
-              <div className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15">
-                <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
-                <span className="text-sm text-bad leading-[1.4]">{error}</span>
-              </div>
-            )}
+              {error && (
+                <motion.div
+                  key="save-error"
+                  initial={RISE_IN}
+                  animate={RISE_SETTLED}
+                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                  className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
+                >
+                  <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
+                  <span className="text-sm text-bad leading-[1.4]">{error}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <footer className="flex items-center justify-between gap-2 px-3 py-2.5 bg-surface-soft/40">
               <div className="flex items-center gap-2">
@@ -428,7 +452,7 @@ export function AutomationEditor({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-sm font-medium text-muted hover:text-ink transition-colors"
+                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-sm font-medium text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
                 >
                   Cancel
                 </button>
@@ -436,9 +460,11 @@ export function AutomationEditor({
                   type="button"
                   onClick={() => void submit()}
                   disabled={!valid || saving}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-[0.45] disabled:cursor-not-allowed transition-opacity"
+                  className="inline-flex items-center justify-center gap-1.5 h-8 min-w-[72px] px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-[0.45] disabled:cursor-not-allowed transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
                 >
-                  {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
+                  <BlurSwap swapKey={saving ? "saving" : seed.kind} blur={2}>
+                    {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
+                  </BlurSwap>
                 </button>
               </div>
             </footer>
@@ -720,10 +746,15 @@ const schedFieldCls =
 // All trigger-kind panels share one grid cell ([grid-area:1/1]) so the popover
 // is always as tall as the tallest panel — switching kinds can't change its
 // height (no jump). Inactive panels stay laid out (for sizing) but hidden.
+// Both states carry the opacity transition so the swap overlaps (outgoing
+// dissolves while incoming rises); the inactive panel's visibility flip is
+// delayed past the fade so it never cuts out mid-crossfade.
 const fieldStackCls = (active: boolean) =>
   clsx(
     "[grid-area:1/1] grid gap-2.5 content-start",
-    active ? "opacity-100 transition-opacity duration-row ease-out" : "invisible opacity-0",
+    active
+      ? "opacity-100 transition-opacity duration-row ease-out"
+      : "invisible opacity-0 pointer-events-none [transition:opacity_var(--duration-row)_var(--ease-out-soft),visibility_0s_var(--duration-row)]",
   );
 
 function ScheduleField({

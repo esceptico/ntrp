@@ -11,6 +11,7 @@ import {
   type WorkflowPhaseStatus,
 } from "../../store/workflow-domain";
 import { Badge, type BadgeTone } from "../Badge";
+import { BlurSwap } from "../BlurSwap";
 
 // Shared workflow presentation. Both the activity-trace chip and the sidebar hub
 // render WorkflowProgressCard; the overlay (WorkflowPanel) reuses the helpers, so
@@ -104,7 +105,13 @@ export function PhaseSparkline({ agents }: { agents: WorkflowAgent[] }) {
   return (
     <span className="flex items-center gap-[3px] shrink-0" aria-hidden>
       {agents.map((agent) => (
-        <span key={agent.taskId} className={clsx("w-[5px] h-[5px] rounded-full", pipClass(agent.status))} />
+        <span
+          key={agent.taskId}
+          className={clsx(
+            "w-[5px] h-[5px] rounded-full transition-colors duration-trace ease-out",
+            pipClass(agent.status),
+          )}
+        />
       ))}
     </span>
   );
@@ -157,13 +164,13 @@ export function WorkflowProgressCard({
       type="button"
       onClick={onOpen}
       title={workflow.description ?? `${workflow.name ?? "Workflow"} — open`}
-      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left cursor-pointer transition-colors hover:border-line hover:bg-surface-sunken"
+      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line hover:bg-surface-sunken active:scale-[0.985]"
     >
       <div className="flex min-w-0 items-center gap-2">
         <span
           aria-hidden
           className={clsx(
-            "grid place-items-center w-5 h-5 shrink-0 rounded-md",
+            "grid place-items-center w-5 h-5 shrink-0 rounded-md transition-colors duration-trace ease-out",
             running ? "bg-accent-soft text-accent-strong" : "bg-surface-sunken text-faint",
           )}
         >
@@ -171,14 +178,20 @@ export function WorkflowProgressCard({
         </span>
         <span
           className={clsx(
-            "min-w-0 flex-1 truncate font-medium",
+            "min-w-0 flex-1 truncate font-medium transition-colors duration-trace ease-out",
             running ? "text-ink" : workflow.status === "failed" ? "text-bad" : "text-muted",
           )}
         >
           {workflow.name ?? "Workflow"}
         </span>
-        <Badge size="sm" tone={WORKFLOW_BADGE_TONE[workflow.status]}>
-          {statusWord(workflow.status)}
+        <Badge
+          size="sm"
+          tone={WORKFLOW_BADGE_TONE[workflow.status]}
+          className="transition-colors duration-trace ease-out"
+        >
+          <BlurSwap swapKey={workflow.status} blur={2}>
+            {statusWord(workflow.status)}
+          </BlurSwap>
         </Badge>
         {running && (
           // span[role=button]: the card root is already a <button>, and nested
@@ -200,7 +213,7 @@ export function WorkflowProgressCard({
                 void stopRun();
               }
             }}
-            className="grid place-items-center w-5 h-5 shrink-0 rounded text-faint transition-colors hover:bg-bad-soft hover:text-bad"
+            className="grid place-items-center w-5 h-5 shrink-0 rounded text-faint transition-[background-color,color,scale] duration-check ease-out hover:bg-bad-soft hover:text-bad active:scale-[0.97]"
           >
             <Square size={ICON.XS} strokeWidth={2} fill="currentColor" />
           </span>
@@ -209,7 +222,7 @@ export function WorkflowProgressCard({
           size={ICON.XS}
           strokeWidth={2}
           className={clsx(
-            "shrink-0 text-faint transition-transform group-hover/workflow:text-muted",
+            "shrink-0 text-faint transition-[rotate,color] duration-row ease-out group-hover/workflow:text-muted",
             expanded && "rotate-90 text-muted", // expanded-in-place (sidebar) → points down
           )}
           aria-hidden
@@ -222,7 +235,10 @@ export function WorkflowProgressCard({
               {phases.map((phase) => (
                 <span
                   key={phase.name}
-                  className={clsx("h-[3px] flex-1 min-w-[2px] rounded-full", phaseSegmentClass(phase.status))}
+                  className={clsx(
+                    "h-[3px] flex-1 min-w-[2px] rounded-full transition-colors duration-trace ease-out",
+                    phaseSegmentClass(phase.status),
+                  )}
                 />
               ))}
             </span>

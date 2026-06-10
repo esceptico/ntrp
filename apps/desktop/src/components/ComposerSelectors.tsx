@@ -7,7 +7,7 @@ import { useStore } from "../store";
 import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "../actions";
 import type { ModelGroup } from "../api";
 import { ICON } from "../lib/icons";
-import { DURATION_POPOVER, EASE_DECELERATE } from "../lib/tokens/motion";
+import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../lib/tokens/motion";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -117,7 +117,7 @@ export function ModelReasoningPicker({
         disabled={disabled}
         title={efforts.length > 0 ? `${currentModel} · thinking ${currentEffort ?? "off"}` : currentModel}
         className={clsx(
-          "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none max-w-[260px]",
+          "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] select-none max-w-[260px]",
           open
             ? "bg-surface-soft text-ink"
             : "text-muted hover:bg-surface-soft hover:text-ink",
@@ -143,7 +143,7 @@ export function ModelReasoningPicker({
           ref={popoverRef}
           initial={{ opacity: 0, y: 4, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
           transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
           style={{
             position: "fixed",
@@ -316,7 +316,7 @@ function EffortPill({
       type="button"
       onClick={onClick}
       className={clsx(
-        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-[background-color,color,transform] duration-check ease-out select-none capitalize active:scale-[0.97]",
+        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-[background-color,color,scale] duration-check ease-out select-none capitalize active:scale-[0.97]",
         active
           ? "bg-accent-soft text-accent-strong"
           : "text-muted hover:bg-surface-soft hover:text-ink",

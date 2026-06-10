@@ -23,7 +23,7 @@ import {
   type RenderedClaim,
 } from "../../api/memoryItems";
 import { Markdown } from "../Markdown";
-import { MOTION, SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, SPRING_LAYOUT } from "../../lib/tokens/motion";
 import { BlurSwap } from "../BlurSwap";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
@@ -42,6 +42,15 @@ import {
 } from "./shared";
 import { criterionPreview, lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
 
+// Disclosure reveals: the layout snaps at mount/unmount, only the content
+// rises into focus — never a height tween over these unbounded subtrees.
+const REVEAL_IN = { ...RISE_IN, y: -4, filter: "blur(2px)" };
+const REVEAL_ENTER = { duration: MOTION.row, ease: EASE_OUT };
+const REVEAL_EXIT = {
+  opacity: 0,
+  filter: "blur(2px)",
+  transition: { duration: MOTION.fast, ease: EASE_OUT },
+};
 
 export function LensesView({
   config,
@@ -105,16 +114,13 @@ export function LensesView({
         <AnimatePresence initial={false}>
           {composing && (
             <motion.div
-              initial={{ opacity: 0, gridTemplateRows: "0fr" }}
-              animate={{ opacity: 1, gridTemplateRows: "1fr" }}
-              exit={{ opacity: 0, gridTemplateRows: "0fr" }}
-              transition={SPRING_LAYOUT}
-              style={{ display: "grid" }}
+              initial={REVEAL_IN}
+              animate={RISE_SETTLED}
+              exit={REVEAL_EXIT}
+              transition={REVEAL_ENTER}
               className="px-2.5"
             >
-              <div className="min-h-0 overflow-hidden">
-                <Composer config={config} onCreated={onCreated} onCancel={() => setComposing(false)} />
-              </div>
+              <Composer config={config} onCreated={onCreated} onCancel={() => setComposing(false)} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -379,21 +385,26 @@ function LensPage({
   // A generation poll in flight — cancelled on unmount/reload so a stale loop
   // never writes into a remounted page (lens switch keys remount LensPage).
   const pollRef = useRef<{ alive: boolean } | null>(null);
-  // Exit-animation timer for a write-back op; tracked so a lens switch within the
-  // 240ms window can't fire load()/re-arm a poll on the unmounted page.
-  const exitTimerRef = useRef<number | null>(null);
+  // Post-exit continuation for a write-back op: the removed claim row's exit
+  // animation drives the re-fetch (ClaimSources fires onClaimExitDone).
+  // Cleared by stopPoll so a reload within the exit window can't fire a
+  // redundant load() — and overwritten wholesale by back-to-back commits.
+  const exitContinuationRef = useRef<(() => void) | null>(null);
   // False once this LensPage has unmounted (lens switch). applyOps awaits the
-  // write-back before arming the exit timer; if the user switches lenses during
-  // that await, the continuation must not arm a timer / load() on the dead page.
+  // write-back before arming the exit continuation; if the user switches lenses
+  // during that await, the continuation must not arm / load() on the dead page.
   const mountedRef = useRef(true);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) pollRef.current.alive = false;
     pollRef.current = null;
-    if (exitTimerRef.current !== null) {
-      clearTimeout(exitTimerRef.current);
-      exitTimerRef.current = null;
-    }
+    exitContinuationRef.current = null;
+  }, []);
+
+  const onClaimExitDone = useCallback(() => {
+    const continueAfterExit = exitContinuationRef.current;
+    exitContinuationRef.current = null;
+    continueAfterExit?.();
   }, []);
 
   const load = useCallback(
@@ -411,6 +422,9 @@ function LensPage({
           // `/page/status` until ready, never blocking the request on synthesis.
           if (!isLensGenStatus(result)) {
             setPage(result);
+            // Fresh data in — release the exit hold (the removed claim is gone
+            // from the page itself now, the filter must not linger).
+            setExiting(null);
             setGen(null);
             setLoading(false);
             return;
@@ -431,6 +445,7 @@ function LensPage({
                       if (!token.alive) return;
                       if (!isLensGenStatus(p)) {
                         setPage(p);
+                        setExiting(null);
                         setGen(null);
                         setLoading(false);
                       } else {
@@ -496,18 +511,13 @@ function LensPage({
         if (res.rejected.length) parts.push(`${res.rejected.length} rejected`);
         setRunNote(parts.join(" · ") || "no change");
         if (hint && res.applied.length) {
+          // Removing the block from ClaimSources plays its exit; the popLayout
+          // AnimatePresence then fires onClaimExitDone, which runs this.
           setExiting(hint);
-          // let the exit animation play, then re-fetch the spine. Tracked so an
-          // unmount (lens switch) within the window cancels it (see stopPoll).
-          // Cancel any prior pending timer first: back-to-back commits within the
-          // 240ms window would otherwise orphan it into a redundant re-fetch.
-          if (exitTimerRef.current !== null) clearTimeout(exitTimerRef.current);
-          exitTimerRef.current = window.setTimeout(() => {
-            exitTimerRef.current = null;
-            setExiting(null);
+          exitContinuationRef.current = () => {
             load({ detail, refresh: res.rederive_triggered });
             onListChanged();
-          }, 240);
+          };
         } else {
           load({ detail, refresh: res.rederive_triggered });
           onListChanged();
@@ -577,6 +587,7 @@ function LensPage({
               onCommit={onClaimCommit}
               onPeek={onPeekClaim}
               onFindEvidence={findEvidenceFor}
+              onExitDone={onClaimExitDone}
             />
           ) : page ? (
             <FlatPage
@@ -588,6 +599,7 @@ function LensPage({
               onClose={() => setEditingId(null)}
               onCommit={onClaimCommit}
               onPeek={onPeekClaim}
+              onExitDone={onClaimExitDone}
             />
           ) : null}
 
@@ -613,7 +625,8 @@ function LensPage({
                 key={runNote}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
+                exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                transition={{ duration: MOTION.row, ease: EASE_OUT }}
                 className="tabular-nums text-muted"
               >
                 {runNote}
@@ -627,17 +640,10 @@ function LensPage({
           <span className="mr-auto text-xs text-faint">
             {page?.synthesized === false && "raw list (synthesis unavailable)"}
           </span>
-          <AnimatePresence initial={false} mode="wait">
+          <BlurSwap swapKey={confirmingDelete ? "confirm" : "actions"} blur={3}>
             {confirmingDelete ? (
               // In-app confirm instead of the off-brand native window.confirm.
-              <motion.div
-                key="confirm"
-                initial={{ opacity: 0, x: 6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: MOTION.fast }}
-                className="flex items-center gap-2"
-              >
+              <div className="flex items-center gap-2">
                 <span className="text-xs text-faint">Delete this view? Claims are untouched.</span>
                 <GhostBtn onClick={() => setConfirmingDelete(false)}>Cancel</GhostBtn>
                 <DangerBtn
@@ -655,21 +661,14 @@ function LensPage({
                 >
                   Delete view
                 </DangerBtn>
-              </motion.div>
+              </div>
             ) : (
-              <motion.div
-                key="actions"
-                initial={false}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: MOTION.fast }}
-                className="flex items-center gap-2"
-              >
+              <div className="flex items-center gap-2">
                 <GhostBtn onClick={() => setEditingCriterion(true)}>Edit criterion</GhostBtn>
                 <GhostBtn onClick={() => setConfirmingDelete(true)}>Delete view</GhostBtn>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </BlurSwap>
         </>
       }
     />
@@ -839,15 +838,14 @@ function CoverageStrip({ coverage }: { coverage: CoverageAdvisory }) {
 }
 
 function CoverageMeter({ coverage, compact }: { coverage: CoverageAdvisory; compact?: boolean }) {
-  const pct = Math.min(100, Math.round(coverage.ratio * 100));
   return (
     <div className={compact ? "h-1 w-16 overflow-hidden rounded-full bg-surface-sunken" : "h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken"}>
       <motion.div
-        layout
         initial={false}
-        animate={{ width: `${pct}%` }}
+        animate={{ scaleX: Math.min(1, coverage.ratio) }}
         transition={SPRING_LAYOUT}
-        className={coverage.generic ? "h-full rounded-full bg-warn" : "h-full rounded-full bg-accent"}
+        style={{ originX: 0 }}
+        className={coverage.generic ? "h-full w-full rounded-full bg-warn" : "h-full w-full rounded-full bg-accent"}
       />
     </div>
   );
@@ -867,6 +865,7 @@ export function GroupedProfiles({
   onCommit,
   onPeek,
   onFindEvidence,
+  onExitDone,
 }: {
   groups: ProjectedGroup[];
   editingId: string | null;
@@ -877,6 +876,7 @@ export function GroupedProfiles({
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
   onFindEvidence?: (subject: string) => void;
+  onExitDone: () => void;
 }) {
   // Key collapse state by a stable per-group id, not the raw subject string: two
   // groups can legitimately share a subject (cached re-read), and a subject-keyed
@@ -918,14 +918,13 @@ export function GroupedProfiles({
             <AnimatePresence initial={false}>
               {isOpen && (
                 <motion.div
-                  initial={{ opacity: 0, gridTemplateRows: "0fr" }}
-                  animate={{ opacity: 1, gridTemplateRows: "1fr" }}
-                  exit={{ opacity: 0, gridTemplateRows: "0fr" }}
-                  transition={SPRING_LAYOUT}
-                  style={{ display: "grid" }}
+                  initial={REVEAL_IN}
+                  animate={RISE_SETTLED}
+                  exit={REVEAL_EXIT}
+                  transition={REVEAL_ENTER}
                   className="pl-6"
                 >
-                  <div className="min-h-0 overflow-hidden flex flex-col gap-2 py-0.5">
+                  <div className="flex flex-col gap-2 py-0.5">
                     {g.synthesized && stripAnchors(g.markdown).trim() && (
                       <Markdown
                         content={stripAnchors(g.markdown).trim()}
@@ -941,6 +940,7 @@ export function GroupedProfiles({
                       onClose={onClose}
                       onCommit={onCommit}
                       onPeek={onPeek}
+                      onExitDone={onExitDone}
                     />
                     {onFindEvidence && (
                       <button
@@ -972,6 +972,7 @@ function ClaimSources({
   onClose,
   onCommit,
   onPeek,
+  onExitDone,
 }: {
   blocks: RenderedClaim[];
   editingId: string | null;
@@ -981,6 +982,8 @@ function ClaimSources({
   onClose: () => void;
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
+  /** Fires when a removed claim row finishes its exit animation. */
+  onExitDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
   if (blocks.length === 0) return null;
@@ -1007,27 +1010,38 @@ function ClaimSources({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ opacity: 0, gridTemplateRows: "0fr" }}
-            animate={{ opacity: 1, gridTemplateRows: "1fr" }}
-            exit={{ opacity: 0, gridTemplateRows: "0fr" }}
-            transition={SPRING_LAYOUT}
-            style={{ display: "grid" }}
+            initial={REVEAL_IN}
+            animate={RISE_SETTLED}
+            exit={REVEAL_EXIT}
+            transition={REVEAL_ENTER}
+            // relative: the wrapper's animated filter makes it the containing
+            // block for popLayout's absolutely-positioned exit rows — position
+            // it so offset measurements resolve against the same box.
+            className="relative mt-1 flex flex-col gap-0.5"
           >
-            <div className="min-h-0 overflow-hidden mt-1 flex flex-col gap-0.5">
-              {blocks.map((b) => (
-                <ClaimBlock
-                  key={b.claim_id}
-                  block={b}
-                  editing={editingId === b.claim_id}
-                  busy={busyId === b.claim_id}
-                  exiting={exiting && exiting.id === b.claim_id ? exiting.how : null}
-                  onOpen={() => onOpen(b.claim_id)}
-                  onClose={onClose}
-                  onCommit={onCommit}
-                  onPeek={() => onPeek(b.claim_id)}
-                />
-              ))}
-            </div>
+            {/* A committed write-back removes its block here; `custom` carries the
+                op direction to the already-removed row's exit variant. */}
+            <AnimatePresence
+              mode="popLayout"
+              initial={false}
+              custom={exiting?.how ?? null}
+              onExitComplete={onExitDone}
+            >
+              {blocks
+                .filter((b) => b.claim_id !== exiting?.id)
+                .map((b) => (
+                  <ClaimBlock
+                    key={b.claim_id}
+                    block={b}
+                    editing={editingId === b.claim_id}
+                    busy={busyId === b.claim_id}
+                    onOpen={() => onOpen(b.claim_id)}
+                    onClose={onClose}
+                    onCommit={onCommit}
+                    onPeek={() => onPeek(b.claim_id)}
+                  />
+                ))}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1058,6 +1072,7 @@ function FlatPage({
   onClose,
   onCommit,
   onPeek,
+  onExitDone,
 }: {
   page: ProjectedPage;
   editingId: string | null;
@@ -1067,6 +1082,7 @@ function FlatPage({
   onClose: () => void;
   onCommit: (op: ClaimOp) => void;
   onPeek: (claimId: string) => void;
+  onExitDone: () => void;
 }) {
   const prose = page.synthesized ? stripAnchors(page.markdown).trim() : "";
   return (
@@ -1081,6 +1097,7 @@ function FlatPage({
         onClose={onClose}
         onCommit={onCommit}
         onPeek={onPeek}
+        onExitDone={onExitDone}
       />
     </div>
   );
@@ -1102,7 +1119,7 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: MOTION.panel }}
+      transition={{ duration: MOTION.panel, ease: EASE_OUT }}
       className="mt-4 flex flex-col gap-2.5"
     >
       {/* Static title — the spinner lives on the active step only, so there are
@@ -1143,7 +1160,7 @@ function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boo
                 <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: MOTION.fast }}
+                  transition={{ duration: MOTION.fast, ease: EASE_OUT }}
                   className="text-xs tabular-nums text-faint"
                 >
                   {detail}

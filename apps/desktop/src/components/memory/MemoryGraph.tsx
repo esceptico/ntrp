@@ -10,6 +10,7 @@ import {
   type Simulation,
 } from "d3-force";
 import type { MemoryEdge, MemoryEdgeRole, MemoryItem } from "../../api/memoryItems";
+import { MOTION } from "../../lib/tokens/motion";
 import { nodeColor, provenanceLabel, truncate } from "./lens";
 
 export interface GraphPayload {
@@ -294,7 +295,8 @@ export function MemoryGraph({
     if (!node) return;
     setEasePan(true);
     setTransform((t) => ({ ...t, x: size.w / 2 - node.x * t.k, y: size.h / 2 - node.y * t.k }));
-    const timer = setTimeout(() => setEasePan(false), 380);
+    // Reset just after the CSS transition (--duration-route) settles.
+    const timer = setTimeout(() => setEasePan(false), MOTION.route * 1000 + 20);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerRequest?.nonce]);
@@ -355,6 +357,7 @@ export function MemoryGraph({
             return (
               <line
                 key={i}
+                className="transition-opacity duration-row ease-out"
                 x1={l.source.x}
                 y1={l.source.y}
                 x2={l.target.x}
@@ -400,6 +403,7 @@ export function MemoryGraph({
             return (
               <g
                 key={n.id}
+                className="transition-opacity duration-row ease-out"
                 transform={`translate(${n.x},${n.y})`}
                 opacity={lit ? 1 : 0.18}
                 style={{ cursor: "pointer" }}
@@ -449,7 +453,7 @@ export function MemoryGraph({
         <button
           type="button"
           onClick={fit}
-          className="pointer-events-auto rounded-md border border-line-soft bg-surface/80 px-2.5 py-1 text-xs text-ink-soft backdrop-blur-sm transition-colors hover:bg-surface-soft hover:text-ink"
+          className="pointer-events-auto rounded-md border border-line-soft bg-surface/80 px-2.5 py-1 text-xs text-ink-soft backdrop-blur-sm transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] hover:bg-surface-soft hover:text-ink"
         >
           Fit
         </button>

@@ -132,7 +132,7 @@ function Section({
             >
               <span
                 className={clsx(
-                  "shrink-0 grid place-items-center w-5 h-5 rounded-md transition-colors",
+                  "shrink-0 grid place-items-center w-5 h-5 rounded-md transition-colors duration-check ease-out",
                   active ? "text-ink-soft" : "text-faint",
                 )}
               >

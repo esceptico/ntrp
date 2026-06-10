@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
@@ -34,6 +35,7 @@ import {
   shouldShowLoadedSettingsContent,
 } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
@@ -246,15 +248,27 @@ export function ProvidersTab() {
         onDisconnect={() => void disconnect(provider)}
         onCodexSignIn={() => void startCodexSignIn()}
       >
-        {provider.id === "custom" && customOpen && (
-          <CustomModelsPanel
-            provider={provider}
-            draft={customDraft}
-            pendingId={pendingId}
-            onDraftChange={updateCustomDraft}
-            onCreate={() => void createCustomModel()}
-            onDelete={(modelId) => void deleteCustomModel(modelId)}
-          />
+        {provider.id === "custom" && (
+          <AnimatePresence initial={false}>
+            {customOpen && (
+              <motion.div
+                key="custom-models"
+                initial={{ ...RISE_IN, y: -4 }}
+                animate={RISE_SETTLED}
+                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                transition={{ duration: MOTION.row, ease: EASE_OUT }}
+              >
+                <CustomModelsPanel
+                  provider={provider}
+                  draft={customDraft}
+                  pendingId={pendingId}
+                  onDraftChange={updateCustomDraft}
+                  onCreate={() => void createCustomModel()}
+                  onDelete={(modelId) => void deleteCustomModel(modelId)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
       </ProviderRow>
     );
@@ -270,7 +284,7 @@ export function ProvidersTab() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
         >
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -427,45 +441,56 @@ function ProviderRow({
               onClick={primaryAction}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
+                "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
                 provider.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
               )}
             >
-              {actionLabel}
+              <BlurSwap swapKey={actionLabel} blur={2}>
+                {actionLabel}
+              </BlurSwap>
             </button>
           )}
         </div>
       </div>
 
-      {editing && !provider.connected && !isOauth && !isCustom && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 bg-surface-soft/35">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(event) => onKeyChange(event.target.value)}
-            placeholder="API key"
-            autoFocus
-            className="input-field"
-          />
-          <button
-            type="button"
-            onClick={onConnect}
-            disabled={!apiKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
+      <AnimatePresence initial={false}>
+        {editing && !provider.connected && !isOauth && !isCustom && (
+          <motion.div
+            key="key-editor"
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 bg-surface-soft/35"
           >
-            Connect
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(event) => onKeyChange(event.target.value)}
+              placeholder="API key"
+              autoFocus
+              className="input-field"
+            />
+            <button
+              type="button"
+              onClick={onConnect}
+              disabled={!apiKey.trim() || pending}
+              className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Connect
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-[color,border-color,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Cancel
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {codexStatus?.status === "pending" && (
         <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-sm text-muted">
@@ -595,7 +620,7 @@ function CustomModelsPanel({
             type="button"
             onClick={onCreate}
             disabled={!canSaveCustomModelDraft(draft) || creating}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
           >
             <BlurSwap swapKey={creating ? "loading" : "add"} blur={3}>
               {creating ? (

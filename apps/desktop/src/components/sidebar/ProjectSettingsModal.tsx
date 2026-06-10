@@ -79,7 +79,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm text-ink outline-none focus:border-accent"
+              className="w-full px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm text-ink outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow] duration-row ease-out"
               autoFocus
             />
           </label>
@@ -89,14 +89,14 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
               <input
                 value={cwd}
                 onChange={(event) => setCwd(event.target.value)}
-                className="min-w-0 flex-1 px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm font-mono text-ink outline-none focus:border-accent"
+                className="min-w-0 flex-1 px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm font-mono text-ink outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow] duration-row ease-out"
                 spellCheck={false}
               />
               <button
                 type="button"
                 disabled={saving || pickingCwd}
                 onClick={pickCwd}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
               >
                 <FolderOpen size={ICON.SM} strokeWidth={2} />
                 Choose
@@ -108,7 +108,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
             <textarea
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              className="w-full min-h-[150px] px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm text-ink outline-none focus:border-accent resize-none"
+              className="w-full min-h-[150px] px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm text-ink outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow] duration-row ease-out resize-none"
             />
           </label>
           {error && <div className="text-sm text-bad">{error}</div>}
@@ -118,14 +118,14 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
             type="button"
             disabled={saving}
             onClick={onClose}
-            className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft"
+            className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={!canSave}
-            className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink"
+            className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
           >
             Save
           </button>

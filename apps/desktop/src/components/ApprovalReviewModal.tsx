@@ -9,6 +9,7 @@ import {
   ENTRY_PANEL,
   EASE_DECELERATE,
   MOTION,
+  POSE_MODAL,
 } from "../lib/tokens/motion";
 import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
@@ -74,13 +75,13 @@ export function ApprovalReviewModal() {
             initial={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
-                : { opacity: 0, scale: 0.96, y: 6 }
+                : POSE_MODAL
             }
             animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
             exit={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
-                : { opacity: 0, scale: 0.96, y: 6 }
+                : POSE_MODAL
             }
             transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
@@ -129,7 +130,7 @@ export function ApprovalReviewModal() {
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, false)}
-                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-sm font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
+                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-sm font-medium hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
               >
                 <X size={ICON.XS} strokeWidth={2} />
                 Reject
@@ -137,7 +138,7 @@ export function ApprovalReviewModal() {
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, true)}
-                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
               >
                 <Check size={ICON.XS} strokeWidth={2.4} />
                 Approve

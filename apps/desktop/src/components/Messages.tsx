@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
@@ -9,13 +10,22 @@ import { visibleMessageIds } from "../lib/messageVisibility";
 import { messageSegments } from "../lib/messageSegments";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "../actions";
-import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "../lib/tokens/motion";
+import { BlurSwap } from "./BlurSwap";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
 import { ScrollBlurTop } from "./ScrollBlur";
 import { ICON } from "../lib/icons";
+
+// Streaming smooth-scroll spring, tuned for "river of text" feel — low
+// stiffness + high damping so scroll trails the latest content gently
+// instead of snapping or overshooting. Units are use-stick-to-bottom-
+// normalized, not framer-motion's, so it lives here rather than with the
+// SPRING_* tokens. Spec: docs/internal/apple-design-intel.md and
+// https://github.com/StonkDog/use-stick-to-bottom.
+const SPRING_SCROLL_RIVER = { damping: 0.92, stiffness: 0.025, mass: 1.5 };
 
 // Parent (Chat) remounts this component on session change via key={sessionId}
 // so each session starts fresh — no carryover scroll state.
@@ -37,13 +47,9 @@ export function Messages() {
     firstMessageIdInSourceFocus(s.order, s.messages, s.sourceFocus, s.currentSessionId),
   );
 
-  // Streaming smooth-scroll. Spring tuned for "river of text" feel — low
-  // stiffness + high damping so scroll trails the latest content gently
-  // instead of snapping or overshooting. Spec: docs/internal/apple-design-
-  // intel.md and https://github.com/StonkDog/use-stick-to-bottom.
   const { scrollRef, contentRef, scrollToBottom, stopScroll, isNearBottom } = useStickToBottom({
     initial: "instant",
-    resize: { damping: 0.92, stiffness: 0.025, mass: 1.5 },
+    resize: SPRING_SCROLL_RIVER,
   });
   const topAnchorRef = useRef<{ height: number; top: number } | null>(null);
 
@@ -192,33 +198,45 @@ export function Messages() {
         </div>
       </div>
       <ScrollBlurTop scrollerRef={scrollRef} />
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {!isNearBottom && order.length > 0 && (
-          // Two discrete variants (round chevron vs. pill with count) swap
-          // via AnimatePresence + a `mode="wait"` keyed parent. Each variant
-          // only animates opacity/scale/y — pure compositor work. Previously
-          // a single `layout`-FLIP button morphed widths, which forced a
-          // measurement pass per swap.
+          // Visibility and content are decoupled: AnimatePresence shows/hides
+          // one persistent shell (opacity/scale/y — pure compositor work)
+          // while the chevron ↔ "{n} new" content crossfades in place via
+          // BlurSwap. Shell colors transition in CSS; width snaps under the
+          // blur bridge instead of tweening.
           <motion.button
-            key={unreadCount > 0 ? "unread" : "chevron"}
+            key="jump-to-latest"
             type="button"
             onClick={onPillClick}
             initial={{ opacity: 0, y: 6, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.95 }}
+            exit={{
+              opacity: 0,
+              y: 6,
+              scale: 0.95,
+              transition: { duration: MOTION.fast, ease: EASE_OUT },
+            }}
             transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
             aria-label={unreadCount > 0 ? `${unreadCount} new message${unreadCount === 1 ? "" : "s"} — jump to latest` : "Scroll to bottom"}
             style={{ bottom: "calc(var(--chat-bottom-h, 96px) + 12px)" }}
-            className={
+            className={clsx(
+              "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center justify-center h-8 overflow-hidden rounded-full border border-transparent shadow-md transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]",
               unreadCount > 0
-                ? "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-md text-sm font-medium hover:opacity-90 transition-opacity"
-                : "absolute left-1/2 -translate-x-1/2 z-20 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted shadow-md transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft"
-            }
-          >
-            <ChevronDown size={ICON.MD} strokeWidth={2} />
-            {unreadCount > 0 && (
-              <span className="tabular-nums">{unreadCount} new</span>
+                ? "pl-2.5 pr-3 bg-ink text-on-ink hover:bg-ink-soft"
+                : "w-8 bg-surface text-muted hover:text-ink hover:bg-surface-soft",
             )}
+          >
+            <BlurSwap swapKey={unreadCount > 0 ? "unread" : "chevron"} blur={3}>
+              {unreadCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+                  <ChevronDown size={ICON.MD} strokeWidth={2} />
+                  <span className="tabular-nums">{unreadCount} new</span>
+                </span>
+              ) : (
+                <ChevronDown size={ICON.MD} strokeWidth={2} />
+              )}
+            </BlurSwap>
           </motion.button>
         )}
       </AnimatePresence>

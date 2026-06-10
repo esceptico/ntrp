@@ -197,7 +197,7 @@ function KindChip({
     <button
       type="button"
       onClick={onClick}
-      className={`h-6 px-2 rounded-full text-2xs font-medium tracking-[-0.005em] transition-colors select-none ${
+      className={`h-6 px-2 rounded-full text-2xs font-medium tracking-[-0.005em] transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] select-none ${
         active ? "bg-accent-soft text-accent-strong" : "text-muted hover:bg-surface-soft hover:text-ink"
       }`}
     >
@@ -299,94 +299,103 @@ function ClaimDetail({
       : "current";
 
   return (
-    <DetailShell
-      header={
-        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={SPRING_CARD}>
-          <p className="text-base leading-[1.5] text-ink">{item.content}</p>
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <Badge tone={provenanceTone(item.provenance)} size="md">
-              {provenanceLabel(item.provenance)}
-            </Badge>
-            {item.feedback !== "none" && (
-              <Badge tone={feedbackTone(item.feedback)} size="md">
-                {item.feedback}
+    // One entrance for the whole detail — header, stats, and sections rise as
+    // a unit (remounts via the loading placeholder on each selection).
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING_CARD}
+      className="h-full"
+    >
+      <DetailShell
+        header={
+          <div>
+            <p className="text-base leading-[1.5] text-ink">{item.content}</p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <Badge tone={provenanceTone(item.provenance)} size="md">
+                {provenanceLabel(item.provenance)}
               </Badge>
+              {item.feedback !== "none" && (
+                <Badge tone={feedbackTone(item.feedback)} size="md">
+                  {item.feedback}
+                </Badge>
+              )}
+              <Badge tone={item.invalid_at ? "neutral" : "ok"} size="md">
+                {validity}
+              </Badge>
+            </div>
+          </div>
+        }
+        body={
+          <div className="mt-2 flex flex-col gap-6">
+            {/* trust signals — four quiet stats, deliberately no single confidence score */}
+            <div className="grid grid-cols-4 gap-2">
+              <Stat label="provenance" value={provenanceLabel(item.provenance)} />
+              <Stat label="corroboration" value={String(item.corroboration)} />
+              <Stat label="last relevant" value={relativeTime(item.last_relevant_at)} />
+              <Stat label="feedback" value={item.feedback} />
+            </div>
+
+            {item.canonical_subject && (
+              <Section title="Subject">
+                <Pill tone="accent">{truncate(item.canonical_subject, 32)}</Pill>
+              </Section>
             )}
-            <Badge tone={item.invalid_at ? "neutral" : "ok"} size="md">
-              {validity}
-            </Badge>
-          </div>
-        </motion.div>
-      }
-      body={
-        <div className="mt-2 flex flex-col gap-6">
-          {/* trust signals — four quiet stats, deliberately no single confidence score */}
-          <div className="grid grid-cols-4 gap-2">
-            <Stat label="provenance" value={provenanceLabel(item.provenance)} />
-            <Stat label="corroboration" value={String(item.corroboration)} />
-            <Stat label="last relevant" value={relativeTime(item.last_relevant_at)} />
-            <Stat label="feedback" value={item.feedback} />
-          </div>
 
-          {item.canonical_subject && (
-            <Section title="Subject">
-              <Pill tone="accent">{truncate(item.canonical_subject, 32)}</Pill>
-            </Section>
-          )}
-
-          {supersedes.length > 0 && (
-            <Section title="Supersedes">
-              {supersedes.map((e) => (
-                <div key={e.parent_id} className="text-sm text-faint">
-                  → {truncate(e.parent_id, 18)}
-                </div>
-              ))}
-            </Section>
-          )}
-
-          {contradicts.length > 0 && (
-            <Section title="Contradicted by">
-              {contradicts.map((e) => {
-                const otherId = e.child_id === item.id ? e.parent_id : e.child_id;
-                return (
-                  <div key={`${e.child_id}-${e.parent_id}`} className="text-sm text-bad">
-                    ⚠ {truncate(otherId, 18)}
+            {supersedes.length > 0 && (
+              <Section title="Supersedes">
+                {supersedes.map((e) => (
+                  <div key={e.parent_id} className="text-sm text-faint">
+                    → {truncate(e.parent_id, 18)}
                   </div>
-                );
-              })}
-            </Section>
-          )}
+                ))}
+              </Section>
+            )}
 
-          {item.source_refs.length > 0 && (
-            <Section title="Sources">
-              <MetaGrid
-                rows={item.source_refs.map((r) => ({
-                  label: r.kind,
-                  value: `${truncate(r.ref, 40)} · ${relativeTime(r.captured_at)}`,
-                  mono: true,
-                }))}
-              />
-            </Section>
-          )}
-        </div>
-      }
-      meta={
-        <DetailMeta>
-          <span className="font-mono">{item.id}</span>
-          <Sep />
-          <span>created {relativeTime(item.created_at)}</span>
-        </DetailMeta>
-      }
-      actions={
-        <button
-          type="button"
-          onClick={onProvenance}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm text-ink-soft transition-colors hover:bg-surface-soft hover:text-ink"
-        >
-          View provenance →
-        </button>
-      }
-    />
+            {contradicts.length > 0 && (
+              <Section title="Contradicted by">
+                {contradicts.map((e) => {
+                  const otherId = e.child_id === item.id ? e.parent_id : e.child_id;
+                  return (
+                    <div key={`${e.child_id}-${e.parent_id}`} className="text-sm text-bad">
+                      ⚠ {truncate(otherId, 18)}
+                    </div>
+                  );
+                })}
+              </Section>
+            )}
+
+            {item.source_refs.length > 0 && (
+              <Section title="Sources">
+                <MetaGrid
+                  rows={item.source_refs.map((r) => ({
+                    label: r.kind,
+                    value: `${truncate(r.ref, 40)} · ${relativeTime(r.captured_at)}`,
+                    mono: true,
+                  }))}
+                />
+              </Section>
+            )}
+          </div>
+        }
+        meta={
+          <DetailMeta>
+            <span className="font-mono">{item.id}</span>
+            <Sep />
+            <span>created {relativeTime(item.created_at)}</span>
+          </DetailMeta>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={onProvenance}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm text-ink-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] hover:bg-surface-soft hover:text-ink"
+          >
+            View provenance →
+          </button>
+        }
+      />
+    </motion.div>
   );
 }
 

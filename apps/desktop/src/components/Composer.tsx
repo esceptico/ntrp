@@ -26,9 +26,15 @@ import { LoopStatusBar } from "./composer/LoopStatus";
 import { BudgetDial } from "./composer/BudgetDial";
 import { useListNav, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
-import { EASE_OUT, MOTION } from "../lib/tokens/motion";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../lib/tokens/motion";
 import { awaitingFirstRunOutput } from "../lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
+
+// Composer sub-sections (editing banner, image strip, skill pill, goal
+// proposal) rise into focus on mount and dissolve out faster on unmount;
+// the composer's height snaps at the AnimatePresence boundary.
+const SECTION_ENTER = { duration: MOTION.row, ease: EASE_OUT };
+const SECTION_EXIT = { ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } };
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -297,9 +303,11 @@ export function Composer() {
       <div className="max-w-[760px] mx-auto">
         <QueueCard />
       </div>
-      {pendingGoalProposal && (
-        <GoalProposalCard objective={pendingGoalProposal.objective} />
-      )}
+      <AnimatePresence initial={false}>
+        {pendingGoalProposal && (
+          <GoalProposalCard key="goal-proposal" objective={pendingGoalProposal.objective} />
+        )}
+      </AnimatePresence>
       {/* Wrapper exists so the CommandPicker can sit as a sibling of
           the form rather than a child and avoid being clipped by the
           composer panel. */}
@@ -321,41 +329,59 @@ export function Composer() {
         data-just-sent={justSent ? "true" : undefined}
         className="composer-card surface-panel surface-radius-md relative flex flex-col"
       >
-        {editingId && (
-          <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
-            <span>Editing previous message — pressing send will replace it.</span>
-            <button
-              type="button"
-              onClick={cancelEdit}
-              className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-              title="Cancel edit"
+        <AnimatePresence initial={false}>
+          {editingId && (
+            <motion.div
+              key="editing-banner"
+              initial={RISE_IN}
+              animate={RISE_SETTLED}
+              exit={SECTION_EXIT}
+              transition={SECTION_ENTER}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]"
             >
-              <X size={ICON.SM} strokeWidth={2} />
-              cancel
-            </button>
-          </div>
-        )}
-        {pendingImages.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-3 pt-2">
-            {pendingImages.map((img, i) => (
-              <div key={i} className="relative">
-                <img
-                  src={`data:${img.media_type};base64,${img.data}`}
-                  alt=""
-                  className="h-14 w-14 rounded-md object-cover border border-line-soft"
-                />
-                <button
-                  type="button"
-                  onClick={() => removePendingImage(i)}
-                  aria-label="Remove image"
-                  className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-opacity"
-                >
-                  <X size={ICON.XS} strokeWidth={2.4} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+              <span>Editing previous message — pressing send will replace it.</span>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
+                title="Cancel edit"
+              >
+                <X size={ICON.SM} strokeWidth={2} />
+                cancel
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence initial={false}>
+          {pendingImages.length > 0 && (
+            <motion.div
+              key="pending-images"
+              initial={RISE_IN}
+              animate={RISE_SETTLED}
+              exit={SECTION_EXIT}
+              transition={SECTION_ENTER}
+              className="flex flex-wrap gap-2 px-3 pt-2"
+            >
+              {pendingImages.map((img, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={`data:${img.media_type};base64,${img.data}`}
+                    alt=""
+                    className="h-14 w-14 rounded-md object-cover border border-line-soft"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePendingImage(i)}
+                    aria-label="Remove image"
+                    className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
+                  >
+                    <X size={ICON.XS} strokeWidth={2.4} />
+                  </button>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
         <input
           ref={fileInputRef}
           type="file"
@@ -368,17 +394,24 @@ export function Composer() {
           }}
         />
         <div className="flex min-h-[64px] items-start gap-2 px-4 pt-[13px] pb-1">
-          {selectedSkill && (
-            <button
-              type="button"
-              onClick={() => void viewSkill(selectedSkill.name)}
-              title={`${selectedSkill.path ?? selectedSkill.name} - Backspace on empty input detaches`}
-              className="mt-[1px] inline-flex max-w-[240px] shrink-0 items-baseline gap-1.5 truncate text-md leading-[1.5] text-info hover:text-accent-strong transition-colors"
-            >
-              <Box size={ICON.MD} strokeWidth={2} className="relative top-[1px] shrink-0" />
-              <span className="truncate capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
-            </button>
-          )}
+          <AnimatePresence initial={false}>
+            {selectedSkill && (
+              <motion.button
+                key="skill-pill"
+                type="button"
+                initial={RISE_IN}
+                animate={RISE_SETTLED}
+                exit={SECTION_EXIT}
+                transition={SECTION_ENTER}
+                onClick={() => void viewSkill(selectedSkill.name)}
+                title={`${selectedSkill.path ?? selectedSkill.name} - Backspace on empty input detaches`}
+                className="mt-[1px] inline-flex max-w-[240px] shrink-0 items-baseline gap-1.5 truncate text-md leading-[1.5] text-info hover:text-accent-strong transition-colors"
+              >
+                <Box size={ICON.MD} strokeWidth={2} className="relative top-[1px] shrink-0" />
+                <span className="truncate capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
           <textarea
             ref={inputRef}
             id="message-input"
@@ -448,7 +481,7 @@ export function Composer() {
             onClick={() => fileInputRef.current?.click()}
             title="Attach image"
             aria-label="Attach image"
-            className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
           >
             <ImagePlus size={ICON.LG} strokeWidth={2} />
           </button>
@@ -484,7 +517,7 @@ export function Composer() {
             // active:scale handles mouse press; sendPressing covers keyboard
             // Enter (form-submit doesn't fire :active). Both look identical.
             className={clsx(
-              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,transform] duration-fast ease-out active:scale-[0.92]",
+              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,scale] duration-fast ease-out active:scale-[0.92]",
               sendPressing && "scale-[0.92]",
             )}
           >
@@ -514,7 +547,13 @@ export function Composer() {
 
 function GoalProposalCard({ objective }: { objective: string }) {
   return (
-    <div className="max-w-[760px] mx-auto mb-2">
+    <motion.div
+      initial={RISE_IN}
+      animate={RISE_SETTLED}
+      exit={SECTION_EXIT}
+      transition={SECTION_ENTER}
+      className="max-w-[760px] mx-auto mb-2"
+    >
       <div className="surface-panel surface-radius-md flex items-start gap-2 px-3 py-2">
         <Target size={ICON.MD} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
@@ -526,7 +565,7 @@ function GoalProposalCard({ objective }: { objective: string }) {
           onClick={() => void acceptGoalProposal()}
           title="Accept goal"
           aria-label="Accept goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-on-ink hover:opacity-90 transition-opacity"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-on-ink hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
         >
           <Check size={ICON.SM} strokeWidth={2.4} />
         </button>
@@ -535,7 +574,7 @@ function GoalProposalCard({ objective }: { objective: string }) {
           onClick={editGoalProposal}
           title="Edit goal"
           aria-label="Edit goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
         >
           <Pencil size={ICON.SM} strokeWidth={2} />
         </button>
@@ -544,11 +583,11 @@ function GoalProposalCard({ objective }: { objective: string }) {
           onClick={cancelGoalProposal}
           title="Cancel goal"
           aria-label="Cancel goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
         >
           <X size={ICON.SM} strokeWidth={2} />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -3,7 +3,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Slash, X } from "lucide-react";
 import { useStore } from "../store";
 import { switchSession } from "../actions";
-import { EASE_DECELERATE, MOTION, SPRING_LAYOUT, originFromEvent } from "../lib/tokens/motion";
+import {
+  EASE_DECELERATE,
+  MOTION,
+  SPRING_LAYOUT,
+  SPRING_TAP,
+  originFromEvent,
+} from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
 import type { Toast } from "../lib/taskToast";
 
@@ -55,7 +61,13 @@ function ToastCard({ toast }: { toast: Toast }) {
       initial={{ opacity: 0, y: -8, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
-      transition={{ layout: SPRING_LAYOUT, duration: MOTION.panel, ease: EASE_DECELERATE }}
+      whileTap={{ scale: 0.97 }}
+      transition={{
+        layout: SPRING_LAYOUT,
+        scale: SPRING_TAP,
+        duration: MOTION.panel,
+        ease: EASE_DECELERATE,
+      }}
       data-toast-status={toast.status}
       className="surface-panel surface-radius-md pointer-events-auto flex w-full items-start gap-2.5 px-3.5 py-3 text-left"
     >

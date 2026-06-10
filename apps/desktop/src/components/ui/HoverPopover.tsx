@@ -1,0 +1,152 @@
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
+import clsx from "clsx";
+import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../../lib/tokens/motion";
+
+/** 120ms hover bridge — one value across the composer-toolbar popovers
+ *  (BudgetDial, GoalStrip, LoopStatus) so the gap-crossing grace feels
+ *  identical. */
+const HIDE_DELAY_MS = 120;
+
+interface TriggerBind {
+  ref: RefObject<HTMLButtonElement | null>;
+  open: boolean;
+  /** Click-to-pin for triggers that want it; hover alone works without. */
+  toggle: () => void;
+  hoverProps: {
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+    onFocus: () => void;
+    onBlur: () => void;
+  };
+}
+
+interface HoverPopoverProps {
+  /** Renders the trigger; spread `hoverProps` and attach `ref` on it. */
+  trigger: (bind: TriggerBind) => ReactNode;
+  children: ReactNode;
+  /** Trigger edge the panel aligns to. The panel always opens above. */
+  anchor?: "left" | "right";
+  /** Panel classes on top of surface-panel/surface-popover (width, padding). */
+  className?: string;
+  /** Close on mousedown outside trigger + panel. Cheap insurance for the
+   *  case where hover misbehaves on a flaky trackpad and the popover gets
+   *  stuck open. */
+  dismissOnOutsideClick?: boolean;
+}
+
+/**
+ * Hover-anchored popover for composer-toolbar pills. Owns the shared
+ * scaffolding: trigger-rect measurement (re-measured on resize/scroll),
+ * hover bridge between trigger and panel, hide-delay timer, portal to
+ * document.body, and the house popover entrance — rising from
+ * `transformOrigin: bottom <anchor>` above the trigger.
+ */
+export function HoverPopover({
+  trigger,
+  children,
+  anchor = "left",
+  className,
+  dismissOnOutsideClick = false,
+}: HoverPopoverProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ bottom: number; left?: number; right?: number } | null>(
+    null,
+  );
+
+  const cancelHide = () => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+  const show = () => {
+    cancelHide();
+    setOpen(true);
+  };
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimerRef.current = window.setTimeout(() => setOpen(false), HIDE_DELAY_MS);
+  };
+  const toggle = () => setOpen((v) => !v);
+
+  // useLayoutEffect so coords are committed before the popover paints —
+  // an open=true / coords-stale frame would render the popover at the
+  // wrong corner of the viewport for one tick (visible flash).
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      setCoords({
+        bottom: Math.max(8, window.innerHeight - r.top + 8),
+        ...(anchor === "left"
+          ? { left: Math.max(8, r.left) }
+          : { right: Math.max(8, window.innerWidth - r.right - 8) }),
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open, anchor]);
+
+  useLayoutEffect(() => {
+    if (!open || !dismissOnOutsideClick) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [open, dismissOnOutsideClick]);
+
+  return (
+    <>
+      {trigger({
+        ref: triggerRef,
+        open,
+        toggle,
+        hoverProps: {
+          onMouseEnter: show,
+          onMouseLeave: scheduleHide,
+          onFocus: show,
+          onBlur: scheduleHide,
+        },
+      })}
+      {createPortal(
+        <AnimatePresence>
+          {open && coords && (
+            <motion.div
+              ref={popoverRef}
+              onMouseEnter={show}
+              onMouseLeave={scheduleHide}
+              initial={{ opacity: 0, y: 4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+              transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
+              style={{
+                position: "fixed",
+                ...coords,
+                zIndex: 60,
+                transformOrigin: `bottom ${anchor}`,
+              }}
+              className={clsx("surface-panel surface-popover", className)}
+            >
+              {children}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </>
+  );
+}

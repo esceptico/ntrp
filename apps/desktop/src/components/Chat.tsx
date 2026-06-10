@@ -48,35 +48,41 @@ function ChatHeader() {
     (parentId ? sessions.find((s) => s.session_id === parentId)?.name : null)?.trim() || "parent session";
 
   return (
-    <div
-      className={clsx(
-        "chat-header flex items-center gap-2 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
-        sidebarHidden ? "pl-[128px]" : "pl-[18px]",
-      )}
-    >
-      {isAgent && parentId && (
-        <>
-          <button
-            type="button"
-            onClick={() => void switchSession(parentId)}
-            title={`Back to ${parentName}`}
-            className="group/back shrink-0 inline-flex items-center gap-1 h-[26px] max-w-[180px] rounded-md px-1.5 -ml-0.5 text-sm text-muted hover:text-ink hover:bg-surface-soft transition-colors"
-          >
-            <ArrowLeft
-              size={ICON.SM}
-              strokeWidth={2}
-              className="shrink-0 text-faint transition-colors group-hover/back:text-ink"
-            />
-            <span className="truncate">{parentName}</span>
-          </button>
-          <span className="shrink-0 text-faint select-none" aria-hidden>
-            /
-          </span>
-        </>
-      )}
-      <h1 className="m-0 min-w-0 flex-1 text-md font-semibold tracking-[-0.01em] text-ink truncate">
-        {title}
-      </h1>
+    <div className="chat-header flex items-center h-[52px] px-[18px]">
+      {/* The sidebar toggle reveals 110px of headroom for the traffic
+          lights. The shift rides a GPU translate on the title row —
+          the right padding snaps once (re-truncating the title) while
+          the transform carries the visible travel. */}
+      <div
+        className={clsx(
+          "flex min-w-0 flex-1 items-center gap-2 transition-transform duration-route ease-emphasized",
+          sidebarHidden && "translate-x-[110px] pr-[110px]",
+        )}
+      >
+        {isAgent && parentId && (
+          <>
+            <button
+              type="button"
+              onClick={() => void switchSession(parentId)}
+              title={`Back to ${parentName}`}
+              className="group/back shrink-0 inline-flex items-center gap-1 h-[26px] max-w-[180px] rounded-md px-1.5 -ml-0.5 text-sm text-muted hover:text-ink hover:bg-surface-soft transition-colors"
+            >
+              <ArrowLeft
+                size={ICON.SM}
+                strokeWidth={2}
+                className="shrink-0 text-faint transition-colors group-hover/back:text-ink"
+              />
+              <span className="truncate">{parentName}</span>
+            </button>
+            <span className="shrink-0 text-faint select-none" aria-hidden>
+              /
+            </span>
+          </>
+        )}
+        <h1 className="m-0 min-w-0 flex-1 text-md font-semibold tracking-[-0.01em] text-ink truncate">
+          {title}
+        </h1>
+      </div>
     </div>
   );
 }

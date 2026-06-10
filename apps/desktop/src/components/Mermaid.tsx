@@ -8,6 +8,9 @@ import {
   ENTRY_PANEL,
   EASE_DECELERATE,
   MOTION,
+  POSE_MODAL,
+  RISE_IN,
+  RISE_SETTLED,
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
@@ -78,7 +81,19 @@ export function Mermaid({ code }: { code: string }) {
       </div>
     );
   }
-  return <MermaidPanel svg={svg} source={code} />;
+  // One-shot mount entrance so the panel doesn't hard-cut in when the SVG
+  // resolves out of the "Rendering…" placeholder. The fullscreen portal
+  // renders outside this wrapper, so the settled filter/transform styles
+  // can't clip or contain it.
+  return (
+    <motion.div
+      initial={{ ...RISE_IN, y: 8 }}
+      animate={RISE_SETTLED}
+      transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+    >
+      <MermaidPanel svg={svg} source={code} />
+    </motion.div>
+  );
 }
 
 /** Top-level panel: holds fullscreen state and either renders the inline
@@ -111,9 +126,9 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
               >
                 <motion.div
                   className="w-full h-full"
-                  initial={{ opacity: 0, scale: 0.96, y: 6 }}
+                  initial={POSE_MODAL}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.96, y: 6 }}
+                  exit={POSE_MODAL}
                   transition={ENTRY_PANEL}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -344,15 +359,16 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
     <div className="my-[0.6em] px-3.5 py-3 border border-bad/20 rounded-xl bg-bad-soft">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <strong className="text-xs font-semibold text-bad">Couldn't render diagram</strong>
-        <button
-          type="button"
+        <IconButton
+          size="xs"
+          danger
           onClick={() => void onCopy()}
           aria-label={copied ? "Copied" : "Copy source"}
           title={copied ? "Copied" : "Copy source"}
-          className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-bad/25 text-bad cursor-pointer transition-[background-color,color,transform] duration-check ease-out hover:bg-bad-soft active:scale-[0.97]"
+          className="border border-bad/25 !text-bad hover:!bg-bad-soft"
         >
           <CopyGlyph copied={copied} size={ICON.XS} />
-        </button>
+        </IconButton>
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>
       {message && (

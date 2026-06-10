@@ -11,6 +11,7 @@ import {
   updateMCPServerApi,
 } from "../../../api";
 import { useMutationState } from "../../../lib/hooks";
+import { BlurSwap } from "../../BlurSwap";
 import { SettingsInlineError } from "../SettingsNotice";
 import { ICON } from "../../../lib/icons";
 import { SegmentedControl } from "../../SegmentedControl";
@@ -115,7 +116,7 @@ export function ServerForm({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-sm text-muted hover:text-ink transition-colors"
+          className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-sm text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
         >
           <ArrowLeft size={ICON.SM} strokeWidth={2} /> Back
         </button>
@@ -124,7 +125,7 @@ export function ServerForm({
             type="button"
             onClick={() => void remove()}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-[0.45]"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
             <Trash2 size={ICON.SM} strokeWidth={2} /> Uninstall
           </button>
@@ -208,9 +209,11 @@ export function ServerForm({
           type="button"
           onClick={() => void save()}
           disabled={!valid || busy}
-          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-[0.45] disabled:cursor-not-allowed"
+          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
         >
-          {busy ? "Saving…" : "Save"}
+          <BlurSwap swapKey={busy ? "saving" : "save"} blur={2}>
+            {busy ? "Saving…" : "Save"}
+          </BlurSwap>
         </button>
       </div>
     </div>

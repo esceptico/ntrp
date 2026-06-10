@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { Repeat2, X } from "lucide-react";
 import { useStore, type ServerLoop } from "../../store";
 import { refreshLoops, stopLoop } from "../../actions";
 import { useEscapeKey } from "../../lib/hooks";
 import { ICON } from "../../lib/icons";
+import { EASE_DECELERATE, EASE_OUT, ENTRY_PANEL, MOTION, POSE_MODAL } from "../../lib/tokens/motion";
 import { formatLoopCountdown } from "../../lib/loops";
 import { Chip } from "../Chip";
 import { IconButton } from "../IconButton";
 import { Markdown } from "../Markdown";
 import { RollingToken } from "../trace/RollingToken";
+import { HoverPopover } from "../ui/HoverPopover";
 
 /** Per-character odometer aligned to the RIGHT so the unit suffix
  *  ("s"/"m"/"h"/"d") sits at a stable slot and only digits that
@@ -71,43 +74,6 @@ export function LoopStatusBar() {
     };
   }, [sessionId]);
 
-  // Hover popover is portaled to document.body so it can escape the
-  // composer panel. Open state is hover-bridged: button hover shows;
-  // popover hover keeps it open;
-  // either leaving hides after a brief delay so the user can move the
-  // cursor across the gap.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ bottom: number; left: number } | null>(null);
-  const hideTimerRef = useRef<number | null>(null);
-  const show = useCallback(() => {
-    if (hideTimerRef.current) {
-      window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    setOpen(true);
-  }, []);
-  const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(() => setOpen(false), 80);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const update = () => {
-      const r = triggerRef.current!.getBoundingClientRect();
-      setCoords({ bottom: window.innerHeight - r.top + 8, left: r.left });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
-
   if (loops.length === 0) return null;
 
   const next = loops[0];
@@ -116,76 +82,68 @@ export function LoopStatusBar() {
 
   return (
     <div className="relative flex items-center">
-      <Chip
-        ref={triggerRef}
-        size="sm"
-        tone="neutral"
-        variant="ghost"
-        leading={<Repeat2 size={ICON.SM} strokeWidth={2} />}
-        onMouseEnter={show}
-        onMouseLeave={scheduleHide}
-        onFocus={show}
-        onBlur={scheduleHide}
-        aria-label="Active loops"
-      >
-        {loops.length === 1 ? (
-          <>
-            <span className="composer-loop-label">Loop · </span>
-            <RollingDigits value={countdown} />
-          </>
-        ) : (
-          <>
-            <span className="composer-loop-label">Loops · {loops.length} · next </span>
-            <RollingDigits value={countdown} />
-          </>
+      <HoverPopover
+        className="w-[360px] p-3"
+        trigger={({ ref, hoverProps }) => (
+          <Chip
+            ref={ref}
+            size="sm"
+            tone="neutral"
+            variant="ghost"
+            leading={<Repeat2 size={ICON.SM} strokeWidth={2} />}
+            {...hoverProps}
+            aria-label="Active loops"
+          >
+            {loops.length === 1 ? (
+              <>
+                <span className="composer-loop-label">Loop · </span>
+                <RollingDigits value={countdown} />
+              </>
+            ) : (
+              <>
+                <span className="composer-loop-label">Loops · {loops.length} · next </span>
+                <RollingDigits value={countdown} />
+              </>
+            )}
+          </Chip>
         )}
-      </Chip>
-      {open && coords && createPortal(
-        <div
-          ref={popoverRef}
-          onMouseEnter={show}
-          onMouseLeave={scheduleHide}
-          style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-          className="surface-panel surface-popover w-[360px] p-3"
-        >
-          <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
-          <div className="space-y-1">
-            {loops.map((loop) => {
-              const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
-              return (
-                <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => void stopLoop(loop.task_id)}
-                    title="Stop loop"
-                    aria-label="Stop loop"
-                    className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-[color,background-color,transform] active:scale-[0.92]"
-                  >
-                    <X size={ICON.SM} strokeWidth={2} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOpenLoop(loop)}
-                    className="min-w-0 text-left -my-1.5 -mr-1.5 py-1.5 pr-1.5 rounded-md hover:bg-surface-soft transition-colors"
-                    title="Show full prompt"
-                  >
-                    <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
-                    <div className="mt-0.5 text-xs text-faint">
-                      Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
-                      {loop.max_iterations
-                        ? ` · ${loop.iteration_count}/${loop.max_iterations}`
-                        : loop.iteration_count > 0
-                          ? ` · iter ${loop.iteration_count}`
-                          : ""}
-                    </div>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>,
-        document.body
-      )}
+      >
+        <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
+        <div className="space-y-1">
+          {loops.map((loop) => {
+            const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
+            return (
+              <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => void stopLoop(loop.task_id)}
+                  title="Stop loop"
+                  aria-label="Stop loop"
+                  className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-[color,background-color,scale] duration-check ease-out active:scale-[0.92]"
+                >
+                  <X size={ICON.SM} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenLoop(loop)}
+                  className="min-w-0 text-left -my-1.5 -mr-1.5 py-1.5 pr-1.5 rounded-md hover:bg-surface-soft transition-colors"
+                  title="Show full prompt"
+                >
+                  <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
+                  <div className="mt-0.5 text-xs text-faint">
+                    Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
+                    {loop.max_iterations
+                      ? ` · ${loop.iteration_count}/${loop.max_iterations}`
+                      : loop.iteration_count > 0
+                        ? ` · iter ${loop.iteration_count}`
+                        : ""}
+                  </div>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </HoverPopover>
       <LoopDetailModal loop={openLoop} onClose={() => setOpenLoopId(null)} />
     </div>
   );
@@ -194,43 +152,54 @@ export function LoopStatusBar() {
 function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: () => void }) {
   useEscapeKey(onClose, !!loop);
 
-  if (!loop) return null;
-  const nextRunMs = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
   const root = document.querySelector("#app");
   if (!root) return null;
 
-  const detail = (
-    <div
-      className="modal-scrim fixed inset-0 z-50 grid place-items-center p-4"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-label="Loop detail"
-        className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
-          <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
-          <div className="text-sm font-medium text-ink">Loop</div>
-          <div className="ml-auto text-xs text-faint">
-            Every {loop.every} · next in {formatLoopCountdown(nextRunMs)}
-          </div>
-          <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
-            <X size={ICON.SM} strokeWidth={2} />
-          </IconButton>
-        </div>
-        <div className="overflow-y-auto px-4 py-3">
-          <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
-        </div>
-        <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">
-          {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
-          {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
-          {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
-          <span className="ml-auto font-mono text-2xs">{loop.task_id}</span>
-        </div>
-      </div>
-    </div>
+  return createPortal(
+    <AnimatePresence>
+      {loop && (
+        <motion.div
+          key="loop-detail"
+          className="modal-scrim fixed inset-0 z-50 grid place-items-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+          onClick={onClose}
+        >
+          <motion.div
+            role="dialog"
+            aria-label="Loop detail"
+            className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto]"
+            initial={POSE_MODAL}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={ENTRY_PANEL}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
+              <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
+              <div className="text-sm font-medium text-ink">Loop</div>
+              <div className="ml-auto text-xs text-faint">
+                Every {loop.every} · next in {formatLoopCountdown(loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY)}
+              </div>
+              <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
+                <X size={ICON.SM} strokeWidth={2} />
+              </IconButton>
+            </div>
+            <div className="overflow-y-auto px-4 py-3">
+              <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
+            </div>
+            <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">
+              {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
+              {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
+              {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
+              <span className="ml-auto font-mono text-2xs">{loop.task_id}</span>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    root,
   );
-  return createPortal(detail, root);
 }

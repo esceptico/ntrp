@@ -134,7 +134,7 @@ export function QuickCapture() {
               disabled={disabled}
               aria-label="Send"
               className={clsx(
-                "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[opacity,transform] duration-check ease-out",
+                "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[opacity,scale] duration-check ease-out",
                 disabled
                   ? "text-faint"
                   : "bg-ink text-on-ink hover:opacity-90 active:scale-[0.94]",

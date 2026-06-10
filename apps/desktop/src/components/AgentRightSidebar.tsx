@@ -27,8 +27,12 @@ import { nextTodoStatus, todoSignature } from "../lib/todoOverride";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import {
   EASE_EMPHASIZED,
+  EASE_OUT,
   MOTION,
   originFromEvent,
+  RISE_IN,
+  RISE_SETTLED,
+  ROW_EXIT,
   SPRING_ROW_ENTRY,
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
@@ -48,6 +52,7 @@ import { ExpandableWorkflowCard } from "./workflow/WorkflowDetail";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunRow";
+import { Collapse } from "./ui/Collapse";
 export { isActiveBackgroundAgent } from "../store/background-agent-domain";
 export { StatusDot } from "./StatusDot";
 
@@ -66,6 +71,17 @@ export const RIGHT_PANEL_WIDTH = 320;
 export const RIGHT_PANEL_BODY_WIDTH = 304;
 
 const RECENT_AGENT_LIMIT = 6;
+
+// One list-motion recipe for every roster section (todos, agents, workflows,
+// automations): under popLayout the removed row dissolves out of flow while
+// siblings FLIP up on SPRING_ROW_ENTRY. Spread onto the keyed motion.div.
+const rosterRowMotion = {
+  layout: true,
+  initial: { opacity: 0, y: -4 },
+  animate: { opacity: 1, y: 0 },
+  exit: { ...ROW_EXIT, transition: { duration: MOTION.fast, ease: EASE_OUT } },
+  transition: { layout: SPRING_ROW_ENTRY, duration: MOTION.row, ease: EASE_OUT },
+} as const;
 
 function useChildAgentsPoll(sessionId: string | null): void {
   // Live BackgroundTaskEvents already keep the roster current for the session
@@ -433,7 +449,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
               type="button"
               onClick={reset}
               title="Reset to the agent's list"
-              className="text-2xs text-faint hover:text-ink transition-colors"
+              className="text-2xs text-faint hover:text-ink transition-colors duration-row ease-out"
             >
               reset
             </button>
@@ -446,7 +462,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
             onClick={() => setAdding(true)}
             aria-label="Add a task"
             title="Add a task"
-            className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+            className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink hover:bg-surface-soft/70 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]"
           >
             <Plus size={ICON.XS} strokeWidth={2} />
           </button>
@@ -457,16 +473,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
           {items.map((item) => (
             <motion.div
               key={item.key}
-              layout
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97 }}
-              transition={{
-                layout: SPRING_ROW_ENTRY,
-                opacity: { duration: MOTION.row },
-                y: { duration: MOTION.row },
-                scale: { duration: MOTION.fast },
-              }}
+              {...rosterRowMotion}
               className="group/todo flex min-w-0 items-start gap-1.5 rounded px-1 -mx-1 hover:bg-surface-soft/40"
             >
               <button
@@ -474,7 +481,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
                 onClick={() => cycle(item.key)}
                 aria-label="Cycle status"
                 title="Cycle status"
-                className="mt-[1px] shrink-0 rounded"
+                className="mt-[1px] shrink-0 rounded transition-[scale] duration-check ease-out active:scale-[0.97]"
               >
                 {todoStatusIcon(item.status)}
               </button>
@@ -493,7 +500,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
                   onClick={() => setEditingKey(item.key)}
                   title="Edit"
                   className={clsx(
-                    "min-w-0 flex-1 break-words text-left text-xs leading-[1.35] transition-colors hover:text-ink",
+                    "min-w-0 flex-1 break-words text-left text-xs leading-[1.35] transition-colors duration-row ease-out hover:text-ink",
                     item.status === "completed" && "text-faint line-through",
                     item.status === "in_progress" && "font-medium text-ink-soft",
                     item.status === "pending" && "text-muted",
@@ -507,7 +514,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
                 onClick={() => remove(item.key)}
                 aria-label="Delete task"
                 title="Delete"
-                className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-opacity"
+                className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-[opacity,color,scale] duration-row ease-out active:scale-[0.97]"
               >
                 <X size={ICON.XS} strokeWidth={2} />
               </button>
@@ -515,7 +522,12 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
           ))}
         </AnimatePresence>
         {adding && (
-          <div className="flex min-w-0 items-start gap-1.5 px-1 -mx-1">
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+            className="flex min-w-0 items-start gap-1.5 px-1 -mx-1"
+          >
             <Circle size={ICON.XS} strokeWidth={2} className="mt-[2px] shrink-0 text-faint" />
             <TodoEditInput
               initial=""
@@ -526,7 +538,7 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
               }}
               onCancel={() => setAdding(false)}
             />
-          </div>
+          </motion.div>
         )}
       </div>
     </section>
@@ -552,20 +564,31 @@ function ApprovalsRow() {
   const count = useStore((s) => s.pendingApprovals.length);
   const firstToolId = useStore((s) => s.pendingApprovals[0]?.toolId);
   const review = useStore((s) => s.setReviewingApproval);
-  if (count === 0 || !firstToolId) return null;
 
   return (
-    <button
-      type="button"
-      onClick={(e) => review(firstToolId, originFromEvent(e.currentTarget))}
-      className="flex w-full items-center gap-2 rounded-[8px] bg-warn/10 px-2.5 py-2 text-left transition-colors hover:bg-warn/15"
-    >
-      <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-warn" aria-hidden />
-      <span className="flex-1 text-xs text-ink-soft">
-        {count} awaiting approval
-      </span>
-      <span className="shrink-0 text-2xs text-warn">Review →</span>
-    </button>
+    <AnimatePresence initial={false}>
+      {count > 0 && firstToolId && (
+        <motion.div
+          key="approvals"
+          initial={{ ...RISE_IN, y: -4 }}
+          animate={RISE_SETTLED}
+          exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+          transition={{ duration: MOTION.row, ease: EASE_OUT }}
+        >
+          <button
+            type="button"
+            onClick={(e) => review(firstToolId, originFromEvent(e.currentTarget))}
+            className="flex w-full items-center gap-2 rounded-[8px] bg-warn/10 px-2.5 py-2 text-left transition-[background-color,scale] duration-row ease-out hover:bg-warn/15 active:scale-[0.985]"
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-warn" aria-hidden />
+            <span className="flex-1 text-xs text-ink-soft">
+              {count} awaiting approval
+            </span>
+            <span className="shrink-0 text-2xs text-warn">Review →</span>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -583,12 +606,12 @@ function ParentBreadcrumb({
       type="button"
       onClick={() => void switchSession(parentId)}
       title={parentName ? `Back to ${parentName}` : "Back to parent session"}
-      className="group/bc flex w-full items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left text-xs text-muted transition-colors hover:bg-surface-soft/60 hover:text-ink"
+      className="group/bc flex w-full items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left text-xs text-muted transition-[background-color,color,scale] duration-row ease-out hover:bg-surface-soft/60 hover:text-ink active:scale-[0.985]"
     >
       <ArrowLeft
         size={ICON.SM}
         strokeWidth={2}
-        className="shrink-0 text-faint transition-colors group-hover/bc:text-ink"
+        className="shrink-0 text-faint transition-colors duration-row ease-out group-hover/bc:text-ink"
       />
       <span className="truncate">{parentName ?? "Parent session"}</span>
     </button>
@@ -730,7 +753,7 @@ export function AgentRightSidebar() {
         onClick={toggleCollapsed}
         title={collapsed ? "Show active" : "Hide active"}
         aria-label={collapsed ? `Show active${totalCount > 0 ? ` (${totalCount})` : ""}` : "Hide active"}
-        className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+        className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-row ease-out active:scale-[0.96]"
       >
         {collapsed && activeCount > 0 && <StatusDot status="running" pulse />}
         <MoreHorizontal size={ICON.MD} strokeWidth={2} />
@@ -761,22 +784,9 @@ export function AgentRightSidebar() {
           <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollFadeTop />
             <div className="space-y-3">
-              <AnimatePresence initial={false}>
-                {hasBreadcrumb && parentId && (
-                  <motion.div
-                    key="breadcrumb"
-                    initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-                    animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-                    exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-                    transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                    style={{ display: "grid" }}
-                  >
-                    <div className="min-h-0 overflow-hidden">
-                      <ParentBreadcrumb parentId={parentId} parentName={parentName} />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <Collapse open={hasBreadcrumb}>
+                {parentId && <ParentBreadcrumb parentId={parentId} parentName={parentName} />}
+              </Collapse>
               <ApprovalsRow />
               {todo && (
                 <TodoSidebarSection
@@ -797,19 +807,7 @@ export function AgentRightSidebar() {
                   <div className="relative">
                     <AnimatePresence initial={false} mode="popLayout">
                       {agents.map((agent) => (
-                        <motion.div
-                          key={`${agent.sessionId}:${agent.taskId}`}
-                          layout
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.97 }}
-                          transition={{
-                            layout: SPRING_ROW_ENTRY,
-                            opacity: { duration: MOTION.row },
-                            y: { duration: MOTION.row },
-                            scale: { duration: MOTION.fast },
-                          }}
-                        >
+                        <motion.div key={`${agent.sessionId}:${agent.taskId}`} {...rosterRowMotion}>
                           <SidebarAgentRow
                             agent={agent}
                             resultPreview={resultSnippets[agent.taskId]}
@@ -830,19 +828,7 @@ export function AgentRightSidebar() {
                   <div className="relative">
                     <AnimatePresence initial={false} mode="popLayout">
                       {sortedWorkflows.map((wf) => (
-                        <motion.div
-                          key={wf.workflowId}
-                          layout
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.97 }}
-                          transition={{
-                            layout: SPRING_ROW_ENTRY,
-                            opacity: { duration: MOTION.row },
-                            y: { duration: MOTION.row },
-                            scale: { duration: MOTION.fast },
-                          }}
-                        >
+                        <motion.div key={wf.workflowId} {...rosterRowMotion}>
                           <div className="group/wfrow relative py-0.5">
                             <ExpandableWorkflowCard workflow={wf} />
                             <button
@@ -852,7 +838,7 @@ export function AgentRightSidebar() {
                                 dismissWorkflow(wf.sessionId, wf.workflowId);
                               }}
                               title="Dismiss"
-                              className="absolute -right-1 -top-1 grid place-items-center w-5 h-5 rounded-full border border-line-soft bg-surface text-faint opacity-0 transition-opacity hover:text-bad group-hover/wfrow:opacity-100"
+                              className="absolute -right-1 -top-1 grid place-items-center w-5 h-5 rounded-full border border-line-soft bg-surface text-faint opacity-0 transition-[opacity,color,scale] duration-row ease-out hover:text-bad active:scale-[0.97] group-hover/wfrow:opacity-100"
                             >
                               <X size={ICON.XS} strokeWidth={2} />
                             </button>
@@ -876,7 +862,7 @@ export function AgentRightSidebar() {
                     <button
                       type="button"
                       onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
-                      className="block w-full text-left hover:text-ink transition-colors"
+                      className="block w-full text-left hover:text-ink transition-colors duration-row ease-out"
                       title="Open automations"
                     >
                       <SectionHeader
@@ -885,14 +871,17 @@ export function AgentRightSidebar() {
                       />
                     </button>
                   ) : null}
-                  <div>
-                    {runningAutomations.map((automation) => (
-                      <SidebarAutomationRow
-                        key={automation.task_id}
-                        automation={automation}
-                        streamStatus={automationStatuses[automation.task_id]}
-                      />
-                    ))}
+                  <div className="relative">
+                    <AnimatePresence initial={false} mode="popLayout">
+                      {runningAutomations.map((automation) => (
+                        <motion.div key={automation.task_id} {...rosterRowMotion}>
+                          <SidebarAutomationRow
+                            automation={automation}
+                            streamStatus={automationStatuses[automation.task_id]}
+                          />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                   </div>
                 </section>
               )}

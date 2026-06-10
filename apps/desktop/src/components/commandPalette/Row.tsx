@@ -30,7 +30,7 @@ export function Row({
       >
         <span
           className={clsx(
-            "grid place-items-center w-5 h-5 rounded-md shrink-0 transition-colors",
+            "grid place-items-center w-5 h-5 rounded-md shrink-0 transition-colors duration-check ease-out",
             active ? "bg-accent-soft text-accent-strong" : "text-muted",
           )}
         >

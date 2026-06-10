@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
 import {
@@ -12,7 +13,9 @@ import {
 } from "../../store";
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
+import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
 import { SegmentedControl } from "../SegmentedControl";
 
@@ -186,27 +189,39 @@ function ShortcutRecorder() {
           type="button"
           onClick={() => setRecording((r) => !r)}
           className={clsx(
-            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] border text-sm font-medium tracking-[-0.005em] tabular-nums transition-colors min-w-[140px] justify-center",
+            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] border text-sm font-medium tracking-[-0.005em] tabular-nums transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97] min-w-[140px] justify-center",
             recording
               ? "border-accent bg-accent-soft text-accent-strong"
               : "border-line-soft bg-surface text-ink-soft hover:bg-surface-soft/60",
           )}
         >
           <Keyboard size={ICON.SM} strokeWidth={2} className="opacity-70" />
-          {recording ? "Press chord…" : (value ? formatAccelerator(value) : "Disabled")}
+          <BlurSwap swapKey={recording ? "recording" : value || "disabled"} blur={2}>
+            {recording ? "Press chord…" : (value ? formatAccelerator(value) : "Disabled")}
+          </BlurSwap>
         </button>
-        {value !== DEFAULT_QUICK_CAPTURE_SHORTCUT && (
-          <IconButton
-            size="lg"
-            tone="faint"
-            className="rounded-[8px]"
-            onClick={() => void reset()}
-            aria-label="Reset to default"
-            title="Reset to default"
-          >
-            <RotateCcw size={ICON.SM} strokeWidth={2} />
-          </IconButton>
-        )}
+        <AnimatePresence initial={false}>
+          {value !== DEFAULT_QUICK_CAPTURE_SHORTCUT && (
+            <motion.span
+              key="reset"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: MOTION.check, ease: EASE_OUT }}
+            >
+              <IconButton
+                size="lg"
+                tone="faint"
+                className="rounded-[8px]"
+                onClick={() => void reset()}
+                aria-label="Reset to default"
+                title="Reset to default"
+              >
+                <RotateCcw size={ICON.SM} strokeWidth={2} />
+              </IconButton>
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
       {error && (
         <span className="text-xs text-bad text-right max-w-[260px]">{error}</span>
@@ -300,34 +315,41 @@ function PalettePicker({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-[8px] border border-line-soft bg-surface hover:bg-surface-soft/60 transition-colors text-sm font-medium text-ink-soft"
+        className="inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-[8px] border border-line-soft bg-surface hover:bg-surface-soft/60 transition-[background-color,scale] duration-check ease-out active:scale-[0.97] text-sm font-medium text-ink-soft"
       >
         <PaletteIcon swatch={triggerSwatch} />
         <span>{current.label}</span>
         <ChevronDown size={ICON.MD} strokeWidth={2} className="opacity-70" />
       </button>
-      {open && pos &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="surface-panel surface-popover fixed z-[60] py-1"
-          >
-            {PALETTES.map((p) => (
-              <PaletteRow
-                key={p.id}
-                palette={p}
-                dark={isDark}
-                active={p.id === value}
-                onClick={() => {
-                  onChange(p.id);
-                  setOpen(false);
-                }}
-              />
-            ))}
-          </div>,
-          document.body,
-        )}
+      {createPortal(
+        <AnimatePresence>
+          {open && pos && (
+            <motion.div
+              ref={popoverRef}
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+              transition={SPRING_POPOVER}
+              style={{ top: pos.top, left: pos.left, width: pos.width, transformOrigin: "top" }}
+              className="surface-panel surface-popover fixed z-[60] py-1"
+            >
+              {PALETTES.map((p) => (
+                <PaletteRow
+                  key={p.id}
+                  palette={p}
+                  dark={isDark}
+                  active={p.id === value}
+                  onClick={() => {
+                    onChange(p.id);
+                    setOpen(false);
+                  }}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </>
   );
 }
@@ -400,7 +422,7 @@ function VariantCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={clsx(
-        "group flex flex-col gap-2 p-3 rounded-[10px] border text-left transition-colors",
+        "group flex flex-col gap-2 p-3 rounded-[10px] border text-left transition-[background-color,border-color,scale] duration-check ease-out active:scale-[0.985]",
         selected
           ? "border-line-strong bg-surface-soft/60"
           : "border-line-soft bg-bg-main/30 hover:bg-surface-soft/40",

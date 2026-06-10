@@ -10,6 +10,7 @@ import { highlight } from "../highlight";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { humanizeAgentType } from "../lib/agentRun";
 import { Markdown } from "./Markdown";
+import { BlurSwap } from "./BlurSwap";
 import { CopyGlyph } from "./CopyGlyph";
 import { IconButton } from "./IconButton";
 import { ScrollFadeTop } from "./ScrollBlur";
@@ -17,6 +18,7 @@ import {
   ENTRY_PANEL,
   EASE_DECELERATE,
   MOTION,
+  POSE_MODAL,
 } from "../lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
@@ -128,9 +130,9 @@ export function ToolViewer() {
         >
           <motion.div
             className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
+            initial={POSE_MODAL}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            exit={POSE_MODAL}
             transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >
@@ -268,6 +270,15 @@ function AgentBody({
     matchingChildResult?.status === "running" ||
     matchingChildResult?.status === "activity" ||
     matchingChildResult?.status === "cancel_requested";
+  const resultState = childResultError
+    ? "error"
+    : childResultLoading && result.trim().length === 0
+      ? "loading"
+      : running || childRunning
+        ? "working"
+        : result.trim().length === 0
+          ? "empty"
+          : "result";
 
   return (
     <>
@@ -301,27 +312,37 @@ function AgentBody({
             <CopyButton getValue={() => result} />
           )}
         </div>
-        {childResultError ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-bad">
-            {childResultError}
-          </div>
-        ) : childResultLoading && result.trim().length === 0 ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
-            Loading result…
-          </div>
-        ) : running || childRunning ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
-            Working…
-          </div>
-        ) : result.trim().length === 0 ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
-            Empty result.
-          </div>
-        ) : (
-          <div className="rounded-[10px] border border-line-soft bg-bg-main px-3 py-2.5 max-h-[40vh] overflow-y-auto scroll-thin min-w-0">
-            <Markdown content={result} />
-          </div>
-        )}
+        {/* Keyed by state so the arriving content gets a one-shot blur-in
+            instead of hard-cutting (e.g. "Working…" → result). */}
+        <motion.div
+          key={resultState}
+          initial={{ opacity: 0, filter: "blur(2px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)" }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+          className="min-w-0"
+        >
+          {resultState === "error" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-bad">
+              {childResultError}
+            </div>
+          ) : resultState === "loading" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Loading result…
+            </div>
+          ) : resultState === "working" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Working…
+            </div>
+          ) : resultState === "empty" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Empty result.
+            </div>
+          ) : (
+            <div className="rounded-[10px] border border-line-soft bg-bg-main px-3 py-2.5 max-h-[40vh] overflow-y-auto scroll-thin min-w-0">
+              <Markdown content={result} />
+            </div>
+          )}
+        </motion.div>
       </section>
 
       {descendants.length > 0 && (
@@ -500,12 +521,14 @@ function CopyButton({ getValue }: { getValue: () => string }) {
       onClick={() => void onCopy()}
       aria-label={copied ? "Copied" : "Copy"}
       className={clsx(
-        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
+        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]",
         copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
       )}
     >
       <CopyGlyph copied={copied} size={ICON.XS} />
-      {copied ? "Copied" : "Copy"}
+      <BlurSwap swapKey={copied ? "copied" : "copy"} blur={2}>
+        {copied ? "Copied" : "Copy"}
+      </BlurSwap>
     </button>
   );
 }
@@ -549,15 +572,7 @@ function Section({
   html: string;
   placeholder: string;
 }) {
-  const [copied, flashCopied] = useTimeoutFlag(1200);
   const hasBody = body.trim().length > 0;
-
-  const onCopy = async () => {
-    if (!hasBody) return;
-    if (await window.ntrpDesktop?.clipboard?.writeText(body)) {
-      flashCopied();
-    }
-  };
 
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
@@ -565,22 +580,7 @@ function Section({
         <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
           {title}
         </h3>
-        {hasBody && (
-          <button
-            type="button"
-            onClick={() => void onCopy()}
-            aria-label={copied ? "Copied" : "Copy"}
-            className={clsx(
-              "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
-              copied
-                ? "text-accent-strong bg-accent-soft"
-                : "text-muted hover:bg-surface-soft hover:text-ink",
-            )}
-          >
-            <CopyGlyph copied={copied} size={ICON.XS} />
-            {copied ? "Copied" : "Copy"}
-          </button>
-        )}
+        {hasBody && <CopyButton getValue={() => body} />}
       </div>
       {hasBody ? (
         html ? (

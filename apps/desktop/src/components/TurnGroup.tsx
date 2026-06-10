@@ -8,10 +8,17 @@ import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
 import { turnHeaderLabel } from "../lib/turnHeader";
 import { turnHasActiveChildAgent } from "../lib/turnActiveAgents";
-import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/tokens/motion";
+import {
+  MOTION,
+  EASE_DECELERATE,
+  EASE_OUT,
+  SPRING_ROW_ENTRY,
+  RISE_IN,
+  RISE_SETTLED,
+  DISSOLVE_OUT,
+} from "../lib/tokens/motion";
+import { Collapse } from "./ui/Collapse";
 import { ICON } from "../lib/icons";
-
-const EASE = EASE_EMPHASIZED;
 
 export function TurnGroup({
   userId,
@@ -133,57 +140,42 @@ export function TurnGroup({
   );
   const workBlock = hasWork ? (
     <div className="flex flex-col">
-      {/* grid-template-rows: 0fr ↔ 1fr lets the row collapse without ever
-          animating `height: auto`, which would trigger layout recalc every
-          frame (D-tier per motion's tier list). The inner wrapper is grid
-          item 1 with overflow:hidden + min-height:0 so the row defines its
-          own clip. */}
-      <AnimatePresence initial={false}>
-        {isDone && (
-          <motion.div
-            key="header"
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE }}
-            style={{ display: "grid" }}
-          >
-            <div style={{ overflow: "hidden", minHeight: 0 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  onManualResize?.();
-                  setExpanded((v) => !v);
-                }}
-                className="self-start inline-flex items-center gap-1.5 text-base leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
-              >
-                <span>{headerLabel}</span>
-                <ChevronDown
-                  size={ICON.XS}
-                  strokeWidth={2}
-                  className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
-                />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {isDone ? (
-        <motion.div
-          initial={false}
-          animate={{
-            gridTemplateRows: showInterim ? "1fr" : "0fr",
-            opacity: showInterim ? 1 : 0,
+      <Collapse open={isDone}>
+        <button
+          type="button"
+          onClick={() => {
+            onManualResize?.();
+            setExpanded((v) => !v);
           }}
-          transition={{ duration: MOTION.route, ease: EASE }}
-          style={{ display: "grid" }}
+          className="self-start inline-flex items-center gap-1.5 text-base leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
         >
-          <div style={{ overflow: "hidden", minHeight: 0 }}>
-            <div className="h-px bg-line-soft mt-2" />
-            {interimList}
-          </div>
-        </motion.div>
+          <span>{headerLabel}</span>
+          <ChevronDown
+            size={ICON.XS}
+            strokeWidth={2}
+            className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
+          />
+        </button>
+      </Collapse>
+
+      {/* No height tween here — the interim subtree is the heaviest in the
+          app, so the layout snaps once at the presence boundary and only the
+          content rises/dissolves on GPU props. */}
+      {isDone ? (
+        <AnimatePresence initial={false}>
+          {showInterim && (
+            <motion.div
+              key="interim"
+              initial={RISE_IN}
+              animate={RISE_SETTLED}
+              exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+              transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+            >
+              <div className="h-px bg-line-soft mt-2" />
+              {interimList}
+            </motion.div>
+          )}
+        </AnimatePresence>
       ) : (
         interimList
       )}

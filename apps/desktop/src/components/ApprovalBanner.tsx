@@ -4,13 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useStore, type ApprovalState } from "../store";
 import { respondToAllApprovals, respondToApproval } from "../actions";
 import { ICON } from "../lib/icons";
-import { EASE_OUT, MOTION, originFromEvent } from "../lib/tokens/motion";
-
-// Spring physics — tuned to feel like iOS 17 / Linear / Raycast: the
-// card moves with mass + damping, not a tween. Stiffness ~340 gives a
-// quick settle; damping 32 kills overshoot so it doesn't feel bouncy
-// (we're not animating a Slack message, just a card dismissing).
-const SPRING = { type: "spring", stiffness: 340, damping: 32, mass: 0.9 } as const;
+import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "../lib/tokens/motion";
+import { Collapse } from "./ui/Collapse";
 
 // Cap visible stack to 2 cards. The front card already shows "1 of N" when
 // there are more pending, so a third sliver doesn't add information — it
@@ -178,11 +173,10 @@ export function ApprovalBanner() {
         {/* grid + grid-area="stack" makes every child share one cell —
             the container sizes to the largest child (the front card)
             and every card overlaps in the same space. Only the front
-            is interactive; back cards are decorative slivers. */}
-        <div
-          className="grid"
-          style={{ gridTemplateAreas: '"stack"', paddingTop: approvals.length > 1 ? 14 : 0 }}
-        >
+            is interactive; back cards are decorative slivers. Headroom
+            for the slivers is constant so the front card doesn't jump
+            when a second approval arrives or the stack drains. */}
+        <div className="grid pt-3.5" style={{ gridTemplateAreas: '"stack"' }}>
           <AnimatePresence
             initial={false}
             custom={exitReason}
@@ -207,7 +201,7 @@ export function ApprovalBanner() {
                   initial="initial"
                   animate="show"
                   exit="exit"
-                  transition={{ ...SPRING, opacity: { duration: 0.16, ease: "easeOut" } }}
+                  transition={{ ...SPRING_STACK, opacity: { duration: MOTION.row, ease: EASE_OUT } }}
                 >
                   <ApprovalCard
                     approval={approval}
@@ -333,45 +327,33 @@ function ApprovalCard({
         )
       )}
 
-      <AnimatePresence initial={false}>
-        {interactive && denyOpen && (
-          <motion.div
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE_OUT }}
-            style={{ display: "grid" }}
+      <Collapse open={interactive && denyOpen}>
+        <div className="flex items-center gap-2 px-3 pb-2">
+          <input
+            autoFocus
+            value={denyReason}
+            onChange={(e) => setDenyReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitDeny();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setDenyOpen(false);
+              }
+            }}
+            placeholder="Why? — sent to the agent as guidance"
+            className="flex-1 min-w-0 h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-faint focus:outline-none focus:border-line-strong transition-colors duration-check"
+          />
+          <button
+            type="button"
+            onClick={submitDeny}
+            className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
           >
-            <div className="min-h-0 overflow-hidden">
-              <div className="flex items-center gap-2 px-3 pb-2">
-                <input
-                  autoFocus
-                  value={denyReason}
-                  onChange={(e) => setDenyReason(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      submitDeny();
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      setDenyOpen(false);
-                    }
-                  }}
-                  placeholder="Why? — sent to the agent as guidance"
-                  className="flex-1 min-w-0 h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-faint focus:outline-none focus:border-line-strong transition-colors duration-check"
-                />
-                <button
-                  type="button"
-                  onClick={submitDeny}
-                  className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
-                >
-                  Deny
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            Deny
+          </button>
+        </div>
+      </Collapse>
 
       <footer className="flex flex-wrap items-center gap-2 px-3 py-2 bg-surface-soft/35">
         {hasReviewable && (
@@ -379,7 +361,7 @@ function ApprovalCard({
             type="button"
             tabIndex={interactive ? 0 : -1}
             onClick={(e) => setReviewing(toolId, originFromEvent(e.currentTarget))}
-            className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97]"
+            className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
           >
             Review
           </button>
@@ -391,7 +373,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("reject", () => respondToAllApprovals(false))}
-              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97]"
+              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
             >
               Reject all
             </button>
@@ -399,7 +381,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("approve", () => respondToAllApprovals(true))}
-              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
+              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
             >
               Approve all
             </button>
@@ -414,7 +396,7 @@ function ApprovalCard({
           aria-expanded={denyOpen}
           title="Deny with reason"
           className={
-            "grid place-items-center w-7 h-7 rounded-md transition-[background-color,color,transform] duration-check ease-out active:scale-[0.97] " +
+            "grid place-items-center w-7 h-7 rounded-md transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] " +
             (denyOpen
               ? "bg-surface text-ink"
               : "text-muted hover:bg-surface hover:text-ink")
@@ -426,7 +408,7 @@ function ApprovalCard({
           type="button"
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("reject", () => respondToApproval(toolId, false))}
-          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,transform] duration-check ease-out active:scale-[0.97]"
+          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
         >
           Reject
         </button>
@@ -435,7 +417,7 @@ function ApprovalCard({
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("approve", () => respondToApproval(toolId, true))}
           title="Approve (⌘↩)"
-          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,transform] duration-check ease-out active:scale-[0.97]"
+          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
         >
           Approve
           <span className="inline-flex items-center gap-0.5 opacity-70 text-2xs font-mono leading-none">

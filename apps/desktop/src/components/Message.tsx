@@ -23,13 +23,20 @@ import type { SkillDescriptor, TodoStatus } from "../api";
 import { activityTraceStats } from "../lib/agent";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
-import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
+import {
+  MOTION,
+  EASE_DECELERATE,
+  EASE_OUT,
+  RISE_IN,
+  RISE_SETTLED,
+  DISSOLVE_OUT,
+} from "../lib/tokens/motion";
+import { BlurSwap } from "./BlurSwap";
 import { ICON } from "../lib/icons";
 import { IconButton } from "./IconButton";
 import { useTimeoutFlag } from "../lib/hooks";
 import { useSmoothStreamedContent } from "../lib/useSmoothStream";
 
-const EASE = EASE_EMPHASIZED;
 // Background tint only — the previous inset 1px ring stacked
 // visually badly when several adjacent messages were focused at once,
 // reading as overlapping outlines. The tint alone is enough cue.
@@ -366,22 +373,23 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         />
       </button>
 
+      {/* No height tween — the reasoning body can be long markdown, so the
+          layout snaps at the presence boundary and only the content
+          rises/dissolves on GPU props. */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
             key="body"
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE }}
-            style={{ display: "grid" }}
+            initial={RISE_IN}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+            className="min-w-0"
           >
-            <div className="min-h-0 overflow-hidden">
-              <Markdown
-                content={smoothContent}
-                className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words"
-              />
-            </div>
+            <Markdown
+              content={smoothContent}
+              className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words"
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -413,7 +421,12 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
         <span className="text-muted truncate min-w-0 flex-1">{message.subtitle || ""}</span>
       </div>
       {!isRunning && (
-        <pre className="m-0 mt-[3px] ml-[18px] text-faint font-mono text-sm leading-[1.45] whitespace-pre-wrap max-h-[80px] overflow-hidden [mask-image:linear-gradient(180deg,#000_60%,transparent)]">
+        <pre
+          className={clsx(
+            "m-0 mt-[3px] ml-[18px] text-faint font-mono text-sm leading-[1.45] whitespace-pre-wrap max-h-[80px] overflow-hidden [mask-image:linear-gradient(180deg,#000_60%,transparent)]",
+            entryAnimation(message, "animate-fade-in"),
+          )}
+        >
           {message.content}
         </pre>
       )}
@@ -561,11 +574,13 @@ const TodoMessage = memo(function TodoMessage({ id }: { id: string }) {
         )}
         <ul className="mt-2.5 flex flex-col gap-1.5">
           {items.map((item, index) => (
-            <li key={`${item.status}-${index}-${item.content}`} className="flex items-start gap-2 min-w-0">
-              <TodoIcon status={item.status} />
+            <li key={`${index}-${item.content}`} className="flex items-start gap-2 min-w-0">
+              <BlurSwap swapKey={item.status} blur={3} className="mt-[1px] shrink-0">
+                <TodoIcon status={item.status} />
+              </BlurSwap>
               <span
                 className={clsx(
-                  "min-w-0 flex-1 text-sm leading-[1.4] break-words",
+                  "min-w-0 flex-1 text-sm leading-[1.4] break-words transition-colors duration-trace ease-out",
                   item.status === "completed" && "text-faint line-through",
                   item.status === "in_progress" && "text-ink font-medium",
                   item.status === "pending" && "text-muted",
@@ -583,10 +598,10 @@ const TodoMessage = memo(function TodoMessage({ id }: { id: string }) {
 
 function TodoIcon({ status }: { status: TodoStatus }) {
   if (status === "completed") {
-    return <CheckCircle2 size={ICON.SM} strokeWidth={2.2} className="mt-[1px] shrink-0 text-ok" />;
+    return <CheckCircle2 size={ICON.SM} strokeWidth={2.2} className="text-ok" />;
   }
   if (status === "in_progress") {
-    return <CircleDot size={ICON.SM} strokeWidth={2.2} className="mt-[1px] shrink-0 text-info" />;
+    return <CircleDot size={ICON.SM} strokeWidth={2.2} className="text-info" />;
   }
-  return <Circle size={ICON.SM} strokeWidth={2} className="mt-[1px] shrink-0 text-faint" />;
+  return <Circle size={ICON.SM} strokeWidth={2} className="text-faint" />;
 }

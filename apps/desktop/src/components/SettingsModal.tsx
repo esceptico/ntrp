@@ -15,6 +15,7 @@ import { AppearanceTab } from "./settings/AppearanceTab";
 import { ArchiveTab } from "./settings/ArchiveTab";
 import { PageModal } from "./PageModal";
 import { IconButton } from "./IconButton";
+import { BlurSwap } from "./BlurSwap";
 import { ICON } from "../lib/icons";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
@@ -120,7 +121,9 @@ export function SettingsModal() {
         <div className="relative min-h-0 min-w-0">
           <header className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-5 pt-4 pb-3">
             <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
-              {TABS.find((t) => t.id === active)?.label}
+              <BlurSwap swapKey={active} className="justify-items-start">
+                {TABS.find((t) => t.id === active)?.label}
+              </BlurSwap>
             </div>
             <IconButton onClick={close} disabled={saving} aria-label="Close">
               <X size={ICON.SM} strokeWidth={2} />

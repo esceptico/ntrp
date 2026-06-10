@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import {
   CalendarDays,
@@ -36,7 +37,9 @@ import {
   shouldShowLoadedSettingsContent,
 } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
+import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
 
 export function IntegrationsTab() {
@@ -180,7 +183,7 @@ export function IntegrationsTab() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
         >
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -290,22 +293,26 @@ function GoogleCard({
             type="button"
             onClick={() => void onAdd()}
             disabled={pendingAdd}
-            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-[0.45]"
+            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
-            {pendingAdd ? "Connecting…" : "Add account"}
+            <BlurSwap swapKey={pendingAdd ? "connecting" : "add"} blur={2}>
+              {pendingAdd ? "Connecting…" : "Add account"}
+            </BlurSwap>
           </button>
           <button
             type="button"
             onClick={() => void onToggle(!enabled)}
             disabled={pendingGoogle}
             className={clsx(
-              "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
+              "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
               enabled
                 ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                 : "bg-ink text-on-ink hover:opacity-90",
             )}
           >
-            {pendingGoogle ? "Saving…" : enabled ? "Disable" : "Enable"}
+            <BlurSwap swapKey={pendingGoogle ? "saving" : enabled ? "disable" : "enable"} blur={2}>
+              {pendingGoogle ? "Saving…" : enabled ? "Disable" : "Enable"}
+            </BlurSwap>
           </button>
         </div>
       </div>
@@ -499,45 +506,56 @@ function ServiceRow({
               onClick={service.connected ? onDisconnect : onEdit}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-[0.45]",
+                "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
                 service.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
               )}
             >
-              {actionLabel}
+              <BlurSwap swapKey={actionLabel} blur={2}>
+                {actionLabel}
+              </BlurSwap>
             </button>
           )}
         </div>
       </div>
 
-      {editing && !service.connected && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 bg-surface-soft/35">
-          <input
-            type="password"
-            value={serviceKey}
-            onChange={(event) => onKeyChange(event.target.value)}
-            placeholder="Token"
-            autoFocus
-            className="input-field"
-          />
-          <button
-            type="button"
-            onClick={onConnect}
-            disabled={!serviceKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-opacity"
+      <AnimatePresence initial={false}>
+        {editing && !service.connected && (
+          <motion.div
+            key="token-editor"
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 bg-surface-soft/35"
           >
-            Connect
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+            <input
+              type="password"
+              value={serviceKey}
+              onChange={(event) => onKeyChange(event.target.value)}
+              placeholder="Token"
+              autoFocus
+              className="input-field"
+            />
+            <button
+              type="button"
+              onClick={onConnect}
+              disabled={!serviceKey.trim() || pending}
+              className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Connect
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-[color,border-color,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Cancel
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

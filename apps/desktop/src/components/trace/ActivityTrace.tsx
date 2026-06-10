@@ -5,8 +5,15 @@ import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
 import { activityItemStatus, isAgent, isWorkflow } from "../../lib/agent";
 import { cancelSubagent, switchSession } from "../../actions";
-// Collapse/expand height shift on the trace — layout-style settle, not a modal entry.
-import { SPRING_LAYOUT } from "../../lib/tokens/motion";
+import {
+  MOTION,
+  EASE_DECELERATE,
+  EASE_OUT,
+  SPRING_TRACE_ROW,
+  RISE_IN,
+  RISE_SETTLED,
+  DISSOLVE_OUT,
+} from "../../lib/tokens/motion";
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
 import { StatusDot } from "../StatusDot";
@@ -182,7 +189,9 @@ export function ActivityHeader({
       disabled={!interactive}
       className={clsx(
         "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-sm leading-[1.4] text-faint",
-        interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
+        interactive
+          ? "cursor-pointer transition-colors hover:text-muted active:text-ink-soft select-none"
+          : "cursor-default",
       )}
     >
       <SquareTerminal size={ICON.MD} strokeWidth={2} className="shrink-0" />
@@ -208,7 +217,7 @@ export function ActivityHeader({
           size={ICON.SM}
           strokeWidth={2}
           className={clsx(
-            "ml-1 self-center transition-transform duration-trace text-faint",
+            "ml-1 self-center transition-transform duration-trace ease-out text-faint",
             expanded && "rotate-180",
           )}
         />
@@ -271,9 +280,15 @@ export function ActivityTail({
       <>
         {entries.map((entry, i) =>
           entry.kind === "workflow" ? (
-            <div key={`wf:${entry.workflow.workflowId}`} className="mt-1 space-y-1">
+            <motion.div
+              key={`wf:${entry.workflow.workflowId}`}
+              className="mt-1 space-y-1"
+              initial={suppressMotion ? false : { opacity: 0, y: 8, filter: "blur(2px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={suppressMotion ? { duration: 0 } : SPRING_TRACE_ROW}
+            >
               <ExpandableWorkflowCard workflow={entry.workflow} />
-            </div>
+            </motion.div>
           ) : (
             <div key={`rows:${i}`} className="relative overflow-hidden pl-3 mt-0.5">
               <AnimatePresence mode="popLayout" initial={false}>
@@ -286,11 +301,7 @@ export function ActivityTail({
                     initial={suppressMotion ? false : { opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-                    transition={
-                      suppressMotion
-                        ? { duration: 0 }
-                        : { type: "spring", stiffness: 350, damping: 40, mass: 0.8 }
-                    }
+                    transition={suppressMotion ? { duration: 0 } : SPRING_TRACE_ROW}
                     style={{ height: `${ROW_HEIGHT_EM}em` }}
                     className="flex items-center min-w-0"
                   >
@@ -305,10 +316,9 @@ export function ActivityTail({
     );
   }
 
-  // Static (post-run) mode: the user-driven collapse toggle is a one-shot
-  // event, not a per-frame stream, so animating height here is fine. Every
-  // row (tool or agent) is a uniform single line, so an exact em count is
-  // both correct and cheaper than measuring to `auto`.
+  // Static (post-run) mode: no height tween on the collapse — the rows block
+  // is unbounded, so the layout snaps at the presence boundary and only the
+  // content rises/dissolves on GPU props.
   //
   // Workflow cards are the turn's primary artifact, NOT collapsible tool rows —
   // they stay visible after the run finishes (a finished `onlyWorkflows` turn
@@ -326,27 +336,37 @@ export function ActivityTail({
         }
         const visible = buildStaticTree(entry.items);
         return (
-          <motion.div
-            key={`rows:${i}`}
-            initial={false}
-            animate={{
-              opacity: collapsed ? 0 : 1,
-              height: collapsed ? 0 : `${visible.length * ROW_HEIGHT_EM}em`,
-            }}
-            transition={suppressMotion ? { duration: 0 } : SPRING_LAYOUT}
-            style={{ overflow: "hidden" }}
-            className="pl-3 mt-0.5"
-          >
-            {visible.map((item) => (
-              <div
-                key={item.id}
-                style={{ height: `${ROW_HEIGHT_EM}em` }}
-                className="flex items-center min-w-0"
-              >
-                <ItemButton item={item} onOpen={setViewingTool} />
-              </div>
-            ))}
-          </motion.div>
+          <div key={`rows:${i}`} className="pl-3 mt-0.5">
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.div
+                  key="rows"
+                  initial={suppressMotion ? false : RISE_IN}
+                  animate={RISE_SETTLED}
+                  exit={
+                    suppressMotion
+                      ? { opacity: 0, transition: { duration: 0 } }
+                      : { ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }
+                  }
+                  transition={
+                    suppressMotion
+                      ? { duration: 0 }
+                      : { duration: MOTION.panel, ease: EASE_DECELERATE }
+                  }
+                >
+                  {visible.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{ height: `${ROW_HEIGHT_EM}em` }}
+                      className="flex items-center min-w-0"
+                    >
+                      <ItemButton item={item} onOpen={setViewingTool} />
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         );
       })}
     </>
@@ -534,7 +554,7 @@ function AgentRow({
         <span
           aria-hidden
           className={clsx(
-            "grid place-items-center w-[18px] h-[18px] rounded-md transition-opacity",
+            "grid place-items-center w-[18px] h-[18px] rounded-md transition-opacity duration-row ease-out",
             running ? "bg-accent-soft text-accent-strong" : "bg-surface-soft text-faint",
             canStop && "group-hover/agent:opacity-0",
           )}
@@ -550,12 +570,12 @@ function AgentRow({
               event.stopPropagation();
               if (item.runId) void cancelSubagent(item.runId, item.id);
             }}
-            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100"
+            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] duration-row ease-out group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100"
           >
             <Square size={ICON.XS} strokeWidth={2} />
             <span
               aria-hidden
-              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-2xs font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
+              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-2xs font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity duration-row ease-out group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
             >
               Stop subagent
             </span>
@@ -577,7 +597,7 @@ function AgentRow({
       >
         <span
           className={clsx(
-            "shrink truncate font-medium max-w-[18rem] group-hover/agent:text-ink transition-colors",
+            "shrink truncate font-medium max-w-[18rem] group-hover/agent:text-ink transition-colors duration-row ease-out",
             running ? "text-ink-soft" : terminalBad ? "text-bad" : "text-faint",
           )}
         >
@@ -597,7 +617,7 @@ function AgentRow({
         <ArrowUpRight
           size={ICON.XS}
           strokeWidth={2}
-          className="shrink-0 text-faint opacity-0 transition-opacity group-hover/agent:opacity-100"
+          className="shrink-0 text-faint opacity-0 transition-opacity duration-row ease-out group-hover/agent:opacity-100"
           aria-hidden
         />
       )}

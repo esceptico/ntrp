@@ -4,6 +4,7 @@ import { useStore } from "../../../store";
 import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "../../../api";
 import { useMutationState } from "../../../lib/hooks";
 import { ICON } from "../../../lib/icons";
+import { BlurSwap } from "../../BlurSwap";
 import { IconButton } from "../../IconButton";
 import { SwitchControl } from "../../SwitchControl";
 
@@ -73,9 +74,11 @@ export function ServerRow({
             type="button"
             onClick={onAuthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-[0.45]"
+            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
-            {busy ? "…" : server.error ? "Re-authenticate" : "Sign in"}
+            <BlurSwap swapKey={busy ? "busy" : server.error ? "reauth" : "signin"} blur={2}>
+              {busy ? "…" : server.error ? "Re-authenticate" : "Sign in"}
+            </BlurSwap>
           </button>
         )}
         <IconButton onClick={onEdit} aria-label="Configure">

@@ -3,12 +3,13 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ChevronDown, Code2 } from "lucide-react";
 import { ICON } from "../../lib/icons";
-import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
 import { useTimeTicker, useTimeoutFlag } from "../../lib/hooks";
 import { formatDuration } from "../../lib/agentRun";
 import { switchSession } from "../../actions";
 import { useStore } from "../../store";
 import { highlight } from "../../highlight";
+import { BlurSwap } from "../BlurSwap";
 import { CopyGlyph } from "../CopyGlyph";
 import { isActiveWorkflow, type Workflow, type WorkflowAgent, type WorkflowPhase } from "../../store/workflow-domain";
 import { formatTokens, PhaseSparkline, WorkflowProgressCard } from "./WorkflowProgress";
@@ -25,12 +26,20 @@ export function ExpandableWorkflowCard({ workflow }: { workflow: Workflow }) {
         expanded={expanded}
         onOpen={() => setExpanded((v) => !v)}
       />
-      {expanded && (
-        <>
-          <WorkflowDetail workflow={workflow} onOpenAgent={(sid) => void switchSession(sid)} />
-          <WorkflowSource parentToolCallId={workflow.parentToolCallId} />
-        </>
-      )}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="detail"
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+          >
+            <WorkflowDetail workflow={workflow} onOpenAgent={(sid) => void switchSession(sid)} />
+            <WorkflowSource parentToolCallId={workflow.parentToolCallId} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -90,7 +99,7 @@ function WorkflowSource({ parentToolCallId }: { parentToolCallId?: string }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="group/src flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-colors duration-row"
+          className="group/src flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
         >
           <ChevronDown
             size={ICON.XS}
@@ -101,36 +110,40 @@ function WorkflowSource({ parentToolCallId }: { parentToolCallId?: string }) {
           <span className="shrink-0 text-2xs font-medium text-ink">Source</span>
         </button>
         {open && (
-          <button
+          <motion.button
             type="button"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: MOTION.check, ease: EASE_OUT }}
             onClick={() => void onCopy()}
             aria-label={copied ? "Copied" : "Copy script"}
             className={clsx(
-              "shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-2xs font-medium transition-colors",
+              "shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-2xs font-medium transition-[background-color,color,scale] duration-row ease-out active:scale-[0.97]",
               copied ? "text-accent-strong bg-accent-soft" : "text-faint hover:bg-surface-soft hover:text-ink",
             )}
           >
             <CopyGlyph copied={copied} size={ICON.XS} />
-            {copied ? "Copied" : "Copy"}
-          </button>
+            <BlurSwap swapKey={copied ? "copied" : "copy"} blur={3}>
+              {copied ? "Copied" : "Copy"}
+            </BlurSwap>
+          </motion.button>
         )}
       </div>
+      {/* The highlighted pre can be 40vh of code — never height-tween it.
+          The layout snaps at mount/after-exit; only the content fades. */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-            style={{ display: "grid" }}
+            initial={{ opacity: 0, filter: "blur(2px)" }}
+            animate={{ opacity: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, filter: "blur(2px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
           >
-            <div className="min-h-0 overflow-hidden">
-              {html ? (
-                <pre className={SOURCE_PRE_CLASS} dangerouslySetInnerHTML={{ __html: html }} />
-              ) : (
-                <pre className={SOURCE_PRE_CLASS}>{script}</pre>
-              )}
-            </div>
+            {html ? (
+              <pre className={SOURCE_PRE_CLASS} dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <pre className={SOURCE_PRE_CLASS}>{script}</pre>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -204,7 +217,7 @@ function PhaseGroup({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="group/phase flex w-full items-center gap-1.5 px-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-colors duration-row"
+        className="group/phase flex w-full items-center gap-1.5 px-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
       >
         <ChevronDown
           size={ICON.XS}
@@ -216,24 +229,22 @@ function PhaseGroup({
         <span className="flex-1" />
         <span className="shrink-0 text-2xs tabular-nums text-faint">{agents.length}</span>
       </button>
+      {/* Unbounded agent list — snap the height, rise the content. */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
-            initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-            animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-            exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-            style={{ display: "grid" }}
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
           >
-            <div className="min-h-0 overflow-hidden">
-              {agents.length === 0 ? (
-                <div className="pl-6 py-0.5 text-2xs text-faint">No agents yet.</div>
-              ) : (
-                agents.map((agent) => (
-                  <AgentRow key={agent.taskId} agent={agent} onOpenAgent={onOpenAgent} />
-                ))
-              )}
-            </div>
+            {agents.length === 0 ? (
+              <div className="pl-6 py-0.5 text-2xs text-faint">No agents yet.</div>
+            ) : (
+              agents.map((agent) => (
+                <AgentRow key={agent.taskId} agent={agent} onOpenAgent={onOpenAgent} />
+              ))
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -279,7 +290,7 @@ function AgentRow({
       type="button"
       onClick={() => onOpenAgent(childSessionId)}
       title={`Open ${agent.name ?? "agent"} — watch its tool calls live`}
-      className="group/agent flex w-full items-center gap-2 pl-6 pr-1.5 py-0.5 text-xs text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-colors"
+      className="group/agent flex w-full items-center gap-2 pl-6 pr-1.5 py-0.5 text-xs text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
     >
       {body}
     </button>
