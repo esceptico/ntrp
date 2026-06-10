@@ -1,4 +1,5 @@
 declare module "*.css";
+declare module "@fontsource-variable/geist";
 
 interface Window {
   ntrpDesktop?: {
