@@ -58,6 +58,22 @@ function isTrustedRendererUrl(frameUrl) {
   }
 }
 
+// The render_html shell document (see src/public/widget-frame.html) — the one
+// subframe navigation to a real URL the app performs itself.
+function isWidgetFrameUrl(url) {
+  if (isDev) {
+    const devUrl = process.env.NTRP_DESKTOP_DEV_SERVER_URL;
+    return originOf(url) === originOf(devUrl) && new URL(url).pathname === "/widget-frame.html";
+  }
+  if (!url.startsWith("file://")) return false;
+  try {
+    const expected = path.join(path.dirname(rendererIndexPath()), "widget-frame.html");
+    return path.normalize(fileURLToPath(url)) === path.normalize(expected);
+  } catch {
+    return false;
+  }
+}
+
 function assertTrustedSender(event) {
   if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
 }
@@ -348,6 +364,17 @@ function createWindow() {
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!isTrustedRendererUrl(url)) event.preventDefault();
+  });
+
+  // Sandboxed srcdoc widgets (render_html) can always navigate THEMSELVES —
+  // neither sandbox flags nor CSP block self-navigation, so widget HTML could
+  // exfiltrate data via location.href and load a remote page into the
+  // renderer. Pin every subframe to its srcdoc/about:blank document, with
+  // one exception: the app's own widget-frame.html shell.
+  mainWindow.webContents.on("will-frame-navigate", (event) => {
+    if (!event.isMainFrame && !event.url.startsWith("about:") && !isWidgetFrameUrl(event.url)) {
+      event.preventDefault();
+    }
   });
 
   mainWindow.on("closed", () => {

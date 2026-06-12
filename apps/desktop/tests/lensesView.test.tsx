@@ -19,6 +19,7 @@ const lens: Lens = {
   render_mode: "flat",
   provenance: "user_authored",
   status: "active",
+  promoted_to: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
@@ -29,7 +30,7 @@ const config = { serverUrl: "http://server", apiKey: "test" };
 
 test("lens header keeps only the refresh action", () => {
   const html = renderToStaticMarkup(<LensHeader lens={lens} onRefresh={() => {}} refreshing={false} />);
-  expect(html).toContain('aria-label="Re-synthesize"');
+  expect(html).toContain('aria-label="Re-evaluate"');
   expect(html).not.toContain("Group by subject");
   expect(html).not.toContain("Provenance graph");
 });
@@ -63,6 +64,7 @@ test("profile rows hide source claims by default", () => {
       onClose={() => {}}
       onCommit={() => {}}
       onPeek={() => {}}
+      onExitDone={() => {}}
     />,
   );
 
@@ -85,7 +87,6 @@ test("source claim editor keeps normal text spacing", () => {
       }}
       editing
       busy={false}
-      exiting={null}
       onOpen={() => {}}
       onClose={() => {}}
       onCommit={() => {}}
@@ -370,6 +371,7 @@ function memoryItem(id: string, content: string, subject = "Kevin Gu") {
     id,
     content,
     canonical_subject: subject,
+    labels: [],
     scope: { kind: "user", key: null },
     provenance: "recorded",
     status: "active",

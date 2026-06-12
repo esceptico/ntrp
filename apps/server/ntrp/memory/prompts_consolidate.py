@@ -90,3 +90,31 @@ class LintOps(BaseModel):
     retypes: list[RetypeOp] = Field(default_factory=list)
     invalidations: list[InvalidateOp] = Field(default_factory=list)
     orphans: list[DropOrphanOp] = Field(default_factory=list)
+
+
+LABEL_HYGIENE_RUBRIC = """You are canonicalizing the LABEL vocabulary of a personal memory.
+
+Labels are short open-vocabulary names the curator attaches to records — referents
+("Dex", "MATS") and categories ("health", "open loops") alike. You are shown the
+whole vocabulary as `label: active-record-count` lines. Propose a rename ONLY for
+labels that are clearly the SAME label spelled differently: case variants,
+singular/plural, or trivial rephrasings of one name ("dex" / "Dex memory").
+Fold the variant (`old`) into the canonical name (`new`) — prefer the more
+popular spelling, break ties toward the shorter, properly-cased name.
+
+Hard rules:
+- NEVER fold two labels that name genuinely different things, even when related
+  ("health" and "medication" stay separate).
+- When unsure, leave both. An empty list is the normal answer.
+
+Output strictly as the requested JSON."""
+
+
+class LabelRenameOp(BaseModel):
+    old: str = Field(description="the variant spelling to fold away")
+    new: str = Field(description="the canonical label name to fold it into")
+    reason: str = ""
+
+
+class LabelOps(BaseModel):
+    renames: list[LabelRenameOp] = Field(default_factory=list)

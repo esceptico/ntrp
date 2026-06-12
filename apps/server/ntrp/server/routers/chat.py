@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, ApprovalNeededEvent, TextDeltaEvent
+from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, ApprovalNeededEvent, InputNeededEvent, TextDeltaEvent
 from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -128,12 +128,21 @@ async def _event_stream(
                 }
         return tool_id in durable_pending_approval_ids
 
+    def is_pending_input(tool_id: str) -> bool:
+        active_run = run_registry.get_active_run(session_id)
+        future = active_run.pending_inputs.get(tool_id) if active_run else None
+        return future is not None and not future.done()
+
     async def filter_replay_records(records: list[StreamRecord]) -> list[StreamRecord]:
         filtered: list[StreamRecord] = []
         for record in records:
             # approval_needed is a UI edge; the canonical state is the live
             # Future / durable tool_approvals row. Do not replay stale cards.
             if isinstance(record.event, ApprovalNeededEvent) and not await is_pending_approval(record.event.tool_id):
+                continue
+            # input_needed is a UI edge; the resolved state replays via the
+            # durable TOOL_CALL_RESULT. Do not replay stale input cards.
+            if isinstance(record.event, InputNeededEvent) and not is_pending_input(record.event.tool_id):
                 continue
             filtered.append(record)
         return filtered
@@ -400,6 +409,20 @@ async def submit_tool_result(
         if await resolve_durable_approval_if_pending():
             return {"status": "ok"}
         raise HTTPException(status_code=404, detail="Run not found")
+
+    input_future = run.pending_inputs.get(request.tool_id)
+    if input_future is not None:
+        if input_future.done():
+            raise HTTPException(status_code=409, detail="Input already resolved")
+        input_future.set_result(
+            {
+                "type": "tool_response",
+                "tool_id": request.tool_id,
+                "result": request.result,
+                "approved": request.approved,
+            }
+        )
+        return {"status": "ok"}
 
     future = run.pending_approvals.get(request.tool_id)
     if future is None:

@@ -8,7 +8,10 @@ RecordStore.search touches — `index.embedder.embed_one`, `index.store.vector_s
 record->vector bridge happens. NO scope partition: search/list span ALL records.
 Covers add/get, hybrid search (with the fake index AND None), supersede (excluded
 from active search, shown with include_superseded), confirm, update, delete,
-list(pinned_only), kinds filtering, and provenance round-trip.
+list(pinned_only), kinds filtering, provenance round-trip, and the labels
+substrate (set/add/labels_of/labels_for, records_for_label active-only,
+list_labels active counts, rename_label union, merge-unions, supersede_with
+inheritance, delete cascade).
 """
 
 import asyncio
@@ -57,7 +60,7 @@ class _FakeStore:
         assert sources == ["record"]
         q = np.frombuffer(embedding, dtype=np.float32)
         scored: list[tuple[int, float]] = []
-        for sid, rec in self._items.items():
+        for rec in self._items.values():
             e = rec["embedding"].astype(np.float32)
             denom = (np.linalg.norm(q) * np.linalg.norm(e)) or 1.0
             scored.append((rec["int_id"], float(np.dot(q, e) / denom)))
@@ -352,4 +355,141 @@ async def test_search_filters_by_kinds(tmp_path: Path):
 
     hits = await store.search("sky", kinds=["fact"])
     assert {h.id for h in hits} == {fact.id}
+    await store.close()
+
+
+# --- labels ---------------------------------------------------------------------
+
+
+async def test_set_labels_replaces_all(tmp_path: Path):
+    store = _store(tmp_path)
+    rec = await store.add("Dex sleeps eighteen hours a day")
+
+    await store.set_labels(rec.id, ["Dex", "traits"])
+    assert await store.labels_of(rec.id) == ["Dex", "traits"]
+
+    await store.set_labels(rec.id, ["health"])  # replace, not union
+    assert await store.labels_of(rec.id) == ["health"]
+    await store.close()
+
+
+async def test_add_labels_unions(tmp_path: Path):
+    store = _store(tmp_path)
+    rec = await store.add("Dex hates the vacuum cleaner")
+    await store.set_labels(rec.id, ["Dex"])
+
+    await store.add_labels(rec.id, ["Dex", "traits"])  # duplicate ignored, new added
+    assert await store.labels_of(rec.id) == ["Dex", "traits"]
+    await store.close()
+
+
+async def test_labels_of_missing_record_is_empty(tmp_path: Path):
+    store = _store(tmp_path)
+    assert await store.labels_of("does-not-exist") == []
+    await store.close()
+
+
+async def test_labels_for_batch_hydrates_every_id(tmp_path: Path):
+    store = _store(tmp_path)
+    a = await store.add("a")
+    b = await store.add("b")
+    c = await store.add("c")
+    await store.set_labels(a.id, ["x"])
+    await store.set_labels(b.id, ["y", "x"])
+
+    got = await store.labels_for([a.id, b.id, c.id])
+    assert got == {a.id: ["x"], b.id: ["x", "y"], c.id: []}  # unlabeled -> []
+    assert await store.labels_for([]) == {}
+    await store.close()
+
+
+async def test_records_for_label_active_only_newest_confirmed_first(tmp_path: Path):
+    store = _store(tmp_path)
+    old = await store.add("Dex was adopted in 2021")
+    await asyncio.sleep(0.01)
+    new = await store.add("Dex eats grain-free food")
+    await store.set_labels(old.id, ["Dex"])
+    await store.set_labels(new.id, ["Dex"])
+    await store.add("unlabeled noise")
+
+    hits = await store.records_for_label("Dex")
+    assert [r.id for r in hits] == [new.id, old.id]  # newest-confirmed first
+
+    successor = await store.add("Dex was adopted in 2022")
+    await store.supersede(old.id, successor.id)
+    assert [r.id for r in await store.records_for_label("Dex")] == [new.id]
+    await store.close()
+
+
+async def test_list_labels_counts_active_records_only(tmp_path: Path):
+    store = _store(tmp_path)
+    a = await store.add("a")
+    b = await store.add("b")
+    c = await store.add("c")
+    await store.set_labels(a.id, ["Dex", "health"])
+    await store.set_labels(b.id, ["Dex"])
+    await store.set_labels(c.id, ["Dex"])
+
+    successor = await store.add("c2")
+    await store.supersede(c.id, successor.id)  # c's labels no longer counted
+
+    assert await store.list_labels() == [
+        {"label": "Dex", "count": 2},
+        {"label": "health", "count": 1},
+    ]
+    await store.close()
+
+
+async def test_rename_label_unions_into_existing(tmp_path: Path):
+    store = _store(tmp_path)
+    a = await store.add("a")
+    b = await store.add("b")
+    await store.set_labels(a.id, ["dex"])
+    await store.set_labels(b.id, ["Dex", "dex"])  # carries both spellings
+
+    await store.rename_label("dex", "Dex")
+
+    assert await store.labels_of(a.id) == ["Dex"]
+    assert await store.labels_of(b.id) == ["Dex"]  # union: no duplicate row
+    assert await store.list_labels() == [{"label": "Dex", "count": 2}]
+    await store.close()
+
+
+async def test_merge_unions_labels_onto_survivor(tmp_path: Path):
+    store = _store(tmp_path)
+    s = await store.add("survivor")
+    l1 = await store.add("loser one")
+    l2 = await store.add("loser two")
+    await store.set_labels(s.id, ["Dex"])
+    await store.set_labels(l1.id, ["health"])
+    await store.set_labels(l2.id, ["Dex", "traits"])
+
+    merged = await store.merge(s.id, [l1.id, l2.id])
+
+    assert merged is not None
+    assert await store.labels_of(s.id) == ["Dex", "health", "traits"]
+    await store.close()
+
+
+async def test_supersede_with_passes_labels_to_successor(tmp_path: Path):
+    store = _store(tmp_path)
+    old = await store.add("Dex weighs 12kg")
+    await store.set_labels(old.id, ["Dex", "health"])
+
+    new = await store.supersede_with(old.id, text="Dex weighs 14kg")
+
+    assert await store.labels_of(new.id) == ["Dex", "health"]
+    assert await store.labels_of(old.id) == ["Dex", "health"]  # history keeps its labels
+    await store.close()
+
+
+async def test_delete_cascades_labels(tmp_path: Path):
+    store = _store(tmp_path)
+    rec = await store.add("disposable")
+    await store.set_labels(rec.id, ["Dex"])
+
+    await store.delete(rec.id)
+
+    assert await store.labels_of(rec.id) == []
+    assert await store.list_labels() == []
     await store.close()

@@ -35,6 +35,9 @@ BASH_TIMEOUT = 120  # seconds — safety brake against runaway commands
 # a `cat hugefile`-style command can't dump GBs into context + the offload store.
 BASH_MAX_OUTPUT_CHARS = 1_000_000
 
+# Hard cap on render_html widget payloads (schema-enforced, no truncation logic).
+RENDER_HTML_MAX_CHARS = 150_000
+
 RESEARCH_TIMEOUT = None
 # Per-subagent wall-time guard. A spawned agent that hangs or loops (e.g. emitting
 # many tool calls per LLM step, which the per-step iteration cap doesn't catch) is

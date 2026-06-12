@@ -12,9 +12,10 @@ import { MemoryGraph, type CenterRequest, type GraphPayload } from "./MemoryGrap
 import { DetailPlaceholder, Empty, ListError } from "./shared";
 import { provenanceLabel, provenanceTone, relativeTime, scopeLabel } from "./lens";
 
-/** The claim graph. By default the whole in-scope graph (all claims + claim↔claim
- *  edges); click-to-focus re-roots a bounded BFS on a claim. Lenses are never
- *  nodes (the locked model: memory is claims only). */
+/** The memory graph. By default the labels-first view (label hubs + their
+ *  member claims, role="label" edges); click-to-focus re-roots a bounded BFS
+ *  on a claim. Hubs are pseudo-items (id "label:<name>") — viewable, never
+ *  BFS roots. Lenses are never nodes. */
 export function GraphView({
   config,
   scope,
@@ -82,7 +83,7 @@ export function GraphView({
   }
 
   if (!loading && graph.nodes.length === 0) {
-    return <Empty>No claims yet.</Empty>;
+    return <Empty>No labels yet — the graph fills in as memories are tagged.</Empty>;
   }
 
   return (
@@ -117,30 +118,42 @@ export function GraphView({
                   </IconButton>
                 </div>
                 <p className="mt-3 text-sm leading-[1.5] text-ink">{selected.content}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <Badge tone={provenanceTone(selected.provenance)} size="sm">
-                    {provenanceLabel(selected.provenance)}
-                  </Badge>
-                  <Badge tone="neutral" size="sm">
-                    {scopeLabel(selected.scope)}
-                  </Badge>
-                  {selected.corroboration > 0 && (
-                    <span className="text-2xs text-faint tabular-nums">×{selected.corroboration}</span>
-                  )}
-                </div>
+                {selected.id.startsWith("label:") ? (
+                  // A label hub: provenance/scope are pseudo-values; corroboration
+                  // is the member count, the only stat that means anything here.
+                  <div className="mt-3 text-2xs text-faint tabular-nums">
+                    {selected.corroboration} record{selected.corroboration === 1 ? "" : "s"}
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <Badge tone={provenanceTone(selected.provenance)} size="sm">
+                      {provenanceLabel(selected.provenance)}
+                    </Badge>
+                    <Badge tone="neutral" size="sm">
+                      {scopeLabel(selected.scope)}
+                    </Badge>
+                    {selected.corroboration > 0 && (
+                      <span className="text-2xs text-faint tabular-nums">×{selected.corroboration}</span>
+                    )}
+                  </div>
+                )}
                 <div className="mt-auto pt-3 text-2xs text-faint">
-                  created {relativeTime(selected.created_at)}
+                  {selected.id.startsWith("label:") ? "latest record" : "created"}{" "}
+                  {relativeTime(selected.created_at)}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRootId(selected.id);
-                    setCenter({ id: selected.id, nonce: Date.now() });
-                  }}
-                  className="mt-2 inline-flex h-7 items-center justify-center rounded-md bg-surface-soft text-sm text-ink-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] hover:bg-surface-sunken hover:text-ink"
-                >
-                  Center here
-                </button>
+                {/* Hubs are pseudo-items — the BFS endpoint can't root on them. */}
+                {!selected.id.startsWith("label:") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRootId(selected.id);
+                      setCenter({ id: selected.id, nonce: Date.now() });
+                    }}
+                    className="mt-2 inline-flex h-7 items-center justify-center rounded-md bg-surface-soft text-sm text-ink-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] hover:bg-surface-sunken hover:text-ink"
+                  >
+                    Center here
+                  </button>
+                )}
               </div>
             </BlurSwap>
           </motion.div>

@@ -92,18 +92,19 @@ class AutomationRuntime:
             consolidate = self.get_consolidate()
             if consolidate is None:
                 return "memory consolidation unavailable (no memory model configured)"
-            totals = {"merged": 0, "superseded": 0, "dropped": 0, "promoted": 0}
+            totals = {"merged": 0, "superseded": 0, "dropped": 0, "retyped": 0, "relabeled": 0}
             # run_once is O(delta)-bounded (200/call); loop so one scheduled run
             # drains the day's backlog. Empty pass -> done.
             for _ in range(8):
                 rep = await consolidate.run_once()
                 for k in totals:
                     totals[k] += getattr(rep, k)
-                if rep.merged == rep.superseded == rep.dropped == rep.promoted == 0:
+                if not any(getattr(rep, k) for k in totals):
                     break
             return (
                 f"merged {totals['merged']}, superseded {totals['superseded']}, "
-                f"dropped {totals['dropped']}, promoted {totals['promoted']}"
+                f"dropped {totals['dropped']}, retyped {totals['retyped']}, "
+                f"relabeled {totals['relabeled']}"
             )
 
         return handler

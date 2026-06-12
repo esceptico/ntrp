@@ -2954,17 +2954,26 @@ class SessionStore:
 
     async def recent_session_scopes(self, limit: int) -> list[dict]:
         """The `limit` most-recently-active live sessions (archived excluded),
-        as {session_id, project_id} — the curation sweep's worklist."""
+        as {session_id, project_id, session_type, origin_automation_id} — the
+        curation sweep's worklist (it gates on the origin fields)."""
         rows = await self.read_conn.execute_fetchall(
             """
-            SELECT session_id, project_id FROM sessions
+            SELECT session_id, project_id, session_type, origin_automation_id FROM sessions
             WHERE archived_at IS NULL
             ORDER BY last_activity DESC
             LIMIT ?
             """,
             (limit,),
         )
-        return [{"session_id": row["session_id"], "project_id": row["project_id"]} for row in rows]
+        return [
+            {
+                "session_id": row["session_id"],
+                "project_id": row["project_id"],
+                "session_type": row["session_type"] or "chat",
+                "origin_automation_id": row["origin_automation_id"],
+            }
+            for row in rows
+        ]
 
     async def search_messages(
         self,

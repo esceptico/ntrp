@@ -39,6 +39,7 @@ from ntrp.tools.files import (
 from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
+from ntrp.tools.render_html import render_html_tool
 from ntrp.tools.research import research_tool
 from ntrp.tools.sessions import (
     create_session_tool,
@@ -62,6 +63,7 @@ SYSTEM = Integration(
         "write_file": write_file_tool,
         "edit_file": edit_file_tool,
         "current_time": current_time_tool,
+        "render_html": render_html_tool,
         "research": research_tool,
         "workflow": workflow_tool,
         "save_workflow": save_workflow_tool,

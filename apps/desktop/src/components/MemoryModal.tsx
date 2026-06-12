@@ -5,9 +5,9 @@ import { Tab, Tabs } from "./ui/Tabs";
 import { PageModal } from "./PageModal";
 
 /** Memory views host. Title-row header with an inset-border tab strip below;
- *  the three destinations (Claims · Lenses · Graph) are one woven sheet, swapped
- *  by the shared-element pill indicator. Claims is home — claims ARE the memory;
- *  lenses are a view layer over them. */
+ *  the four destinations (Browse · Claims · Lenses · Graph) are one woven sheet,
+ *  swapped by the shared-element pill indicator. Browse is home — labels are the
+ *  connective tissue; lenses are a view layer over the claims. */
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);

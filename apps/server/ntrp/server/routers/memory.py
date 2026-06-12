@@ -2,15 +2,18 @@
 served entirely from the live flat RecordStore + LensStore.
 
 The bridge: the UI is "claims-centric" (MemoryItem, Lens, ProjectedPage,
-CoverageAdvisory) but the substrate is records + criterion-view lenses. A RECORD
-*is* a claim — `record.text` is the claim content; a lens's MEMBERS are the
-records its criterion scores in; a lens PAGE is the synthesized markdown over
-those members. There are NO scopes (one flat pool) and NO provenance edge table
-(records have no parents/children) — `/scopes` returns [], graph edges are [].
+CoverageAdvisory) but the substrate is records + LABELS + on-demand lenses. A
+RECORD *is* a claim — `record.text` is the claim content; LABELS are the
+curator's open-vocabulary names on each record (hydrated in batch onto every
+item); a lens's MEMBERS are the records its criterion judges in; a lens PAGE is
+the synthesized markdown over those members. There are NO scopes (one flat
+pool) — `/scopes` returns []. The GRAPH is the derivation DAG: inferred records
+linked to their premises by `role="evidence"` edges, plus supersession lineage.
 
-Synthesis is synchronous (one LLM call in LensStore.page), so `getLensPage`
-always returns a materialized ProjectedPage (never HTTP 202); `/page/status`
-reports `idle`. The UI's async-generation poll path simply never fires.
+NO LLM CALL EVER RUNS ON A READ PATH. Lens pages are synthesized in the
+BACKGROUND (LensStore.kick) and served from cache; while an evaluation is in
+flight `getLensPage` returns the LensGenStatus shape and the UI polls
+`/page/status` until the page lands.
 
 Wiring: `require_knowledge_runtime` -> `KnowledgeRuntime._record_store` /
 `._lens_store`. 503 when memory is off.
@@ -25,6 +28,10 @@ from ntrp.server.deps import require_knowledge_runtime
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
 
 router = APIRouter(prefix="/admin/memory", tags=["memory"])
+
+# Node budgets that keep both graph payloads bounded.
+GRAPH_NODE_CAP = 250
+ITEM_GRAPH_NODE_CAP = 60
 
 
 def _record_store(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)):
@@ -49,17 +56,20 @@ _USER_SOURCE_KINDS = {"desktop_pin", "user", "user_authored"}
 
 def _provenance(r: Record) -> str:
     if r.pinned:
-        return _PROVENANCE_USER
+        return _PROVENANCE_USER  # the user's pin converts inference to knowledge
+    if r.provenance == "derived":
+        return "inferred"
     if r.source_ref is not None and r.source_ref.kind in _USER_SOURCE_KINDS:
         return _PROVENANCE_USER
     return _PROVENANCE_RECORDED
 
 
-def record_to_item_json(r: Record) -> dict:
+def record_to_item_json(r: Record, labels: list[str]) -> dict:
     """A Record rendered as the UI's `MemoryItem` (claims-only shape). Records
     have no claims-era fields, so map deterministically: text->content,
     kind->canonical_subject (keeps grouped bucketing meaningful), one flat
-    user/null scope, no edges."""
+    user/null scope, no edges. `labels` come from a labels_for batch hydrate —
+    list endpoints must never fetch them per record (N+1)."""
     source_refs = []
     if r.source_ref is not None:
         source_refs.append(
@@ -69,13 +79,22 @@ def record_to_item_json(r: Record) -> dict:
                 "captured_at": r.source_ref.captured_at,
             }
         )
+    if r.superseded_by:
+        status = "superseded"
+    elif r.standing != "active":
+        status = r.standing  # unresolved | retired (derivation lifecycle)
+    else:
+        status = "active"
     return {
         "id": r.id,
         "content": r.text,
         "canonical_subject": r.kind,
+        "labels": labels,
         "scope": {"kind": "user", "key": None},
         "provenance": _provenance(r),
-        "status": "superseded" if r.superseded_by else "active",
+        "status": status,
+        "standing": r.standing,
+        "depth": r.depth,
         "valid_from": r.created_at,
         "invalid_at": None,
         "source_refs": source_refs,
@@ -85,6 +104,12 @@ def record_to_item_json(r: Record) -> dict:
         "created_at": r.created_at,
         "updated_at": r.last_confirmed_at,
     }
+
+
+async def hydrated_items_json(store, records: list[Record]) -> list[dict]:
+    """Render many records as MemoryItems with ONE labels_for batch query."""
+    labels = await store.labels_for([r.id for r in records])
+    return [record_to_item_json(r, labels[r.id]) for r in records]
 
 
 def rendered_claim_json(r: Record) -> dict:
@@ -122,6 +147,7 @@ def lens_to_json(lens) -> dict:
         "render_mode": "grouped_by_subject",
         "provenance": "user_authored",
         "status": "active",
+        "promoted_to": lens.promoted_to,
         "created_at": lens.created_at,
         "updated_at": lens.created_at,
     }
@@ -175,11 +201,11 @@ def _split_subject_sections(markdown: str, members: list[Record]) -> list[dict] 
     ]
 
 
-async def _projected_page(store, lens, *, detail: str, refresh: bool) -> dict:
-    """Build the UI's `ProjectedPage` for a lens: synthesized markdown +
-    member-record blocks + coverage + (grouped sections | None)."""
+async def _projected_page(store, lens, *, detail: str) -> dict:
+    """Build the UI's `ProjectedPage` for a lens from CACHE (markdown + members
+    are background-derived; this never triggers LLM work)."""
+    markdown = await store.page(lens.name, detail=detail)
     members = await store.members(lens.name, limit=200)
-    markdown = await store.page(lens.name, detail=detail, refresh=refresh)
     blocks = [rendered_claim_json(r) for r in members]
     groups = _split_subject_sections(markdown or "", members)
     member_count = await store.member_count(lens.id)
@@ -229,8 +255,10 @@ class WriteBackBody(BaseModel):
 
 def _parse_definition(markdown: str) -> tuple[str, str]:
     """Pull (name, criterion) out of a drafted lens markdown: the first `# Name`
-    heading is the name, the remainder is the criterion body. Falls back to the
-    first non-empty line as the name."""
+    heading (or first non-empty line) is the name; the criterion is the plain
+    PROSE after it — heading lines (`#`, `##`, ...) are template structure,
+    never criterion text. The old version kept the raw remainder, so the draft
+    template's `## Belongs` fragment was stored verbatim as the criterion."""
     lines = markdown.strip().split("\n")
     name = ""
     rest_start = 0
@@ -238,15 +266,13 @@ def _parse_definition(markdown: str) -> tuple[str, str]:
         s = line.strip()
         if not s:
             continue
-        if s.startswith("# "):
-            name = s[2:].strip()
-            rest_start = i + 1
-        else:
-            name = s
-            rest_start = i + 1
+        name = s[2:].strip() if s.startswith("# ") else s
+        rest_start = i + 1
         break
-    criterion = "\n".join(lines[rest_start:]).strip() or markdown.strip()
-    return name or "Untitled lens", criterion
+    name = name or "Untitled lens"
+    prose = (line.strip() for line in lines[rest_start:])
+    criterion = " ".join(s for s in prose if s and not s.startswith("#"))
+    return name, criterion or f"Records about {name}."
 
 
 # --- 1: scopes (flat pool -> none) -------------------------------------------
@@ -277,7 +303,7 @@ async def create_record(body: RecordBody, store=Depends(_record_store)) -> dict:
     record into the flat pool. Pinning is a follow-up call so the record survives
     consolidation decay."""
     record = await store.add(body.text, kind=body.kind_tag)
-    return {"record": record_to_item_json(record)}
+    return {"record": record_to_item_json(record, [])}
 
 
 @router.post("/record/{record_id}/pin")
@@ -302,15 +328,40 @@ async def list_items(
     records = await store.list(include_superseded=include_superseded, limit=limit)
     if status == "superseded":
         records = [r for r in records if r.superseded_by]
-    return {"items": [record_to_item_json(r) for r in records], "limit": limit}
+    return {"items": await hydrated_items_json(store, records), "limit": limit}
+
+
+def _evidence_edge(derived_id: str, premise_id: str, created_at: str) -> dict:
+    """A justification rendered as the UI's MemoryEdge: the derived record is the
+    CHILD ("because of"), its premise the PARENT (walkable down to experience)."""
+    return {
+        "child_id": derived_id,
+        "parent_id": premise_id,
+        "role": "evidence",
+        "position": 0,
+        "created_at": created_at,
+    }
 
 
 @router.get("/items/{item_id}")
 async def get_item(item_id: str, store=Depends(_record_store)) -> dict:
+    """The claim + its epistemic edges: parents = the premises it was derived
+    from ("because of…"), children = the inferences it supports ("supports…")."""
     record = await store.get(item_id)
     if record is None:
         raise HTTPException(status_code=404, detail="claim not found")
-    return {"item": record_to_item_json(record), "parents": [], "children": []}
+    labels = await store.labels_of(item_id)
+    parents = [
+        _evidence_edge(item_id, pid, j.created_at)
+        for j in await store.justifications_of(item_id)
+        for pid in j.premise_ids
+    ]
+    children = []
+    for dep_id in await store.dependents_of(item_id):
+        for j in await store.justifications_of(dep_id):
+            if item_id in j.premise_ids:
+                children.append(_evidence_edge(dep_id, item_id, j.created_at))
+    return {"item": record_to_item_json(record, labels), "parents": parents, "children": children}
 
 
 # --- 3: lenses (with coverage) -----------------------------------------------
@@ -362,19 +413,45 @@ async def create_lens(body: CreateLensBody, store=Depends(_lens_store)) -> dict:
         raise HTTPException(status_code=422, detail="lens name required")
     if await store.get(name) is not None:
         raise HTTPException(status_code=409, detail=f"lens {name!r} already exists")
-    lens = await store.create(name, criterion, background_backfill=True)
+    lens = await store.create(name, criterion)  # instant — membership derives on open
     return {"lens": lens_to_json(lens)}
 
 
 @router.put("/lenses/{lens_id}/criterion")
 async def edit_criterion(lens_id: str, body: CriterionBody, store=Depends(_lens_store)) -> dict:
+    """A criterion change clears the membership cache only — the next open
+    re-evaluates against the new criterion."""
     lens = await store.get_by_id(lens_id)
     if lens is None:
         raise HTTPException(status_code=404, detail="lens not found")
-    updated = await store.update(lens.name, criterion=body.criterion, background_backfill=True)
+    updated = await store.update(lens.name, criterion=body.criterion)
     if updated is None:
         raise HTTPException(status_code=404, detail="lens not found")
     return {"lens": lens_to_json(updated)}
+
+
+class PromoteBody(BaseModel):
+    label: str
+
+
+@router.post("/lenses/{lens_id}/promote")
+async def promote_lens(lens_id: str, body: PromoteBody, store=Depends(_lens_store)) -> dict:
+    """Graduate a durable lens into a LABEL: tag the CACHED members (you promote
+    the membership you're looking at — no LLM in the request), mark the lens
+    promoted. The curator tags future records since the label is in vocabulary."""
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(status_code=422, detail="label required")
+    lens = await store.get_by_id(lens_id)
+    if lens is None:
+        raise HTTPException(status_code=404, detail="lens not found")
+    try:
+        count = await store.promote_to_label(lens_id, label)
+    except ValueError:
+        # Never evaluated — kick it and tell the client to wait for the page.
+        store.kick(lens)
+        raise HTTPException(status_code=409, detail="lens is still evaluating; open it first") from None
+    return {"promoted": count, "label": label}
 
 
 @router.delete("/lenses/{lens_id}")
@@ -386,7 +463,19 @@ async def delete_lens(lens_id: str, store=Depends(_lens_store)) -> dict:
     return {"deleted": deleted}
 
 
-# --- 4: lens page (synchronous synthesis) ------------------------------------
+# --- 4: lens page (background synthesis, cache-served) ------------------------
+
+
+def _gen_status(lens_id: str) -> dict:
+    """The UI's LensGenStatus shape — it discriminates on the top-level `status`
+    field (a ProjectedPage never has one) and polls until the page lands."""
+    return {
+        "lens_id": lens_id,
+        "status": "generating",
+        "subject": None,
+        "progress": None,
+        "error": None,
+    }
 
 
 @router.get("/lenses/{lens_id}/page")
@@ -396,46 +485,76 @@ async def lens_page(
     refresh: bool = Query(default=False),
     store=Depends(_lens_store),
 ) -> dict:
-    """The materialized `ProjectedPage`. Synthesis is one LLM call (synchronous),
-    so this always returns a page — never the async-generation status (HTTP 202).
-    The UI discriminates on a top-level `status` field, which a page never has."""
+    """The `ProjectedPage`, served from CACHE — a lookup never pays an LLM call.
+    refresh=true (and an empty never-evaluated cache) KICKS a background
+    evaluate+render and returns the generating status; the UI polls."""
     lens = await store.get_by_id(lens_id)
     if lens is None:
         raise HTTPException(status_code=404, detail="lens not found")
-    return await _projected_page(store, lens, detail=detail, refresh=refresh)
+    if refresh:
+        store.kick(lens)
+        return _gen_status(lens_id)
+    if store.status(lens_id) == "generating":
+        return _gen_status(lens_id)
+    page = await _projected_page(store, lens, detail=detail)
+    if not page["blocks"] and not page["markdown"]:
+        # Never evaluated (a pre-v2 lens, or a kick lost to a restart) — derive
+        # it in the background rather than serving a permanently empty view.
+        store.kick(lens)
+        return _gen_status(lens_id)
+    return page
 
 
 @router.get("/lenses/{lens_id}/page/status")
-async def lens_page_status(lens_id: str) -> dict:
-    """Always idle — synthesis is synchronous, so the UI never polls this for a
-    real generation. Present only to satisfy the contract."""
+async def lens_page_status(lens_id: str, store=Depends(_lens_store)) -> dict:
+    """Real status: 'generating' while a background evaluate+render is in
+    flight for this lens, else 'idle'."""
     return {
         "lens_id": lens_id,
-        "status": "idle",
+        "status": store.status(lens_id),
         "subject": None,
         "progress": None,
         "error": None,
     }
 
 
-# --- 5: provenance graph (records have no edges) -----------------------------
+# --- 5: the derivation DAG ----------------------------------------------------
 
 
 @router.get("/graph")
 async def whole_graph(
     store=Depends(_record_store),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=GRAPH_NODE_CAP, ge=1, le=1000),
     scope_kind: str | None = None,
     scope_key: str | None = None,
     subject: str | None = None,
     roles: str | None = None,
 ) -> dict:
-    records = await store.list(limit=limit)
-    return {
-        "nodes": [record_to_item_json(r) for r in records],
-        "edges": [],
-        "scope": {"kind": "user", "key": None},
-    }
+    """The memory's epistemic structure — the derivation DAG: inferred records,
+    their premises, and supersession lineage. Grows as the dreamer works; labels
+    are metadata on the nodes, never edges (spec §6)."""
+    included: dict[str, Record] = {}
+    for d in await store.derived_records(limit=limit // 2):
+        included[d.id] = d
+        for just in await store.justifications_of(d.id):
+            for pid in just.premise_ids:
+                if pid not in included and len(included) < limit:
+                    premise = await store.get(pid)
+                    if premise is not None:
+                        included[pid] = premise
+
+    edges = [
+        _evidence_edge(e["derived_id"], e["premise_id"], e["created_at"])
+        for e in await store.justification_edges_among(list(included))
+    ]
+    for r in included.values():
+        if r.superseded_by and r.superseded_by in included:
+            edges.append({
+                "child_id": r.id, "parent_id": r.superseded_by,
+                "role": "supersedes", "position": 0, "created_at": r.last_confirmed_at,
+            })
+    nodes = await hydrated_items_json(store, list(included.values()))
+    return {"nodes": nodes, "edges": edges, "scope": {"kind": "user", "key": None}}
 
 
 @router.get("/items/{item_id}/graph")
@@ -446,13 +565,39 @@ async def item_graph(
     roles: str | None = None,
     store=Depends(_record_store),
 ) -> dict:
+    """One record's epistemic neighborhood: premises and dependents, walked
+    through justifications to `depth`."""
     record = await store.get(item_id)
     if record is None:
         raise HTTPException(status_code=404, detail="claim not found")
+
+    included: dict[str, Record] = {item_id: record}
+    frontier = {item_id}
+    for _ in range(depth):
+        nxt: set[str] = set()
+        for fid in frontier:
+            neighbor_ids = set(await store.dependents_of(fid))
+            for just in await store.justifications_of(fid):
+                neighbor_ids |= set(just.premise_ids)
+            for nid in neighbor_ids:
+                if nid not in included and len(included) < ITEM_GRAPH_NODE_CAP:
+                    n = await store.get(nid)
+                    if n is not None:
+                        included[nid] = n
+                        nxt.add(nid)
+        if not nxt:
+            break
+        frontier = nxt
+
+    edges = [
+        _evidence_edge(e["derived_id"], e["premise_id"], e["created_at"])
+        for e in await store.justification_edges_among(list(included))
+    ]
+    nodes = await hydrated_items_json(store, list(included.values()))
     return {
         "root_id": item_id,
-        "nodes": [record_to_item_json(record)],
-        "edges": [],
+        "nodes": nodes,
+        "edges": edges,
         "depth": depth,
         "direction": direction,
     }
@@ -474,7 +619,7 @@ async def search(
     records = await store.search(q, limit=limit, include_superseded=include_inactive)
     return {
         "mode": "fts",
-        "items": [record_to_item_json(r) for r in records],
+        "items": await hydrated_items_json(store, records),
         "degraded": store._search_index is None,
     }
 

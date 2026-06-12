@@ -14,7 +14,8 @@ export interface MemoryScope {
 
 // ── Shared value objects ────────────────────────────────────────────────────
 // Memory is claims only. Lenses are a separate registry of views (see `Lens`).
-export type MemoryStatus = "active" | "superseded" | "archived";
+export type MemoryStatus = "active" | "superseded" | "archived" | "unresolved" | "retired";
+export type MemoryStanding = "active" | "unresolved" | "retired";
 export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external";
 export type MemoryFeedback = "none" | "confirmed" | "corrected";
 export type LensDetailLevel = "gist" | "structured" | "dossier";
@@ -32,9 +33,12 @@ export interface MemoryItem {
   id: string;
   content: string;
   canonical_subject: string;
+  labels: string[];
   scope: MemoryScope;
   provenance: MemoryProvenance;
   status: MemoryStatus;
+  standing?: MemoryStanding;
+  depth?: number;
   valid_from: string | null;
   invalid_at: string | null;
   source_refs: MemorySourceRef[];
@@ -60,11 +64,13 @@ export interface Lens {
   render_mode: LensRenderMode;
   provenance: LensProvenance;
   status: LensStatus;
+  /** Set when the lens was promoted to a label; the lens stays viewable. */
+  promoted_to: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts";
+export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts" | "label";
 export interface MemoryEdge {
   child_id: string;
   parent_id: string;
@@ -156,6 +162,7 @@ export interface MemoryItemDetail {
 export function getMemoryItem(config: AppConfig, itemId: string) {
   return apiWithConfig<MemoryItemDetail>(config, `/admin/memory/items/${encodeURIComponent(itemId)}`);
 }
+
 
 // ── 3 — List lenses (with coverage advisory) ────────────────────────────────
 export interface LensWithCoverage {
@@ -423,6 +430,16 @@ export interface MergeLensBody extends ScopeParams {
 
 export function mergeLenses(config: AppConfig, body: MergeLensBody) {
   return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses/merge", jsonBody(body));
+}
+
+/** Promote a durable lens to a label: evaluates fresh, tags every member, and
+ *  marks the lens promoted. Returns the tagged member count. */
+export function promoteLens(config: AppConfig, lensId: string, label: string) {
+  return apiWithConfig<{ promoted: number; label: string }>(
+    config,
+    `/admin/memory/lenses/${encodeURIComponent(lensId)}/promote`,
+    jsonBody({ label }),
+  );
 }
 
 export function deleteLens(config: AppConfig, lensId: string) {

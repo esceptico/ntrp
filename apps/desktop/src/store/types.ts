@@ -215,6 +215,10 @@ export interface ActivityItem {
    *  `semanticKind === "workflow"`. Lets the lifted card open the panel even
    *  after reload, before any live workflow-domain event repopulates it. */
   workflowId?: string;
+  /** HTML widget payload for `semanticKind === "html_widget"` (render_html
+   *  tool). Set live from `input_needed` / TOOL_CALL_RESULT data, and from
+   *  the tool-call args on history rebuild (result data is not persisted). */
+  htmlWidget?: { html: string; title: string; mode: "display" | "input" };
 }
 
 export type ActivityLabel = "Calling" | "Called" | "Backgrounded" | "Stopped";

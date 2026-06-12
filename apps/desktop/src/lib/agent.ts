@@ -2,6 +2,7 @@ import type { ActivityItem } from "../store";
 
 export const SEMANTIC_KIND_AGENT = "agent" as const;
 export const SEMANTIC_KIND_WORKFLOW = "workflow" as const;
+export const SEMANTIC_KIND_HTML_WIDGET = "html_widget" as const;
 
 export function isAgent(item: ActivityItem): boolean {
   return item.semanticKind === SEMANTIC_KIND_AGENT;
@@ -9,6 +10,10 @@ export function isAgent(item: ActivityItem): boolean {
 
 export function isWorkflow(item: ActivityItem): boolean {
   return item.semanticKind === SEMANTIC_KIND_WORKFLOW;
+}
+
+export function isHtmlWidget(item: ActivityItem): boolean {
+  return item.semanticKind === SEMANTIC_KIND_HTML_WIDGET && item.htmlWidget != null;
 }
 
 export function activityItemStatus(item: ActivityItem): "ongoing" | "executed" | "backgrounded" {

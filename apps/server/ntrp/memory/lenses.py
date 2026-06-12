@@ -1,19 +1,22 @@
-"""Lenses — named VIEWS over the flat record pool, defined by a natural-language
-CRITERION whose membership is decided by the LLM scoring each record.
+"""Lenses v2 — saved natural-language QUERIES over the flat record pool,
+evaluated in the BACKGROUND, read from cache.
 
-ANYTHING is a lens: a person ("Regina"), a disease, a trait, an action, a theme
-("bugs"), a project ("ntrp"). ENTITY == LENS. A lens is just {name, criterion}.
+A lens is just {name, criterion}. There is NO write-path scoring and NO LLM on
+ANY read path: create() and a criterion edit KICK a background evaluation
+(recall candidates -> ONE judge call -> replace the `lens_members` cache ->
+synthesize the page). members()/page() only ever read the cache; status()
+reports an in-flight kick so the surface shows "evaluating", not an empty view.
 
-Membership is CACHED (the `lens_members` join table) so a lens is cheap to read:
-  - create -> backfill ONCE (recall candidates over the whole pool, judge, cache).
-  - dreamer -> score NEW/changed records into active lenses incrementally.
-  - members() -> read the cache; top up any un-scored recent records on demand.
+Banding routes each candidate: high -> member, mid -> uncertain (still shown),
+low -> omitted. The band is EXPLICIT (the judge returns it), never a silent
+score cutoff, and the judge only ever picks from the candidate ids we hand it —
+it never invents ids. With no LLM configured, evaluation degrades to raw hybrid
+search of the criterion — NEVER a wordlist heuristic.
 
-Banding routes each candidate: high -> member, mid -> LLM/defer (still shown),
-low -> omitted. The band is EXPLICIT (the judge returns it), never a silent score
-cutoff. The judge only ever picks from the candidate ids we hand it — it never
-invents ids. With no LLM configured, membership degrades to raw hybrid search of
-the criterion (no banding) — NEVER a wordlist heuristic.
+A lens that proves durable can be PROMOTED to a label: promote_to_label() tags
+every CACHED member record and marks the lens with the label
+(`lenses.promoted_to`). The lens stays viewable; thereafter the curator tags
+new records because the label is in vocabulary.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from ntrp.database import connect as db_connect
@@ -30,10 +33,13 @@ from ntrp.memory.lens_page import LensPage
 from ntrp.memory.models import Record, now_iso
 from ntrp.memory.records import RecordStore
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 _logger = get_logger(__name__)
 
-# How many candidates to recall when backfilling a freshly-created lens.
-BACKFILL_K = 200
+# How many candidates evaluate() recalls for the judge.
+CANDIDATE_K = 100
 # Bands written into lens_members. "low" is never written (omission).
 _MEMBER_BANDS = ("high", "mid")
 
@@ -51,14 +57,22 @@ _JUDGE_SYSTEM = (
 )
 
 
+def _criterion_from_markdown(text: str) -> str:
+    """The old draft path stored a whole markdown fragment as the criterion.
+    Recover the plain-prose criterion: every non-heading line, joined."""
+    lines = (line.strip() for line in text.split("\n"))
+    return " ".join(s for s in lines if s and not s.startswith("#"))
+
+
 @dataclass
 class Lens:
-    """A named view over records, defined by a natural-language criterion."""
+    """A saved query over records, defined by a natural-language criterion."""
 
     id: str
     name: str
     criterion: str
     created_at: str
+    promoted_to: str | None
 
 
 class LensStore:
@@ -81,39 +95,68 @@ class LensStore:
         self._page_synth = LensPage(llm, model=model, reasoning_effort=reasoning_effort)
         self._conn = None
         self._conn_lock = asyncio.Lock()
-        self._bg: set[asyncio.Task] = set()  # tracked backfill tasks (no GC, errors logged)
+        self._evals: dict[str, asyncio.Task] = {}  # lens_id -> in-flight kick
 
-    def _track(self, coro) -> None:
-        """Fire-and-forget membership backfill, keeping a ref (no GC) and logging
-        failures — backfill is a long LLM pass that must not block the HTTP request
-        that created/edited the lens (else the client times out)."""
-        task = asyncio.create_task(coro)
-        self._bg.add(task)
+    # -- background evaluation (the ONLY place lens LLM work happens) ---------
+
+    def kick(self, lens: Lens) -> None:
+        """Start a background evaluate+render for this lens (idempotent while one
+        is in flight). Reads stay LLM-free: they serve the cache and report
+        status() until this lands."""
+        running = self._evals.get(lens.id)
+        if running is not None and not running.done():
+            return
+        task = asyncio.create_task(self._evaluate_and_render(lens))
+        self._evals[lens.id] = task
         task.add_done_callback(
             lambda t: (
-                self._bg.discard(t),
+                self._evals.pop(lens.id, None),
                 None if t.cancelled() or not t.exception()
-                else _logger.warning("lens backfill failed", exc_info=t.exception()),
+                else _logger.warning("lens evaluation failed", exc_info=t.exception()),
             )
         )
 
+    def status(self, lens_id: str) -> str:
+        """'generating' while a kick is in flight, else 'idle'."""
+        task = self._evals.get(lens_id)
+        return "generating" if task is not None and not task.done() else "idle"
+
+    async def wait(self) -> None:
+        """Await all in-flight evaluations (tests + orderly shutdown)."""
+        tasks = [t for t in self._evals.values() if not t.done()]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _evaluate_and_render(self, lens: Lens) -> None:
+        members = await self.evaluate(lens)
+        if not members:
+            return
+        md = await self._page_synth.synthesize(
+            lens.name, lens.criterion, members, detail="structured"
+        )
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "UPDATE lenses SET page = ?, page_detail = 'structured' WHERE id = ?",
+            (md, lens.id),
+        )
+        await conn.commit()
+
     # -- public API ----------------------------------------------------------
 
-    async def create(self, name: str, criterion: str, *, background_backfill: bool = False) -> Lens:
+    async def create(self, name: str, criterion: str) -> Lens:
+        """INSERT + kick: the request returns instantly; membership + page
+        materialize in the background."""
         conn = await self._ensure_conn()
-        lens = Lens(id=uuid4().hex, name=name, criterion=criterion, created_at=now_iso())
+        lens = Lens(
+            id=uuid4().hex, name=name, criterion=criterion,
+            created_at=now_iso(), promoted_to=None,
+        )
         await conn.execute(
             "INSERT INTO lenses (id, name, criterion, created_at) VALUES (?, ?, ?, ?)",
             (lens.id, lens.name, lens.criterion, lens.created_at),
         )
         await conn.commit()
-        # Backfill (recall + LLM banding over the pool) is a long pass. The HTTP
-        # create path runs it in the BACKGROUND so the request returns immediately
-        # (else the client times out); programmatic/test callers await it.
-        if background_backfill:
-            self._track(self.backfill(lens))
-        else:
-            await self.backfill(lens)
+        self.kick(lens)
         return lens
 
     async def list(self) -> list[Lens]:
@@ -158,11 +201,10 @@ class LensStore:
         return cur.rowcount > 0
 
     async def update(
-        self, name: str, *, criterion: str | None = None, new_name: str | None = None,
-        background_backfill: bool = False,
+        self, name: str, *, criterion: str | None = None, new_name: str | None = None
     ) -> Lens | None:
-        """Edit a lens. A criterion change clears the membership cache and
-        re-backfills (the old bands no longer apply)."""
+        """Edit a lens. A criterion change clears the membership cache + page
+        ONLY — the next open re-evaluates (no write-path work here)."""
         conn = await self._ensure_conn()
         lens = await self.get(name)
         if lens is None:
@@ -176,71 +218,88 @@ class LensStore:
         )
         if criterion_changed:
             await conn.execute("DELETE FROM lens_members WHERE lens_id = ?", (lens.id,))
-            # The page is synthesized from the old members — dirty it so the next
-            # read re-synthesizes against the re-derived membership.
             await conn.execute("UPDATE lenses SET page = NULL WHERE id = ?", (lens.id,))
         await conn.commit()
-        updated = Lens(id=lens.id, name=next_name, criterion=next_criterion, created_at=lens.created_at)
+        updated = Lens(
+            id=lens.id, name=next_name, criterion=next_criterion,
+            created_at=lens.created_at, promoted_to=lens.promoted_to,
+        )
         if criterion_changed:
-            if background_backfill:
-                self._track(self.backfill(updated))  # don't block the edit request
-            else:
-                await self.backfill(updated)
+            self.kick(updated)  # re-derive in the background; reads stay cheap
         return updated
+
+    async def evaluate(self, lens: Lens, *, limit: int = 200) -> list[Record]:
+        """The background worker: recall candidates for the criterion, judge them
+        in ONE LLM call, REPLACE the membership cache, return the members. Runs
+        inside kick() — never on a read path. With no LLM the candidates ARE the
+        members (banded mid). On a failed judge the old cache is kept."""
+        candidates = await self._records.search(lens.criterion, limit=CANDIDATE_K)
+        if self._llm is None:
+            bands = {r.id: "mid" for r in candidates}
+        elif candidates:
+            bands = await self._judge(lens.criterion, candidates)
+            if bands is None:
+                return await self._cached_members(lens, limit=limit)
+        else:
+            bands = {}
+        conn = await self._ensure_conn()
+        scored_at = now_iso()
+        await conn.execute("DELETE FROM lens_members WHERE lens_id = ?", (lens.id,))
+        for rid, band in bands.items():
+            if band == "low":
+                continue
+            await conn.execute(
+                "INSERT OR REPLACE INTO lens_members (lens_id, record_id, band, scored_at) "
+                "VALUES (?, ?, ?, ?)",
+                (lens.id, rid, band, scored_at),
+            )
+        # Membership moved — the synthesized page is stale; dirty it.
+        await conn.execute("UPDATE lenses SET page = NULL WHERE id = ?", (lens.id,))
+        await conn.commit()
+        return await self._cached_members(lens, limit=limit)
 
     async def members(self, name: str, *, limit: int = 200) -> list[Record]:
         """The render/retrieval unit: the lens's member records (bands high+mid),
-        newest-confirmed first. Reads the membership cache, dropping rows whose
-        record was superseded/deleted. No per-call LLM (membership is maintained
-        incrementally by create/backfill/the dreamer)."""
+        newest-confirmed first. CACHE-ONLY — an empty cache means the lens hasn't
+        been evaluated yet (check status(); kick() fills it in the background)."""
         lens = await self.get(name)
         if lens is None:
             return []
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT r.* FROM lens_members m "
-            "JOIN records r ON r.id = m.record_id "
-            f"WHERE m.lens_id = ? AND m.band IN ({','.join('?' * len(_MEMBER_BANDS))}) "
-            "AND r.superseded_by IS NULL "
-            "ORDER BY r.last_confirmed_at DESC LIMIT ?",
-            (lens.id, *_MEMBER_BANDS, limit),
-        )
-        members = [RecordStore._row_to_record(r) for r in rows]
-        if members:
-            return members
-        # Empty cache + no LLM -> degrade to raw hybrid search of the criterion
-        # (no banding). With an LLM, an empty cache means a backfill genuinely
-        # found no members; trust it.
-        if self._llm is None:
-            return await self._records.search(lens.criterion, limit=limit)
-        return members
+        return await self._cached_members(lens, limit=limit)
 
-    async def page(
-        self, name: str, *, detail: str = "structured", refresh: bool = False
-    ) -> str | None:
-        """The synthesized, editable lens PAGE: member records rendered into one
-        markdown directory. Cached in the `lenses.page` column; the cache is
-        nulled when membership or the criterion changes (so the next read
-        re-synthesizes). Returns None when the lens is missing or has no members."""
+    async def page(self, name: str, *, detail: str = "structured") -> str | None:
+        """The synthesized lens PAGE, served from the `lenses.page` cache. NEVER
+        synthesizes inline — the background kick renders it; None means missing
+        lens, no members, or not rendered yet (pair with status())."""
+        lens = await self.get(name)
+        if lens is None:
+            return None
         conn = await self._ensure_conn()
         rows = await conn.execute_fetchall(
-            "SELECT id, page, page_detail FROM lenses WHERE name = ?", (name,)
+            "SELECT page, page_detail FROM lenses WHERE id = ?", (lens.id,)
         )
-        if not rows:
-            return None
-        lens_id, cached, cached_detail = rows[0]["id"], rows[0]["page"], rows[0]["page_detail"]
-        if not refresh and cached and cached_detail == detail:
-            return cached
-        lens = await self.get(name)
-        members = await self.members(name, limit=BACKFILL_K)
+        if rows[0]["page"] and rows[0]["page_detail"] == detail:
+            return rows[0]["page"]
+        return None
+
+    async def promote_to_label(self, lens_id: str, label: str) -> int:
+        """Graduate a durable lens into a LABEL: tag every CACHED member record
+        (you promote the membership you're looking at), mark the lens promoted.
+        Raises if the lens was never evaluated — there is nothing to promote."""
+        lens = await self.get_by_id(lens_id)
+        if lens is None:
+            raise ValueError(f"lens {lens_id!r} not found")
+        members = await self._cached_members(lens, limit=1000)
         if not members:
-            return None
-        md = await self._page_synth.synthesize(lens.name, lens.criterion, members, detail=detail)
+            raise ValueError(f"lens {lens.name!r} has no evaluated members yet")
+        for record in members:
+            await self._records.add_labels(record.id, [label])
+        conn = await self._ensure_conn()
         await conn.execute(
-            "UPDATE lenses SET page = ?, page_detail = ? WHERE id = ?", (md, detail, lens_id)
+            "UPDATE lenses SET promoted_to = ? WHERE id = ?", (label, lens_id)
         )
         await conn.commit()
-        return md
+        return len(members)
 
     async def add_member(self, lens_id: str, record_id: str, *, band: str = "high") -> None:
         """Force a record into a lens's membership cache (the `include` write-back).
@@ -287,71 +346,32 @@ class LensStore:
         await conn.execute("UPDATE lenses SET page = NULL WHERE id = ?", (lens_id,))
         await conn.commit()
 
-    async def backfill(self, lens: Lens) -> None:
-        """Score the existing pool into this lens's membership ONCE: recall
-        candidates for the criterion, judge them, persist the bands."""
-        candidates = await self._records.search(lens.criterion, limit=BACKFILL_K)
-        await self._route(lens, candidates)
-
-    async def score_records(self, records: list[Record]) -> None:
-        """The dreamer hook: route a batch of new/changed records into EVERY
-        active lens. Cheap + best-effort (one judge call per lens over the small
-        batch). No-op without an LLM or without records."""
-        if not records or self._llm is None:
-            return
-        for lens in await self.list():
-            try:
-                await self._route(lens, records)
-            except Exception:
-                _logger.warning("scoring records into lens failed", lens=lens.name, exc_info=True)
-
     async def close(self) -> None:
-        for task in self._bg:
+        for task in self._evals.values():
             task.cancel()
-        self._bg.clear()
+        self._evals.clear()
         if self._conn is not None:
             await self._conn.close()
             self._conn = None
 
     # -- internals -----------------------------------------------------------
 
-    async def _route(self, lens: Lens, candidates: list[Record]) -> None:
-        """Judge candidates against the criterion and persist their bands. With
-        no LLM, every candidate is banded 'mid' (best-effort, no silent drop)."""
-        if not candidates:
-            return
-        if self._llm is None:
-            bands = {r.id: "mid" for r in candidates}
-        else:
-            bands = await self._judge(lens.criterion, candidates)
-            if bands is None:
-                return  # judge failed — leave the cache untouched (retried later)
+    async def _cached_members(self, lens: Lens, *, limit: int) -> list[Record]:
         conn = await self._ensure_conn()
-        scored_at = now_iso()
-        changed = False
-        for rid, band in bands.items():
-            if band == "low":
-                cur = await conn.execute(
-                    "DELETE FROM lens_members WHERE lens_id = ? AND record_id = ?",
-                    (lens.id, rid),
-                )
-                changed = changed or cur.rowcount > 0
-                continue
-            await conn.execute(
-                "INSERT OR REPLACE INTO lens_members (lens_id, record_id, band, scored_at) "
-                "VALUES (?, ?, ?, ?)",
-                (lens.id, rid, band, scored_at),
-            )
-            changed = True
-        if changed:
-            # Membership moved — the synthesized page is stale; dirty it.
-            await conn.execute("UPDATE lenses SET page = NULL WHERE id = ?", (lens.id,))
-        await conn.commit()
+        rows = await conn.execute_fetchall(
+            "SELECT r.* FROM lens_members m "
+            "JOIN records r ON r.id = m.record_id "
+            f"WHERE m.lens_id = ? AND m.band IN ({','.join('?' * len(_MEMBER_BANDS))}) "
+            "AND r.superseded_by IS NULL "
+            "ORDER BY r.last_confirmed_at DESC LIMIT ?",
+            (lens.id, *_MEMBER_BANDS, limit),
+        )
+        return [RecordStore._row_to_record(r) for r in rows]
 
     async def _judge(self, criterion: str, candidates: list[Record]) -> dict[str, str] | None:
         """ONE LLM call: hand the model the candidate {id: text} set + the
         criterion, get back a per-id band. Returns {id: band} for ids in the
-        candidate set, or None on failure (caller leaves the cache untouched)."""
+        candidate set, or None on failure (caller keeps the old cache)."""
         valid_ids = {r.id for r in candidates}
         payload = {r.id: r.text for r in candidates}
         user_prompt = (
@@ -411,6 +431,7 @@ class LensStore:
             name=row["name"],
             criterion=row["criterion"],
             created_at=row["created_at"],
+            promoted_to=row["promoted_to"],
         )
 
     async def _ensure_conn(self):
@@ -418,6 +439,9 @@ class LensStore:
             return self._conn
         async with self._conn_lock:
             if self._conn is None:
+                # Every lens query joins `records` — materialize the RecordStore
+                # schema first (it lazy-creates on its own connection).
+                await self._records.count_active()
                 conn = await db_connect(self._db_path)
                 await conn.execute(
                     "CREATE TABLE IF NOT EXISTS lenses ("
@@ -426,11 +450,13 @@ class LensStore:
                     "    criterion TEXT NOT NULL,"
                     "    created_at TEXT NOT NULL,"
                     "    page TEXT,"
-                    "    page_detail TEXT"
+                    "    page_detail TEXT,"
+                    "    promoted_to TEXT"
                     ")"
                 )
-                # Existing DBs predate the page columns; add them idempotently.
-                for col in ("page TEXT", "page_detail TEXT"):
+                # Existing DBs predate the page/promoted_to columns; add them
+                # idempotently.
+                for col in ("page TEXT", "page_detail TEXT", "promoted_to TEXT"):
                     try:
                         await conn.execute(f"ALTER TABLE lenses ADD COLUMN {col}")
                     except Exception:
@@ -444,6 +470,31 @@ class LensStore:
                     "    PRIMARY KEY (lens_id, record_id)"
                     ")"
                 )
+                # Drop cache rows whose record was superseded or deleted — the
+                # joins hide them anyway, but the rows would make an all-stale
+                # cache look populated and block the lazy re-evaluate.
+                await conn.execute(
+                    "DELETE FROM lens_members WHERE record_id NOT IN "
+                    "(SELECT id FROM records WHERE superseded_by IS NULL)"
+                )
+                # Repair criteria corrupted by the old draft path (a markdown
+                # fragment like '## Belongs\n...' stored verbatim): keep the
+                # plain prose, drop the headings, force a re-evaluate.
+                rows = await conn.execute_fetchall(
+                    "SELECT id, name, criterion FROM lenses WHERE criterion LIKE '#%'"
+                )
+                for row in rows:
+                    criterion = (
+                        _criterion_from_markdown(row["criterion"])
+                        or f"Records about {row['name']}."
+                    )
+                    await conn.execute(
+                        "DELETE FROM lens_members WHERE lens_id = ?", (row["id"],)
+                    )
+                    await conn.execute(
+                        "UPDATE lenses SET criterion = ?, page = NULL WHERE id = ?",
+                        (criterion, row["id"]),
+                    )
                 await conn.commit()
                 self._conn = conn
         return self._conn

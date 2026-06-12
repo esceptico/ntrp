@@ -48,6 +48,10 @@ class RunState:
     # Replaces the old single Queue[dict] which forced mutating tools to
     # serialize because they all raced on one shared response stream.
     pending_approvals: dict[str, "asyncio.Future[dict]"] = field(default_factory=dict)
+    # Per-tool input routing for render_html mode="input". Kept apart from
+    # pending_approvals so set_skip_approvals' blanket-approve never feeds a
+    # pending input an empty string.
+    pending_inputs: dict[str, "asyncio.Future[dict]"] = field(default_factory=dict)
     task: asyncio.Task | None = None
     inject_queue: list[dict] = field(default_factory=list)
     loaded_tools: set[str] = field(default_factory=set)

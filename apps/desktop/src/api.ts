@@ -242,6 +242,7 @@ export type ServerEvent = CommonServerEventFields & (
 
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
+  | { type: "input_needed"; tool_id: string; name: string; title: string; html: string }
   | {
       type: "background_task";
       event_id?: string | null;

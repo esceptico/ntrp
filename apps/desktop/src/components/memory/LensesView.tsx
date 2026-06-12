@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, Check, ChevronRight, Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import { ChevronRight, Plus, RefreshCw, Search, Tag } from "lucide-react";
 import type { AppConfig } from "../../api";
 import {
   createLens,
   deleteLens,
-  draftLens,
   editLensCriterion,
   getLensPage,
-  getLensPageStatus,
   isLensGenStatus,
   listMemoryLenses,
+  promoteLens,
   writebackLens,
   type CoverageAdvisory,
   type Lens,
   type LensDetailLevel,
-  type LensGenStatus,
   type LensWithCoverage,
   type PageEditOp,
   type ProjectedGroup,
@@ -40,7 +38,7 @@ import {
   PrimaryBtn,
   SearchInput,
 } from "./shared";
-import { criterionPreview, lensColor, lensProvenanceLabel, lensProvenanceTone, lensTitle, scopeLabel } from "./lens";
+import { criterionPreview, lensColor, lensTitle } from "./lens";
 
 // Disclosure reveals: the layout snaps at mount/unmount, only the content
 // rises into focus — never a height tween over these unbounded subtrees.
@@ -211,6 +209,8 @@ function LensRow({
   );
 }
 
+// A lens is a saved query: name + plain-language criterion. Create is an
+// INSERT only — membership derives the first time the view is opened.
 function Composer({
   config,
   onCreated,
@@ -221,47 +221,28 @@ function Composer({
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
-  const [markdown, setMarkdown] = useState("");
-  const [phase, setPhase] = useState<"seed" | "draft">("seed");
+  const [criterion, setCriterion] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const markdownRef = useRef<HTMLTextAreaElement>(null);
+  const criterionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    const el = markdownRef.current;
+    const el = criterionRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 420)}px`;
-  }, [markdown]);
+    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
+  }, [criterion]);
 
-  const makeDraft = () => {
+  const create = () => {
     if (!name.trim() || busy) return;
     setBusy(true);
     setErr(null);
-    draftLens(config, { name: name.trim() })
-      .then((r) => {
-        setMarkdown(r.markdown);
-        setPhase("draft");
-        setBusy(false);
-        requestAnimationFrame(() => markdownRef.current?.focus());
-      })
-      .catch((e) => {
-        setErr(e instanceof Error ? e.message : String(e));
-        setBusy(false);
-      });
-  };
-
-  const approve = () => {
-    const definition = markdown.trim();
-    if (!definition || busy) return;
-    setBusy(true);
-    setErr(null);
-    createLens(config, { definition_markdown: definition })
+    createLens(config, { name: name.trim(), criterion: criterion.trim() || undefined })
       .then((r) => onCreated(r.lens))
       .catch((e) => {
         setErr(e instanceof Error ? e.message : String(e));
@@ -269,59 +250,42 @@ function Composer({
       });
   };
 
-  if (phase === "seed") {
-    return (
-      <div className="surface-panel surface-popover mb-2 flex flex-col gap-2 p-2.5">
-        <input
-          ref={nameRef}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") makeDraft();
-            if (e.key === "Escape") onCancel();
-          }}
-          placeholder="Lens seed"
-          spellCheck={false}
-          className="input-field h-7 text-sm"
-        />
-        {err && <span className="text-xs text-bad">{err}</span>}
-        <div className="flex items-center justify-between">
-          <span className="text-2xs text-faint">Drafts an editable lens file.</span>
-          <div className="flex items-center gap-1">
-            <GhostBtn onClick={onCancel} disabled={busy}>
-              Cancel
-            </GhostBtn>
-            <PrimaryBtn onClick={makeDraft} disabled={busy || !name.trim()}>
-              {busy ? "Drafting…" : "Draft"}
-            </PrimaryBtn>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="surface-panel surface-popover mb-2 flex flex-col gap-2 p-2.5">
-      <textarea
-        ref={markdownRef}
-        value={markdown}
-        onChange={(e) => setMarkdown(e.target.value)}
+      <input
+        ref={nameRef}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) approve();
+          if (e.key === "Enter") criterionRef.current?.focus();
+          if (e.key === "Escape") onCancel();
         }}
-        rows={12}
+        placeholder="View name"
         spellCheck={false}
-        className="input-field resize-none overflow-y-auto py-1.5 font-mono text-xs leading-relaxed"
+        className="input-field h-7 text-sm"
+      />
+      <textarea
+        ref={criterionRef}
+        value={criterion}
+        onChange={(e) => setCriterion(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) create();
+          if (e.key === "Escape") onCancel();
+        }}
+        rows={2}
+        placeholder="What belongs here, in plain language"
+        spellCheck={false}
+        className="input-field resize-none overflow-y-auto py-1.5 text-sm leading-relaxed"
       />
       {err && <span className="text-xs text-bad">{err}</span>}
       <div className="flex items-center justify-between">
-        <span className="text-2xs text-faint">Approve writes the lens.</span>
+        <span className="text-2xs text-faint">Saved instantly — evaluated when opened.</span>
         <div className="flex items-center gap-1">
           <GhostBtn onClick={onCancel} disabled={busy}>
             Cancel
           </GhostBtn>
-          <PrimaryBtn onClick={approve} disabled={busy || !markdown.trim()}>
-            {busy ? "Saving…" : "Approve"}
+          <PrimaryBtn onClick={create} disabled={busy || !name.trim()}>
+            {busy ? "Saving…" : "Create"}
           </PrimaryBtn>
         </div>
       </div>
@@ -348,9 +312,7 @@ function LensPage({
 }) {
   // Detail level is fixed to the lens's own setting — no user-facing toggle.
   const detail = lens.detail_level;
-  const grouped = lens.render_mode === "grouped_by_subject";
   const [page, setPage] = useState<ProjectedPage | null>(null);
-  const [gen, setGen] = useState<LensGenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -365,7 +327,10 @@ function LensPage({
     (subject: string) => setEvidenceSeed((s) => ({ term: subject, nonce: s.nonce + 1 })),
     [],
   );
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // The actions strip cycles between rest, delete-confirm, and the inline
+  // promote-to-label form (one BlurSwap, never stacked panels).
+  const [actionMode, setActionMode] = useState<"rest" | "delete" | "promote">("rest");
+  const [promoting, setPromoting] = useState(false);
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
     if (!page) return ids;
@@ -382,24 +347,15 @@ function LensPage({
     return () => clearTimeout(t);
   }, [runNote]);
 
-  // A generation poll in flight — cancelled on unmount/reload so a stale loop
-  // never writes into a remounted page (lens switch keys remount LensPage).
-  const pollRef = useRef<{ alive: boolean } | null>(null);
   // Post-exit continuation for a write-back op: the removed claim row's exit
   // animation drives the re-fetch (ClaimSources fires onClaimExitDone).
-  // Cleared by stopPoll so a reload within the exit window can't fire a
-  // redundant load() — and overwritten wholesale by back-to-back commits.
+  // Cleared on every load() so a reload within the exit window can't fire a
+  // redundant fetch — and overwritten wholesale by back-to-back commits.
   const exitContinuationRef = useRef<(() => void) | null>(null);
   // False once this LensPage has unmounted (lens switch). applyOps awaits the
   // write-back before arming the exit continuation; if the user switches lenses
   // during that await, the continuation must not arm / load() on the dead page.
   const mountedRef = useRef(true);
-
-  const stopPoll = useCallback(() => {
-    if (pollRef.current) pollRef.current.alive = false;
-    pollRef.current = null;
-    exitContinuationRef.current = null;
-  }, []);
 
   const onClaimExitDone = useCallback(() => {
     const continueAfterExit = exitContinuationRef.current;
@@ -409,83 +365,29 @@ function LensPage({
 
   const load = useCallback(
     (opts: { detail: LensDetailLevel; refresh?: boolean }) => {
-      stopPoll();
+      exitContinuationRef.current = null;
       setLoading(true);
       setError(null);
-      // A refresh re-runs synthesis — clear the stale page so the progress
-      // checklist (not the old prose) is what the user watches.
+      // A refresh re-evaluates membership and re-synthesizes — clear the stale
+      // page so the skeleton (not the old prose) is what the user watches.
       if (opts.refresh) setPage(null);
       getLensPage(config, lens.id, { detail: opts.detail, refresh: opts.refresh })
         .then((result) => {
-          // Clean cache hit → the materialized page. Otherwise the GET returned
-          // a generation status (HTTP 202): show live progress and poll
-          // `/page/status` until ready, never blocking the request on synthesis.
-          if (!isLensGenStatus(result)) {
-            setPage(result);
-            // Fresh data in — release the exit hold (the removed claim is gone
-            // from the page itself now, the filter must not linger).
-            setExiting(null);
-            setGen(null);
-            setLoading(false);
-            return;
-          }
-          setGen(result);
-          const token = { alive: true };
-          pollRef.current = token;
-          const tick = () => {
-            if (!token.alive) return;
-            getLensPageStatus(config, lens.id)
-              .then((s) => {
-                if (!token.alive) return;
-                setGen(s);
-                if (s.status === "ready") {
-                  // Page materialized — re-GET hits the cache (no synthesis).
-                  getLensPage(config, lens.id, { detail: opts.detail })
-                    .then((p) => {
-                      if (!token.alive) return;
-                      if (!isLensGenStatus(p)) {
-                        setPage(p);
-                        setExiting(null);
-                        setGen(null);
-                        setLoading(false);
-                      } else {
-                        // "ready" but the re-GET still returned a status — don't
-                        // dead-end on a frozen checklist; keep polling.
-                        setGen(p);
-                        window.setTimeout(tick, 700);
-                      }
-                    })
-                    .catch((e) => {
-                      if (!token.alive) return;
-                      // Clear gen so the error branch renders — the `gen && !page`
-                      // guard would otherwise keep a frozen progress checklist up.
-                      setGen(null);
-                      setError(e instanceof Error ? e.message : String(e));
-                      setLoading(false);
-                    });
-                } else if (s.status === "error") {
-                  setGen(null);
-                  setError(s.error || "Lens generation failed.");
-                  setLoading(false);
-                } else {
-                  window.setTimeout(tick, 700);
-                }
-              })
-              .catch((e) => {
-                if (!token.alive) return;
-                setGen(null);
-                setError(e instanceof Error ? e.message : String(e));
-                setLoading(false);
-              });
-          };
-          window.setTimeout(tick, 350);
+          // Lens v2 evaluates on demand inside this GET — it always returns the
+          // materialized page (the async 202 status shape is gone).
+          if (isLensGenStatus(result)) return;
+          setPage(result);
+          // Fresh data in — release the exit hold (the removed claim is gone
+          // from the page itself now, the filter must not linger).
+          setExiting(null);
+          setLoading(false);
         })
         .catch((e) => {
           setError(e instanceof Error ? e.message : String(e));
           setLoading(false);
         });
     },
-    [config, lens.id, stopPoll],
+    [config, lens.id],
   );
 
   useEffect(() => {
@@ -493,9 +395,9 @@ function LensPage({
     load({ detail });
     return () => {
       mountedRef.current = false;
-      stopPoll();
+      exitContinuationRef.current = null;
     };
-  }, [load, detail, stopPoll]);
+  }, [load, detail]);
 
   const applyOps = useCallback(
     async (ops: PageEditOp[], hint: { id: string; how: "supersede" | "reject" } | null) => {
@@ -537,6 +439,25 @@ function LensPage({
     void applyOps([op], how ? { id: op.claim_id, how } : null);
   };
 
+  // Graduate the lens into a label: the server evaluates fresh and tags every
+  // member; thereafter the curator tags new records (the label is in vocabulary).
+  const doPromote = (label: string) => {
+    setPromoting(true);
+    promoteLens(config, lens.id, label)
+      .then((r) => {
+        if (!mountedRef.current) return;
+        setActionMode("rest");
+        setRunNote(`promoted — ${r.promoted} record${r.promoted === 1 ? "" : "s"} labeled ${r.label}`);
+        onListChanged();
+      })
+      .catch((e) => {
+        if (mountedRef.current) setRunNote(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (mountedRef.current) setPromoting(false);
+      });
+  };
+
   return (
     <DetailShell
       header={
@@ -563,16 +484,14 @@ function LensPage({
             }}
           />
 
-          {gen && !page ? (
-            <GenerationProgress gen={gen} grouped={grouped} />
-          ) : loading && !page ? (
+          {loading && !page ? (
             <PageSkeleton />
           ) : error ? (
             <div className="mt-4">
               <ListError title="Couldn't render page" message={error} />
             </div>
           ) : page && page.blocks.length === 0 ? (
-            <Empty>Nothing matches this criterion yet. New memories appear here as they're admitted.</Empty>
+            <Empty>Nothing matches this criterion yet. Re-evaluate once new memories land.</Empty>
           ) : page?.groups && page.groups.length > 0 ? (
             // Directory-style lenses render as list/profile rows from generated
             // `## Name` sections. Even one row should still feel like a list item,
@@ -640,15 +559,15 @@ function LensPage({
           <span className="mr-auto text-xs text-faint">
             {page?.synthesized === false && "raw list (synthesis unavailable)"}
           </span>
-          <BlurSwap swapKey={confirmingDelete ? "confirm" : "actions"} blur={3}>
-            {confirmingDelete ? (
+          <BlurSwap swapKey={actionMode} blur={3}>
+            {actionMode === "delete" ? (
               // In-app confirm instead of the off-brand native window.confirm.
               <div className="flex items-center gap-2">
-                <span className="text-xs text-faint">Delete this view? Claims are untouched.</span>
-                <GhostBtn onClick={() => setConfirmingDelete(false)}>Cancel</GhostBtn>
+                <span className="text-xs text-faint">Delete this view? Records are untouched.</span>
+                <GhostBtn onClick={() => setActionMode("rest")}>Cancel</GhostBtn>
                 <DangerBtn
                   onClick={() => {
-                    setConfirmingDelete(false);
+                    setActionMode("rest");
                     void deleteLens(config, lens.id)
                       .then(onArchived)
                       .catch((e) => {
@@ -662,10 +581,25 @@ function LensPage({
                   Delete view
                 </DangerBtn>
               </div>
+            ) : actionMode === "promote" ? (
+              <PromoteForm
+                initial={lens.name}
+                busy={promoting}
+                onCancel={() => setActionMode("rest")}
+                onSubmit={doPromote}
+              />
             ) : (
               <div className="flex items-center gap-2">
+                {!lens.promoted_to && (
+                  <GhostBtn
+                    onClick={() => setActionMode("promote")}
+                    title="Graduate this view into a label — every member gets tagged"
+                  >
+                    Promote to label
+                  </GhostBtn>
+                )}
                 <GhostBtn onClick={() => setEditingCriterion(true)}>Edit criterion</GhostBtn>
-                <GhostBtn onClick={() => setConfirmingDelete(true)}>Delete view</GhostBtn>
+                <GhostBtn onClick={() => setActionMode("delete")}>Delete view</GhostBtn>
               </div>
             )}
           </BlurSwap>
@@ -691,17 +625,21 @@ export function LensHeader({
           <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: lensColor(lens) }} />
           <span className="truncate">{lensTitle(lens)}</span>
         </h2>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <Badge tone="neutral" size="sm">
-            {scopeLabel(lens.scope)}
-          </Badge>
-          <Badge tone={lensProvenanceTone(lens.provenance)} size="sm">
-            {lensProvenanceLabel(lens.provenance)}
-          </Badge>
-        </div>
+        {lens.promoted_to && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Badge
+              tone="accent"
+              size="sm"
+              leading={<Tag size={ICON.XS} strokeWidth={2} />}
+              title="Promoted — members carry this label; the curator tags new records"
+            >
+              {lens.promoted_to}
+            </Badge>
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <IconButton onClick={onRefresh} aria-label="Re-synthesize" size="md" title="Re-synthesize (LLM)">
+        <IconButton onClick={onRefresh} aria-label="Re-evaluate" size="md" title="Re-evaluate this view (LLM)">
           <RefreshCw size={ICON.SM} strokeWidth={2} className={refreshing ? "animate-spin" : undefined} />
         </IconButton>
       </div>
@@ -1103,86 +1041,63 @@ function FlatPage({
   );
 }
 
-// Live generation progress (ask: "i can't see what's happening when i create a
-// lens"). The async page GET returns a status (HTTP 202) and the projector
-// reports stage/subject/"i/n" through the poll target — surfaced here as an
-// ordered checklist instead of a frozen spinner that times out.
-const GEN_STEPS: { stage: "scoring" | "synthesizing"; label: string }[] = [
-  { stage: "scoring", label: "Finding matching claims" },
-  { stage: "synthesizing", label: "Writing the summary" },
-];
-const STAGE_ORDER: Record<string, number> = { creating: 0, scoring: 1, synthesizing: 2, ready: 3 };
-
-function GenerationProgress({ gen, grouped }: { gen: LensGenStatus; grouped: boolean }) {
-  const cur = STAGE_ORDER[gen.status] ?? 0;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: MOTION.panel, ease: EASE_OUT }}
-      className="mt-4 flex flex-col gap-2.5"
-    >
-      {/* Static title — the spinner lives on the active step only, so there are
-          never two spinners competing ("Generating view" + "Scoring members"). */}
-      <div className="flex items-center gap-2 text-sm font-medium text-ink">
-        {gen.status === "error" && (
-          <AlertCircle size={ICON.XS} strokeWidth={2.4} className="shrink-0 text-bad" />
-        )}
-        {gen.status === "error" ? "Couldn't build this view" : "Building this view…"}
-      </div>
-      <ul className="flex flex-col gap-1.5">
-        {GEN_STEPS.map((step) => {
-          const stepOrd = STAGE_ORDER[step.stage];
-          const done = cur > stepOrd;
-          const active = cur === stepOrd;
-          const detail =
-            active && step.stage === "synthesizing"
-              ? [grouped && gen.subject, gen.progress].filter(Boolean).join(" · ")
-              : "";
-          return (
-            <li key={step.stage} className="flex items-center gap-2 text-sm">
-              <BlurSwap
-                swapKey={done ? "done" : active ? "active" : "pending"}
-                className="size-4 shrink-0"
-              >
-                {done ? (
-                  <Check size={ICON.XS} strokeWidth={2.4} className="text-accent" />
-                ) : active ? (
-                  <Loader2 size={ICON.XS} strokeWidth={2.4} className="animate-spin text-accent" />
-                ) : (
-                  <span className="size-1.5 rounded-full bg-line" aria-hidden />
-                )}
-              </BlurSwap>
-              <span className={`transition-colors ${done || active ? "text-ink" : "text-faint"}`}>
-                {step.label}
-              </span>
-              {detail && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: MOTION.fast, ease: EASE_OUT }}
-                  className="text-xs tabular-nums text-faint"
-                >
-                  {detail}
-                </motion.span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {gen.status === "error" && gen.error && (
-        <span className="text-xs text-bad">{gen.error}</span>
-      )}
-    </motion.div>
-  );
-}
-
+// Evaluation happens inside the page GET (recall → one membership call →
+// synthesis), so a first open can take a while — caption the skeleton so it
+// reads as work, not a hang.
 function PageSkeleton() {
   return (
     <div className="mt-4 flex flex-col gap-2">
+      <div className="mb-1 text-sm italic text-muted">Evaluating this view against memory…</div>
       {[92, 78, 85, 64, 88].map((w, i) => (
         <div key={i} className="skeleton h-4 rounded" style={{ width: `${w}%` }} />
       ))}
+    </div>
+  );
+}
+
+// Inline promote-to-label form living in the actions strip: name the label
+// (prefilled with the lens name), confirm, and the view graduates.
+function PromoteForm({
+  initial,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  initial: string;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (label: string) => void;
+}) {
+  const [label, setLabel] = useState(initial);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const valid = label.trim().length > 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-faint">Tag every member with</span>
+      <input
+        ref={inputRef}
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && valid && !busy) onSubmit(label.trim());
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Label"
+        spellCheck={false}
+        className="input-field h-7 w-44 text-sm"
+      />
+      <GhostBtn onClick={onCancel} disabled={busy}>
+        Cancel
+      </GhostBtn>
+      <PrimaryBtn onClick={() => onSubmit(label.trim())} disabled={busy || !valid}>
+        {busy ? "Promoting…" : "Promote"}
+      </PrimaryBtn>
     </div>
   );
 }

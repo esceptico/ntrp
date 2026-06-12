@@ -13,6 +13,10 @@ provenance lives in `source_ref`.
 
 No bitemporal axis. Freshness = `last_confirmed_at`; `superseded_by` closes a
 lineage (never hard-delete on supersede). `pinned` survives decay.
+
+Open-vocabulary LABELS (referents AND categories, attached by the curator at
+write time) live in `record_labels`. Merge unions labels onto the survivor,
+supersede_with passes them to the successor, delete cascades them.
 """
 
 from __future__ import annotations
@@ -26,7 +30,15 @@ from ntrp.constants import RRF_K
 from ntrp.database import connect as db_connect
 from ntrp.database import serialize_embedding
 from ntrp.logging import get_logger
-from ntrp.memory.models import Kind, Record, SourceRef, now_iso
+from ntrp.memory.models import (
+    Justification,
+    Kind,
+    Provenance,
+    Record,
+    SourceRef,
+    Standing,
+    now_iso,
+)
 from ntrp.search.fts import build_fts_or_query
 from ntrp.search.retrieval import rrf_merge
 
@@ -70,8 +82,41 @@ CREATE TRIGGER IF NOT EXISTS records_au AFTER UPDATE ON records BEGIN
     INSERT INTO records_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
 
+CREATE TABLE IF NOT EXISTS record_labels (
+    record_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (record_id, label)
+);
+CREATE INDEX IF NOT EXISTS idx_labels_label ON record_labels(label);
+
+CREATE TABLE IF NOT EXISTS justifications (
+    id TEXT PRIMARY KEY,
+    derived_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    question TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_just_derived ON justifications(derived_id);
+
+CREATE TABLE IF NOT EXISTS justification_premises (
+    justification_id TEXT NOT NULL,
+    premise_id TEXT NOT NULL,
+    PRIMARY KEY (justification_id, premise_id)
+);
+CREATE INDEX IF NOT EXISTS idx_just_premise ON justification_premises(premise_id);
+
+CREATE TABLE IF NOT EXISTS nogoods (
+    id TEXT PRIMARY KEY,
+    premise_ids TEXT NOT NULL,
+    conclusion TEXT NOT NULL,
+    why TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 DROP INDEX IF EXISTS idx_records_scope;
 DROP TABLE IF EXISTS record_edges;
+DROP TABLE IF EXISTS label_pages;
 """
 
 # The v2 `records` table declared scope_kind NOT NULL. Flat records write it NULL
@@ -162,6 +207,18 @@ class RecordStore:
                 await conn.executescript(_SCHEMA)
                 await conn.commit()
                 await self._migrate_nullable_scope(conn)
+                # Derivation columns (additive; existing DBs predate them). After
+                # the scope rebuild so a rebuilt table gains them too.
+                for col in (
+                    "provenance TEXT NOT NULL DEFAULT 'ground'",
+                    "standing TEXT NOT NULL DEFAULT 'active'",
+                    "depth INTEGER NOT NULL DEFAULT 0",
+                ):
+                    try:
+                        await conn.execute(f"ALTER TABLE records ADD COLUMN {col}")
+                    except Exception:
+                        pass  # column already present
+                await conn.commit()
                 self._conn = conn
         return self._conn
 
@@ -242,6 +299,7 @@ class RecordStore:
         )
         await conn.commit()
         await self._unindex(old_id)
+        await self.mark_unresolved_dependents(old_id)
         return cur.rowcount > 0
 
     async def supersede_with(
@@ -250,7 +308,9 @@ class RecordStore:
     ) -> Record:
         """Insert a replacement AND close the old lineage in ONE transaction, so a
         mid-op failure can't strand a half-applied SUPERSEDE (orphan duplicate).
-        If `old_id` doesn't exist this is just an ADD (the correction still lands)."""
+        The successor inherits the old record's labels (the caller may then set
+        more). If `old_id` doesn't exist this is just an ADD (the correction
+        still lands)."""
         from uuid import uuid4
 
         record = Record(id=uuid4().hex, text=text, kind=kind, source_ref=source_ref)
@@ -271,9 +331,15 @@ class RecordStore:
         cur = await conn.execute(
             "UPDATE records SET superseded_by = ? WHERE id = ?", (record.id, old_id)
         )
+        await conn.execute(
+            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
+            "SELECT ?, label, created_at FROM record_labels WHERE record_id = ?",
+            (record.id, old_id),
+        )
         await conn.commit()
         self._index(record)
         await self._unindex(old_id)
+        await self.mark_unresolved_dependents(old_id)
         if cur.rowcount == 0:
             _logger.warning("supersede target id not found; landed as ADD", old_id=old_id)
         return record
@@ -293,10 +359,11 @@ class RecordStore:
     ) -> Record | None:
         """Collapse N records into ONE in a single transaction (the consolidate
         primitive). Each loser's `superseded_by` is pointed at the survivor and
-        evicted from the vector index. If `text` is given the survivor is
-        re-texted (and re-confirmed) in the same transaction. Aborts (returns
-        None) if the survivor or any loser is pinned — pinned records are never
-        merged away. Returns the (re-fetched) survivor."""
+        evicted from the vector index; the survivor's labels become the union of
+        all members' labels. If `text` is given the survivor is re-texted (and
+        re-confirmed) in the same transaction. Aborts (returns None) if the
+        survivor or any loser is pinned — pinned records are never merged away.
+        Returns the (re-fetched) survivor."""
         conn = await self._ensure_conn()
         survivor = await self.get(survivor_id)
         if survivor is None or survivor.pinned:
@@ -329,10 +396,16 @@ class RecordStore:
                 "UPDATE records SET superseded_by = ? WHERE id = ?",
                 (survivor_id, loser.id),
             )
+            await conn.execute(
+                "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
+                "SELECT ?, label, created_at FROM record_labels WHERE record_id = ?",
+                (survivor_id, loser.id),
+            )
         await conn.commit()
 
         for loser in losers:
             await self._unindex(loser.id)
+            await self.mark_unresolved_dependents(loser.id)
         merged = await self.get(survivor_id)
         if merged is not None and new_text:
             self._index(merged)  # re-embed the re-texted survivor
@@ -370,6 +443,14 @@ class RecordStore:
 
     async def delete(self, record_id: str) -> None:
         conn = await self._ensure_conn()
+        await self.mark_unresolved_dependents(record_id)  # before the row vanishes
+        await conn.execute("DELETE FROM record_labels WHERE record_id = ?", (record_id,))
+        await conn.execute(
+            "DELETE FROM justification_premises WHERE justification_id IN "
+            "(SELECT id FROM justifications WHERE derived_id = ?)",
+            (record_id,),
+        )
+        await conn.execute("DELETE FROM justifications WHERE derived_id = ?", (record_id,))
         await conn.execute("DELETE FROM records WHERE id = ?", (record_id,))
         await conn.commit()
         await self._unindex(record_id)  # inline (cheap, pure-DB) — no upsert-vs-delete race
@@ -380,6 +461,407 @@ class RecordStore:
                 await self._search_index.delete("record", record_id)
             except Exception:
                 _logger.warning("record index delete failed", exc_info=True)
+
+    # -- labels (open-vocabulary, attached at write time by the curator) ------
+
+    async def set_labels(self, record_id: str, labels: list[str]) -> None:
+        """Replace the record's labels wholesale (the curator's UPDATE semantics)."""
+        conn = await self._ensure_conn()
+        await conn.execute("DELETE FROM record_labels WHERE record_id = ?", (record_id,))
+        ts = now_iso()
+        await conn.executemany(
+            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) VALUES (?, ?, ?)",
+            [(record_id, label, ts) for label in labels],
+        )
+        await conn.commit()
+
+    async def add_labels(self, record_id: str, labels: list[str]) -> None:
+        """Union new labels onto the record (backfill / lens promotion)."""
+        if not labels:
+            return
+        conn = await self._ensure_conn()
+        ts = now_iso()
+        await conn.executemany(
+            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) VALUES (?, ?, ?)",
+            [(record_id, label, ts) for label in labels],
+        )
+        await conn.commit()
+
+    async def labels_of(self, record_id: str) -> list[str]:
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT label FROM record_labels WHERE record_id = ? ORDER BY label",
+            (record_id,),
+        )
+        return [row["label"] for row in rows]
+
+    async def labels_for(self, record_ids: list[str]) -> dict[str, list[str]]:
+        """Batch-hydrate labels for many records in ONE query (no N+1). Every
+        requested id is a key; unlabeled records map to []."""
+        if not record_ids:
+            return {}
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            f"SELECT record_id, label FROM record_labels "
+            f"WHERE record_id IN ({','.join('?' * len(record_ids))}) ORDER BY label",
+            tuple(record_ids),
+        )
+        out: dict[str, list[str]] = {rid: [] for rid in record_ids}
+        for row in rows:
+            out[row["record_id"]].append(row["label"])
+        return out
+
+    async def records_for_label(self, label: str, *, limit: int = 200) -> list[Record]:
+        """The "everything about X" page: active records carrying the label,
+        newest-confirmed first."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT records.* FROM records "
+            "JOIN record_labels ON record_labels.record_id = records.id "
+            "WHERE record_labels.label = ? AND records.superseded_by IS NULL AND records.standing = 'active' "
+            "ORDER BY records.last_confirmed_at DESC LIMIT ?",
+            (label, limit),
+        )
+        return [self._row_to_record(row) for row in rows]
+
+    async def list_labels(self) -> list[dict]:
+        """[{"label", "count"}] counting ACTIVE records only, biggest hubs first."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT record_labels.label AS label, COUNT(*) AS count FROM record_labels "
+            "JOIN records ON records.id = record_labels.record_id "
+            "WHERE records.superseded_by IS NULL AND records.standing = 'active' "
+            "GROUP BY record_labels.label ORDER BY count DESC, label ASC"
+        )
+        return [{"label": row["label"], "count": row["count"]} for row in rows]
+
+    async def rename_label(self, old: str, new: str) -> None:
+        """Lint canonicalization: fold `old` into `new` with union semantics — a
+        record already carrying both keeps one row."""
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
+            "SELECT record_id, ?, created_at FROM record_labels WHERE label = ?",
+            (new, old),
+        )
+        await conn.execute("DELETE FROM record_labels WHERE label = ?", (old,))
+        await conn.commit()
+
+    # -- derivation (the recursive memory: justifications, standing, nogoods) --
+    # A derived record exists only with >=1 justification (cite-or-void). It may
+    # hold SEVERAL (JTMS) — it stays active while any justification's premises
+    # all live. Premise death marks dependents `unresolved` (excluded from
+    # recall); the dreamer re-judges them. Confidence is never stored — trust is
+    # computed from the DAG (justification count, disjoint evidence, depth).
+
+    async def add_derived(
+        self, text: str, *, premise_ids: list[str], mode: str, question: str,
+        kind: str = Kind.NOTE,
+    ) -> Record:
+        """Insert an inferred record + its first justification atomically."""
+        from uuid import uuid4
+
+        premises = await self._live_premises(premise_ids)
+        record = Record(
+            id=uuid4().hex, text=text, kind=kind,
+            source_ref=SourceRef(kind="dreamer", ref=question),
+            provenance=Provenance.DERIVED,
+            depth=max(p.depth for p in premises) + 1,
+        )
+        conn = await self._ensure_conn()
+        await conn.execute(
+            """
+            INSERT INTO records
+                (id, text, kind, scope_kind, scope_key, created_at,
+                 last_confirmed_at, superseded_by, pinned, source_ref,
+                 provenance, standing, depth)
+            VALUES (?, ?, ?, NULL, NULL, ?, ?, NULL, 0, ?, ?, ?, ?)
+            """,
+            (record.id, record.text, record.kind, record.created_at,
+             record.last_confirmed_at, json.dumps(record.source_ref.to_dict()),
+             record.provenance, record.standing, record.depth),
+        )
+        await self._insert_justification(conn, record.id, premise_ids, mode, question)
+        await conn.commit()
+        self._index(record)
+        return record
+
+    async def add_justification(
+        self, record_id: str, *, premise_ids: list[str], mode: str, question: str,
+    ) -> Justification:
+        """Append an independent justification to an existing record (a
+        re-derivation landed on the same conclusion). Reactivates an unresolved
+        record — fresh living support resolves it. Raises on cyclic support."""
+        premises = await self._live_premises(premise_ids)
+        record = await self.get(record_id)
+        if record is None:
+            raise ValueError(f"record {record_id!r} not found")
+        conn = await self._ensure_conn()
+        just = await self._insert_justification(conn, record_id, premise_ids, mode, question)
+        # A GROUND record gaining a justification stays ground at depth 0 (direct
+        # evidence outranks inference — the justification is corroboration, not
+        # pedigree). Only derived records carry chain depth.
+        depth = record.depth
+        if record.provenance == Provenance.DERIVED:
+            depth = max(record.depth, max(p.depth for p in premises) + 1)
+        await conn.execute(
+            "UPDATE records SET depth = ?, standing = ? WHERE id = ?",
+            (depth, Standing.ACTIVE, record_id),
+        )
+        await conn.commit()
+        if record.standing != Standing.ACTIVE:
+            self._index(record)  # back into retrieval circulation
+        return just
+
+    async def _insert_justification(
+        self, conn, derived_id: str, premise_ids: list[str], mode: str, question: str,
+    ) -> Justification:
+        from uuid import uuid4
+
+        for pid in premise_ids:
+            if pid == derived_id or derived_id in await self._ancestry(pid):
+                raise ValueError(f"cyclic justification: {pid!r} depends on {derived_id!r}")
+        just = Justification(
+            id=uuid4().hex, derived_id=derived_id,
+            premise_ids=tuple(premise_ids), mode=mode, question=question,
+        )
+        await conn.execute(
+            "INSERT INTO justifications (id, derived_id, mode, question, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (just.id, just.derived_id, just.mode, just.question, just.created_at),
+        )
+        for pid in premise_ids:
+            await conn.execute(
+                "INSERT OR IGNORE INTO justification_premises (justification_id, premise_id) "
+                "VALUES (?, ?)",
+                (just.id, pid),
+            )
+        return just
+
+    async def _live_premises(self, premise_ids: list[str]) -> list[Record]:
+        """Resolve premises, requiring every one alive — a derivation may only be
+        built on live knowledge."""
+        if not premise_ids:
+            raise ValueError("a derivation needs at least one premise")
+        premises = []
+        for pid in premise_ids:
+            p = await self.get(pid)
+            if p is None or not self._alive(p):
+                raise ValueError(f"premise {pid!r} is not a live record")
+            premises.append(p)
+        return premises
+
+    @staticmethod
+    def _alive(record: Record) -> bool:
+        return record.superseded_by is None and record.standing == Standing.ACTIVE
+
+    async def justifications_of(self, record_id: str) -> list[Justification]:
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM justifications WHERE derived_id = ? ORDER BY created_at",
+            (record_id,),
+        )
+        out = []
+        for row in rows:
+            prem = await conn.execute_fetchall(
+                "SELECT premise_id FROM justification_premises WHERE justification_id = ?",
+                (row["id"],),
+            )
+            out.append(Justification(
+                id=row["id"], derived_id=row["derived_id"],
+                premise_ids=tuple(p["premise_id"] for p in prem),
+                mode=row["mode"], question=row["question"], created_at=row["created_at"],
+            ))
+        return out
+
+    async def dependents_of(self, record_id: str) -> list[str]:
+        """Ids of derived records holding a justification that cites this one."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT DISTINCT j.derived_id FROM justifications j "
+            "JOIN justification_premises p ON p.justification_id = j.id "
+            "WHERE p.premise_id = ?",
+            (record_id,),
+        )
+        return [r["derived_id"] for r in rows]
+
+    async def _ancestry(self, record_id: str, *, _seen: set | None = None) -> set[str]:
+        """All premise ids reachable upward from a record (cycle-guarded)."""
+        seen = _seen if _seen is not None else set()
+        for just in await self.justifications_of(record_id):
+            for pid in just.premise_ids:
+                if pid not in seen:
+                    seen.add(pid)
+                    await self._ancestry(pid, _seen=seen)
+        return seen
+
+    async def evidence_base(self, record_id: str) -> set[str]:
+        """The GROUND record ids in this record's derivation ancestry — the
+        NARS evidential stamp (disjointness = real corroboration)."""
+        base: set[str] = set()
+        for rid in await self._ancestry(record_id) or {record_id}:
+            r = await self.get(rid)
+            if r is not None and r.provenance == Provenance.GROUND:
+                base.add(rid)
+        return base
+
+    async def trust_signals(self, record_id: str) -> dict:
+        """The vision-§7 signals, computed from the DAG — shown, never a gate."""
+        record = await self.get(record_id)
+        justs = await self.justifications_of(record_id)
+        bases: list[set[str]] = []
+        for j in justs:
+            b: set[str] = set()
+            for pid in j.premise_ids:
+                p = await self.get(pid)
+                if p is None:
+                    continue
+                b |= {pid} if p.provenance == Provenance.GROUND else await self.evidence_base(pid)
+            bases.append(b)
+        independent = 0
+        covered: set[str] = set()
+        for b in bases:
+            if b - covered:
+                independent += 1
+                covered |= b
+        return {
+            "provenance": record.provenance if record else Provenance.GROUND,
+            "standing": record.standing if record else Standing.ACTIVE,
+            "depth": record.depth if record else 0,
+            "justifications": len(justs),
+            "independent_grounds": independent,
+            "modes": sorted({j.mode for j in justs}),
+        }
+
+    async def mark_unresolved_dependents(self, dead_id: str) -> int:
+        """Premise death propagation (JTMS): walk dependents; a derivation goes
+        `unresolved` ONLY when every justification it holds contains a dead
+        premise — surviving independent support keeps it active untouched.
+        Unresolved records leave retrieval until the dreamer re-judges them."""
+        conn = await self._ensure_conn()
+        marked = 0
+        frontier = {dead_id}
+        for _ in range(10):  # bounded transitive depth
+            nxt: set[str] = set()
+            for fid in frontier:
+                for dep_id in await self.dependents_of(fid):
+                    dep = await self.get(dep_id)
+                    if dep is None or not self._alive(dep):
+                        continue
+                    if await self._has_living_justification(dep_id):
+                        continue
+                    await conn.execute(
+                        "UPDATE records SET standing = ? WHERE id = ?",
+                        (Standing.UNRESOLVED, dep_id),
+                    )
+                    await self._unindex(dep_id)
+                    marked += 1
+                    nxt.add(dep_id)
+            await conn.commit()
+            if not nxt:
+                break
+            frontier = nxt
+        return marked
+
+    async def _has_living_justification(self, record_id: str) -> bool:
+        for just in await self.justifications_of(record_id):
+            alive = True
+            for pid in just.premise_ids:
+                p = await self.get(pid)
+                if p is None or not self._alive(p):
+                    alive = False
+                    break
+            if alive:
+                return True
+        return False
+
+    async def unresolved(self, *, limit: int = 50) -> list[Record]:
+        """Derivations awaiting re-judgment, oldest first."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM records WHERE standing = ? AND superseded_by IS NULL "
+            "ORDER BY last_confirmed_at ASC LIMIT ?",
+            (Standing.UNRESOLVED, limit),
+        )
+        return [self._row_to_record(row) for row in rows]
+
+    async def retire(self, record_id: str, *, nogood_why: str | None = None) -> bool:
+        """Take a derivation out of circulation (lint hygiene / re-judgment).
+        With `nogood_why` the retirement also records a nogood so the dreamer
+        never re-derives the same junk from the same premises."""
+        record = await self.get(record_id)
+        if record is None or record.pinned:
+            return False
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "UPDATE records SET standing = ? WHERE id = ?", (Standing.RETIRED, record_id)
+        )
+        await conn.commit()
+        await self._unindex(record_id)
+        if nogood_why:
+            for just in await self.justifications_of(record_id):
+                await self.add_nogood(list(just.premise_ids), record.text, nogood_why)
+        await self.mark_unresolved_dependents(record_id)
+        return True
+
+    async def add_nogood(self, premise_ids: list[str], conclusion: str, why: str) -> None:
+        from uuid import uuid4
+
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "INSERT INTO nogoods (id, premise_ids, conclusion, why, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (uuid4().hex, json.dumps(sorted(premise_ids)), conclusion, why, now_iso()),
+        )
+        await conn.commit()
+
+    async def justification_edges_among(self, record_ids: list[str]) -> list[dict]:
+        """Evidence edges (derived -> premise) with BOTH endpoints in `record_ids`
+        — the graph view's epistemic structure, one query."""
+        if not record_ids:
+            return []
+        conn = await self._ensure_conn()
+        ph = ",".join("?" * len(record_ids))
+        rows = await conn.execute_fetchall(
+            f"SELECT j.derived_id AS derived_id, p.premise_id AS premise_id, "
+            f"j.created_at AS created_at FROM justifications j "
+            f"JOIN justification_premises p ON p.justification_id = j.id "
+            f"WHERE j.derived_id IN ({ph}) AND p.premise_id IN ({ph})",
+            (*record_ids, *record_ids),
+        )
+        return [
+            {"derived_id": r["derived_id"], "premise_id": r["premise_id"],
+             "created_at": r["created_at"]}
+            for r in rows
+        ]
+
+    async def derived_records(self, *, limit: int = 200) -> list[Record]:
+        """Active inferred records, newest first — the dream's output surface."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM records WHERE provenance = 'derived' AND superseded_by IS NULL "
+            "ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [self._row_to_record(row) for row in rows]
+
+    async def nogoods_for(self, record_ids: list[str]) -> list[dict]:
+        """Nogoods whose premises overlap `record_ids` — injected into dream
+        prompts so retracted junk is not re-derived. The table is small; filter
+        in Python."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall("SELECT * FROM nogoods")
+        wanted = set(record_ids)
+        out = []
+        for row in rows:
+            premises = set(json.loads(row["premise_ids"]))
+            if premises & wanted:
+                out.append({
+                    "premise_ids": sorted(premises),
+                    "conclusion": row["conclusion"],
+                    "why": row["why"],
+                })
+        return out
 
     # -- reads ---------------------------------------------------------------
 
@@ -405,7 +887,7 @@ class RecordStore:
         window = max(limit * 4, 40)
 
         def _matches(record: Record) -> bool:
-            if not include_superseded and record.superseded_by is not None:
+            if not include_superseded and not self._alive(record):
                 return False
             if kinds is not None and record.kind not in kinds:
                 return False
@@ -418,7 +900,9 @@ class RecordStore:
             where = ["records_fts MATCH ?"]
             params: list = [fts_query]
             if not include_superseded:
+                # `unresolved`/`retired` derivations leave recall with their premises.
                 where.append("records.superseded_by IS NULL")
+                where.append("records.standing = 'active'")
             if kinds:
                 where.append(f"records.kind IN ({','.join('?' * len(kinds))})")
                 params += list(kinds)
@@ -497,7 +981,7 @@ class RecordStore:
         """Size of the active pool — the lens-coverage denominator (scope_pool)."""
         conn = await self._ensure_conn()
         rows = await conn.execute_fetchall(
-            "SELECT COUNT(*) AS n FROM records WHERE superseded_by IS NULL"
+            "SELECT COUNT(*) AS n FROM records WHERE superseded_by IS NULL AND standing = 'active'"
         )
         return rows[0]["n"] if rows else 0
 
@@ -515,7 +999,7 @@ class RecordStore:
         sharing the boundary timestamp is never skipped; `None` returns the whole
         active pool oldest-first."""
         conn = await self._ensure_conn()
-        sql = "SELECT * FROM records WHERE superseded_by IS NULL"
+        sql = "SELECT * FROM records WHERE superseded_by IS NULL AND standing = 'active'"
         params: list = []
         if watermark is not None:
             sql += " AND last_confirmed_at >= ?"
@@ -554,4 +1038,7 @@ class RecordStore:
             source_ref=SourceRef.from_dict(json.loads(row["source_ref"]))
             if row["source_ref"]
             else None,
+            provenance=row["provenance"],
+            standing=row["standing"],
+            depth=row["depth"],
         )

@@ -498,12 +498,13 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const collapsed = done && !expanded;
   const max = done ? undefined : 3;
   // Count over post-lift rows so the header matches what ActivityTail renders —
-  // a workflow tool call is lifted into a card, not counted as one of the calls.
-  const { workflowRows, rowItems } = liftWorkflows(items, workflows, currentSessionId);
+  // workflow and html-widget tool calls are lifted into cards, not counted
+  // as calls.
+  const { workflowRows, htmlWidgetItems, rowItems } = liftWorkflows(items, workflows, currentSessionId);
   const { totalCount, activeCount } = activityTraceStats(rowItems);
-  // A turn whose only activity is a workflow shows just the card — no
+  // A turn whose only activity is lifted cards shows just the cards — no
   // "Running/Worked N calls" tool-call header, no row chrome.
-  const onlyWorkflows = rowItems.length === 0 && workflowRows.length > 0;
+  const onlyCards = rowItems.length === 0 && workflowRows.length + htmlWidgetItems.length > 0;
 
   return (
     <article
@@ -517,7 +518,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
       data-source-index={message.sourceIndex}
     >
       <ActivityTrace>
-        {!onlyWorkflows && (
+        {!onlyCards && (
           <ActivityHeader
             done={done}
             label={message.activity.label}

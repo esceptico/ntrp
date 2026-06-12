@@ -18,11 +18,19 @@ export interface GraphPayload {
   edges: MemoryEdge[];
 }
 
-// Every node is a claim → every node is a circle (locked model §5: no squares,
-// differentiate by color/size only). Size grows mildly with corroboration so a
-// well-supported claim reads larger; it never encodes a different shape.
+// Every node is a circle (locked model §5: no squares, differentiate by
+// color/size only). Size grows mildly with corroboration so a well-supported
+// claim reads larger; label hubs (pseudo-items, id "label:<name>") start a
+// step bigger — corroboration there is the member count.
 const BASE_RADIUS = 9;
+const HUB_RADIUS = 12;
+
+function isLabelHub(item: MemoryItem): boolean {
+  return item.id.startsWith("label:");
+}
+
 function nodeRadius(item: MemoryItem): number {
+  if (isLabelHub(item)) return HUB_RADIUS + Math.min(6, item.corroboration);
   return BASE_RADIUS + Math.min(5, item.corroboration);
 }
 
@@ -31,12 +39,14 @@ const ROLE_DASH: Record<MemoryEdgeRole, string | undefined> = {
   evidence: undefined,
   supersedes: "5 4",
   contradicts: "2 4",
+  label: undefined,
 };
 
 const ROLE_LABEL: Record<MemoryEdgeRole, string> = {
   evidence: "evidence",
   supersedes: "supersedes",
   contradicts: "contradicts",
+  label: "label",
 };
 
 interface SimNode {
@@ -313,7 +323,10 @@ export function MemoryGraph({
     for (const n of nodes) {
       const lit = isLit(n.id);
       if (focusId != null && lit) candidates.push({ id: n.id, pri: n.id === focusId ? 0 : 1, n });
-      else if (focusId == null && hubIds.has(n.id)) candidates.push({ id: n.id, pri: 2, n });
+      // Label hubs carry standing names ahead of degree-ranked hubs — the
+      // labels ARE the map's landmarks.
+      else if (focusId == null && isLabelHub(n.item)) candidates.push({ id: n.id, pri: 2, n });
+      else if (focusId == null && hubIds.has(n.id)) candidates.push({ id: n.id, pri: 3, n });
     }
     candidates.sort((a, b) => a.pri - b.pri);
     const placed: { x: number; y: number; w: number; h: number }[] = [];
@@ -395,7 +408,9 @@ export function MemoryGraph({
             const lit = isLit(n.id);
             const isRoot = n.id === rootId;
             const isSelected = n.id === selectedId;
-            const color = nodeColor(n.item);
+            const hub = isLabelHub(n.item);
+            // Hubs are structure, not content: neutral ink, never provenance-colored.
+            const color = hub ? "var(--color-ink)" : nodeColor(n.item);
             const dim = n.item.status !== "active";
             // De-clutter: label the focused/hovered node + lit neighbours, plus
             // standing hub labels — all collision-avoided (locked model §4).
@@ -433,8 +448,9 @@ export function MemoryGraph({
                     x={r + 5}
                     y={3}
                     fontSize={10}
+                    fontWeight={hub ? 600 : undefined}
                     className="pointer-events-none"
-                    fill="var(--color-ink-soft)"
+                    fill={hub ? "var(--color-ink)" : "var(--color-ink-soft)"}
                     paintOrder="stroke"
                     stroke="var(--color-surface)"
                     strokeWidth={3}
@@ -462,7 +478,7 @@ export function MemoryGraph({
   );
 }
 
-const LEGEND_ROLES: MemoryEdgeRole[] = ["evidence", "supersedes", "contradicts"];
+const LEGEND_ROLES: MemoryEdgeRole[] = ["label", "evidence", "supersedes", "contradicts"];
 const LEGEND_PROVENANCE: MemoryItem["provenance"][] = [
   "user_authored",
   "recorded",

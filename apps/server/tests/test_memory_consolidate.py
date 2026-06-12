@@ -17,15 +17,15 @@ Covers:
   (h) the RecordStore primitives: merge atomicity + pin-guard, updated_since order.
 """
 
-import json
 from pathlib import Path
 
 import pytest
 
 from ntrp.memory.consolidate import Consolidate
 from ntrp.memory.models import SourceRef
+from ntrp.memory.prompts_consolidate import LabelOps, LintOps
+from ntrp.memory.prompts_derive import DreamOps
 from ntrp.memory.records import RecordStore
-from ntrp.memory.prompts_consolidate import LintOps
 from tests.conftest import completion_response
 
 pytestmark = pytest.mark.asyncio
@@ -205,6 +205,81 @@ async def test_drop_orphan_keeps_record_with_provenance(tmp_path: Path):
     await records.close()
 
 
+# --- label hygiene (one bounded call per sweep) --------------------------------
+
+
+def _label_ops(renames: list[tuple[str, str]]) -> str:
+    return LabelOps.model_validate(
+        {"renames": [{"old": old, "new": new} for old, new in renames]}
+    ).model_dump_json()
+
+
+async def test_label_hygiene_folds_near_duplicate_labels(tmp_path: Path):
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("dex sleeps through the night now")
+    b = await records.add("dex sleeps in his crib")
+    await records.set_labels(a.id, ["dex"])
+    await records.set_labels(b.id, ["Dex memory"])
+    # One neighborhood judgment (no ops), then the label-hygiene call: both
+    # spellings fold into "Dex"; the hallucinated "ghost" rename is dropped.
+    llm = StubLLM(
+        LintOps().model_dump_json(),
+        _label_ops([("dex", "Dex"), ("Dex memory", "Dex"), ("ghost", "Dex")]),
+    )
+    consolidate = _consolidate(tmp_path, records, llm)
+
+    report = await consolidate.run_once()
+
+    assert report.relabeled == 2
+    assert await records.list_labels() == [{"label": "Dex", "count": 2}]
+    assert await records.labels_of(a.id) == ["Dex"]
+    # ONE hygiene call after the neighborhood judgments, then the dream phase
+    # (one DreamOps call per >=2-member neighborhood; stub yields no candidates).
+    assert [c["response_format"] for c in llm.calls] == [LintOps, LabelOps, DreamOps]
+
+    # No new records -> the next sweep spends nothing, label hygiene included.
+    await consolidate.run_once()
+    assert len(llm.calls) == 3
+    await consolidate.close()
+    await records.close()
+
+
+async def test_label_hygiene_skipped_below_two_labels(tmp_path: Path):
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("a lone labeled fact")
+    await records.set_labels(a.id, ["solo"])
+    llm = StubLLM()  # default no-op LintOps for the one neighborhood
+    consolidate = _consolidate(tmp_path, records, llm)
+
+    report = await consolidate.run_once()
+
+    assert report.relabeled == 0
+    assert [c["response_format"] for c in llm.calls] == [LintOps]
+    await consolidate.close()
+    await records.close()
+
+
+async def test_merge_unions_labels_onto_survivor(tmp_path: Path):
+    """Verify the store-level union semantics through a consolidation merge."""
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("the user lives in Yerevan")
+    b = await records.add("the user lives in Yerevan, Armenia")
+    await records.set_labels(a.id, ["Timur"])
+    await records.set_labels(b.id, ["places"])
+    llm = StubLLM(
+        _merge_ops([a.id, b.id], merged_text="the user lives in Yerevan, Armenia"),
+        _label_ops([]),
+    )
+    consolidate = _consolidate(tmp_path, records, llm)
+
+    await consolidate.run_once()
+
+    survivor = (await records.list())[0]
+    assert await records.labels_of(survivor.id) == ["Timur", "places"]
+    await consolidate.close()
+    await records.close()
+
+
 # --- watermark durability / anti-heartbeat -----------------------------------
 
 
@@ -228,8 +303,8 @@ async def test_second_sweep_is_a_noop_without_changes(tmp_path: Path):
 
 async def test_noop_without_llm(tmp_path: Path):
     records = RecordStore(tmp_path / "memory.db", search_index=None)
-    a = await records.add("x")
-    b = await records.add("x")
+    await records.add("x")
+    await records.add("x")
     consolidate = Consolidate(records, None, model="memory-model", db_path=tmp_path / "memory.db")
 
     report = await consolidate.run_once()

@@ -1,21 +1,24 @@
 """Curator (the Dreamer) — the sleep-time memory writer (ntrp/memory/curator.py).
 
 ONE LLM call per session emits a SINGLE JSON object `{"records": [ADD|UPDATE|
-SUPERSEDE|NOOP ...]}`: it reconciles the flat record pool, then scores the new
-records into the active lenses. No docs, no scope. Hermetic: a STUB LLM (scripted
-single-call JSON responses) + a STUB sessions store (in-memory `messages_since`) +
-a real tmp RecordStore + a real tmp LensStore (`search_index=None` -> FTS-only).
-The watermark + records live in a tmp sqlite (injected via the Curator's `db_path`
-arg so the real ~/.ntrp/memory.db is never touched).
+SUPERSEDE|NOOP ...]}` whose write ops carry open-vocabulary `labels`. The call
+reconciles the flat record pool; there is NO lens write path. Hermetic: a STUB
+LLM (scripted single-call JSON responses) + a STUB sessions store (in-memory
+`messages_since`) + a real tmp RecordStore (`search_index=None` -> FTS-only).
+The watermark + records live in a tmp sqlite (injected via the Curator's
+`db_path` arg so the real ~/.ntrp/memory.db is never touched).
 
 Covers:
-  (a) empty ops (novelty gate) -> no record writes, watermark advances;
+  (a) empty ops (admit gate) -> no record writes, watermark advances;
   (b) the watermark filters already-seen seqs;
   (c) a content-less completion -> no writes, watermark NOT advanced;
   (d) record ops: ADD inserts, UPDATE edits+confirms, SUPERSEDE closes+inserts,
       NOOP confirms — exactly one LLM call per curation;
-  (e) new records get scored into active lenses (the dreamer's membership half);
-  (f) the sweep schedules curation for recent sessions.
+  (e) labels: ADD sets them, UPDATE replaces-or-keeps, SUPERSEDE's successor
+      takes the op's labels else inherits, and the prompt carries the LABEL
+      VOCABULARY (top names + the recalled records' labels);
+  (f) the sweep schedules curation for recent USER CHATS only — automation
+      channels and agent sessions are skipped.
 """
 
 import asyncio
@@ -25,7 +28,6 @@ from pathlib import Path
 import pytest
 
 from ntrp.memory.curator import Curator
-from ntrp.memory.lenses import LensStore
 from ntrp.memory.records import RecordStore
 from tests.conftest import completion_response
 
@@ -51,7 +53,8 @@ class StubLLM:
 class StubSessions:
     """Minimal SessionService stand-in. Holds ordered transcript rows in the
     `_message_row_payload` shape (seq/role/message) and serves messages_since.
-    `scopes` is the preset {session_id, project_id} worklist for the sweep."""
+    `scopes` is the preset sweep worklist; rows carry the origin fields the
+    sweep gates on ({session_id, project_id, session_type, origin_automation_id})."""
 
     def __init__(self, rows: dict[str, list[dict]] | None = None, scopes: list[dict] | None = None):
         self._rows = rows or {}
@@ -71,32 +74,39 @@ def _turn(seq: int, role: str, text: str) -> dict:
     return {"seq": seq, "role": role, "message": {"role": role, "content": text}}
 
 
+def _scope(session_id: str, *, session_type: str = "chat", origin_automation_id: str | None = None) -> dict:
+    return {
+        "session_id": session_id,
+        "project_id": None,
+        "session_type": session_type,
+        "origin_automation_id": origin_automation_id,
+    }
+
+
 def _ops_json(records: list[dict] | None = None) -> str:
-    """The single JSON object the Curator now expects from the LLM."""
+    """The single JSON object the Curator expects from the LLM."""
     return json.dumps({"records": records or []})
 
 
-def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore, LensStore]:
+def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore]:
     records = RecordStore(tmp_path / "memory.db", search_index=None)
-    lenses = LensStore(tmp_path / "memory.db", records, llm=None)  # no lens scoring by default
     curator = Curator(
         llm,
         sessions,
         model="memory-model",
         db_path=tmp_path / "memory.db",
         record_store=records,
-        lens_store=lenses,
     )
-    return curator, records, lenses
+    return curator, records
 
 
-# --- novelty gate / watermark -------------------------------------------------
+# --- admit gate / watermark -----------------------------------------------------
 
 
 async def test_empty_ops_skip_writes_but_advance_watermark(tmp_path: Path):
     llm = StubLLM(_ops_json([]))
     sessions = StubSessions({"s1": [_turn(0, "user", "what time is it")]})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     await curator.curate_session("s1")
 
@@ -104,7 +114,6 @@ async def test_empty_ops_skip_writes_but_advance_watermark(tmp_path: Path):
     assert await records.list() == []  # no record writes
     assert await curator._read_watermark("s1") == 0  # advanced to max seq seen
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
@@ -121,7 +130,7 @@ async def test_watermark_filters_already_seen_seqs(tmp_path: Path):
             ]
         }
     )
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     await curator._write_watermark("s1", 0)  # pretend seq 0 already curated
 
@@ -134,7 +143,6 @@ async def test_watermark_filters_already_seen_seqs(tmp_path: Path):
     assert "old turn already curated" not in user_prompt
     assert await curator._read_watermark("s1") == 1
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
@@ -148,7 +156,7 @@ async def test_curator_ignores_system_rows(tmp_path: Path):
             ]
         }
     )
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     await curator.curate_session("s1")
 
@@ -158,7 +166,6 @@ async def test_curator_ignores_system_rows(tmp_path: Path):
     assert "large repeated system prompt" not in user_prompt
     assert await curator._read_watermark("s1") == 1
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
@@ -166,7 +173,7 @@ async def test_curator_chunks_large_backlog_before_llm(tmp_path: Path):
     llm = StubLLM(_ops_json([]))
     rows = [_turn(i, "user", f"fact {i} " + ("x" * 1000)) for i in range(20)]
     sessions = StubSessions({"s1": rows})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     await curator.curate_session("s1")
 
@@ -175,23 +182,21 @@ async def test_curator_chunks_large_backlog_before_llm(tmp_path: Path):
     assert len(user_prompt) < 8_000
     assert await curator._read_watermark("s1") < rows[-1]["seq"]
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
 async def test_no_new_turns_advances_without_llm(tmp_path: Path):
     llm = StubLLM(_ops_json([{"op": "ADD", "text": "never called"}]))
     sessions = StubSessions({"s1": [_turn(5, "user", "hello")]})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
     await curator._write_watermark("s1", 5)  # everything already seen
 
     changed = await curator.curate_session("s1")
 
     assert changed is False
-    assert llm.calls == []  # the novelty gate never even spent an LLM call
+    assert llm.calls == []  # the admit gate never even spent an LLM call
     assert await curator._read_watermark("s1") == 5
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
@@ -201,7 +206,7 @@ async def test_empty_completion_does_not_write_or_advance(tmp_path: Path, blank:
     the watermark — the turns retry next session."""
     llm = StubLLM(blank)
     sessions = StubSessions({"s1": [_turn(0, "user", "some durable new fact")]})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     changed = await curator.curate_session("s1")
 
@@ -210,14 +215,13 @@ async def test_empty_completion_does_not_write_or_advance(tmp_path: Path, blank:
     assert await records.list() == []  # …no record writes
     assert await curator._read_watermark("s1") == -1  # NOT advanced -> retried
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
 async def test_unparseable_completion_does_not_advance(tmp_path: Path):
     llm = StubLLM("not json at all")
     sessions = StubSessions({"s1": [_turn(0, "user", "a durable fact")]})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     changed = await curator.curate_session("s1")
 
@@ -225,7 +229,6 @@ async def test_unparseable_completion_does_not_advance(tmp_path: Path):
     assert await records.list() == []
     assert await curator._read_watermark("s1") == -1
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
@@ -235,7 +238,7 @@ async def test_unparseable_completion_does_not_advance(tmp_path: Path):
 async def test_add_op_inserts_a_record(tmp_path: Path):
     llm = StubLLM(_ops_json([{"op": "ADD", "text": "the user uses Linux", "kind": "fact"}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I run Linux")]})
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     changed = await curator.curate_session("s1")
 
@@ -250,12 +253,11 @@ async def test_add_op_inserts_a_record(tmp_path: Path):
     assert rows[0].source_ref.ref == "s1"
     assert await curator._read_watermark("s1") == 0
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
 async def test_update_op_edits_and_confirms(tmp_path: Path):
-    curator, records, lenses = _make_curator(tmp_path, StubLLM(), StubSessions())
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
     existing = await records.add("the user lives in Berlin")
     before = (await records.get(existing.id)).last_confirmed_at
 
@@ -263,7 +265,7 @@ async def test_update_op_edits_and_confirms(tmp_path: Path):
     sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
     curator2 = Curator(
         llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records, lens_store=lenses,
+        db_path=tmp_path / "memory.db", record_store=records,
     )
     await asyncio.sleep(0.01)
 
@@ -276,12 +278,11 @@ async def test_update_op_edits_and_confirms(tmp_path: Path):
     assert len(llm.calls) == 1
     await curator2.stop()
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
 async def test_supersede_op_closes_old_and_inserts_new(tmp_path: Path):
-    curator, records, lenses = _make_curator(tmp_path, StubLLM(), StubSessions())
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
     old = await records.add("the user works at Acme")
 
     llm = StubLLM(
@@ -290,7 +291,7 @@ async def test_supersede_op_closes_old_and_inserts_new(tmp_path: Path):
     sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
     curator2 = Curator(
         llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records, lens_store=lenses,
+        db_path=tmp_path / "memory.db", record_store=records,
     )
 
     changed = await curator2.curate_session("s1")
@@ -305,12 +306,11 @@ async def test_supersede_op_closes_old_and_inserts_new(tmp_path: Path):
     assert len(llm.calls) == 1
     await curator2.stop()
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
 async def test_noop_op_confirms_existing(tmp_path: Path):
-    curator, records, lenses = _make_curator(tmp_path, StubLLM(), StubSessions())
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
     existing = await records.add("the user prefers dark mode")
     before = (await records.get(existing.id)).last_confirmed_at
 
@@ -318,7 +318,7 @@ async def test_noop_op_confirms_existing(tmp_path: Path):
     sessions = StubSessions({"s1": [_turn(0, "user", "still on dark mode")]})
     curator2 = Curator(
         llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records, lens_store=lenses,
+        db_path=tmp_path / "memory.db", record_store=records,
     )
     await asyncio.sleep(0.01)
 
@@ -332,83 +332,219 @@ async def test_noop_op_confirms_existing(tmp_path: Path):
     assert len(llm.calls) == 1
     await curator2.stop()
     await curator.stop()
-    await lenses.close()
     await records.close()
 
 
-# --- the dreamer also maintains lens membership -------------------------------
+# --- labels: write-time membership ---------------------------------------------
 
 
-async def test_new_records_are_scored_into_active_lenses(tmp_path: Path):
-    """ADD'd records get routed into an active lens by the dreamer. The lens store
-    has its OWN LLM (the judge); the curator's LLM emits the ops."""
-    records = RecordStore(tmp_path / "memory.db", search_index=None)
-    lens_llm = StubLLM()  # filled after we know the new record id (see below)
-    lenses = LensStore(tmp_path / "memory.db", records, llm=lens_llm, model="lens-model")
-
-    # Backfill the lens (empty pool) -> 1 judge call returning no members.
-    lens_llm._queue.append(json.dumps({"members": []}))
-    await lenses.create("linux", "about Linux usage")
-
-    curator_llm = StubLLM(_ops_json([{"op": "ADD", "text": "the user uses Linux", "kind": "fact"}]))
+async def test_add_op_sets_labels(tmp_path: Path):
+    llm = StubLLM(
+        _ops_json([{"op": "ADD", "text": "the user uses Linux", "kind": "fact", "labels": ["Linux", "tools"]}])
+    )
     sessions = StubSessions({"s1": [_turn(0, "user", "I run Linux")]})
-    curator = Curator(
-        curator_llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records, lens_store=lenses,
+    curator, records = _make_curator(tmp_path, llm, sessions)
+
+    await curator.curate_session("s1")
+
+    rows = await records.list()
+    assert await records.labels_of(rows[0].id) == ["Linux", "tools"]
+    await curator.stop()
+    await records.close()
+
+
+async def test_add_op_labels_sanitized_and_capped(tmp_path: Path):
+    llm = StubLLM(
+        _ops_json(
+            [
+                {
+                    "op": "ADD",
+                    "text": "the user uses Linux",
+                    "labels": ["Linux", " Linux ", "", 7, "a", "b", "c"],
+                }
+            ]
+        )
+    )
+    sessions = StubSessions({"s1": [_turn(0, "user", "I run Linux")]})
+    curator, records = _make_curator(tmp_path, llm, sessions)
+
+    await curator.curate_session("s1")
+
+    rows = await records.list()
+    # Stripped + deduped + non-strings dropped, capped at 4.
+    assert await records.labels_of(rows[0].id) == ["Linux", "a", "b", "c"]
+    await curator.stop()
+    await records.close()
+
+
+async def test_update_op_replaces_labels_when_provided(tmp_path: Path):
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
+    existing = await records.add("the user lives in Berlin")
+    await records.set_labels(existing.id, ["Berlin", "places"])
+
+    llm = StubLLM(
+        _ops_json(
+            [{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich", "labels": ["Munich"]}]
+        )
+    )
+    sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
+    curator2 = Curator(
+        llm, sessions, model="memory-model",
+        db_path=tmp_path / "memory.db", record_store=records,
     )
 
-    # Queue the judge's banding for the new record: it'll be high (a member).
-    # The new record's id isn't known yet, so script the judge to echo whatever
-    # candidate it's handed as high.
-    class EchoHighLLM:
-        def __init__(self):
-            self.calls = 0
+    await curator2.curate_session("s1")
 
-        async def completion(self, *, messages, model, reasoning_effort=None, **kwargs):
-            self.calls += 1
-            payload = messages[1]["content"]
-            # Extract candidate ids from the JSON the judge was handed.
-            import re
-            ids = re.findall(r'"([0-9a-f]{32})"', payload)
-            members = [{"id": i, "band": "high"} for i in ids]
-            return completion_response(json.dumps({"members": members}))
-
-    lenses._llm = EchoHighLLM()
-
-    changed = await curator.curate_session("s1")
-    assert changed is True
-
-    members = await lenses.members("linux")
-    assert [r.text for r in members] == ["the user uses Linux"]
+    assert await records.labels_of(existing.id) == ["Munich"]
+    await curator2.stop()
     await curator.stop()
-    await lenses.close()
+    await records.close()
+
+
+async def test_update_op_keeps_labels_when_absent(tmp_path: Path):
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
+    existing = await records.add("the user lives in Berlin")
+    await records.set_labels(existing.id, ["Berlin", "places"])
+
+    llm = StubLLM(_ops_json([{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich"}]))
+    sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
+    curator2 = Curator(
+        llm, sessions, model="memory-model",
+        db_path=tmp_path / "memory.db", record_store=records,
+    )
+
+    await curator2.curate_session("s1")
+
+    assert await records.labels_of(existing.id) == ["Berlin", "places"]
+    await curator2.stop()
+    await curator.stop()
+    await records.close()
+
+
+async def test_supersede_op_successor_takes_op_labels(tmp_path: Path):
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
+    old = await records.add("the user works at Acme")
+    await records.set_labels(old.id, ["Acme", "work"])
+
+    llm = StubLLM(
+        _ops_json(
+            [{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex", "labels": ["Globex", "work"]}]
+        )
+    )
+    sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
+    curator2 = Curator(
+        llm, sessions, model="memory-model",
+        db_path=tmp_path / "memory.db", record_store=records,
+    )
+
+    await curator2.curate_session("s1")
+
+    active = await records.list()
+    assert await records.labels_of(active[0].id) == ["Globex", "work"]
+    assert await records.labels_of(old.id) == ["Acme", "work"]  # history keeps its labels
+    await curator2.stop()
+    await curator.stop()
+    await records.close()
+
+
+async def test_supersede_op_successor_inherits_labels_when_absent(tmp_path: Path):
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
+    old = await records.add("the user works at Acme")
+    await records.set_labels(old.id, ["Acme", "work"])
+
+    llm = StubLLM(_ops_json([{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex"}]))
+    sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
+    curator2 = Curator(
+        llm, sessions, model="memory-model",
+        db_path=tmp_path / "memory.db", record_store=records,
+    )
+
+    await curator2.curate_session("s1")
+
+    active = await records.list()
+    assert await records.labels_of(active[0].id) == ["Acme", "work"]
+    await curator2.stop()
+    await curator.stop()
+    await records.close()
+
+
+async def test_prompt_carries_label_vocabulary_and_recalled_labels(tmp_path: Path):
+    curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
+    recalled = await records.add("the user runs Linux on the desktop")
+    await records.set_labels(recalled.id, ["Linux"])
+    other = await records.add("venlafaxine dose changed in May")
+    await records.set_labels(other.id, ["venlafaxine", "health"])
+
+    llm = StubLLM(_ops_json([]))
+    sessions = StubSessions({"s1": [_turn(0, "user", "I run Linux on my desktop")]})
+    curator2 = Curator(
+        llm, sessions, model="memory-model",
+        db_path=tmp_path / "memory.db", record_store=records,
+    )
+
+    await curator2.curate_session("s1")
+
+    user_prompt = llm.calls[0]["messages"][1]["content"]
+    assert "LABEL VOCABULARY" in user_prompt
+    # Top-by-count vocabulary names, not just the recalled record's.
+    assert "venlafaxine" in user_prompt
+    assert "health" in user_prompt
+    # The recalled record line shows its labels inline (UPDATE replace needs them).
+    assert f"- {recalled.id} [Linux]:" in user_prompt
+    await curator2.stop()
+    await curator.stop()
     await records.close()
 
 
 # --- sweep --------------------------------------------------------------------
 
 
-async def test_sweep_schedules_curation_for_recent_sessions(tmp_path: Path):
-    """The sweep schedules curation for every recent session by id (no scope)."""
+async def test_sweep_schedules_curation_for_recent_user_chats(tmp_path: Path):
+    """The sweep schedules curation for recent USER CHATS by id (no scope)."""
     llm = StubLLM()
     sessions = StubSessions(
         scopes=[
-            {"session_id": "chat1", "project_id": None},
-            {"session_id": "auto2", "project_id": "proj_abc"},
-            {"session_id": "chat3", "project_id": None},
+            _scope("chat1"),
+            _scope("chat3"),
         ]
     )
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
 
     recorded: list[str] = []
     curator.schedule_curation = lambda sid: recorded.append(sid)  # type: ignore[method-assign]
 
     scheduled = await curator.sweep_once()
 
-    assert scheduled == 3
-    assert recorded == ["chat1", "auto2", "chat3"]
+    assert scheduled == 2
+    assert recorded == ["chat1", "chat3"]
     await curator.stop()
-    await lenses.close()
+    await records.close()
+
+
+async def test_sweep_skips_automation_and_agent_sessions(tmp_path: Path):
+    """Automation channels (origin_automation_id), channel sessions, and spawned
+    agent sessions never enter curation — operational transcripts stay out of
+    memory entirely."""
+    llm = StubLLM()
+    sessions = StubSessions(
+        scopes=[
+            _scope("chat1"),
+            _scope("auto1", session_type="channel", origin_automation_id="task_1"),
+            _scope("agent1", session_type="agent"),
+            _scope("odd1", origin_automation_id="task_2"),  # automation-origin even as 'chat'
+            _scope("chat2"),
+        ]
+    )
+    curator, records = _make_curator(tmp_path, llm, sessions)
+
+    recorded: list[str] = []
+    curator.schedule_curation = lambda sid: recorded.append(sid)  # type: ignore[method-assign]
+
+    scheduled = await curator.sweep_once()
+
+    assert scheduled == 2
+    assert recorded == ["chat1", "chat2"]
+    await curator.stop()
     await records.close()
 
 
@@ -422,11 +558,11 @@ async def test_sweep_curates_only_sessions_with_new_turns(tmp_path: Path):
             "stale": [_turn(0, "user", "already curated long ago")],
         },
         scopes=[
-            {"session_id": "fresh", "project_id": None},
-            {"session_id": "stale", "project_id": None},
+            _scope("fresh"),
+            _scope("stale"),
         ],
     )
-    curator, records, lenses = _make_curator(tmp_path, llm, sessions)
+    curator, records = _make_curator(tmp_path, llm, sessions)
     await curator._write_watermark("stale", 0)  # stale is fully up to date
 
     await curator.sweep_once()
@@ -436,5 +572,4 @@ async def test_sweep_curates_only_sessions_with_new_turns(tmp_path: Path):
     assert [r.text for r in await records.list()] == ["the user prefers tea"]
     assert await curator._read_watermark("fresh") == 0
     await curator.stop()
-    await lenses.close()
     await records.close()

@@ -992,12 +992,15 @@ async def _record_completed_run(ctx: ChatContext, *, last_seq: int | None) -> No
     )
     await _update_run_client_idempotency(ctx.session_service, ctx.run, RunStatus.COMPLETED.value)
     ctx.run_registry.complete_run(ctx.run.run_id)
-    # Curate this session into the durable memory doc (one LLM call, novelty-gated).
+    # Curate USER CHATS into durable memory (one LLM call, admit-gated).
+    # Automation channels and spawned agent sessions are operational
+    # transcripts — memory never reads them (mirrors the sweep's gate).
     # Fire-and-forget off the response path; the curator tracks the task and
     # swallows errors. Without this, chats never become memory.
     curator = ctx.memory_curator
-    if curator is not None:
-        curator.schedule_curation(ctx.session_state.session_id)
+    state = ctx.session_state
+    if curator is not None and state.session_type == "chat" and state.origin_automation_id is None:
+        curator.schedule_curation(state.session_id)
 
 
 async def _drain_backgrounded(
@@ -1326,6 +1329,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
 
         io = IOBridge(
             pending_approvals=run.pending_approvals,
+            pending_inputs=run.pending_inputs,
             emit=bus.emit,
             record_approval=record_approval,
             resolve_approval=resolve_approval,

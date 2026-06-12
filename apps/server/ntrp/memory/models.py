@@ -50,6 +50,22 @@ class Kind(StrEnum):
     NOTE = "note"
 
 
+class Provenance(StrEnum):
+    """Epistemic class — the load-bearing distinction of the derivation spec."""
+
+    GROUND = "ground"     # extracted from experience by the curator
+    DERIVED = "derived"   # inferred by the dreamer from other records
+
+
+class Standing(StrEnum):
+    """Derivation lifecycle (CUPMem tri-state). `unresolved` = a premise died and
+    the derivation awaits re-judgment — excluded from agent recall, visible in UI."""
+
+    ACTIVE = "active"
+    UNRESOLVED = "unresolved"
+    RETIRED = "retired"
+
+
 @dataclass
 class Record:
     id: str
@@ -60,3 +76,20 @@ class Record:
     superseded_by: str | None = None
     pinned: bool = False
     source_ref: SourceRef | None = None
+    provenance: str = Provenance.GROUND
+    standing: str = Standing.ACTIVE
+    depth: int = 0                  # longest premise chain to ground (0 = ground)
+
+
+@dataclass(frozen=True)
+class Justification:
+    """Why a derived record exists: the premise set that produced it. A derived
+    record may hold SEVERAL justifications (JTMS) — it survives premise death
+    while any justification's premises all live."""
+
+    id: str
+    derived_id: str
+    premise_ids: tuple[str, ...]
+    mode: str                       # deduction | induction | abduction
+    question: str                   # the salient question this derivation answered
+    created_at: str = field(default_factory=now_iso)

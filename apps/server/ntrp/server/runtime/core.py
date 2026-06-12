@@ -7,9 +7,9 @@ from fastapi import HTTPException, Request
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
+from ntrp.integrations.slack.client import SlackClient
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import get_completion_client
-from ntrp.integrations.slack.client import SlackClient
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager

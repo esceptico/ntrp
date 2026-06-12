@@ -165,7 +165,6 @@ class KnowledgeRuntime:
                 model=self.config.memory_model,
                 db_path=self.config.memory_db_path,
                 record_store=self._record_store,
-                lens_store=self._lens_store,
                 consolidate=self._consolidate,
                 reasoning_effort=memory_effort,
             )

@@ -81,6 +81,7 @@ async def test_runtime_research_runner_projects_internal_ledger_notes(monkeypatc
         config=SimpleNamespace(
             chat_model="model-a",
             research_model="model-b",
+            workflow_model="model-c",
             max_depth=3,
             agent_max_iterations=None,
             agent_max_tool_calls=None,

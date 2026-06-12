@@ -9,15 +9,16 @@ import { GraphView } from "./GraphView";
 
 export type MemoryDestination = "lenses" | "claims" | "graph";
 export const MEMORY_TABS: { id: MemoryDestination; label: string }[] = [
-  { id: "claims", label: "Claims" },
-  { id: "lenses", label: "Lenses" },
+  { id: "claims", label: "Memory" },
   { id: "graph", label: "Graph" },
+  { id: "lenses", label: "Lenses" },
 ];
 const ORDER = MEMORY_TABS.map((t) => t.id);
 
-/** Hosts the three woven destinations. Peel state threads between them: a
- *  claim peeked from a lens opens Claims focused on that claim; a provenance
- *  request opens Graph seeded on that item. */
+/** Hosts the three woven destinations. The memory itself (records + their
+ *  derivations) is the default surface; the graph is its DAG; lenses are the
+ *  side feature. Peel state threads between them: a claim peeked from a lens
+ *  opens Memory focused on that claim; a provenance request seeds the Graph. */
 export function MemoryPane({
   tab,
   onTab,

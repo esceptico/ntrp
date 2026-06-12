@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
-import { activityItemStatus, isAgent, isWorkflow } from "../../lib/agent";
+import { activityItemStatus, isAgent, isHtmlWidget, isWorkflow } from "../../lib/agent";
 import { cancelSubagent, switchSession } from "../../actions";
 import {
   MOTION,
@@ -20,6 +20,7 @@ import { StatusDot } from "../StatusDot";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
 import { useWorkflows } from "../../hooks/useWorkflows";
 import { ExpandableWorkflowCard } from "../workflow/WorkflowDetail";
+import { HtmlWidgetCard } from "../widget/HtmlWidgetCard";
 import type { Workflow, WorkflowStatus } from "../../store/workflow-domain";
 
 export type { ActivityItem };
@@ -33,6 +34,7 @@ export type { ActivityItem };
 
 export type TraceEntry =
   | { kind: "workflow"; workflow: Workflow }
+  | { kind: "html_widget"; item: ActivityItem }
   | { kind: "rows"; items: ActivityItem[] };
 
 // The trace in chronological order: runs of ordinary tool rows, with each
@@ -77,6 +79,9 @@ export function orderedTraceEntries(
     } else if (isWorkflow(it)) {
       flush();
       entries.push({ kind: "workflow", workflow: synthWorkflow(it, sessionId) });
+    } else if (isHtmlWidget(it)) {
+      flush();
+      entries.push({ kind: "html_widget", item: it });
     } else if (insideWorkflow(it)) {
       continue; // contained in the workflow, not a parent row
     } else {
@@ -93,10 +98,11 @@ export function liftWorkflows(
   items: ActivityItem[],
   workflows: Workflow[],
   sessionId: string | null,
-): { workflowRows: Workflow[]; rowItems: ActivityItem[] } {
+): { workflowRows: Workflow[]; htmlWidgetItems: ActivityItem[]; rowItems: ActivityItem[] } {
   const entries = orderedTraceEntries(items, workflows, sessionId);
   return {
     workflowRows: entries.filter((e) => e.kind === "workflow").map((e) => e.workflow),
+    htmlWidgetItems: entries.filter((e) => e.kind === "html_widget").map((e) => e.item),
     rowItems: entries.flatMap((e) => (e.kind === "rows" ? e.items : [])),
   };
 }
@@ -289,6 +295,16 @@ export function ActivityTail({
             >
               <ExpandableWorkflowCard workflow={entry.workflow} />
             </motion.div>
+          ) : entry.kind === "html_widget" ? (
+            <motion.div
+              key={`hw:${entry.item.id}`}
+              className="mt-1 space-y-1"
+              initial={suppressMotion ? false : { opacity: 0, y: 8, filter: "blur(2px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={suppressMotion ? { duration: 0 } : SPRING_TRACE_ROW}
+            >
+              <HtmlWidgetCard item={entry.item} />
+            </motion.div>
           ) : (
             <div key={`rows:${i}`} className="relative overflow-hidden pl-3 mt-0.5">
               <AnimatePresence mode="popLayout" initial={false}>
@@ -331,6 +347,13 @@ export function ActivityTail({
           return (
             <div key={`wf:${entry.workflow.workflowId}`} className="mt-1 space-y-1">
               <ExpandableWorkflowCard workflow={entry.workflow} />
+            </div>
+          );
+        }
+        if (entry.kind === "html_widget") {
+          return (
+            <div key={`hw:${entry.item.id}`} className="mt-1 space-y-1">
+              <HtmlWidgetCard item={entry.item} />
             </div>
           );
         }

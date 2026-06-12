@@ -12,6 +12,7 @@ function workflowIdFromData(data: unknown): string | undefined {
   const wid = (data as { workflow_id?: unknown } | null | undefined)?.workflow_id;
   return typeof wid === "string" ? wid : undefined;
 }
+import { htmlWidgetFromHistory } from "../lib/htmlWidget";
 import { isActivityContinuationMessage } from "../lib/messageVisibility";
 import { childAgentFromToolResultData, type ToolResultData } from "./child-agent-metadata";
 import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
@@ -402,9 +403,25 @@ export function applyChatEventToTranscript(
         patch.childAgent = childAgent;
         patch.semanticKind = SEMANTIC_KIND_AGENT;
       }
+      const widget = event.data as { html?: unknown; title?: unknown; mode?: unknown } | null;
+      if (
+        liftedKind(event.kind) === "html_widget" &&
+        typeof widget?.html === "string" &&
+        typeof widget?.title === "string" &&
+        (widget.mode === "display" || widget.mode === "input")
+      ) {
+        patch.htmlWidget = { html: widget.html, title: widget.title, mode: widget.mode };
+      }
       if (!s.mergeActivityItem(event.tool_call_id, patch)) {
         bufferActivityPatch(context, event.tool_call_id, patch);
       }
+      break;
+    }
+
+    case "input_needed": {
+      mergeOrBufferActivityPatch(context, [event.tool_id], {
+        htmlWidget: { html: event.html, title: event.title, mode: "input" },
+      });
       break;
     }
 
@@ -628,6 +645,8 @@ export function rebuildTranscriptFromHistory(
           const args = toolCall.arguments || "";
           const result = resultsById.get(toolCall.id);
           const childAgent = childAgentFromToolResultData(result?.data);
+          const htmlWidget =
+            toolCall.kind === "html_widget" ? htmlWidgetFromHistory(args, result?.content) : undefined;
           activity.items.push({
             id: toolCall.id,
             kind: toolCall.name,
@@ -638,6 +657,7 @@ export function rebuildTranscriptFromHistory(
             result: result?.content,
             status: "executed",
             childAgent,
+            htmlWidget,
           });
         }
       }

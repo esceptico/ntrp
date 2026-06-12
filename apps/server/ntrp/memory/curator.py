@@ -2,8 +2,10 @@
 
 ONE LLM call per session: reads new transcript turns since a per-session
 watermark, reconciles them against existing similar records (ADD/UPDATE/
-SUPERSEDE/NOOP), applies the ops to the flat record pool, then scores the freshly
-added/updated records into the active lenses. No docs, no scope.
+SUPERSEDE/NOOP), and applies the ops — text AND labels — to the flat record
+pool. Labels are open-vocabulary names (referents and categories) decided once
+at write time; the prompt carries the existing vocabulary so names get reused
+instead of re-minted. No docs, no scope, no lens write path.
 
 The watermark lives in a tiny `meta(key, value)` table the Dreamer OWNS inside
 `config.memory_db_path`. Key form: `curate_watermark:{session_id}`. Anti-heartbeat:
@@ -17,7 +19,6 @@ from pathlib import Path
 
 from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
-from ntrp.memory.lenses import LensStore
 from ntrp.memory.models import Record, SourceRef
 from ntrp.memory.records import RecordStore
 
@@ -32,6 +33,8 @@ CURATION_BATCH_MAX_TURNS = 40
 CURATION_BATCH_MAX_CHARS = 6_000
 CURATION_TURN_MAX_CHARS = 2_000
 CURATION_ROLES = {"user", "assistant"}
+LABEL_VOCAB_LIMIT = 40
+MAX_LABELS_PER_RECORD = 4
 
 # consolidate.run_once() is a heavy FTS+LLM sweep over the record pool. Running
 # it INLINE on the chat server (after every curation) saturates CPU/SQLite and
@@ -46,30 +49,38 @@ _SYSTEM_PROMPT = (
     "JSON object:\n"
     "{\n"
     '  "records": [\n'
-    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "fact|action|preference|note"},\n'
-    '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>"},\n'
-    '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "..."},\n'
+    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "fact|action|preference|note", "labels": ["..."]},\n'
+    '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>", "labels": ["..."]},\n'
+    '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "...", "labels": ["..."]},\n'
     '    {"op": "NOOP",      "id": "<existing id>"}\n'
     "  ]\n"
     "}\n"
     "Rules:\n"
-    "(1) NOVELTY GATE — if the turns contain nothing durable AND new (stable "
-    "preferences, decisions, facts, identity, long-lived context), return "
-    '"records": []. Transient task state, one-off questions, and anything already '
-    "captured do NOT count.\n"
+    "(1) ADMIT GATE — the bar is HIGH. Most exchanges contain NOTHING worth "
+    'remembering: return "records": []. Operational/automation runs (the agent '
+    "doing its job, SOPs, routine tool output) admit NOTHING unless they reveal "
+    "durable user-level knowledge. Never turn one short task or debugging "
+    "segment into a global fact or pattern. Explicit user corrections are "
+    "maximal signal — always admit them, keep the user's wording.\n"
     "(2) Records are atomic, self-contained (resolve pronouns inline), typed by "
     "FUNCTION not subject. Choose the op against the EXISTING SIMILAR RECORDS: "
     "ADD (new), UPDATE (edit an existing one), SUPERSEDE (replace a now-wrong "
     "one), NOOP (reconfirm an unchanged one). Use ONLY ids that appear in "
     "EXISTING SIMILAR RECORDS; never invent an id.\n"
-    "(3) Output ONLY the JSON object, no preamble."
+    "(3) LABELS — attach 1-4 labels to every ADD/UPDATE/SUPERSEDE. A label is a "
+    "short name, not a sentence: a referent the record is about (a person, "
+    "project, tool, substance) or a category it belongs to (traits, bugs, open "
+    "loops, health). REUSE a name from LABEL VOCABULARY whenever it fits, with "
+    "its exact casing; mint a new one only when nothing fits. UPDATE labels "
+    "REPLACE the record's labels; omit the field to keep them.\n"
+    "(4) Output ONLY the JSON object, no preamble."
 )
 
 
 class Curator:
     """The sleep-time Dreamer. ONE LLM call per session: read new transcript
     turns since a per-session watermark, reconcile them into the flat record
-    pool, then score the new records into the active lenses."""
+    pool, labeling each written record from the open vocabulary."""
 
     def __init__(
         self,
@@ -79,7 +90,6 @@ class Curator:
         model: str,               # config.memory_model id (for the call)
         db_path: Path,            # config.memory_db_path — the Dreamer owns this meta DB
         record_store: RecordStore,  # the flat record pool; ops land here
-        lens_store: LensStore,    # membership maintenance for the new records
         consolidate=None,         # Consolidate — the CONSOLIDATE/LINT step (None -> skip)
         reasoning_effort: str | None = None,
     ) -> None:
@@ -87,7 +97,6 @@ class Curator:
         self._sessions = sessions
         self._model = model
         self._record_store = record_store
-        self._lens_store = lens_store
         self._consolidate = consolidate
         self._reasoning_effort = reasoning_effort
 
@@ -123,13 +132,17 @@ class Curator:
             self._sweep_task = asyncio.create_task(self._sweep_loop())
 
     async def sweep_once(self) -> int:
-        """Schedule curation for the most-recent live sessions. Cheap: relies on
-        schedule_curation's in-flight de-dupe and curate_session's no-new-turns
-        no-op, so already-curated sessions cost one DB read and no LLM call.
-        Returns the number of sessions scheduled."""
+        """Schedule curation for the most-recent live USER CHATS. Automation
+        channels and spawned agent sessions are operational transcripts —
+        memory never reads them. Cheap: relies on schedule_curation's in-flight
+        de-dupe and curate_session's no-new-turns no-op, so already-curated
+        sessions cost one DB read and no LLM call. Returns the number of
+        sessions scheduled."""
         rows = await self._sessions.recent_session_scopes(SWEEP_SESSION_LIMIT)
         scheduled = 0
         for row in rows:
+            if row["session_type"] != "chat" or row["origin_automation_id"] is not None:
+                continue
             self.schedule_curation(row["session_id"])
             scheduled += 1
         return scheduled
@@ -138,8 +151,9 @@ class Curator:
         """1. Read watermark (max seq already curated for this session).
         2. Load new transcript turns (seq > watermark) via the sessions store.
         3. If no new substantive turns -> advance watermark, return False.
-        4. ONE LLM call emitting record ops. Novelty gate: empty ops + advance.
-        5. Apply ops to the flat pool; score the new records into active lenses.
+        4. ONE LLM call emitting record ops (text + labels). Admit gate: empty
+           ops + advance.
+        5. Apply ops to the flat pool.
         6. Advance watermark ONLY after a successful apply (or confirmed no-change)."""
         watermark = await self._read_watermark(session_id)
         rows = await self._sessions.messages_since(session_id, watermark)
@@ -168,25 +182,13 @@ class Curator:
             except Exception:
                 _logger.warning("record op failed; skipping", op=op.get("op"), exc_info=True)
 
-        # The Dreamer also maintains lens membership: score the freshly added/
-        # updated records into the active lenses (best-effort, anti-heartbeat —
-        # only runs when there were new records).
-        if new_records:
-            try:
-                await self._lens_store.score_records(new_records)
-            except Exception:
-                _logger.warning("lens scoring failed", exc_info=True)
-
         # CONSOLIDATE/LINT — THE memory step: turn the raw record pile into a small,
         # clean, current body (merge duplicates, supersede stale, drop orphans).
         # Best-effort + O(delta): no-ops cheaply when nothing changed since its own
-        # watermark, so this is safe to call on every curation. Re-score the merge
-        # survivors so lens membership tracks the collapsed set.
+        # watermark, so this is safe to call on every curation.
         if new_records and self._consolidate is not None and _INLINE_CONSOLIDATE:
             try:
-                report = await self._consolidate.run_once()
-                if report.survivors:
-                    await self._lens_store.score_records(report.survivors)
+                await self._consolidate.run_once()
             except Exception:
                 _logger.warning("consolidation failed", exc_info=True)
 
@@ -237,16 +239,33 @@ class Curator:
 
     async def _complete(self, turns: list[str], watermark: int) -> list[dict] | None:
         """ONE LLM call emitting the record-ops. Pre-searches the flat record pool
-        for the candidate set so the model picks from REAL ids only. Returns the
-        parsed op list, or None on a content-less/failed reply (no-advance)."""
+        for the candidate set so the model picks from REAL ids only, and carries
+        the label vocabulary (top names by count + the recalled records' labels)
+        so names get reused instead of re-minted. Returns the parsed op list, or
+        None on a content-less/failed reply (no-advance)."""
         existing = await self._record_store.search("\n".join(turns), limit=20)
+        existing_labels = await self._record_store.labels_for([r.id for r in existing])
         existing_block = (
-            "\n".join(f"- {r.id}: {r.text}" for r in existing) if existing else "(none)"
+            "\n".join(
+                f"- {r.id} [{', '.join(existing_labels[r.id])}]: {r.text}"
+                if existing_labels[r.id]
+                else f"- {r.id}: {r.text}"
+                for r in existing
+            )
+            if existing
+            else "(none)"
         )
 
+        vocabulary = [row["label"] for row in (await self._record_store.list_labels())[:LABEL_VOCAB_LIMIT]]
+        for labels in existing_labels.values():
+            vocabulary.extend(label for label in labels if label not in vocabulary)
+        vocabulary_block = ", ".join(vocabulary) if vocabulary else "(none yet)"
+
         user_prompt = (
-            f"EXISTING SIMILAR RECORDS (id: text — use these ids only):\n"
+            f"EXISTING SIMILAR RECORDS (id [labels]: text — use these ids only):\n"
             f"{existing_block}\n\n"
+            f"LABEL VOCABULARY (reuse before minting):\n"
+            f"{vocabulary_block}\n\n"
             f"NEW TURNS (since seq {watermark}):\n"
             f"{chr(10).join(turns)}"
         )
@@ -293,37 +312,65 @@ class Curator:
         return [op for op in raw_ops if isinstance(op, dict)]
 
     async def _apply_op(self, op: dict, session_id: str) -> Record | None:
-        """Apply one reconciliation op against the flat record pool. Returns the
-        added/updated record (for lens scoring), or None for NOOP/no-op."""
+        """Apply one reconciliation op (text + labels) against the flat record
+        pool. Returns the added/updated record, or None for NOOP/no-op."""
         verb = str(op.get("op", "")).upper()
         source = SourceRef(kind="curator", ref=session_id)
+        labels = self._op_labels(op)
         if verb == "ADD":
             text = op.get("text")
             if text:
-                return await self._record_store.add(
+                record = await self._record_store.add(
                     text, kind=op.get("kind", "note"), source_ref=source
                 )
+                if labels:
+                    await self._record_store.set_labels(record.id, labels)
+                return record
         elif verb == "UPDATE":
             rid, text = op.get("id"), op.get("text")
             if rid and text:
                 if await self._record_store.update(rid, text):
+                    # UPDATE labels REPLACE; an absent field keeps the old set.
+                    if labels is not None:
+                        await self._record_store.set_labels(rid, labels)
                     return await self._record_store.get(rid)
                 # Stale/hallucinated id -> land the correction as an ADD.
                 _logger.warning("UPDATE on unknown record id; landing as ADD", record_id=rid)
-                return await self._record_store.add(
+                record = await self._record_store.add(
                     text, kind=op.get("kind", "note"), source_ref=source
                 )
+                if labels:
+                    await self._record_store.set_labels(record.id, labels)
+                return record
         elif verb == "SUPERSEDE":
             rid, text = op.get("id"), op.get("text")
             if rid and text:
-                return await self._record_store.supersede_with(
+                record = await self._record_store.supersede_with(
                     rid, text=text, kind=op.get("kind", "note"), source_ref=source
                 )
+                # The successor takes the op's labels; without any it keeps the
+                # old record's set (supersede_with already copied it).
+                if labels:
+                    await self._record_store.set_labels(record.id, labels)
+                return record
         elif verb == "NOOP":
             rid = op.get("id")
             if rid and not await self._record_store.confirm(rid):
                 _logger.warning("NOOP on unknown record id; skipped", record_id=rid)
         return None
+
+    @staticmethod
+    def _op_labels(op: dict) -> list[str] | None:
+        """The op's labels sanitized (stripped, deduped, capped), or None when
+        the field is absent/malformed — None means 'keep' on UPDATE."""
+        raw = op.get("labels")
+        if not isinstance(raw, list):
+            return None
+        labels: list[str] = []
+        for item in raw:
+            if isinstance(item, str) and (name := item.strip()) and name not in labels:
+                labels.append(name)
+        return labels[:MAX_LABELS_PER_RECORD]
 
     @classmethod
     def _select_batch(cls, rows: list[dict], watermark: int) -> tuple[list[str], int]:

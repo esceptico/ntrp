@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Shell for render_html widgets. srcdoc documents inherit the CSP of their
+     embedder — the app's strict script-src 'self' would kill the widget's
+     inline bridge/scripts, so the widget renders in a srcdoc iframe nested
+     inside THIS document, whose policy is what it inherits: inline code
+     allowed, network closed. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; frame-src about:">
+<style>html,body{margin:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+  var widget = document.createElement("iframe");
+  widget.setAttribute("sandbox", "allow-scripts allow-forms");
+  document.body.appendChild(widget);
+  window.addEventListener("message", function (event) {
+    if (event.source === window.parent) {
+      var message = event.data;
+      if (message && message.jsonrpc === "2.0" && message.method === "ui/init") {
+        widget.setAttribute("srcdoc", message.params.srcdoc);
+      }
+      return;
+    }
+    if (event.source === widget.contentWindow) parent.postMessage(event.data, "*");
+  });
+  parent.postMessage({ jsonrpc: "2.0", method: "ui/ready", params: {} }, "*");
+})();
+</script>
+</body>
+</html>

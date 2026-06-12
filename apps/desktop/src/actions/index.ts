@@ -41,6 +41,7 @@ export {
   stopRun,
 } from "./messages";
 export { respondToAllApprovals, respondToApproval } from "./approvals";
+export { respondToHtmlInput } from "./htmlInput";
 export {
   BUILTIN_COMMANDS,
   isBuiltin,

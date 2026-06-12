@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -12,7 +13,7 @@ from ntrp.agent.agent import RunBudget
 from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import NTRP_TMP_BASE
 from ntrp.context.models import ProjectContext, SessionState
-from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
+from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent, InputNeededEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.types import ToolOverrideDecision
 
@@ -110,6 +111,10 @@ class IOBridge:
     # registers `pending_approvals[tool_id] = Future()` and awaits it;
     # the /tools/result endpoint resolves the matching Future.
     pending_approvals: dict[str, "asyncio.Future[ApprovalResponse]"] | None = None
+    # Per-tool input routing for render_html mode="input". Same Future
+    # mechanics as approvals but a separate dict so set_skip_approvals'
+    # blanket-approve never resolves a pending input with an empty string.
+    pending_inputs: dict[str, "asyncio.Future[ApprovalResponse]"] | None = None
     record_approval: Callable[..., Awaitable[None]] | None = None
     resolve_approval: Callable[..., Awaitable[None]] | None = None
     approval_timeout_seconds: int = 300
@@ -584,3 +589,23 @@ class ToolExecution:
         )
 
         return None
+
+    async def request_input(self, *, html: str, title: str) -> str | None:
+        """Emit input_needed and block until /tools/result resolves it.
+        Returns the client's action envelope verbatim ({"action": ..., "values": ...});
+        timeout resolves to the cancel envelope. None = no interactive client."""
+        if not self.ctx.io.emit or self.ctx.io.pending_inputs is None:
+            return None
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[ApprovalResponse] = loop.create_future()
+        self.ctx.io.pending_inputs[self.tool_id] = future
+        try:
+            await self.ctx.io.emit(
+                InputNeededEvent(tool_id=self.tool_id, name=self.tool_name, title=title, html=html)
+            )
+            response = await asyncio.wait_for(future, timeout=self.ctx.io.approval_timeout_seconds)
+        except TimeoutError:
+            return json.dumps({"action": "cancel", "values": {}})
+        finally:
+            self.ctx.io.pending_inputs.pop(self.tool_id, None)
+        return response["result"]
