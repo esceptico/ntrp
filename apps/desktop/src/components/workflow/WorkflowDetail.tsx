@@ -12,7 +12,7 @@ import { highlight } from "../../highlight";
 import { BlurSwap } from "../BlurSwap";
 import { CopyGlyph } from "../CopyGlyph";
 import { isActiveWorkflow, type Workflow, type WorkflowAgent, type WorkflowPhase } from "../../store/workflow-domain";
-import { formatTokens, PhaseSparkline, WorkflowProgressCard } from "./WorkflowProgress";
+import { formatTokens, PhaseSparkline, pipClass, WorkflowProgressCard } from "./WorkflowProgress";
 
 // A workflow card that expands IN PLACE to reveal its phases → agents — used in
 // both the chat trace and the sidebar hub, each with its own local expand state.
@@ -267,12 +267,28 @@ function AgentRow({
   const tokens = agent.tokens?.total ?? 0;
   const childSessionId = agent.childSessionId;
 
+  // Same pip vocabulary as the phase sparkline; the breathe halo marks agents
+  // doing work right now, settled rows recede to a static dot.
   const body = (
     <>
       <span
+        aria-hidden
+        className={clsx(
+          "w-[5px] h-[5px] shrink-0 rounded-full transition-colors duration-trace ease-out",
+          pipClass(agent.status),
+          running && "status-dot-breathe text-accent",
+        )}
+      />
+      <span
         className={clsx(
           "min-w-0 flex-1 truncate",
-          running ? "text-ink-soft" : agent.status === "failed" ? "text-bad" : "text-muted",
+          running
+            ? "text-ink-soft"
+            : agent.status === "failed"
+              ? "text-bad"
+              : agent.status === "completed"
+                ? "text-muted"
+                : "text-faint", // cancelled / interrupted
         )}
       >
         {agent.name ?? agent.taskId}

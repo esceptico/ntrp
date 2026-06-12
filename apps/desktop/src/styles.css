@@ -149,6 +149,36 @@
   animation: statusBreathe 2s ease-in-out infinite;
 }
 
+/* ─── Phase glare ────────────────────────────────────────────
+   A bright streak sweeping a RUNNING workflow-phase segment so an
+   otherwise static progress bar reads as alive. Same compositor-only
+   overlay recipe as .skeleton::after (transform sweep, no repaints). */
+.phase-glare {
+  position: relative;
+  overflow: hidden;
+}
+.phase-glare::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 15%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 85%
+  );
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+:root.dark .phase-glare::after {
+  background: linear-gradient(
+    90deg,
+    transparent 15%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 85%
+  );
+}
+
 /* ─── Skeleton placeholder ───────────────────────────────────
    Loading block. Use as `<div className="skeleton h-3 w-24" />`
    while data is in-flight. The 1.4s sweep cadence matches Vercel-like

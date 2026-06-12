@@ -238,6 +238,7 @@ export function WorkflowProgressCard({
                   className={clsx(
                     "h-[3px] flex-1 min-w-[2px] rounded-full transition-colors duration-trace ease-out",
                     phaseSegmentClass(phase.status),
+                    phase.status === "running" && "phase-glare",
                   )}
                 />
               ))}
