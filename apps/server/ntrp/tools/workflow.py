@@ -172,15 +172,18 @@ Each agent runs in its own context window; you compose them.
 PREFER A PRESET when one fits the task's shape — run it by `name` (pass parameters via `args`)
 instead of hand-writing a script: `audit` (find -> verify -> rank issues over a target),
 `investigate` (parallel readers -> a cited answer), `panel` (diverge into N takes -> judge ->
-pick). e.g. workflow(name="audit", args={"target": "apps/server", "depth": "normal"}). Save any
-good run as a reusable preset with the save_workflow tool.
+pick), `implement` (recon -> blueprint -> parallel builders -> adversarial review -> test gate,
+for multi-file feature work from a spec). e.g. workflow(name="audit", args={"target":
+"apps/server", "depth": "normal"}). Save any good run as a reusable preset with save_workflow.
 
 When you DO author a script, plan before code: decide its 2-4 stages first, declare them in the
 `phases` input (the UI shows the plan immediately), and structure the script around phase() calls
 with the SAME titles. Keep each agent prompt TERSE and push specifics into `args` or let
 agents DISCOVER them — do NOT hardcode long lists of ids/paths/PR numbers inline (it bloats
 tokens and defeats caching). Pass args={"prs": [941, 956]} and read args["prs"]; don't paste the
-numbers into every prompt. Pass `model` to an agent only when a cheaper/stronger configured tier
+numbers into every prompt. Terse applies to STATIC facts, not to piped context: agents share no
+memory, so paste an upstream agent's full output (a blueprint, a brief) verbatim into the prompt
+of every agent that depends on it — that text is the only contract parallel workers have. Pass `model` to an agent only when a cheaper/stronger configured tier
 clearly fits a step (cheap finders, strong synthesis); default omits it and inherits the configured
 workflow model (falls back to the chat model).
 
@@ -223,6 +226,10 @@ Patterns:
 - fan-out then synthesize: parts = await parallel([agent(p) for p in prompts]); return await agent("synthesize: " + json.dumps(parts))
 - adversarial verify: votes = await parallel([agent("Refute, default refuted=true: " + claim, schema={"refuted": "bool"}) for _ in range(3)]); keep if most say not refuted
 - loop until done: while not done: r = await agent(...); update done
+- deep build: recon readers -> one architect pins every cross-file contract in a blueprint ->
+  parallel builders each given the FULL blueprint (schema: files_changed + deviations) ->
+  review lenses -> skeptics refute each finding -> fixer -> final test gate (the `implement`
+  preset is this shape — compose your own variants for other deep work)
 
 Example (called with phases=["research", "synthesize"], args={"questions": [...]}):
   phase("research")
@@ -234,8 +241,10 @@ Example (called with phases=["research", "synthesize"], args={"questions": [...]
   return await agent("Write a brief from these notes:\\n" + json.dumps(notes))
 
 Use for complex, high-value, multi-step tasks worth several agents. Not for routine
-single-step work (it costs far more tokens). On a script error the exact error comes
-back — fix it and call again."""
+single-step work (it costs far more tokens). Match depth to stakes: a focused question is one
+phase and a few agents, but "implement X" / "audit thoroughly" earns the full plan -> build ->
+adversarial review -> verify arc — don't write a shallow two-phase script for deep work. On a
+script error the exact error comes back — fix it and call again."""
 
 workflow_tool = tool(
     display_name="Workflow",

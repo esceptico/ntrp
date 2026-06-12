@@ -1,5 +1,7 @@
 """Workflow presets — registry/service round-trip and the workflow tool's preset resolution."""
 
+import ast
+import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,7 +10,7 @@ import pytest
 import ntrp.skills.service as skill_service_module
 from ntrp.context.models import SessionState
 from ntrp.skills.registry import SkillRegistry
-from ntrp.skills.service import SkillService
+from ntrp.skills.service import BUILTIN_SKILLS_DIR, SkillService
 from ntrp.tools.core.context import (
     BackgroundTaskRegistry,
     IOBridge,
@@ -59,6 +61,16 @@ def make_ctx(registry: SkillRegistry, events: list) -> ToolContext:
         spawn_fn=spawn_fn,
         background_tasks=BackgroundTaskRegistry(session_id="s1"),
     )
+
+
+def test_builtin_workflow_presets_compile():
+    """Every builtin preset script must parse under the same wrapping run_script
+    uses — a syntax error here would only surface on the user's first run."""
+    scripts = sorted(BUILTIN_SKILLS_DIR.glob("*/workflow.py"))
+    assert {s.parent.name for s in scripts} >= {"audit", "investigate", "panel", "implement"}
+    for script in scripts:
+        source = f"async def __workflow__():\n{textwrap.indent(script.read_text().strip(), '    ')}\n"
+        ast.parse(source, str(script), "exec")
 
 
 def test_load_workflow_script_only_for_workflow_kind(registry: SkillRegistry):
