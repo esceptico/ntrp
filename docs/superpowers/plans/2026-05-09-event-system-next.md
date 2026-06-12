@@ -8,7 +8,7 @@ Server: SSE on `GET /chat/events/{session_id}?after_seq=N&stream=true`. `Session
 
 Desktop: tracks cursor in module-level `Map`, dedupes by seq, handles `stream_reset` by reloading history then replaying queued live events.
 
-TUI: **broken** — no cursor, no `stream_reset` handler (will throw on the `default: never`), uses old back-compat aliases (`tool_call`, `tool_result`).
+Removed client compatibility note: the legacy terminal client no longer exists.
 
 History/live merge: keys mismatch (UUID vs `history-${idx}`), causes remount churn. Five reverted commits at top of branch tried to suppress animations; rolled back.
 
@@ -23,7 +23,7 @@ History/live merge: keys mismatch (UUID vs `history-${idx}`), causes remount chu
 
 ## Priorities (impact × tractability)
 
-(TUI parity dropped from scope.)
+(Non-desktop client parity dropped from scope.)
 
 ### P1 — Persist event log to SQLite (durability across restart)
 Replace pure in-memory ring with append-only SQLite table per session, keyed by `(session_id, seq)`, with TTL by run completion + N hours. Buffer becomes a hot read cache; cold reads from SQLite. Server restart no longer drops in-flight runs. Schema:

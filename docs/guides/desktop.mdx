@@ -1,0 +1,44 @@
+---
+title: "Desktop Guide"
+description: "Use the Electron desktop client for chat, approvals, memory, settings, and rich widgets."
+---
+
+## Overview
+
+The desktop app is the primary ntrp client. It connects to the local server over HTTP/SSE and renders chat, streaming activity, approvals, memory views, settings, automations, and sandboxed HTML widgets.
+
+## Run from source
+
+```bash
+cd apps/desktop
+bun install
+bun run dev
+```
+
+The app connects to `http://localhost:6877` by default. Start the server first with `ntrp-server serve` or `just server`.
+
+## Connect
+
+On first launch, enter:
+
+- **Server URL**: usually `http://localhost:6877`
+- **API key**: the one-time key printed by `ntrp-server serve`
+
+The API key is stored locally. When the OS supports Electron `safeStorage`, the desktop app encrypts it before persisting.
+
+## Main surfaces
+
+- **Chat**: streaming assistant responses, tool calls, attachments, and rendered widgets.
+- **Approvals**: review mutating or risky tool calls before execution.
+- **Activity traces**: inspect tool calls, workflow agents, background work, and run lifecycle events.
+- **Memory**: browse and manage profile entries, facts, patterns, graph/lenses, cleanup, learning proposals, and audit history.
+- **Automations**: view scheduled/user/internal automation state and run history.
+- **Settings**: configure providers, tools, MCP servers, directives, model selection, and local client preferences.
+
+## Checks and builds
+
+```bash
+bun run typecheck
+bun test
+bun run dist
+```

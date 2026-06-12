@@ -5,42 +5,42 @@ description: "Personal entropy reduction system — an AI assistant with persist
 
 ## What is ntrp?
 
-ntrp gives you an AI assistant that actually remembers. It connects to your email, calendar, web, MCP tools, and long-term memory — building a persistent knowledge graph that grows over time.
+ntrp gives you a local AI assistant that actually remembers. It connects to your email, calendar, Slack, web, MCP tools, local files, shell, and long-term memory — then keeps the useful parts available across sessions.
 
 Unlike stateless chat interfaces, ntrp:
 
-- **Remembers** conversations, commitments, and patterns across sessions
-- **Acts autonomously** via scheduled automations with multi-trigger support
-- **Sees images** — paste from clipboard or attach via API
-- **Streams tokens** live as the LLM generates responses
-- **Integrates** with Gmail, Google Calendar, Slack, web search, and MCP tools
-- **Keeps context lean** by loading infrequent tool schemas on demand
-- **Runs locally** — your data stays on your machine
+- **Remembers** conversations, commitments, preferences, and supported patterns across sessions
+- **Acts autonomously** via scheduled automations, background agents, and multi-agent workflows
+- **Shows its work** with streaming traces, approval cards, and tool/run lifecycle events
+- **Renders rich output** through sandboxed HTML widgets for charts, tables, forms, and visualizations
+- **Integrates** with Gmail, Google Calendar, Slack, web search, MCP tools, local files, and notifications
+- **Keeps context lean** by loading infrequent tool schemas only when needed
+- **Runs locally** — the server and clients run on your machine
 
 ## Architecture
 
-ntrp is a two-part system:
+ntrp is split into two main surfaces:
 
-- **Server** — Python/FastAPI backend that runs the agent loop, manages memory, and connects to LLM providers
-- **TUI** — Terminal UI client built with React and OpenTUI that connects to the server over HTTP/SSE
+- **Server** — Python/FastAPI backend that runs the agent loop, manages memory, exposes HTTP/SSE APIs, and connects to LLM/tool providers
+- **Desktop** — Electron client for chat, settings, memory inspection, automations, approvals, traces, and HTML widgets
 
 ## Quick links
 
 <Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Install and run ntrp in 5 minutes.
+    Install and run ntrp locally.
   </Card>
-  <Card title="TUI Guide" icon="terminal" href="/guides/tui">
-    Keyboard shortcuts and slash commands.
+  <Card title="Desktop Guide" icon="desktop" href="/guides/desktop">
+    Connect the app and use the main UI surfaces.
   </Card>
   <Card title="Memory" icon="brain" href="/guides/memory">
-    How the persistent memory system works.
+    How persistent memory, patterns, and profile entries work.
+  </Card>
+  <Card title="HTML Widgets" icon="window-restore" href="/guides/html-widgets">
+    Render rich interactive cards from agent tools.
   </Card>
   <Card title="Automations" icon="clock" href="/guides/automations">
     Schedule tasks that run autonomously.
-  </Card>
-  <Card title="Configuration" icon="gear" href="/configuration">
-    Environment variables, models, and settings.
   </Card>
   <Card title="API Reference" icon="code" href="/api-reference/introduction">
     HTTP API for building on top of ntrp.

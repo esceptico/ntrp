@@ -68,7 +68,7 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
         config.api_key_hash = hashed
         label = "New API key" if reset_key else "Your API key"
         console.print(f"[bold]{label}:[/bold] [cyan]{plaintext}[/cyan]")
-        console.print("[dim]Enter this in the TUI to connect. It won't be shown again.[/dim]")
+        console.print("[dim]Enter this in a desktop client to connect. It won't be shown again.[/dim]")
         console.print()
 
     host = host or config.host

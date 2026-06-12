@@ -4,18 +4,17 @@
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) or pip
-- [Bun](https://bun.sh/) (for the terminal UI)
+- [Bun](https://bun.sh/) (for the desktop app from source)
 
 ## Install
 
 ```bash
 uv tool install ntrp    # or: pip install ntrp
-bun install -g ntrp-cli # or: npx ntrp-cli
 ```
 
 ## Quick Start
 
-Create `~/.ntrp/.env` or repo-root `.env` with at least one LLM provider key and the model variables, or connect OpenAI Codex with browser sign-in from the TUI. See [.env.example](../../.env.example) for all options.
+Create `~/.ntrp/.env` or repo-root `.env` with at least one LLM provider key and the model variables, or connect OpenAI Codex with browser sign-in from the desktop app. See [.env.example](../../.env.example) for all options.
 
 ```bash
 mkdir -p ~/.ntrp
@@ -25,7 +24,7 @@ cp .env.example .env   # if developing from source
 
 ```bash
 ntrp-server serve   # starts backend, prints a one-time API key
-ntrp                # terminal UI (separate terminal) – paste the key on first launch
+cd apps/desktop && bun run dev  # desktop client (separate terminal) – paste the key on first launch
 ```
 
 Config priority: environment variables > CWD `.env` > `~/.ntrp/.env` > defaults.
@@ -207,10 +206,10 @@ Gmail and Calendar tokens are stored in `~/.ntrp/` (covered by the data volume).
 
 ## API Authentication
 
-The server generates and stores a hashed API key on first run. The plaintext key is printed once — enter it in the terminal UI setup screen or pass it via `--token`:
+The server generates and stores a hashed API key on first run. The plaintext key is printed once — enter it in the desktop client connection screen:
 
 ```bash
-ntrp --token <key>             # or set NTRP_API_KEY env var
+cd apps/desktop && bun run dev   # paste the key in the connection screen
 ```
 
 To regenerate the key:

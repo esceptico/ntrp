@@ -1,0 +1,58 @@
+---
+title: "HTML Widgets"
+description: "Render sandboxed rich cards from the agent with the render_html tool."
+---
+
+## Overview
+
+`render_html` lets the agent return rich desktop cards instead of plain Markdown. Use it for charts, tables, diagrams, compact dashboards, approval-like forms, or self-contained interactive views.
+
+Widgets are rendered in sandboxed iframes. They do not have network access, cannot load external scripts/styles/images/fonts, and should use inline CSS/JS only.
+
+## Modes
+
+| Mode | Behavior |
+|------|----------|
+| `display` | Render immediately and return to the agent. User interactions stay inside the widget. |
+| `input` | Block until the user submits/cancels, then return a flat JSON result to the agent. |
+
+Use `display` for dashboards and visualizations. Use `input` for structured forms where the next agent step depends on user input.
+
+## Theming
+
+The desktop app injects design tokens as CSS variables:
+
+```css
+color: var(--color-ink);
+background: var(--color-surface-soft);
+border-color: var(--color-line);
+font-family: var(--font-sans);
+```
+
+Prefer semantic HTML and the built-in widget styles for common controls: headings, paragraphs, tables, labels, inputs, buttons, `.field`, `.grid-2`, `.chip`, `.actions`, and `.muted`.
+
+## Input widgets
+
+Submit exactly once with `ntrp.submit({...})`, or use `ntrp.submitForm(form)` for normal form collection.
+
+```html
+<form onsubmit="ntrp.submitForm(this); return false">
+  <label class="field">
+    Rating
+    <input name="rating" type="number" min="1" max="5" />
+  </label>
+  <div class="actions">
+    <button type="button" onclick="ntrp.cancel()">Cancel</button>
+    <button class="primary" type="submit">Submit</button>
+  </div>
+</form>
+```
+
+The tool returns `accept`, `decline`, or `cancel` plus submitted values.
+
+## Constraints
+
+- Keep HTML fully self-contained.
+- Do not use external links, scripts, stylesheets, images, fonts, fetch/XHR, or form actions.
+- Use `data:` URIs for images if needed.
+- Do not draw your own outer card; the desktop app already supplies the card shell and title.

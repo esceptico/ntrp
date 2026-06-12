@@ -4,7 +4,7 @@ This note tracks the remaining non-blocking follow-ups for the `memory_items` re
 
 ## Current decisions
 
-- Legacy `apps/server/ntrp/knowledge/*` package imports and old desktop/TUI knowledge panes were removed.
+- Legacy `apps/server/ntrp/knowledge/*` package imports and old client knowledge panes were removed.
 - `apps/server/ntrp/memory/facts.py` was removed with the legacy fact-store path; the redesign runtime uses `MemoryDatabase` with `memory.items` for the graph primitive.
 - `apps/server/ntrp/memory/service.py` stays as the stable `MemoryService` shell and chat connector attachment point.
 - `pattern_finder` and `skill_inducer` are the surviving memory automation builtins.

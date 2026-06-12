@@ -49,7 +49,6 @@ data/
 .mypy_cache/
 
 # Frontend (built separately)
-apps/tui/
 apps/desktop/
 
 # Misc

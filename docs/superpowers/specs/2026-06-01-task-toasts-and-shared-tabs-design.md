@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-01
 **Status:** Approved (design), pending implementation plan
-**Surface:** `apps/desktop` (React desktop app only — not the TUI)
+**Surface:** `apps/desktop` (React desktop app)
 
 ## Motivation
 

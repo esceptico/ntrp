@@ -9,12 +9,12 @@ ntrp resolves configuration in this order (highest priority first):
 
 1. **Environment variables** — `NTRP_*` prefix or standard provider key names
 2. **`.env` files** — loaded from `~/.ntrp/.env` and `./.env` when developing from source or running Docker Compose
-3. **Settings file** — `~/.ntrp/settings.json` (persisted via TUI settings)
+3. **Settings file** — `~/.ntrp/settings.json` (persisted by clients and server-side config updates)
 4. **Auto-detection** — models resolved from available provider keys
 
 ## LLM providers
 
-Set at least one provider API key, or connect the OpenAI Codex provider with browser sign-in from the TUI. ntrp auto-selects models based on what's available.
+Set at least one provider API key, or connect the OpenAI Codex provider with browser sign-in from the desktop client. ntrp auto-selects models based on what's available.
 
 | Provider | Setup | Chat model | Memory model | Embedding model |
 |----------|-------|------------|--------------|-----------------|
@@ -86,7 +86,7 @@ On first `ntrp-server serve`, an API key is generated and printed. The server st
 ntrp-server serve --reset-key
 ```
 
-The TUI client stores the key in your OS keychain (macOS Keychain, Linux libsecret). Fallback: `~/.ntrp/settings.json`.
+Desktop clients store the key in local app storage and encrypt it with OS-backed storage when supported. The server stores only the salted hash.
 
 | Variable | Description |
 |----------|-------------|

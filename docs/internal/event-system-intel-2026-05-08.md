@@ -1,6 +1,6 @@
 # Event System Intel - 2026-05-08
 
-Scope: server and desktop event streaming for NTRP, with TUI intentionally deferred.
+Scope: server and desktop event streaming for NTRP.
 
 ## External Systems
 
@@ -43,7 +43,7 @@ Useful files:
 - `/Users/escept1co/src/hermes-agent/tui_gateway/server.py:1749` - spawn tree snapshot.
 - `/Users/escept1co/src/hermes-agent/run_agent.py:3544` - interrupt propagation.
 
-Weakness to avoid: Hermes does not provide a durable sequence/replay contract. Good TUI model, weaker recovery model.
+Weakness to avoid: Hermes does not provide a durable sequence/replay contract. Good terminal interaction model, weaker recovery model.
 
 ### Letta
 
@@ -96,7 +96,7 @@ These findings describe the state before the stable event-system implementation 
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/services/chat.py:522`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/server/runtime/outbox.py:48`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/automation/scheduler.py:173`
-- The TUI streaming protocol is stale, but TUI is out of scope for the first implementation pass.
+- Legacy terminal streaming is out of scope.
 - SSE replay had no event id, no cursor, and no `Last-Event-ID`. The replay buffer was cleared after checkpoint saves, so reconnect could miss events. Relevant files:
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/events/sse.py:75`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/server/bus.py:54`
@@ -113,7 +113,7 @@ NTRP mixes domain events and UI rendering rules across too many places:
 - Agent events are domain-ish.
 - `events/sse.py` converts domain-ish events into AG-UI-ish wire events.
 - `routers/chat.py` synthesizes text start/end boundaries per subscriber.
-- Desktop and TUI independently rebuild activity grouping from roles, timing, and heuristics.
+- Clients should avoid independently rebuilding activity grouping from roles, timing, and heuristics.
 
 This makes ordering, replay, and sub-agent display fragile. The stable direction is:
 
@@ -157,7 +157,7 @@ Do not rewrite the whole chat system. Fix in this order:
 
 ## Implemented Pass - 2026-05-08
 
-This pass intentionally kept the system in-process and server/desktop scoped. TUI remains deferred.
+This pass intentionally kept the system in-process and server/desktop scoped.
 
 Implemented:
 
@@ -176,4 +176,4 @@ Remaining risks:
 
 - Replay is still bounded to the in-memory recent-record buffer plus history reload. A durable event table would be the next step if reconnect across process restart needs exact event replay rather than history reconstruction.
 - Browser/Electron cancellation of blocking subprocess tools is not fully process-tree-aware yet.
-- TUI still needs to adopt the server-owned contract after desktop settles.
+- Removed legacy terminal-client follow-up; desktop is the supported UI target.

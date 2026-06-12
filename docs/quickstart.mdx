@@ -1,32 +1,34 @@
 ---
 title: "Quickstart"
-description: "Get ntrp running in 5 minutes."
+description: "Get ntrp running locally."
 ---
 
 ## Prerequisites
 
 - Python 3.13+ with [uv](https://docs.astral.sh/uv/)
-- [Bun](https://bun.sh) runtime
-- An LLM provider: Anthropic, OpenAI, Google, or OpenAI account sign-in — can be configured during setup
+- [Bun](https://bun.sh) for the desktop app when running from source
+- An LLM provider: Anthropic, OpenAI, Google, OpenRouter, custom OpenAI-compatible endpoint, or OpenAI account sign-in
 
 ## Install
 
 <Tabs>
-  <Tab title="From package registries">
+  <Tab title="Backend package">
     ```bash
-    uv tool install ntrp    # Python backend (PyPI)
-    bun install -g ntrp-cli # TUI client (npm)
+    uv tool install ntrp    # or: pip install ntrp
     ```
   </Tab>
   <Tab title="From source">
     ```bash
     git clone https://github.com/esceptico/ntrp.git
     cd ntrp
-    cd apps/server && uv sync && cd ../..  # Python backend
-    cd apps/tui && bun install && cd ../.. # TUI client
+    just install
     ```
   </Tab>
 </Tabs>
+
+<Note>
+The desktop client currently runs from source with `bun run dev` or packaged builds from `apps/desktop`. The old terminal client has been removed.
+</Note>
 
 ## Set up
 
@@ -34,10 +36,10 @@ description: "Get ntrp running in 5 minutes."
 
 ### Set your LLM provider (optional)
 
-You can export a provider API key now, or configure a provider interactively in the TUI after connecting. OpenAI can be used either with an API key or with browser sign-in through the OpenAI Codex provider.
+You can export a provider API key now, or configure a provider interactively in the desktop app after connecting. OpenAI can be used either with an API key or with browser sign-in through the OpenAI Codex provider.
 
 ```bash
-# Pick one (or skip and configure in the TUI):
+# Pick one, or skip and configure from the desktop app:
 export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GEMINI_API_KEY=...
@@ -48,15 +50,14 @@ If you want to use an OpenAI subscription/account instead of an API key, skip th
 ### Start the server
 
 <Tabs>
-  <Tab title="From source">
-    ```bash
-    cd apps/server
-    uv run ntrp-server serve
-    ```
-  </Tab>
   <Tab title="Installed">
     ```bash
     ntrp-server serve
+    ```
+  </Tab>
+  <Tab title="From source">
+    ```bash
+    just server
     ```
   </Tab>
 </Tabs>
@@ -65,38 +66,35 @@ On first run, ntrp generates an API key and prints it:
 
 ```
 Your API key: nBx7k2...
-Enter this in the TUI to connect. It won't be shown again.
+Enter this in a desktop client to connect. It won't be shown again.
 ```
 
 <Warning>Copy this key — it's only shown once. Use `ntrp-server serve --reset-key` to generate a new one.</Warning>
 
-### Start the TUI
+### Start the desktop app
 
 In a separate terminal:
 
-<Tabs>
-  <Tab title="Installed">
-    ```bash
-    ntrp
-    ```
-  </Tab>
-  <Tab title="From source">
-    ```bash
-    cd apps/tui
-    bun run start
-    ```
-  </Tab>
-</Tabs>
+```bash
+just desktop
+```
 
-Paste your API key in the connection dialog. If no LLM provider is configured, a provider setup screen appears where you can connect a provider and choose a default model.
+Or directly:
+
+```bash
+cd apps/desktop
+bun run dev
+```
+
+Paste your API key in the connection screen. If no LLM provider is configured, provider onboarding appears so you can connect a provider and choose defaults.
 
 </Steps>
 
 ## What's next?
 
 <CardGroup cols={2}>
-  <Card title="TUI Guide" icon="terminal" href="/guides/tui">
-    Keyboard shortcuts and slash commands.
+  <Card title="Desktop Guide" icon="desktop" href="/guides/desktop">
+    Learn the app surfaces: chat, approvals, settings, memory, and traces.
   </Card>
   <Card title="Configuration" icon="gear" href="/configuration">
     Customize models, enable integrations, and tune settings.

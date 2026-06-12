@@ -19,7 +19,7 @@ An API key is generated on first `ntrp-server serve`:
 cd apps/server
 uv run ntrp-server serve
 # Your API key: nBx7k2...
-# Enter this in the TUI to connect. It won't be shown again.
+# Enter this in the desktop client to connect. It won't be shown again.
 ```
 
 ## Resetting a key
@@ -33,7 +33,7 @@ This invalidates the old key immediately.
 
 ## Storage
 
-The server stores only a salted SHA-256 hash of the key — the plaintext is never persisted. The TUI client stores the plaintext in your OS keychain.
+The server stores only a salted SHA-256 hash of the key — the plaintext is never persisted. Desktop clients store the plaintext locally and encrypt it with OS-backed storage when supported.
 
 ## Public endpoints
 

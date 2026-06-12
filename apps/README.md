@@ -2,9 +2,8 @@
 
 Top-level runnable surfaces live here:
 
-- `server` - self-contained uv project with backend package, tests, API server source, and builtin skills.
-- `tui` - self-contained Bun/OpenTUI terminal client.
-- `desktop` - self-contained Bun/Electron desktop client.
+- `server` — self-contained uv project with the FastAPI backend, agent runtime, tools, integrations, memory system, builtin skills, tests, `pyproject.toml`, `uv.lock`, and Dockerfile.
+- `desktop` — self-contained Bun/Electron desktop client with chat, approvals, traces, memory UI, and HTML widget rendering.
 
 The Python package name stays `ntrp`, so imports and the `ntrp-server` entrypoint do not change.
 

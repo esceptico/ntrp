@@ -19,6 +19,7 @@ Some tool schemas are **deferred**. Deferred tools are known to the agent, but t
 | `research` | Spawn a research agent with all read-only tools (`depth`: quick/normal/deep) | — |
 | `load_tools` | Load deferred tool schemas by group or exact name | — |
 | `background` | Spawn an autonomous background agent for long-running tasks | — |
+| `render_html` | Render a sandboxed rich card in desktop chat (`display` or `input` mode) | — |
 | `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
 
 `background` and `set_directives` are deferred. The agent should first load `background` or `directives` when those capabilities are needed.
@@ -144,7 +145,7 @@ Obsidian should be connected as an MCP server and loaded with `load_tools(group=
 
 ## Approval flow
 
-When a tool requires approval, the TUI shows a dialog with the tool name, arguments, and options to approve, reject, or always-allow that tool for the session. See [Auto-approve mode](/guides/tui#auto-approve-mode) for skipping approvals.
+When a tool requires approval, the desktop app shows an approval card with the tool name, arguments, preview, and options to approve or reject the call. Session/tool-specific policy overrides can skip repeated approvals when you explicitly configure them.
 
 Settings → Tools can override individual tools:
 

@@ -4,7 +4,7 @@
 
 **Goal:** Build a stable server-owned event system for NTRP chat runs so desktop rendering, sub-agent progress, replay, and cancellation are ordered and reliable.
 
-**Architecture:** The server emits normalized wire events exactly once, assigns a monotonic per-session sequence number, and exposes cursor-based replay. Desktop consumes sequenced events as a reducer projection; it does not infer execution ordering from React timing. TUI is intentionally left out of this pass and can adapt after server and desktop are stable.
+**Architecture:** The server emits normalized wire events exactly once, assigns a monotonic per-session sequence number, and exposes cursor-based replay. Desktop consumes sequenced events as a reducer projection; it does not infer execution ordering from React timing.
 
 **Tech Stack:** Python 3.13, FastAPI, SSE, SQLite/aiosqlite, pytest, React 19, Zustand, Electron, Bun tests.
 
@@ -23,7 +23,7 @@ In scope:
 
 Out of scope:
 
-- TUI stream compatibility changes.
+- Removed client compatibility changes outside desktop.
 - Multi-process or remote server clustering.
 - Replacing SSE with WebSocket.
 - Full Temporal-style durable workflow execution.
@@ -1628,7 +1628,7 @@ Spec coverage:
 - Desktop event rendering and ordering: Tasks 1, 4, 6, 8.
 - Sub-agent progress: Task 6.
 - Cancel behavior: Task 5.
-- TUI deferred: listed out of scope.
+- Non-desktop clients were listed out of scope.
 - Intel dump: `docs/internal/event-system-intel-2026-05-08.md`.
 
 Placeholder scan:

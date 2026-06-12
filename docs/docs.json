@@ -18,7 +18,7 @@
             "pages": [
               "index",
               "quickstart",
-              "guides/tui"
+              "guides/desktop"
             ]
           },
           {
@@ -27,6 +27,7 @@
               "guides/memory",
               "guides/automations",
               "guides/tools",
+              "guides/html-widgets",
               "guides/skills"
             ]
           },
