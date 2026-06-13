@@ -83,45 +83,37 @@ Custom models appear in the settings UI alongside built-in models.
 
 ## Google Gmail & Calendar
 
-Requires a Google Cloud project with OAuth credentials.
+Recommended path: use **Settings → Integrations → Gmail / Google Calendar → Run setup assistant**.
 
-### 1. Create a Google Cloud project
+The assistant supports:
 
-- Go to [Google Cloud Console](https://console.cloud.google.com/)
-- Create a new project (or use an existing one)
+- Service choice: email-only, email+calendar, calendar-only, or all current Google scopes.
+- Importing Google OAuth Desktop app credentials by file path.
+- Pasting the credentials JSON directly.
+- Preflight validation for missing/wrong credentials.
+- Better OAuth/setup error messages for missing credentials, test-user denial, API disabled/403, redirect/client mismatch, and missing scopes.
 
-### 2. Enable APIs
+Manual path:
 
-In **APIs & Services > Library**, enable:
-- **Gmail API**
-- **Google Calendar API**
-
-### 3. Configure OAuth consent screen
-
-- Go to **APIs & Services > OAuth consent screen**
-- Choose **External** user type
-- Fill in app name and your email
-- Add scopes: `gmail.readonly`, `gmail.send`, `calendar`
-- Add your Google account as a test user (required while app is in "Testing" status)
-
-### 4. Create credentials
-
-- Go to **APIs & Services > Credentials**
-- Click **Create Credentials > OAuth client ID**
-- Application type: **Desktop app**
-- Download the JSON file
-- Save it as `~/.ntrp/gmail_credentials.json`
-
-### 5. Enable in ntrp
-
-In your `.env`:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create or select a project.
+3. Enable the APIs you need:
+   - **Gmail API** for Gmail tools.
+   - **Google Calendar API** for Calendar tools.
+4. Configure **APIs & Services → OAuth consent screen**.
+   - Add yourself as a test user while the app is in Testing.
+5. Create **OAuth client ID → Desktop app** credentials.
+6. Save/import the JSON as `~/.ntrp/gmail_credentials.json`.
+7. Enable in `.env` as needed:
 
 ```
 NTRP_GMAIL=true
 NTRP_CALENDAR=true
 ```
 
-On first use, a browser window opens for OAuth consent. The token is saved to `~/.ntrp/gmail_token.json` and refreshes automatically.
+Account add still uses Google's local browser OAuth flow. Tokens are saved under `~/.ntrp/` as `gmail_token_<email>.json` or `calendar_token*.json` and refresh automatically.
+
+Google note: ntrp intentionally uses BYO OAuth credentials for now. Gmail read/send scopes are restricted Google scopes, so a shared public Google OAuth app would require Google's verification/security-assessment process.
 
 ## Telegram Notifications
 

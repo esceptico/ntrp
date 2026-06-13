@@ -3,27 +3,56 @@ title: "Google Calendar"
 description: "Connect Google Calendar to view, create, and manage events."
 ---
 
-## Setup
+## Recommended setup
 
-Google Calendar uses the same OAuth credentials as Gmail.
+Google Calendar uses the same Google OAuth credentials flow as Gmail. The easiest path is the desktop setup assistant:
 
 <Steps>
 
-### Enable Calendar in config
+### Open Integrations settings
+
+Go to **Settings → Integrations → Gmail / Google Calendar**.
+
+### Run the setup assistant
+
+Click **Run setup assistant** and choose either:
+
+- **Calendar only** — Calendar tools without Gmail
+- **Email + Calendar** — Gmail and Calendar tools together
+- **All current Google services** — legacy full ntrp scope set, including Pub/Sub
+
+### Enable the Calendar API
+
+In the Google Cloud project used for your OAuth Desktop app credentials, enable the **Google Calendar API**.
+
+### Import credentials and add account
+
+Import/paste your Google OAuth Desktop app credentials in the assistant, then click **Add account**. ntrp opens the local browser OAuth flow and saves a token under `~/.ntrp/`.
+
+</Steps>
+
+## Manual setup
+
+Use the same credentials file as Gmail:
+
+```bash
+~/.ntrp/gmail_credentials.json
+```
+
+Enable Calendar:
 
 ```bash
 export NTRP_CALENDAR=true
 ```
 
-### Ensure OAuth credentials exist
+Then add an account from desktop settings, or call:
 
-If you've already set up Gmail, the same `~/.ntrp/credentials.json` works. Otherwise, follow the [Gmail setup](/integrations/gmail) steps but also enable the **Google Calendar API**.
-
-### Authenticate
-
-On first calendar tool use, ntrp opens a browser for OAuth consent.
-
-</Steps>
+```bash
+curl -X POST http://localhost:6877/gmail/add \
+  -H "Authorization: Bearer $NTRP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"service_choice":"calendar"}'
+```
 
 ## Available tools
 
@@ -34,9 +63,15 @@ On first calendar tool use, ntrp opens a browser for OAuth consent.
 | `edit_calendar_event` | Edit an event (requires approval) |
 | `delete_calendar_event` | Delete an event (requires approval) |
 
+## Troubleshooting
+
+- **API not enabled / 403** — enable the Google Calendar API in the OAuth project's API library.
+- **Missing scope** — re-run setup with **Calendar only**, **Email + Calendar**, or **All current Google services**.
+- **Testing app access denied** — add your Google account as an OAuth test user.
+
 ## Event-driven automations
 
-Calendar events can trigger automations. For example, get a briefing 15 minutes before each meeting:
+Calendar events can trigger automations. For example:
 
 ```
 Create an automation that triggers 15 minutes before any calendar event.

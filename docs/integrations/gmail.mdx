@@ -3,33 +3,79 @@ title: "Gmail"
 description: "Connect Gmail to read, search, and send emails."
 ---
 
-## Setup
+## Recommended setup
+
+The easiest path is the desktop setup assistant:
 
 <Steps>
 
-### Enable Gmail in config
+### Open Integrations settings
+
+In the desktop app, go to **Settings → Integrations → Gmail / Google Calendar**.
+
+### Run the setup assistant
+
+Click **Run setup assistant**.
+
+Choose the Google services you want:
+
+- **Email only** — Gmail read/send scopes
+- **Email + Calendar** — Gmail read/send plus Calendar
+- **Calendar only** — Calendar without Gmail tools
+- **All current Google services** — legacy full ntrp scope set, including Pub/Sub
+
+### Create Google OAuth credentials
+
+The assistant walks you through Google Cloud setup. In short:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create or select a project
+3. Enable the **Gmail API**
+4. Configure the OAuth consent screen
+5. Create an OAuth 2.0 client with application type **Desktop app**
+6. Download the credentials JSON
+
+### Import credentials
+
+Use the assistant to either:
+
+- Select/import the downloaded credentials file by path, or
+- Paste the credentials JSON directly
+
+ntrp saves the normalized credentials to `~/.ntrp/gmail_credentials.json`.
+
+### Add account
+
+Click **Add account**. ntrp opens a local browser OAuth consent flow and saves the token under `~/.ntrp/`.
+
+</Steps>
+
+## Manual setup
+
+If you do not use the desktop assistant, place your Google OAuth Desktop app credentials at:
+
+```bash
+~/.ntrp/gmail_credentials.json
+```
+
+Then enable Gmail:
 
 ```bash
 export NTRP_GMAIL=true
 ```
 
-### Create Google OAuth credentials
+Start the server and desktop app, then add the account from **Settings → Integrations** or call:
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a project (or select existing)
-3. Enable the **Gmail API**
-4. Create OAuth 2.0 credentials (Desktop application)
-5. Download the credentials JSON
+```bash
+curl -X POST http://localhost:6877/gmail/add \
+  -H "Authorization: Bearer $NTRP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"service_choice":"email"}'
+```
 
-### Place credentials
+## Google verification note
 
-Save the downloaded file as `~/.ntrp/credentials.json`.
-
-### Authenticate
-
-Start the server and the desktop client. On first use of any email tool, ntrp will open a browser window for OAuth consent. The token is saved to `~/.ntrp/gmail_token.json`.
-
-</Steps>
+ntrp currently uses **bring-your-own Google OAuth credentials**. Gmail scopes such as read/send are restricted Google scopes, so shipping a shared public OAuth app would require Google's verification/security-assessment process. BYO credentials keep setup local and avoid routing Gmail access through a third-party auth broker.
 
 ## Configuration
 
@@ -46,18 +92,13 @@ Start the server and the desktop client. On first use of any email tool, ntrp wi
 | `read_email` | Get full email content by ID |
 | `send_email` | Send an email (requires approval) |
 
+## Troubleshooting
+
+- **Missing credentials** — import a Google OAuth Desktop app JSON; Web application credentials are rejected.
+- **Access denied / test user** — if your OAuth app is still in Testing mode, add your Google account as a test user.
+- **API not enabled / 403** — enable the Gmail API in the same Google Cloud project.
+- **Missing scope** — re-run setup and choose a service option that includes the needed Gmail scope.
+
 ## Multiple accounts
 
-Add additional Gmail accounts via the API:
-
-```bash
-curl -X POST http://localhost:6877/gmail/add \
-  -H "Authorization: Bearer $NTRP_API_KEY"
-```
-
-List connected accounts:
-
-```bash
-curl http://localhost:6877/gmail/accounts \
-  -H "Authorization: Bearer $NTRP_API_KEY"
-```
+Add more accounts from the desktop Integrations tab, or call `/gmail/add` again. Tokens are saved as account-specific files such as `gmail_token_<email>.json`.

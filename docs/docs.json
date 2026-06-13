@@ -36,7 +36,9 @@
             "pages": [
               "integrations/models",
               "integrations/gmail",
-              "integrations/calendar"
+              "integrations/calendar",
+              "integrations/slack",
+              "integrations/mcp"
             ]
           },
           {

@@ -116,6 +116,19 @@ approval metadata, then runs the tool. Extra middleware can wrap that pipeline
 for logging, tracing, policy, or result transforms without changing individual
 tool implementations.
 
+## Setup assistants
+
+User onboarding for native integrations should prefer a guided setup assistant over raw env-var docs when setup is multi-step or error-prone.
+
+Current assistant endpoints live under `apps/server/ntrp/server/routers/setup.py`:
+
+- `GET /setup/status` — passive status for Google, Slack, and MCP. This must not refresh tokens or start OAuth.
+- `POST /setup/google/credentials` — import Google OAuth Desktop app credentials by path or pasted JSON.
+- `POST /setup/google/preflight` — validate Google service choice and credentials before account add.
+- `POST /setup/slack/verify` — verify a Slack `xoxb-` or `xoxp-` token with Slack `auth.test` before saving.
+
+Desktop assistants live under `apps/desktop/src/components/settings/setup/`. When adding a new integration with a painful setup path, add concise assistant copy, preflight/status APIs if useful, and tests for both server contracts and setup helpers.
+
 ## Native integration vs MCP
 
 **Use a native integration** when you need:

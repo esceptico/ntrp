@@ -1,0 +1,67 @@
+---
+title: "Slack"
+description: "Connect Slack with token-backed search, reading, posting, and notifications."
+---
+
+## Recommended setup
+
+ntrp currently supports Slack through workspace tokens. A polished Slack OAuth install flow can be added later, but today the desktop setup assistant makes the token path explicit and verifies the token before saving.
+
+<Steps>
+
+### Open Integrations settings
+
+Go to **Settings → Integrations → Slack**.
+
+### Run the setup assistant
+
+Click **Run setup assistant**.
+
+Choose the token type:
+
+- **Bot token** — starts with `xoxb-`; best for posting and notifier-style behavior
+- **User token** — starts with `xoxp-`; useful when you need user-level Slack access
+
+### Paste and verify the token
+
+Paste the token into the assistant and click verify. ntrp calls Slack `auth.test` and shows the workspace/user details if the token works.
+
+### Save the connection
+
+After verification, save the token from the Integrations card. ntrp reloads integration clients automatically.
+
+</Steps>
+
+## Manual setup
+
+You can also set tokens through environment/config:
+
+```bash
+export SLACK_BOT_TOKEN=xoxb-...
+export SLACK_USER_TOKEN=xoxp-...
+```
+
+Or save the token in **Settings → Integrations → Slack**.
+
+## Available tools
+
+| Tool | Description |
+|------|-------------|
+| `slack_search` | Search Slack messages |
+| `slack_channel` | Read channel history |
+| `slack_thread` | Read a thread |
+| `slack_dm` / `slack_dms` | Read direct messages |
+| `slack_file` | Read Slack file/image content |
+| `slack_post_message` | Post a message (requires approval) |
+| `slack_post_blocks` | Post block-kit content (requires approval) |
+| `slack_user` / `slack_users` | Resolve Slack users |
+
+## Token notes
+
+- `xoxb-` bot tokens usually need the bot to be invited to private channels before it can read or post there.
+- `xoxp-` user tokens act as the installing user and should be treated as highly sensitive.
+- If verification fails, check the token prefix, workspace, revoked-token state, and Slack app scopes.
+
+## Current limitation
+
+ntrp does **not** ship a shared Slack OAuth app yet. The setup assistant is intentionally honest: token setup now, OAuth install later.

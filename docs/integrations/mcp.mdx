@@ -1,0 +1,70 @@
+---
+title: "MCP Servers"
+description: "Connect external MCP servers and expose their tools to ntrp."
+---
+
+## Recommended setup
+
+Use the desktop MCP setup assistant when adding a server.
+
+<Steps>
+
+### Open MCP settings
+
+Go to **Settings → MCP**.
+
+### Run the setup assistant
+
+Click **Run setup assistant**.
+
+Choose the transport:
+
+- **stdio** — ntrp launches a local command, such as `npx` or a local binary
+- **HTTP** — ntrp connects to a remote or local HTTP/SSE MCP endpoint
+
+### Fill the fields or import JSON
+
+The assistant can parse common MCP JSON shapes, including:
+
+```json
+{
+  "mcpServers": {
+    "example": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@example/mcp-server"],
+      "env": { "EXAMPLE_API_KEY": "..." }
+    }
+  }
+}
+```
+
+It also accepts direct server objects with `name` and `transport`.
+
+### Save and reload
+
+After saving, ntrp reloads MCP providers and shows their tools in the provider list.
+
+</Steps>
+
+## Transport fields
+
+| Transport | Required fields | Optional fields |
+|-----------|-----------------|-----------------|
+| `stdio` | `command` | `args`, `env`, `cwd` |
+| `http` | `url` | `headers`, auth-related fields supported by the server |
+
+## Deferred tools
+
+MCP tools are deferred by server group. For example, a server named `obsidian` is loaded by the agent with:
+
+```text
+load_tools(group="mcp:obsidian")
+```
+
+## Troubleshooting
+
+- **Command not found** — use an absolute command path or install the package/binary first.
+- **Missing env var** — add required `KEY=value` entries in the server config.
+- **HTTP auth failure** — check headers/tokens and whether the server expects OAuth.
+- **No tools appear** — verify the server starts successfully and then reload MCP/settings.
