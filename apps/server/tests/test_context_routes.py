@@ -75,9 +75,6 @@ class _SessionService:
             }
         ][:limit]
 
-    async def list_episodes(self, session_id: str, limit: int = 100):
-        return [{**turn, "episode_id": turn["turn_id"]} for turn in await self.list_turns(session_id, limit=limit)]
-
 
 class _SmallSessionService(_SessionService):
     async def load(self, session_id: str | None = None):

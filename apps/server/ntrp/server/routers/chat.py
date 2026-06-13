@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, ApprovalNeededEvent, InputNeededEvent, TextDeltaEvent
+from ntrp.events.sse import EPHEMERAL_EVENT_TYPES, ApprovalNeededEvent, InputNeededEvent, TextMessageContentEvent
 from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -95,7 +95,7 @@ async def _event_stream(
     replay_upper_seq = bus.next_seq - 1
 
     def should_emit(event) -> bool:
-        return stream or not isinstance(event, TextDeltaEvent)
+        return stream or not isinstance(event, TextMessageContentEvent)
 
     # Catch-up replay (durable + in-memory snapshot) emits only STRUCTURAL
     # events — never the ephemeral deltas (token text, tool args, reasoning).

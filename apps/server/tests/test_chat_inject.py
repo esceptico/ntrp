@@ -13,7 +13,6 @@ from ntrp.context.store import SessionStore
 from ntrp.core.factory import AgentConfig
 from ntrp.events.sse import (
     MessageIngestedEvent,
-    TextDeltaEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
@@ -370,7 +369,7 @@ async def test_event_stream_replays_explicit_text_boundaries():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(TextMessageStartEvent(message_id="text-1"))
-    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageContentEvent(message_id="text-1", delta="hello"))
     await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
@@ -664,7 +663,7 @@ async def test_event_stream_stream_false_filters_text_deltas_but_preserves_seque
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(TextMessageStartEvent(message_id="text-1"))
-    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageContentEvent(message_id="text-1", delta="hello"))
     await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=False)

@@ -403,10 +403,6 @@ class SessionService:
     async def list_turns(self, session_id: str, limit: int = 100) -> list[dict]:
         return await self.store.list_session_turns(session_id, limit=limit)
 
-    async def list_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
-        # Compatibility alias: this returns transcript turn ranges, not true memory episodes.
-        return await self.store.list_session_episodes(session_id, limit=limit)
-
     async def rename(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name(session_id, name)
 

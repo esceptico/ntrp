@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Literal, Self
 
@@ -166,17 +165,11 @@ class Config(BaseSettings):
 
     @model_validator(mode="after")
     def _resolve_model_defaults(self) -> Self:
-        self._migrate_deprecated_env()
         self._resolve_chat_model()
         self._fill_model_fallbacks()
         self._migrate_legacy_reasoning_effort()
         self._resolve_embedding_model()
         return self
-
-    def _migrate_deprecated_env(self) -> None:
-        if not self.research_model and (legacy := os.environ.get("NTRP_EXPLORE_MODEL")):
-            _logger.warning("NTRP_EXPLORE_MODEL is deprecated, use NTRP_RESEARCH_MODEL")
-            self.research_model = legacy
 
     def _resolve_chat_model(self) -> None:
         if self.chat_model:

@@ -133,9 +133,7 @@ async def _session_runtime_snapshot(
     checkpoint_seq = max(durable_checkpoint_seq, run_checkpoint_seq)
 
     approval_rows = (
-        await svc.store.list_pending_tool_approvals(session_id, run_id=surfaced_run["run_id"])
-        if surfaced_run
-        else []
+        await svc.store.list_pending_tool_approvals(session_id, run_id=surfaced_run["run_id"]) if surfaced_run else []
     )
     queued_rows = []
     if surfaced_run and run_status in ACTIVE_RUN_STATUSES:
@@ -209,9 +207,8 @@ def _clean_goal_proposal(text: str) -> str:
     for prefix in ("Goal:", "Objective:", "- ", "* "):
         if objective.startswith(prefix):
             objective = objective[len(prefix) :].strip()
-    if (
-        (objective.startswith('"') and objective.endswith('"'))
-        or (objective.startswith("'") and objective.endswith("'"))
+    if (objective.startswith('"') and objective.endswith('"')) or (
+        objective.startswith("'") and objective.endswith("'")
     ):
         objective = objective[1:-1].strip()
     return objective
@@ -412,9 +409,7 @@ async def get_session_history(
         # existed.
         "usage": {
             "last_input_tokens": data.last_input_tokens or 0,
-            "message_count": data.last_message_count
-            if data.last_message_count is not None
-            else len(data.messages),
+            "message_count": data.last_message_count if data.last_message_count is not None else len(data.messages),
         },
     }
 
@@ -429,20 +424,6 @@ async def get_session_turns(
     if not data:
         return {"turns": []}
     return {"turns": await svc.list_turns(data.state.session_id, limit=limit)}
-
-
-@router.get("/session/episodes")
-async def get_session_episodes(
-    svc: SessionService = Depends(require_session_service),
-    session_id: str | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
-):
-    # Deprecated compatibility endpoint. These are session turns, not true memory episodes.
-    data = await svc.load(session_id)
-    if not data:
-        return {"episodes": [], "turns": []}
-    turns = await svc.list_turns(data.state.session_id, limit=limit)
-    return {"episodes": [{**turn, "episode_id": turn["turn_id"]} for turn in turns], "turns": turns}
 
 
 @router.get("/projects", response_model=dict[str, list[ProjectResponse]])

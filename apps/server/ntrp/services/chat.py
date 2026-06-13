@@ -1510,7 +1510,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
 
         run.usage = tracker.usage
 
-        # Note: we used to emit a final TextEvent with the cumulative
+        # Note: we used to emit a final text-content event with the cumulative
         # `result` here, which made sense back when the wire had a separate
         # "final text" event (replace-semantics). Under AG-UI the text was
         # already streamed through TEXT_MESSAGE_CONTENT deltas — re-emitting

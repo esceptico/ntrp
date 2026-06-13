@@ -637,7 +637,6 @@ class SessionStore:
         await self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_parent_activity ON sessions(parent_session_id, started_at)"
         )
-        await self._migrate_session_turns_schema()
         await self._migrate_session_messages_fts()
         await self._migrate_tool_calls_schema()
         await self._migrate_background_agent_runs_schema()
@@ -777,30 +776,6 @@ class SessionStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def _migrate_session_turns_schema(self) -> None:
-        # Older builds named per-user-turn transcript slices "session_episodes".
-        # Keep the data, but store it under the accurate name going forward.
-        rows = await self.conn.execute_fetchall(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_episodes'"
-        )
-        if not rows:
-            return
-        await self.conn.execute(
-            """
-            INSERT OR IGNORE INTO session_turns (
-                session_id, turn_id, turn_index, user_message_id,
-                message_start_id, message_end_id, message_start_seq, message_end_seq,
-                started_at, ended_at
-            )
-            SELECT
-                session_id, episode_id, turn_index, user_message_id,
-                message_start_id, message_end_id, message_start_seq, message_end_seq,
-                started_at, ended_at
-            FROM session_episodes
-            """
-        )
-        await self.conn.commit()
-
     async def set_goal(
         self,
         session_id: str,
@@ -856,9 +831,7 @@ class SessionStore:
         )
         return self._goal_payload(rows[0]) if rows else None
 
-    async def set_todo_override(
-        self, session_id: str, items: list[dict], explanation: str | None = None
-    ) -> dict:
+    async def set_todo_override(self, session_id: str, items: list[dict], explanation: str | None = None) -> dict:
         now = datetime.now(UTC).isoformat()
         lock = await self._session_write_lock(session_id)
         async with lock:
@@ -893,9 +866,7 @@ class SessionStore:
     async def clear_todo_override(self, session_id: str) -> bool:
         lock = await self._session_write_lock(session_id)
         async with lock:
-            cursor = await self.conn.execute(
-                "DELETE FROM session_todo_overrides WHERE session_id = ?", (session_id,)
-            )
+            cursor = await self.conn.execute("DELETE FROM session_todo_overrides WHERE session_id = ?", (session_id,))
             await self.conn.commit()
             return cursor.rowcount > 0
 
@@ -2322,8 +2293,7 @@ class SessionStore:
     ) -> str:
         prefix = preview_text(preview)
         note = (
-            f"[Full raw tool result stored as {tool_result_id}; "
-            f"{content_bytes} bytes, sha256:{content_sha256[:12]}.]"
+            f"[Full raw tool result stored as {tool_result_id}; {content_bytes} bytes, sha256:{content_sha256[:12]}.]"
         )
         return f"{prefix}\n\n{note}" if prefix else note
 
@@ -3418,9 +3388,3 @@ class SessionStore:
             }
             for row in rows
         ]
-
-    async def list_session_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
-        # Compatibility for old API/tool callers. These are transcript turns,
-        # not true memory episodes.
-        turns = await self.list_session_turns(session_id, limit=limit)
-        return [{**turn, "episode_id": turn["turn_id"]} for turn in turns]

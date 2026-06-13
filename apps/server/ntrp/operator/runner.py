@@ -9,7 +9,7 @@ from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
-from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
+from ntrp.events.sse import AutomationProgressEvent, ToolCallResultEvent, ToolCallStartEvent, agent_event_to_sse
 from ntrp.server.bus import SessionBus
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ApprovalControls
@@ -160,10 +160,10 @@ async def run_agent_streaming(
                 usage = item.usage
             else:
                 sse = agent_event_to_sse(item)
-                if isinstance(sse, ToolCallEvent):
+                if isinstance(sse, ToolCallStartEvent):
                     label = sse.display_name or sse.tool_call_name
                     await bus.emit(AutomationProgressEvent(task_id=task_id, status=f"{label}..."))
-                elif isinstance(sse, ToolResultEvent):
+                elif isinstance(sse, ToolCallResultEvent):
                     label = sse.display_name or sse.name
                     status = f"{label}: {sse.preview}" if sse.preview else label
                     await bus.emit(AutomationProgressEvent(task_id=task_id, status=status))

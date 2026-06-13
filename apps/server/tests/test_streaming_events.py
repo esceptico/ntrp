@@ -29,7 +29,6 @@ from ntrp.events.sse import (
     ReasoningMessageContentEvent,
     TaskFinishedEvent,
     TaskStartedEvent,
-    TextDeltaEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
@@ -433,7 +432,7 @@ async def test_catchup_replay_emits_structural_events_only():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(TextMessageStartEvent(message_id="text-1"))
-    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageContentEvent(message_id="text-1", delta="hello"))
     await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
@@ -457,7 +456,7 @@ async def test_event_stream_filters_snapshot_text_deltas_when_stream_false():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(TextMessageStartEvent(message_id="text-1"))
-    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageContentEvent(message_id="text-1", delta="hello"))
     await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=False)
@@ -2662,19 +2661,13 @@ def test_foreground_child_suppression_drops_nested_text_keeps_tool_args():
     from ntrp.core.spawner import _SUPPRESSED_NESTED_SSE
 
     def forwarded(event) -> tuple[str, ...]:
-        return tuple(
-            type(e).__name__
-            for e in agent_events_to_sse(event)
-            if not isinstance(e, _SUPPRESSED_NESTED_SSE)
-        )
+        return tuple(type(e).__name__ for e in agent_events_to_sse(event) if not isinstance(e, _SUPPRESSED_NESTED_SSE))
 
     assert forwarded(TextStarted(depth=1, parent_id="p", message_id="t")) == ()
     assert forwarded(TextDelta(depth=1, parent_id="p", message_id="t", content="x")) == ()
     assert forwarded(TextEnded(depth=1, parent_id="p", message_id="t", content="x")) == ()
 
-    tool = forwarded(
-        ToolStarted(tool_id="tl", name="bash", display_name="Bash", args={"command": "nl -ba x"})
-    )
+    tool = forwarded(ToolStarted(tool_id="tl", name="bash", display_name="Bash", args={"command": "nl -ba x"}))
     assert "ToolCallStartEvent" in tool
     assert "ToolCallArgsEvent" in tool
     assert "ToolCallEndEvent" in tool

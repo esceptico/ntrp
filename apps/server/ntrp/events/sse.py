@@ -650,17 +650,6 @@ def event_from_payload(payload: dict) -> SSEEvent:
     return cls(**kwargs)
 
 
-# ─── Aliases (back-compat for existing imports) ───────────────────────
-
-# Older code may import ToolCallEvent / ToolResultEvent / TextEvent /
-# TextDeltaEvent. Map them to the AG-UI start/result/content equivalents
-# so callers don't break. New code should prefer the canonical names above.
-ToolCallEvent = ToolCallStartEvent
-ToolResultEvent = ToolCallResultEvent
-TextEvent = TextMessageContentEvent
-TextDeltaEvent = TextMessageContentEvent
-
-
 # ─── Conversion from agent events to AG-UI SSE ────────────────────────
 
 
