@@ -30,7 +30,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
-    "electron": "^39.2.7",
+    "electron": "^42.4.0",
     "electron-builder": "^26.8.1",
     "tailwindcss": "^4.2.4",
     "typescript": "latest",

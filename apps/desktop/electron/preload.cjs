@@ -40,13 +40,25 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
     writeText: text => ipcRenderer.invoke("clipboard:write", text),
   },
   quickCapture: {
-    submit: message => ipcRenderer.invoke("quick:submit", message),
+    submit: payload => ipcRenderer.invoke("quick:submit", payload),
     close: () => ipcRenderer.invoke("quick:close"),
+    captureScreen: () => ipcRenderer.invoke("quick:captureScreen"),
+    resize: height => ipcRenderer.invoke("quick:resize", height),
     setShortcut: accelerator => ipcRenderer.invoke("quick:setShortcut", accelerator),
     onMessage: callback => {
       const listener = (_event, message) => callback(message);
       ipcRenderer.on("quick:message", listener);
       return () => ipcRenderer.off("quick:message", listener);
+    },
+    onSummon: callback => {
+      const listener = () => callback();
+      ipcRenderer.on("quick:summon", listener);
+      return () => ipcRenderer.off("quick:summon", listener);
+    },
+    onDismiss: callback => {
+      const listener = () => callback();
+      ipcRenderer.on("quick:dismiss", listener);
+      return () => ipcRenderer.off("quick:dismiss", listener);
     },
   },
 });

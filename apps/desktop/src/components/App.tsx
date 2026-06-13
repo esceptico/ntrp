@@ -34,7 +34,7 @@ import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useAutomationEvents } from "../hooks/useAutomationEvents";
 import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
 import { useThemeEffect } from "../lib/theme";
-import { bootstrap, createSession, sendMessage } from "../actions";
+import { bootstrap, createSession, sendMessage, switchSession } from "../actions";
 
 function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash);
@@ -138,15 +138,22 @@ export function App() {
   useAutomationEvents();
   useTaskResultToasts();
 
-  // Receive messages submitted from the quick-capture floating window.
-  // The Electron main process forwards each one via `quick:message`;
-  // we spin up a new session and immediately send the text. The user's
-  // first interaction with the main window is the streaming response.
+  // Receive submissions from the quick-capture floating window. The
+  // Electron main process forwards each one via `quick:message`; we
+  // route into the chosen chat (or a fresh project-less chat — Inbox,
+  // NOT the current session's project) and send. Capture is silent —
+  // this window is NOT brought forward — so the session (and its
+  // streamed response) is simply waiting the next time the user
+  // switches to ntrp.
   useEffect(() => {
-    const unsubscribe = window.ntrpDesktop?.quickCapture?.onMessage?.(async (message) => {
+    const unsubscribe = window.ntrpDesktop?.quickCapture?.onMessage?.(async (payload) => {
       try {
-        await createSession();
-        await sendMessage(message);
+        if (payload.sessionId) {
+          await switchSession(payload.sessionId);
+        } else {
+          await createSession(null);
+        }
+        await sendMessage(payload.message, payload.images ?? []);
       } catch {
         /* surfaced via the store's error toast */
       }

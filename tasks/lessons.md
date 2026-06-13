@@ -1,5 +1,13 @@
 # Lessons
 
+## Print the VALUE, not just the error — and validate your harness (Jun 2026)
+
+Electron 42 upgrade → "asks for API key every launch". I burned three theories (Keychain ACL/ad-hoc signing, dev-plaintext workaround, duplicate keychain items — including telling the user to delete keychain entries) before one probe that printed `typeof result` + `Object.keys(result)` revealed the truth in 30 seconds: `decryptStringAsync` now resolves `{shouldReEncrypt, result}` instead of a string, and our code passed the object into a string-normalizer that silently coerced it to "". Two rules: (1) when a previously-working API "impossibly fails", inspect the actual returned value/shape FIRST — a breaking API change is more likely than OS-level conspiracies; check the upgrade's breaking-changes/release notes for the EXACT functions you call, not just the ones that error. (2) Validate the test harness before trusting its signal: macOS has no GNU `timeout`, so `timeout 25 electron … || echo "TIMED OUT"` printed a fabricated "hang" (exit 127, command never ran) that I read as a Keychain prompt and built a whole theory on. Check exit codes before interpreting silence or absence as behavior.
+
+## Read the user's literal words; check the WHOLE screenshot (Jun 2026)
+
+User reported quick-capture makes "app in the dock disappear." I pattern-matched to "main window gets hidden" (app.hide()) and ran several screen-driving rounds without once checking the Dock strip at the bottom of my own screenshots. User had to interrupt: "can't you see it disappears from the bottom menu????" — the literal complaint was the DOCK ICON vanishing (`setVisibleOnAllWorkspaces(visibleOnFullScreen)` transforms process type to UIElementApplication; fix `skipTransformProcessType: true`). Rule: when a report names a concrete UI location ("dock"), verify THAT spot explicitly in every screenshot, and confirm early which symptom the user means when two plausible readings exist. Also: budget computer-use rounds — batch assertions per round and read every region of the screenshot; the user tires of watching repeated screen-driving loops.
+
 ## Subagent = first-class session; don't band-aid with polling (Jun 2026)
 
 I "fixed" no-live-updates-in-subagent-sessions with a 2s poll-refresh of the viewed child session (`useViewedAgentSessionRefresh` + `appendLatestForSession`). User: "not correct — subagent must look and work the same as default agent, no differences."

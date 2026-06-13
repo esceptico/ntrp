@@ -1,6 +1,8 @@
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, safeStorage, screen, session, shell } = require("electron");
 const crypto = require("node:crypto");
+const { execFile } = require("node:child_process");
 const fs = require("node:fs/promises");
+const os = require("node:os");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 // The parser is an ESM module (shared with the Vite renderer, which can't
@@ -86,15 +88,17 @@ function normalizeConfig(input) {
   };
 }
 
-async function encryptSecret(value) {
+// Sync safeStorage ONLY. Electron 42.4.0's async variants are a minefield
+// on macOS: decryptStringAsync resolves { shouldReEncrypt, result } instead
+// of the string (which silently emptied the apiKey after the 39→42 upgrade
+// — the "asks for the API key every launch" bug), its key store is
+// incompatible with the sync path's, and encryptStringAsync sporadically
+// SIGSEGVs the main process (V8 HandleScope fatal). The sync calls block
+// for one tiny string at boot — irrelevant. Revisit if the sync API is
+// actually deprecated.
+
+function encryptSecret(value) {
   if (!value) return { encoding: "empty", value: "" };
-  if (typeof safeStorage.encryptStringAsync === "function" && typeof safeStorage.isAsyncEncryptionAvailable === "function") {
-    const available = await safeStorage.isAsyncEncryptionAvailable();
-    if (available) {
-      const encrypted = await safeStorage.encryptStringAsync(value);
-      return { encoding: "safeStorage", value: encrypted.toString("base64") };
-    }
-  }
   if (safeStorage.isEncryptionAvailable()) {
     const encrypted = safeStorage.encryptString(value);
     return { encoding: "safeStorage", value: encrypted.toString("base64") };
@@ -102,15 +106,11 @@ async function encryptSecret(value) {
   return { encoding: "plain", value };
 }
 
-async function decryptSecret(secret) {
+function decryptSecret(secret) {
   if (!secret || secret.encoding === "empty") return "";
   if (secret.encoding === "plain") return typeof secret.value === "string" ? secret.value : "";
   if (secret.encoding !== "safeStorage" || typeof secret.value !== "string") return "";
   const encrypted = Buffer.from(secret.value, "base64");
-  if (typeof safeStorage.decryptStringAsync === "function" && typeof safeStorage.isAsyncEncryptionAvailable === "function") {
-    const available = await safeStorage.isAsyncEncryptionAvailable();
-    if (available) return safeStorage.decryptStringAsync(encrypted);
-  }
   if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(encrypted);
   return "";
 }
@@ -120,7 +120,7 @@ async function readConfig() {
     const raw = JSON.parse(await fs.readFile(configPath(), "utf8"));
     return normalizeConfig({
       serverUrl: raw.serverUrl,
-      apiKey: await decryptSecret(raw.apiKey),
+      apiKey: decryptSecret(raw.apiKey),
     });
   } catch {
     return defaultConfig;
@@ -135,7 +135,7 @@ async function writeConfig(config) {
     JSON.stringify(
       {
         serverUrl: normalized.serverUrl,
-        apiKey: await encryptSecret(normalized.apiKey),
+        apiKey: encryptSecret(normalized.apiKey),
       },
       null,
       2,
@@ -283,14 +283,14 @@ let quickWindow = null;
  *  we can unregister cleanly before re-registering a new chord, and so
  *  duplicate-set calls become no-ops. */
 let registeredShortcut = null;
-/** Whether the quick-capture window was summoned with ntrp already in
- *  the foreground (i.e. the main window had focus). Drives the
- *  "dismiss" path: if we came in from another app, on Esc/blur we
- *  deactivate ntrp so focus returns to that app rather than popping
- *  the main window forward. */
-let quickSummonedFromForeground = false;
 
 const DEFAULT_QUICK_SHORTCUT = "CommandOrControl+Shift+Space";
+
+const QUICK_WIDTH = 668;
+/** Base height: composer card + shadow padding. The renderer requests a
+ *  taller window via quick:resize while its chat picker is open. */
+const QUICK_BASE_HEIGHT = 100;
+const QUICK_MAX_HEIGHT = 420;
 
 /** Register the quick-capture global shortcut, replacing whatever was
  *  previously bound. Pass an empty string / nullish value to clear.
@@ -329,8 +329,9 @@ function setQuickShortcut(accelerator) {
   return false;
 }
 
-function createWindow() {
+function createWindow({ show }) {
   mainWindow = new BrowserWindow({
+    show,
     width: 1320,
     height: 880,
     minWidth: 980,
@@ -403,8 +404,17 @@ function createQuickWindow() {
   if (quickWindow && !quickWindow.isDestroyed()) return quickWindow;
 
   quickWindow = new BrowserWindow({
-    width: 620,
-    height: 68,
+    // macOS: a non-activating NSPanel. The composer takes keyboard focus
+    // WITHOUT activating ntrp — the user's current app stays active, its
+    // menu bar stays up, and dismissal hands focus straight back. This is
+    // what lets dismissQuickWindow be a plain hide() instead of the old
+    // app.hide() hack that vanished the main window along with the panel.
+    ...(process.platform === "darwin" ? { type: "panel" } : {}),
+    // Sized for the card PLUS its drop shadow: the renderer pads the card
+    // (24px sides / 36px below) so the shadow can render instead of being
+    // clipped at the window edge.
+    width: QUICK_WIDTH,
+    height: QUICK_BASE_HEIGHT,
     frame: false,
     transparent: true,
     resizable: false,
@@ -429,8 +439,15 @@ function createQuickWindow() {
 
   // Floats across all spaces / above fullscreen apps on macOS. Without
   // this the window is invisible if the user is in a fullscreen Chrome
-  // tab when they hit the shortcut.
-  quickWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // tab when they hit the shortcut. skipTransformProcessType is load-
+  // bearing: without it, visibleOnFullScreen flips the app's process
+  // type to UIElementApplication — which REMOVES the ntrp icon from the
+  // Dock. The panel window type already floats over fullscreen, so the
+  // transformation is pure downside.
+  quickWindow.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  });
 
   quickWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) {
@@ -441,8 +458,7 @@ function createQuickWindow() {
 
   // Auto-hide on blur — Spotlight feel. User can re-summon with the
   // shortcut without paying the load cost since the window persists.
-  // Routes through dismissQuickWindow so focus yields back to the
-  // user's previous app instead of popping the main window forward.
+  // The renderer keeps the draft, so an accidental blur loses nothing.
   quickWindow.on("blur", () => {
     dismissQuickWindow();
   });
@@ -461,56 +477,72 @@ function createQuickWindow() {
   return quickWindow;
 }
 
+let quickSummonPending = false;
+
 function showQuickWindow() {
   const win = createQuickWindow();
   if (win.isVisible()) {
     dismissQuickWindow();
     return;
   }
-  // Snapshot the foreground state BEFORE we show our window — once we
-  // call win.show() ntrp becomes the focused app and we lose that
-  // signal. We compare focus identity rather than just BrowserWindow
-  // presence: the main window might be open but unfocused (user was
-  // in another app), which is the case where we want Esc to NOT pop
-  // the main window forward.
-  const focused = BrowserWindow.getFocusedWindow();
-  quickSummonedFromForeground = focused === mainWindow && focused !== null;
+  // Never present a window whose renderer hasn't loaded: keyboard-focus
+  // routing and the quick:summon signal would land in a void, leaving an
+  // empty deaf panel on screen. The window is created eagerly at startup,
+  // so this only triggers if the shortcut is hit during app boot.
+  if (win.webContents.isLoading()) {
+    if (quickSummonPending) return;
+    quickSummonPending = true;
+    win.webContents.once("did-finish-load", () => {
+      quickSummonPending = false;
+      presentQuickWindow(win);
+    });
+    return;
+  }
+  presentQuickWindow(win);
+}
 
+function presentQuickWindow(win) {
   // Horizontally centered on the display that currently owns the
-  // cursor; vertically biased toward the bottom of the work area so
-  // the composer sits near where the user's reading attention is
-  // (and out of the way of any top-of-screen menus / browser tabs).
-  // ~78% from the top leaves enough margin below for the window's
-  // shadow without crowding the dock.
+  // cursor; vertically in the lower third — near where the user's
+  // attention usually rests, clear of top-of-screen menus and tabs.
+  // Reset to base size first: a prior summon may have grown the window
+  // for the chat picker.
   const cursorPoint = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursorPoint);
   const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
-  const [ww, wh] = win.getSize();
-  const x = Math.round(dx + (dw - ww) / 2);
-  const y = Math.round(dy + dh * 0.78 - wh);
-  win.setPosition(x, y);
+  const x = Math.round(dx + (dw - QUICK_WIDTH) / 2);
+  const y = Math.round(dy + dh * 0.64);
+  win.setBounds({ x, y, width: QUICK_WIDTH, height: QUICK_BASE_HEIGHT });
   win.show();
   win.focus();
+  // Non-activating panels become the key window without activating the
+  // app, but Chromium doesn't route keyboard focus into the page on its
+  // own in that state — without this, keystrokes reach the window and
+  // die before the <input>.
+  win.webContents.focus();
+  // Esc NEVER reaches Chromium in a non-activating panel (AppKit consumes
+  // it at the NSPanel layer — verified: before-input-event sees every key
+  // EXCEPT Escape). Claim it as a global shortcut for exactly the lifetime
+  // of the panel being visible; dismissQuickWindow releases it.
+  globalShortcut.register("Escape", () => {
+    if (quickWindow && !quickWindow.isDestroyed()) {
+      quickWindow.webContents.send("quick:dismiss");
+    }
+  });
+  // Per-summon signal for the renderer: re-present the card, replay the
+  // entrance, focus + select the draft.
+  win.webContents.send("quick:summon");
 }
 
-/** Hide the quick window WITHOUT bringing the main window forward.
- *  Used for Esc/blur cancels — the user explicitly decided not to
- *  send anything, so we don't want ntrp to suddenly become the
- *  foreground app. On macOS, `app.hide()` yields focus to whatever
- *  the previous app was. We only invoke it when the quick window was
- *  summoned from outside ntrp; if the user was already in the main
- *  window, hiding the whole app would be jarring. */
+/** Hide the quick window. As a non-activating panel it never stole app
+ *  activation, so macOS hands focus straight back to whatever app the
+ *  user was in — no app.hide() (which would hide the main window too). */
 function dismissQuickWindow() {
+  // Release Esc unconditionally — it must never stay claimed while the
+  // panel is hidden, whatever state the window is in.
+  globalShortcut.unregister("Escape");
   if (!quickWindow || quickWindow.isDestroyed() || !quickWindow.isVisible()) return;
   quickWindow.hide();
-  if (process.platform === "darwin" && !quickSummonedFromForeground) {
-    // app.hide is the cleanest "give focus back" on macOS — there's no
-    // way to deactivate without hiding ntrp's other windows. If the
-    // main window was already hidden / minimized, this is a no-op for
-    // it. If it happened to be visible in another space, it'll be
-    // hidden too — that's the trade-off for proper focus restoration.
-    app.hide();
-  }
 }
 
 app.whenReady().then(() => {
@@ -593,43 +625,84 @@ app.whenReady().then(() => {
     return true;
   });
 
-  // Hide the floating composer (called from QuickCapture on Escape or
-  // any explicit dismiss). Hiding rather than destroying keeps the next
-  // summon snappy. Routed through dismissQuickWindow so focus yields
-  // back to the user's previous app instead of popping ntrp forward.
+  // Hide the floating composer (called from QuickCapture after Escape,
+  // submit, or any explicit dismiss — the renderer owns the timing so
+  // its exit animation finishes first). Hiding rather than destroying
+  // keeps the next summon snappy.
   ipcMain.handle("quick:close", event => {
     assertTrustedSender(event);
     dismissQuickWindow();
   });
 
-  // Submit a message from the quick-capture window. We forward it to the
-  // main window over IPC so the renderer can call its existing
-  // createSession + sendMessage actions (with the store, the SSE
-  // subscription, etc. already wired). Side-effect: bring main window
-  // forward so the user immediately sees the session that starts.
-  ipcMain.handle("quick:submit", (event, message) => {
+  // Submit from the quick-capture window: { message, images?, sessionId? }.
+  // We forward it to the main window over IPC so the renderer can call
+  // its existing switchSession/createSession + sendMessage actions (with
+  // the store, the SSE subscription, etc. already wired). Capture is
+  // silent: the main window is NOT brought forward — the point of the
+  // quick composer is firing off a thought without leaving the current
+  // app. The session is waiting in ntrp whenever the user next switches.
+  ipcMain.handle("quick:submit", (event, payload) => {
     assertTrustedSender(event);
-    if (typeof message !== "string" || !message.trim()) return false;
-    if (quickWindow && !quickWindow.isDestroyed()) quickWindow.hide();
+    if (typeof payload?.message !== "string") return false;
+    const hasImages = Array.isArray(payload.images) && payload.images.length > 0;
+    if (!payload.message.trim() && !hasImages) return false;
     if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow();
-      // Defer the dispatch until the renderer has mounted and registered
-      // its listener, otherwise the message gets sent into the void.
+      // Main window was closed (app kept alive in the dock). Recreate it
+      // hidden so its renderer can process the message; the dock-icon
+      // activate handler reveals it on demand. Defer the dispatch until
+      // the renderer has mounted and registered its listener, otherwise
+      // the message gets sent into the void.
+      createWindow({ show: false });
       mainWindow.webContents.once("did-finish-load", () => {
-        mainWindow.webContents.send("quick:message", message);
+        mainWindow.webContents.send("quick:message", payload);
       });
     } else {
-      mainWindow.webContents.send("quick:message", message);
-    }
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
+      mainWindow.webContents.send("quick:message", payload);
     }
     return true;
   });
 
-  createWindow();
+  // Interactive macOS screen snip for the quick composer. The panel hides
+  // so the selection overlay captures what's beneath it, then re-presents
+  // (draft intact) with the captured image handed back to the renderer.
+  // Returns null when the user cancels the snip.
+  ipcMain.handle("quick:captureScreen", async event => {
+    assertTrustedSender(event);
+    if (process.platform !== "darwin") return null;
+    if (quickWindow && !quickWindow.isDestroyed()) dismissQuickWindow();
+    const file = path.join(os.tmpdir(), `ntrp-quick-capture-${Date.now()}.png`);
+    await new Promise(resolve => {
+      // -i interactive selection, -x no shutter sound. Exits non-zero /
+      // writes nothing when the user cancels with Esc — not an error.
+      execFile("screencapture", ["-i", "-x", file], () => resolve());
+    });
+    let data = null;
+    try {
+      data = (await fs.readFile(file)).toString("base64");
+      await fs.unlink(file);
+    } catch {
+      /* user cancelled the snip — no file */
+    }
+    if (quickWindow && !quickWindow.isDestroyed()) presentQuickWindow(quickWindow);
+    return data ? { media_type: "image/png", data } : null;
+  });
+
+  // The quick renderer grows/shrinks its window around the chat picker.
+  // Top edge stays fixed; the panel expands downward.
+  ipcMain.handle("quick:resize", (event, height) => {
+    assertTrustedSender(event);
+    if (typeof height !== "number" || !Number.isFinite(height)) return;
+    if (!quickWindow || quickWindow.isDestroyed()) return;
+    const clamped = Math.round(Math.min(Math.max(height, QUICK_BASE_HEIGHT), QUICK_MAX_HEIGHT));
+    const { x, y } = quickWindow.getBounds();
+    quickWindow.setBounds({ x, y, width: QUICK_WIDTH, height: clamped });
+  });
+
+  createWindow({ show: true });
+  // Preload the quick-capture panel (hidden) so the first shortcut press
+  // presents an already-loaded renderer — same instant behavior as every
+  // later summon, no first-use race.
+  createQuickWindow();
 
   // Allow the renderer to bind/unbind the global quick-capture chord.
   // Returns true on success so the Settings UI can surface "already in
@@ -651,7 +724,14 @@ app.whenReady().then(() => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // Count only the main window: the quick-capture panel persisting in
+    // the background must not satisfy "a window exists", or clicking the
+    // dock icon after closing the main window would do nothing.
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+    } else {
+      createWindow({ show: true });
+    }
   });
 });
 
