@@ -1,24 +1,17 @@
 ---
 title: "Memory"
-description: "Admin APIs for memory scopes, records, lenses, search, and graph views."
+description: "Admin APIs for memory records, lenses, search, and graph views."
 ---
 
 ## Mental model
 
 The current memory API is exposed under `/admin/memory/*`.
 
-- **Memory items** are source-backed records stored in a scope.
+- **Memory records/items** are source-backed durable statements with provenance and lifecycle metadata.
 - **Lenses** are curated views over memory with criteria, rendered claims, and coverage status.
 - **Graphs** expose linked memory items and edges for inspection.
 
 Most users should manage memory from the desktop Memory view. These endpoints are for admin/client surfaces.
-
-## Scopes
-
-```bash
-curl http://localhost:6877/admin/memory/scopes \
-  -H "Authorization: Bearer $API_KEY"
-```
 
 ## Records
 
@@ -28,7 +21,7 @@ curl http://localhost:6877/admin/memory/scopes \
 curl -X POST http://localhost:6877/admin/memory/record \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text":"User prefers concise engineering feedback.","scope":"default"}'
+  -d '{"text":"User prefers concise engineering feedback.","kind_tag":"preference"}'
 ```
 
 ### Pin or unpin record

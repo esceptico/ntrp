@@ -8,14 +8,14 @@ It provides:
 - FastAPI HTTP/SSE server
 - agent runtime and multi-agent tooling
 - integrations and deferred tool loading
-- persistent memory: facts, patterns, profile entries, lenses, learning candidates, and audit/cleanup APIs
+- persistent memory records, search, graph/lens APIs, and desktop admin surfaces
 - builtin skills and user-tool loading
 - sandboxed `render_html` widget tool support for interactive desktop clients
 
 Run from source:
 
 ```bash
-uv sync
+uv sync --extra dev
 uv run ntrp-server serve
 ```
 

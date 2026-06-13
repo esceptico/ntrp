@@ -77,7 +77,7 @@ When ntrp learns something new:
 4. **Consolidate** facts into patterns when there is enough support.
 5. **Propose** profile or policy changes when memory feedback suggests a durable improvement.
 
-Profile changes and continual-learning proposals stay review-gated. The system can propose them, but the user can inspect, approve, reject, edit, or archive them from the memory UI.
+Profile changes and continual-learning proposals stay review-gated. The system can propose them, but applying them still requires an explicit reviewed action; they are not silently promoted into always-on memory.
 
 ## Consolidation
 
@@ -120,19 +120,13 @@ Applying a proposal activates a bounded note for its lane. It does not rewrite s
 
 Open the Memory view in the desktop app to inspect and control memory.
 
-![Memory patterns viewer](../images/memory-patterns.png)
+![Memory records viewer](../images/memory-patterns.png)
 
-- **Home**: health, counts, and next actions
-- **Search**: inspect query-time retrieval before it reaches the agent
-- **Sent**: see what memory was injected into recent prompts/tools
-- **Profile**: edit always-visible profile entries
-- **Facts**: browse and edit source-of-truth records
-- **Patterns**: inspect derived memory and supporting facts
-- **Cleanup**: dry-run archival candidates before applying cleanup
-- **Improve**: review continual-learning proposals
-- **Audit**: answer why memory changed
+- **Memory**: search and inspect durable records, provenance, corroboration, feedback, and record lifecycle state.
+- **Graph**: inspect linked records and relationships visually.
+- **Lenses**: create curated views over memory by naming a criterion and reviewing the rendered claims.
 
-![Memory learning proposals](../images/memory-learning.png)
+![Memory lenses view](../images/memory-learning.png)
 
 ## Agent Tools
 

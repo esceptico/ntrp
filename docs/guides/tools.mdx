@@ -14,15 +14,16 @@ Some tool schemas are **deferred**. Deferred tools are known to the agent, but t
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `bash` | Execute shell commands | 🔒 Dangerous commands |
-| `read_file` | Read file contents (supports `~` expansion) | — |
+| `read_file` / `list_files` / `find_files` / `search_text` | Inspect local files without editing them | — |
+| `write_file` / `edit_file` | Create or modify local files | 🔒 |
 | `current_time` | Get current date and time | — |
 | `research` | Spawn a research agent with all read-only tools (`depth`: quick/normal/deep) | — |
-| `load_tools` | Load deferred tool schemas by group or exact name | — |
 | `background` | Spawn an autonomous background agent for long-running tasks | — |
 | `render_html` | Render a sandboxed rich card in desktop chat (`display` or `input` mode) | — |
+| `load_tools` | Load deferred tool schemas by group or exact name | — |
 | `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
 
-`background` and `set_directives` are deferred. The agent should first load `background` or `directives` when those capabilities are needed.
+File write tools and `set_directives` are deferred. The `background` tool can start new background work immediately; the `background` deferred group is only for listing, reading, or canceling existing background tasks.
 
 ## Email
 
@@ -82,6 +83,8 @@ Deferred group: `slack`.
 | `slack_dm` | Read a direct message conversation | — |
 | `slack_users` | Search workspace members | — |
 | `slack_user` | Read a user profile | — |
+| `slack_post_message` | Post a message | 🔒 |
+| `slack_post_blocks` | Post Block Kit content | 🔒 |
 
 ## Automations
 
@@ -90,11 +93,26 @@ Deferred group: `automations`.
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `create_automation` | Schedule a task | 🔒 |
+| `create_loop` | Start an in-chat recurring loop | 🔒 |
+| `schedule_wakeup` | Schedule a one-off wakeup into the current session | 🔒 |
 | `list_automations` | List all automations | — |
 | `update_automation` | Modify an automation | 🔒 |
 | `delete_automation` | Remove an automation | 🔒 |
 | `run_automation` | Trigger immediate run | 🔒 |
 | `get_automation_result` | Get last run result | — |
+
+## Runtime state
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `update_todos` | Update the visible task list for complex work | — |
+| `get_goal` | Read the active durable session goal | — |
+| `complete_goal` | Mark the active goal complete after verification | — |
+| `block_goal` | Mark the active goal blocked on missing input | — |
+| `create_session` | Create a new chat/channel session | — |
+| `list_recent_sessions` / `read_session` / `search_transcripts` | Inspect readable chat history | — |
+
+These are mostly internal coordination tools. The desktop app exposes the visible results as todos, channels, session history, and status updates.
 
 ## Background tasks
 

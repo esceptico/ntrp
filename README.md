@@ -55,13 +55,13 @@ just              # list recipes
 just install      # install server and desktop deps
 just server       # run backend from apps/server
 just desktop      # run desktop client
-just check        # run backend + client checks
+just check        # run backend tests and desktop typecheck
 ```
 
 Useful focused checks:
 
 ```bash
-cd apps/server && uv run pytest
+cd apps/server && uv sync --extra dev && uv run pytest
 cd apps/desktop && bun run typecheck && bun test
 ```
 
@@ -91,7 +91,7 @@ cd apps/desktop && bun run typecheck && bun test
 ./release final    # 0.6.0-rc.2 → 0.6.0
 ```
 
-Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI packages are published automatically via CI. Release candidates are GitHub prereleases and are published to npm under the `rc` dist-tag.
+Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI packages are published automatically via CI. Release candidates are GitHub prereleases.
 
 ## Inspired by
 

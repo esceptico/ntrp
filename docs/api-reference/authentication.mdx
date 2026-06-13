@@ -38,7 +38,3 @@ The server stores only a salted SHA-256 hash of the key — the plaintext is nev
 ## Public endpoints
 
 The `/health` endpoint is always public (no auth required). This allows Docker healthchecks and monitoring tools to work without credentials.
-
-## Webhook authentication
-
-Webhook endpoints (`/webhooks/email`) use a separate `NTRP_WEBHOOK_TOKEN` for authentication, passed via `X-Webhook-Token` header or Bearer token.
