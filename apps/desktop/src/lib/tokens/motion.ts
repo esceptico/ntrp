@@ -22,8 +22,6 @@ export const SPRING_TAP = { type: "spring", stiffness: 380, damping: 30, mass: 1
 export const SPRING_LAYOUT = { type: "spring", stiffness: 220, damping: 28, mass: 1 } as const;
 /** Popover / menu reveal — origin-anchored, snappy with a hint of bounce. */
 export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mass: 1 } as const;
-/** Tap release — snappy spring so an interrupted release re-targets cleanly. */
-export const SPRING_TAP_RELEASE = { type: "spring", stiffness: 400, damping: 22, mass: 0.8 } as const;
 /** Row settles — Control Center–style spring for sibling-row entrances.
  *  Used by `TurnGroup`'s work-block stagger. Snappier than SPRING_MODAL;
  *  livelier than SPRING_CARD. */
@@ -37,8 +35,6 @@ export const SPRING_STACK = { type: "spring", stiffness: 340, damping: 32, mass:
 
 // ─── Eases (cubic-bezier tuples) ─────────────────────────────
 
-/** Material 3 emphasized — default for transitions. */
-export const EASE_STANDARD = [0.2, 0, 0, 1] as const;
 /** Material 3 emphasized-decelerate — entries that should "land". */
 export const EASE_DECELERATE = [0.05, 0.7, 0.1, 1] as const;
 /** Snappy out-cubic for hover brightness/color shifts. */

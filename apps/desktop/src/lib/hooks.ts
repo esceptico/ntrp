@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
 } from "react";
 
 /** Returns `[flag, fire]`. `fire()` flips the flag true and schedules
@@ -143,23 +142,6 @@ export function useListNav(
   return { index, setIndex, onKeyDown };
 }
 
-/** Calls `onClose` when a `mousedown` lands outside the element referenced
- *  by `ref`. No-op when `open` is false (keeps the listener off when it
- *  isn't needed). Used by popovers, dropdowns, and command pickers. */
-export function useOutsideClick(
-  ref: RefObject<HTMLElement | null>,
-  open: boolean,
-  onClose: () => void,
-): void {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, ref, onClose]);
-}
 
 /** Invokes `callback` once on mount, then on each `intervalMs` tick
  *  (skipped when the document is hidden), and again on every visibility
