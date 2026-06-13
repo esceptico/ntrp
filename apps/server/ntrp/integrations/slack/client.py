@@ -1,7 +1,7 @@
 import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 
@@ -113,6 +113,25 @@ class SlackClient:
             "Content-Type": "application/json; charset=utf-8",
         }
         async with session.post(f"{_API}/{method}", headers=headers, json=payload) as resp:
+            data = await resp.json()
+            if not data.get("ok"):
+                self._raise_for_error(method, data, dict(resp.headers))
+            return data
+
+    async def auth_test(self, token_kind: Literal["bot", "user", "read"] = "read") -> dict[str, Any]:
+        method = "auth.test"
+        if token_kind == "bot":
+            if not self._bot_token:
+                raise RuntimeError("Slack auth.test requires a bot token (xoxb-)")
+            token = self._bot_token
+        elif token_kind == "user":
+            if not self._user_token:
+                raise RuntimeError("Slack auth.test requires a user token (xoxp-)")
+            token = self._user_token
+        else:
+            token = self._read_token
+        headers = {"Authorization": f"Bearer {token}"}
+        async with aiohttp.ClientSession() as session, session.get(f"{_API}/{method}", headers=headers) as resp:
             data = await resp.json()
             if not data.get("ok"):
                 self._raise_for_error(method, data, dict(resp.headers))

@@ -1,5 +1,41 @@
-import { expect, test } from "bun:test";
-import { parseModelsResponse, parseServerConfig } from "../src/api.js";
+import { afterEach, expect, test } from "bun:test";
+import {
+  addGmailAccountApi,
+  getSetupStatusApi,
+  parseModelsResponse,
+  parseServerConfig,
+  preflightGoogleSetupApi,
+  saveGoogleCredentialsApi,
+  verifySlackTokenApi,
+} from "../src/api.js";
+
+const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+
+afterEach(() => {
+  (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+});
+
+function installRequestRecorder(data: unknown = {}) {
+  const requests: { path: string; method?: string; body?: string; timeout?: number }[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, req: { path: string; method?: string; body?: string; timeout?: number }) => {
+          requests.push(req);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data,
+            text: "",
+          };
+        },
+      },
+    },
+  };
+  return requests;
+}
 
 const config = {
   chat_model: "gpt-5.2",
@@ -55,4 +91,39 @@ test("accepts current config and model metadata contracts", () => {
     research_model: "gpt-5.2",
     memory_model: "gpt-5.2",
   })).toMatchObject({ reasoning_efforts: { "gpt-5.2": ["low", "medium"] } });
+});
+
+test("setup API wrappers preserve endpoint contracts", async () => {
+  const requests = installRequestRecorder({});
+  const appConfig = { serverUrl: "http://localhost:6877", apiKey: "" };
+
+  await getSetupStatusApi(appConfig);
+  await saveGoogleCredentialsApi(appConfig, { path: "/tmp/client_secret.json" });
+  await preflightGoogleSetupApi(appConfig, "email_calendar");
+  await verifySlackTokenApi(appConfig, "slack_bot_token", "xoxb-token");
+
+  expect(requests.map((request) => request.path)).toEqual([
+    "/setup/status",
+    "/setup/google/credentials",
+    "/setup/google/preflight",
+    "/setup/slack/verify",
+  ]);
+  expect(JSON.parse(requests[1].body ?? "{}")).toEqual({ path: "/tmp/client_secret.json" });
+  expect(JSON.parse(requests[2].body ?? "{}")).toEqual({ service_choice: "email_calendar" });
+  expect(JSON.parse(requests[3].body ?? "{}")).toEqual({ service_id: "slack_bot_token", api_key: "xoxb-token" });
+});
+
+test("addGmailAccountApi sends backward-compatible service_choice body", async () => {
+  const requests = installRequestRecorder({ email: "user@example.com", status: "connected" });
+  const appConfig = { serverUrl: "http://localhost:6877", apiKey: "" };
+
+  await addGmailAccountApi(appConfig);
+  await addGmailAccountApi(appConfig, "calendar");
+
+  expect(requests).toMatchObject([
+    { path: "/gmail/add", method: "POST" },
+    { path: "/gmail/add", method: "POST" },
+  ]);
+  expect(JSON.parse(requests[0].body ?? "{}")).toEqual({ service_choice: "all" });
+  expect(JSON.parse(requests[1].body ?? "{}")).toEqual({ service_choice: "calendar" });
 });

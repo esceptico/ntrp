@@ -897,6 +897,68 @@ export interface GmailAccount {
   error?: string;
 }
 
+// ─── Setup assistant contracts ─────────────────────────────────────────
+
+export type GoogleServiceChoice = "email" | "email_calendar" | "calendar" | "all";
+
+export interface GoogleCredentialsStatus {
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  client_id: string | null;
+  client_type: string | null;
+  error: string | null;
+}
+
+export interface ToolProviderConnection {
+  id: string;
+  label: string;
+  kind: "native" | "mcp";
+  status: "connected" | "error" | "not_configured";
+  detail: string | null;
+  tool_count: number;
+}
+
+export interface CalendarTokenStatus {
+  token_file: string;
+  has_calendar_scope: boolean;
+  error?: string | null;
+}
+
+export interface SetupStatus {
+  google: {
+    enabled: boolean;
+    credentials: GoogleCredentialsStatus;
+    accounts: GmailAccount[];
+    calendar_tokens: CalendarTokenStatus[];
+    provider_statuses: ToolProviderConnection[];
+  };
+  slack: {
+    services: ServiceConnection[];
+    provider_status: ToolProviderConnection | null;
+  };
+  mcp: {
+    servers: MCPServer[];
+    provider_statuses: ToolProviderConnection[];
+  };
+}
+
+export interface GooglePreflightResponse {
+  ok: boolean;
+  credentials: GoogleCredentialsStatus;
+  scopes: string[];
+  warnings: string[];
+}
+
+export interface SlackVerifyResponse {
+  ok: boolean;
+  token_kind: "bot" | "user";
+  team?: string | null;
+  team_id?: string | null;
+  user?: string | null;
+  bot_id?: string | null;
+}
+
 export interface CreateCustomModelPayload {
   model_id: string;
   base_url: string;
@@ -926,8 +988,49 @@ export async function listGmailAccountsApi(config: AppConfig): Promise<GmailAcco
   return r.accounts;
 }
 
-export async function addGmailAccountApi(config: AppConfig): Promise<{ email: string; status: string }> {
-  return apiWithConfig<{ email: string; status: string }>(config, "/gmail/add", { method: "POST" });
+export async function getSetupStatusApi(config: AppConfig): Promise<SetupStatus> {
+  return apiWithConfig<SetupStatus>(config, "/setup/status");
+}
+
+export async function saveGoogleCredentialsApi(
+  config: AppConfig,
+  payload: { path?: string; json?: unknown },
+): Promise<{ status: string; credentials: GoogleCredentialsStatus }> {
+  return apiWithConfig<{ status: string; credentials: GoogleCredentialsStatus }>(config, "/setup/google/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function preflightGoogleSetupApi(
+  config: AppConfig,
+  serviceChoice: GoogleServiceChoice,
+): Promise<GooglePreflightResponse> {
+  return apiWithConfig<GooglePreflightResponse>(config, "/setup/google/preflight", {
+    method: "POST",
+    body: JSON.stringify({ service_choice: serviceChoice }),
+  });
+}
+
+export async function addGmailAccountApi(
+  config: AppConfig,
+  serviceChoice: GoogleServiceChoice = "all",
+): Promise<{ email: string | null; status: string; token_file?: string; scopes?: string[] }> {
+  return apiWithConfig<{ email: string | null; status: string; token_file?: string; scopes?: string[] }>(config, "/gmail/add", {
+    method: "POST",
+    body: JSON.stringify({ service_choice: serviceChoice }),
+  });
+}
+
+export async function verifySlackTokenApi(
+  config: AppConfig,
+  serviceId: "slack_bot_token" | "slack_user_token",
+  apiKey: string,
+): Promise<SlackVerifyResponse> {
+  return apiWithConfig<SlackVerifyResponse>(config, "/setup/slack/verify", {
+    method: "POST",
+    body: JSON.stringify({ service_id: serviceId, api_key: apiKey }),
+  });
 }
 
 export async function removeGmailAccountApi(

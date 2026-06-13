@@ -4,6 +4,7 @@ import { type MCPServer, listMCPServersApi } from "../../../api";
 import { TabPanels } from "../../ui/TabPanels";
 import { ServerForm } from "./ServerForm";
 import { ServerList } from "./ServerList";
+import { SetupAssistant } from "../setup/SetupAssistant";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -12,6 +13,7 @@ export function MCPTab() {
   const [servers, setServers] = useState<MCPServer[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   async function refresh() {
     setLoadError(null);
@@ -40,6 +42,16 @@ export function MCPTab() {
       value={view.kind === "edit" ? `edit:${view.name}` : view.kind}
       direction={view.kind === "list" ? -1 : 1}
     >
+      {assistantOpen && (
+        <SetupAssistant
+          kind="mcp"
+          onClose={() => setAssistantOpen(false)}
+          onDone={async () => {
+            setAssistantOpen(false);
+            await refresh();
+          }}
+        />
+      )}
       {view.kind === "add" ? (
         <ServerForm
           mode="add"
@@ -69,6 +81,7 @@ export function MCPTab() {
           onAdd={() => setView({ kind: "add" })}
           onEdit={(name) => setView({ kind: "edit", name })}
           onChanged={refresh}
+          onAssistant={() => setAssistantOpen(true)}
         />
       )}
     </TabPanels>

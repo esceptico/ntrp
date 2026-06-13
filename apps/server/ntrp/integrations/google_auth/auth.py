@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from typing import Literal
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -17,6 +19,92 @@ SCOPES_PUBSUB = ["https://www.googleapis.com/auth/pubsub"]
 
 # Default scopes for new tokens (Gmail + Calendar + Pub/Sub for push notifications)
 SCOPES_ALL = SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND + SCOPES_CALENDAR + SCOPES_PUBSUB
+
+GoogleServiceChoice = Literal["email", "email_calendar", "calendar", "all"]
+GOOGLE_SCOPE_CHOICES: dict[str, list[str]] = {
+    "email": SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND,
+    "email_calendar": SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND + SCOPES_CALENDAR,
+    "calendar": SCOPES_CALENDAR,
+    "all": SCOPES_ALL,
+}
+
+
+def scopes_for_google_choice(choice: str) -> list[str]:
+    try:
+        return list(GOOGLE_SCOPE_CHOICES[choice])
+    except KeyError:
+        raise ValueError("service_choice must be one of: email, email_calendar, calendar, all")
+
+
+def _normalized_installed_payload(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Google credentials JSON must be an object")
+    if "web" in data and "installed" not in data:
+        raise ValueError("Use OAuth client type Desktop app, not Web application.")
+    installed = data.get("installed", data)
+    if not isinstance(installed, dict):
+        raise ValueError("Google credentials installed client must be an object")
+    if installed.get("client_type") == "web":
+        raise ValueError("Use OAuth client type Desktop app, not Web application.")
+    return installed
+
+
+def validate_google_credentials_payload(data: dict) -> dict:
+    installed = _normalized_installed_payload(data)
+    required = ("client_id", "client_secret", "auth_uri", "token_uri")
+    missing = [key for key in required if not installed.get(key)]
+    if missing:
+        raise ValueError(f"Google Desktop app credentials missing required field(s): {', '.join(missing)}")
+    return {"installed": dict(installed)}
+
+
+def save_google_credentials_json(data: dict) -> Path:
+    normalized = validate_google_credentials_payload(data)
+    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_PATH.write_text(json.dumps(normalized, indent=2))
+    return CREDENTIALS_PATH
+
+
+def import_google_credentials_file(path: str | Path) -> Path:
+    source = Path(path).expanduser()
+    if not source.is_file():
+        raise ValueError(f"Google credentials file not found: {source}")
+    try:
+        data = json.loads(source.read_text())
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Google credentials file is not valid JSON: {e}")
+    return save_google_credentials_json(data)
+
+
+def google_credentials_status() -> dict:
+    status = {
+        "path": str(CREDENTIALS_PATH),
+        "exists": CREDENTIALS_PATH.exists(),
+        "valid": False,
+        "client_id": None,
+        "client_type": None,
+        "error": None,
+    }
+    if not CREDENTIALS_PATH.exists():
+        status["error"] = (
+            f"Google credentials not found at {CREDENTIALS_PATH}. "
+            "Download OAuth Desktop app credentials from Google Cloud Console."
+        )
+        return status
+    try:
+        data = json.loads(CREDENTIALS_PATH.read_text())
+        if "web" in data and "installed" not in data:
+            status["client_type"] = "web"
+            status["client_id"] = data.get("web", {}).get("client_id")
+            raise ValueError("Use OAuth client type Desktop app, not Web application.")
+        installed = _normalized_installed_payload(data)
+        status["client_type"] = "installed"
+        status["client_id"] = installed.get("client_id")
+        validate_google_credentials_payload(data)
+        status["valid"] = True
+    except Exception as e:
+        status["error"] = str(e)
+    return status
 
 
 def discover_gmail_tokens() -> list[Path]:
@@ -39,6 +127,17 @@ def discover_calendar_tokens() -> list[Path]:
 def gmail_token_path(email: str) -> Path:
     """Get token path for a Gmail account by email."""
     return NTRP_DIR / f"gmail_token_{email}.json"
+
+
+def _next_calendar_token_path() -> Path:
+    base = NTRP_DIR / "calendar_token.json"
+    if not base.exists():
+        return base
+    for idx in range(1, 1000):
+        candidate = NTRP_DIR / f"calendar_token_{idx}.json"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError("Could not allocate a calendar token filename")
 
 
 def get_google_credentials(
@@ -80,8 +179,8 @@ def get_google_credentials(
         if not refreshed:
             if not CREDENTIALS_PATH.exists():
                 raise FileNotFoundError(
-                    f"Google credentials not found at {CREDENTIALS_PATH}\n"
-                    "Download OAuth 'Desktop app' credentials from Google Cloud Console."
+                    f"Google credentials not found at {CREDENTIALS_PATH}. "
+                    "Download OAuth Desktop app credentials from Google Cloud Console."
                 )
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), scopes)
             creds = flow.run_local_server(port=0)
@@ -93,7 +192,7 @@ def get_google_credentials(
         for scope in require_scopes:
             if scope not in creds.scopes:
                 raise PermissionError(
-                    f"Missing permission '{scope}' for {token_path.name}. Re-add the account in settings."
+                    f"Missing Google OAuth scope {scope}. Re-run setup with the required Google service choice."
                 )
 
     return creds
@@ -106,32 +205,38 @@ def has_scope(creds: Credentials, scope: str) -> bool:
     return scope in creds.scopes
 
 
-def add_gmail_account() -> str:
-    """
-    Add a new Gmail account via OAuth flow.
-
-    Returns:
-        The email address of the added account
-
-    Raises:
-        FileNotFoundError: If credentials file doesn't exist
-    """
-
+def add_google_account(service_choice: str = "all") -> dict:
+    scopes = scopes_for_google_choice(service_choice)
     if not CREDENTIALS_PATH.exists():
         raise FileNotFoundError(
-            f"Google credentials not found at {CREDENTIALS_PATH}\n"
-            "Download OAuth 'Desktop app' credentials from Google Cloud Console."
+            f"Google credentials not found at {CREDENTIALS_PATH}. "
+            "Download OAuth Desktop app credentials from Google Cloud Console."
         )
 
-    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES_ALL)
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), scopes)
     creds = flow.run_local_server(port=0)
 
-    service = build("gmail", "v1", credentials=creds)
-    profile = service.users().getProfile(userId="me").execute()
-    email = profile.get("emailAddress", "unknown")
+    email = None
+    if service_choice in ("email", "email_calendar", "all"):
+        service = build("gmail", "v1", credentials=creds)
+        profile = service.users().getProfile(userId="me").execute()
+        email = profile.get("emailAddress", "unknown")
+        token_path = gmail_token_path(email)
+    else:
+        token_path = _next_calendar_token_path()
 
-    token_path = gmail_token_path(email)
     NTRP_DIR.mkdir(parents=True, exist_ok=True)
     token_path.write_text(creds.to_json())
 
-    return email
+    return {
+        "email": email,
+        "status": "connected",
+        "token_file": token_path.name,
+        "scopes": scopes,
+    }
+
+
+def add_gmail_account() -> str:
+    """Compatibility wrapper for the legacy Gmail add flow."""
+    result = add_google_account("all")
+    return result.get("email") or ""

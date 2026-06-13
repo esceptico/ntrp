@@ -41,6 +41,7 @@ import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
+import { SetupAssistant, type SetupAssistantKind } from "./setup/SetupAssistant";
 
 export function IntegrationsTab() {
   const config = useStore((s) => s.config);
@@ -53,6 +54,7 @@ export function IntegrationsTab() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [serviceKey, setServiceKey] = useState("");
+  const [assistant, setAssistant] = useState<Extract<SetupAssistantKind, "google" | "slack"> | null>(null);
 
   const googleEnabled = serverConfig?.google_enabled ?? false;
   const slackServices = useMemo(
@@ -203,6 +205,18 @@ export function IntegrationsTab() {
         <SettingsConnectionHint />
       ) : (
         <>
+          {assistant && (
+            <SetupAssistant
+              kind={assistant}
+              onClose={() => setAssistant(null)}
+              onDone={async () => {
+                setAssistant(null);
+                await fetchServerConfig();
+                await refresh();
+              }}
+            />
+          )}
+
           <ReadinessCard
             tone={readyToolsCount > 0 ? "ok" : "warn"}
             label={readyToolsCount > 0 ? "Tools ready" : "Connect tools"}
@@ -218,6 +232,7 @@ export function IntegrationsTab() {
             onToggle={toggleGoogle}
             onAdd={addGoogleAccount}
             onRemove={removeGoogleAccount}
+            onAssistant={() => setAssistant("google")}
           />
 
           <ServiceCard
@@ -237,6 +252,7 @@ export function IntegrationsTab() {
             onKeyChange={setServiceKey}
             onConnect={connectService}
             onDisconnect={disconnectService}
+            onAssistant={() => setAssistant("slack")}
           />
         </>
       )}
@@ -252,6 +268,7 @@ function GoogleCard({
   onToggle,
   onAdd,
   onRemove,
+  onAssistant,
 }: {
   enabled: boolean;
   summary: GoogleConnectionSummary;
@@ -260,6 +277,7 @@ function GoogleCard({
   onToggle: (enabled: boolean) => Promise<void>;
   onAdd: () => Promise<void>;
   onRemove: (account: GmailAccount) => Promise<void>;
+  onAssistant: () => void;
 }) {
   const pendingGoogle = pendingId === "google";
   const pendingAdd = pendingId === "gmail:add";
@@ -289,6 +307,13 @@ function GoogleCard({
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onAssistant}
+            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
+          >
+            Run setup assistant
+          </button>
           <button
             type="button"
             onClick={() => void onAdd()}
@@ -370,6 +395,7 @@ function ServiceCard({
   onKeyChange,
   onConnect,
   onDisconnect,
+  onAssistant,
 }: {
   connectedServices: ServiceConnection[];
   setupServices: ServiceConnection[];
@@ -381,6 +407,7 @@ function ServiceCard({
   onKeyChange: (value: string) => void;
   onConnect: (service: ServiceConnection) => Promise<void>;
   onDisconnect: (service: ServiceConnection) => Promise<void>;
+  onAssistant: () => void;
 }) {
   return (
     <section className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
@@ -392,6 +419,13 @@ function ServiceCard({
         <div className="mt-1 text-xs text-muted leading-[1.4]">
           Token-backed Slack tools. OAuth MCP servers stay in the MCP tab.
         </div>
+        <button
+          type="button"
+          onClick={onAssistant}
+          className="mt-2 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
+        >
+          Run setup assistant
+        </button>
       </div>
 
       {connectedServices.length + setupServices.length === 0 ? (

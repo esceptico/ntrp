@@ -1,17 +1,23 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ntrp.integrations.gmail.client import GmailSource
 from ntrp.integrations.google_auth.auth import (
     CREDENTIALS_PATH,
-    add_gmail_account,
+    GoogleServiceChoice,
+    add_google_account,
     discover_gmail_tokens,
 )
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.settings import NTRP_DIR
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
+
+
+class GmailAddRequest(BaseModel):
+    service_choice: GoogleServiceChoice = "all"
 
 
 @router.get("/accounts")
@@ -45,22 +51,34 @@ async def gmail_accounts():
     return {"accounts": accounts}
 
 
-@router.post("/add")
-async def gmail_add(runtime: Runtime = Depends(get_runtime)):
-    if not CREDENTIALS_PATH.exists():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Gmail credentials not found at {CREDENTIALS_PATH}. "
-            "Download OAuth 'Desktop app' credentials from Google Cloud Console.",
+def _google_oauth_detail(exc: Exception) -> str:
+    text = str(exc)
+    lower = text.lower()
+    if isinstance(exc, FileNotFoundError):
+        return (
+            f"Google credentials not found at {CREDENTIALS_PATH}. "
+            "Download OAuth Desktop app credentials from Google Cloud Console."
         )
+    if "access_denied" in lower or "test user" in lower:
+        return "Google OAuth was denied. If this is a Testing app, add this Google account as a test user."
+    if "redirect" in lower and ("mismatch" in lower or "uri" in lower):
+        return "Google OAuth redirect URI mismatch. Use OAuth client type Desktop app, not Web application."
+    if "403" in lower or "api has not been used" in lower or "access not configured" in lower:
+        return "Google API returned 403. Enable the Gmail API and/or Google Calendar API for this Google Cloud project."
+    if "missing google oauth scope" in lower or ("insufficient" in lower and "scope" in lower):
+        return f"Missing Google OAuth scope: {text}. Re-run setup with the required Google service choice."
+    return text
 
+
+@router.post("/add")
+async def gmail_add(req: GmailAddRequest | None = None, runtime: Runtime = Depends(get_runtime)):
+    service_choice = req.service_choice if req else "all"
     try:
-        email = await asyncio.to_thread(add_gmail_account)
+        result = await asyncio.to_thread(add_google_account, service_choice)
         await runtime.sync_google_sources()
-
-        return {"email": email, "status": "connected"}
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=_google_oauth_detail(e))
 
 
 @router.delete("/{token_file}")

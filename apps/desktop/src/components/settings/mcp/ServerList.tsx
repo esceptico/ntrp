@@ -13,12 +13,14 @@ export function ServerList({
   onAdd,
   onEdit,
   onChanged,
+  onAssistant,
 }: {
   servers: MCPServer[] | null;
   loadError: string | null;
   onAdd: () => void;
   onEdit: (name: string) => void;
   onChanged: () => Promise<void>;
+  onAssistant: () => void;
 }) {
   return (
     <div className="grid gap-4">
@@ -33,13 +35,22 @@ export function ServerList({
           label="Servers"
           action={
             !loadError && (
-              <button
-                type="button"
-                onClick={onAdd}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-              >
-                <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onAssistant}
+                  className="inline-flex items-center h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
+                >
+                  Run setup assistant
+                </button>
+                <button
+                  type="button"
+                  onClick={onAdd}
+                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+                >
+                  <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
+                </button>
+              </div>
             )
           }
         />
