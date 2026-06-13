@@ -1,40 +1,39 @@
 ---
 title: "Configuration"
-description: "Reference for all environment variables and settings."
+description: "Reference for environment variables and persisted settings."
 ---
 
 ## Config resolution
 
-ntrp resolves configuration in this order (highest priority first):
+ntrp resolves configuration in this order, highest priority first:
 
 1. **Environment variables** — `NTRP_*` prefix or standard provider key names
 2. **`.env` files** — loaded from `~/.ntrp/.env` and `./.env` when developing from source or running Docker Compose
-3. **Settings file** — `~/.ntrp/settings.json` (persisted by clients and server-side config updates)
-4. **Auto-detection** — models resolved from available provider keys
+3. **Settings file** — `~/.ntrp/settings.json`
+4. **Auto-detection** — models and integrations inferred from available keys/tokens
 
 ## LLM providers
 
-Set at least one provider API key, or connect the OpenAI Codex provider with browser sign-in from the desktop client. ntrp auto-selects models based on what's available.
+Set at least one provider API key, or connect OpenAI Codex with browser sign-in from the desktop client.
 
-| Provider | Setup | Chat model | Memory model | Embedding model |
-|----------|-------|------------|--------------|-----------------|
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | claude-sonnet-4-6 | — |
-| OpenAI API | `OPENAI_API_KEY` | gpt-5.2 | gpt-5.2 | text-embedding-3-small |
-| OpenAI Codex | Browser sign-in in `/connect` or `/settings` | openai-codex/gpt-5.5 | openai-codex/gpt-5.4-mini | — |
-| Google | `GEMINI_API_KEY` | gemini-3.1-pro-preview | gemini-3-flash-preview | gemini-embedding-001 |
-
-<Note>
-Claude Pro/Max OAuth is not supported. We will not integrate it until Anthropic officially allows third-party applications to use subscription-based OAuth.
-</Note>
+| Provider | Setup | Typical chat model | Embedding model |
+|----------|-------|--------------------|-----------------|
+| Anthropic | `ANTHROPIC_API_KEY` | Claude | — |
+| OpenAI API | `OPENAI_API_KEY` | GPT | `text-embedding-3-small` |
+| OpenAI Codex | Browser sign-in in desktop onboarding/settings | OpenAI account models | — |
+| Google | `GEMINI_API_KEY` | Gemini | `gemini-embedding-001` |
+| OpenRouter/custom | Desktop settings or custom model config | Provider model | depends |
 
 <Note>
-OpenAI Codex uses OpenAI browser sign-in, not an API key. Tokens are stored locally in `~/.ntrp/openai-codex-auth.json` with `0600` permissions and refreshed automatically.
+Claude Pro/Max OAuth is not supported. ntrp will not integrate it until Anthropic officially allows third-party applications to use subscription-based OAuth.
 </Note>
 
 Override auto-detection with explicit model IDs:
 
 ```bash
 export NTRP_CHAT_MODEL=claude-sonnet-4-6
+export NTRP_RESEARCH_MODEL=claude-sonnet-4-6
+export NTRP_WORKFLOW_MODEL=claude-sonnet-4-6
 export NTRP_MEMORY_MODEL=claude-haiku-4-5
 export NTRP_EMBEDDING_MODEL=text-embedding-3-small
 ```
@@ -47,54 +46,50 @@ export NTRP_EMBEDDING_MODEL=text-embedding-3-small
 |----------|---------|-------------|
 | `NTRP_HOST` | `127.0.0.1` | Server bind address |
 | `NTRP_PORT` | `6877` | Server port |
+| `NTRP_WEBHOOK_TOKEN` | unset | Separate token for webhook/event endpoints |
 
 ## Features
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTRP_MEMORY` | `true` | Enable persistent memory |
-| `NTRP_DREAMS` | `false` | Enable cross-domain dream generation |
-| `NTRP_CONSOLIDATION_INTERVAL` | `30` | Minutes between consolidation runs (builtin automation) |
-| `NTRP_GMAIL` | `false` | Enable Gmail integration |
-| `NTRP_GMAIL_DAYS` | `30` | Days of email history to index |
-| `NTRP_CALENDAR` | `false` | Enable Google Calendar |
+| `NTRP_CONSOLIDATION_INTERVAL` | `30` | Minutes between consolidation runs |
+| `NTRP_GOOGLE` | `false` | Enable Google integrations, including Gmail and Calendar tools |
+| `NTRP_GMAIL_DAYS` | `30` | Days of Gmail history to index |
+| `NTRP_DEFERRED_TOOLS` | `true` | Hide infrequent integration/action tool schemas until loaded |
 
 ## Optional integrations
 
 | Variable | Description |
 |----------|-------------|
-| `EXA_API_KEY` | Exa.ai API key for web search (required only when `WEB_SEARCH=exa`) |
-| `WEB_SEARCH` | Web provider mode: `auto` (default), `exa`, `ddgs`, or `none` |
+| `EXA_API_KEY` | Exa.ai API key for web search when `WEB_SEARCH=exa` |
+| `WEB_SEARCH` | Web provider mode: `auto`, `exa`, `ddgs`, or `none` |
+| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) |
+| `SLACK_USER_TOKEN` | Slack user token (`xoxp-...`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram notifications |
+
+For Google, Slack, and MCP, prefer the desktop setup assistants in **Settings → Integrations** and **Settings → MCP**.
 
 ## Agent behavior
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTRP_MAX_DEPTH` | `8` | Max agentic recursion depth |
-| `NTRP_REASONING_EFFORT` | unset | Optional model-specific reasoning effort, e.g. `low`, `medium`, `high`, `xhigh`, or whatever the selected model advertises |
-| `NTRP_DEFERRED_TOOLS` | `true` | Hide infrequent integration/action tool schemas until the agent loads them with `load_tools` |
+| `NTRP_REASONING_EFFORT` | unset | Optional model-specific reasoning effort |
+| `NTRP_COMPRESSION_THRESHOLD` | app default | Token threshold for context compaction |
+| `NTRP_MAX_MESSAGES` | app default | Message-count threshold for compaction |
 
-Deferred tools reduce prompt size and improve cache stability. Gmail, calendar, Slack, automation, background-task, notification, directive, and MCP tools are loaded on demand. Always-visible tools include shell/file access, memory recall/write tools, web search/fetch, research, skills, current time, and `load_tools` itself.
+Deferred tools reduce prompt size and improve cache stability. Gmail, calendar, Slack, automation, background-task, notification, directive, file-write, and MCP tools are loaded on demand. Always-visible tools include local file reads, web search/fetch, research, skills, current time, and `load_tools` itself.
 
 ## Authentication
 
 On first `ntrp-server serve`, an API key is generated and printed. The server stores only a salted SHA-256 hash — the plaintext key is never persisted.
 
 ```bash
-# Generate a new key
 ntrp-server serve --reset-key
 ```
 
-Desktop clients store the key in local app storage and encrypt it with OS-backed storage when supported. The server stores only the salted hash.
-
-| Variable | Description |
-|----------|-------------|
-| `NTRP_WEBHOOK_TOKEN` | Separate token for webhook endpoints (email notifications) |
-
-## Custom models
-
-See [Custom Models](/integrations/models) for registering OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint.
+Desktop clients store the key locally and encrypt it with OS-backed storage when supported.
 
 ## Settings file
 
@@ -103,8 +98,14 @@ See [Custom Models](/integrations/models) for registering OpenRouter, Ollama, vL
 ```json
 {
   "chat_model": "claude-sonnet-4-6",
-  "memory_model": "claude-sonnet-4-6",
+  "research_model": "claude-sonnet-4-6",
+  "workflow_model": "claude-sonnet-4-6",
+  "memory_model": "claude-haiku-4-5",
   "embedding_model": "text-embedding-3-small",
   "api_key_hash": "a1b2c3:..."
 }
 ```
+
+## Custom models
+
+See [Custom Models](/integrations/models) for registering OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint.

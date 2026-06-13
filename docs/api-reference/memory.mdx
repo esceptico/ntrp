@@ -1,214 +1,163 @@
 ---
 title: "Memory"
-description: "CRUD operations for facts, profile entries, patterns, learning proposals, and memory health."
+description: "Admin APIs for memory scopes, records, lenses, search, and graph views."
 ---
 
 ## Mental model
 
-- **Facts** are source-of-truth memory records.
-- **Profile entries** are curated always-visible memory with direct provenance.
-- **Patterns** are derived memory over supporting facts. The API still uses the historical `/observations` route name.
-- **Learning candidates** are reviewable continual-learning proposals.
+The current memory API is exposed under `/admin/memory/*`.
 
-## Facts
+- **Memory items** are source-backed records stored in a scope.
+- **Lenses** are curated views over memory with criteria, rendered claims, and coverage status.
+- **Graphs** expose linked memory items and edges for inspection.
 
-### List facts
+Most users should manage memory from the desktop Memory view. These endpoints are for admin/client surfaces.
+
+## Scopes
 
 ```bash
-curl "http://localhost:6877/facts?limit=20&offset=0" \
+curl http://localhost:6877/admin/memory/scopes \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Get fact
+## Records
+
+### Create record
 
 ```bash
-curl http://localhost:6877/facts/42 \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Returns the fact with its entities and linked facts.
-
-### Update fact
-
-```bash
-curl -X PATCH http://localhost:6877/facts/42 \
+curl -X POST http://localhost:6877/admin/memory/record \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text": "Updated fact text"}'
+  -d '{"text":"User prefers concise engineering feedback.","scope":"default"}'
 ```
 
-### Delete fact
+### Pin or unpin record
 
 ```bash
-curl -X DELETE http://localhost:6877/facts/42 \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-## Profile Entries
-
-Profile entries are curated always-visible memory. They are separate from raw facts and keep direct provenance through source fact or observation ids.
-
-### List profile entries
-
-```bash
-curl http://localhost:6877/memory/profile \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Create profile entry
-
-```bash
-curl -X POST http://localhost:6877/memory/profile \
+curl -X POST http://localhost:6877/admin/memory/record/rec_123/pin \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"kind":"preference","summary":"User prefers direct engineering feedback.","source_fact_ids":[42]}'
+  -d '{"pinned":true}'
 ```
 
-### Get profile entry
+## Items
+
+### List items
 
 ```bash
-curl http://localhost:6877/memory/profile/7 \
+curl "http://localhost:6877/admin/memory/items?limit=50" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns the entry with its source facts and source patterns.
-
-### Update profile entry
+### Get item
 
 ```bash
-curl -X PATCH http://localhost:6877/memory/profile/7 \
+curl http://localhost:6877/admin/memory/items/item_123 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Search items
+
+```bash
+curl "http://localhost:6877/admin/memory/search?q=backend%20preferences&limit=20" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Lenses
+
+### List lenses
+
+```bash
+curl http://localhost:6877/admin/memory/lenses \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Draft a lens
+
+```bash
+curl -X POST http://localhost:6877/admin/memory/lenses/draft \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"summary":"User prefers concise, direct engineering feedback."}'
+  -d '{"prompt":"Show project planning preferences"}'
 ```
 
-### Archive profile entry
+### Create a lens
 
 ```bash
-curl -X DELETE http://localhost:6877/memory/profile/7 \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-## Patterns
-
-Patterns are stored behind the historical `observations` API names.
-
-### List patterns
-
-```bash
-curl http://localhost:6877/observations \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Get pattern
-
-```bash
-curl http://localhost:6877/observations/7 \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Returns the pattern with its supporting facts.
-
-### Update pattern
-
-```bash
-curl -X PATCH http://localhost:6877/observations/7 \
+curl -X POST http://localhost:6877/admin/memory/lenses \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"summary": "Updated observation"}'
+  -d '{"name":"Project planning","criterion":"planning preferences and constraints"}'
 ```
 
-### Delete pattern
+### Update lens criterion
 
 ```bash
-curl -X DELETE http://localhost:6877/observations/7 \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-## Learning candidates
-
-Create reviewable continual-learning candidates from recent memory feedback and runtime evidence:
-
-```bash
-curl -X POST http://localhost:6877/memory/learning/propose \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-List candidates:
-
-```bash
-curl http://localhost:6877/memory/learning/candidates \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Update a candidate status:
-
-```bash
-curl -X PATCH http://localhost:6877/memory/learning/candidates/12/status \
+curl -X PUT http://localhost:6877/admin/memory/lenses/lens_123/criterion \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"status":"approved"}'
+  -d '{"criterion":"durable project planning preferences"}'
 ```
 
-## Stats
+### Promote lens
 
 ```bash
-curl http://localhost:6877/stats \
+curl -X POST http://localhost:6877/admin/memory/lenses/lens_123/promote \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-```json
-{
-  "fact_count": 245,
-  "observation_count": 38,
-  "dream_count": 5
-}
-```
-
-## Audit and cleanup
-
-Inspect memory health:
+### Delete lens
 
 ```bash
-curl http://localhost:6877/memory/audit \
+curl -X DELETE http://localhost:6877/admin/memory/lenses/lens_123 \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Preview cleanup before applying it:
+## Lens pages
+
+### Get rendered page
 
 ```bash
-curl -X POST http://localhost:6877/memory/prune/dry-run \
+curl http://localhost:6877/admin/memory/lenses/lens_123/page \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Apply cleanup after reviewing the dry run:
+### Get render status
 
 ```bash
-curl -X POST http://localhost:6877/memory/prune/apply \
+curl http://localhost:6877/admin/memory/lenses/lens_123/page/status \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Inspect what memory would be retrieved for a query:
+### Write back edits
 
 ```bash
-curl -X POST http://localhost:6877/memory/recall/inspect \
+curl -X POST http://localhost:6877/admin/memory/lenses/lens_123/writeback \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"query":"what should the agent know about my backend architecture preferences?"}'
+  -d '{"claims":[]}'
 ```
 
-## Purge
+## Graph
 
-Delete all memory data:
+### Global graph
 
 ```bash
-curl -X POST http://localhost:6877/memory/clear \
+curl http://localhost:6877/admin/memory/graph \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Clear only patterns (keep facts):
+### Item-centered graph
 
 ```bash
-curl -X POST http://localhost:6877/memory/observations/clear \
+curl http://localhost:6877/admin/memory/items/item_123/graph \
   -H "Authorization: Bearer $API_KEY"
 ```
+
+## Agent tools
+
+For normal chat usage, prefer the agent tools:
+
+- `remember` — store a durable memory record
+- `recall` — search long-term memory
+- `forget` — archive/delete a matching remembered record

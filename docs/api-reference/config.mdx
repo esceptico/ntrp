@@ -154,46 +154,9 @@ curl -X DELETE http://localhost:6877/services/telegram \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Notifier configs
+## Notifiers
 
-Notifiers deliver automation results to external channels.
-
-### List configs
-
-```bash
-curl http://localhost:6877/notifiers/configs \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### List available types
-
-```bash
-curl http://localhost:6877/notifiers/types \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Create notifier
-
-```bash
-curl -X POST http://localhost:6877/notifiers/configs \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-telegram", "type": "telegram", "config": {"chat_id": "123456"}}'
-```
-
-### Test notifier
-
-```bash
-curl -X POST http://localhost:6877/notifiers/configs/my-telegram/test \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Delete notifier
-
-```bash
-curl -X DELETE http://localhost:6877/notifiers/configs/my-telegram \
-  -H "Authorization: Bearer $API_KEY"
-```
+Notifier configuration lives in the automation router. See [Notifiers](/api-reference/notifiers) for `/notifiers/*` endpoints.
 
 ## Directives
 

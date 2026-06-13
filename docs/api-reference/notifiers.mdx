@@ -1,0 +1,99 @@
+---
+title: "Notifiers"
+description: "Configure and test notification destinations for automations and the notify tool."
+---
+
+## Overview
+
+Notifiers deliver messages from automations or the `notify` tool. They are configured separately from automation creation.
+
+Supported types include:
+
+| Type | Typical fields |
+|------|----------------|
+| `telegram` | `user_id` |
+| `email` | `from_account`, `to_address` |
+| `slack` | `channel` |
+| `bash` | `command` |
+
+## List enabled notifier names
+
+```bash
+curl http://localhost:6877/notifiers \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## List configs
+
+```bash
+curl http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## List notifier types
+
+```bash
+curl http://localhost:6877/notifiers/types \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Create config
+
+Telegram:
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"telegram-me","type":"telegram","config":{"user_id":"123456"}}'
+```
+
+Email:
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"email-me","type":"email","config":{"from_account":"me@example.com","to_address":"me@example.com"}}'
+```
+
+Slack:
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"slack-alerts","type":"slack","config":{"channel":"#alerts"}}'
+```
+
+Bash:
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"local-notify","type":"bash","config":{"command":"osascript -e '\''display notification $NTRP_MESSAGE with title $NTRP_TITLE'\''"}}'
+```
+
+## Update config
+
+```bash
+curl -X PUT http://localhost:6877/notifiers/configs/telegram-me \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"telegram","config":{"user_id":"123456"}}'
+```
+
+## Test config
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs/telegram-me/test \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Delete config
+
+```bash
+curl -X DELETE http://localhost:6877/notifiers/configs/telegram-me \
+  -H "Authorization: Bearer $API_KEY"
+```

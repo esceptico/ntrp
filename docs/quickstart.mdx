@@ -11,6 +11,10 @@ description: "Get ntrp running locally."
 
 ## Install
 
+<Note>
+`uv tool install ntrp` installs the backend CLI. The Electron desktop app currently runs from a source checkout.
+</Note>
+
 <Tabs>
   <Tab title="Backend package">
     ```bash
@@ -26,17 +30,13 @@ description: "Get ntrp running locally."
   </Tab>
 </Tabs>
 
-<Note>
-The desktop client currently runs from source with `bun run dev` or packaged builds from `apps/desktop`. The old terminal client has been removed.
-</Note>
-
 ## Set up
 
 <Steps>
 
-### Set your LLM provider (optional)
+### Set your LLM provider
 
-You can export a provider API key now, or configure a provider interactively in the desktop app after connecting. OpenAI can be used either with an API key or with browser sign-in through the OpenAI Codex provider.
+You can export a provider API key now, or configure a provider interactively in the desktop app after connecting.
 
 ```bash
 # Pick one, or skip and configure from the desktop app:
@@ -50,7 +50,7 @@ If you want to use an OpenAI subscription/account instead of an API key, skip th
 ### Start the server
 
 <Tabs>
-  <Tab title="Installed">
+  <Tab title="Installed backend">
     ```bash
     ntrp-server serve
     ```
@@ -73,9 +73,10 @@ Enter this in a desktop client to connect. It won't be shown again.
 
 ### Start the desktop app
 
-In a separate terminal:
+Desktop currently requires a source checkout. In a second terminal:
 
 ```bash
+cd ntrp
 just desktop
 ```
 
@@ -88,6 +89,10 @@ bun run dev
 
 Paste your API key in the connection screen. If no LLM provider is configured, provider onboarding appears so you can connect a provider and choose defaults.
 
+### Connect integrations
+
+Open **Settings → Integrations** for Gmail/Google Calendar and Slack, or **Settings → MCP** for MCP servers. Use **Run setup assistant** for guided Google credentials, Slack token verification, and MCP JSON import.
+
 </Steps>
 
 ## What's next?
@@ -97,7 +102,7 @@ Paste your API key in the connection screen. If no LLM provider is configured, p
     Learn the app surfaces: chat, approvals, settings, memory, and traces.
   </Card>
   <Card title="Configuration" icon="gear" href="/configuration">
-    Customize models, enable integrations, and tune settings.
+    Customize models, integrations, and runtime settings.
   </Card>
   <Card title="Memory" icon="brain" href="/guides/memory">
     Understand how ntrp remembers things.

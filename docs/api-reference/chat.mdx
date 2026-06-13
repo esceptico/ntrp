@@ -1,38 +1,20 @@
 ---
 title: "Chat"
-description: "Send messages and receive streamed agent responses."
+description: "Send messages, stream agent events, approve tools, and manage active runs."
 ---
 
 ## Connect to event stream
 
-Open a persistent SSE connection to receive all events for a session.
+Open a persistent SSE connection to receive events for a session.
 
 ```bash
 curl -N http://localhost:6877/chat/events/{session_id} \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns a `text/event-stream` response. See [Streaming](/api-reference/streaming) for event types. The connection stays open with keepalive pings every 5 seconds.
+Returns `text/event-stream`. See [Streaming](/api-reference/streaming) for event types.
 
 ## Send message
-
-Fire-and-forget message send. If an agent is already running, the message is queued for safe injection at the next turn boundary.
-
-<ParamField body="message" type="string" required>
-  The user message to send.
-</ParamField>
-
-<ParamField body="images" type="array">
-  Optional array of image objects to include with the message. Each image has `media_type` (e.g. `image/jpeg`, `image/png`) and `data` (base64-encoded content).
-</ParamField>
-
-<ParamField body="session_id" type="string" required>
-  Target session ID.
-</ParamField>
-
-<ParamField body="skip_approvals" type="boolean" default="false">
-  Auto-approve all tool calls.
-</ParamField>
 
 ```bash
 curl -X POST http://localhost:6877/chat/message \
@@ -41,24 +23,22 @@ curl -X POST http://localhost:6877/chat/message \
   -d '{"message": "What meetings do I have today?", "session_id": "abc-123"}'
 ```
 
-With an image:
+Useful request fields:
 
-```bash
-curl -X POST http://localhost:6877/chat/message \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "What is in this image?",
-    "session_id": "abc-123",
-    "images": [{"media_type": "image/jpeg", "data": "<base64>"}]
-  }'
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | User message |
+| `session_id` | string | Target session |
+| `images` | array | Optional base64 image attachments |
+| `skip_approvals` | boolean | Auto-approve all tool calls for this run |
+
+Response:
 
 ```json
 {"run_id": "run_abc", "session_id": "abc-123"}
 ```
 
-The agent response arrives on the SSE event stream.
+The assistant response arrives on the SSE stream.
 
 ## Submit tool result
 
@@ -89,39 +69,83 @@ curl -X POST http://localhost:6877/chat/background \
 
 ## Cancel
 
-Cancel a running agent loop.
+Cancel a running agent loop by run or session.
 
 ```bash
 curl -X POST http://localhost:6877/cancel \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"run_id":"run_abc"}'
+```
+
+Or:
+
+```json
+{"session_id":"abc-123"}
+```
+
+Cancel a foreground subagent tool call:
+
+```bash
+curl -X POST http://localhost:6877/chat/subagents/{tool_call_id}/cancel \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Context usage
+## Queued injections
 
-Get current token and tool-schema usage for the session. During an active run, tool counts reflect the tools visible to that run after deferred loading.
+If a message is queued for injection into an active run, cancel it by client id:
+
+```bash
+curl -X DELETE http://localhost:6877/chat/inject/{client_id} \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Run status
+
+```bash
+curl http://localhost:6877/chat/runs/status \
+  -H "Authorization: Bearer $API_KEY"
+
+curl http://localhost:6877/chat/{session_id}/workflows \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Background tasks and child agents
+
+```bash
+curl http://localhost:6877/chat/background-tasks \
+  -H "Authorization: Bearer $API_KEY"
+
+curl -X POST http://localhost:6877/chat/background-tasks/{task_id}/cancel \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Child agents created by research/workflow tools can be inspected and controlled:
+
+```bash
+curl http://localhost:6877/chat/child-agents \
+  -H "Authorization: Bearer $API_KEY"
+
+curl http://localhost:6877/chat/child-agents/{child_run_id}/result \
+  -H "Authorization: Bearer $API_KEY"
+
+curl -X POST http://localhost:6877/chat/child-agents/{child_run_id}/cancel \
+  -H "Authorization: Bearer $API_KEY"
+
+curl -X POST http://localhost:6877/chat/child-agents/{child_run_id}/inject \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"extra context"}'
+```
+
+## Context usage
 
 ```bash
 curl http://localhost:6877/context \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-```json
-{
-  "model": "claude-sonnet-4-6",
-  "limit": 200000,
-  "total": 12500,
-  "message_count": 15,
-  "tool_count": 46,
-  "visible_tool_count": 18,
-  "deferred_tool_count": 28,
-  "loaded_tool_count": 2
-}
-```
-
-- `tool_count`: total tools available after provider/service capability filtering.
-- `visible_tool_count`: schemas currently sent to the model.
-- `deferred_tool_count`: tools hidden until `load_tools` is called.
-- `loaded_tool_count`: deferred tools loaded in the active run. This resets after compaction.
+Response includes model, context limit, message count, and visible/deferred/loaded tool counts.
 
 ## Compact context
 

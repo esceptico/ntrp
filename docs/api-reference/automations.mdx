@@ -1,6 +1,6 @@
 ---
 title: "Automations"
-description: "Create and manage scheduled automations."
+description: "Create and manage scheduled, event, idle, and count-triggered automations."
 ---
 
 ## Create automation
@@ -14,12 +14,13 @@ curl -X POST http://localhost:6877/automations \
     "description": "Summarize unread emails and today calendar",
     "trigger_type": "time",
     "at": "09:00",
-    "days": "weekdays",
-    "notifiers": ["telegram"]
+    "days": "weekdays"
   }'
 ```
 
-### Trigger options
+Notifier configuration is separate from automation creation. Use the notification/notifier settings or `/notifiers/*` endpoints.
+
+## Trigger options
 
 **Scheduled:**
 ```json
@@ -28,7 +29,7 @@ curl -X POST http://localhost:6877/automations \
 {"type": "time", "at": "08:00"}
 ```
 
-**Interval (with optional time window):**
+**Interval:**
 ```json
 {"type": "time", "every": "2h"}
 {"type": "time", "every": "30m", "start": "09:00", "end": "18:00"}
@@ -39,19 +40,19 @@ curl -X POST http://localhost:6877/automations \
 {"type": "event", "event_type": "event_approaching", "lead_minutes": 15}
 ```
 
-**Idle (fires after user inactivity):**
+**Idle:**
 ```json
 {"type": "idle", "idle_minutes": 5}
 ```
 
-**Count (fires every N user messages):**
+**Count:**
 ```json
 {"type": "count", "every_n": 3}
 ```
 
-### Multi-trigger
+## Multi-trigger
 
-Pass a `triggers` array to combine multiple triggers (OR logic):
+Pass a `triggers` array to combine multiple triggers with OR logic:
 
 ```bash
 curl -X POST http://localhost:6877/automations \
@@ -67,8 +68,6 @@ curl -X POST http://localhost:6877/automations \
     "cooldown_minutes": 10
   }'
 ```
-
-The `cooldown_minutes` field prevents an automation from firing again too soon after a run.
 
 ## List automations
 
@@ -100,19 +99,41 @@ curl -X POST http://localhost:6877/automations/1/toggle \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Toggle writable
+## Toggle auto-approve
 
-Allow the automation to modify data (memory, emails, calendar, and other connected services):
+Allow a headless automation to skip per-call approval for mutating/external tools that would normally require user approval:
 
 ```bash
-curl -X POST http://localhost:6877/automations/1/writable \
+curl -X POST http://localhost:6877/automations/1/auto-approve \
   -H "Authorization: Bearer $API_KEY"
 ```
+
+The response includes the updated `auto_approve` value.
 
 ## Run immediately
 
 ```bash
 curl -X POST http://localhost:6877/automations/1/run \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Runs and events
+
+```bash
+curl http://localhost:6877/automations/1/runs \
+  -H "Authorization: Bearer $API_KEY"
+
+curl http://localhost:6877/automations/events \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Suggestions
+
+```bash
+curl http://localhost:6877/automations/suggestions \
+  -H "Authorization: Bearer $API_KEY"
+
+curl -X POST http://localhost:6877/automations/suggestions/refresh \
   -H "Authorization: Bearer $API_KEY"
 ```
 
