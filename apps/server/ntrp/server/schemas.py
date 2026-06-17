@@ -460,17 +460,7 @@ class MemoryPruneApplyRequest(BaseModel):
     max_sources: int = Field(default=5, ge=0, le=1000)
 
 
-# --- Memory UI (Stage-5 lens/claim router) ---
-
-
-class PageEditOpBody(BaseModel):
-    kind: Literal["edit", "reject", "accept", "include", "edit_criterion"]
-    claim_id: str | None = None
-    new_text: str | None = None
-
-
-class WriteBackOpsBody(BaseModel):
-    ops: list[PageEditOpBody] = Field(default_factory=list, max_length=200)
+# --- Memory UI ---
 
 
 class RememberBody(BaseModel):
@@ -478,50 +468,6 @@ class RememberBody(BaseModel):
 
     fact: str = Field(..., min_length=1, max_length=20_000)
     project_id: str | None = None
-
-
-class DraftLensBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=500)
-    scope_kind: Literal["user", "project", "session"] = "user"
-    scope_key: str | None = None
-
-
-class CreateLensBody(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=500)
-    # Optional: when omitted the criterion is synthesized server-side from the name.
-    criterion: str | None = Field(default=None, max_length=10_000)
-    # Approved full markdown definition from /lenses/draft. When present, this is
-    # parsed from frontmatter/body and persisted as the lens source of truth.
-    definition_markdown: str | None = Field(default=None, min_length=1, max_length=20_000)
-    render_mode: Literal["flat", "grouped_by_subject"] = "flat"
-    scope_kind: Literal["user", "project", "session"] = "user"
-    scope_key: str | None = None
-
-
-class EditCriterionBody(BaseModel):
-    criterion: str = Field(..., min_length=1, max_length=10_000)
-
-
-class SetLensRenderModeBody(BaseModel):
-    render_mode: Literal["flat", "grouped_by_subject"]
-
-
-class SplitChildBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=500)
-    criterion: str = Field(..., min_length=1, max_length=10_000)
-
-
-class SplitLensBody(BaseModel):
-    into: list[SplitChildBody] = Field(..., min_length=1, max_length=50)
-    archive_parent: bool = True
-
-
-class MergeLensBody(BaseModel):
-    lens_ids: list[str] = Field(..., min_length=2, max_length=50)
-    name: str = Field(..., min_length=1, max_length=500)
-    criterion: str = Field(..., min_length=1, max_length=10_000)
-    scope_kind: Literal["user", "project", "session"] = "user"
-    scope_key: str | None = None
 
 
 # --- Automations / notifiers ---

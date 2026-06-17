@@ -1,6 +1,6 @@
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from ntrp.agent.coverage import CoverageReport, ResearchOutline, coverage_report, empty_coverage
@@ -54,6 +54,62 @@ class WorkItem:
     metadata: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class CandidateSource:
+    id: str
+    title: str
+    locator: str
+    status: Literal["candidate", "read", "rejected"] = "candidate"
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CuratedEvidence:
+    claim: str
+    source: str
+    quote: str | None = None
+    importance: Literal["low", "medium", "high", "critical"] = "medium"
+    confidence: Literal["low", "medium", "high"] = "medium"
+    notes: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationRecord:
+    claim: str
+    verdict: Literal["supported", "contradicted", "uncertain"]
+    sources: tuple[str, ...] = ()
+    rationale: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceQuestion:
+    question: str
+    status: Literal["open", "answered", "dead_end"] = "open"
+    answer_or_reason: str | None = None
+
+
+@dataclass(slots=True)
+class ResearchWorkspace:
+    sources: dict[str, CandidateSource] = field(default_factory=dict)
+    evidence: list[CuratedEvidence] = field(default_factory=list)
+    verifications: list[VerificationRecord] = field(default_factory=list)
+    questions: list[WorkspaceQuestion] = field(default_factory=list)
+    search_history: list[str] = field(default_factory=list)
+
+    def summary(self, *, max_items: int = 8) -> dict[str, Any]:
+        evidence = sorted(
+            self.evidence,
+            key=lambda e: {"critical": 0, "high": 1, "medium": 2, "low": 3}[e.importance],
+        )[:max_items]
+        return {
+            "sources": [asdict(source) for source in list(self.sources.values())[-max_items:]],
+            "evidence": [asdict(item) for item in evidence],
+            "verifications": [asdict(item) for item in self.verifications[-max_items:]],
+            "questions": [asdict(item) for item in self.questions[-max_items:]],
+            "search_history": self.search_history[-max_items:],
+        }
+
+
 @dataclass(slots=True)
 class _CoverageState:
     outline: ResearchOutline
@@ -67,6 +123,7 @@ class SharedLedger:
         self._notes: list[ResearchNote] = []
         self._reads: dict[str, _ReadRecord] = {}
         self._coverage: dict[str, _CoverageState] = {}
+        self._workspaces: dict[str, ResearchWorkspace] = {}
         self._lock = asyncio.Lock()
 
     async def register(self, item_id: str, label: str, **metadata: object) -> None:
@@ -143,6 +200,39 @@ class SharedLedger:
             self._notes.append(note)
             added.append(note)
         return added
+
+    def workspace(self, *, scope: str = "default") -> ResearchWorkspace:
+        workspace = self._workspaces.get(scope)
+        if workspace is None:
+            workspace = ResearchWorkspace()
+            self._workspaces[scope] = workspace
+        return workspace
+
+    def workspace_summary(self, *, scope: str = "default", max_items: int = 8) -> dict[str, Any] | None:
+        workspace = self._workspaces.get(scope)
+        if workspace is None:
+            return None
+        summary = workspace.summary(max_items=max_items)
+        if not any(summary.values()):
+            return None
+        return summary
+
+    def add_workspace_source(self, source: CandidateSource, *, scope: str = "default") -> None:
+        self.workspace(scope=scope).sources[source.id] = source
+
+    def add_workspace_evidence(self, evidence: CuratedEvidence, *, scope: str = "default") -> None:
+        self.workspace(scope=scope).evidence.append(evidence)
+
+    def add_workspace_verification(self, verification: VerificationRecord, *, scope: str = "default") -> None:
+        self.workspace(scope=scope).verifications.append(verification)
+
+    def add_workspace_question(self, question: WorkspaceQuestion, *, scope: str = "default") -> None:
+        self.workspace(scope=scope).questions.append(question)
+
+    def add_workspace_search(self, query: str, *, scope: str = "default") -> None:
+        query = query.strip()
+        if query:
+            self.workspace(scope=scope).search_history.append(query)
 
     def get_items(self, *, exclude_id: str | None = None) -> list[WorkItem]:
         return [item for item in self._items.values() if item.id != exclude_id]

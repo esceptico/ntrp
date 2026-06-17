@@ -1,15 +1,15 @@
 """RecordStore — the atomic memory unit.
 
-Free-form, self-contained records (typed by function, not subject) in one FLAT
-pool in `config.memory_db_path` (the same DB the Curator owns). NO scope/project
-partition — every read path searches/lists ALL records. Lexical retrieval via a
-local `records_fts`; semantic retrieval via the shared `SearchIndex`
-(`source="record"`). Hybrid `search` fuses the two legs with `rrf_merge`, exactly
-like transcript search, then post-filters by kinds / supersession.
+Free-form, self-contained records (typed by function, not subject) in one
+simple table. Scope is visibility metadata, not a hierarchy/graph: read paths
+can filter to global + current project/session/integration scopes. Lexical
+retrieval via local `records_fts`; semantic retrieval via the shared
+`SearchIndex` (`source="record"`). Hybrid `search` fuses the two legs with
+`rrf_merge`, exactly like transcript search, then post-filters by kinds,
+scopes, and supersession.
 
-The legacy `scope_kind`/`scope_key` columns are kept (the seeded rows hold their
-provenance there) but are inert — never a WHERE clause, never an index. New
-provenance lives in `source_ref`.
+`scope_kind`/`scope_key` are intentionally boring columns. They prevent global
+memory pollution without introducing project partitions or a derivation DAG.
 
 No bitemporal axis. Freshness = `last_confirmed_at`; `superseded_by` closes a
 lineage (never hard-delete on supersede). `pinned` survives decay.
@@ -23,22 +23,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from ntrp.constants import RRF_K
 from ntrp.database import connect as db_connect
 from ntrp.database import serialize_embedding
 from ntrp.logging import get_logger
-from ntrp.memory.models import (
-    Justification,
-    Kind,
-    Provenance,
-    Record,
-    SourceRef,
-    Standing,
-    now_iso,
-)
+from ntrp.memory.models import Kind, Record, SourceRef, now_iso
 from ntrp.search.fts import build_fts_or_query
 from ntrp.search.retrieval import rrf_merge
 
@@ -85,38 +76,12 @@ END;
 CREATE TABLE IF NOT EXISTS record_labels (
     record_id TEXT NOT NULL,
     label TEXT NOT NULL,
+    label_kind TEXT NOT NULL DEFAULT 'meta',
     created_at TEXT NOT NULL,
     PRIMARY KEY (record_id, label)
 );
 CREATE INDEX IF NOT EXISTS idx_labels_label ON record_labels(label);
 
-CREATE TABLE IF NOT EXISTS justifications (
-    id TEXT PRIMARY KEY,
-    derived_id TEXT NOT NULL,
-    mode TEXT NOT NULL,
-    question TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_just_derived ON justifications(derived_id);
-
-CREATE TABLE IF NOT EXISTS justification_premises (
-    justification_id TEXT NOT NULL,
-    premise_id TEXT NOT NULL,
-    PRIMARY KEY (justification_id, premise_id)
-);
-CREATE INDEX IF NOT EXISTS idx_just_premise ON justification_premises(premise_id);
-
-CREATE TABLE IF NOT EXISTS nogoods (
-    id TEXT PRIMARY KEY,
-    premise_ids TEXT NOT NULL,
-    conclusion TEXT NOT NULL,
-    why TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-DROP INDEX IF EXISTS idx_records_scope;
-DROP TABLE IF EXISTS record_edges;
-DROP TABLE IF EXISTS label_pages;
 """
 
 # The v2 `records` table declared scope_kind NOT NULL. Flat records write it NULL
@@ -160,15 +125,6 @@ COMMIT;
 """
 
 
-class RecordOp(StrEnum):
-    """Transient — the dreamer LLM's reconciliation verb. Never persisted."""
-
-    ADD = "ADD"
-    UPDATE = "UPDATE"
-    SUPERSEDE = "SUPERSEDE"
-    NOOP = "NOOP"
-
-
 class RecordStore:
     def __init__(self, db_path: Path, search_index: object | None = None) -> None:
         self._db_path = db_path
@@ -191,7 +147,8 @@ class RecordStore:
         task.add_done_callback(
             lambda t: (
                 self._bg.discard(t),
-                None if t.cancelled() or not t.exception()
+                None
+                if t.cancelled() or not t.exception()
                 else _logger.warning("record index task failed", exc_info=t.exception()),
             )
         )
@@ -210,7 +167,7 @@ class RecordStore:
                 # Derivation columns (additive; existing DBs predate them). After
                 # the scope rebuild so a rebuilt table gains them too.
                 for col in (
-                    "provenance TEXT NOT NULL DEFAULT 'ground'",
+                    "provenance TEXT NOT NULL DEFAULT 'recorded'",
                     "standing TEXT NOT NULL DEFAULT 'active'",
                     "depth INTEGER NOT NULL DEFAULT 0",
                 ):
@@ -218,6 +175,19 @@ class RecordStore:
                         await conn.execute(f"ALTER TABLE records ADD COLUMN {col}")
                     except Exception:
                         pass  # column already present
+                # label_kind column (additive; existing DBs predate it)
+                try:
+                    await conn.execute(
+                        "ALTER TABLE record_labels ADD COLUMN label_kind TEXT NOT NULL DEFAULT 'meta'"
+                    )
+                except Exception:
+                    pass  # column already present
+                try:
+                    await conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_labels_kind ON record_labels(label_kind)"
+                    )
+                except Exception:
+                    pass
                 await conn.commit()
                 self._conn = conn
         return self._conn
@@ -251,9 +221,11 @@ class RecordStore:
         self,
         text: str,
         *,
-        kind: str = Kind.NOTE,
+        kind: str = Kind.FACT,
         pinned: bool = False,
         source_ref: SourceRef | None = None,
+        scope_kind: str | None = None,
+        scope_key: str | None = None,
     ) -> Record:
         from uuid import uuid4
 
@@ -262,6 +234,8 @@ class RecordStore:
             text=text,
             kind=kind,
             pinned=pinned,
+            scope_kind=scope_kind,
+            scope_key=scope_key,
             source_ref=source_ref,
         )
         conn = await self._ensure_conn()
@@ -276,8 +250,8 @@ class RecordStore:
                 record.id,
                 record.text,
                 record.kind,
-                source_ref.scope_kind if source_ref else None,
-                source_ref.scope_key if source_ref else None,
+                record.scope_kind,
+                record.scope_key,
                 record.created_at,
                 record.last_confirmed_at,
                 record.superseded_by,
@@ -294,17 +268,20 @@ class RecordStore:
         from the vector index (the row stays in SQLite for history but must not
         keep occupying retrieval slots). Returns whether the old id existed."""
         conn = await self._ensure_conn()
-        cur = await conn.execute(
-            "UPDATE records SET superseded_by = ? WHERE id = ?", (new_id, old_id)
-        )
+        cur = await conn.execute("UPDATE records SET superseded_by = ? WHERE id = ?", (new_id, old_id))
         await conn.commit()
         await self._unindex(old_id)
-        await self.mark_unresolved_dependents(old_id)
         return cur.rowcount > 0
 
     async def supersede_with(
-        self, old_id: str, *, text: str, kind: str = Kind.NOTE,
+        self,
+        old_id: str,
+        *,
+        text: str,
+        kind: str = Kind.FACT,
         source_ref: SourceRef | None = None,
+        scope_kind: str | None = None,
+        scope_key: str | None = None,
     ) -> Record:
         """Insert a replacement AND close the old lineage in ONE transaction, so a
         mid-op failure can't strand a half-applied SUPERSEDE (orphan duplicate).
@@ -313,7 +290,9 @@ class RecordStore:
         still lands)."""
         from uuid import uuid4
 
-        record = Record(id=uuid4().hex, text=text, kind=kind, source_ref=source_ref)
+        record = Record(
+            id=uuid4().hex, text=text, kind=kind, scope_kind=scope_kind, scope_key=scope_key, source_ref=source_ref
+        )
         conn = await self._ensure_conn()
         await conn.execute(
             """
@@ -322,24 +301,26 @@ class RecordStore:
                  last_confirmed_at, superseded_by, pinned, source_ref)
             VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)
             """,
-            (record.id, record.text, record.kind,
-             source_ref.scope_kind if source_ref else None,
-             source_ref.scope_key if source_ref else None,
-             record.created_at, record.last_confirmed_at,
-             json.dumps(source_ref.to_dict()) if source_ref else None),
+            (
+                record.id,
+                record.text,
+                record.kind,
+                record.scope_kind,
+                record.scope_key,
+                record.created_at,
+                record.last_confirmed_at,
+                json.dumps(source_ref.to_dict()) if source_ref else None,
+            ),
         )
-        cur = await conn.execute(
-            "UPDATE records SET superseded_by = ? WHERE id = ?", (record.id, old_id)
-        )
+        cur = await conn.execute("UPDATE records SET superseded_by = ? WHERE id = ?", (record.id, old_id))
         await conn.execute(
-            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
-            "SELECT ?, label, created_at FROM record_labels WHERE record_id = ?",
+            "INSERT OR IGNORE INTO record_labels (record_id, label, label_kind, created_at) "
+            "SELECT ?, label, label_kind, created_at FROM record_labels WHERE record_id = ?",
             (record.id, old_id),
         )
         await conn.commit()
         self._index(record)
         await self._unindex(old_id)
-        await self.mark_unresolved_dependents(old_id)
         if cur.rowcount == 0:
             _logger.warning("supersede target id not found; landed as ADD", old_id=old_id)
         return record
@@ -347,14 +328,16 @@ class RecordStore:
     async def set_kind(self, record_id: str, kind: str) -> bool:
         """Reclassify a record's function-type (consolidation's retype op)."""
         conn = await self._ensure_conn()
-        cur = await conn.execute(
-            "UPDATE records SET kind = ? WHERE id = ?", (kind, record_id)
-        )
+        cur = await conn.execute("UPDATE records SET kind = ? WHERE id = ?", (kind, record_id))
         await conn.commit()
         return cur.rowcount > 0
 
     async def merge(
-        self, survivor_id: str, loser_ids: list[str], *, text: str | None = None,
+        self,
+        survivor_id: str,
+        loser_ids: list[str],
+        *,
+        text: str | None = None,
         kind: str | None = None,
     ) -> Record | None:
         """Collapse N records into ONE in a single transaction (the consolidate
@@ -388,24 +371,21 @@ class RecordStore:
                 (new_text, now_iso(), survivor_id),
             )
         if kind and kind != survivor.kind:
-            await conn.execute(
-                "UPDATE records SET kind = ? WHERE id = ?", (kind, survivor_id)
-            )
+            await conn.execute("UPDATE records SET kind = ? WHERE id = ?", (kind, survivor_id))
         for loser in losers:
             await conn.execute(
                 "UPDATE records SET superseded_by = ? WHERE id = ?",
                 (survivor_id, loser.id),
             )
             await conn.execute(
-                "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
-                "SELECT ?, label, created_at FROM record_labels WHERE record_id = ?",
+                "INSERT OR IGNORE INTO record_labels (record_id, label, label_kind, created_at) "
+                "SELECT ?, label, label_kind, created_at FROM record_labels WHERE record_id = ?",
                 (survivor_id, loser.id),
             )
         await conn.commit()
 
         for loser in losers:
             await self._unindex(loser.id)
-            await self.mark_unresolved_dependents(loser.id)
         merged = await self.get(survivor_id)
         if merged is not None and new_text:
             self._index(merged)  # re-embed the re-texted survivor
@@ -413,17 +393,13 @@ class RecordStore:
 
     async def confirm(self, record_id: str) -> bool:
         conn = await self._ensure_conn()
-        cur = await conn.execute(
-            "UPDATE records SET last_confirmed_at = ? WHERE id = ?", (now_iso(), record_id)
-        )
+        cur = await conn.execute("UPDATE records SET last_confirmed_at = ? WHERE id = ?", (now_iso(), record_id))
         await conn.commit()
         return cur.rowcount > 0
 
     async def set_pinned(self, record_id: str, pinned: bool) -> bool:
         conn = await self._ensure_conn()
-        cur = await conn.execute(
-            "UPDATE records SET pinned = ? WHERE id = ?", (1 if pinned else 0, record_id)
-        )
+        cur = await conn.execute("UPDATE records SET pinned = ? WHERE id = ?", (1 if pinned else 0, record_id))
         await conn.commit()
         return cur.rowcount > 0
 
@@ -443,14 +419,7 @@ class RecordStore:
 
     async def delete(self, record_id: str) -> None:
         conn = await self._ensure_conn()
-        await self.mark_unresolved_dependents(record_id)  # before the row vanishes
         await conn.execute("DELETE FROM record_labels WHERE record_id = ?", (record_id,))
-        await conn.execute(
-            "DELETE FROM justification_premises WHERE justification_id IN "
-            "(SELECT id FROM justifications WHERE derived_id = ?)",
-            (record_id,),
-        )
-        await conn.execute("DELETE FROM justifications WHERE derived_id = ?", (record_id,))
         await conn.execute("DELETE FROM records WHERE id = ?", (record_id,))
         await conn.commit()
         await self._unindex(record_id)  # inline (cheap, pure-DB) — no upsert-vs-delete race
@@ -462,28 +431,117 @@ class RecordStore:
             except Exception:
                 _logger.warning("record index delete failed", exc_info=True)
 
+    async def prune(self) -> dict[str, int]:
+        """LINT: deterministic structural hygiene. Hard-deletes superseded records
+        (the chosen tombstone policy — records carry no archived status), drops the
+        labels those deletes orphan, and reconciles the vector index so recall can't
+        surface dead content. Idempotent: a clean store prunes nothing. Pinned
+        records are never superseded, so they are never touched here. FTS stays
+        consistent via the AFTER DELETE trigger."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall("SELECT id FROM records WHERE superseded_by IS NOT NULL")
+        dead = len(rows)
+        cur = await conn.execute(
+            "DELETE FROM record_labels WHERE record_id IN "
+            "(SELECT id FROM records WHERE superseded_by IS NOT NULL)"
+        )
+        labels = cur.rowcount
+        await conn.execute("DELETE FROM records WHERE superseded_by IS NOT NULL")
+        # Belt: labels whose record no longer exists at all (pre-existing orphans).
+        cur = await conn.execute("DELETE FROM record_labels WHERE record_id NOT IN (SELECT id FROM records)")
+        labels += cur.rowcount
+        await conn.commit()
+        vectors = await self._reconcile_vectors()
+        return {"records": dead, "labels": labels, "vectors": vectors}
+
+    async def wipe_except_pinned(self) -> dict[str, int]:
+        """/init re-derivation primitive: hard-delete every non-pinned record (and
+        its labels), keeping only pinned survivors. The AFTER DELETE trigger keeps
+        records_fts consistent; `_reconcile_vectors` then drops the vectors whose
+        record id is no longer live. Returns counts of victims/survivors/vectors."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall("SELECT COUNT(*) AS n FROM records WHERE pinned = 0")
+        victims = rows[0]["n"] if rows else 0
+        rows = await conn.execute_fetchall("SELECT COUNT(*) AS n FROM records WHERE pinned = 1")
+        survivors = rows[0]["n"] if rows else 0
+        await conn.execute(
+            "DELETE FROM record_labels WHERE record_id IN (SELECT id FROM records WHERE pinned = 0)"
+        )
+        await conn.execute("DELETE FROM records WHERE pinned = 0")
+        await conn.commit()
+        vectors = await self._reconcile_vectors()
+        return {"deleted": victims, "kept_pinned": survivors, "vectors": vectors}
+
+    async def _reconcile_vectors(self) -> int:
+        """Drop every 'record'-source vector whose source_id is no longer a live
+        record — covers vectors left behind by the supersede→delete path and any
+        pre-existing orphans. No-op when no vector index is wired."""
+        index = self._search_index
+        if index is None:
+            return 0
+        try:
+            indexed = await index.store.get_indexed_hashes("record")  # {source_id: (rowid, hash)}
+        except Exception:
+            _logger.warning("vector reconcile: enumerate failed", exc_info=True)
+            return 0
+        conn = await self._ensure_conn()
+        live = {r["id"] for r in await conn.execute_fetchall("SELECT id FROM records")}
+        dropped = 0
+        for source_id in indexed:
+            if source_id not in live:
+                try:
+                    await index.delete("record", source_id)
+                    dropped += 1
+                except Exception:
+                    _logger.warning("vector reconcile: delete failed", exc_info=True)
+        return dropped
+
     # -- labels (open-vocabulary, attached at write time by the curator) ------
 
-    async def set_labels(self, record_id: str, labels: list[str]) -> None:
-        """Replace the record's labels wholesale (the curator's UPDATE semantics)."""
+    async def set_labels(
+        self,
+        record_id: str,
+        labels: list[str],
+        *,
+        entity_labels: list[str] | None = None,
+    ) -> None:
+        """Replace the record's labels wholesale (the curator's UPDATE semantics).
+
+        `labels` is the legacy flat list (stored as kind='meta').
+        `entity_labels` are stored as kind='entity'; when provided, the full set
+        written is entity_labels (kind='entity') + labels (kind='meta').
+        When only `labels` is given (legacy callers), all are stored as 'meta'.
+        """
         conn = await self._ensure_conn()
         await conn.execute("DELETE FROM record_labels WHERE record_id = ?", (record_id,))
         ts = now_iso()
+        rows: list[tuple] = [(record_id, lbl, "meta", ts) for lbl in labels]
+        if entity_labels:
+            rows += [(record_id, lbl, "entity", ts) for lbl in entity_labels if lbl not in labels]
         await conn.executemany(
-            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) VALUES (?, ?, ?)",
-            [(record_id, label, ts) for label in labels],
+            "INSERT OR IGNORE INTO record_labels (record_id, label, label_kind, created_at) VALUES (?, ?, ?, ?)",
+            rows,
         )
         await conn.commit()
 
-    async def add_labels(self, record_id: str, labels: list[str]) -> None:
+    async def add_labels(
+        self,
+        record_id: str,
+        labels: list[str],
+        *,
+        entity_labels: list[str] | None = None,
+    ) -> None:
         """Union new labels onto the record (backfill / lens promotion)."""
-        if not labels:
+        if not labels and not entity_labels:
             return
         conn = await self._ensure_conn()
         ts = now_iso()
+        rows: list[tuple] = [(record_id, lbl, "meta", ts) for lbl in labels]
+        if entity_labels:
+            rows += [(record_id, lbl, "entity", ts) for lbl in entity_labels]
         await conn.executemany(
-            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) VALUES (?, ?, ?)",
-            [(record_id, label, ts) for label in labels],
+            "INSERT OR IGNORE INTO record_labels (record_id, label, label_kind, created_at) VALUES (?, ?, ?, ?)",
+            rows,
         )
         await conn.commit()
 
@@ -495,17 +553,32 @@ class RecordStore:
         )
         return [row["label"] for row in rows]
 
-    async def labels_for(self, record_ids: list[str]) -> dict[str, list[str]]:
+    async def labels_for(
+        self, record_ids: list[str], *, include_kind: bool = False
+    ) -> dict[str, list[str]]:
         """Batch-hydrate labels for many records in ONE query (no N+1). Every
-        requested id is a key; unlabeled records map to []."""
+        requested id is a key; unlabeled records map to [].
+
+        When `include_kind=True`, returns dicts instead of strings under each key
+        but that mode is reserved for artifact projection use; the default flat
+        list is unchanged so callers don't break.
+        """
         if not record_ids:
             return {}
         conn = await self._ensure_conn()
         rows = await conn.execute_fetchall(
-            f"SELECT record_id, label FROM record_labels "
+            f"SELECT record_id, label, label_kind FROM record_labels "
             f"WHERE record_id IN ({','.join('?' * len(record_ids))}) ORDER BY label",
             tuple(record_ids),
         )
+        if include_kind:
+            # Return dict[record_id, list[dict(label, kind)]] — typed for artifacts
+            out_typed: dict[str, list[dict]] = {rid: [] for rid in record_ids}
+            for row in rows:
+                out_typed[row["record_id"]].append(
+                    {"label": row["label"], "kind": row["label_kind"]}
+                )
+            return out_typed  # type: ignore[return-value]
         out: dict[str, list[str]] = {rid: [] for rid in record_ids}
         for row in rows:
             out[row["record_id"]].append(row["label"])
@@ -518,358 +591,55 @@ class RecordStore:
         rows = await conn.execute_fetchall(
             "SELECT records.* FROM records "
             "JOIN record_labels ON record_labels.record_id = records.id "
-            "WHERE record_labels.label = ? AND records.superseded_by IS NULL AND records.standing = 'active' "
+            "WHERE record_labels.label = ? AND records.superseded_by IS NULL "
             "ORDER BY records.last_confirmed_at DESC LIMIT ?",
             (label, limit),
         )
         return [self._row_to_record(row) for row in rows]
 
     async def list_labels(self) -> list[dict]:
-        """[{"label", "count"}] counting ACTIVE records only, biggest hubs first."""
+        """[{"label", "count", "kind"}] over ACTIVE records, biggest hubs first.
+
+        PK is (record_id, label) so label_kind is uniform per label; MAX() is exact.
+        """
         conn = await self._ensure_conn()
         rows = await conn.execute_fetchall(
-            "SELECT record_labels.label AS label, COUNT(*) AS count FROM record_labels "
+            "SELECT record_labels.label AS label, COUNT(*) AS count, "
+            "MAX(record_labels.label_kind) AS kind FROM record_labels "
             "JOIN records ON records.id = record_labels.record_id "
-            "WHERE records.superseded_by IS NULL AND records.standing = 'active' "
+            "WHERE records.superseded_by IS NULL "
             "GROUP BY record_labels.label ORDER BY count DESC, label ASC"
         )
-        return [{"label": row["label"], "count": row["count"]} for row in rows]
+        return [{"label": row["label"], "count": row["count"], "kind": row["kind"]} for row in rows]
 
     async def rename_label(self, old: str, new: str) -> None:
         """Lint canonicalization: fold `old` into `new` with union semantics — a
         record already carrying both keeps one row."""
         conn = await self._ensure_conn()
         await conn.execute(
-            "INSERT OR IGNORE INTO record_labels (record_id, label, created_at) "
-            "SELECT record_id, ?, created_at FROM record_labels WHERE label = ?",
+            "INSERT OR IGNORE INTO record_labels (record_id, label, label_kind, created_at) "
+            "SELECT record_id, ?, label_kind, created_at FROM record_labels WHERE label = ?",
             (new, old),
         )
         await conn.execute("DELETE FROM record_labels WHERE label = ?", (old,))
         await conn.commit()
 
-    # -- derivation (the recursive memory: justifications, standing, nogoods) --
-    # A derived record exists only with >=1 justification (cite-or-void). It may
-    # hold SEVERAL (JTMS) — it stays active while any justification's premises
-    # all live. Premise death marks dependents `unresolved` (excluded from
-    # recall); the dreamer re-judges them. Confidence is never stored — trust is
-    # computed from the DAG (justification count, disjoint evidence, depth).
-
-    async def add_derived(
-        self, text: str, *, premise_ids: list[str], mode: str, question: str,
-        kind: str = Kind.NOTE,
-    ) -> Record:
-        """Insert an inferred record + its first justification atomically."""
-        from uuid import uuid4
-
-        premises = await self._live_premises(premise_ids)
-        record = Record(
-            id=uuid4().hex, text=text, kind=kind,
-            source_ref=SourceRef(kind="dreamer", ref=question),
-            provenance=Provenance.DERIVED,
-            depth=max(p.depth for p in premises) + 1,
-        )
+    async def set_label_kind(self, label: str, kind: str) -> int:
+        """Retype every occurrence of `label` to `kind` ('entity'|'meta'). One
+        UPDATE — PK is (record_id, label), so label_kind is uniform per label and
+        no per-record fan-out or duplicate-key risk applies. Idempotent."""
         conn = await self._ensure_conn()
-        await conn.execute(
-            """
-            INSERT INTO records
-                (id, text, kind, scope_kind, scope_key, created_at,
-                 last_confirmed_at, superseded_by, pinned, source_ref,
-                 provenance, standing, depth)
-            VALUES (?, ?, ?, NULL, NULL, ?, ?, NULL, 0, ?, ?, ?, ?)
-            """,
-            (record.id, record.text, record.kind, record.created_at,
-             record.last_confirmed_at, json.dumps(record.source_ref.to_dict()),
-             record.provenance, record.standing, record.depth),
-        )
-        await self._insert_justification(conn, record.id, premise_ids, mode, question)
-        await conn.commit()
-        self._index(record)
-        return record
-
-    async def add_justification(
-        self, record_id: str, *, premise_ids: list[str], mode: str, question: str,
-    ) -> Justification:
-        """Append an independent justification to an existing record (a
-        re-derivation landed on the same conclusion). Reactivates an unresolved
-        record — fresh living support resolves it. Raises on cyclic support."""
-        premises = await self._live_premises(premise_ids)
-        record = await self.get(record_id)
-        if record is None:
-            raise ValueError(f"record {record_id!r} not found")
-        conn = await self._ensure_conn()
-        just = await self._insert_justification(conn, record_id, premise_ids, mode, question)
-        # A GROUND record gaining a justification stays ground at depth 0 (direct
-        # evidence outranks inference — the justification is corroboration, not
-        # pedigree). Only derived records carry chain depth.
-        depth = record.depth
-        if record.provenance == Provenance.DERIVED:
-            depth = max(record.depth, max(p.depth for p in premises) + 1)
-        await conn.execute(
-            "UPDATE records SET depth = ?, standing = ? WHERE id = ?",
-            (depth, Standing.ACTIVE, record_id),
+        cur = await conn.execute(
+            "UPDATE record_labels SET label_kind = ? WHERE label = ?", (kind, label)
         )
         await conn.commit()
-        if record.standing != Standing.ACTIVE:
-            self._index(record)  # back into retrieval circulation
-        return just
-
-    async def _insert_justification(
-        self, conn, derived_id: str, premise_ids: list[str], mode: str, question: str,
-    ) -> Justification:
-        from uuid import uuid4
-
-        for pid in premise_ids:
-            if pid == derived_id or derived_id in await self._ancestry(pid):
-                raise ValueError(f"cyclic justification: {pid!r} depends on {derived_id!r}")
-        just = Justification(
-            id=uuid4().hex, derived_id=derived_id,
-            premise_ids=tuple(premise_ids), mode=mode, question=question,
-        )
-        await conn.execute(
-            "INSERT INTO justifications (id, derived_id, mode, question, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (just.id, just.derived_id, just.mode, just.question, just.created_at),
-        )
-        for pid in premise_ids:
-            await conn.execute(
-                "INSERT OR IGNORE INTO justification_premises (justification_id, premise_id) "
-                "VALUES (?, ?)",
-                (just.id, pid),
-            )
-        return just
-
-    async def _live_premises(self, premise_ids: list[str]) -> list[Record]:
-        """Resolve premises, requiring every one alive — a derivation may only be
-        built on live knowledge."""
-        if not premise_ids:
-            raise ValueError("a derivation needs at least one premise")
-        premises = []
-        for pid in premise_ids:
-            p = await self.get(pid)
-            if p is None or not self._alive(p):
-                raise ValueError(f"premise {pid!r} is not a live record")
-            premises.append(p)
-        return premises
-
-    @staticmethod
-    def _alive(record: Record) -> bool:
-        return record.superseded_by is None and record.standing == Standing.ACTIVE
-
-    async def justifications_of(self, record_id: str) -> list[Justification]:
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT * FROM justifications WHERE derived_id = ? ORDER BY created_at",
-            (record_id,),
-        )
-        out = []
-        for row in rows:
-            prem = await conn.execute_fetchall(
-                "SELECT premise_id FROM justification_premises WHERE justification_id = ?",
-                (row["id"],),
-            )
-            out.append(Justification(
-                id=row["id"], derived_id=row["derived_id"],
-                premise_ids=tuple(p["premise_id"] for p in prem),
-                mode=row["mode"], question=row["question"], created_at=row["created_at"],
-            ))
-        return out
-
-    async def dependents_of(self, record_id: str) -> list[str]:
-        """Ids of derived records holding a justification that cites this one."""
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT DISTINCT j.derived_id FROM justifications j "
-            "JOIN justification_premises p ON p.justification_id = j.id "
-            "WHERE p.premise_id = ?",
-            (record_id,),
-        )
-        return [r["derived_id"] for r in rows]
-
-    async def _ancestry(self, record_id: str, *, _seen: set | None = None) -> set[str]:
-        """All premise ids reachable upward from a record (cycle-guarded)."""
-        seen = _seen if _seen is not None else set()
-        for just in await self.justifications_of(record_id):
-            for pid in just.premise_ids:
-                if pid not in seen:
-                    seen.add(pid)
-                    await self._ancestry(pid, _seen=seen)
-        return seen
-
-    async def evidence_base(self, record_id: str) -> set[str]:
-        """The GROUND record ids in this record's derivation ancestry — the
-        NARS evidential stamp (disjointness = real corroboration)."""
-        base: set[str] = set()
-        for rid in await self._ancestry(record_id) or {record_id}:
-            r = await self.get(rid)
-            if r is not None and r.provenance == Provenance.GROUND:
-                base.add(rid)
-        return base
-
-    async def trust_signals(self, record_id: str) -> dict:
-        """The vision-§7 signals, computed from the DAG — shown, never a gate."""
-        record = await self.get(record_id)
-        justs = await self.justifications_of(record_id)
-        bases: list[set[str]] = []
-        for j in justs:
-            b: set[str] = set()
-            for pid in j.premise_ids:
-                p = await self.get(pid)
-                if p is None:
-                    continue
-                b |= {pid} if p.provenance == Provenance.GROUND else await self.evidence_base(pid)
-            bases.append(b)
-        independent = 0
-        covered: set[str] = set()
-        for b in bases:
-            if b - covered:
-                independent += 1
-                covered |= b
-        return {
-            "provenance": record.provenance if record else Provenance.GROUND,
-            "standing": record.standing if record else Standing.ACTIVE,
-            "depth": record.depth if record else 0,
-            "justifications": len(justs),
-            "independent_grounds": independent,
-            "modes": sorted({j.mode for j in justs}),
-        }
-
-    async def mark_unresolved_dependents(self, dead_id: str) -> int:
-        """Premise death propagation (JTMS): walk dependents; a derivation goes
-        `unresolved` ONLY when every justification it holds contains a dead
-        premise — surviving independent support keeps it active untouched.
-        Unresolved records leave retrieval until the dreamer re-judges them."""
-        conn = await self._ensure_conn()
-        marked = 0
-        frontier = {dead_id}
-        for _ in range(10):  # bounded transitive depth
-            nxt: set[str] = set()
-            for fid in frontier:
-                for dep_id in await self.dependents_of(fid):
-                    dep = await self.get(dep_id)
-                    if dep is None or not self._alive(dep):
-                        continue
-                    if await self._has_living_justification(dep_id):
-                        continue
-                    await conn.execute(
-                        "UPDATE records SET standing = ? WHERE id = ?",
-                        (Standing.UNRESOLVED, dep_id),
-                    )
-                    await self._unindex(dep_id)
-                    marked += 1
-                    nxt.add(dep_id)
-            await conn.commit()
-            if not nxt:
-                break
-            frontier = nxt
-        return marked
-
-    async def _has_living_justification(self, record_id: str) -> bool:
-        for just in await self.justifications_of(record_id):
-            alive = True
-            for pid in just.premise_ids:
-                p = await self.get(pid)
-                if p is None or not self._alive(p):
-                    alive = False
-                    break
-            if alive:
-                return True
-        return False
-
-    async def unresolved(self, *, limit: int = 50) -> list[Record]:
-        """Derivations awaiting re-judgment, oldest first."""
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT * FROM records WHERE standing = ? AND superseded_by IS NULL "
-            "ORDER BY last_confirmed_at ASC LIMIT ?",
-            (Standing.UNRESOLVED, limit),
-        )
-        return [self._row_to_record(row) for row in rows]
-
-    async def retire(self, record_id: str, *, nogood_why: str | None = None) -> bool:
-        """Take a derivation out of circulation (lint hygiene / re-judgment).
-        With `nogood_why` the retirement also records a nogood so the dreamer
-        never re-derives the same junk from the same premises."""
-        record = await self.get(record_id)
-        if record is None or record.pinned:
-            return False
-        conn = await self._ensure_conn()
-        await conn.execute(
-            "UPDATE records SET standing = ? WHERE id = ?", (Standing.RETIRED, record_id)
-        )
-        await conn.commit()
-        await self._unindex(record_id)
-        if nogood_why:
-            for just in await self.justifications_of(record_id):
-                await self.add_nogood(list(just.premise_ids), record.text, nogood_why)
-        await self.mark_unresolved_dependents(record_id)
-        return True
-
-    async def add_nogood(self, premise_ids: list[str], conclusion: str, why: str) -> None:
-        from uuid import uuid4
-
-        conn = await self._ensure_conn()
-        await conn.execute(
-            "INSERT INTO nogoods (id, premise_ids, conclusion, why, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (uuid4().hex, json.dumps(sorted(premise_ids)), conclusion, why, now_iso()),
-        )
-        await conn.commit()
-
-    async def justification_edges_among(self, record_ids: list[str]) -> list[dict]:
-        """Evidence edges (derived -> premise) with BOTH endpoints in `record_ids`
-        — the graph view's epistemic structure, one query."""
-        if not record_ids:
-            return []
-        conn = await self._ensure_conn()
-        ph = ",".join("?" * len(record_ids))
-        rows = await conn.execute_fetchall(
-            f"SELECT j.derived_id AS derived_id, p.premise_id AS premise_id, "
-            f"j.created_at AS created_at FROM justifications j "
-            f"JOIN justification_premises p ON p.justification_id = j.id "
-            f"WHERE j.derived_id IN ({ph}) AND p.premise_id IN ({ph})",
-            (*record_ids, *record_ids),
-        )
-        return [
-            {"derived_id": r["derived_id"], "premise_id": r["premise_id"],
-             "created_at": r["created_at"]}
-            for r in rows
-        ]
-
-    async def derived_records(self, *, limit: int = 200) -> list[Record]:
-        """Active inferred records, newest first — the dream's output surface."""
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT * FROM records WHERE provenance = 'derived' AND superseded_by IS NULL "
-            "ORDER BY created_at DESC LIMIT ?",
-            (limit,),
-        )
-        return [self._row_to_record(row) for row in rows]
-
-    async def nogoods_for(self, record_ids: list[str]) -> list[dict]:
-        """Nogoods whose premises overlap `record_ids` — injected into dream
-        prompts so retracted junk is not re-derived. The table is small; filter
-        in Python."""
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall("SELECT * FROM nogoods")
-        wanted = set(record_ids)
-        out = []
-        for row in rows:
-            premises = set(json.loads(row["premise_ids"]))
-            if premises & wanted:
-                out.append({
-                    "premise_ids": sorted(premises),
-                    "conclusion": row["conclusion"],
-                    "why": row["why"],
-                })
-        return out
+        return cur.rowcount
 
     # -- reads ---------------------------------------------------------------
 
     async def get(self, record_id: str) -> Record | None:
         conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT * FROM records WHERE id = ?", (record_id,)
-        )
+        rows = await conn.execute_fetchall("SELECT * FROM records WHERE id = ?", (record_id,))
         return self._row_to_record(rows[0]) if rows else None
 
     async def search(
@@ -879,18 +649,25 @@ class RecordStore:
         kinds: list[str] | None = None,
         limit: int = 10,
         include_superseded: bool = False,
+        scopes: list[tuple[str | None, str | None]] | None = None,
     ) -> list[Record]:
         """Hybrid FTS (records_fts) ⊕ vector (SearchIndex, source="record")
         fused with rrf_merge over the WHOLE flat pool, then post-filtered by
         kinds/supersession. Bridges the two databases in Python on the record id."""
         conn = await self._ensure_conn()
-        window = max(limit * 4, 40)
+        window = max(limit * 8, 80) if scopes is not None else max(limit * 4, 40)
 
         def _matches(record: Record) -> bool:
-            if not include_superseded and not self._alive(record):
+            if not include_superseded and record.superseded_by is not None:
                 return False
             if kinds is not None and record.kind not in kinds:
                 return False
+            if scopes is not None:
+                record_scope = (record.scope_kind, record.scope_key)
+                if record_scope not in scopes and not (
+                    record.scope_kind is None and record.scope_key is None and ("global", None) in scopes
+                ):
+                    return False
             return True
 
         # FTS leg (local records_fts in memory.db) — kind/active in SQL.
@@ -900,12 +677,23 @@ class RecordStore:
             where = ["records_fts MATCH ?"]
             params: list = [fts_query]
             if not include_superseded:
-                # `unresolved`/`retired` derivations leave recall with their premises.
                 where.append("records.superseded_by IS NULL")
-                where.append("records.standing = 'active'")
             if kinds:
                 where.append(f"records.kind IN ({','.join('?' * len(kinds))})")
                 params += list(kinds)
+            if scopes is not None:
+                if not scopes:
+                    return []
+                parts = []
+                for sk, sv in scopes:
+                    if sk == "global" and sv is None:
+                        parts.append(
+                            "((records.scope_kind IS ? AND records.scope_key IS ?) OR (records.scope_kind IS NULL AND records.scope_key IS NULL))"
+                        )
+                    else:
+                        parts.append("(records.scope_kind IS ? AND records.scope_key IS ?)")
+                    params.extend([sk, sv])
+                where.append("(" + " OR ".join(parts) + ")")
             params.append(window)
             try:
                 rows = await conn.execute_fetchall(
@@ -925,9 +713,7 @@ class RecordStore:
         if index is not None:
             try:
                 emb = await index.embedder.embed_one(query)
-                raw = await index.store.vector_search(
-                    serialize_embedding(emb), sources=["record"], limit=window
-                )
+                raw = await index.store.vector_search(serialize_embedding(emb), sources=["record"], limit=window)
                 for item_id, score in raw:
                     item = await index.store.get_by_id(item_id)
                     meta = item.metadata if item and item.metadata else None
@@ -961,28 +747,53 @@ class RecordStore:
         return out
 
     async def list(
-        self, *, pinned_only: bool = False, include_superseded: bool = False, limit: int = 50
+        self,
+        *,
+        pinned_only: bool = False,
+        include_superseded: bool = False,
+        limit: int | None = 50,
+        offset: int = 0,
+        scopes: list[tuple[str | None, str | None]] | None = None,
+        kinds: list[str] | None = None,
     ) -> list[Record]:
         """The flat Records list — active records (newest-confirmed first) by
         default; `include_superseded` widens it to the whole lineage for the
-        admin claim browser's "all statuses" view."""
+        admin claim browser's "all statuses" view. `limit=None` is the explicit
+        unbounded export/rebuild path and still returns active-only records
+        unless `include_superseded=True` is supplied."""
         conn = await self._ensure_conn()
+        if scopes == []:
+            return []
         where = [] if include_superseded else ["superseded_by IS NULL"]
+        params: list = []
+        if scopes is not None:
+            parts = []
+            for sk, sv in scopes:
+                if sk == "global" and sv is None:
+                    parts.append("((scope_kind IS ? AND scope_key IS ?) OR (scope_kind IS NULL AND scope_key IS NULL))")
+                else:
+                    parts.append("(scope_kind IS ? AND scope_key IS ?)")
+                params.extend([sk, sv])
+            where.append("(" + " OR ".join(parts) + ")")
+        if kinds:
+            where.append(f"kind IN ({','.join('?' * len(kinds))})")
+            params.extend(kinds)
         if pinned_only:
             where.append("pinned = 1")
         sql = "SELECT * FROM records"
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY last_confirmed_at DESC LIMIT ?"
-        rows = await conn.execute_fetchall(sql, (limit,))
+        sql += " ORDER BY last_confirmed_at DESC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        rows = await conn.execute_fetchall(sql, tuple(params))
         return [self._row_to_record(row) for row in rows]
 
     async def count_active(self) -> int:
         """Size of the active pool — the lens-coverage denominator (scope_pool)."""
         conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT COUNT(*) AS n FROM records WHERE superseded_by IS NULL AND standing = 'active'"
-        )
+        rows = await conn.execute_fetchall("SELECT COUNT(*) AS n FROM records WHERE superseded_by IS NULL")
         return rows[0]["n"] if rows else 0
 
     async def neighborhood(self, record: Record, *, limit: int = 8) -> list[Record]:
@@ -999,7 +810,7 @@ class RecordStore:
         sharing the boundary timestamp is never skipped; `None` returns the whole
         active pool oldest-first."""
         conn = await self._ensure_conn()
-        sql = "SELECT * FROM records WHERE superseded_by IS NULL AND standing = 'active'"
+        sql = "SELECT * FROM records WHERE superseded_by IS NULL"
         params: list = []
         if watermark is not None:
             sql += " AND last_confirmed_at >= ?"
@@ -1034,11 +845,8 @@ class RecordStore:
             created_at=row["created_at"],
             last_confirmed_at=row["last_confirmed_at"],
             superseded_by=row["superseded_by"],
+            scope_kind=row["scope_kind"],
+            scope_key=row["scope_key"],
             pinned=bool(row["pinned"]),
-            source_ref=SourceRef.from_dict(json.loads(row["source_ref"]))
-            if row["source_ref"]
-            else None,
-            provenance=row["provenance"],
-            standing=row["standing"],
-            depth=row["depth"],
+            source_ref=SourceRef.from_dict(json.loads(row["source_ref"])) if row["source_ref"] else None,
         )

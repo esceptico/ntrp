@@ -2,6 +2,7 @@ import pytest
 from pydantic import BaseModel
 
 from ntrp.agent import Agent, AgentHooks, Result, StopReason, ToolCompleted, ToolStarted
+from ntrp.constants import AGENT_MAX_OUTPUT_TOKENS
 from ntrp.tools.core import EmptyInput, Tool, ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import ToolExecution
 from tests.helpers import (
@@ -237,3 +238,12 @@ def test_create_agent_wires_run_budget_config():
     tracker.cost = 8.0
     assert agent.cost_getter is not None
     assert agent.cost_getter() == 8.0
+
+
+def test_agent_config_uses_finite_default_output_token_budget():
+    from ntrp.config import Config
+    from ntrp.core.factory import AgentConfig
+
+    config = AgentConfig.from_config(Config(chat_model="claude-sonnet-4-6"))
+
+    assert config.max_output_tokens == AGENT_MAX_OUTPUT_TOKENS == 500_000

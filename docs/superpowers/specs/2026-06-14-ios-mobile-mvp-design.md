@@ -70,8 +70,9 @@ Endpoints:
 | Resolve approval | `POST /tools/result` |
 | Cancel run | `POST /cancel` |
 
-SSE resume uses `after_seq` / `Last-Event-ID` semantics. The app should persist
-the latest sequence per open session in memory and reconnect from it.
+SSE resume uses `after_seq` / `Last-Event-ID` semantics. The app should keep
+the latest sequence for each open session while the app is running and reconnect
+from it.
 
 ---
 
@@ -84,7 +85,7 @@ Recommended stack:
 - `URLSession.bytes` for SSE streaming.
 - Small local SSE parser.
 - Keychain wrapper for API key.
-- In-memory app state first; no local database in v1.
+- Volatile app state first; no local database in v1.
 
 Core modules:
 
@@ -168,7 +169,7 @@ Tools run where their authority lives:
 
 | Tool kind | Runtime |
 |---|---|
-| Server DB/search/memory/API tools | Server |
+| Server DB/search/API tools | Server |
 | Cloud OAuth token stored on server | Server |
 | Local files/repo/shell/browser | Desktop host |
 | Local app automation/OS credentials | Desktop host |
@@ -332,4 +333,3 @@ Manual checks:
 - physical phone can connect to LAN server.
 - invalid API key shows clear error.
 - stream resumes after app foregrounds.
-

@@ -21,23 +21,23 @@ class _Schema(BaseModel):
 
 
 def _ctx_with(responses: list[str], budget: RunBudget | None = None, structured=None):
-    """A fake spawn_fn. `structured` simulates the worker calling structured_output:
-    a dict (those kwargs, every spawn), a list (per-spawn; None = didn't call it),
-    or None (never calls it). Calling the tool here validates + fills the sink,
-    exactly as the real agent loop would."""
-    calls = {"i": 0}
+    """Fake spawn_fn plus direct formatter. `structured` is formatter JSON:
+    dict, per-formatter list, or None."""
+    calls = {"i": 0, "format_i": 0}
 
-    async def spawn_fn(ctx, *, task, extra_tools=None, **kwargs):
+    async def spawn_fn(ctx, *, task, **kwargs):
         i = calls["i"]
         calls["i"] += 1
-        if extra_tools and structured is not None:
-            arg = structured[i] if isinstance(structured, list) else structured
-            if arg is not None:
-                await extra_tools["structured_output"].execute(SimpleNamespace(), **arg)
         text = responses[i] if i < len(responses) else responses[-1]
         return SimpleNamespace(text=text)
 
-    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    async def format_structured(*, response_format, **kwargs):
+        i = calls["format_i"]
+        calls["format_i"] += 1
+        arg = structured[i] if isinstance(structured, list) else structured
+        return response_format(**arg).model_dump_json() if arg is not None else "not json"
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn, format_structured=format_structured)
     if budget is not None:
         ctx.run = SimpleNamespace(budget=budget)
     return ctx, calls
@@ -63,7 +63,7 @@ async def test_agent_returns_text_without_schema():
 
 
 async def test_agent_returns_structured_output_model():
-    # A pydantic schema → the validated model instance (via the structured_output tool).
+    # A pydantic schema -> the validated formatter model instance.
     ctx, _ = _ctx_with(["done"], structured={"value": 42})
     o = Orchestra.for_ctx(ctx)
     result = await o.agent("give me value", schema=_Schema)
@@ -72,53 +72,56 @@ async def test_agent_returns_structured_output_model():
 
 
 async def test_agent_returns_structured_output_dict():
-    # A dict schema → a plain dict (existing contract preserved).
+    # A dict schema -> a plain dict (existing contract preserved).
     ctx, _ = _ctx_with(["done"], structured={"facts": ["a", "b"]})
     o = Orchestra.for_ctx(ctx)
     result = await o.agent("research", schema={"facts": ["str"]})
     assert result == {"facts": ["a", "b"]}
 
 
-async def test_agent_nudges_once_when_structured_output_missing():
-    # First spawn ignores the tool; the nudge spawn calls it.
-    ctx, calls = _ctx_with(["nope", "done"], structured=[None, {"value": 7}])
+async def test_agent_repairs_once_when_formatter_output_is_invalid():
+    ctx, calls = _ctx_with(["worker"], structured=[None, {"value": 7}])
     o = Orchestra.for_ctx(ctx)
     result = await o.agent("give me value", schema=_Schema)
     assert result.value == 7
-    assert calls["i"] == 2  # initial + one nudge
+    assert calls["i"] == 1
+    assert calls["format_i"] == 2  # formatter + repair
 
 
-async def test_agent_raises_when_structured_output_never_called():
-    ctx, calls = _ctx_with(["nope", "still nope"], structured=None)
+async def test_agent_raises_when_formatter_never_returns_valid_json():
+    ctx, calls = _ctx_with(["worker"], structured=None)
     o = Orchestra.for_ctx(ctx)
     with pytest.raises(WorkflowStructuredOutputMissing):
         await o.agent("give me value", schema=_Schema)
-    assert calls["i"] == 2  # initial + nudge, then hard-fail (no prose parsing)
-    assert o.spawn_count == 2  # the nudge respawn counts toward the runaway guard
+    assert calls["i"] == 1
+    assert calls["format_i"] == 2  # formatter + repair
+    assert o.spawn_count == 1
 
 
-async def test_structured_output_appended_to_tool_allowlist():
+async def test_schema_worker_tool_allowlist_is_not_polluted_by_formatter_step():
     captured = {}
 
-    async def spawn_fn(ctx, *, task, tools=None, extra_tools=None, **kwargs):
-        captured["tools"] = tools
-        if extra_tools:
-            await extra_tools["structured_output"].execute(SimpleNamespace(), value=1)
-        return SimpleNamespace(text="ok")
+    async def spawn_fn(ctx, *, task, tools=None, **kwargs):
+        captured["worker_tools"] = tools
+        return SimpleNamespace(text="worker answer")
 
-    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    async def format_structured(*, response_format, **kwargs):
+        captured["formatted"] = True
+        return response_format(value=1).model_dump_json()
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn, format_structured=format_structured)
     o = Orchestra.for_ctx(ctx)
     await o.agent("x", schema=_Schema, tools=["slack_search"])
-    assert "structured_output" in captured["tools"]
-    assert "slack_search" in captured["tools"]
+    assert captured["worker_tools"] == ["slack_search"]
+    assert captured["formatted"] is True
 
 
 async def test_parallel_reraises_missing_structured_output():
-    # A missing structured output is a contract violation — it aborts the fan-out,
+    # A missing structured formatter result is a contract violation — it aborts the fan-out,
     # not swallowed to None.
-    ctx, _ = _ctx_with(["nope", "nope"], structured=None)
+    ctx, _ = _ctx_with(["worker"], structured=None)
     o = Orchestra.for_ctx(ctx)
-    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group below
+    with pytest.raises(BaseException) as ei:
         await o.parallel([(lambda: o.agent("x", schema=_Schema))])
     exc = ei.value
     flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]
@@ -279,20 +282,21 @@ async def test_explicit_system_prompt_overrides_persona_but_keeps_capability():
 async def test_agent_type_with_schema_keeps_capability_and_note():
     captured = {}
 
-    async def spawn_fn(ctx, *, task, system_prompt=None, actions=None, extra_tools=None, **kwargs):
-        captured.update(system_prompt=system_prompt, actions=actions, extra_tools=extra_tools)
-        if extra_tools:
-            await extra_tools["structured_output"].execute(SimpleNamespace(), value=1)
-        return SimpleNamespace(text="ok")
+    async def spawn_fn(ctx, *, task, system_prompt=None, actions=None, **kwargs):
+        captured.update(worker_prompt=system_prompt, worker_actions=actions)
+        return SimpleNamespace(text="worker")
 
-    ctx = SimpleNamespace(spawn_fn=spawn_fn)
+    async def format_structured(*, response_format, **kwargs):
+        captured["formatted"] = True
+        return response_format(value=1).model_dump_json()
+
+    ctx = SimpleNamespace(spawn_fn=spawn_fn, format_structured=format_structured)
     o = Orchestra.for_ctx(ctx)
     out = await o.agent("review", agent_type="reviewer", schema=_Schema)
     assert out.value == 1
-    assert captured["actions"] == frozenset({ToolAction.READ})
-    assert "code reviewer" in captured["system_prompt"]
-    assert "structured_output" in captured["system_prompt"]
-    assert "structured_output" in captured["extra_tools"]
+    assert captured["worker_actions"] == frozenset({ToolAction.READ})
+    assert "code reviewer" in captured["worker_prompt"]
+    assert captured["formatted"] is True
 
 
 async def test_parallel_accepts_bare_coroutines():
@@ -330,7 +334,7 @@ async def test_spawn_cap_aborts_parallel_instead_of_silent_none(monkeypatch):
     monkeypatch.setattr("ntrp.orchestra.engine._MAX_WORKFLOW_SPAWNS", 2)
     ctx, _ = _ctx_with(["ok"])
     o = Orchestra.for_ctx(ctx)
-    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group below
+    with pytest.raises(BaseException) as ei:
         await o.parallel([o.agent("a"), o.agent("b"), o.agent("c"), o.agent("d")])
     exc = ei.value
     flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]
@@ -372,7 +376,7 @@ async def test_spawn_cap_traceback_surfaces_runaway_message(monkeypatch):
     ctx, _ = _ctx_with(["ok"])
     o = Orchestra.for_ctx(ctx)
     script = "return await parallel([agent('a'), agent('b'), agent('c')])"
-    with pytest.raises(BaseException) as ei:  # noqa: PT011 — ExceptionGroup
+    with pytest.raises(BaseException) as ei:
         await run_script(o, script, {})
     tb = format_script_traceback(ei.value, script)
     assert "runaway guard" in tb
@@ -403,7 +407,7 @@ async def test_spawn_denied_when_budget_exhausted():
 async def test_budget_guard_aborts_parallel_instead_of_silent_none():
     ctx, _ = _ctx_with(["ok"], budget=RunBudget(total=50, output_tokens=50))
     o = Orchestra.for_ctx(ctx)
-    with pytest.raises(BaseException) as ei:  # noqa: PT011 — unwrap the group
+    with pytest.raises(BaseException) as ei:
         await o.parallel([o.agent("a"), o.agent("b")])
     exc = ei.value
     flat = list(exc.exceptions) if isinstance(exc, BaseExceptionGroup) else [exc]

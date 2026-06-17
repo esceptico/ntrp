@@ -79,6 +79,8 @@ async def _generate_name(
             temperature=0,
             max_tokens=80,
             response_format=NameOutput,
+            langfuse_name="session.name.generate",
+            langfuse_metadata={"subject": log_subject},
         )
         return _response_name(response)
     except Exception as exc:

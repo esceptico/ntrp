@@ -1,4 +1,4 @@
-import { apiWithConfig, checkHealth, listProjectsApi, loadInitialConfig, type SessionListItem } from "../api";
+import { apiWithConfig, checkHealth, listPrimarySessionsApi, listProjectsApi, loadInitialConfig } from "../api";
 import { getState } from "../store";
 import { isAgentSessionId, parentSessionIdOf } from "../lib/agentRun";
 import { fetchAutomations } from "./automations";
@@ -58,9 +58,9 @@ export async function refresh(): Promise<void> {
     s.setConnected(true);
     s.setError(null);
 
-    const [projects, { sessions }, session] = await Promise.all([
+    const [projects, sessions, session] = await Promise.all([
       listProjectsApi(s.config),
-      apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500"),
+      listPrimarySessionsApi(s.config),
       apiWithConfig<{ session_id: string; name?: string | null }>(s.config, "/session"),
     ]);
     s.setProjects(projects);

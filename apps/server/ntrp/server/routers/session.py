@@ -540,6 +540,8 @@ async def propose_session_goal(
         ],
         temperature=0,
         max_tokens=120,
+        langfuse_name="goal.propose",
+        langfuse_metadata={"session_id": session_id},
     )
     content = response.choices[0].message.content if response.choices else ""
     objective = _clean_goal_proposal(content or "")
@@ -700,20 +702,29 @@ async def list_sessions(
     buses: BusRegistry = Depends(get_bus_registry),
     project_id: str | None = Query(default=None),
     inbox: bool = Query(default=False),
+    include_agents: bool = Query(default=True),
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
     # Tests call route functions directly, so FastAPI's Query defaults are
     # not resolved before the function body runs.
     project_id = project_id if isinstance(project_id, str) else None
     inbox = inbox if isinstance(inbox, bool) else False
+    include_agents = include_agents if isinstance(include_agents, bool) else True
     limit = limit if isinstance(limit, int) else 100
+    offset = offset if isinstance(offset, int) else 0
     if inbox:
-        sessions = await svc.list_sessions(limit=limit, project_id=None)
+        sessions = await svc.list_sessions(limit=limit, project_id=None, include_agents=include_agents, offset=offset)
     elif project_id is not None:
         await _require_project(svc, project_id)
-        sessions = await svc.list_sessions(limit=limit, project_id=project_id)
+        sessions = await svc.list_sessions(
+            limit=limit,
+            project_id=project_id,
+            include_agents=include_agents,
+            offset=offset,
+        )
     else:
-        sessions = await svc.list_sessions(limit=limit)
+        sessions = await svc.list_sessions(limit=limit, include_agents=include_agents, offset=offset)
     enriched = []
     for session in sessions:
         snapshot = await _session_runtime_snapshot(svc, runtime, buses, session["session_id"])

@@ -1,4 +1,4 @@
-import { apiWithConfig, compactSessionApi, type SessionListItem } from "../api";
+import { apiWithConfig, compactSessionApi, listPrimarySessionsApi, type SessionListItem } from "../api";
 import { getState } from "../store";
 import { forgetEventSeqForSession } from "../store/chat-stream";
 import { loadHistory } from "./history";
@@ -156,11 +156,7 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
             body: JSON.stringify(name ? { name } : {}),
           },
         );
-        const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(
-          s.config,
-          "/sessions?limit=500",
-        );
-        s.setSessions(sessions);
+        s.setSessions(await listPrimarySessionsApi(s.config));
         await switchSession(branched.session_id);
       } catch (error) {
         appendError(error instanceof Error ? error.message : String(error));

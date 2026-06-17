@@ -1,14 +1,25 @@
-"""Per-run scratchpad for research subagents.
+"""Filesystem-backed scratchpad for research subagents.
 
-A bounded, scope-isolated artifact store so a deep-research subagent can offload
-bulk (long source inventories, draft tables, working notes) out of its own
-context and re-read specific parts on demand. Scoped to the subagent's run
-(research_scope_id) — it cannot touch user/workspace files. The subagent returns
-a distilled summary + a manifest; the bulk stays here.
+A bounded artifact store so deep-research subagents can offload bulk (long
+source inventories, draft tables, working notes) out of context and re-read
+specific parts on demand. Artifacts are written under
+``~/.ntrp/artifacts/research/<scope>/`` (or ``NTRP_DIR``) with strict relative
+paths, plus a small ``manifest.json``. The old session-store DB is still mirrored
+for compatibility and used as a fallback when reading/listing older artifacts.
 """
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import re
+from datetime import UTC, datetime
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from ntrp.settings import NTRP_DIR
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
@@ -17,6 +28,7 @@ MAX_ARTIFACT_BYTES = 256 * 1024
 MAX_ARTIFACTS_PER_SCOPE = 64
 _DEFAULT_READ_CHARS = 8_000
 _MAX_READ_CHARS = 20_000
+_MANIFEST = "manifest.json"
 
 
 class WriteResearchArtifactInput(BaseModel):
@@ -56,6 +68,28 @@ def _scope(execution: ToolExecution) -> str:
     return execution.ctx.run.research_scope_id or execution.ctx.run.run_id
 
 
+def _safe_scope(scope_id: str) -> str:
+    scope = re.sub(r"[^A-Za-z0-9_.-]+", "-", scope_id.strip())[:96].strip(".-")
+    digest = hashlib.sha256(scope_id.encode("utf-8")).hexdigest()[:10]
+    if not scope:
+        return digest
+    if scope != scope_id or len(scope_id) > 96:
+        return f"{scope}-{digest}"
+    return scope
+
+
+def artifact_root() -> Path:
+    return NTRP_DIR / "artifacts" / "research"
+
+
+def artifact_scope_dir(scope_id: str) -> Path:
+    return artifact_root() / _safe_scope(scope_id)
+
+
+def _manifest_path(scope_id: str) -> Path:
+    return artifact_scope_dir(scope_id) / _MANIFEST
+
+
 def _validate_path(path: str) -> str | None:
     if not path.strip():
         return "path must be non-empty"
@@ -67,11 +101,131 @@ def _validate_path(path: str) -> str | None:
         return "path must not contain control characters"
     if len(path) > 256:
         return "path too long (max 256 chars)"
+    if path == _MANIFEST or path.endswith(f"/{_MANIFEST}"):
+        return f"{_MANIFEST} is reserved"
     return None
 
 
-def _unavailable() -> ToolResult:
-    return ToolResult(content="Research artifact store unavailable.", preview="Unavailable", is_error=True)
+def _artifact_path(scope_id: str, rel_path: str) -> Path:
+    root = artifact_scope_dir(scope_id).resolve()
+    path = (root / rel_path).resolve()
+    if root != path and root not in path.parents:
+        raise ValueError("artifact path escaped scope")
+    return path
+
+
+def _preview(content: str, chars: int = 120) -> str:
+    return content[:chars]
+
+
+def _stat_row(scope_id: str, rel_path: str, content: str | None = None) -> dict:
+    path = _artifact_path(scope_id, rel_path)
+    if content is None:
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+    updated_at = datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat() if path.exists() else datetime.now(UTC).isoformat()
+    return {
+        "path": rel_path,
+        "byte_len": len(content.encode("utf-8")),
+        "updated_at": updated_at,
+        "preview": _preview(content),
+        "fs_path": str(path),
+        "artifact_dir": str(artifact_scope_dir(scope_id)),
+        "scope_id": scope_id,
+    }
+
+
+def _read_manifest(scope_id: str) -> dict:
+    path = _manifest_path(scope_id)
+    if not path.exists():
+        return {"scope_id": scope_id, "artifact_dir": str(artifact_scope_dir(scope_id)), "files": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError
+        data.setdefault("scope_id", scope_id)
+        data.setdefault("artifact_dir", str(artifact_scope_dir(scope_id)))
+        data.setdefault("files", [])
+        return data
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {"scope_id": scope_id, "artifact_dir": str(artifact_scope_dir(scope_id)), "files": []}
+
+
+def _write_manifest(scope_id: str) -> None:
+    root = artifact_scope_dir(scope_id)
+    root.mkdir(parents=True, exist_ok=True)
+    rows = _list_fs_artifacts_sync(scope_id)
+    now = datetime.now(UTC).isoformat()
+    existing = _read_manifest(scope_id)
+    manifest = {
+        "scope_id": scope_id,
+        "safe_scope_id": _safe_scope(scope_id),
+        "artifact_dir": str(root),
+        "created_at": existing.get("created_at") or now,
+        "updated_at": now,
+        "files": rows,
+    }
+    _manifest_path(scope_id).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _list_fs_artifacts_sync(scope_id: str) -> list[dict]:
+    root = artifact_scope_dir(scope_id)
+    if not root.exists():
+        return []
+    rows: list[dict] = []
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        rel = path.relative_to(root).as_posix()
+        if rel == _MANIFEST:
+            continue
+        if _validate_path(rel):
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        rows.append(_stat_row(scope_id, rel, content))
+    rows.sort(key=lambda row: row.get("updated_at") or "")
+    return rows
+
+
+async def list_scope_artifacts(scope_id: str, store=None) -> list[dict]:
+    """List filesystem artifacts, merging legacy DB artifacts as fallback."""
+    fs_rows = await asyncio.to_thread(_list_fs_artifacts_sync, scope_id)
+    by_path = {row["path"]: row for row in fs_rows}
+    if store is not None:
+        for row in await store.list_research_artifacts(scope_id=scope_id):
+            if row["path"] not in by_path:
+                by_path[row["path"]] = {
+                    "path": row["path"],
+                    "byte_len": row["byte_len"],
+                    "updated_at": row.get("updated_at"),
+                    "preview": row.get("preview", ""),
+                    "scope_id": scope_id,
+                    "artifact_dir": str(artifact_scope_dir(scope_id)),
+                    "fs_path": None,
+                    "legacy_store": True,
+                }
+    return list(by_path.values())
+
+
+async def _get_fs_artifact(scope_id: str, rel_path: str) -> str | None:
+    def _read() -> str | None:
+        path = _artifact_path(scope_id, rel_path)
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    return await asyncio.to_thread(_read)
+
+
+async def _put_fs_artifact(scope_id: str, rel_path: str, content: str) -> Path:
+    def _write() -> Path:
+        path = _artifact_path(scope_id, rel_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        _write_manifest(scope_id)
+        return path
+
+    return await asyncio.to_thread(_write)
 
 
 def _invalid(err: str) -> ToolResult:
@@ -83,77 +237,87 @@ async def write_research_artifact(execution: ToolExecution, args: WriteResearchA
         return _invalid(err)
     if len(args.content.encode("utf-8")) > MAX_ARTIFACT_BYTES:
         return ToolResult(content=f"Artifact too large (max {MAX_ARTIFACT_BYTES} bytes).", preview="Too large", is_error=True)
-    store = _resolve_store(execution)
-    if store is None:
-        return _unavailable()
     scope = _scope(execution)
-    existing = await store.list_research_artifacts(scope_id=scope)
+    store = _resolve_store(execution)
+    existing = await list_scope_artifacts(scope, store=store)
     if args.path not in {a["path"] for a in existing} and len(existing) >= MAX_ARTIFACTS_PER_SCOPE:
         return ToolResult(
             content=f"Too many artifacts in this research scope (max {MAX_ARTIFACTS_PER_SCOPE}).",
             preview="Too many",
             is_error=True,
         )
-    await store.put_research_artifact(scope_id=scope, path=args.path, content=args.content)
-    return ToolResult(content=f"Wrote research artifact {args.path} ({len(args.content)} chars).", preview=f"Wrote {args.path}")
+    fs_path = await _put_fs_artifact(scope, args.path, args.content)
+    if store is not None:
+        await store.put_research_artifact(scope_id=scope, path=args.path, content=args.content)
+    return ToolResult(
+        content=f"Wrote research artifact {args.path} ({len(args.content)} chars) at {fs_path}.",
+        preview=f"Wrote {args.path}",
+    )
 
 
 async def append_research_artifact(execution: ToolExecution, args: AppendResearchArtifactInput) -> ToolResult:
     if err := _validate_path(args.path):
         return _invalid(err)
-    store = _resolve_store(execution)
-    if store is None:
-        return _unavailable()
     scope = _scope(execution)
-    existing = await store.get_research_artifact(scope_id=scope, path=args.path)
+    store = _resolve_store(execution)
+    existing = await _get_fs_artifact(scope, args.path)
+    if existing is None and store is not None:
+        existing = await store.get_research_artifact(scope_id=scope, path=args.path)
     if existing is None:
-        listed = await store.list_research_artifacts(scope_id=scope)
+        listed = await list_scope_artifacts(scope, store=store)
         if len(listed) >= MAX_ARTIFACTS_PER_SCOPE:
             return ToolResult(
                 content=f"Too many artifacts in this research scope (max {MAX_ARTIFACTS_PER_SCOPE}).",
                 preview="Too many",
                 is_error=True,
             )
-    new_len = len(((existing or "") + args.content).encode("utf-8"))
+    content = (existing or "") + args.content
+    new_len = len(content.encode("utf-8"))
     if new_len > MAX_ARTIFACT_BYTES:
         return ToolResult(content=f"Artifact would exceed max size ({MAX_ARTIFACT_BYTES} bytes).", preview="Too large", is_error=True)
-    await store.append_research_artifact(scope_id=scope, path=args.path, content=args.content)
-    return ToolResult(content=f"Appended to {args.path} ({new_len} bytes total).", preview=f"Appended {args.path}")
+    fs_path = await _put_fs_artifact(scope, args.path, content)
+    if store is not None:
+        await store.put_research_artifact(scope_id=scope, path=args.path, content=content)
+    return ToolResult(content=f"Appended to {args.path} ({new_len} bytes total) at {fs_path}.", preview=f"Appended {args.path}")
 
 
 async def read_research_artifact(execution: ToolExecution, args: ReadResearchArtifactInput) -> ToolResult:
     if err := _validate_path(args.path):
         return _invalid(err)
+    scope = _scope(execution)
     store = _resolve_store(execution)
-    if store is None:
-        return _unavailable()
-    content = await store.get_research_artifact(scope_id=_scope(execution), path=args.path)
+    content = await _get_fs_artifact(scope, args.path)
+    if content is None and store is not None:
+        content = await store.get_research_artifact(scope_id=scope, path=args.path)
     if content is None:
-        return ToolResult(content=f"No research artifact at {args.path}.", preview="Not found", is_error=True)
+        return ToolResult(content=f"No research artifact at {args.path} in scope {scope}.", preview="Not found", is_error=True)
     total = len(content)
     chunk = content[args.offset : args.offset + args.limit]
     end = args.offset + len(chunk)
-    header = f"[{args.path} — {total} chars, showing {args.offset}-{end}]\n"
+    fs_path = _artifact_path(scope, args.path)
+    header = f"[{args.path} — {total} chars, showing {args.offset}-{end}; fs_path={fs_path}]\n"
     footer = f"\n... [{total - end} more chars; call again with offset={end}]" if end < total else ""
     return ToolResult(content=f"{header}{chunk}{footer}", preview=f"Read {len(chunk)} of {total} chars")
 
 
 async def list_research_artifacts(execution: ToolExecution, args: ListResearchArtifactsInput) -> ToolResult:
-    store = _resolve_store(execution)
-    if store is None:
-        return _unavailable()
-    artifacts = await store.list_research_artifacts(scope_id=_scope(execution))
+    scope = _scope(execution)
+    artifacts = await list_scope_artifacts(scope, store=_resolve_store(execution))
     if not artifacts:
-        return ToolResult(content="No research artifacts in this scope yet.", preview="0 artifacts")
-    lines = [f"- {a['path']} ({a['byte_len']} bytes)" for a in artifacts]
-    return ToolResult(content="Research artifacts:\n" + "\n".join(lines), preview=f"{len(artifacts)} artifacts")
+        return ToolResult(content=f"No research artifacts in scope {scope} yet.", preview="0 artifacts")
+    artifact_dir = artifact_scope_dir(scope)
+    lines = [f"- {a['path']} ({a['byte_len']} bytes)" + (f" — {a['fs_path']}" if a.get("fs_path") else "") for a in artifacts]
+    return ToolResult(
+        content=f"Research artifacts for scope {scope}:\nArtifact dir: {artifact_dir}\n" + "\n".join(lines),
+        preview=f"{len(artifacts)} artifacts",
+    )
 
 
 _POLICY = ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False)
 
 write_research_artifact_tool = tool(
     display_name="WriteResearchArtifact",
-    description="Write (overwrite) a scratchpad artifact for this research run. Use to offload long source inventories, tables, or draft reports out of context; return a compact manifest instead. Scoped to this run; cannot touch user files.",
+    description="Write (overwrite) a filesystem-backed scratchpad artifact for this research run. Use to offload long source inventories, tables, or draft reports out of context; return a compact manifest instead. Stored under ~/.ntrp/artifacts/research/<scope>/ with safe relative paths.",
     input_model=WriteResearchArtifactInput,
     policy=_POLICY,
     execute=write_research_artifact,
@@ -161,7 +325,7 @@ write_research_artifact_tool = tool(
 
 append_research_artifact_tool = tool(
     display_name="AppendResearchArtifact",
-    description="Append text to a scratchpad artifact for this research run (created if absent). Good for incrementally building a source inventory.",
+    description="Append text to a filesystem-backed scratchpad artifact for this research run (created if absent). Good for incrementally building a source inventory.",
     input_model=AppendResearchArtifactInput,
     policy=_POLICY,
     execute=append_research_artifact,
@@ -169,7 +333,7 @@ append_research_artifact_tool = tool(
 
 read_research_artifact_tool = tool(
     display_name="ReadResearchArtifact",
-    description="Read back a scratchpad artifact you wrote earlier this research run, paging with offset/limit.",
+    description="Read back a scratchpad artifact from this research run, paging with offset/limit. Artifacts are also readable from ~/.ntrp/artifacts/research/<scope>/.",
     input_model=ReadResearchArtifactInput,
     policy=_POLICY,
     execute=read_research_artifact,
@@ -177,7 +341,7 @@ read_research_artifact_tool = tool(
 
 list_research_artifacts_tool = tool(
     display_name="ListResearchArtifacts",
-    description="List the scratchpad artifacts written so far in this research run.",
+    description="List scratchpad artifacts written so far in this research run, including filesystem paths.",
     input_model=ListResearchArtifactsInput,
     policy=_POLICY,
     execute=list_research_artifacts,

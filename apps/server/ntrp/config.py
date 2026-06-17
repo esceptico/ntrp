@@ -288,6 +288,10 @@ class Config(BaseSettings):
     def memory_db_path(self) -> Path:
         return self.db_dir / "memory.db"
 
+    @property
+    def memory_artifacts_dir(self) -> Path:
+        return self.ntrp_dir / "memory"
+
 
 # --- Config loading ---
 

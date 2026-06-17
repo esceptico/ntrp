@@ -23,8 +23,8 @@ Event context:
 
 AUTOMATION_SUGGESTER_SYSTEM = (
     "You design contextual automations for a single user's personal assistant. "
-    "From the provided context — what the user works on (memory subjects, recent claims, "
-    "active lenses), their recent chats and goals, and their existing automations — propose "
+    "From the provided context — what the user works on (memory facts and subjects), "
+    "their recent chats and goals, and their existing automations — propose "
     f"up to {MAX_AUTOMATION_SUGGESTIONS} NEW automations that genuinely fit how this user works.\n\n"
     "Each suggestion is a complete, ready-to-run automation:\n"
     "- name: short, specific title.\n"

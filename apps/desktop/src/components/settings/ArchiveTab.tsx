@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import clsx from "clsx";
@@ -13,6 +13,7 @@ import type { ArchivedSession } from "../../api";
 import { useMutationState } from "../../lib/hooks";
 import { formatRelativePast } from "../../lib/format";
 import { ICON } from "../../lib/icons";
+import { Skeleton } from "../ui/Skeleton";
 
 export function ArchiveTab() {
   const archived = useStore((s) => s.archivedSessions);
@@ -43,7 +44,11 @@ export function ArchiveTab() {
       </div>
 
       {filtered === null ? (
-        <Empty>Loading…</Empty>
+        <div className="flex flex-col gap-1" aria-busy>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} height={52} radius={10} />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <Empty>
           {archived && archived.length > 0
@@ -76,6 +81,13 @@ function ArchivedRow({
 }) {
   const { busy: anyBusy, error, run } = useMutationState();
   const [busyOp, setBusyOp] = useState<"restore" | "delete" | null>(null);
+  // Inline two-click confirm replaces the native confirm() dialog: first
+  // click arms ("Confirm delete"), second commits; auto-reverts after 3s.
+  const [confirming, setConfirming] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  }, []);
 
   const trigger = async (op: "restore" | "delete", fn: () => Promise<void>) => {
     if (anyBusy) return;
@@ -87,8 +99,14 @@ function ArchivedRow({
   const onRestore = () =>
     void trigger("restore", () => restoreArchivedSession(session.session_id));
   const onDelete = () => {
-    if (!confirm("Permanently delete this session? This cannot be undone.")) return;
-    void trigger("delete", () => permanentlyDeleteSession(session.session_id));
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirming) {
+      setConfirming(false);
+      void trigger("delete", () => permanentlyDeleteSession(session.session_id));
+      return;
+    }
+    setConfirming(true);
+    confirmTimer.current = setTimeout(() => setConfirming(false), 3000);
   };
 
   return (
@@ -97,6 +115,10 @@ function ArchivedRow({
       layout
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={{ layout: SPRING_LAYOUT }}
+      onMouseLeave={() => {
+        if (confirmTimer.current) clearTimeout(confirmTimer.current);
+        setConfirming(false);
+      }}
       className="app-row group flex items-center gap-3 px-3 py-2 rounded-[10px]"
     >
       <div className="min-w-0 flex-1">
@@ -122,7 +144,7 @@ function ArchivedRow({
         />
         <RowAction
           icon={<Trash2 size={ICON.XS} strokeWidth={2} />}
-          label="Delete"
+          label={confirming ? "Confirm delete" : "Delete"}
           onClick={onDelete}
           busy={busyOp === "delete"}
           danger

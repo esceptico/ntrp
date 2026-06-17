@@ -1,9 +1,20 @@
 from typing import Literal
 
+from coolname import generate_slug
 from pydantic import BaseModel, Field
 
 from ntrp.agent.coverage import ResearchOutline
-from ntrp.agent.ledger import ContradictionNote, DeadEndNote, FactNote, GapNote, SharedLedger
+from ntrp.agent.ledger import (
+    CandidateSource,
+    ContradictionNote,
+    CuratedEvidence,
+    DeadEndNote,
+    FactNote,
+    GapNote,
+    SharedLedger,
+    VerificationRecord,
+    WorkspaceQuestion,
+)
 from ntrp.core.agent_types import AgentType, apply_profile, register_agent_type
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
@@ -13,7 +24,9 @@ from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.core.types import ToolAction, ToolPolicy, ToolScope
 from ntrp.tools.research_artifacts import (
     append_research_artifact_tool,
+    artifact_scope_dir,
     list_research_artifacts_tool,
+    list_scope_artifacts,
     read_research_artifact_tool,
     write_research_artifact_tool,
 )
@@ -36,6 +49,17 @@ RESEARCH CONTEXT (shared across all agents in this run):
 {% endfor %}{% endif %}\
 {% if coverage %}Coverage: {{ coverage.coverage }}%; gaps: {{ coverage.gaps | join(", ") if coverage.gaps else "none" }}
 {% endif %}\
+{% if workspace %}Harness workspace:
+{% if workspace.search_history %}- Recent searches: {{ workspace.search_history | join("; ") }}
+{% endif %}{% if workspace.sources %}- Sources:
+{% for source in workspace.sources %}  - {{ source.id }}: {{ source.title }} — {{ source.locator }} [{{ source.status }}]{% if source.reason %}; {{ source.reason }}{% endif %}
+{% endfor %}{% endif %}{% if workspace.evidence %}- Curated evidence:
+{% for item in workspace.evidence %}  - {{ item.importance }}/{{ item.confidence }}: {{ item.claim }} ({{ item.source }}){% if item.quote %} quote="{{ item.quote }}"{% endif %}
+{% endfor %}{% endif %}{% if workspace.verifications %}- Verification records:
+{% for item in workspace.verifications %}  - {{ item.verdict }}: {{ item.claim }} ({{ item.sources | join(", ") }}){% if item.rationale %}; {{ item.rationale }}{% endif %}
+{% endfor %}{% endif %}{% if workspace.questions %}- Open/dead-end questions:
+{% for item in workspace.questions %}  - {{ item.status }}: {{ item.question }}{% if item.answer_or_reason %}; {{ item.answer_or_reason }}{% endif %}
+{% endfor %}{% endif %}{% endif %}\
 Do not re-research topics already covered. Focus on your specific scope.""")
 
 
@@ -56,13 +80,19 @@ def _format_ledger(
         if coverage_report is not None
         else None
     )
-    if not items and not ledger.accessed_count and not notes and coverage is None:
+    workspace = ledger.workspace_summary(scope=coverage_scope, max_items=8)
+    if not items and not ledger.accessed_count and not notes and coverage is None and workspace is None:
         return ""
 
     active = [item for item in items if not item.done]
     done = [item for item in items if item.done]
     return LEDGER_TEMPLATE.render(
-        active=active, done=done, accessed=ledger.accessed_count, notes=notes, coverage=coverage
+        active=active,
+        done=done,
+        accessed=ledger.accessed_count,
+        notes=notes,
+        coverage=coverage,
+        workspace=workspace,
     )
 
 
@@ -103,10 +133,17 @@ USER CONTEXT:
 {{ activated_skill_context }}
 {% endif %}
 
-RESEARCH LEDGER TOOLS — record AS YOU GO, never batched at the end:
-- The ledger is shared LIVE with the other research agents in this run. The moment you learn something, call research_note() to record facts, dead ends, contradictions, and gaps; the moment a source supports an outline section, call research_cover(). For deep or broad tasks, call research_outline() early with the sections the answer must cover.
-- Record after each source you read, before moving to the next. Batching all notes at the end defeats the ledger — parallel agents can't see your progress and re-do the same analysis.
-- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record it as a note and say so in the final answer.
+RESEARCH HARNESS — record AS YOU GO, never batched at the end:
+- The harness is shared LIVE with other research agents in this run. The model decides what to inspect; the harness stores state so you do not carry everything in the transcript.
+- Use research_track_search() for meaningful queries/paths tried, research_track_source() for candidate/read/rejected sources, research_curate() for important source-backed evidence, research_verify_claim() for claims you checked, and research_question() for open questions/dead ends.
+- Also use research_note() for shared facts/dead ends/contradictions/gaps, research_cover() when a source supports an outline section, and research_outline() early for broad/deep tasks.
+- Record after each source you read, before moving to the next. Batching all notes at the end defeats the harness — parallel agents can't see your progress and re-do the same analysis.
+- Do not hide unsupported claims. If a claim is weak, contradictory, or missing evidence, record it and say so in the final answer.
+
+OUTPUT CONTRACT:
+- quick depth: return a concise answer directly unless there is genuinely bulky evidence.
+- normal/deep depth or long outputs: write detailed markdown artifacts such as report.md, sources.md, evidence.md, or verification.md, then return only a TL;DR plus artifact manifest/path references.
+- If artifacts already exist, prefer updating them instead of dumping raw text into final answer. Downstream workflow agents must read relevant artifacts before making detailed claims.
 
 SCRATCHPAD (for long output):
 - For bulky intermediates — long source inventories, large tables, draft reports — write them to an artifact with write_research_artifact()/append_research_artifact() instead of carrying everything in context, and read_research_artifact() back specific parts as needed.
@@ -150,6 +187,40 @@ class ResearchCoverInput(BaseModel):
     source: str = Field(description="Source path, URL, message id, or tool result reference.")
 
 
+class ResearchSourceInput(BaseModel):
+    id: str = Field(description="Short stable source id, e.g. paper-1, readme, slack-thread-3.")
+    title: str = Field(description="Human-readable source title.")
+    locator: str = Field(description="URL, path, message id, or tool-result reference.")
+    status: Literal["candidate", "read", "rejected"] = Field(default="candidate", description="Current source status.")
+    reason: str | None = Field(default=None, description="Why the source matters or why it was rejected.")
+
+
+class ResearchCurateInput(BaseModel):
+    claim: str = Field(description="Atomic claim or finding supported by the source.")
+    source: str = Field(description="Source id/path/URL/tool-result reference supporting the claim.")
+    quote: str | None = Field(default=None, description="Short direct quote or exact evidence snippet when available.")
+    importance: Literal["low", "medium", "high", "critical"] = Field(default="medium")
+    confidence: Literal["low", "medium", "high"] = Field(default="medium")
+    notes: str | None = Field(default=None, description="Caveats, scope, or why the evidence matters.")
+
+
+class ResearchVerifyClaimInput(BaseModel):
+    claim: str = Field(description="Claim that was checked against sources.")
+    verdict: Literal["supported", "contradicted", "uncertain"] = Field(description="Verification verdict.")
+    sources: list[str] = Field(default_factory=list, description="Sources consulted for the verdict.")
+    rationale: str | None = Field(default=None, description="Brief reason, including what is missing if uncertain.")
+
+
+class ResearchQuestionInput(BaseModel):
+    question: str = Field(description="Open question, answered question, or dead end to track.")
+    status: Literal["open", "answered", "dead_end"] = Field(default="open")
+    answer_or_reason: str | None = Field(default=None, description="Answer if resolved, or why it dead-ended.")
+
+
+class ResearchSearchInput(BaseModel):
+    query: str = Field(description="Search query or exploration path tried during research.")
+
+
 async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
     ledger_summary = None
     if ctx.ledger:
@@ -171,17 +242,18 @@ async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id:
 
 async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
     ctx = execution.ctx
+    research_scope_id = f"research-{generate_slug(2)}"
 
     if not ctx.spawn_fn:
         return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
     if ctx.ledger:
-        await ctx.ledger.register(execution.tool_id, args.task, depth=args.depth)
+        await ctx.ledger.register(research_scope_id, args.task, depth=args.depth)
 
     remaining = ctx.run.max_depth - ctx.run.current_depth - 1
     # Runtime-only: forbid nested research when shallow or nesting depth is exhausted.
     extra_exclude = frozenset({"research"}) if (args.depth == "quick" or remaining <= 1) else frozenset()
-    prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
+    prompt = await _build_research_prompt(ctx, args.depth, remaining, research_scope_id)
     # The read-only capability, the spawn-tool excludes, and the ledger toolset all
     # come from the registered research AgentType; the spawner builds the actual
     # toolset from that profile. Only the dynamic prompt + depth gate are per-call.
@@ -198,22 +270,29 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
             kind="research",
             compaction_prompt_context="research",
             include_tool_messages_in_compaction=True,
-            research_scope_id=execution.tool_id,
+            research_scope_id=research_scope_id,
             **profile,
         )
     finally:
         if ctx.ledger:
-            await ctx.ledger.complete(execution.tool_id)
+            await ctx.ledger.complete(research_scope_id)
 
     # Carry the subagent's own usage + cost out via `data` so the desktop
     # can render a per-agent budget breakdown on its trace row. The cost
     # has already rolled into the caller's tracker inside spawn_fn.
     data: dict = spawn.child_agent_data()
+    data["research_scope_id"] = research_scope_id
+    data["research_tool_call_id"] = execution.tool_id
+    data["artifact_dir"] = str(artifact_scope_dir(research_scope_id))
     if spawn.usage is not None:
         data["usage"] = spawn.usage
         data["cost"] = spawn.cost
-    if artifacts := await _list_scope_artifacts(ctx, execution.tool_id):
+    if artifacts := await _list_scope_artifacts(ctx, research_scope_id):
         data["artifacts"] = artifacts
+    if ctx.ledger:
+        workspace = ctx.ledger.workspace_summary(scope=research_scope_id, max_items=12)
+        if workspace:
+            data["research_workspace"] = workspace
     return ToolResult(content=spawn.text, preview=f"Researched ({args.depth})", data=data or None)
 
 
@@ -222,10 +301,18 @@ async def _list_scope_artifacts(ctx: ToolContext, scope_id: str) -> list[dict]:
     if store is None:
         svc = ctx.services.get("session")
         store = getattr(svc, "store", None) if svc else None
-    if store is None:
-        return []
-    rows = await store.list_research_artifacts(scope_id=scope_id)
-    return [{"path": r["path"], "bytes": r["byte_len"], "preview": r["preview"]} for r in rows]
+    rows = await list_scope_artifacts(scope_id, store=store)
+    return [
+        {
+            "path": r["path"],
+            "bytes": r["byte_len"],
+            "preview": r["preview"],
+            "fs_path": r.get("fs_path"),
+            "artifact_dir": str(artifact_scope_dir(scope_id)),
+            "scope_id": scope_id,
+        }
+        for r in rows
+    ]
 
 
 async def research_note(execution: ToolExecution, args: ResearchNoteInput) -> ToolResult:
@@ -298,6 +385,94 @@ async def research_cover(execution: ToolExecution, args: ResearchCoverInput) -> 
     )
 
 
+def _research_scope(execution: ToolExecution) -> str:
+    return execution.ctx.run.research_scope_id or "default"
+
+
+def _require_ledger(execution: ToolExecution) -> SharedLedger | ToolResult:
+    ledger = execution.ctx.ledger
+    if not ledger:
+        return ToolResult(content="Error: research harness not available", preview="No harness", is_error=True)
+    return ledger
+
+
+async def research_track_source(execution: ToolExecution, args: ResearchSourceInput) -> ToolResult:
+    ledger = _require_ledger(execution)
+    if isinstance(ledger, ToolResult):
+        return ledger
+    source = CandidateSource(
+        id=args.id.strip(),
+        title=args.title.strip(),
+        locator=args.locator.strip(),
+        status=args.status,
+        reason=args.reason,
+    )
+    if not source.id or not source.title or not source.locator:
+        return ToolResult(content="source id, title, and locator are required", preview="Invalid source", is_error=True)
+    ledger.add_workspace_source(source, scope=_research_scope(execution))
+    return ToolResult(content=f"Tracked source {source.id}: {source.title} ({source.status})", preview=f"Source {source.status}")
+
+
+async def research_curate(execution: ToolExecution, args: ResearchCurateInput) -> ToolResult:
+    ledger = _require_ledger(execution)
+    if isinstance(ledger, ToolResult):
+        return ledger
+    evidence = CuratedEvidence(
+        claim=args.claim.strip(),
+        source=args.source.strip(),
+        quote=args.quote,
+        importance=args.importance,
+        confidence=args.confidence,
+        notes=args.notes,
+    )
+    if not evidence.claim or not evidence.source:
+        return ToolResult(content="claim and source are required", preview="Invalid evidence", is_error=True)
+    ledger.add_workspace_evidence(evidence, scope=_research_scope(execution))
+    return ToolResult(
+        content=f"Curated {args.importance}/{args.confidence} evidence: {evidence.claim}",
+        preview=f"Evidence {args.importance}/{args.confidence}",
+    )
+
+
+async def research_verify_claim(execution: ToolExecution, args: ResearchVerifyClaimInput) -> ToolResult:
+    ledger = _require_ledger(execution)
+    if isinstance(ledger, ToolResult):
+        return ledger
+    verification = VerificationRecord(
+        claim=args.claim.strip(),
+        verdict=args.verdict,
+        sources=tuple(s.strip() for s in args.sources if s.strip()),
+        rationale=args.rationale,
+    )
+    if not verification.claim:
+        return ToolResult(content="claim is required", preview="Invalid verification", is_error=True)
+    ledger.add_workspace_verification(verification, scope=_research_scope(execution))
+    return ToolResult(content=f"Verified claim as {verification.verdict}: {verification.claim}", preview=f"{verification.verdict}")
+
+
+async def research_question(execution: ToolExecution, args: ResearchQuestionInput) -> ToolResult:
+    ledger = _require_ledger(execution)
+    if isinstance(ledger, ToolResult):
+        return ledger
+    question = WorkspaceQuestion(
+        question=args.question.strip(),
+        status=args.status,
+        answer_or_reason=args.answer_or_reason,
+    )
+    if not question.question:
+        return ToolResult(content="question is required", preview="Invalid question", is_error=True)
+    ledger.add_workspace_question(question, scope=_research_scope(execution))
+    return ToolResult(content=f"Tracked {question.status} question: {question.question}", preview=f"Question {question.status}")
+
+
+async def research_track_search(execution: ToolExecution, args: ResearchSearchInput) -> ToolResult:
+    ledger = _require_ledger(execution)
+    if isinstance(ledger, ToolResult):
+        return ledger
+    ledger.add_workspace_search(args.query, scope=_research_scope(execution))
+    return ToolResult(content=f"Tracked research search: {args.query}", preview="Search tracked")
+
+
 research_tool = tool(
     display_name="Research",
     description=RESEARCH_DESCRIPTION,
@@ -331,10 +506,55 @@ research_cover_tool = tool(
     execute=research_cover,
 )
 
+research_track_source_tool = tool(
+    display_name="Research Track Source",
+    description="Track a candidate/read/rejected source in the structured research harness workspace.",
+    input_model=ResearchSourceInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False),
+    execute=research_track_source,
+)
+
+research_curate_tool = tool(
+    display_name="Research Curate Evidence",
+    description="Promote an important source-backed finding into the research harness with importance/confidence metadata.",
+    input_model=ResearchCurateInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False),
+    execute=research_curate,
+)
+
+research_verify_claim_tool = tool(
+    display_name="Research Verify Claim",
+    description="Record whether a claim is supported, contradicted, or uncertain based on inspected sources.",
+    input_model=ResearchVerifyClaimInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False),
+    execute=research_verify_claim,
+)
+
+research_question_tool = tool(
+    display_name="Research Question",
+    description="Track an open, answered, or dead-end research question in the structured harness workspace.",
+    input_model=ResearchQuestionInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False),
+    execute=research_question,
+)
+
+research_track_search_tool = tool(
+    display_name="Research Track Search",
+    description="Record a meaningful query or exploration path tried during research.",
+    input_model=ResearchSearchInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL, offload=False),
+    execute=research_track_search,
+)
+
 RESEARCH_AGENT_TOOLS = {
     "research_note": research_note_tool,
     "research_outline": research_outline_tool,
     "research_cover": research_cover_tool,
+    "research_track_source": research_track_source_tool,
+    "research_curate": research_curate_tool,
+    "research_verify_claim": research_verify_claim_tool,
+    "research_question": research_question_tool,
+    "research_track_search": research_track_search_tool,
     "write_research_artifact": write_research_artifact_tool,
     "append_research_artifact": append_research_artifact_tool,
     "read_research_artifact": read_research_artifact_tool,

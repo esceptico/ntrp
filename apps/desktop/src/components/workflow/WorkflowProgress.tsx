@@ -229,24 +229,32 @@ export function WorkflowProgressCard({
         />
       </div>
       {(phases.length > 0 || meta) && (
-        <div className="flex items-center gap-2.5">
-          {phases.length > 0 ? (
-            <span className="flex flex-1 items-center gap-[2px]" aria-hidden>
-              {phases.map((phase) => (
-                <span
-                  key={phase.name}
-                  className={clsx(
-                    "h-[3px] flex-1 min-w-[2px] rounded-full transition-colors duration-trace ease-out",
-                    phaseSegmentClass(phase.status),
-                    phase.status === "running" && "phase-glare",
-                  )}
-                />
-              ))}
-            </span>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {meta && <span className="shrink-0 text-2xs tabular-nums text-faint">{meta}</span>}
+        <div className="grid gap-1">
+          <div className="flex items-center gap-2.5">
+            {phases.length > 0 ? (
+              <span className="flex flex-1 items-center gap-[2px]" aria-hidden>
+                {phases.map((phase) => (
+                  <span key={phase.name} className="relative flex-1 min-w-[2px]">
+                    {phase.status === "running" && phases.length > 1 && (
+                      <span className="absolute bottom-full mb-0.5 left-0 text-2xs text-faint truncate whitespace-nowrap">
+                        <BlurSwap swapKey={phase.name} blur={2}>{phase.name}</BlurSwap>
+                      </span>
+                    )}
+                    <span
+                      className={clsx(
+                        "block h-[3px] w-full rounded-full transition-colors duration-trace ease-out",
+                        phaseSegmentClass(phase.status),
+                        phase.status === "running" && "phase-glare",
+                      )}
+                    />
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="flex-1" />
+            )}
+            {meta && <span className="shrink-0 text-2xs tabular-nums text-faint">{meta}</span>}
+          </div>
         </div>
       )}
     </button>

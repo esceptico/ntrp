@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { Archive, FolderInput, Pencil, Pin, PinOff, Sparkles } from "lucide-react";
 import type { Project } from "../../api";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
+import { EASE_DECELERATE, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 
 export interface ContextMenuState {
@@ -78,10 +78,14 @@ export function SessionContextMenu({
   return createPortal(
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, scale: 0.97, y: -4 }}
-      animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
-      exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-      transition={SPRING_POPOVER}
+      initial="closed"
+      animate={pos.ready ? "open" : "closed"}
+      exit="closed"
+      variants={{
+        closed: { opacity: 0, scale: 0.97, y: -4 },
+        open: { opacity: 1, scale: 1, y: 0, transition: { ...SPRING_POPOVER, staggerChildren: 0.035 } },
+      }}
+      transition={{ ...SPRING_POPOVER, when: "afterChildren" }}
       className="surface-panel surface-popover fixed z-50 w-[220px] py-1"
       style={{ left: pos.left, top: pos.top, transformOrigin: `${originY} ${originX}` }}
       onContextMenu={(e) => e.preventDefault()}
@@ -109,6 +113,11 @@ export function SessionContextMenu({
   );
 }
 
+const ITEM_VARIANTS = {
+  closed: { opacity: 0, y: -4 },
+  open: { opacity: 1, y: 0, transition: { duration: MOTION.row, ease: EASE_DECELERATE } },
+};
+
 function ContextItem({
   icon,
   label,
@@ -119,13 +128,14 @@ function ContextItem({
   onClick: () => void;
 }) {
   return (
-    <button
+    <motion.button
       type="button"
+      variants={ITEM_VARIANTS}
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
+      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.98]"
     >
       <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
       <span className="truncate">{label}</span>
-    </button>
+    </motion.button>
   );
 }

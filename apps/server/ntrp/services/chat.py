@@ -32,7 +32,9 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
+from ntrp.memory.profile import resident_profile
 from ntrp.notifiers.service import NotifierService
+from ntrp.observability import get_langfuse_tracer
 from ntrp.server.bus import BusRegistry, SessionBus, prime_bus_cursor_from_store
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
@@ -383,37 +385,19 @@ def _is_meta_client_id(client_id: str | None) -> bool:
     return bool(client_id and client_id.startswith(("loop:", "bg:", "goal:")))
 
 
+def _trace_name(session_state: SessionState) -> str:
+    return f"chat:{session_state.name or session_state.session_id}"
+
+
+def _trace_input(run: RunState) -> dict:
+    user_messages = [msg for msg in run.messages if msg.get("role") == Role.USER]
+    return {
+        "run_id": run.run_id,
+        "latest_user_message": user_messages[-1].get("content") if user_messages else None,
+    }
+
+
 # Below this many chars of user input there is nothing worth a scoped recall
-# (a bare "ok"/"thanks"). A routing floor, not a worth gate.
-_MEMORY_RECALL_FLOOR = 12
-
-
-# Pinned records injected per scope into the hot path (small, zero-LLM).
-_PINNED_RECORD_LIMIT = 20
-
-
-async def _retrieve_memory_context(
-    memory_records: object | None,
-    user_message: str,
-) -> str | None:
-    """Pinned records for the system prompt — the flat pool's durable bullets.
-
-    Pure DB I/O, zero LLM, zero per-turn vector. Skips on trivial/empty input so
-    the hot path pays nothing. Docs are gone; records are the memory pool.
-    """
-    if memory_records is None:
-        return None
-    if not user_message or len(user_message.strip()) < _MEMORY_RECALL_FLOOR:
-        return None
-
-    try:
-        records = await memory_records.list(pinned_only=True, limit=_PINNED_RECORD_LIMIT)
-    except Exception:
-        _logger.warning("pinned records load failed", exc_info=True)
-        return None
-    if not records:
-        return None
-    return "## Pinned\n\n" + "\n".join(f"- [{r.kind}] {r.text}" for r in records)
 
 
 async def _prepare_messages(
@@ -431,7 +415,9 @@ async def _prepare_messages(
     project_context: ProjectContext | None = None,
     todo_override: dict | None = None,
 ) -> list[dict]:
-    memory_context = await _retrieve_memory_context(deps.memory_records, user_message)
+    memory_context = await resident_profile(
+        deps.memory_records, project_context=project_context, session_id=session_id
+    )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
@@ -1495,7 +1481,27 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
         await _record_run_status(ctx.session_service, run.run_id, RunStatus.RUNNING.value)
         await _update_run_client_idempotency(ctx.session_service, run, RunStatus.RUNNING.value)
 
-        result, bg_gen = await _run_agent_with_context_retry()
+        tracer = get_langfuse_tracer()
+        with tracer.trace(
+            name=_trace_name(session_state),
+            session_id=session_state.session_id,
+            input=_trace_input(run),
+            tags=["chat", "meta"] if run.is_meta_run else ["chat"],
+            metadata={
+                "session_id": session_state.session_id,
+                "session_name": session_state.name,
+                "run_id": run.run_id,
+                "project_id": session_state.project_id,
+                "parent_session_id": session_state.parent_session_id,
+                "session_type": session_state.session_type,
+                "model": ctx.config.model,
+                "is_meta_run": run.is_meta_run,
+                "loop_task_id": run.loop_task_id,
+            },
+        ) as trace_span:
+            result, bg_gen = await _run_agent_with_context_retry()
+            if trace_span is not None:
+                trace_span.update(output=result)
 
         if bg_gen is not None:
             io.emit = None

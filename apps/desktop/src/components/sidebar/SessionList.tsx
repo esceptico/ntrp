@@ -114,6 +114,7 @@ export function SessionList() {
       onStartRename={() => setRenamingId(session.session_id)}
       onCancelRename={() => setRenamingId(null)}
       onMenu={(pos) => setMenu({ sessionId: session.session_id, x: pos.x, y: pos.y })}
+      onArchive={() => void archiveSession(session.session_id)}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });

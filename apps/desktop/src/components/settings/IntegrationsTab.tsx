@@ -5,11 +5,9 @@ import {
   CalendarDays,
   CheckCircle2,
   KeyRound,
-  Loader2,
   Mail,
   MessageCircle,
   RefreshCw,
-  Trash2,
 } from "lucide-react";
 import {
   addGmailAccountApi,
@@ -40,7 +38,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
-import { IconButton } from "../IconButton";
+import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
 import { SetupAssistant, type SetupAssistantKind } from "./setup/SetupAssistant";
 
 export function IntegrationsTab() {
@@ -364,18 +362,12 @@ function GoogleCard({
                       : "Read and calendar access"}
                 </div>
               </div>
-              <IconButton
-                danger
-                aria-label={`Remove ${account.email || account.token_file}`}
-                onClick={() => void onRemove(account)}
-                disabled={pendingId === `gmail:${account.token_file}`}
-              >
-                {pendingId === `gmail:${account.token_file}` ? (
-                  <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
-                ) : (
-                  <Trash2 size={ICON.MD} strokeWidth={2} />
-                )}
-              </IconButton>
+              <ConfirmDeleteButton
+                size="md"
+                label={`Remove ${account.email || account.token_file}`}
+                busy={pendingId === `gmail:${account.token_file}`}
+                onConfirm={() => void onRemove(account)}
+              />
             </div>
           ))}
         </div>

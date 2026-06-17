@@ -244,7 +244,10 @@ async def _complete_compaction_request(model: str, request: dict) -> CompletionR
     async def complete() -> CompletionResponse:
         client = create_completion_client(model)
         try:
-            return await client.completion(**request)
+            return await client.completion(
+                **request,
+                langfuse_name="context.compaction",
+            )
         finally:
             await client.close()
 

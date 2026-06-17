@@ -25,6 +25,7 @@ def _run_completed(run_id: str = "run-1") -> RunCompleted:
         ),
         usage=Usage(prompt_tokens=3, completion_tokens=5, cache_read_tokens=7, cache_write_tokens=11),
         result="done",
+        source_refs=({"kind": "tool", "ref": "memory:1"},),
     )
 
 

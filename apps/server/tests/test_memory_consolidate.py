@@ -21,10 +21,9 @@ from pathlib import Path
 
 import pytest
 
-from ntrp.memory.consolidate import Consolidate
+from ntrp.memory.consolidate import Consolidate, ConsolidateReport
 from ntrp.memory.models import SourceRef
 from ntrp.memory.prompts_consolidate import LabelOps, LintOps
-from ntrp.memory.prompts_derive import DreamOps
 from ntrp.memory.records import RecordStore
 from tests.conftest import completion_response
 
@@ -83,10 +82,11 @@ async def test_merge_folds_duplicates_onto_one_survivor(tmp_path: Path):
     assert len(active) == 1
     survivor = active[0]
     assert survivor.text == "the user lives in Yerevan, Armenia"
-    # The loser is closed into the survivor (history preserved).
+    # The loser is folded into the survivor, then the LINT pass hard-deletes the
+    # tombstone (records carry no archived status).
     loser = a if survivor.id == b.id else b
-    closed = await records.get(loser.id)
-    assert closed.superseded_by == survivor.id
+    assert await records.get(loser.id) is None
+    assert report.pruned == 1
     await consolidate.close()
     await records.close()
 
@@ -153,8 +153,8 @@ async def test_invalidate_with_successor_supersedes_into_it(tmp_path: Path):
     report = await consolidate.run_once()
 
     assert report.superseded == 1
-    closed = await records.get(old.id)
-    assert closed.superseded_by == new.id
+    assert report.pruned == 1
+    assert await records.get(old.id) is None  # superseded into new, then pruned
     assert (await records.get(new.id)).superseded_by is None  # the newer record lives
     await consolidate.close()
     await records.close()
@@ -209,9 +209,7 @@ async def test_drop_orphan_keeps_record_with_provenance(tmp_path: Path):
 
 
 def _label_ops(renames: list[tuple[str, str]]) -> str:
-    return LabelOps.model_validate(
-        {"renames": [{"old": old, "new": new} for old, new in renames]}
-    ).model_dump_json()
+    return LabelOps.model_validate({"renames": [{"old": old, "new": new} for old, new in renames]}).model_dump_json()
 
 
 async def test_label_hygiene_folds_near_duplicate_labels(tmp_path: Path):
@@ -231,17 +229,83 @@ async def test_label_hygiene_folds_near_duplicate_labels(tmp_path: Path):
     report = await consolidate.run_once()
 
     assert report.relabeled == 2
-    assert await records.list_labels() == [{"label": "Dex", "count": 2}]
+    assert await records.list_labels() == [{"label": "Dex", "count": 2, "kind": "meta"}]
     assert await records.labels_of(a.id) == ["Dex"]
-    # ONE hygiene call after the neighborhood judgments, then the dream phase
-    # (one DreamOps call per >=2-member neighborhood; stub yields no candidates).
-    assert [c["response_format"] for c in llm.calls] == [LintOps, LabelOps, DreamOps]
+    # ONE hygiene call after the neighborhood judgments; no derivation phase runs.
+    assert [c["response_format"] for c in llm.calls] == [LintOps, LabelOps]
 
     # No new records -> the next sweep spends nothing, label hygiene included.
     await consolidate.run_once()
-    assert len(llm.calls) == 3
+    assert len(llm.calls) == 2
     await consolidate.close()
     await records.close()
+
+
+async def test_label_hygiene_reclassifies_entity_vs_meta(tmp_path: Path):
+    """The hygiene call retypes a subject label to 'entity' while leaving a
+    category label as 'meta'. Only the explicit reclass op moves a label."""
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    d1 = await records.add("Dex slept through the night")
+    d2 = await records.add("Dex started crawling")
+    await records.set_labels(d1.id, ["Dex"])
+    await records.set_labels(d2.id, ["Dex"])
+    b1 = await records.add("server returned a 500 on /memory")
+    b2 = await records.add("intermittent 500 on the memory router")
+    await records.set_labels(b1.id, ["Bug"])
+    await records.set_labels(b2.id, ["Bug"])
+
+    reclass_ops = LabelOps.model_validate(
+        {"reclass": [{"label": "Dex", "kind": "entity"}]}
+    ).model_dump_json()
+    consolidate = _consolidate(tmp_path, records, StubLLM())
+
+    report = ConsolidateReport()
+    # Drive _lint_labels directly with a stubbed label judgment.
+    consolidate._judge_labels = _scripted_judge_labels(reclass_ops)  # type: ignore[method-assign]
+    await consolidate._lint_labels(report)
+
+    assert report.reclassified == 1
+    by_label = {e["label"]: e["kind"] for e in await records.list_labels()}
+    assert by_label["Dex"] == "entity"
+    assert by_label["Bug"] == "meta"
+    await consolidate.close()
+    await records.close()
+
+
+async def test_empty_delta_still_classifies_labels(tmp_path: Path):
+    """An idle sweep (no records confirmed since the watermark) still runs the
+    label-hygiene/classification call — the cold-start backfill path."""
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("Dex is the user's son")
+    b = await records.add("the user works on ntrp")
+    await records.set_labels(a.id, ["Dex"])
+    await records.set_labels(b.id, ["ntrp"])
+    consolidate = _consolidate(tmp_path, records, StubLLM())
+
+    # First sweep advances the watermark past both records.
+    await consolidate.run_once()
+
+    called = {"n": 0}
+    orig = consolidate._lint_labels
+
+    async def _spy(report):
+        called["n"] += 1
+        await orig(report)
+
+    consolidate._lint_labels = _spy  # type: ignore[method-assign]
+
+    # Second sweep: delta is empty, yet _lint_labels must still be invoked.
+    await consolidate.run_once()
+    assert called["n"] == 1
+    await consolidate.close()
+    await records.close()
+
+
+def _scripted_judge_labels(body: str):
+    async def _judge(labels):
+        return LabelOps.model_validate_json(body)
+
+    return _judge
 
 
 async def test_label_hygiene_skipped_below_two_labels(tmp_path: Path):

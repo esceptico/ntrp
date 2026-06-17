@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 import ntrp.database as database
 import ntrp.tools.research as research_module
+import ntrp.tools.research_artifacts as research_artifacts_module
 from ntrp.agent import Result, SharedLedger, StopReason, Usage
 from ntrp.context.models import SessionState
 from ntrp.core.agent_types import apply_profile
@@ -16,6 +17,11 @@ from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.executor import ToolExecutor
+
+
+@pytest.fixture(autouse=True)
+def _isolate_research_artifacts(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(research_artifacts_module, "NTRP_DIR", tmp_path / ".ntrp")
 
 
 @pytest_asyncio.fixture
@@ -36,23 +42,38 @@ SCRATCHPAD_TOOL_NAMES = {
     "list_research_artifacts",
 }
 
+HARNESS_TOOL_NAMES = {
+    "research_track_source",
+    "research_curate",
+    "research_verify_claim",
+    "research_question",
+    "research_track_search",
+}
+
 
 def test_scratchpad_tools_are_research_only():
     from ntrp.integrations.core import CORE_INTEGRATIONS
 
-    assert set(research_module.RESEARCH_AGENT_TOOLS) >= SCRATCHPAD_TOOL_NAMES
+    assert set(research_module.RESEARCH_AGENT_TOOLS) >= SCRATCHPAD_TOOL_NAMES | HARNESS_TOOL_NAMES
     main_tool_names = {name for integ in CORE_INTEGRATIONS for name in integ.tools}
-    assert not (SCRATCHPAD_TOOL_NAMES & main_tool_names)
+    assert not ((SCRATCHPAD_TOOL_NAMES | HARNESS_TOOL_NAMES) & main_tool_names)
 
 
 @pytest.mark.asyncio
-async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_store: SessionStore):
+async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_store: SessionStore, monkeypatch):
+    monkeypatch.setattr(research_module, "generate_slug", lambda _: "fun-panda")
     captured = {}
     registry = ToolExecutor().registry
 
     async def spawn_fn(ctx, task, **kwargs):
         captured.update(kwargs)
-        await session_store.put_research_artifact(scope_id="research-1", path="inv.md", content="big inventory")
+        scope = kwargs["research_scope_id"]
+        await session_store.put_research_artifact(scope_id=scope, path="inv.md", content="big inventory")
+        assert ctx.ledger is not None
+        ctx.ledger.add_workspace_evidence(
+            research_module.CuratedEvidence(claim="important finding", source="inv.md", importance="high"),
+            scope=scope,
+        )
         return SpawnResult(text="done")
 
     ctx = _context(SharedLedger(), registry=registry, spawn_fn=spawn_fn)
@@ -65,7 +86,14 @@ async def test_research_offers_scratchpad_and_returns_artifact_manifest(session_
     # extra_tools (the spawner builds the actual toolset from the profile).
     assert SCRATCHPAD_TOOL_NAMES <= set(captured["extra_tools"])
     assert result.data is not None
-    assert result.data["artifacts"] == [{"path": "inv.md", "bytes": len(b"big inventory"), "preview": "big inventory"}]
+    assert result.data["artifacts"][0]["path"] == "inv.md"
+    assert result.data["artifacts"][0]["bytes"] == len(b"big inventory")
+    assert result.data["artifacts"][0]["preview"] == "big inventory"
+    assert result.data["research_scope_id"] == "research-fun-panda"
+    assert result.data["research_tool_call_id"] == "research-1"
+    assert result.data["artifacts"][0]["scope_id"] == "research-fun-panda"
+    assert "research-fun-panda" in result.data["artifact_dir"]
+    assert result.data["research_workspace"]["evidence"][0]["claim"] == "important finding"
 
 
 def _context(
@@ -95,10 +123,12 @@ def test_default_agent_tool_schemas_hide_research_ledger_helpers():
     assert "research_note" not in tool_names
     assert "research_outline" not in tool_names
     assert "research_cover" not in tool_names
+    assert not (HARNESS_TOOL_NAMES & tool_names)
 
 
 @pytest.mark.asyncio
-async def test_research_spawns_child_with_research_ledger_helpers():
+async def test_research_spawns_child_with_research_ledger_helpers(monkeypatch):
+    monkeypatch.setattr(research_module, "generate_slug", lambda _: "fun-panda")
     captured = {}
     registry = ToolExecutor().registry
     ledger = SharedLedger()
@@ -149,8 +179,11 @@ async def test_research_spawns_child_with_research_ledger_helpers():
             "research_cover",
         }
         | SCRATCHPAD_TOOL_NAMES
+        | HARNESS_TOOL_NAMES
     )
-    assert captured["research_scope_id"] == "research-1"
+    assert captured["research_scope_id"] == "research-fun-panda"
+    assert result.data["research_scope_id"] == "research-fun-panda"
+    assert result.data["research_tool_call_id"] == "research-1"
 
 
 @pytest.mark.asyncio
@@ -249,6 +282,7 @@ async def test_research_profile_builds_read_only_child_toolset(monkeypatch):
     assert "read_tool" in names
     assert SCRATCHPAD_TOOL_NAMES <= names
     assert {"research_note", "research_outline", "research_cover"} <= names
+    assert HARNESS_TOOL_NAMES <= names
     assert "write_tool" not in names  # WRITE filtered by actions={READ}
     assert "background" not in names  # excluded by the research spawn-tool set
     assert "workflow" not in names
@@ -280,8 +314,55 @@ async def test_nested_research_profile_does_not_double_register_ledger_tools(mon
     names = {schema["function"]["name"] for schema in captured["tools"]}
     assert {"research_note", "research_outline", "research_cover"} <= names
     assert SCRATCHPAD_TOOL_NAMES <= names
+    assert HARNESS_TOOL_NAMES <= names
     assert "read_tool" in names
     assert "write_tool" not in names
+
+
+@pytest.mark.asyncio
+async def test_research_harness_tools_populate_scoped_workspace():
+    ledger = SharedLedger()
+    ctx = _context(ledger, research_scope_id="research-a")
+
+    await research_module.research_track_search(
+        ToolExecution(tool_id="s", tool_name="research_track_search", ctx=ctx),
+        research_module.ResearchSearchInput(query="research agent harness"),
+    )
+    await research_module.research_track_source(
+        ToolExecution(tool_id="src", tool_name="research_track_source", ctx=ctx),
+        research_module.ResearchSourceInput(id="paper", title="Harness paper", locator="https://example.test/paper", status="read"),
+    )
+    await research_module.research_curate(
+        ToolExecution(tool_id="cur", tool_name="research_curate", ctx=ctx),
+        research_module.ResearchCurateInput(
+            claim="Harnesses externalize research state.",
+            source="paper",
+            quote="stateful harness",
+            importance="high",
+            confidence="high",
+        ),
+    )
+    await research_module.research_verify_claim(
+        ToolExecution(tool_id="ver", tool_name="research_verify_claim", ctx=ctx),
+        research_module.ResearchVerifyClaimInput(
+            claim="Harnesses externalize research state.",
+            verdict="supported",
+            sources=["paper"],
+            rationale="Directly described by the source.",
+        ),
+    )
+    await research_module.research_question(
+        ToolExecution(tool_id="q", tool_name="research_question", ctx=ctx),
+        research_module.ResearchQuestionInput(question="How much UI work is needed?", status="open"),
+    )
+
+    summary = ledger.workspace_summary(scope="research-a")
+    assert summary is not None
+    assert summary["search_history"] == ["research agent harness"]
+    assert summary["sources"][0]["id"] == "paper"
+    assert summary["evidence"][0]["importance"] == "high"
+    assert summary["verifications"][0]["verdict"] == "supported"
+    assert summary["questions"][0]["status"] == "open"
 
 
 @pytest.mark.asyncio
@@ -380,5 +461,9 @@ async def test_research_prompt_names_note_and_coverage_tools():
     assert "research_note" in prompt
     assert "research_outline" in prompt
     assert "research_cover" in prompt
-    assert "facts, dead ends, contradictions, and gaps" in prompt
+    assert "research_curate" in prompt
+    assert "research_verify_claim" in prompt
+    assert "research_track_source" in prompt
+    assert "facts/dead ends/contradictions/gaps" in prompt
     assert "Do not hide unsupported claims" in prompt
+    assert "TL;DR plus artifact manifest" in prompt

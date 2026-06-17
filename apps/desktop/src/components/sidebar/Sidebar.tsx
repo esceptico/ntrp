@@ -6,6 +6,7 @@ import { ICON } from "../../lib/icons";
 import { useVisibilityPoll } from "../../lib/hooks";
 import { NavRow } from "./NavRow";
 import { SessionList } from "./SessionList";
+import { ThemeToggle } from "../ThemeToggle";
 
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
@@ -36,12 +37,15 @@ export function Sidebar() {
         />
       </nav>
       <SessionList />
-      <nav className="flex flex-col gap-0.5 px-2.5 pt-1.5 pb-3">
-        <NavRow
-          icon={<SettingsIcon size={ICON.LG} strokeWidth={2} />}
-          label="Settings"
-          onClick={(e) => openSettings(originFromEvent(e.currentTarget))}
-        />
+      <nav className="flex items-center gap-1 px-2.5 pt-1.5 pb-3">
+        <div className="min-w-0 flex-1">
+          <NavRow
+            icon={<SettingsIcon size={ICON.LG} strokeWidth={2} />}
+            label="Settings"
+            onClick={(e) => openSettings(originFromEvent(e.currentTarget))}
+          />
+        </div>
+        <ThemeToggle />
       </nav>
     </aside>
   );

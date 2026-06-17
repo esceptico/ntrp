@@ -57,6 +57,8 @@ export interface AppConfig {
   apiKey: string;
 }
 
+const SESSION_PAGE_SIZE = 500;
+
 export type SessionType = "chat" | "channel" | "agent";
 
 export interface Project {
@@ -371,6 +373,18 @@ export async function apiWithConfig<T>(config: AppConfig, path: string, init: Re
   }
 }
 
+export async function listPrimarySessionsApi(config: AppConfig): Promise<SessionListItem[]> {
+  const all: SessionListItem[] = [];
+  for (let offset = 0; ; offset += SESSION_PAGE_SIZE) {
+    const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(
+      config,
+      `/sessions?limit=${SESSION_PAGE_SIZE}&offset=${offset}&include_agents=false`,
+    );
+    all.push(...sessions);
+    if (sessions.length < SESSION_PAGE_SIZE) return all;
+  }
+}
+
 async function desktopRequestWithTimeout(
   desktopApi: NonNullable<NonNullable<Window["ntrpDesktop"]>["api"]>,
   config: AppConfig,
@@ -492,7 +506,7 @@ export async function pinToMemoryApi(
   if (!text) return { written: false };
   const r = await apiWithConfig<{ record: { id: string } }>(config, "/admin/memory/record", {
     method: "POST",
-    body: JSON.stringify({ text, kind_tag: "note" }),
+    body: JSON.stringify({ text, kind_tag: "fact" }),
   });
   await apiWithConfig(config, `/admin/memory/record/${encodeURIComponent(r.record.id)}/pin`, {
     method: "POST",

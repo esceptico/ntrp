@@ -5,7 +5,7 @@ watermark, reconciles them against existing similar records (ADD/UPDATE/
 SUPERSEDE/NOOP), and applies the ops — text AND labels — to the flat record
 pool. Labels are open-vocabulary names (referents and categories) decided once
 at write time; the prompt carries the existing vocabulary so names get reused
-instead of re-minted. No docs, no scope, no lens write path.
+instead of re-minted. Writes only directives/facts/sources; no lens write path.
 
 The watermark lives in a tiny `meta(key, value)` table the Dreamer OWNS inside
 `config.memory_db_path`. Key form: `curate_watermark:{session_id}`. Anti-heartbeat:
@@ -21,6 +21,7 @@ from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
 from ntrp.memory.models import Record, SourceRef
 from ntrp.memory.records import RecordStore
+from ntrp.memory.scopes import apply_scope_to_source, scope_for_write
 
 _logger = get_logger(__name__)
 
@@ -35,6 +36,17 @@ CURATION_TURN_MAX_CHARS = 2_000
 CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
+ALLOWED_KINDS = {"directive", "fact", "source"}
+# Legacy/alias kinds that map onto a writable kind. Narrative kinds ("note",
+# "action", "summary") are intentionally absent: junk/narrative is SKIPPED at
+# write time, not coerced into a record.
+LEGACY_KIND_MAP = {
+    "preference": "fact",
+    "project_fact": "fact",
+    "feedback": "source",
+    "changelog": "source",
+}
+BAD_TEXT_PATTERNS = ("project-proj_", "source=curator:", "facts/project-", "summaries/project-", "sources/index.md")
 
 # consolidate.run_once() is a heavy FTS+LLM sweep over the record pool. Running
 # it INLINE on the chat server (after every curation) saturates CPU/SQLite and
@@ -49,31 +61,45 @@ _SYSTEM_PROMPT = (
     "JSON object:\n"
     "{\n"
     '  "records": [\n'
-    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "fact|action|preference|note", "labels": ["..."]},\n'
-    '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>", "labels": ["..."]},\n'
-    '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "...", "labels": ["..."]},\n'
+    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "directive|fact|source", "entity_labels": ["Dex", "Regina Lin"], "meta_labels": ["Bug", "Open loop"]},\n'
+    '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
+    '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "...", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
     '    {"op": "NOOP",      "id": "<existing id>"}\n'
     "  ]\n"
     "}\n"
     "Rules:\n"
-    "(1) ADMIT GATE — the bar is HIGH. Most exchanges contain NOTHING worth "
-    'remembering: return "records": []. Operational/automation runs (the agent '
-    "doing its job, SOPs, routine tool output) admit NOTHING unless they reveal "
-    "durable user-level knowledge. Never turn one short task or debugging "
-    "segment into a global fact or pattern. Explicit user corrections are "
-    "maximal signal — always admit them, keep the user's wording.\n"
-    "(2) Records are atomic, self-contained (resolve pronouns inline), typed by "
-    "FUNCTION not subject. Choose the op against the EXISTING SIMILAR RECORDS: "
+    "(1) ADMIT GATE / WORTHINESS — the bar is HIGH. Only mint durable, "
+    "user-relevant knowledge: standing preferences, stable facts about the user "
+    "or their world, behaviour rules, and real source pointers. DROP (admit "
+    "NOTHING for) transient session recaps, catch-up/status narratives, "
+    "tool-by-tool narration, and ntrp/Dex engineering or dev meta-commentary — "
+    'rely on transcript search for those, not memory: return "records": []. '
+    "Most exchanges contain NOTHING worth remembering. Operational/automation "
+    "runs (the agent doing its job, SOPs, routine tool output) admit NOTHING "
+    "unless they reveal durable user-level knowledge. Never turn one short task "
+    "or debugging segment into a global fact or pattern. Explicit user "
+    "corrections are maximal signal — always admit them, keep the user's wording.\n"
+    "(2) Records are atomic, self-contained, short, and usable in future prompts (resolve pronouns inline), typed by "
+    "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only). Choose the op against the EXISTING SIMILAR RECORDS: "
     "ADD (new), UPDATE (edit an existing one), SUPERSEDE (replace a now-wrong "
     "one), NOOP (reconfirm an unchanged one). Use ONLY ids that appear in "
     "EXISTING SIMILAR RECORDS; never invent an id.\n"
-    "(3) LABELS — attach 1-4 labels to every ADD/UPDATE/SUPERSEDE. A label is a "
-    "short name, not a sentence: a referent the record is about (a person, "
-    "project, tool, substance) or a category it belongs to (traits, bugs, open "
-    "loops, health). REUSE a name from LABEL VOCABULARY whenever it fits, with "
-    "its exact casing; mint a new one only when nothing fits. UPDATE labels "
-    "REPLACE the record's labels; omit the field to keep them.\n"
-    "(4) Output ONLY the JSON object, no preamble."
+    "(3) LABELS — attach labels to every ADD/UPDATE/SUPERSEDE using two distinct fields:\n"
+    "  entity_labels: 0-2 — the record's PRIMARY subject only: the specific person (Regina Lin), "
+    "product (Dex, ntrp), company (Anthropic), project (MATS), or named concept (O-1A) the record is "
+    "FUNDAMENTALLY ABOUT. NOT subjects merely mentioned, listed as examples, or referenced in passing "
+    "— a directive about ntrp memory design that says 'dossiers such as O-1A and health' is about "
+    "ntrp/Memory design, NOT O-1A or health. A general rule/process with no single subject gets an "
+    "EMPTY list. This drives dossier generation, so a stray label creates a junk subject page.\n"
+    "  meta_labels: 0-3 category/workflow tags — Bug, Open loop, Health, Skills, Automation, "
+    "etc. These classify the record but don't get their own dossiers.\n"
+    "REUSE names from LABEL VOCABULARY whenever they fit, with exact casing; mint new ones only "
+    "when nothing fits. UPDATE labels REPLACE the record's labels; omit both fields to keep them.\n"
+    "(4) Never store assistant implementation reports, verification transcripts, migration summaries, or UI/file-path churn as memory. "
+    "If the user corrects memory behavior, store only the durable behavior rule/preference, not a narrative of the fix. "
+    "Never expose internal ids/provenance strings like project-proj_..., source=curator:..., facts/project-..., or summaries/project-... in record text. "
+    "Write record text as clean human prose: keep meaningful names (people, products, experiment/metric names) but omit raw absolute file paths, commit hashes, UUIDs, and opaque run/tool ids — they are noise the projection now renders verbatim.\n"
+    "(5) Output ONLY the JSON object, no preamble."
 )
 
 
@@ -84,14 +110,15 @@ class Curator:
 
     def __init__(
         self,
-        llm,                      # completion client for config.memory_model
-        sessions,                 # SessionService — reads transcript turns via messages_since
+        llm,  # completion client for config.memory_model
+        sessions,  # SessionService — reads transcript turns via messages_since
         *,
-        model: str,               # config.memory_model id (for the call)
-        db_path: Path,            # config.memory_db_path — the Dreamer owns this meta DB
+        model: str,  # config.memory_model id (for the call)
+        db_path: Path,  # config.memory_db_path — the Dreamer owns this meta DB
         record_store: RecordStore,  # the flat record pool; ops land here
-        consolidate=None,         # Consolidate — the CONSOLIDATE/LINT step (None -> skip)
+        consolidate=None,  # Consolidate — the CONSOLIDATE/LINT step (None -> skip)
         reasoning_effort: str | None = None,
+        artifacts_dir: Path | None = None,
     ) -> None:
         self._llm = llm
         self._sessions = sessions
@@ -99,6 +126,7 @@ class Curator:
         self._record_store = record_store
         self._consolidate = consolidate
         self._reasoning_effort = reasoning_effort
+        self._artifacts_dir = artifacts_dir
 
         # The Dreamer owns this meta DB (watermark). Co-located with the records.
         self._db_path = db_path
@@ -164,7 +192,7 @@ class Curator:
             await self._write_watermark(session_id, max_seq)
             return False
 
-        ops = await self._complete(turns, watermark)
+        ops = await self._complete(turns, header="NEW TURNS")
         if ops is None:
             # The LLM call failed (or returned nothing usable); do NOT advance the
             # watermark so the same turns are retried next time (idempotent — the
@@ -174,9 +202,10 @@ class Curator:
         # Apply ADD/UPDATE/SUPERSEDE/NOOP. Isolate per-op — one bad op must not
         # abort the rest or block the watermark advance.
         new_records: list[Record] = []
+        source_ref = SourceRef(kind="curator", ref=session_id)
         for op in ops:
             try:
-                record = await self._apply_op(op, session_id)
+                record = await self._apply_op(op, session_id, source_ref)
                 if record is not None:
                     new_records.append(record)
             except Exception:
@@ -192,8 +221,146 @@ class Curator:
             except Exception:
                 _logger.warning("consolidation failed", exc_info=True)
 
+        await self._sync_artifacts_after_changes(new_records)
         await self._write_watermark(session_id, max_seq)
         return bool(ops)
+
+    async def curate_session_fully(self, session_id: str, *, max_calls: int | None = None) -> dict:
+        """Full re-derivation of ONE session: loop curate_session-style batches,
+        draining ALL transcript turns rather than the single 40-turn batch the
+        incremental tick does. Advances the in-process watermark each iteration via
+        the batch's max_seq so the next batch starts where this one ended.
+
+        Returns {"admitted": <records written>, "calls": <LLM calls spent>,
+        "capped": <budget hit before draining>}. `max_calls` is an optional
+        per-session LLM budget (the /init driver threads its global remainder in);
+        when hit we stop early with capped=True so the driver can account for it.
+        """
+        admitted = 0
+        calls = 0
+        capped = False
+        watermark = await self._read_watermark(session_id)
+
+        while True:
+            if max_calls is not None and calls >= max_calls:
+                capped = True
+                break
+            rows = await self._sessions.messages_since(session_id, watermark)
+            turns, max_seq = self._select_batch(rows, watermark)
+            if not turns:
+                await self._write_watermark(session_id, max_seq)
+                break
+
+            ops = await self._complete(turns, header="NEW TURNS")
+            calls += 1
+            if ops is None:
+                # Failed/empty completion: do NOT advance (the batch retries next
+                # run). Stop the drain so a persistent failure can't spin.
+                break
+
+            new_records: list[Record] = []
+            source_ref = SourceRef(kind="curator", ref=session_id)
+            for op in ops:
+                try:
+                    record = await self._apply_op(op, session_id, source_ref)
+                    if record is not None:
+                        new_records.append(record)
+                except Exception:
+                    _logger.warning("record op failed; skipping", op=op.get("op"), exc_info=True)
+            admitted += len(new_records)
+            await self._write_watermark(session_id, max_seq)
+            watermark = max_seq
+
+        return {"admitted": admitted, "calls": calls, "capped": capped}
+
+    async def ingest_items(
+        self,
+        items,
+        *,
+        source_kind: str,
+        source_label: str,
+        max_calls: int | None = None,
+    ) -> dict:
+        """Curate a list of source-agnostic RawItems (calendar/gmail/slack docs)
+        through the SAME worthiness gate + reconciliation the chat path uses.
+
+        Each item renders to a `title\\ncontent` line (content truncated to
+        CURATION_TURN_MAX_CHARS, mirroring _flatten_turn). Lines are batched by the
+        SAME bounds as _select_batch (CURATION_BATCH_MAX_TURNS / _CHARS), and each
+        batch is one `_complete` call applied via the existing `_apply_op`. There is
+        NO watermark: /init re-derives the whole window each time.
+
+        One SourceRef per batch (`SourceRef(kind=source_kind, ref="{source_kind}:batch")`)
+        — ops don't map 1:1 to items, and scope_for_write only needs source_ref.kind
+        ∈ INTEGRATION_SOURCE_KINDS to route to the integration scope. `max_calls`
+        caps total LLM calls (stop + capped=true). Returns
+        {"admitted", "calls", "capped"}.
+        """
+        lines = [line for item in items if (line := self._render_item(item))]
+        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:batch")
+        admitted = 0
+        calls = 0
+        capped = False
+
+        idx = 0
+        while idx < len(lines):
+            if max_calls is not None and calls >= max_calls:
+                capped = True
+                break
+            batch, idx = self._take_batch(lines, idx)
+            if not batch:
+                break
+
+            ops = await self._complete(batch, header=source_label)
+            calls += 1
+            if ops is None:
+                break
+
+            new_records: list[Record] = []
+            for op in ops:
+                try:
+                    record = await self._apply_op(op, None, source_ref)
+                    if record is not None:
+                        new_records.append(record)
+                except Exception:
+                    _logger.warning("ingest op failed; skipping", op=op.get("op"), exc_info=True)
+            admitted += len(new_records)
+
+        return {"admitted": admitted, "calls": calls, "capped": capped}
+
+    @staticmethod
+    def _render_item(item) -> str:
+        """Render a RawItem to a `title\\ncontent` line; truncate content to
+        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn)."""
+        title = (getattr(item, "title", "") or "").strip()
+        content = (getattr(item, "content", "") or "").strip()
+        if len(content) > CURATION_TURN_MAX_CHARS:
+            content = content[:CURATION_TURN_MAX_CHARS].rstrip()
+        line = "\n".join(part for part in (title, content) if part)
+        return line.strip()
+
+    @staticmethod
+    def _take_batch(lines: list[str], start: int) -> tuple[list[str], int]:
+        """Slice `lines[start:]` into one batch under the same bounds as
+        _select_batch. Returns (batch, next_index)."""
+        batch: list[str] = []
+        total_chars = 0
+        idx = start
+        while idx < len(lines):
+            line = lines[idx]
+            if batch and (len(batch) >= CURATION_BATCH_MAX_TURNS or total_chars + len(line) > CURATION_BATCH_MAX_CHARS):
+                break
+            batch.append(line)
+            total_chars += len(line)
+            idx += 1
+        return batch, idx
+
+    async def reset_watermarks(self) -> None:
+        """/init: clear every per-session curate watermark so the next read returns
+        -1 (full re-curation from the start of each transcript)."""
+        conn = await self._ensure_conn()
+        await conn.execute("DELETE FROM meta WHERE key LIKE 'curate_watermark:%'")
+        await conn.commit()
 
     async def stop(self) -> None:
         """Cancel the sweep loop and await/cancel in-flight curation tasks.
@@ -226,6 +393,19 @@ class Curator:
             if current is asyncio.current_task():
                 self._tasks.pop(session_id, None)
 
+    async def _sync_artifacts_after_changes(self, changed_records: list[Record]) -> None:
+        if self._artifacts_dir is None or not changed_records:
+            return
+        try:
+            from ntrp.memory.artifacts import ArtifactMemoryStore, summarize_changelog_text
+
+            artifacts = ArtifactMemoryStore(self._artifacts_dir)
+            summary = summarize_changelog_text([record.text for record in changed_records], max_items=3)
+            artifacts.append_event(f"Learned: {summary}")
+            await artifacts.export_from_records(self._record_store)
+        except Exception:
+            _logger.warning("artifact sync after curation failed", exc_info=True)
+
     async def _sweep_loop(self) -> None:
         # Sleep first so startup isn't a thundering herd of curations.
         while True:
@@ -237,13 +417,16 @@ class Curator:
             except Exception:
                 _logger.warning("curation sweep failed", exc_info=True)
 
-    async def _complete(self, turns: list[str], watermark: int) -> list[dict] | None:
+    async def _complete(self, lines: list[str], header: str) -> list[dict] | None:
         """ONE LLM call emitting the record-ops. Pre-searches the flat record pool
         for the candidate set so the model picks from REAL ids only, and carries
         the label vocabulary (top names by count + the recalled records' labels)
         so names get reused instead of re-minted. Returns the parsed op list, or
-        None on a content-less/failed reply (no-advance)."""
-        existing = await self._record_store.search("\n".join(turns), limit=20)
+        None on a content-less/failed reply (no-advance).
+
+        `lines` is the source-agnostic body (chat turns today; integration records
+        in Phase 2) and `header` labels the block in the prompt."""
+        existing = await self._record_store.search("\n".join(lines), limit=20)
         existing_labels = await self._record_store.labels_for([r.id for r in existing])
         existing_block = (
             "\n".join(
@@ -266,8 +449,8 @@ class Curator:
             f"{existing_block}\n\n"
             f"LABEL VOCABULARY (reuse before minting):\n"
             f"{vocabulary_block}\n\n"
-            f"NEW TURNS (since seq {watermark}):\n"
-            f"{chr(10).join(turns)}"
+            f"{header}:\n"
+            f"{chr(10).join(lines)}"
         )
         messages = [
             {"role": "system", "content": _SYSTEM_PROMPT},
@@ -278,6 +461,7 @@ class Curator:
                 messages=messages,
                 model=self._model,
                 reasoning_effort=self._reasoning_effort,
+                langfuse_name="memory.curate",
             )
         except Exception:
             _logger.warning("curator LLM call failed", exc_info=True)
@@ -311,47 +495,78 @@ class Curator:
             return None
         return [op for op in raw_ops if isinstance(op, dict)]
 
-    async def _apply_op(self, op: dict, session_id: str) -> Record | None:
+    async def _apply_op(self, op: dict, session_id: str, source_ref: SourceRef) -> Record | None:
         """Apply one reconciliation op (text + labels) against the flat record
-        pool. Returns the added/updated record, or None for NOOP/no-op."""
+        pool. Returns the added/updated record, or None for NOOP/no-op.
+
+        `source_ref` is the provenance the written record carries — the chat path
+        passes `SourceRef(kind="curator", ref=session_id)`; this is the seam
+        integrations reuse in Phase 2. `session_id` still drives scope_for_write."""
         verb = str(op.get("op", "")).upper()
-        source = SourceRef(kind="curator", ref=session_id)
-        labels = self._op_labels(op)
+        base_source = source_ref
+        meta_labels, entity_labels = self._op_labels(op)
         if verb == "ADD":
-            text = op.get("text")
-            if text:
+            text = self._op_text(op)
+            kind = self._op_kind(op, default="fact")
+            if text and kind is not None:
+                scope = scope_for_write(kind=kind, session_id=session_id, source_ref=base_source)
+                source = apply_scope_to_source(base_source, scope)
                 record = await self._record_store.add(
-                    text, kind=op.get("kind", "note"), source_ref=source
+                    text, kind=kind, source_ref=source, scope_kind=scope.kind, scope_key=scope.key
                 )
-                if labels:
-                    await self._record_store.set_labels(record.id, labels)
+                if meta_labels or entity_labels:
+                    await self._record_store.set_labels(
+                        record.id, meta_labels or [], entity_labels=entity_labels or []
+                    )
                 return record
         elif verb == "UPDATE":
-            rid, text = op.get("id"), op.get("text")
+            rid, text = op.get("id"), self._op_text(op)
             if rid and text:
                 if await self._record_store.update(rid, text):
-                    # UPDATE labels REPLACE; an absent field keeps the old set.
-                    if labels is not None:
-                        await self._record_store.set_labels(rid, labels)
+                    # UPDATE labels REPLACE; absent fields keep the old set.
+                    if meta_labels is not None or entity_labels is not None:
+                        await self._record_store.set_labels(
+                            rid, meta_labels or [], entity_labels=entity_labels or []
+                        )
                     return await self._record_store.get(rid)
-                # Stale/hallucinated id -> land the correction as an ADD.
+                # Stale/hallucinated id -> land the correction as an ADD, unless
+                # the kind is narrative/unwritable (skip rather than mint).
+                kind = self._op_kind(op, default="fact")
+                if kind is None:
+                    return None
                 _logger.warning("UPDATE on unknown record id; landing as ADD", record_id=rid)
+                scope = scope_for_write(kind=kind, session_id=session_id, source_ref=base_source)
+                source = apply_scope_to_source(base_source, scope)
                 record = await self._record_store.add(
-                    text, kind=op.get("kind", "note"), source_ref=source
+                    text, kind=kind, source_ref=source, scope_kind=scope.kind, scope_key=scope.key
                 )
-                if labels:
-                    await self._record_store.set_labels(record.id, labels)
+                if meta_labels or entity_labels:
+                    await self._record_store.set_labels(
+                        record.id, meta_labels or [], entity_labels=entity_labels or []
+                    )
                 return record
         elif verb == "SUPERSEDE":
-            rid, text = op.get("id"), op.get("text")
+            rid, text = op.get("id"), self._op_text(op)
             if rid and text:
+                old = await self._record_store.get(rid)
+                default_kind = old.kind if old else "fact"
+                kind = self._op_kind(op, default=default_kind) or default_kind
+                scope = scope_for_write(kind=kind, session_id=session_id, source_ref=base_source)
+                source = apply_scope_to_source(base_source, scope)
                 record = await self._record_store.supersede_with(
-                    rid, text=text, kind=op.get("kind", "note"), source_ref=source
+                    rid,
+                    text=text,
+                    kind=kind,
+                    source_ref=source,
+                    scope_kind=(old.scope_kind if old else scope.kind),
+                    scope_key=(old.scope_key if old else scope.key),
                 )
                 # The successor takes the op's labels; without any it keeps the
                 # old record's set (supersede_with already copied it).
-                if labels:
-                    await self._record_store.set_labels(record.id, labels)
+                if meta_labels or entity_labels:
+                    await self._record_store.set_labels(
+                        record.id, meta_labels or [], entity_labels=entity_labels or []
+                    )
                 return record
         elif verb == "NOOP":
             rid = op.get("id")
@@ -360,17 +575,60 @@ class Curator:
         return None
 
     @staticmethod
-    def _op_labels(op: dict) -> list[str] | None:
-        """The op's labels sanitized (stripped, deduped, capped), or None when
-        the field is absent/malformed — None means 'keep' on UPDATE."""
-        raw = op.get("labels")
-        if not isinstance(raw, list):
+    def _op_kind(op: dict, *, default: str) -> str | None:
+        """Resolve the op's kind to a writable kind. An absent kind defaults; an
+        explicit narrative/unknown kind ('summary', 'note', 'action', junk) maps
+        to None so the caller SKIPS it rather than minting a low-value record."""
+        raw_value = op.get("kind")
+        if not raw_value:
+            return default
+        raw = str(raw_value).strip().lower()
+        if raw in ALLOWED_KINDS:
+            return raw
+        mapped = LEGACY_KIND_MAP.get(raw)
+        return mapped if mapped in ALLOWED_KINDS else None
+
+    @staticmethod
+    def _op_text(op: dict) -> str | None:
+        raw = op.get("text")
+        if not isinstance(raw, str):
             return None
-        labels: list[str] = []
-        for item in raw:
-            if isinstance(item, str) and (name := item.strip()) and name not in labels:
-                labels.append(name)
-        return labels[:MAX_LABELS_PER_RECORD]
+        text = " ".join(raw.split()).strip()
+        if not text:
+            return None
+        if len(text) > 1200:
+            return None
+        lower = text.lower()
+        if any(pattern in lower for pattern in BAD_TEXT_PATTERNS):
+            return None
+        return text
+
+    @staticmethod
+    def _op_labels(op: dict) -> tuple[list[str] | None, list[str] | None]:
+        """Return (meta_labels, entity_labels) sanitized, or (None, None) when
+        both fields are absent — None means 'keep existing' on UPDATE.
+
+        Accepts the new split format (entity_labels / meta_labels) and falls back
+        to the legacy flat `labels` field (all treated as meta) for compatibility.
+        """
+        def _clean(raw) -> list[str] | None:
+            if not isinstance(raw, list):
+                return None
+            out: list[str] = []
+            for item in raw:
+                if isinstance(item, str) and (name := item.strip()) and name not in out:
+                    out.append(name)
+            return out[:MAX_LABELS_PER_RECORD]
+
+        meta = _clean(op.get("meta_labels"))
+        entity = _clean(op.get("entity_labels"))
+
+        # Legacy flat `labels` field: treat all as meta if new fields absent
+        if meta is None and entity is None:
+            legacy = _clean(op.get("labels"))
+            return legacy, None
+
+        return meta or [], entity or []
 
     @classmethod
     def _select_batch(cls, rows: list[dict], watermark: int) -> tuple[list[str], int]:
@@ -385,10 +643,7 @@ class Curator:
             if not turn:
                 max_seq = max(max_seq, seq)
                 continue
-            if turns and (
-                len(turns) >= CURATION_BATCH_MAX_TURNS
-                or total_chars + len(turn) > CURATION_BATCH_MAX_CHARS
-            ):
+            if turns and (len(turns) >= CURATION_BATCH_MAX_TURNS or total_chars + len(turn) > CURATION_BATCH_MAX_CHARS):
                 break
             turns.append(turn)
             total_chars += len(turn)
@@ -447,9 +702,7 @@ class Curator:
         async with self._conn_lock:
             if self._conn is None:
                 conn = await db_connect(self._db_path)
-                await conn.execute(
-                    "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-                )
+                await conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
                 await conn.commit()
                 self._conn = conn
         return self._conn
@@ -460,9 +713,7 @@ class Curator:
 
     async def _read_watermark(self, session_id: str) -> int:
         conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT value FROM meta WHERE key = ?", (self._watermark_key(session_id),)
-        )
+        rows = await conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (self._watermark_key(session_id),))
         if not rows:
             return -1
         try:
@@ -473,8 +724,7 @@ class Curator:
     async def _write_watermark(self, session_id: str, value: int) -> None:
         conn = await self._ensure_conn()
         await conn.execute(
-            "INSERT INTO meta (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (self._watermark_key(session_id), str(value)),
         )
         await conn.commit()

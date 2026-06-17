@@ -3,7 +3,8 @@ import { NumberField, PercentField } from "./Field";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ServerConfig, ServerConfigPatch } from "../../api";
 import { useStore } from "../../store";
-import { BlurSwap } from "../BlurSwap";
+import { SaveButton } from "../ui/SaveButton";
+import { Skeleton } from "../ui/Skeleton";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type Draft = Pick<
@@ -42,15 +43,21 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
 
   if (!serverConfig || !draft) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-sm text-muted">Loading context settings…</div>;
+    return (
+      <div className="grid gap-5" aria-busy>
+        <Skeleton width="60%" height={14} />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} height={40} radius={9} />
+        ))}
+      </div>
+    );
   }
 
   const dirty = KEYS.some((k) => draft[k] !== serverConfig[k]);
 
   const update = (patch: Partial<Draft>) => setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const save = async () => {
     if (!dirty || saving) return;
     setSaving(true);
     setError(null);
@@ -68,6 +75,11 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
     } finally {
       setSaving(false);
     }
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void save();
   };
 
   return (
@@ -129,15 +141,15 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
       )}
 
       <div className="flex justify-end pt-1">
-        <button
-          type="submit"
-          disabled={!dirty || saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
-        >
-          <BlurSwap swapKey={saving ? "saving" : dirty ? "save" : "saved"} blur={2}>
-            {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
-          </BlurSwap>
-        </button>
+        <SaveButton
+          tone="ink"
+          onSave={save}
+          disabled={!dirty}
+          idleLabel="Save changes"
+          savingLabel="Saving"
+          savedLabel="Saved"
+          className="px-3.5 rounded-[9px]"
+        />
       </div>
     </form>
   );

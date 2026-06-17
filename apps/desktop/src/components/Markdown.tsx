@@ -1,4 +1,4 @@
-import { Children, isValidElement, useMemo, type ReactNode } from "react";
+import { Children, isValidElement, useContext, useMemo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -15,6 +15,7 @@ import typescript from "highlight.js/lib/languages/typescript";
 import { Mermaid } from "./Mermaid";
 import { ICON } from "../lib/icons";
 import { useTimeoutFlag } from "../lib/hooks";
+import { remarkWikiLink, WikiLinkContext } from "./wikilink";
 
 const HL_LANGUAGES = {
   json,
@@ -55,6 +56,8 @@ const sanitizeSchema = {
     code: [...(defaultSchema.attributes?.code ?? []), ["className"]],
     span: [...(defaultSchema.attributes?.span ?? []), ["className"], "style"],
     div: [...(defaultSchema.attributes?.div ?? []), ["className"], "style"],
+    // Wikilinks carry a className styling hook + the resolution target.
+    a: [...(defaultSchema.attributes?.a ?? []), ["className"], ["data-wikilink"]],
     // KaTeX uses MathML annotations and explicit display modes.
     math: [["xmlns"], "display"],
     annotation: [["encoding"]],
@@ -96,7 +99,7 @@ export function Markdown({
         // before sanitize so its output exists when sanitize walks the
         // tree, but the sanitize schema is extended above to keep the
         // tags/classes/attributes katex emits.
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
         rehypePlugins={
           streaming
             ? [
@@ -113,7 +116,7 @@ export function Markdown({
                 [rehypeSanitize, sanitizeSchema],
               ]
         }
-        components={{ pre: streaming ? StreamingPreBlock : PreBlock, a: Anchor }}
+        components={{ pre: streaming ? StreamingPreBlock : PreBlock, a: Anchor, code: InlineCode }}
       >
         {content}
       </ReactMarkdown>
@@ -122,10 +125,62 @@ export function Markdown({
 }
 
 function Anchor({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const wiki = useContext(WikiLinkContext);
+  const target = (rest as Record<string, unknown>)["data-wikilink"] as string | undefined;
+  if (target != null) {
+    const { className, ...anchorRest } = rest;
+    // No handlers wired (chat, traces) → inert styled text, no nav. With
+    // handlers, a dangling target renders Obsidian-style "unresolved".
+    const exists = wiki?.exists(target) ?? false;
+    const interactive = wiki != null && exists;
+    return (
+      <a
+        {...anchorRest}
+        href={href}
+        className={clsx("wikilink", !interactive && "wikilink--unresolved", className)}
+        onClick={(e) => {
+          e.preventDefault();
+          if (interactive) wiki.onNavigate(target);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
       {children}
     </a>
+  );
+}
+
+// Inline code that names an artifact path (`directives.md`, `entities/`,
+// `changelog/2026.md`) renders as a clickable internal link in the memory view.
+// Fenced blocks (language/hljs class, non-string children) and code in chat/traces
+// (no WikiLinkContext) fall through to a plain <code>.
+function InlineCode({ className, children, ...rest }: React.HTMLAttributes<HTMLElement>) {
+  const wiki = useContext(WikiLinkContext);
+  const text = typeof children === "string" ? children : null;
+  const isInline = !className || (!className.includes("language-") && !className.includes("hljs"));
+  if (wiki && isInline && text && wiki.exists(text.trim())) {
+    const target = text.trim();
+    return (
+      <a
+        href="#wikilink"
+        className="wikilink"
+        onClick={(e) => {
+          e.preventDefault();
+          wiki.onNavigate(target);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <code className={className} {...rest}>
+      {children}
+    </code>
   );
 }
 
