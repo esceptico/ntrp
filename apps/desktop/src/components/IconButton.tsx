@@ -1,5 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
+import { Tooltip } from "./ui/Tooltip";
 
 type IconButtonSize = "xs" | "sm" | "md" | "lg";
 type IconButtonTone = "muted" | "faint";
@@ -29,10 +30,12 @@ const TONE: Record<IconButtonTone, string> = {
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
-    { className, size = "md", tone = "muted", danger = false, type, children, ...rest },
+    { className, size = "md", tone = "muted", danger = false, type, children, title, ...rest },
     ref,
   ) {
-    return (
+    // `title` becomes an animated Tooltip instead of the OS bubble; keep
+    // aria-label (in `rest`) on the button as the accessible name.
+    const button = (
       <button
         ref={ref}
         type={type ?? "button"}
@@ -49,5 +52,6 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         {children}
       </button>
     );
+    return title ? <Tooltip label={title}>{button}</Tooltip> : button;
   },
 );

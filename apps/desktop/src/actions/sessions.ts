@@ -5,6 +5,7 @@ import {
   createProjectApi,
   listProjectsApi,
   listArchivedSessionsApi,
+  listPrimarySessionsApi,
   moveSessionToProjectApi,
   permanentlyDeleteSessionApi,
   renameSessionApi,
@@ -78,8 +79,7 @@ export async function refreshProjects(): Promise<void> {
 
 export async function refreshSessions(): Promise<void> {
   const s = getState();
-  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
-  s.setSessions(sessions);
+  s.setSessions(await listPrimarySessionsApi(s.config));
 }
 
 export async function updateSessionModelAction(sessionId: string, chatModel: string): Promise<void> {
@@ -142,8 +142,7 @@ export async function restoreArchivedSession(sessionId: string): Promise<void> {
   // Move back into the live sessions list — easiest is a refresh of both.
   const archived = s.archivedSessions ?? [];
   s.setArchivedSessions(archived.filter((a) => a.session_id !== sessionId));
-  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
-  s.setSessions(sessions);
+  s.setSessions(await listPrimarySessionsApi(s.config));
 }
 
 export async function permanentlyDeleteSession(sessionId: string): Promise<void> {
@@ -159,7 +158,6 @@ export async function branchAtMessage(messageId: string): Promise<void> {
   const branched = await branchSessionApi(s.config, s.currentSessionId, {
     up_to_message_id: messageId,
   });
-  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions?limit=500");
-  s.setSessions(sessions);
+  s.setSessions(await listPrimarySessionsApi(s.config));
   await switchSession(branched.session_id);
 }

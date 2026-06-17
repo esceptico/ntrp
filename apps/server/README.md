@@ -8,7 +8,7 @@ It provides:
 - FastAPI HTTP/SSE server
 - agent runtime and multi-agent tooling
 - integrations and deferred tool loading
-- persistent memory records, search, graph/lens APIs, and desktop admin surfaces
+- persistent memory records, search, lens/admin APIs, and desktop admin surfaces
 - builtin skills and user-tool loading
 - sandboxed `render_html` widget tool support for interactive desktop clients
 

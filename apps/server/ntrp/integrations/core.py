@@ -37,7 +37,16 @@ from ntrp.tools.files import (
     write_file_tool,
 )
 from ntrp.tools.goals import block_goal_tool, complete_goal_tool, get_goal_tool
-from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
+from ntrp.tools.memory import (
+    forget_tool,
+    memory_patch_tool,
+    memory_read_tool,
+    memory_rebuild_tool,
+    memory_search_tool,
+    memory_tree_tool,
+    recall_tool,
+    remember_tool,
+)
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.render_html import render_html_tool
 from ntrp.tools.research import research_tool
@@ -147,11 +156,12 @@ SESSIONS = Integration(
     },
 )
 
-# remember/forget/recall stay hidden until the knowledge runtime wires the
-# memory_records service — each tool's permission — so they never appear when
-# memory is off. Lenses are NOT an agent tool (REST + the dreamer maintain them).
+# Memory record and artifact tools stay hidden until the knowledge runtime wires
+# the memory_records service — each tool's permission — so they never appear when
+# memory is off.
 # Transcript recall stays in the hybrid search_transcripts tool; recall here is
-# the record-layer lookup.
+# the record-layer lookup; memory_* filesystem tools only inspect/patch the
+# artifact projection.
 MEMORY = Integration(
     id="_memory",
     label="Memory",
@@ -159,6 +169,11 @@ MEMORY = Integration(
         "remember": remember_tool,
         "forget": forget_tool,
         "recall": recall_tool,
+        "memory_tree": memory_tree_tool,
+        "memory_read": memory_read_tool,
+        "memory_search": memory_search_tool,
+        "memory_patch": memory_patch_tool,
+        "memory_rebuild": memory_rebuild_tool,
     },
 )
 

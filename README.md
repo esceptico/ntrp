@@ -6,7 +6,7 @@
 
 ## What it does
 
-- **Persistent memory**: stores source-backed records, builds lenses/graphs, and keeps provenance visible.
+- **Persistent memory**: stores source-backed records, builds scoped records and lenses, and keeps provenance visible.
 - **Autonomous work**: scheduled automations, background agents, research agents, and multi-agent workflows.
 - **Connected sources**: Gmail, Google Calendar, Slack, web search, MCP servers, local files, shell commands, and notifications.
 - **Rich desktop UI**: streaming traces, tool approvals, memory inspection, integration setup assistants, MCP config, and rendered HTML widgets.

@@ -26,9 +26,10 @@ AGENT_MAX_ITERATIONS = 200
 AGENT_MAX_TOOL_CALLS = None
 AGENT_MAX_WALL_TIME_SECONDS = None
 AGENT_MAX_COST = None
-# Hard ceiling on cumulative output (completion) tokens for a run subtree. None =
-# no cap. Surfaced to dynamic workflows as `budget` so scripts can scale fan-out.
-AGENT_MAX_OUTPUT_TOKENS = None
+# Hard ceiling on cumulative output (completion) tokens for a run subtree.
+# Per-turn "+1m" style directives can override this, but the default must be
+# finite so unattended agent trees cannot drift into multi-million-token runs.
+AGENT_MAX_OUTPUT_TOKENS = 500_000
 
 BASH_TIMEOUT = 120  # seconds — safety brake against runaway commands
 # Hard cap on bash output that enters the harness (head+tail elision past this), so
@@ -137,21 +138,6 @@ OBSERVATION_HISTORY_LIMIT = 10  # max history entries kept per observation
 
 RRF_K = 60
 RRF_OVERFETCH_FACTOR = 2
-
-# --- Lens membership (Stage-4, LENS_CONTRACTS §5) ---
-# Scale-orchestration bounds: the expensive pass is once per NEW lens, never per
-# node, never per query. K bounds incremental recall fan-out; the scan cap +
-# batch size bound the one-time backfill; GENERIC_RATIO is the advisory-only
-# coverage threshold (never a gate — LENS_CONTRACTS §0, §7).
-MEMBERSHIP_CANDIDATE_K = 8
-BACKFILL_SCAN_CAP = 500
-MEMBERSHIP_BATCH = 20
-GENERIC_RATIO = 0.5
-
-# Structural heading for the write-back REJECT section appended to a lens page.
-# Shared by writeback (appends it) and project (skips it when reconstructing a
-# cached grouped page). A page-layout label only — never a membership decision.
-NEGATIVE_EXAMPLES_HEADER = "## Not in this lens (user-rejected)"
 
 # --- Context Compression (Summarizer) ---
 

@@ -51,28 +51,57 @@ def status():
     console.print(f"Embedding model: {config.embedding_model or '[dim]not set[/dim]'}")
 
 
+def _rotate_api_key(config, *, label: str) -> str:
+    settings = load_user_settings()
+    plaintext, hashed = generate_api_key()
+    settings["api_key_hash"] = hashed
+    save_user_settings(settings)
+    config.api_key_hash = hashed
+    console.print(f"[bold]{label}:[/bold] [cyan]{plaintext}[/cyan]")
+    console.print("[dim]Enter this in a desktop client to connect. It won't be shown again.[/dim]")
+    console.print()
+    return plaintext
+
+
+def _show_pairing(host: str, port: int, api_key: str) -> None:
+    from ntrp.pairing import build_pairing
+
+    lan_host, link, qr = build_pairing(host, port, api_key)
+    console.print("[bold]Scan to pair a phone:[/bold]")
+    console.print(qr, highlight=False)
+    console.print(f"[dim]Deep link:[/dim] [cyan]{link}[/cyan]")
+    if lan_host != host:
+        console.print(f"[dim]LAN URL: http://{lan_host}:{port} (phone must be on the same network)[/dim]")
+    console.print()
+
+
 @main.command()
 @click.option("--host", default=None, help="Host to bind to (or NTRP_HOST)")
 @click.option("--port", default=None, type=int, help="Port to bind to (or NTRP_PORT)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @click.option("--reset-key", is_flag=True, help="Generate a new API key")
-def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
+@click.option("--qr", is_flag=True, help="Show a pairing QR code for the mobile app")
+def serve(host: str | None, port: int | None, reload: bool, reset_key: bool, qr: bool):
     """Start the ntrp API server."""
     config = get_config()
 
+    plaintext: str | None = None
     if reset_key or not config.api_key_hash:
-        settings = load_user_settings()
-        plaintext, hashed = generate_api_key()
-        settings["api_key_hash"] = hashed
-        save_user_settings(settings)
-        config.api_key_hash = hashed
         label = "New API key" if reset_key else "Your API key"
-        console.print(f"[bold]{label}:[/bold] [cyan]{plaintext}[/cyan]")
-        console.print("[dim]Enter this in a desktop client to connect. It won't be shown again.[/dim]")
-        console.print()
+        plaintext = _rotate_api_key(config, label=label)
 
     host = host or config.host
     port = port or config.port
+
+    if qr:
+        if plaintext is None:
+            console.print(
+                "[yellow]--qr needs a fresh plaintext key.[/yellow] "
+                "Re-run with [bold]--qr --reset-key[/bold] to rotate the key and show the code."
+            )
+            console.print()
+        else:
+            _show_pairing(host, port, plaintext)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -101,6 +130,24 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
         # heartbeat; 75s gives a wide margin.
         timeout_keep_alive=75,
     )
+
+
+@main.command()
+@click.option("--host", default=None, help="Host advertised to the phone (or NTRP_HOST)")
+@click.option("--port", default=None, type=int, help="Port advertised to the phone (or NTRP_PORT)")
+def pair(host: str | None, port: int | None):
+    """Pair a phone: rotate the API key and show a QR + deep link.
+
+    The plaintext key is never stored, so pairing rotates it. Any existing
+    desktop client must re-enter the new key after running this.
+    """
+    config = get_config()
+    host = host or config.host
+    port = port or config.port
+
+    plaintext = _rotate_api_key(config, label="Pairing API key")
+    _show_pairing(host, port, plaintext)
+    console.print("[dim]Start the server with[/dim] [bold]ntrp serve[/bold] [dim]if it isn't running.[/dim]")
 
 
 @main.command()
@@ -152,6 +199,84 @@ def mcp_command(transport: str, host: str | None, port: int | None):
         public_url=f"http://{host}:{port}",
     )
     server.run(transport=transport)
+
+
+@main.group()
+def memory():
+    """Memory subsystem maintenance."""
+
+
+@memory.command("init")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt")
+@click.option(
+    "--days",
+    "recency_days",
+    default=None,
+    type=int,
+    help="Override the per-source integration recency window (applies to all sources)",
+)
+@click.option("--max-calls", "max_calls", default=400, type=int, help="LLM-call budget for re-derivation")
+def memory_init(yes: bool, recency_days: int | None, max_calls: int):
+    """Wipe all records except pinned and re-derive memory from transcripts + integrations."""
+    if not yes:
+        click.confirm(
+            "This wipes all non-pinned memory records and re-derives from transcripts + integrations. Continue?",
+            abort=True,
+        )
+    report = asyncio.run(_run_memory_init(recency_days=recency_days, max_calls=max_calls))
+    console.print("[bold]Memory init complete[/bold]")
+    console.print(report)
+
+
+@memory.command("classify-labels")
+def memory_classify_labels():
+    """Classify every label as entity|meta now (one-shot cold-start backfill),
+    then rebuild artifacts so entity dossiers regenerate."""
+    report = asyncio.run(_run_memory_classify_labels())
+    console.print("[bold]Label classification complete[/bold]")
+    console.print(report)
+
+
+async def _run_memory_classify_labels() -> dict:
+    from ntrp.memory.artifacts import ArtifactMemoryStore
+    from ntrp.memory.consolidate import ConsolidateReport
+
+    runtime = Runtime()
+    await runtime.connect()
+    try:
+        knowledge = runtime.knowledge
+        if not knowledge.memory_ready:
+            console.print("[red]Error:[/red] memory not ready (check memory_model / config)")
+            raise SystemExit(1)
+        consolidate = knowledge._consolidate
+        record_store = knowledge._record_store
+        report = ConsolidateReport()
+        await consolidate._lint_labels(report)
+        artifacts = ArtifactMemoryStore(knowledge.config.memory_artifacts_dir)
+        await artifacts.export_from_records(record_store)
+        return {"relabeled": report.relabeled, "reclassified": report.reclassified}
+    finally:
+        await runtime.close()
+
+
+async def _run_memory_init(*, recency_days: int | None, max_calls: int) -> dict:
+    from ntrp.memory.init import run_memory_init
+
+    runtime = Runtime()
+    await runtime.connect()
+    try:
+        if not runtime.knowledge.memory_ready:
+            console.print("[red]Error:[/red] memory not ready (check memory_model / config)")
+            raise SystemExit(1)
+        return await run_memory_init(
+            runtime.knowledge,
+            recency_days=recency_days,
+            max_llm_calls=max_calls,
+            integration_clients=runtime.integrations.clients,
+            progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+        )
+    finally:
+        await runtime.close()
 
 
 async def _run_headless(prompt: str):

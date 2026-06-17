@@ -53,6 +53,7 @@ import { ScrollFadeTop } from "./ScrollBlur";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunRow";
 import { Collapse } from "./ui/Collapse";
+import { Tooltip } from "./ui/Tooltip";
 export { isActiveBackgroundAgent } from "../store/background-agent-domain";
 export { StatusDot } from "./StatusDot";
 
@@ -445,27 +446,29 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
         <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">Tasks</span>
         <div className="flex items-center gap-1.5">
           {edited && (
-            <button
-              type="button"
-              onClick={reset}
-              title="Reset to the agent's list"
-              className="text-2xs text-faint hover:text-ink transition-colors duration-row ease-out"
-            >
-              reset
-            </button>
+            <Tooltip label="Reset to the agent's list">
+              <button
+                type="button"
+                onClick={reset}
+                className="text-2xs text-faint hover:text-ink transition-colors duration-row ease-out"
+              >
+                reset
+              </button>
+            </Tooltip>
           )}
           <span className="text-2xs tabular-nums text-faint">
             {completed}/{items.length}
           </span>
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            aria-label="Add a task"
-            title="Add a task"
-            className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink hover:bg-surface-soft/70 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]"
-          >
-            <Plus size={ICON.XS} strokeWidth={2} />
-          </button>
+          <Tooltip label="Add a task">
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              aria-label="Add a task"
+              className="grid place-items-center w-4 h-4 rounded text-faint hover:text-ink hover:bg-surface-soft/70 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              <Plus size={ICON.XS} strokeWidth={2} />
+            </button>
+          </Tooltip>
         </div>
       </div>
       <div className="relative flex flex-col gap-0.5">
@@ -476,15 +479,16 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
               {...rosterRowMotion}
               className="group/todo flex min-w-0 items-start gap-1.5 rounded px-1 -mx-1 hover:bg-surface-soft/40"
             >
-              <button
-                type="button"
-                onClick={() => cycle(item.key)}
-                aria-label="Cycle status"
-                title="Cycle status"
-                className="mt-[1px] shrink-0 rounded transition-[scale] duration-check ease-out active:scale-[0.97]"
-              >
-                {todoStatusIcon(item.status)}
-              </button>
+              <Tooltip label="Cycle status">
+                <button
+                  type="button"
+                  onClick={() => cycle(item.key)}
+                  aria-label="Cycle status"
+                  className="mt-[1px] shrink-0 rounded transition-[scale] duration-check ease-out active:scale-[0.97]"
+                >
+                  {todoStatusIcon(item.status)}
+                </button>
+              </Tooltip>
               {editingKey === item.key ? (
                 <TodoEditInput
                   initial={item.content}
@@ -509,15 +513,16 @@ function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; sessionI
                   {item.content}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => remove(item.key)}
-                aria-label="Delete task"
-                title="Delete"
-                className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-[opacity,color,scale] duration-row ease-out active:scale-[0.97]"
-              >
-                <X size={ICON.XS} strokeWidth={2} />
-              </button>
+              <Tooltip label="Delete task">
+                <button
+                  type="button"
+                  onClick={() => remove(item.key)}
+                  aria-label="Delete task"
+                  className="mt-[1px] shrink-0 grid place-items-center w-4 h-4 rounded text-faint opacity-0 group-hover/todo:opacity-100 hover:text-bad transition-[opacity,color,scale] duration-row ease-out active:scale-[0.97]"
+                >
+                  <X size={ICON.XS} strokeWidth={2} />
+                </button>
+              </Tooltip>
             </motion.div>
           ))}
         </AnimatePresence>

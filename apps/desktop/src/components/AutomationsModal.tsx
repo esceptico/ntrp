@@ -59,6 +59,8 @@ import { ICON } from "../lib/icons";
 import { ScrollFadeTop } from "./ScrollBlur";
 import { Tab as TabItem, Tabs } from "./ui/Tabs";
 import { TabPanels, useTabDirection } from "./ui/TabPanels";
+import { Tooltip } from "./ui/Tooltip";
+import { ShowMore } from "./ui/ShowMore";
 
 type Tab = "active" | "system" | "templates";
 
@@ -395,29 +397,30 @@ export function SuggestionCard({
         className="absolute inset-0 cursor-pointer rounded-[inherit] focus:outline-none"
       />
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
-      <div className="min-w-0 grid gap-1.5 pr-6">
+      <div className="relative z-[1] min-w-0 grid gap-1.5 pr-6">
         <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
           {suggestion.name}
         </h4>
-        <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
-          {suggestion.rationale}
-        </p>
+        <ShowMore collapsedHeight={44} moreLabel="More" lessLabel="Less">
+          <p className="m-0 text-sm text-muted leading-[1.5]">{suggestion.rationale}</p>
+        </ShowMore>
         <Badge tone="neutral" className="font-mono tabular-nums" title={schedule}>
           {schedule}
         </Badge>
       </div>
-      <button
-        type="button"
-        aria-label="Dismiss suggestion"
-        title="Dismiss"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDismiss(suggestion.id);
-        }}
-        className="absolute top-2.5 right-2.5 z-[1] grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
-      >
-        <X size={ICON.XS} strokeWidth={2} />
-      </button>
+      <Tooltip label="Dismiss">
+        <button
+          type="button"
+          aria-label="Dismiss suggestion"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss(suggestion.id);
+          }}
+          className="absolute top-2.5 right-2.5 z-[1] grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+        >
+          <X size={ICON.XS} strokeWidth={2} />
+        </button>
+      </Tooltip>
     </motion.div>
   );
 }
@@ -468,20 +471,21 @@ function AutomationToggle({
       className="relative z-[1] grid place-items-center shrink-0 self-center"
       style={{ width: ICON.MD, height: ICON.MD }}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={busy}
-        title={enabled ? "Pause" : "Enable"}
-        aria-label={enabled ? "Pause automation" : "Enable automation"}
-        className={clsx(
-          "grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
-          enabled
-            ? "bg-ink-soft hover:bg-ink"
-            : "bg-transparent border border-line-strong hover:border-muted",
-          busy && "opacity-50",
-        )}
-      />
+      <Tooltip label={enabled ? "Pause" : "Enable"}>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={busy}
+          aria-label={enabled ? "Pause automation" : "Enable automation"}
+          className={clsx(
+            "grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
+            enabled
+              ? "bg-ink-soft hover:bg-ink"
+              : "bg-transparent border border-line-strong hover:border-muted",
+            busy && "opacity-50",
+          )}
+        />
+      </Tooltip>
     </span>
   );
 }
@@ -653,7 +657,7 @@ function AutomationCard({
         }
         badges={badges}
       />
-      <p className="self-start pl-[24px] m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
+      <p className="relative z-[1] self-start pl-[24px] m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
         {automation.description || "No description."}
       </p>
     </motion.article>

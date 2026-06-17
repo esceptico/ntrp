@@ -368,7 +368,18 @@ SELECT session_id, started_at, last_activity, name,
 FROM sessions
 WHERE archived_at IS NULL
 ORDER BY last_activity DESC
-LIMIT ?
+LIMIT ? OFFSET ?
+"""
+
+SQL_LIST_PRIMARY_SESSIONS = """
+SELECT session_id, started_at, last_activity, name,
+       session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
+       agent_type, agent_status, project_id, chat_model,
+       json_array_length(COALESCE(messages, '[]')) AS message_count
+FROM sessions
+WHERE archived_at IS NULL AND COALESCE(session_type, 'chat') != 'agent'
+ORDER BY last_activity DESC
+LIMIT ? OFFSET ?
 """
 
 SQL_LIST_ARCHIVED = """
@@ -2688,10 +2699,15 @@ class SessionStore:
         return await self.load_session(session_id)
 
     async def list_sessions(
-        self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET
+        self,
+        limit: int = 20,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
+        include_agents: bool = True,
+        offset: int = 0,
     ) -> list[dict]:
         if project_id is PROJECT_FILTER_UNSET:
-            rows = await self.read_conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
+            sql = SQL_LIST_SESSIONS if include_agents else SQL_LIST_PRIMARY_SESSIONS
+            rows = await self.read_conn.execute_fetchall(sql, (limit, offset))
         elif project_id is None:
             rows = await self.read_conn.execute_fetchall(
                 """
@@ -2700,11 +2716,13 @@ class SessionStore:
                        agent_type, agent_status, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
-                WHERE archived_at IS NULL AND project_id IS NULL
+                WHERE archived_at IS NULL
+                  AND project_id IS NULL
+                  AND (? OR COALESCE(session_type, 'chat') != 'agent')
                 ORDER BY last_activity DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (include_agents, limit, offset),
             )
         else:
             rows = await self.read_conn.execute_fetchall(
@@ -2714,11 +2732,13 @@ class SessionStore:
                        agent_type, agent_status, project_id, chat_model,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
-                WHERE archived_at IS NULL AND project_id = ?
+                WHERE archived_at IS NULL
+                  AND project_id = ?
+                  AND (? OR COALESCE(session_type, 'chat') != 'agent')
                 ORDER BY last_activity DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (project_id, limit),
+                (project_id, include_agents, limit, offset),
             )
         return [
             {

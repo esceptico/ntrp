@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import time
 from collections.abc import AsyncGenerator
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 from ntrp.agent.tools.executor import AgentToolExecutor
@@ -31,10 +32,11 @@ def _ms_now() -> int:
 
 
 class ToolRunner:
-    def __init__(self, executor: AgentToolExecutor, depth: int, parent_id: str | None):
+    def __init__(self, executor: AgentToolExecutor, depth: int, parent_id: str | None, tracer: object | None = None):
         self._executor = executor
         self._depth = depth
         self._parent_id = parent_id
+        self._tracer = tracer
 
     def _resolve(self, call: PendingToolCall) -> _ResolvedCall:
         meta = self._executor.get_meta(call.name)
@@ -46,18 +48,43 @@ class ToolRunner:
 
     async def _run_one(self, rc: _ResolvedCall) -> tuple[ToolResult, int]:
         start_ms = _ms_now()
-        try:
-            result = await self._executor.execute(rc.call.name, rc.call.args, rc.call.tool_call.id)
-            return result, _ms_now() - start_ms
-        except Exception as e:
-            return (
-                ToolResult(
-                    content=f"Error: {type(e).__name__}: {e}",
-                    preview=f"Failed: {type(e).__name__}",
-                    is_error=True,
-                ),
-                _ms_now() - start_ms,
-            )
+        cm = (
+            self._tracer.observation(name=f"tool.{rc.call.name}", as_type="span", input=rc.call.args)
+            if self._tracer is not None
+            else nullcontext()
+        )
+        with cm as observation:
+            try:
+                result = await self._executor.execute(rc.call.name, rc.call.args, rc.call.tool_call.id)
+                if observation is not None:
+                    update = {
+                        "output": result.content,
+                        "metadata": {
+                            "tool_id": rc.call.tool_call.id,
+                            "tool_name": rc.call.name,
+                            "is_error": result.is_error,
+                        },
+                    }
+                    if result.is_error:
+                        update["level"] = "ERROR"
+                    observation.update(**update)
+                return result, _ms_now() - start_ms
+            except Exception as e:
+                if observation is not None:
+                    observation.update(
+                        output=f"{type(e).__name__}: {e}",
+                        metadata={"tool_id": rc.call.tool_call.id, "tool_name": rc.call.name},
+                        level="ERROR",
+                        status_message=str(e),
+                    )
+                return (
+                    ToolResult(
+                        content=f"Error: {type(e).__name__}: {e}",
+                        preview=f"Failed: {type(e).__name__}",
+                        is_error=True,
+                    ),
+                    _ms_now() - start_ms,
+                )
 
     def _started(self, rc: _ResolvedCall) -> ToolStarted:
         return ToolStarted(

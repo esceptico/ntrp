@@ -345,9 +345,18 @@ class SessionService:
             return False
 
     async def list_sessions(
-        self, limit: int = 20, project_id: str | None | object = PROJECT_FILTER_UNSET
+        self,
+        limit: int = 20,
+        project_id: str | None | object = PROJECT_FILTER_UNSET,
+        include_agents: bool = True,
+        offset: int = 0,
     ) -> list[dict]:
-        return await self.store.list_sessions(limit=limit, project_id=project_id)
+        return await self.store.list_sessions(
+            limit=limit,
+            project_id=project_id,
+            include_agents=include_agents,
+            offset=offset,
+        )
 
     async def list_messages(
         self,

@@ -34,7 +34,7 @@ import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
 import { SegmentedControl } from "../SegmentedControl";
 import { Chip } from "../Chip";
-import { SwitchControl } from "../SwitchControl";
+import { SwitchDisclosure } from "../ui/SwitchDisclosure";
 import { BlurSwap } from "../BlurSwap";
 
 export type EditorSeed =
@@ -432,21 +432,16 @@ export function AutomationEditor({
                   schedule={form.schedule}
                   onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
                 />
-                <div
-                  className="inline-flex items-center gap-1.5 px-1 select-none cursor-pointer"
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest("button")) return;
-                    setForm((p) => ({ ...p, auto_approve: !p.auto_approve }));
-                  }}
+                <SwitchDisclosure
+                  checked={form.auto_approve}
+                  onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
+                  label="Auto-Approve"
+                  aria-label="Auto-Approve"
                 >
-                  <SwitchControl
-                    size="sm"
-                    checked={form.auto_approve}
-                    onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
-                    aria-label="Auto-Approve"
-                  />
-                  <span className="text-sm text-muted">Auto-Approve</span>
-                </div>
+                  <p className="m-0 text-xs text-faint leading-[1.4]">
+                    Runs execute without asking for approval first.
+                  </p>
+                </SwitchDisclosure>
               </div>
               <div className="flex items-center gap-1">
                 <button

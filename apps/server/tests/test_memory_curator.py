@@ -43,9 +43,7 @@ class StubLLM:
         self.calls: list[dict] = []
 
     async def completion(self, *, messages, model, reasoning_effort=None, **kwargs):
-        self.calls.append(
-            {"messages": messages, "model": model, "reasoning_effort": reasoning_effort}
-        )
+        self.calls.append({"messages": messages, "model": model, "reasoning_effort": reasoning_effort})
         body = self._queue.pop(0) if self._queue else ""
         return completion_response(body)
 
@@ -88,7 +86,7 @@ def _ops_json(records: list[dict] | None = None) -> str:
     return json.dumps({"records": records or []})
 
 
-def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore]:
+def _make_curator(tmp_path: Path, llm, sessions, *, artifacts_dir: Path | None = None) -> tuple[Curator, RecordStore]:
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     curator = Curator(
         llm,
@@ -96,8 +94,40 @@ def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore]:
         model="memory-model",
         db_path=tmp_path / "memory.db",
         record_store=records,
+        artifacts_dir=artifacts_dir,
     )
     return curator, records
+
+
+# --- artifact sync -------------------------------------------------------------
+
+
+async def test_curator_syncs_artifacts_after_record_changes(tmp_path: Path):
+    artifacts_dir = tmp_path / "artifacts"
+    llm = StubLLM(_ops_json([{"op": "ADD", "text": "The user prefers green tea", "kind": "fact"}]))
+    sessions = StubSessions({"s1": [_turn(0, "user", "I prefer green tea")]})
+    curator, records = _make_curator(tmp_path, llm, sessions, artifacts_dir=artifacts_dir)
+
+    changed = await curator.curate_session("s1")
+
+    assert changed is True
+    facts = (artifacts_dir / "facts" / "index.md").read_text(encoding="utf-8")
+    assert "Facts are DB-backed" in facts
+    assert "The user prefers green tea" not in facts
+    changelog = (artifacts_dir / "changelog" / "index.md").read_text(encoding="utf-8")
+    assert "curator updated 1 memory record(s) from chat transcript" not in changelog
+    assert "The user prefers green tea" not in changelog  # index is a count-only rollup
+    assert "events across" in changelog
+    monthly = "\n".join(path.read_text(encoding="utf-8") for path in (artifacts_dir / "changelog").glob("*/*.md"))
+    assert "Learned: The user prefers green tea" in monthly
+    assert "s1" not in monthly
+    assert "source_ref" not in monthly
+    assert "curator:" not in monthly
+    for record in await records.list(limit=None):
+        assert record.id not in changelog
+        assert record.id not in monthly
+    await curator.stop()
+    await records.close()
 
 
 # --- admit gate / watermark -----------------------------------------------------
@@ -264,8 +294,11 @@ async def test_update_op_edits_and_confirms(tmp_path: Path):
     llm = StubLLM(_ops_json([{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich"}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
     await asyncio.sleep(0.01)
 
@@ -285,13 +318,14 @@ async def test_supersede_op_closes_old_and_inserts_new(tmp_path: Path):
     curator, records = _make_curator(tmp_path, StubLLM(), StubSessions())
     old = await records.add("the user works at Acme")
 
-    llm = StubLLM(
-        _ops_json([{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex", "kind": "fact"}])
-    )
+    llm = StubLLM(_ops_json([{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex", "kind": "fact"}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     changed = await curator2.curate_session("s1")
@@ -317,8 +351,11 @@ async def test_noop_op_confirms_existing(tmp_path: Path):
     llm = StubLLM(_ops_json([{"op": "NOOP", "id": existing.id}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "still on dark mode")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
     await asyncio.sleep(0.01)
 
@@ -331,6 +368,59 @@ async def test_noop_op_confirms_existing(tmp_path: Path):
     assert got.superseded_by is None
     assert len(llm.calls) == 1
     await curator2.stop()
+    await curator.stop()
+    await records.close()
+
+
+# --- worthiness gate: narrative / dev-chatter is not minted -------------------
+
+
+async def test_narrative_summary_kind_is_not_minted(tmp_path: Path):
+    """An ADD the model tags as a narrative 'summary' (or any non-writable kind)
+    is SKIPPED, not coerced into a record."""
+    llm = StubLLM(
+        _ops_json([{"op": "ADD", "text": "Recap: we debugged the curator and ran the tests", "kind": "summary"}])
+    )
+    sessions = StubSessions({"s1": [_turn(0, "user", "let's wrap up this session")]})
+    curator, records = _make_curator(tmp_path, llm, sessions)
+
+    await curator.curate_session("s1")
+
+    assert await records.list() == []  # narrative recap dropped
+    assert await curator._read_watermark("s1") == 0  # watermark still advances
+    await curator.stop()
+    await records.close()
+
+
+async def test_curator_add_kinds_exclude_summary(tmp_path: Path):
+    """The curator's writable ADD kinds are directive|fact|source only — the
+    prompt no longer offers 'summary'."""
+    from ntrp.memory.curator import ALLOWED_KINDS, _SYSTEM_PROMPT
+
+    assert ALLOWED_KINDS == {"directive", "fact", "source"}
+    assert "summary" not in ALLOWED_KINDS
+    assert '"summary"' not in _SYSTEM_PROMPT
+    assert "directive|fact|source" in _SYSTEM_PROMPT
+
+
+async def test_legacy_note_action_kinds_are_dropped(tmp_path: Path):
+    """Legacy 'note'/'action' kinds used to coerce to 'summary'; they now map to
+    no writable kind, so the ADD is skipped."""
+    llm = StubLLM(
+        _ops_json(
+            [
+                {"op": "ADD", "text": "note to self about the refactor", "kind": "note"},
+                {"op": "ADD", "text": "the user prefers tabs over spaces", "kind": "fact"},
+            ]
+        )
+    )
+    sessions = StubSessions({"s1": [_turn(0, "user", "some chatter")]})
+    curator, records = _make_curator(tmp_path, llm, sessions)
+
+    await curator.curate_session("s1")
+
+    rows = await records.list()
+    assert [r.text for r in rows] == ["the user prefers tabs over spaces"]  # only the fact landed
     await curator.stop()
     await records.close()
 
@@ -383,14 +473,15 @@ async def test_update_op_replaces_labels_when_provided(tmp_path: Path):
     await records.set_labels(existing.id, ["Berlin", "places"])
 
     llm = StubLLM(
-        _ops_json(
-            [{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich", "labels": ["Munich"]}]
-        )
+        _ops_json([{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich", "labels": ["Munich"]}])
     )
     sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     await curator2.curate_session("s1")
@@ -409,8 +500,11 @@ async def test_update_op_keeps_labels_when_absent(tmp_path: Path):
     llm = StubLLM(_ops_json([{"op": "UPDATE", "id": existing.id, "text": "the user lives in Munich"}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I moved to Munich")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     await curator2.curate_session("s1")
@@ -427,14 +521,15 @@ async def test_supersede_op_successor_takes_op_labels(tmp_path: Path):
     await records.set_labels(old.id, ["Acme", "work"])
 
     llm = StubLLM(
-        _ops_json(
-            [{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex", "labels": ["Globex", "work"]}]
-        )
+        _ops_json([{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex", "labels": ["Globex", "work"]}])
     )
     sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     await curator2.curate_session("s1")
@@ -455,8 +550,11 @@ async def test_supersede_op_successor_inherits_labels_when_absent(tmp_path: Path
     llm = StubLLM(_ops_json([{"op": "SUPERSEDE", "id": old.id, "text": "the user works at Globex"}]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I switched jobs to Globex")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     await curator2.curate_session("s1")
@@ -478,8 +576,11 @@ async def test_prompt_carries_label_vocabulary_and_recalled_labels(tmp_path: Pat
     llm = StubLLM(_ops_json([]))
     sessions = StubSessions({"s1": [_turn(0, "user", "I run Linux on my desktop")]})
     curator2 = Curator(
-        llm, sessions, model="memory-model",
-        db_path=tmp_path / "memory.db", record_store=records,
+        llm,
+        sessions,
+        model="memory-model",
+        db_path=tmp_path / "memory.db",
+        record_store=records,
     )
 
     await curator2.curate_session("s1")

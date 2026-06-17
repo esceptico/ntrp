@@ -275,8 +275,10 @@ def _make_tool_context(registry: ToolRegistry, session_id: str = "test") -> Tool
 @pytest.fixture(autouse=True)
 def _isolate_result_files(tmp_path, monkeypatch):
     import ntrp.core.tool_result_files as trf
+    import ntrp.tools.research_artifacts as research_artifacts
 
     monkeypatch.setattr(trf, "RESULTS_BASE", tmp_path / "tool-results")
+    monkeypatch.setattr(research_artifacts, "NTRP_DIR", tmp_path / ".ntrp")
 
 
 @pytest_asyncio.fixture
@@ -1097,6 +1099,13 @@ async def test_research_artifact_write_then_read(session_store: SessionStore):
     r = await read_research_artifact(ex, ReadResearchArtifactInput(path="sources/inv.md"))
     assert not r.is_error
     assert "hello world" in r.content
+    assert "fs_path=" in r.content
+
+    from ntrp.tools.research_artifacts import artifact_scope_dir
+
+    artifact_file = artifact_scope_dir("run-1") / "sources" / "inv.md"
+    assert artifact_file.read_text() == "hello world"
+    assert (artifact_scope_dir("run-1") / "manifest.json").exists()
 
 
 @pytest.mark.asyncio

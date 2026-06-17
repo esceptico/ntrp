@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Camera, Check, ChevronDown, Plus, Sparkles } from "lucide-react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import clsx from "clsx";
+import { Tooltip } from "./ui/Tooltip";
 import { ICON } from "../lib/icons";
 import { useThemeEffect } from "../lib/theme";
 import { EASE_OUT, MOTION, SPRING_POPOVER } from "../lib/tokens/motion";
@@ -247,11 +248,10 @@ export function QuickCapture() {
               className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[15px] text-ink placeholder:text-muted tracking-[-0.005em]"
             />
             {images.map((image, index) => (
+              <Tooltip key={index} label="Remove screenshot">
               <button
-                key={index}
                 type="button"
                 onClick={() => setImages((prev) => prev.filter((_, i) => i !== index))}
-                title="Remove screenshot"
                 className="shrink-0 w-8 h-6 rounded-[5px] overflow-hidden ring-1 ring-ink/15 hover:opacity-75 transition-opacity duration-check"
               >
                 <img
@@ -260,6 +260,7 @@ export function QuickCapture() {
                   className="w-full h-full object-cover"
                 />
               </button>
+              </Tooltip>
             ))}
             <button
               type="button"
@@ -278,21 +279,22 @@ export function QuickCapture() {
                 className={clsx("shrink-0 transition-transform duration-check", pickerOpen && "rotate-180")}
               />
             </button>
-            <button
-              type="button"
-              onClick={() => void onCapture()}
-              disabled={capturing || exiting || images.length >= MAX_IMAGES}
-              aria-label="Capture screen"
-              title="Capture a screenshot"
-              className={clsx(
-                "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[color,background-color,opacity] duration-check",
-                capturing || images.length >= MAX_IMAGES
-                  ? "text-faint"
-                  : "text-muted hover:text-ink hover:bg-ink/5",
-              )}
-            >
-              <Camera size={ICON.SM} strokeWidth={2} />
-            </button>
+            <Tooltip label="Capture a screenshot">
+              <button
+                type="button"
+                onClick={() => void onCapture()}
+                disabled={capturing || exiting || images.length >= MAX_IMAGES}
+                aria-label="Capture screen"
+                className={clsx(
+                  "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[color,background-color,opacity] duration-check",
+                  capturing || images.length >= MAX_IMAGES
+                    ? "text-faint"
+                    : "text-muted hover:text-ink hover:bg-ink/5",
+                )}
+              >
+                <Camera size={ICON.SM} strokeWidth={2} />
+              </button>
+            </Tooltip>
             <button
               type="button"
               onClick={onSubmit}

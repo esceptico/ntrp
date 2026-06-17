@@ -4,6 +4,7 @@ import { renameSession, switchSession } from "../../actions";
 import { ICON } from "../../lib/icons";
 import { formatRelativePast } from "../../lib/format";
 import { SessionStateIcon } from "./SessionStateIcon";
+import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
 
 export function SessionRow({
   sessionId,
@@ -20,6 +21,7 @@ export function SessionRow({
   onCancelRename,
   onMenu,
   onContextMenu,
+  onArchive,
 }: {
   sessionId: string;
   name: string | null;
@@ -35,8 +37,10 @@ export function SessionRow({
   onCancelRename: () => void;
   onMenu: (pos: { x: number; y: number }) => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onArchive: () => void;
 }) {
   const [draft, setDraft] = useState(name ?? "");
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -113,9 +117,26 @@ export function SessionRow({
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em] group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%_-_6.25rem),transparent_calc(100%_-_4.5rem))]">
         {name || "untitled"}
       </span>
-      <span className="absolute right-2 top-0 bottom-0 flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
+      <span
+        className={`absolute right-2 top-0 bottom-0 flex items-center gap-1 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity duration-row ${deleting ? "opacity-100" : "opacity-0"}`}
+      >
         <span className="text-xs tabular-nums text-faint">
           {formatRelativePast(lastActivity)}
+        </span>
+        {/* Inline countdown-archive — the destructive session gesture, on
+            every row's hover instead of buried in a settings tab. Wrapper
+            swallows the click so it doesn't also open the session. */}
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="contents"
+        >
+          <ConfirmDeleteButton
+            size="sm"
+            label="Archive session"
+            onConfirm={onArchive}
+            onActiveChange={setDeleting}
+          />
         </span>
         <button
           type="button"

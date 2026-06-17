@@ -13,6 +13,7 @@ def run_completed_payload(event: RunCompleted) -> dict:
         "messages": list(event.messages),
         "usage": asdict(event.usage),
         "result": event.result,
+        "source_refs": list(event.source_refs),
     }
 
 
@@ -29,4 +30,5 @@ def run_completed_from_payload(payload: dict) -> RunCompleted:
             cache_write_tokens=int(usage.get("cache_write_tokens", 0)),
         ),
         result=payload.get("result"),
+        source_refs=tuple(payload.get("source_refs") or ()),
     )

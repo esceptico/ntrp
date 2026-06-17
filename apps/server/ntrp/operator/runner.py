@@ -10,6 +10,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallResultEvent, ToolCallStartEvent, agent_event_to_sse
+from ntrp.memory.profile import resident_profile
 from ntrp.server.bus import SessionBus
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ApprovalControls
@@ -48,32 +49,11 @@ class RunResult:
     usage: Usage
 
 
-# Below this many chars of prompt there is nothing worth a scoped recall.
-_MEMORY_RECALL_FLOOR = 12
-
-
-async def _retrieve_memory_context(memory_records: object | None, prompt: str) -> str | None:
-    """Pinned records for an operator/automation run.
-
-    Automation runs act on behalf of the principal; they inject the durable
-    pinned records (zero-LLM, zero per-run vector). Skips on trivial input.
-    """
-    if memory_records is None or not prompt or len(prompt.strip()) < _MEMORY_RECALL_FLOOR:
-        return None
-    try:
-        records = await memory_records.list(pinned_only=True, limit=20)
-    except Exception:
-        return None
-    if not records:
-        return None
-    return "## Pinned\n\n" + "\n".join(f"- [{r.kind}] {r.text}" for r in records)
-
-
 async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list[dict], str, str]:
     run_id = generate_slug(2)
     session_state = deps.create_session()
 
-    memory_context = await _retrieve_memory_context(deps.memory_records, request.prompt)
+    memory_context = await resident_profile(deps.memory_records)
 
     executor = deps.executor
     tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)

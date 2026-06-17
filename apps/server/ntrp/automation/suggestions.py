@@ -74,6 +74,7 @@ class AutomationSuggester:
             ],
             model=self.model,
             response_format=SuggestionSet,
+            langfuse_name="automation.suggest",
         )
         drafts = self._parse(response).suggestions
 

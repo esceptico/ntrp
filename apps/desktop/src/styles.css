@@ -788,6 +788,32 @@ button.app-row:not(:disabled):active,
   text-decoration-color: rgba(61, 110, 156, 0.4);
 }
 .md a:hover { text-decoration-color: var(--color-info); }
+
+/* Obsidian-style internal links: accent-tinted, no underline, dotted on hover.
+   Unresolved (dangling) targets read muted, matching Obsidian's convention. */
+.md a.wikilink {
+  color: var(--color-accent-strong);
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color var(--duration-check) var(--ease-out),
+    background-color var(--duration-check) var(--ease-out);
+}
+.md a.wikilink:hover {
+  color: var(--color-accent);
+  background-color: var(--color-accent-soft);
+}
+.md a.wikilink--unresolved {
+  color: var(--color-muted);
+  cursor: default;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--color-line);
+  text-underline-offset: 2px;
+}
+.md a.wikilink--unresolved:hover {
+  color: var(--color-muted);
+  background-color: transparent;
+}
 .md h1, .md h2, .md h3, .md h4 {
   margin: 0.5em 0 0.22em;
   font-weight: 600;

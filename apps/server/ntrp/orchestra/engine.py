@@ -6,8 +6,9 @@ from uuid import uuid4
 from ntrp.constants import AGENT_MAX_CONCURRENT
 from ntrp.core.agent_types import resolve_agent_type
 from ntrp.core.isolation import IsolationLevel
+from ntrp.core.llm_client import llm_client
 from ntrp.logging import get_logger
-from ntrp.orchestra.schema import model_from_schema, structured_output_tool
+from ntrp.orchestra.schema import model_from_schema
 
 _logger = get_logger(__name__)
 
@@ -31,11 +32,9 @@ WORKFLOW_AGENT_PROMPT = (
     "concise final answer."
 )
 
-# Appended to the system prompt only when a schema is requested — a prose worker
-# (no schema) is never told to call structured_output.
-_STRUCTURED_OUTPUT_NOTE = (
-    "Provide your final answer by calling the `structured_output` tool exactly once, "
-    "instead of writing it as prose."
+_FORMATTER_PROMPT = (
+    "Convert the provided worker answer into the requested structured result. "
+    "Preserve the worker's facts. Do not invent missing fields."
 )
 
 Thunk = Callable[[], Awaitable[Any]]
@@ -58,9 +57,11 @@ class WorkflowBudgetExceeded(RuntimeError):
 
 
 class WorkflowStructuredOutputMissing(RuntimeError):
-    """Raised when an agent given a schema never called structured_output. A
-    workflow asking for structure and getting none is a contract violation, so
-    _safe re-raises it rather than degrading to None — we do NOT parse prose."""
+    """Raised when a schema formatter returns an invalid structured response."""
+
+
+class WorkflowStructuredFormatError(RuntimeError):
+    """Raised when the formatter LLM fails before returning a response."""
 
 
 class TokenBudget:
@@ -88,7 +89,7 @@ class TokenBudget:
 async def _safe(unit: Unit) -> Any:
     try:
         return await (unit() if callable(unit) else unit)
-    except (WorkflowSpawnLimit, WorkflowBudgetExceeded, WorkflowStructuredOutputMissing):
+    except (WorkflowSpawnLimit, WorkflowBudgetExceeded, WorkflowStructuredOutputMissing, WorkflowStructuredFormatError):
         # Resource guards + the structured-output contract must abort the whole
         # fan-out, not be swallowed into a None the model reads as a partial fail.
         raise
@@ -101,9 +102,8 @@ class Orchestra:
     """Deterministic subagent orchestration over ctx.spawn_fn.
 
     Combinators mirror the Workflow engine: agent() spawns one subagent and,
-    when given a schema, returns the validated args of its structured_output
-    tool call; parallel() fans out with a barrier; pipeline() runs per-item
-    stage chains with no barrier. Failed units
+    when given a schema, returns a validated formatter result; parallel() fans
+    out with a barrier; pipeline() runs per-item stage chains with no barrier. Failed units
     degrade to None — asyncio.TaskGroup cancels siblings on the first exception,
     so every unit is wrapped to swallow errors and keep the rest alive.
     """
@@ -167,44 +167,88 @@ class Orchestra:
                 extra_tools=type_extra or None,
             )
 
-        # Structured output: the worker calls a `structured_output` tool whose input
-        # model IS the schema. Its args are pydantic-validated at the tool boundary
-        # (a bad shape is a cheap in-run retry, not a re-spawn) and become the
-        # result — no JSON in the chat message, no string parsing of prose.
+        # Structured output is a two-step contract: the worker can use normal
+        # tools and return prose; a separate formatter pass uses provider-native
+        # response_format. This keeps workflow workers from seeing a fake
+        # structured_output tool that can conflict with tool filtering.
         out_model = model_from_schema(schema)
-        sink: list[Any] = []
-        extra_tools = {**type_extra, "structured_output": structured_output_tool(out_model, sink)}
-        sys_prompt = f"{prompt}\n\n{_STRUCTURED_OUTPUT_NOTE}"
-        # A name allowlist must include the tool, or the spawner filters it out.
-        use_tools = tools
-        if tools and all(isinstance(t, str) for t in tools) and "structured_output" not in tools:
-            use_tools = [*tools, "structured_output"]
-
-        await self._spawn(
-            task, use_tools, model, sys_prompt, active_phase,
-            agent_type_label=label, actions=actions, type_exclude=type_exclude, extra_tools=extra_tools,
+        worker_answer = await self._spawn(
+            task, tools, model, prompt, active_phase,
+            agent_type_label=label, actions=actions, type_exclude=type_exclude, extra_tools=type_extra or None,
         )
-        if not sink:
-            # One nudge — the model has its answer, it just didn't call the tool.
-            await self._spawn(
-                f"{task}\n\nYou did not call structured_output. Call it now with your final answer.",
-                use_tools,
+        formatted = await self._format_structured(task, worker_answer, out_model, model)
+        try:
+            result = out_model.model_validate_json(formatted)
+        except Exception as exc:
+            # One repair pass: provider streaming/parsing should have produced
+            # JSON text, but keep a bounded correction path for loose providers.
+            formatted = await self._format_structured(
+                task,
+                worker_answer,
+                out_model,
                 model,
-                sys_prompt,
-                active_phase,
-                agent_type_label=label,
-                actions=actions,
-                type_exclude=type_exclude,
-                extra_tools=extra_tools,
+                invalid_output=formatted,
+                error=str(exc),
             )
-        if not sink:
-            raise WorkflowStructuredOutputMissing(
-                "workflow agent did not call structured_output for the requested schema"
-            )
-        result = sink[-1]
+            try:
+                result = out_model.model_validate_json(formatted)
+            except Exception as repair_exc:
+                raise WorkflowStructuredOutputMissing(
+                    "workflow formatter did not return valid structured output"
+                ) from repair_exc
         # Preserve the contract: a pydantic schema returns the validated instance;
         # a dict schema returns a dict.
         return result if out_model is schema else result.model_dump()
+
+    async def _format_structured(
+        self,
+        task: str,
+        worker_answer: str,
+        out_model: type,
+        model: str | None,
+        *,
+        invalid_output: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        test_formatter = getattr(self.ctx, "format_structured", None)
+        if callable(test_formatter):
+            return await test_formatter(
+                task=task,
+                worker_answer=worker_answer,
+                response_format=out_model,
+                invalid_output=invalid_output,
+                error=error,
+            )
+        if self._budget is not None and self._budget.total is not None and self._budget.output_tokens >= self._budget.total:
+            raise WorkflowBudgetExceeded(
+                f"workflow output-token budget of {self._budget.total} exhausted "
+                f"({self._budget.output_tokens} spent)"
+            )
+        user = f"Task:\n{task}\n\nWorker answer:\n{worker_answer}"
+        if invalid_output is not None:
+            user = (
+                "Return valid JSON for this schema from the worker answer.\n\n"
+                f"{user}\n\nInvalid formatter output:\n{invalid_output}\n\nError: {error or ''}"
+            )
+        model_id = model or self._default_model or getattr(getattr(self.ctx, "run", None), "model", None)
+        if not model_id:
+            raise WorkflowStructuredFormatError("workflow formatter has no model")
+        try:
+            response = await llm_client.complete(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": _FORMATTER_PROMPT},
+                    {"role": "user", "content": user},
+                ],
+                response_format=out_model,
+                langfuse_name="workflow.format_output",
+                langfuse_metadata={"schema": out_model.__name__},
+            )
+        except Exception as exc:
+            raise WorkflowStructuredFormatError("workflow formatter failed") from exc
+        if self._budget is not None:
+            self._budget.output_tokens += response.usage.completion_tokens
+        return (response.choices[0].message.content or "").strip()
 
     async def parallel(self, units: list[Unit]) -> list[Any]:
         async with asyncio.TaskGroup() as tg:
@@ -236,8 +280,8 @@ class Orchestra:
         type_exclude: frozenset[str] = frozenset(),
         extra_tools: dict[str, Any] | None = None,
     ) -> str:
-        # Cap + count every real spawn here (not in agent()), so schema-repair
-        # respawns also count toward — and are bounded by — the runaway guard.
+        # Cap + count every real worker spawn here. Schema formatter/repair
+        # passes are internal LLM calls and do not consume spawn slots.
         if self.spawn_count >= _MAX_WORKFLOW_SPAWNS:
             raise WorkflowSpawnLimit(f"workflow exceeded {_MAX_WORKFLOW_SPAWNS} agent spawns (runaway guard)")
         # Hard token ceiling: don't start a new agent once the run's shared budget

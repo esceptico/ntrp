@@ -147,7 +147,7 @@ export function TurnGroup({
             onManualResize?.();
             setExpanded((v) => !v);
           }}
-          className="self-start inline-flex items-center gap-1.5 text-base leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
+          className="self-start inline-flex items-center gap-1.5 px-1.5 -mx-1.5 rounded-md text-base leading-[1.45] text-muted hover:text-ink-soft hover:bg-surface-soft/40 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97] select-none"
         >
           <span>{headerLabel}</span>
           <ChevronDown

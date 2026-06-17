@@ -37,6 +37,7 @@ from ntrp.agent.types.llm import (
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
+from ntrp.observability import get_langfuse_tracer
 
 AgentEvent = (
     TextStarted
@@ -92,6 +93,7 @@ class Agent:
         clock: Callable[[], float] = time.monotonic,
         started_at: float | None = None,
         budget: RunBudget | None = None,
+        tracer: object | None = None,
     ):
         if max_cost is not None and cost_calculator is None and cost_getter is None:
             raise ValueError("max_cost requires cost_calculator or cost_getter")
@@ -117,7 +119,8 @@ class Agent:
         self._started_at = started_at
         self._budget = budget or RunBudget()
         self._executor = executor
-        self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
+        self._tracer = tracer if tracer is not None else get_langfuse_tracer()
+        self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id, tracer=self._tracer)
         self._last_response: CompletionResponse | None = None
         self._last_text_id: str | None = None
         self._last_streamed_tool_input_ids: set[str] = set()
@@ -144,6 +147,7 @@ class Agent:
                     yield self._result(result_text, reason, step)
                     return
 
+                budget_reminder = self._budget_pressure_reminder()
                 step_model, step_tools, step_tool_choice, step_reasoning_effort = await self._prepare(step, messages)
 
                 if reason := self._budget_stop_reason(started_at):
@@ -151,7 +155,12 @@ class Agent:
                     return
 
                 async for event in self._call_llm(
-                    messages, step_model, step_tools, step_tool_choice, step_reasoning_effort
+                    messages,
+                    step_model,
+                    step_tools,
+                    step_tool_choice,
+                    step_reasoning_effort,
+                    budget_reminder=budget_reminder,
                 ):
                     yield event
 
@@ -243,6 +252,20 @@ class Agent:
             return StopReason.MAX_TOKEN_BUDGET
         return None
 
+    def _budget_pressure_reminder(self) -> str | None:
+        if self._budget.total is None or self._budget.total <= 0:
+            return None
+        remaining = max(0, self._budget.total - self._budget.output_tokens)
+        ratio = remaining / self._budget.total
+        prefix = f"Output-token budget pressure: {remaining} of {self._budget.total} tokens remain. "
+        if ratio <= 0.05:
+            return prefix + "Finalize with current evidence."
+        if ratio <= 0.10:
+            return prefix + "Wrap up now; do not start broad new work."
+        if ratio <= 0.25:
+            return prefix + "Budget is limited; prioritize the final answer."
+        return None
+
     def _current_cost(self) -> float:
         if self.cost_getter:
             return self.cost_getter()
@@ -305,6 +328,8 @@ class Agent:
         tools: list[dict],
         tool_choice: ToolChoice,
         reasoning_effort: str | None,
+        *,
+        budget_reminder: str | None = None,
     ) -> AsyncGenerator[AgentEvent]:
         try:
             self._last_streamed_tool_input_ids = set()
@@ -350,7 +375,10 @@ class Agent:
                 kwargs["reasoning_effort"] = reasoning_effort
             if self.prompt_cache_key is not None:
                 kwargs["prompt_cache_key"] = self.prompt_cache_key
-            async for item in self.client.stream(messages, model, tools, **kwargs):
+            request_messages = (
+                [*messages, {"role": Role.SYSTEM, "content": budget_reminder}] if budget_reminder else messages
+            )
+            async for item in self.client.stream(request_messages, model, tools, **kwargs):
                 if isinstance(item, str):
                     if not text_started:
                         text_started = True

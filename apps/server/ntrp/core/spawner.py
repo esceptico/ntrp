@@ -205,6 +205,7 @@ async def _salvage_summary(model: str, child_messages: list[dict], error: str, t
             messages=salvage_messages,
             temperature=0.2,
             max_tokens=_SALVAGE_MAX_TOKENS,
+            langfuse_name="subagent.salvage_summary",
         )
         return (response.choices[0].message.content or "").strip()
     except Exception as e:

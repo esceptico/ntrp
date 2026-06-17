@@ -16,6 +16,7 @@ from ntrp.mcp.manager import MCPManager
 from ntrp.monitor.slack import SlackMonitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
+from ntrp.observability import get_langfuse_tracer
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.runtime.automation import AutomationRuntime
 from ntrp.server.runtime.config import RuntimeConfig
@@ -98,10 +99,6 @@ class Runtime:
     @property
     def memory_records(self):
         return self.knowledge._record_store
-
-    @property
-    def memory_lenses(self):
-        return self.knowledge._lens_store
 
     @property
     def search_index(self):
@@ -260,6 +257,7 @@ class Runtime:
         if self.stores:
             await self.stores.close()
         await llm_close()
+        get_langfuse_tracer().shutdown()
 
     # --- Queries ---
 

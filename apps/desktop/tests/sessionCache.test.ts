@@ -324,7 +324,7 @@ test("refresh hydrates the current session goal", async () => {
           if (request.path === "/projects") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { projects: [] }, text: "" };
           }
-          if (request.path === "/sessions" || request.path === "/sessions?limit=500") {
+          if (request.path === "/sessions" || request.path.startsWith("/sessions?limit=500&offset=")) {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
           }
           if (request.path === "/session") {
@@ -394,7 +394,7 @@ test("refresh keeps the current session usable when goal hydration fails", async
           if (request.path === "/projects") {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { projects: [] }, text: "" };
           }
-          if (request.path === "/sessions" || request.path === "/sessions?limit=500") {
+          if (request.path === "/sessions" || request.path.startsWith("/sessions?limit=500&offset=")) {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
           }
           if (request.path === "/session") {

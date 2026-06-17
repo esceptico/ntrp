@@ -1,120 +1,100 @@
 ---
 title: "Memory"
-description: "How ntrp builds and maintains persistent memory."
+description: "How ntrp remembers, maintains, and recalls what matters."
 ---
 
 ## Overview
 
-ntrp keeps memory in layers instead of treating every extracted sentence as always-visible profile context.
+ntrp keeps long-term memory as one flat pool of small, self-contained
+**records**. Each record is a single durable statement, typed by what it does:
 
-```
-source facts  ->  patterns  ->  profile entries
-      |              |              |
-      v              v              v
- searchable      derived        small always-on
- evidence        context        core memory
-```
+- **directive** — a rule or procedure that should steer how ntrp behaves.
+- **fact** — a durable statement about you or your world. Preferences and
+  project facts are facts; they just live in different scopes.
+- **source** — a captured reference or receipt from a connected integration or
+  tool.
 
-- **Facts** are the source-of-truth records extracted from chats, tools, and connected sources.
-- **Patterns** are derived summaries over facts. In the API they are still called `observations`, but the UI calls them patterns because they are not raw truth.
-- **Profile entries** are the only always-visible memory surface. They are curated, budgeted, and backed by direct fact or pattern provenance.
-- **Learning proposals** are review-gated policy, prompt, skill, automation, or memory improvements. They never auto-apply silently.
+There is no separate graph, claim, or lens layer. Records are atomic; lineage is
+a single line (a corrected record is *superseded* by its replacement); pinned
+records survive cleanup.
 
-Dreams are optional experimental cross-domain insights and are not part of the default memory navigation.
+## Records
 
-## Facts
-
-Facts are durable evidence records. They carry text, source metadata, timestamps, entities, embeddings, access counts, and lifecycle state.
-
-Facts should answer: "what concrete thing did ntrp observe or store?"
+A record carries its text, an optional source reference, timestamps, a scope, a
+pinned flag, and lifecycle state. It should answer one question on its own:
+"what concrete, durable thing should ntrp know?"
 
 Examples:
 
-- "The user prefers direct engineering feedback."
-- "The Dex automation table mutation issue was discussed on May 1, 2026."
-- "A calendar event named `morning briefing` runs daily at 08:00."
+- "The user prefers direct, concise engineering feedback." *(fact)*
+- "Always branch and open a PR; never push to main." *(directive)*
+- "Daily morning-briefing automation runs at 08:00." *(fact)*
 
-Facts are searchable and editable, but they are not automatically promoted into the prompt just because they mention the user.
+Records are searchable and editable, but a record is not automatically shown to
+the agent on every turn just because it mentions you — see [Recall](#recall).
 
-## Patterns
+### Scopes
 
-Patterns are derived context built from supporting facts. They compress repeated or related evidence into a higher-level statement.
+Every record has a scope that controls where it is visible by default:
 
-Patterns should answer: "what trend, repeated behavior, or durable relationship is supported by multiple facts?"
+- **global** — always visible (directives live here).
+- **user** — durable facts about you.
+- **project** — scoped to an active project.
+- **session** / **integration** — scoped to a conversation or a connected source,
+  so transient or source-specific writes don't pollute your standing memory.
 
-Examples:
+Scopes are visibility metadata, not folders or a hierarchy.
 
-- "The user tends to reject broad agent abstractions unless the data flow becomes simpler."
-- "Recent backend work focused on reducing tool-schema prompt cost through deferred loading."
+## How memory is written
 
-Patterns keep links to their source facts. They can be archived or regenerated without deleting the underlying evidence.
+ntrp writes memory two ways:
 
-## Profile Entries
+1. **The Curator** runs in the background after a conversation and periodically.
+   It reads the new turns, compares them against your existing similar records,
+   and adds, updates, or supersedes records accordingly. Because it reconciles
+   against what already exists, it avoids minting duplicates.
+2. **The `remember` tool** lets the agent store a single durable statement on the
+   spot during a chat. Anything it over-captures is reconciled later by
+   consolidation.
 
-Profile entries are curated core memory shown to the agent by default. They should stay small and directly useful across unrelated sessions.
+## Maintenance (consolidation and the LINT)
 
-Profile entries should answer: "what should the agent almost always know before responding?"
+Memory is meant to stay small and current, not grow forever. A background
+**consolidation** pass periodically reviews recently-changed records and their
+neighbours and can:
 
-Good profile entries:
+- merge near-duplicates onto a single survivor,
+- supersede stale or contradicted records into a newer one,
+- reclassify a record to its correct kind,
+- drop genuine orphans,
+- fold near-duplicate labels into one spelling.
 
-- Stable identity, preference, relationship, or standing constraint.
-- Short enough to fit in the always-on memory budget.
-- Backed by source fact ids or pattern ids.
+It never invents new facts. Pinned records are never merged or superseded away.
 
-Bad profile entries:
+Each pass finishes with the **LINT** (`prune`): superseded records are
+hard-deleted, the labels they leave behind are dropped, and the search index is
+reconciled so recall can never surface dead content. You can trigger it manually
+via the API (see the [Memory API](/api-reference/memory)).
 
-- One-off tasks, current debugging state, temporary plans, or raw extracted facts.
-- Generated summaries without direct provenance.
-- Large biographies or project dumps.
+## Recall
 
-## Write Path
+For every prompt, ntrp combines two layers:
 
-When ntrp learns something new:
+1. **Resident profile** — a small, always-on `## Profile` block injected into the
+   system prompt for both chat and automation runs. It contains your directives,
+   durable user facts, and anything you've pinned (within the visible scopes),
+   under a fixed character budget so it stays compact.
+2. **On-demand recall** — the agent uses the `recall` tool to pull deeper memory
+   relevant to the current query. Recall is hybrid (keyword + semantic) search
+   over the record pool and defaults to directives and facts.
 
-1. **Extract** durable source facts from user-visible evidence.
-2. **Embed and index** facts for semantic and full-text retrieval.
-3. **Link** entities and provenance.
-4. **Consolidate** facts into patterns when there is enough support.
-5. **Propose** profile or policy changes when memory feedback suggests a durable improvement.
+This keeps the always-on context small while still allowing context-specific
+lookups when the conversation needs them.
 
-Profile changes and continual-learning proposals stay review-gated. The system can propose them, but applying them still requires an explicit reviewed action; they are not silently promoted into always-on memory.
+## Pinning
 
-## Consolidation
-
-Consolidation runs as a builtin automation with dual triggers: periodically and after idle time.
-
-It performs narrow jobs:
-
-- merge near-duplicate facts
-- update or create supported patterns
-- archive stale low-value records after dry-run review
-- repair stale search indexes and missing embeddings
-- record audit events for memory writes and automation outcomes
-
-The goal is not to grow memory forever. The goal is better compression with clear provenance.
-
-## Retrieval
-
-For each prompt, ntrp combines:
-
-1. profile entries that are always-on and budgeted
-2. query-specific memory prefetch from facts and patterns
-3. access telemetry showing which memory was retrieved, injected, omitted, or later corrected
-
-This keeps profile memory small while still allowing context-specific recall.
-
-## Continual Learning
-
-The learning loop observes explicit feedback and runtime evidence, then creates reviewable proposals.
-
-Current lanes include:
-
-- **memory**: extraction, profile, compression, or cleanup policy notes
-- **prompt**: bounded runtime prompt notes
-- **skill**: proposed procedural skill improvements
-- **automation**: automation scheduling or prompt behavior notes
-
-Applying a proposal activates a bounded note for its lane. It does not rewrite source facts, edit skill files, or change schedules without an explicit action.
+Pinning a record marks it as something to always keep. Pinned records ride along
+in the resident profile and are never touched by consolidation or the LINT.
 
 ## Desktop Memory UI
 
@@ -122,14 +102,15 @@ Open the Memory view in the desktop app to inspect and control memory.
 
 ![Memory records viewer](../images/memory-patterns.png)
 
-- **Memory**: search and inspect durable records, provenance, corroboration, feedback, and record lifecycle state.
-- **Graph**: inspect linked records and relationships visually.
-- **Lenses**: create curated views over memory by naming a criterion and reviewing the rendered claims.
+- **Browse** records and a generated, read-only markdown view of your memory.
+- **Search** records by keyword or meaning, inspect scope, source, and lifecycle.
+- **Capture** a new record, and **pin** the ones you want to keep permanently.
 
-![Memory lenses view](../images/memory-learning.png)
+## Agent tools
 
-## Agent Tools
-
-- `remember`: store a durable fact with approval
-- `recall`: search facts and patterns
-- `forget`: delete or archive matching memory with approval
+- `remember` — store a single durable record.
+- `recall` — search long-term memory (read-only).
+- `forget` — remove the best-matching remembered record.
+- `memory_tree` / `memory_read` / `memory_search` — browse the generated
+  markdown projection of memory.
+</content>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCw } from "lucide-react";
 import {
   createCustomModelApi,
   connectModelProviderApi,
@@ -38,7 +38,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
-import { IconButton } from "../IconButton";
+import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 
@@ -558,18 +558,12 @@ function CustomModelsPanel({
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <IconButton
-                    danger
-                    aria-label={`Delete ${model.id}`}
-                    onClick={() => onDelete(model.id)}
-                    disabled={deleting}
-                  >
-                    {deleting ? (
-                      <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={ICON.MD} strokeWidth={2} />
-                    )}
-                  </IconButton>
+                  <ConfirmDeleteButton
+                    size="md"
+                    label={`Delete ${model.id}`}
+                    busy={deleting}
+                    onConfirm={() => onDelete(model.id)}
+                  />
                 </div>
               </div>
             );

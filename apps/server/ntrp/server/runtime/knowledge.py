@@ -1,3 +1,5 @@
+import asyncio
+
 from ntrp.config import Config
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
@@ -17,12 +19,32 @@ class KnowledgeRuntime:
         self.chat_connector = None
 
         self._record_store = None
-        self._lens_store = None
         self._consolidate = None
+        self._artifact_refresh_task: asyncio.Task | None = None
 
     @property
     def memory_ready(self) -> bool:
         return self._record_store is not None
+
+    @property
+    def record_store(self):
+        return self._record_store
+
+    @property
+    def consolidate(self):
+        return self._consolidate
+
+    async def rebuild_artifacts(self) -> int:
+        """Regenerate the markdown projection (entities/, projects/, …) from the
+        canonical record pool. Returns the artifact count."""
+        if self._record_store is None:
+            return 0
+        from ntrp.memory.artifacts import ArtifactMemoryStore
+
+        artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
+            self._record_store
+        )
+        return len(artifacts)
 
     async def connect(self, stores: Stores) -> None:
         await self._init_search()
@@ -31,6 +53,26 @@ class KnowledgeRuntime:
             stores.sessions.store.attach_search_index(self.search_index)
         if self.memory_curator is not None:
             self.memory_curator.start_sweep()
+        if self.memory_ready:
+            # Refresh the markdown projection once on boot so pre-existing files
+            # adopt the current generator (e.g. frontmatter) with no manual
+            # rebuild. Background + best-effort: never blocks startup.
+            self._artifact_refresh_task = asyncio.create_task(self._refresh_artifacts_on_start())
+
+    async def _refresh_artifacts_on_start(self) -> None:
+        if self._record_store is None:
+            return
+        try:
+            # Classify the label vocabulary first (cold-start backlog → entity
+            # dossiers) so a fresh deploy self-populates subject pages on boot
+            # instead of waiting for the daily consolidation.
+            if self._consolidate is not None:
+                await self._consolidate.lint_labels_once()
+            from ntrp.memory.artifacts import ArtifactMemoryStore
+
+            await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(self._record_store)
+        except Exception:
+            _logger.warning("startup artifact refresh failed", exc_info=True)
 
     async def reload_config(self, config: Config, stores: Stores | None) -> None:
         self.config = config
@@ -40,19 +82,19 @@ class KnowledgeRuntime:
         # without a restart. attach_search_index is idempotent and clears on None.
         if stores is not None:
             stores.sessions.store.attach_search_index(self.search_index)
-        # Same re-wire for the record store (the lens store + curator share it).
+        # Same re-wire for the record store (the curator shares it).
         if self._record_store is not None:
             self._record_store.attach_search_index(self.search_index)
 
     async def stop(self) -> None:
+        if self._artifact_refresh_task is not None:
+            self._artifact_refresh_task.cancel()
         if self.memory_curator:
             await self.memory_curator.stop()
         if self._consolidate:
             await self._consolidate.close()
         if self._record_store:
             await self._record_store.close()
-        if self._lens_store:
-            await self._lens_store.close()
         if self.indexer:
             await self.indexer.stop()
 
@@ -61,8 +103,6 @@ class KnowledgeRuntime:
             await self._consolidate.close()
         if self._record_store:
             await self._record_store.close()
-        if self._lens_store:
-            await self._lens_store.close()
         if self.indexer:
             await self.indexer.close()
 
@@ -74,7 +114,6 @@ class KnowledgeRuntime:
             from ntrp.tools.memory import MEMORY_RECORDS_SERVICE
 
             services[MEMORY_RECORDS_SERVICE] = self._record_store
-        # The lens store is NOT a tool service — it's reached only via REST.
         return services
 
     def start_indexing(self) -> None:
@@ -114,7 +153,7 @@ class KnowledgeRuntime:
             await self.indexer.connect()
         self.search_index = self.indexer.index
 
-    # --- flat-records + lenses memory ------------------------------------
+    # --- flat-records memory ---------------------------------------------
 
     async def _init_memory(self, stores: Stores) -> None:
         if not self.config.memory:
@@ -123,7 +162,6 @@ class KnowledgeRuntime:
 
         from ntrp.memory.consolidate import Consolidate
         from ntrp.memory.curator import Curator
-        from ntrp.memory.lenses import LensStore
         from ntrp.memory.records import RecordStore
 
         # Flat record pool (rows in memory.db, vectors via the shared index).
@@ -132,21 +170,8 @@ class KnowledgeRuntime:
             search_index=self.search_index,
         )
 
-        memory_llm = (
-            get_completion_client(self.config.memory_model)
-            if self.config.memory_model
-            else None
-        )
+        memory_llm = get_completion_client(self.config.memory_model) if self.config.memory_model else None
         memory_effort = self._memory_reasoning_effort(self.config.memory_model)
-
-        # Lenses: named views over records, membership LLM-scored + cached.
-        self._lens_store = LensStore(
-            db_path=self.config.memory_db_path,
-            records=self._record_store,
-            llm=memory_llm,
-            model=self.config.memory_model,
-            reasoning_effort=memory_effort,
-        )
 
         # CONSOLIDATE/LINT — the background pass that turns the raw record pile
         # into the actual memory (merge/supersede/drop). O(delta), watermark-durable.
@@ -167,13 +192,14 @@ class KnowledgeRuntime:
                 record_store=self._record_store,
                 consolidate=self._consolidate,
                 reasoning_effort=memory_effort,
+                artifacts_dir=self.config.memory_artifacts_dir,
             )
         else:
             _logger.warning("memory enabled but no memory_model; curator disabled")
 
         # Run the record-store schema migration NOW, serially, while it is the
         # only open connection to memory.db. Deferring it to the first lazy
-        # _ensure_conn lets the lens/consolidate/curator connections race the
+        # _ensure_conn lets the consolidate/curator connections race the
         # one-time DROP/ALTER rebuild (writer-vs-writer lock contention).
         await self._record_store.open()
 

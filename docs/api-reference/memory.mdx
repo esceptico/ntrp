@@ -1,30 +1,39 @@
 ---
 title: "Memory"
-description: "Admin APIs for memory records, lenses, search, and graph views."
+description: "Admin APIs for memory records, search, pinning, and the markdown artifact browser."
 ---
 
 ## Mental model
 
-The current memory API is exposed under `/admin/memory/*`.
+The memory API is exposed under `/admin/memory/*`. The substrate is a flat pool
+of atomic **records** (typed `directive`, `fact`, `source`, or `summary`) with
+scope metadata for visibility. There is no graph, no lenses, and no derivation
+edges — record detail returns empty `parents`/`children` for client
+compatibility only.
 
-- **Memory records/items** are source-backed durable statements with provenance and lifecycle metadata.
-- **Lenses** are curated views over memory with criteria, rendered claims, and coverage status.
-- **Graphs** expose linked memory items and edges for inspection.
-
-Most users should manage memory from the desktop Memory view. These endpoints are for admin/client surfaces.
+Most users should manage memory from the desktop Memory view. These endpoints
+back that surface and other admin clients.
 
 ## Records
 
 ### Create record
 
+Quick-capture a single record into the pool. `kind_tag` is one of
+`directive | fact | summary | source`.
+
 ```bash
 curl -X POST http://localhost:6877/admin/memory/record \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text":"User prefers concise engineering feedback.","kind_tag":"preference"}'
+  -d '{"text":"User prefers concise engineering feedback.","kind_tag":"fact"}'
 ```
 
+Optional `scope_kind` / `scope_key` set an explicit scope; otherwise the scope
+is resolved from the kind (directives are global, others default to user).
+
 ### Pin or unpin record
+
+Pinned records survive consolidation and ride along in the resident profile.
 
 ```bash
 curl -X POST http://localhost:6877/admin/memory/record/rec_123/pin \
@@ -35,7 +44,12 @@ curl -X POST http://localhost:6877/admin/memory/record/rec_123/pin \
 
 ## Items
 
+Records are returned as `MemoryItem` objects for the desktop client.
+
 ### List items
+
+`status` is `active` (default) or `superseded`. Accepts `limit`, `offset`, `q`
+(switches to search), and `scope_kind` / `scope_key` / `kind` filters.
 
 ```bash
 curl "http://localhost:6877/admin/memory/items?limit=50" \
@@ -51,99 +65,63 @@ curl http://localhost:6877/admin/memory/items/item_123 \
 
 ### Search items
 
+Hybrid keyword + semantic search over the record pool. Accepts `limit`,
+`include_inactive`, and `scope_kind` / `scope_key` / `kind` filters.
+
 ```bash
 curl "http://localhost:6877/admin/memory/search?q=backend%20preferences&limit=20" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Lenses
+## Scopes
 
-### List lenses
+Returns the user-facing scope list. Currently empty — scopes are stored and
+enforced internally on read/write paths, but are not exposed as a browser.
 
 ```bash
-curl http://localhost:6877/admin/memory/lenses \
+curl http://localhost:6877/admin/memory/scopes \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Draft a lens
+## Maintenance
+
+### Prune (LINT)
+
+Trigger the LINT pass on demand: hard-delete superseded records, drop the labels
+they orphan, and reconcile the vector index. Runs automatically each
+consolidation sweep too.
 
 ```bash
-curl -X POST http://localhost:6877/admin/memory/lenses/draft \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"Show project planning preferences"}'
-```
-
-### Create a lens
-
-```bash
-curl -X POST http://localhost:6877/admin/memory/lenses \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Project planning","criterion":"planning preferences and constraints"}'
-```
-
-### Update lens criterion
-
-```bash
-curl -X PUT http://localhost:6877/admin/memory/lenses/lens_123/criterion \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"criterion":"durable project planning preferences"}'
-```
-
-### Promote lens
-
-```bash
-curl -X POST http://localhost:6877/admin/memory/lenses/lens_123/promote \
+curl -X POST http://localhost:6877/admin/memory/prune \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Delete lens
+## Artifacts
+
+A generated, read-only markdown projection of memory for browsing.
+
+### List artifacts
+
+Accepts optional `kind` and `q` query parameters.
 
 ```bash
-curl -X DELETE http://localhost:6877/admin/memory/lenses/lens_123 \
+curl http://localhost:6877/admin/memory/artifacts \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Lens pages
-
-### Get rendered page
+### Read artifact
 
 ```bash
-curl http://localhost:6877/admin/memory/lenses/lens_123/page \
+curl http://localhost:6877/admin/memory/artifacts/facts/index.md \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Get render status
+### Rebuild artifacts
+
+Regenerate the markdown projection from the current records.
 
 ```bash
-curl http://localhost:6877/admin/memory/lenses/lens_123/page/status \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Write back edits
-
-```bash
-curl -X POST http://localhost:6877/admin/memory/lenses/lens_123/writeback \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"claims":[]}'
-```
-
-## Graph
-
-### Global graph
-
-```bash
-curl http://localhost:6877/admin/memory/graph \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-### Item-centered graph
-
-```bash
-curl http://localhost:6877/admin/memory/items/item_123/graph \
+curl -X POST http://localhost:6877/admin/memory/artifacts/rebuild \
   -H "Authorization: Bearer $API_KEY"
 ```
 
@@ -151,6 +129,7 @@ curl http://localhost:6877/admin/memory/items/item_123/graph \
 
 For normal chat usage, prefer the agent tools:
 
-- `remember` — store a durable memory record
-- `recall` — search long-term memory
-- `forget` — archive/delete a matching remembered record
+- `remember` — store a durable memory record.
+- `recall` — search long-term memory.
+- `forget` — remove a matching remembered record.
+</content>

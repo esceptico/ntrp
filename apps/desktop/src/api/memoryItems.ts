@@ -2,7 +2,7 @@ import type { AppConfig } from "../api";
 import { apiWithConfig } from "../api";
 
 // ── Scope ─────────────────────────────────────────────────────────────────
-export type ScopeKind = "user" | "project" | "session";
+export type ScopeKind = "global" | "project" | "session" | "integration" | "user";
 export interface ScopeParams {
   scope_kind?: ScopeKind;
   scope_key?: string;
@@ -13,15 +13,9 @@ export interface MemoryScope {
 }
 
 // ── Shared value objects ────────────────────────────────────────────────────
-// Memory is claims only. Lenses are a separate registry of views (see `Lens`).
+export type MemoryKind = "directive" | "fact" | "source";
 export type MemoryStatus = "active" | "superseded" | "archived" | "unresolved" | "retired";
-export type MemoryStanding = "active" | "unresolved" | "retired";
-export type MemoryProvenance = "user_authored" | "recorded" | "inferred" | "external";
 export type MemoryFeedback = "none" | "confirmed" | "corrected";
-export type LensDetailLevel = "gist" | "structured" | "dossier";
-export type LensRenderMode = "flat" | "grouped_by_subject";
-export type LensProvenance = "user_authored" | "induced";
-export type LensStatus = "active" | "archived";
 
 export interface MemorySourceRef {
   kind: string;
@@ -32,13 +26,12 @@ export interface MemorySourceRef {
 export interface MemoryItem {
   id: string;
   content: string;
+  kind: MemoryKind;
   canonical_subject: string;
   labels: string[];
   scope: MemoryScope;
-  provenance: MemoryProvenance;
+  pinned: boolean;
   status: MemoryStatus;
-  standing?: MemoryStanding;
-  depth?: number;
   valid_from: string | null;
   invalid_at: string | null;
   source_refs: MemorySourceRef[];
@@ -49,56 +42,8 @@ export interface MemoryItem {
   updated_at: string;
 }
 
-// A lens DEFINITION — a view over claims, never a memory item, never a graph node.
-// The definition lives as an editable markdown file at NTRP_DIR/memory/lenses/<slug>.md:
-// `id` is the file slug, `name` is the frontmatter directory, `criterion` is the file
-// body (## Belongs + optional ## Profile shape). The JSON shape is unchanged here; the
-// server reads/writes the file behind these same fields.
-export interface Lens {
-  id: string;
-  name: string;
-  criterion: string;
-  entity_type?: string;
-  scope: MemoryScope;
-  detail_level: LensDetailLevel;
-  render_mode: LensRenderMode;
-  provenance: LensProvenance;
-  status: LensStatus;
-  /** Set when the lens was promoted to a label; the lens stays viewable. */
-  promoted_to: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export type MemoryEdgeRole = "evidence" | "supersedes" | "contradicts" | "label";
-export interface MemoryEdge {
-  child_id: string;
-  parent_id: string;
-  role: MemoryEdgeRole;
-  position: number;
-  created_at: string;
-}
-
-export interface CoverageAdvisory {
-  lens_id: string;
-  scope_pool: number;
-  member_count: number;
-  ratio: number;
-  generic: boolean;
-  suggestion: string;
-}
-
-export interface RenderedClaim {
-  claim_id: string;
-  content: string;
-  provenance: MemoryProvenance;
-  corroboration: number;
-  feedback: MemoryFeedback;
-  source_refs: MemorySourceRef[];
-}
-
 // ── Query encoding ──────────────────────────────────────────────────────────
-function queryString(params: Record<string, string | number | boolean | undefined>): string {
+export function queryString(params: Record<string, string | number | boolean | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") qs.set(key, String(value));
@@ -107,20 +52,12 @@ function queryString(params: Record<string, string | number | boolean | undefine
   return raw ? `?${raw}` : "";
 }
 
-function jsonBody(body: unknown): RequestInit {
-  return {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
-}
-
-// ── 1 — List claims/lenses ──────────────────────────────────────────────────
+// ── 1 — List records ──────────────────────────────────────────────────────
 export interface MemoryItemsResponse {
   items: MemoryItem[];
   limit: number;
 }
-// A scope summary row (distinct from `MemoryScope` = a claim's {kind,key}).
+// A scope summary row (distinct from `MemoryScope` = a record's {kind,key}).
 export interface MemoryScopeSummary {
   scope_kind: ScopeKind;
   scope_key: string | null;
@@ -135,7 +72,10 @@ export interface ListMemoryItemsParams extends ScopeParams {
   subject?: string;
   status?: MemoryStatus | ""; // "" => all statuses
   valid_at?: string;
+  kind?: MemoryKind;
   limit?: number;
+  offset?: number;
+  q?: string;
 }
 
 export function listMemoryItems(config: AppConfig, params: ListMemoryItemsParams = {}) {
@@ -147,161 +87,33 @@ export function listMemoryItems(config: AppConfig, params: ListMemoryItemsParams
       subject: params.subject,
       status: params.status,
       valid_at: params.valid_at,
+      kind: params.kind,
       limit: params.limit,
+      offset: params.offset,
+      q: params.q,
     })}`,
   );
 }
 
-// ── 2 — Get one item + provenance edges ─────────────────────────────────────
+// ── 2 — Get one item ────────────────────────────────────────────────────────
 export interface MemoryItemDetail {
   item: MemoryItem;
-  parents: MemoryEdge[]; // direction=from: item -> parent
-  children: MemoryEdge[]; // direction=to:   child -> item
 }
 
 export function getMemoryItem(config: AppConfig, itemId: string) {
   return apiWithConfig<MemoryItemDetail>(config, `/admin/memory/items/${encodeURIComponent(itemId)}`);
 }
 
-
-// ── 3 — List lenses (with coverage advisory) ────────────────────────────────
-export interface LensWithCoverage {
-  lens: Lens;
-  coverage: CoverageAdvisory;
-}
-export interface LensesResponse {
-  lenses: LensWithCoverage[];
-}
-
-export function listMemoryLenses(config: AppConfig, params: ScopeParams = {}) {
-  return apiWithConfig<LensesResponse>(
+// ── 2b — Pin / unpin a record ─────────────────────────────────────────────────
+export function setRecordPinned(config: AppConfig, recordId: string, pinned: boolean) {
+  return apiWithConfig<{ ok: boolean; pinned: boolean }>(
     config,
-    `/admin/memory/lenses${queryString({ scope_kind: params.scope_kind, scope_key: params.scope_key })}`,
+    `/admin/memory/record/${encodeURIComponent(recordId)}/pin`,
+    { method: "POST", body: JSON.stringify({ pinned }) },
   );
 }
 
-export interface DraftLensBody extends ScopeParams {
-  name: string;
-}
-export interface DraftLensResponse {
-  markdown: string;
-}
-
-export function draftLens(config: AppConfig, body: DraftLensBody) {
-  return apiWithConfig<DraftLensResponse>(config, "/admin/memory/lenses/draft", jsonBody(body));
-}
-
-// ── 4 — Get a lens page ─────────────────────────────────────────────────────
-export interface ProjectedGroup {
-  subject: string;
-  markdown: string;
-  synthesized: boolean;
-  blocks: RenderedClaim[];
-}
-export interface ProjectedPage {
-  lens_id: string;
-  detail: LensDetailLevel;
-  markdown: string;
-  blocks: RenderedClaim[];
-  synthesized: boolean;
-  coverage: CoverageAdvisory | null;
-  groups: ProjectedGroup[] | null;
-}
-export interface LensPageParams {
-  detail?: LensDetailLevel;
-  refresh?: boolean;
-}
-
-// Lens page generation is async (timeout fix): the GET returns either a
-// materialized page (clean cache hit) or a generation status (miss/dirty/refresh,
-// HTTP 202). The two JSON shapes are disjoint — the status object carries a
-// top-level `status`/`stage`; the page never does. Discriminate on that.
-export type LensGenStage = "creating" | "scoring" | "synthesizing" | "ready" | "error";
-export interface LensGenStatus {
-  lens_id: string;
-  status: "idle" | LensGenStage;
-  stage?: LensGenStage;
-  detail?: LensDetailLevel;
-  subject: string | null;
-  progress: string | null; // "2/5" while synthesizing grouped buckets
-  error: string | null;
-  updated_at?: string;
-}
-
-export type LensPageResult = ProjectedPage | LensGenStatus;
-
-export function isLensGenStatus(r: LensPageResult): r is LensGenStatus {
-  return "status" in r;
-}
-
-export function getLensPage(config: AppConfig, lensId: string, params: LensPageParams = {}) {
-  return apiWithConfig<LensPageResult>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/page${queryString({
-      detail: params.detail,
-      refresh: params.refresh,
-    })}`,
-  );
-}
-
-export function getLensPageStatus(config: AppConfig, lensId: string) {
-  return apiWithConfig<LensGenStatus>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/page/status`,
-  );
-}
-
-// ── 5 — Provenance graph ────────────────────────────────────────────────────
-export interface MemoryGraph {
-  root_id: string;
-  nodes: MemoryItem[];
-  edges: MemoryEdge[];
-  depth: number;
-  direction: "parents" | "children" | "both";
-}
-export interface MemoryGraphParams {
-  direction?: "parents" | "children" | "both";
-  depth?: number;
-  roles?: MemoryEdgeRole[];
-}
-
-export function getMemoryGraph(config: AppConfig, itemId: string, params: MemoryGraphParams = {}) {
-  return apiWithConfig<MemoryGraph>(
-    config,
-    `/admin/memory/items/${encodeURIComponent(itemId)}/graph${queryString({
-      direction: params.direction,
-      depth: params.depth,
-      roles: params.roles?.join(","),
-    })}`,
-  );
-}
-
-// ── 5a — Whole claim-graph (default view) ────────────────────────────────────
-export interface WholeGraph {
-  nodes: MemoryItem[];
-  edges: MemoryEdge[];
-  scope: MemoryScope;
-}
-export interface WholeGraphParams extends ScopeParams {
-  subject?: string;
-  roles?: MemoryEdgeRole[];
-  limit?: number;
-}
-
-export function getWholeGraph(config: AppConfig, params: WholeGraphParams = {}) {
-  return apiWithConfig<WholeGraph>(
-    config,
-    `/admin/memory/graph${queryString({
-      scope_kind: params.scope_kind,
-      scope_key: params.scope_key,
-      subject: params.subject,
-      roles: params.roles?.join(","),
-      limit: params.limit,
-    })}`,
-  );
-}
-
-// ── 6 — Search ──────────────────────────────────────────────────────────────
+// ── 3 — Search ──────────────────────────────────────────────────────────────
 export interface MemorySearchFts {
   mode: "fts";
   items: MemoryItem[];
@@ -312,7 +124,6 @@ export interface RankedItem {
   order_score: number;
   rrf: number;
   freshness: number;
-  provenance_ord: number;
   corroboration: number;
 }
 export interface MemorySearchRetrieve {
@@ -328,12 +139,13 @@ export interface MemorySearchParams extends ScopeParams {
   limit?: number;
   include_inactive?: boolean;
   mode?: "fts" | "retrieve";
+  kind?: MemoryKind;
 }
 
 export function searchMemory(config: AppConfig, params: MemorySearchParams) {
   // Routed through apiWithConfig so it uses the Electron bridge (main-process
   // fetch, no renderer CSP/CORS) like every other memory call — a raw renderer
-  // fetch breaks lens search in packaged builds / non-localhost servers.
+  // fetch breaks search in packaged builds / non-localhost servers.
   return apiWithConfig<MemorySearchResponse>(
     config,
     `/admin/memory/search${queryString({
@@ -343,107 +155,8 @@ export function searchMemory(config: AppConfig, params: MemorySearchParams) {
       limit: params.limit,
       include_inactive: params.include_inactive,
       mode: params.mode,
+      kind: params.kind,
     })}`,
     { timeout: 8_000 } as RequestInit & { timeout: number },
   );
-}
-
-// ── 7 — Lens page write-back ────────────────────────────────────────────────
-export type PageEditKind = "edit" | "reject" | "accept" | "include" | "edit_criterion";
-export interface PageEditOp {
-  kind: PageEditKind;
-  claim_id?: string; // required for edit|reject|accept|include
-  new_text?: string; // required for edit (successor) | edit_criterion
-}
-export interface WriteBackApplied {
-  kind: PageEditKind;
-  id: string;
-}
-export interface WriteBackRejected {
-  op: PageEditOp;
-  reason: string;
-}
-export interface WriteBackResult {
-  applied: WriteBackApplied[];
-  rejected: WriteBackRejected[];
-  rederive_triggered: boolean;
-}
-
-export function writebackLens(config: AppConfig, lensId: string, ops: PageEditOp[]) {
-  return apiWithConfig<WriteBackResult>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/writeback`,
-    jsonBody({ ops }),
-  );
-}
-
-// ── 8 — Lens lifecycle (admin) ──────────────────────────────────────────────
-export interface CreateLensBody extends ScopeParams {
-  name?: string;
-  criterion?: string; // optional — synthesized server-side from the name when omitted
-  definition_markdown?: string;
-  render_mode?: LensRenderMode;
-}
-
-export function createLens(config: AppConfig, body: CreateLensBody) {
-  return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses", jsonBody(body));
-}
-
-export function setLensRenderMode(config: AppConfig, lensId: string, render_mode: LensRenderMode) {
-  return apiWithConfig<{ lens: Lens }>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/render_mode`,
-    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ render_mode }) },
-  );
-}
-
-export function editLensCriterion(config: AppConfig, lensId: string, criterion: string) {
-  return apiWithConfig<{ lens: Lens }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}/criterion`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ criterion }),
-  });
-}
-
-export interface SplitChild {
-  name: string;
-  criterion: string;
-}
-export interface SplitLensBody {
-  into: SplitChild[];
-  archive_parent?: boolean; // default true
-}
-
-export function splitLens(config: AppConfig, lensId: string, body: SplitLensBody) {
-  return apiWithConfig<{ children: Lens[] }>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/split`,
-    jsonBody(body),
-  );
-}
-
-export interface MergeLensBody extends ScopeParams {
-  lens_ids: string[];
-  name: string;
-  criterion: string;
-}
-
-export function mergeLenses(config: AppConfig, body: MergeLensBody) {
-  return apiWithConfig<{ lens: Lens }>(config, "/admin/memory/lenses/merge", jsonBody(body));
-}
-
-/** Promote a durable lens to a label: evaluates fresh, tags every member, and
- *  marks the lens promoted. Returns the tagged member count. */
-export function promoteLens(config: AppConfig, lensId: string, label: string) {
-  return apiWithConfig<{ promoted: number; label: string }>(
-    config,
-    `/admin/memory/lenses/${encodeURIComponent(lensId)}/promote`,
-    jsonBody({ label }),
-  );
-}
-
-export function deleteLens(config: AppConfig, lensId: string) {
-  return apiWithConfig<{ deleted: boolean }>(config, `/admin/memory/lenses/${encodeURIComponent(lensId)}`, {
-    method: "DELETE",
-  });
 }

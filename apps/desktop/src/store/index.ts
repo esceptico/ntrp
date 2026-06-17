@@ -718,6 +718,13 @@ export const useStore = create<State & Actions>((set) => ({
     }),
 }));
 
+// Dev-only: expose the store so connection-gated surfaces can be driven for
+// manual UI/animation verification in a renderer with no backend. Tree-shaken
+// out of production builds via the `import.meta.env.DEV` guard.
+if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+  (globalThis as { __ntrpStore?: typeof useStore }).__ntrpStore = useStore;
+}
+
 // Helpers for use outside React (e.g. inside event-stream handlers).
 export const getState = useStore.getState;
 export const setState = useStore.setState;

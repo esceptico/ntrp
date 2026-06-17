@@ -128,10 +128,10 @@ def _store(tmp_path: Path, *, index=None) -> RecordStore:
 
 async def test_add_then_get_round_trips(tmp_path: Path):
     store = _store(tmp_path)
-    rec = await store.add("the user prefers tea", kind=Kind.PREFERENCE)
+    rec = await store.add("the user prefers tea", kind=Kind.FACT)
 
     assert rec.id
-    assert rec.kind == "preference"
+    assert rec.kind == "fact"
     assert rec.superseded_by is None
     assert rec.pinned is False
 
@@ -147,10 +147,10 @@ async def test_get_missing_returns_none(tmp_path: Path):
     await store.close()
 
 
-async def test_add_defaults_to_note_kind(tmp_path: Path):
+async def test_add_defaults_to_fact_kind(tmp_path: Path):
     store = _store(tmp_path)
-    rec = await store.add("a loose note")
-    assert rec.kind == "note"
+    rec = await store.add("a loose fact")
+    assert rec.kind == "fact"
     await store.close()
 
 
@@ -229,8 +229,8 @@ async def test_add_bridges_record_into_the_vector_index(tmp_path: Path):
     assert up["source_id"] == rec.id
     assert up["content"] == "indexed record"
     assert up["metadata"]["record_id"] == rec.id
-    assert up["metadata"]["kind"] == "note"
-    assert "scope_kind" not in up["metadata"]  # scope is no longer indexed metadata
+    assert up["metadata"]["kind"] == "fact"
+    assert "scope_kind" not in up["metadata"]  # raw store writes can remain unscoped; tool/API writes apply scope
     await store.close()
 
 
@@ -306,6 +306,30 @@ async def test_delete_removes_row_and_vector(tmp_path: Path):
     await store.close()
 
 
+# --- prune (LINT structural hygiene) ------------------------------------------
+
+
+async def test_prune_hard_deletes_tombstones_and_orphan_labels(tmp_path: Path):
+    store = _store(tmp_path)  # FTS-only; vector reconcile is a no-op without an index
+    survivor = await store.add("the user lives in Munich")
+    stale = await store.add("the user lives in Berlin")
+    await store.set_labels(stale.id, ["location"])
+    await store.supersede(stale.id, survivor.id)
+
+    report = await store.prune()
+
+    assert report["records"] == 1  # the one tombstone
+    assert report["labels"] == 1  # its orphaned label
+    assert await store.get(stale.id) is None  # tombstone gone
+    assert await store.get(survivor.id) is not None  # active survivor untouched
+    assert await store.labels_of(stale.id) == []
+    assert await store.count_active() == 1
+
+    # Idempotent: a clean store prunes nothing.
+    assert (await store.prune())["records"] == 0
+    await store.close()
+
+
 # --- list(pinned_only) --------------------------------------------------------
 
 
@@ -334,6 +358,17 @@ async def test_list_excludes_superseded(tmp_path: Path):
     await store.close()
 
 
+async def test_list_limit_none_returns_all_active_records(tmp_path: Path):
+    store = _store(tmp_path, index=None)
+    rows = [await store.add(f"fact {i}", kind=Kind.FACT) for i in range(56)]
+    await store.supersede(rows[0].id, rows[-1].id)
+
+    assert len(await store.list()) == 50
+    assert len(await store.list(limit=None)) == 55
+    assert rows[0].id not in {r.id for r in await store.list(limit=None)}
+    await store.close()
+
+
 async def test_list_spans_whole_flat_pool(tmp_path: Path):
     """No scope: list returns every active record regardless of provenance."""
     store = _store(tmp_path)
@@ -348,10 +383,21 @@ async def test_list_spans_whole_flat_pool(tmp_path: Path):
 # --- kinds filtering ----------------------------------------------------------
 
 
+async def test_list_filters_by_kinds(tmp_path: Path):
+    store = _store(tmp_path)
+    fact = await store.add("the sky is blue", kind=Kind.FACT)
+    await store.add("daily receipt", kind=Kind.SOURCE)
+
+    rows = await store.list(kinds=["fact"])
+
+    assert [r.id for r in rows] == [fact.id]
+    await store.close()
+
+
 async def test_search_filters_by_kinds(tmp_path: Path):
     store = _store(tmp_path)
     fact = await store.add("the sky is blue", kind=Kind.FACT)
-    await store.add("the sky is blue", kind=Kind.NOTE)
+    await store.add("the sky is blue", kind=Kind.SOURCE)
 
     hits = await store.search("sky", kinds=["fact"])
     assert {h.id for h in hits} == {fact.id}
@@ -434,9 +480,30 @@ async def test_list_labels_counts_active_records_only(tmp_path: Path):
     await store.supersede(c.id, successor.id)  # c's labels no longer counted
 
     assert await store.list_labels() == [
-        {"label": "Dex", "count": 2},
-        {"label": "health", "count": 1},
+        {"label": "Dex", "count": 2, "kind": "meta"},
+        {"label": "health", "count": 1, "kind": "meta"},
     ]
+    await store.close()
+
+
+async def test_set_label_kind_retypes_all_rows_and_is_idempotent(tmp_path: Path):
+    store = _store(tmp_path)
+    a = await store.add("Dex slept through the night")
+    b = await store.add("Dex started crawling")
+    await store.set_labels(a.id, ["Dex", "health"])
+    await store.set_labels(b.id, ["Dex"])
+
+    n = await store.set_label_kind("Dex", "entity")
+    assert n == 2  # both record rows carrying the label retyped
+
+    by_label = {e["label"]: e["kind"] for e in await store.list_labels()}
+    assert by_label["Dex"] == "entity"
+    assert by_label["health"] == "meta"  # untouched
+
+    # Idempotent: re-applying the same kind still touches the rows but changes nothing.
+    await store.set_label_kind("Dex", "entity")
+    by_label = {e["label"]: e["kind"] for e in await store.list_labels()}
+    assert by_label["Dex"] == "entity"
     await store.close()
 
 
@@ -451,7 +518,7 @@ async def test_rename_label_unions_into_existing(tmp_path: Path):
 
     assert await store.labels_of(a.id) == ["Dex"]
     assert await store.labels_of(b.id) == ["Dex"]  # union: no duplicate row
-    assert await store.list_labels() == [{"label": "Dex", "count": 2}]
+    assert await store.list_labels() == [{"label": "Dex", "count": 2, "kind": "meta"}]
     await store.close()
 
 
