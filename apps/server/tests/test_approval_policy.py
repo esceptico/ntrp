@@ -40,3 +40,10 @@ def test_metadata_reports_approval_mode():
     metadata = registry.get_metadata()[0]
 
     assert metadata["policy"]["approval_mode"] == "always"
+
+
+def test_unimplemented_approval_modes_are_rejected():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, approval_mode="once")

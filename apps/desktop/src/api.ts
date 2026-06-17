@@ -181,7 +181,7 @@ export interface ToolPolicyMetadata {
   action: "read" | "draft" | "write" | "execute";
   scope: "internal" | "external";
   requires_approval: boolean;
-  approval_mode: "never" | "once" | "always" | "predicate";
+  approval_mode: "never" | "always";
   permissions: string[];
   timeout_seconds: number | null;
   audit: boolean;

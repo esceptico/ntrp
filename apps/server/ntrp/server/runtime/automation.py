@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from datetime import datetime
 
+from ntrp.agent_surface.schedules import compile_schedules_to_automations
 from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
@@ -77,6 +78,7 @@ class AutomationRuntime:
         )
 
         await seed_builtins(self.stores.automations)
+        await compile_schedules_to_automations(".", self.stores.automations)
         await self.automation_service.backfill_channels()
         self.scheduler.start()
         self.outbox_runtime.start()

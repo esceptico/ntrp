@@ -1,7 +1,7 @@
 import json
 
-from ntrp.events.sse import ApprovalNeededEvent, EventType, RunFinishedEvent, event_from_payload
-from ntrp.workflow.models import WorkflowState, state_for_event_type
+from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent, EventType, RunFinishedEvent, event_from_payload
+from ntrp.workflow.models import WorkflowState, state_for_event, state_for_event_type
 from ntrp.workflow.store import WorkflowStateStore
 
 
@@ -19,6 +19,12 @@ def test_sse_payload_includes_additive_workflow_state():
 
     assert payload["type"] == "approval_needed"
     assert payload["workflow_state"] == "waiting_for_approval"
+
+
+def test_workflow_state_uses_event_payload_not_only_type():
+    assert state_for_event(BackgroundTaskEvent(status="started")) == WorkflowState.WAITING_FOR_SUBAGENT
+    assert state_for_event(BackgroundTaskEvent(status="completed")) == WorkflowState.COMPLETED
+    assert state_for_event(BackgroundTaskEvent(status="failed")) == WorkflowState.FAILED
 
 
 def test_event_from_payload_ignores_workflow_state_for_compatibility():

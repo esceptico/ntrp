@@ -47,6 +47,29 @@ def test_runtime_info_endpoint_returns_manifest(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == build_runtime_info(tmp_path).model_dump(mode="json")
+    assert not (tmp_path / ".ntrp" / "manifest.json").exists()
+
+
+def test_runtime_info_endpoint_reports_active_runtime_tools(tmp_path, monkeypatch):
+    class Executor:
+        def get_tool_metadata(self):
+            return [{"name": "read_file", "policy": {"requires_approval": False}}]
+
+    class Runtime:
+        executor = Executor()
+        skill_registry = None
+        automation_service = None
+
+    monkeypatch.chdir(tmp_path)
+    test_app = FastAPI()
+    test_app.state.runtime = Runtime()
+    test_app.include_router(router)
+
+    response = TestClient(test_app).get("/runtime/info")
+
+    assert response.status_code == 200
+    assert response.json()["tools"] == [{"name": "read_file", "policy": {"requires_approval": False}}]
+    assert "RUN_STARTED" in response.json()["event_types"]
 
 
 def test_cli_info_prints_runtime_info(tmp_path, monkeypatch):
@@ -56,3 +79,4 @@ def test_cli_info_prints_runtime_info(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert "Runtime" in result.output
     assert ".ntrp/manifest.json" in result.output
+    assert not (tmp_path / ".ntrp" / "manifest.json").exists()

@@ -1,4 +1,4 @@
 async def test_basic_chat(t):
-    await t.send("Say hello.")
-    t.completed()
-    t.no_failed_actions()
+    result = await t.send("Say hello.")
+    result.completed()
+    result.no_failed_actions()

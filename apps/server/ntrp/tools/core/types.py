@@ -18,9 +18,7 @@ class ToolScope(StrEnum):
 
 class ApprovalMode(StrEnum):
     NEVER = "never"
-    ONCE = "once"
     ALWAYS = "always"
-    PREDICATE = "predicate"
 
 
 class ToolPolicy(BaseModel):
@@ -42,6 +40,8 @@ class ToolPolicy(BaseModel):
             mode = ApprovalMode.ALWAYS if self.requires_approval else ApprovalMode.NEVER
             object.__setattr__(self, "approval_mode", mode)
             return self
+        if not isinstance(self.approval_mode, ApprovalMode):
+            raise ValueError(f"Unsupported approval_mode: {self.approval_mode!r}")
         if self.requires_approval and self.approval_mode == ApprovalMode.NEVER:
             raise ValueError("approval_mode='never' cannot downgrade requires_approval=True")
         requires = self.approval_mode != ApprovalMode.NEVER

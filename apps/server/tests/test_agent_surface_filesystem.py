@@ -61,29 +61,30 @@ async def test_compile_schedules_to_automation_rows(tmp_path, automation_store):
     assert task is not None
     assert task.name == "daily_digest"
     assert task.description == "Prepare digest."
-    assert task.handler == "filesystem_schedule"
+    assert task.handler is None
     assert task.triggers[0].params() == {"at": "09:00", "days": "daily"}
 
 
-def test_dev_schedule_dispatch_uses_runtime_dispatcher():
+def test_dev_schedule_dispatch_uses_automation_service():
     calls = []
 
-    async def dispatch(session_id, message, client_id=None, skip_approvals=False):
-        calls.append((session_id, message, client_id, skip_approvals))
-        return "run-1"
+    class AutomationService:
+        async def get(self, task_id):
+            calls.append(("get", task_id))
+            return object()
+
+        async def run_now(self, task_id):
+            calls.append(("run_now", task_id))
 
     class Runtime:
-        dispatch_session_message = staticmethod(dispatch)
+        automation_service = AutomationService()
 
     app = FastAPI()
     app.state.runtime = Runtime()
     app.include_router(dev_runtime_router)
 
-    response = TestClient(app).post(
-        "/runtime/dev/schedules/daily_digest/dispatch",
-        json={"prompt": "Prepare digest.", "session_id": "sess-1"},
-    )
+    response = TestClient(app).post("/runtime/dev/schedules/daily_digest/dispatch")
 
     assert response.status_code == 200
-    assert response.json() == {"schedule_id": "daily_digest", "session_id": "sess-1", "run_id": "run-1"}
-    assert calls == [("sess-1", "Prepare digest.", "schedule:daily_digest", False)]
+    assert response.json() == {"schedule_id": "daily_digest", "task_id": "fs:daily_digest", "status": "queued"}
+    assert calls == [("get", "fs:daily_digest"), ("run_now", "fs:daily_digest")]

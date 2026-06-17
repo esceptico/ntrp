@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from evals.assertions import EventAssertions
 from evals.client import parse_sse_events
 from evals.report import EventEvalResult
+from evals.run import run_event_case
 from evals.runtime_case import RuntimeCase
 
 
@@ -51,6 +52,21 @@ async def test_runtime_case_sends_prompt_and_captures_events():
     assertions = await case.send("Find Eve thread")
 
     assertions.completed()
+
+
+@pytest.mark.asyncio
+async def test_run_event_case_executes_case_against_runtime_case():
+    async def send(prompt):
+        assert prompt == "Say hello."
+        return [{"type": "RUN_FINISHED"}]
+
+    async def case(t):
+        result = await t.send("Say hello.")
+        result.completed()
+
+    result = await run_event_case("basic_chat", case, RuntimeCase(send))
+
+    assert result.passed is True
 
 
 def test_event_eval_result_serializes_summary():

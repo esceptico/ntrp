@@ -59,7 +59,7 @@ async def compile_schedules_to_automations(
             last_result=None,
             running_since=None,
             auto_approve=False,
-            handler="filesystem_schedule",
+            handler=None,
         )
         await store.save(automation)
         compiled.append(task_id)

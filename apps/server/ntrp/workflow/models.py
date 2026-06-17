@@ -1,6 +1,10 @@
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from ntrp.events.sse import EventType
+
+if TYPE_CHECKING:
+    from ntrp.events.sse import SSEEvent
 
 
 class WorkflowState(StrEnum):
@@ -31,3 +35,22 @@ def state_for_event_type(event_type: EventType | str) -> WorkflowState | None:
     if raw == EventType.RUN_CANCELLED.value:
         return WorkflowState.CANCELLED
     return None
+
+
+def state_for_event(event: "SSEEvent") -> WorkflowState | None:
+    raw = event.type.value
+    if raw == EventType.BACKGROUND_TASK.value:
+        status = getattr(event, "status", "")
+        if status in {"completed"}:
+            return WorkflowState.COMPLETED
+        if status in {"failed"}:
+            return WorkflowState.FAILED
+        if status in {"cancelled", "interrupted"}:
+            return WorkflowState.CANCELLED
+        return WorkflowState.WAITING_FOR_SUBAGENT
+    if raw == EventType.TASK_FINISHED.value:
+        status = getattr(event, "status", "")
+        if status == "failed":
+            return WorkflowState.FAILED
+        return WorkflowState.COMPLETED
+    return state_for_event_type(event.type)

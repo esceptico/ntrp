@@ -125,9 +125,9 @@ class SSEEvent:
     def to_sse(self) -> dict:
         data = asdict(self)
         data["type"] = self.type.value
-        from ntrp.workflow.models import state_for_event_type
+        from ntrp.workflow.models import state_for_event
 
-        state = state_for_event_type(self.type)
+        state = state_for_event(self)
         if state is not None:
             data["workflow_state"] = state.value
         return {"event": self.type.value, "data": json.dumps(data)}

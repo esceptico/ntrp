@@ -24,8 +24,8 @@ class AgentSurfaceInfo(BaseModel):
 class AgentSurfaceManifest(BaseModel):
     version: str = "1"
     agent_surface: AgentSurfaceInfo = Field(default_factory=AgentSurfaceInfo)
-    tools: list[SurfaceCapability] = Field(default_factory=list)
-    deferred_tool_groups: list[SurfaceCapability] = Field(default_factory=list)
+    tools: list[dict] = Field(default_factory=list)
+    deferred_tool_groups: list[dict] = Field(default_factory=list)
     skills: list[SurfaceCapability] = Field(default_factory=list)
     automations: list[SurfaceCapability] = Field(default_factory=list)
     schedules: list[SurfaceCapability] = Field(default_factory=list)
