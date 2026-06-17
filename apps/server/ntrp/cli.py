@@ -1,4 +1,5 @@
 import asyncio
+import json
 import socket
 
 import click
@@ -49,6 +50,28 @@ def status():
     console.print(f"Chat model: {config.chat_model or '[dim]not set[/dim]'}")
     console.print(f"Memory model: {config.memory_model or '[dim]not set[/dim]'}")
     console.print(f"Embedding model: {config.embedding_model or '[dim]not set[/dim]'}")
+
+
+@main.command("info")
+@click.option("--json", "as_json", is_flag=True, help="Print raw runtime info JSON")
+def info(as_json: bool):
+    """Show the active runtime surface."""
+    from ntrp.agent_surface.runtime_info import build_runtime_info
+
+    data = build_runtime_info()
+    dumped = data.model_dump(mode="json")
+    if as_json:
+        console.print(json.dumps(dumped, indent=2, sort_keys=True))
+        return
+    console.print("[bold]Runtime[/bold]")
+    console.print(f"Version: [cyan]{data.version}[/cyan]")
+    console.print(f"Agent root: [cyan]{data.agent_surface.root}[/cyan]")
+    console.print(f"Manifest: [cyan]{data.agent_surface.manifest_path}[/cyan]")
+    console.print(f"Tools: {len(data.tools)}")
+    console.print(f"Skills: {len(data.skills)}")
+    console.print(f"Schedules: {len(data.schedules)}")
+    if data.warnings:
+        console.print(f"Warnings: {len(data.warnings)}")
 
 
 def _rotate_api_key(config, *, label: str) -> str:

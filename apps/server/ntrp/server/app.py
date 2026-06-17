@@ -25,6 +25,7 @@ from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.memory import router as memory_router
 from ntrp.server.routers.ops import router as ops_router
 from ntrp.server.routers.providers import router as providers_router
+from ntrp.server.routers.runtime_info import router as runtime_info_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.setup import router as setup_router
@@ -259,6 +260,7 @@ app.include_router(chat_router)
 app.include_router(context_router)
 app.include_router(ops_router)
 app.include_router(providers_router)
+app.include_router(runtime_info_router)
 app.include_router(setup_router)
 app.include_router(session_router)
 app.include_router(settings_router)
