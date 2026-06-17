@@ -125,6 +125,11 @@ class SSEEvent:
     def to_sse(self) -> dict:
         data = asdict(self)
         data["type"] = self.type.value
+        from ntrp.workflow.models import state_for_event_type
+
+        state = state_for_event_type(self.type)
+        if state is not None:
+            data["workflow_state"] = state.value
         return {"event": self.type.value, "data": json.dumps(data)}
 
     def to_sse_string(self) -> str:
@@ -646,7 +651,7 @@ def event_from_payload(payload: dict) -> SSEEvent:
     cls = _EVENT_CLASSES.get(event_type)
     if cls is None:
         raise ValueError(f"Unknown SSE event type: {event_type}")
-    kwargs = {key: value for key, value in payload.items() if key not in {"type", "seq", "session_id"}}
+    kwargs = {key: value for key, value in payload.items() if key not in {"type", "seq", "session_id", "workflow_state"}}
     return cls(**kwargs)
 
 
