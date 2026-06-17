@@ -4,7 +4,7 @@ from typing import Any, Self
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.middleware import DEFAULT_TOOL_MIDDLEWARE, ToolCall, ToolMiddleware
-from ntrp.tools.core.types import ToolAction, ToolOverrideDecision, ToolPolicy
+from ntrp.tools.core.types import ApprovalMode, ToolAction, ToolOverrideDecision, ToolPolicy
 
 
 def tool_changes_state(tool: Tool) -> bool:
@@ -108,10 +108,10 @@ class ToolRegistry:
     def _effective_tool(self, name: str, tool: Tool) -> Tool:
         override = self._tool_overrides.get(name)
         if override == ToolOverrideDecision.APPROVE:
-            policy = tool.policy.model_copy(update={"requires_approval": False})
+            policy = tool.policy.model_copy(update={"requires_approval": False, "approval_mode": ApprovalMode.NEVER})
             return _PolicyOverrideTool(tool, policy)
         if override == ToolOverrideDecision.ASK:
-            policy = tool.policy.model_copy(update={"requires_approval": True})
+            policy = tool.policy.model_copy(update={"requires_approval": True, "approval_mode": ApprovalMode.ALWAYS})
             return _PolicyOverrideTool(tool, policy)
         return tool
 
