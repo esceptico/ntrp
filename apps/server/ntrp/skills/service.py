@@ -19,6 +19,7 @@ _SKILL_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,47}$")
 def get_skills_dirs() -> list[tuple[Path, str]]:
     return [
         (BUILTIN_SKILLS_DIR, "builtin"),
+        (Path.cwd() / "agent" / "skills", "agent"),
         (Path.cwd() / ".skills", "project"),
         (NTRP_DIR / "skills", "global"),
     ]
