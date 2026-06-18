@@ -8,6 +8,7 @@ import { Markdown } from "../Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "../wikilink";
 import { ICON } from "../../lib/icons";
 import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, SPRING_TAP } from "../../lib/tokens/motion";
+import { TabPanels } from "../ui/TabPanels";
 import {
   listMemoryArtifacts,
   readMemoryArtifact,
@@ -115,6 +116,22 @@ function collectFolderPaths(nodes: TreeNode[]): string[] {
 function countFiles(node: TreeNode): number {
   if (node.kind === "file") return 1;
   return node.children.reduce((sum, child) => sum + countFiles(child), 0);
+}
+
+/** File-leaf paths in the order the tree renders them (depth-first, already
+ *  directory-sorted). Drives the detail-pane slide direction so it matches the
+ *  visible list position — selecting a note further down slides in from the
+ *  right, further up from the left. */
+function flattenTreeFiles(nodes: TreeNode[]): string[] {
+  const out: string[] = [];
+  const walk = (ns: TreeNode[]) => {
+    for (const n of ns) {
+      if (n.kind === "file") out.push(n.path);
+      else walk(n.children);
+    }
+  };
+  walk(nodes);
+  return out;
 }
 
 function searchMatches(a: MemoryArtifact, q: string) {
@@ -324,6 +341,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   const [serverQuery, setServerQuery] = useState("");
   const [recordsRefreshKey, setRecordsRefreshKey] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [filesDirection, setFilesDirection] = useState(1);
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -511,6 +529,16 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       .finally(() => setRebuilding(false));
   };
 
+  const filesOrder = useMemo(
+    () => (flatMatches ? flatMatches.map((a) => a.path) : flattenTreeFiles(tree)),
+    [flatMatches, tree],
+  );
+  const selectFile = (path: string) => {
+    const from = filesOrder.indexOf(selectedMeta?.path ?? selected ?? "");
+    const to = filesOrder.indexOf(path);
+    if (from !== -1 && to !== -1 && from !== to) setFilesDirection(to > from ? 1 : -1);
+    setSelected(path);
+  };
   const riseTransition = reduce ? { duration: 0.1 } : { duration: MOTION.panel, ease: EASE_OUT };
 
   // ─── Mode toggle (shared by both panes' headers) ────────────────────
@@ -570,7 +598,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
           ) : (
             <div className="flex flex-col gap-px">
               {flatMatches.map((a) => (
-                <FlatRow key={a.path} a={a} active={selectedMeta?.path === a.path} onSelect={setSelected} />
+                <FlatRow key={a.path} a={a} active={selectedMeta?.path === a.path} onSelect={selectFile} />
               ))}
             </div>
           )
@@ -596,7 +624,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
                 expanded={expanded}
                 onToggle={toggleExpanded}
                 selectedPath={selectedMeta?.path ?? null}
-                onSelect={setSelected}
+                onSelect={selectFile}
               />
             ))}
           </div>
@@ -708,6 +736,11 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       </DetailPlaceholder>
     )
   ) : (
+    <TabPanels
+      value={active.path}
+      direction={filesDirection}
+      className="h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden"
+    >
     <DetailShell
       header={
         <div className="flex items-start justify-between gap-3">
@@ -719,12 +752,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         </div>
       }
       body={
-        <motion.div
-          key={active.path}
-          initial={reduce ? false : RISE_IN}
-          animate={RISE_SETTLED}
-          transition={riseTransition}
-        >
+        <>
           {active.readonly_reason && (
             <div className="mb-4 rounded-[10px] bg-surface-soft px-3 py-2 text-sm text-muted">
               {active.readonly_reason}
@@ -743,7 +771,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
               <Markdown content={active.content} className="max-w-none" />
             </WikiLinkContext.Provider>
           )}
-        </motion.div>
+        </>
       }
       meta={
         <MetaGrid
@@ -769,6 +797,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         ) : null
       }
     />
+    </TabPanels>
   );
 
   // ─── Records detail pane ────────────────────────────────────────────

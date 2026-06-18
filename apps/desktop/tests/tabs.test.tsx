@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Tab, Tabs } from "../src/components/ui/Tabs.tsx";
+import { SLIDE_PAGE_VARIANTS } from "../src/components/ui/TabPanels.tsx";
 
 test("renders a button per tab and marks the active one", () => {
   const html = renderToStaticMarkup(
@@ -41,4 +42,11 @@ test("pill variant renders a pill indicator with the supplied indicator class", 
   );
   expect(html).toContain('data-tab-indicator="pill"');
   expect(html).toContain("indicator-probe");
+});
+
+test("page panel variant matches settings-style directional swaps", () => {
+  expect(SLIDE_PAGE_VARIANTS.exit(-1)).toMatchObject({ x: 16 });
+  expect(SLIDE_PAGE_VARIANTS.enter(-1)).toMatchObject({ x: -16 });
+  expect(SLIDE_PAGE_VARIANTS.exit(1)).toMatchObject({ x: -16 });
+  expect(SLIDE_PAGE_VARIANTS.enter(1)).toMatchObject({ x: 16 });
 });
