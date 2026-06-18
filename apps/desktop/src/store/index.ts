@@ -77,7 +77,6 @@ export type {
   CachedSessionState,
   ImageBlock,
   MarkdownViewState,
-  PaletteId,
   Prefs,
   QueuedMessage,
   QueuedMessageStatus,

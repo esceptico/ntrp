@@ -10,13 +10,10 @@ export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 const PREFS_KEY = "ntrp.desktop.prefs";
 const PREFS_VERSION = 9;
 
-const RETIRED_PALETTES = new Set(["vercel", "github", "linear", "catppuccin"]);
-
 export const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
   theme: "system",
-  palette: "notion",
   sidebarGroupBy: "project",
   sidebarUnreadOnly: false,
   sidebarChannelsOnly: false,
@@ -30,6 +27,7 @@ export const DEFAULT_PREFS: Prefs = {
 
 type LegacyPrefs = Partial<Prefs> & {
   prefsVersion?: number;
+  palette?: unknown;
   material?: unknown;
   showReasoningInChat?: unknown;
 };
@@ -39,19 +37,7 @@ export function loadPrefs(): Prefs {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw) as LegacyPrefs;
-    const ver = parsed.prefsVersion ?? 1;
-    // One-time migration: bump anyone still on the legacy "warm" default
-    // to the current default. Users who explicitly want warm can flip
-    // back from Settings → Appearance.
-    if (ver < 2 && parsed.palette === "warm") {
-      parsed.palette = DEFAULT_PREFS.palette;
-    }
-    // v5 → v6: palette list trimmed from 8 → 4 (vercel/github/linear/
-    // catppuccin retired). Migrate anyone parked on a dropped palette
-    // back to the current default.
-    if (ver < 6 && parsed.palette && RETIRED_PALETTES.has(parsed.palette)) {
-      parsed.palette = DEFAULT_PREFS.palette;
-    }
+    Reflect.deleteProperty(parsed, "palette");
     Reflect.deleteProperty(parsed, "material");
     Reflect.deleteProperty(parsed, "glass");
     Reflect.deleteProperty(parsed, "showReasoningInChat");

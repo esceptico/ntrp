@@ -1,10 +1,7 @@
 import { useEffect } from "react";
-import { useStore, type PaletteId, type ThemeChoice } from "../store";
-import { PALETTES } from "./palettes";
-import { applyTokens } from "./tokens/color";
+import { useStore, type ThemeChoice } from "../store";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
-const PALETTE_CLASSES = PALETTES.map((p) => `palette-${p.id}`);
 
 function resolveDark(choice: ThemeChoice): boolean {
   if (choice === "dark") return true;
@@ -12,32 +9,24 @@ function resolveDark(choice: ThemeChoice): boolean {
   return window.matchMedia(DARK_QUERY).matches;
 }
 
-function apply(choice: ThemeChoice, palette: PaletteId): void {
+function applyDarkMode(choice: ThemeChoice): void {
   const root = document.documentElement;
-  const isDark = resolveDark(choice);
-  if (isDark) root.classList.add("dark");
+  if (resolveDark(choice)) root.classList.add("dark");
   else root.classList.remove("dark");
-  // Drop any other palette- class first so we don't accumulate stale ones.
-  for (const cls of PALETTE_CLASSES) root.classList.remove(cls);
-  root.classList.add(`palette-${palette}`);
-  // Phase 4: write OKLCH neutral/accent ramps to :root so consumers can
-  // reach them via `var(--color-neutral-N)` / `var(--color-accent-N)`.
-  applyTokens(palette, isDark ? "dark" : "light");
 }
 
-/** Effect that keeps the <html> `dark` + `palette-<id>` classes in sync
- *  with the user's prefs. When theme is "system", also subscribes to
- *  OS-level changes so the app flips automatically without a reload. */
+/** Effect that keeps the <html> `dark` class in sync with the user's
+ *  prefs. When theme is "system", also subscribes to OS-level changes
+ *  so the app flips automatically without a reload. */
 export function useThemeEffect(): void {
   const theme = useStore((s) => s.prefs.theme);
-  const palette = useStore((s) => s.prefs.palette);
 
   useEffect(() => {
-    apply(theme, palette);
+    applyDarkMode(theme);
     if (theme !== "system") return;
     const mql = window.matchMedia(DARK_QUERY);
-    const onChange = () => apply("system", palette);
+    const onChange = () => applyDarkMode("system");
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
-  }, [theme, palette]);
+  }, [theme]);
 }

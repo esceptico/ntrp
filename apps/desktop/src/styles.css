@@ -8,7 +8,7 @@
    maintaining a parallel `.dark .foo` selector block. */
 @custom-variant dark (&:where(:root.dark, :root.dark *));
 
-/* ─── Theme tokens (Flexoki-flavored) ──────────────────────── */
+/* ─── Theme tokens (Geist) ─────────────────────────────────── */
 @theme {
   --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont,
     "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -36,51 +36,43 @@
   --text-xl: 18px;
   --text-2xl: 20px;
 
-  /* Light-mode neutrals. The chat scroll bg (`--color-bg`) is a
-     subtle warm cream; content surfaces stay brighter so message
-     content / cards have max contrast for reading. */
-  /* Color tokens reference the OKLCH ramp vars written by applyTokens()
-     at runtime (see lib/tokens/color.ts + lib/theme.ts). Hex fallbacks
-     are the warm-palette light values — used before JS hydrates and as
-     a safety net if the ramp vars aren't set. Inside @theme so Tailwind
-     v4 generates `bg-accent`, `text-accent`, etc. as var() references
-     instead of baking in static colors. */
-  --color-bg: var(--color-neutral-1, #faf9f3);
-  --color-bg-main: var(--color-neutral-1, #ffffff);
-  --color-surface: var(--color-neutral-2, #ffffff);
-  --color-surface-soft: var(--color-neutral-3, #f3f3f2);
-  --color-surface-sunken: var(--color-neutral-4, #ebebea);
-  --color-code-bg: var(--color-neutral-2, #f5f5f4);
+  /* Geist design system color tokens. Static hex values — no runtime
+     ramp vars. Inside @theme so Tailwind v4 generates `bg-accent`,
+     `text-accent`, etc. as var() references. */
+  --color-bg: #ffffff;
+  --color-bg-main: #ffffff;
+  --color-surface: #fafafa;
+  --color-surface-soft: #f2f2f2;
+  --color-surface-sunken: #ebebeb;
+  --color-code-bg: #fafafa;
 
-  --color-line: var(--color-neutral-5, #e8e8e7);
-  --color-line-soft: var(--color-neutral-4, #f0f0ef);
-  --color-line-strong: var(--color-neutral-7, #d6d6d4);
+  --color-line: #e6e6e6;
+  --color-line-soft: #ebebeb;
+  --color-line-strong: #d6d6d6;
 
-  --color-ink: var(--color-neutral-12, #1a1a1a);
-  --color-ink-soft: var(--color-neutral-11, #3a3a3a);
-  --color-on-ink: var(--color-neutral-1, #f5f5f5);
-  --color-muted: var(--color-neutral-11, #6e6e6e);
-  --color-faint: var(--color-neutral-9, #9d9d9d);
-  --color-whisper: var(--color-neutral-8, #c0c0c0);
+  --color-ink: #171717;
+  --color-ink-soft: #3d3d3d;
+  --color-on-ink: #f5f5f5;
+  --color-muted: #6e6e6e;
+  --color-faint: #8f8f8f;
+  --color-whisper: #c2c2c2;
 
-  --color-accent: var(--color-accent-9, #b85c1f);
-  --color-accent-soft: var(--color-accent-3, rgba(184, 92, 31, 0.1));
-  --color-accent-strong: var(--color-accent-11, #9c4d18);
+  --color-accent: #0070f3;
+  --color-accent-soft: rgba(0,112,243,0.1);
+  --color-accent-strong: #0060d1;
 
-  --color-ok: #4f8a3a;
-  --color-ok-soft: rgba(79, 138, 58, 0.12);
-  --color-warn: #c46a14;
-  --color-warn-soft: rgba(196, 106, 20, 0.1);
-  --color-bad: #b8442b;
-  --color-bad-soft: rgba(184, 68, 43, 0.08);
-  --color-info: #3d6e9c;
+  --color-ok: #45a557;
+  --color-ok-soft: rgba(69,165,87,0.12);
+  --color-warn: #f5a623;
+  --color-warn-soft: rgba(245,166,35,0.1);
+  --color-bad: #e5484d;
+  --color-bad-soft: rgba(229,72,77,0.08);
+  --color-info: #0070f3;
 
-  /* The leading `0 0 0 0.5px` is a sub-pixel inner ring — gives the
-     edge definition that reads as "macOS surface" without needing a
-     visible border. Apple uses it on every elevated surface. */
-  --shadow-sm: 0 0 0 0.5px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 0 0 0.5px rgba(0, 0, 0, 0.045), 0 3px 14px rgba(0, 0, 0, 0.045), 0 10px 34px rgba(0, 0, 0, 0.028);
-  --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 3px 12px rgba(0, 0, 0, 0.04), 0 12px 34px rgba(0, 0, 0, 0.065), 0 22px 56px rgba(0, 0, 0, 0.035);
+  /* Geist shadow tokens. */
+  --shadow-sm: 0 2px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.04), 0 8px 16px -4px rgba(0,0,0,0.06), 0 16px 24px -8px rgba(0,0,0,0.06);
+  --shadow-pop: 0 4px 6px -1px rgba(0,0,0,0.04), 0 8px 16px -4px rgba(0,0,0,0.06), 0 24px 32px -8px rgba(0,0,0,0.06);
 
   --animate-roll-in: rollIn var(--duration-palette) var(--ease-out-soft);
   --animate-fade-in: fadeIn var(--duration-trace) var(--ease-out-soft);
@@ -91,15 +83,16 @@
      Registered in Tailwind's --duration-* namespace so they're usable as
      `duration-fast`, `duration-route`, etc. fast/check is the fastest
      tier; route is reserved for full pane slides and is the slowest. */
-  --duration-fast: 100ms;
-  --duration-check: 120ms;
-  --duration-row: 140ms;
-  --duration-palette: 180ms;
+  --duration-fast: 150ms;
+  --duration-check: 150ms;
+  --duration-row: 150ms;
+  --duration-palette: 200ms;
   --duration-trace: 200ms;
-  --duration-panel: 220ms;
-  --duration-route: 360ms;
+  --duration-panel: 200ms;
+  --duration-route: 300ms;
 
   --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-geist: cubic-bezier(0.175, 0.885, 0.32, 1.1);
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* CSS mirrors of the remaining motion.ts eases — keep in sync. */
   --ease-hover: cubic-bezier(0.16, 1, 0.3, 1);
@@ -184,7 +177,7 @@
    while data is in-flight. The 1.4s sweep cadence matches Vercel-like
    solid panel skeletons. */
 .skeleton {
-  background-color: var(--color-neutral-3);
+  background-color: var(--color-surface-soft);
   border-radius: 6px;
   position: relative;
   overflow: hidden;
@@ -216,64 +209,28 @@
 
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
-  /* ─── Legacy → ramp aliases ─────────────────────────────────
-     The OKLCH `--color-neutral-{1..12}` / `--color-accent-{1..12}` vars
-     are written to :root by `applyTokens(palette, theme)` in
-     lib/theme.ts on every palette/theme change. These aliases let the
-     existing `--color-bg`, `--color-line`, … consumers keep working
-     while the ramps are the canonical source of color across every
-     palette × theme. The per-palette `:root.palette-*` blocks that
-     once overrode these were retired once all four kept palettes
-     produced matching visuals from the OKLCH generator alone.
+  /* Geist light-mode semantic aliases (static). */
+  --color-bg: #ffffff;
+  --color-bg-main: #ffffff;
+  --color-surface: #fafafa;
+  --color-surface-soft: #f2f2f2;
+  --color-surface-sunken: #ebebeb;
+  --color-code-bg: #fafafa;
+  --color-line: #e6e6e6;
+  --color-line-soft: #ebebeb;
+  --color-line-strong: #d6d6d6;
+  --color-ink: #171717;
+  --color-ink-soft: #3d3d3d;
+  --color-on-ink: #f5f5f5;
+  --color-muted: #6e6e6e;
+  --color-faint: #8f8f8f;
+  --color-whisper: #c2c2c2;
+  --color-accent: #0070f3;
+  --color-accent-soft: rgba(0,112,243,0.1);
+  --color-accent-strong: #0060d1;
 
-     Step picks follow the Radix scale documented in
-     lib/tokens/color.ts. Two non-obvious choices, kept for visual
-     parity with the current warm defaults:
-       --color-line       → neutral-5 (Radix step 6 reads too dark
-                            against the cream bg we ship today).
-       --color-line-soft  → neutral-4 (current `#f0f0ef` sits between
-                            step 3 and step 5; step 4 is closest).
-       --color-line-strong → neutral-7. */
-  --color-bg: var(--color-neutral-1);
-  --color-bg-main: var(--color-neutral-1);
-  --color-surface: var(--color-neutral-2);
-  --color-surface-soft: var(--color-neutral-3);
-  --color-surface-sunken: var(--color-neutral-4);
-  --color-code-bg: var(--color-neutral-2);
-  --color-line-soft: var(--color-neutral-4);
-  --color-line: var(--color-neutral-5);
-  --color-line-strong: var(--color-neutral-7);
-  --color-faint: var(--color-neutral-9);
-  --color-muted: var(--color-neutral-11);
-  --color-ink-soft: var(--color-neutral-11);
-  --color-ink: var(--color-neutral-12);
-  --color-on-ink: var(--color-neutral-1);
-  --color-whisper: var(--color-neutral-8);
-  --color-accent: var(--color-accent-9);
-  --color-accent-soft: var(--color-accent-3);
-  --color-accent-strong: var(--color-accent-11);
-
-  /* ─── Design-system tokens (Phase 1) ────────────────────────
-     Added by docs/superpowers/specs/2026-05-17-design-system-tokens-design.md.
-     No consumers yet — Phase 3 sweeps inline shadow/ring strings to these.
-
-     Ring alphas (ink-derived on light, white-derived on dark): */
-  --ring-light: rgba(20, 24, 28, 0.10);
-  --ring-light-soft: rgba(20, 24, 28, 0.06);
-  --ring-light-strong: rgba(20, 24, 28, 0.14);
-  --ring-dark: rgba(255, 255, 255, 0.08);
-  --ring-dark-soft: rgba(255, 255, 255, 0.05);
-  --ring-dark-strong: rgba(255, 255, 255, 0.14);
-
-  /* Linen shadow recipes — stacked Tailwind pattern, light defaults. */
-  --shadow-linen-rest:    0 1px 2px rgb(0 0 0 / .04),  0 2px 8px rgb(0 0 0 / .06);
-  --shadow-linen-hover:   0 1px 3px rgb(0 0 0 / .05),  0 4px 12px rgb(0 0 0 / .08);
-  --shadow-linen-popover: 0 2px 8px rgb(0 0 0 / .04),  0 8px 22px rgb(0 0 0 / .06);
-  --shadow-linen-modal:   0 3px 10px rgb(0 0 0 / .045), 0 14px 36px rgb(0 0 0 / .07);
-
-  /* Focus ring — drives :focus-visible across interactive primitives in Phase 3. */
-  --focus-ring: 0 0 0 2px var(--color-accent-soft),
-                0 0 0 3px var(--color-accent);
+  /* Focus ring — Geist: bg-gap + accent ring. */
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #006bff;
 
   color-scheme: light;
   font-feature-settings: "ss01", "cv11";
@@ -281,16 +238,6 @@
   -moz-osx-font-smoothing: grayscale;
 }
 :root.dark {
-  /* Dark-mode overrides for the design-system tokens above. */
-  --ring-light: rgba(255, 255, 255, 0.08);
-  --ring-light-soft: rgba(255, 255, 255, 0.05);
-  --ring-light-strong: rgba(255, 255, 255, 0.14);
-
-  --shadow-linen-rest:    0 1px 3px rgba(0,0,0,.35);
-  --shadow-linen-hover:   0 1px 3px rgba(0,0,0,.4),    0 4px 10px rgba(0,0,0,.25);
-  --shadow-linen-popover: 0 3px 10px rgba(0,0,0,.26),  0 10px 26px rgba(0,0,0,.18);
-  --shadow-linen-modal:   0 4px 14px rgba(0,0,0,.28),  0 16px 40px rgba(0,0,0,.20);
-
   color-scheme: dark;
 }
 
@@ -314,7 +261,7 @@ button:focus-visible,
 .input-field {
   height: 2rem;
   padding-inline: 0.625rem;
-  border-radius: 9px;
+  border-radius: 6px;
   border: 1px solid var(--color-line);
   background: var(--color-surface);
   color: var(--color-ink);
@@ -430,7 +377,7 @@ html[data-fullscreen="true"] .sidebar-toggle { left: 18px; }
 .sidebar-toggle *,
 .right-sidebar-toggle * { -webkit-app-region: no-drag; }
 
-::selection { background: rgba(184, 92, 31, 0.18); }
+::selection { background: rgba(0, 112, 243, 0.18); }
 
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
@@ -466,7 +413,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 .settings-sidebar-card {
-  --surface-radius: 10px;
+  --surface-radius: 12px;
 }
 
 .chat-header { -webkit-app-region: drag; }
@@ -895,31 +842,29 @@ button.app-row:not(:disabled):active,
   background: var(--color-surface);
   border-radius: var(--surface-radius);
   box-shadow:
-    var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-pop),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
   transition: box-shadow var(--duration-row) var(--ease-hover);
 }
 :root.dark .surface-panel,
 .surface-panel[data-tone="dark"] {
   background: var(--color-surface);
   box-shadow:
-    var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-dark);
+    var(--shadow-pop),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 /* Small surfaces — list-item cards (.surface-radius-sm) inside
-   modals must NOT inherit the outer slab's modal-tier shadow. The big
-   shadow extends past the scroll viewport and clips. Rest-tier sits
-   well inside any reasonable container padding. */
+   modals must NOT inherit the outer slab's modal-tier shadow. */
 .surface-panel.surface-radius-sm {
   box-shadow:
-    var(--shadow-linen-rest),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-sm),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 :root.dark .surface-panel.surface-radius-sm,
 .surface-panel.surface-radius-sm[data-tone="dark"] {
   box-shadow:
-    var(--shadow-linen-rest),
-    inset 0 0 0 1px var(--ring-dark);
+    var(--shadow-sm),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 /* SegmentedControl — self-contained segmented control. Variables are
    consumed by the component's inline styles; this block just resolves
@@ -1043,10 +988,10 @@ button.app-row:not(:disabled):active,
   --gs-knob-bg: #ffffff;
   --gs-knob-border: transparent;
 }
-.surface-radius-sm { --surface-radius: 10px; }  /* cards in lists (automation cards, etc.) */
-.surface-radius-md { --surface-radius: 14px; }  /* panels: composer, modals, popovers, sidebars */
-.surface-radius-lg { --surface-radius: 18px; }  /* message bubbles, hero-ish surfaces */
-.surface-radius-pill { --surface-radius: 999px; }
+.surface-radius-sm { --surface-radius: 6px; }   /* controls, small cards */
+.surface-radius-md { --surface-radius: 12px; }  /* menus, modals, popovers */
+.surface-radius-lg { --surface-radius: 16px; }  /* fullscreen panels */
+.surface-radius-pill { --surface-radius: 9999px; }
 
 /* ─── Tokenized surface utilities (Phase 3) ──────────────────
    Named handles for recurring inline patterns. Each one wraps the
@@ -1059,12 +1004,12 @@ button.app-row:not(:disabled):active,
 .surface-rail {
   border-radius: 12px;
   background: color-mix(in oklab, var(--color-bg-main) 30%, transparent);
-  box-shadow: inset 0 0 0 1px var(--ring-light-soft);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
 :root.dark .surface-rail {
   background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, white 7%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
 /* Popover surfaces — floating menus / dropdowns.
@@ -1072,60 +1017,58 @@ button.app-row:not(:disabled):active,
    Combined with `.surface-panel`: downshifts the modal-tier shadow to
    the popover tier, closer to the content with a smaller spread. */
 .surface-popover:not(.surface-panel) {
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--color-surface);
   box-shadow:
-    var(--shadow-linen-popover),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 .surface-panel.surface-popover {
-  --surface-radius: 10px;
+  --surface-radius: 12px;
   background: var(--color-surface);
   box-shadow:
-    var(--shadow-linen-popover),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 :root.dark .surface-panel.surface-popover,
 .surface-panel.surface-popover[data-tone="dark"] {
   box-shadow:
-    var(--shadow-linen-popover),
-    inset 0 0 0 1px var(--ring-dark);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 /* Cards — resting state with subtle lift; hovering deepens the shadow. */
 .surface-card {
   border-radius: 12px;
   background: var(--color-surface);
   box-shadow:
-    var(--shadow-linen-rest),
-    inset 0 0 0 1px var(--ring-light-soft);
+    var(--shadow-sm),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.04);
   transition: box-shadow var(--duration-row) var(--ease-hover);
 }
 
 .surface-card:hover {
   box-shadow:
-    var(--shadow-linen-hover),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 :root.dark .surface-card:hover {
   box-shadow:
-    var(--shadow-linen-hover),
-    inset 0 0 0 1px var(--ring-dark);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* Press — shadow stays at the hover tier (cards "settle" but
-   keep the same depth band — adequate signal without inventing a new
-   tier). Transition handled by the base .surface-card rule. */
+/* Press — shadow stays at the hover tier. */
 .surface-card:active,
 .surface-card[aria-pressed="true"] {
   box-shadow:
-    var(--shadow-linen-hover),
-    inset 0 0 0 1px var(--ring-light);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 :root.dark .surface-card:active,
 :root.dark .surface-card[aria-pressed="true"] {
   box-shadow:
-    var(--shadow-linen-hover),
-    inset 0 0 0 1px var(--ring-dark);
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 }
 /* Composer focus state: strengthen the panel ring without changing layout.
@@ -1138,13 +1081,13 @@ button.app-row:not(:disabled):active,
   outline: var(--composer-focus-spread) solid var(--color-accent-soft);
   outline-offset: 0;
   box-shadow:
-    var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-light-strong);
+    var(--shadow-pop),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.10);
 }
 :root.dark .composer-card.surface-panel:focus-within {
   box-shadow:
-    var(--shadow-linen-modal),
-    inset 0 0 0 1px var(--ring-dark-strong);
+    var(--shadow-pop),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .composer-wrap {
   container-type: inline-size;
@@ -1513,48 +1456,40 @@ main[data-has-approval="false"] .scroll-messages {
   transition-delay: 0ms !important;
 }
 
-/* ─── Dark theme ─────────────────────────────────────────────
-   Applied when the <html> element has class `dark`. The
-   `useThemeEffect` hook (lib/theme.ts) toggles this based on the
-   user's theme choice (Light / Dark / System) — for "System" it
-   mirrors `prefers-color-scheme` and listens for OS changes. */
+/* ─── Dark theme (Geist) ────────────────────────────────────
+   Applied when the <html> element has class `dark`. */
 :root.dark {
-    --color-bg: #171514;
-    --color-bg-main: #1c1b1a;
-    --color-surface: #201f1d;
-    --color-surface-soft: #292826;
-    --color-surface-sunken: #343331;
-    --color-code-bg: #282726;
+    --color-bg: #0a0a0a;
+    --color-bg-main: #0a0a0a;
+    --color-surface: #1a1a1a;
+    --color-surface-soft: #1a1a1a;
+    --color-surface-sunken: #111111;
+    --color-code-bg: #1a1a1a;
 
-    --color-line: #3d3a37;
-    --color-line-soft: #2c2b2a;
-    --color-line-strong: #4a4945;
+    --color-line: #2e2e2e;
+    --color-line-soft: #1a1a1a;
+    --color-line-strong: #3a3a3a;
 
-    --color-ink: #cecdc3;
-    --color-ink-soft: #b7b5ac;
-    --color-on-ink: #100f0f;
-    --color-muted: #878580;
-    --color-faint: #575653;
-    --color-whisper: #403e3c;
+    --color-ink: #ededed;
+    --color-ink-soft: #e0e0e0;
+    --color-on-ink: #0a0a0a;
+    --color-muted: #a0a0a0;
+    --color-faint: #7a7a7a;
+    --color-whisper: #474747;
 
-    --color-accent: var(--color-accent-9);
-    --color-accent-soft: var(--color-accent-3);
-    --color-accent-strong: var(--color-accent-11);
+    --color-accent: #0070f3;
+    --color-accent-soft: rgba(0,112,243,0.15);
+    --color-accent-strong: #3291ff;
 
-    --color-ok: #879a39;
-    --color-ok-soft: rgba(135, 154, 57, 0.14);
-    --color-warn: #d97757;
-    --color-warn-soft: rgba(217, 119, 87, 0.12);
-    --color-bad: #d14d41;
-    --color-bad-soft: rgba(209, 77, 65, 0.14);
-    --color-info: #4385be;
+    --color-ok: #4cc38a;
+    --color-ok-soft: rgba(76,195,138,0.15);
+    --color-warn: #f5a623;
+    --color-warn-soft: rgba(245,166,35,0.12);
+    --color-bad: #e5484d;
+    --color-bad-soft: rgba(229,72,77,0.12);
+    --color-info: #3291ff;
 
-    /* Dark mode: the inner ring switches to a faint white highlight
-       (specular edge) instead of a darker line — same trick Apple
-       uses to make panels read as elevated against deep grays. */
-    --shadow-sm: 0 0 0 0.5px rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
-    --shadow-md: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.28), 0 12px 42px rgba(0, 0, 0, 0.14);
-    --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 3px 12px rgba(0, 0, 0, 0.26), 0 16px 42px rgba(0, 0, 0, 0.34), 0 26px 64px rgba(0, 0, 0, 0.18);
+    --focus-ring: 0 0 0 2px #0a0a0a, 0 0 0 4px #006bff;
 
     --hl-keyword: #ce9178;
     --hl-string: #afc463;
@@ -1564,130 +1499,14 @@ main[data-has-approval="false"] .scroll-messages {
     --hl-attr: #7daea3;
     --hl-type: #d8a657;
     --hl-built-in: #d8a657;
-    --hl-title: #cecdc3;
+    --hl-title: #ededed;
     --hl-tag: #ea6962;
     --hl-meta: #7c6f64;
     --hl-symbol: #7daea3;
 }
 
-/* Dark palette surfaces: keep dark mode restrained, but preserve each
-   palette's old product feel. Accent vars still come from runtime tokens. */
-:root.dark.palette-graphite {
-    --color-bg: #141516;
-    --color-bg-main: #171819;
-    --color-surface: #1b1d1f;
-    --color-surface-soft: #222528;
-    --color-surface-sunken: #292d30;
-    --color-code-bg: #1e2022;
-    --color-line: #303337;
-    --color-line-soft: #25282b;
-    --color-line-strong: #3f4348;
-    --color-ink: #d4d7dc;
-    --color-ink-soft: #bcc0c7;
-    --color-on-ink: #101112;
-    --color-muted: #9a9da3;
-    --color-faint: #6b6e74;
-    --color-whisper: #4a4d52;
-}
-
-:root.dark.palette-raycast {
-    --color-bg: #161616;
-    --color-bg-main: #1b1b1b;
-    --color-surface: #212121;
-    --color-surface-soft: #282828;
-    --color-surface-sunken: #303030;
-    --color-code-bg: #262626;
-    --color-line: #3a3a3a;
-    --color-line-soft: #2e2e2e;
-    --color-line-strong: #4a4a4a;
-    --color-ink: #f5f5f5;
-    --color-ink-soft: #d4d4d4;
-    --color-on-ink: #1a1a1a;
-    --color-muted: #a1a1a1;
-    --color-faint: #6f6f6f;
-    --color-whisper: #4a4a4a;
-}
-
-:root.dark.palette-notion {
-    --color-bg: #171717;
-    --color-bg-main: #1b1b1b;
-    --color-surface: #212121;
-    --color-surface-soft: #2b2b2b;
-    --color-surface-sunken: #363636;
-    --color-code-bg: #2c2c2c;
-    --color-line: #3f3f3f;
-    --color-line-soft: #303030;
-    --color-line-strong: #4d4d4d;
-    --color-ink: #e6e6e6;
-    --color-ink-soft: #c7c7c7;
-    --color-on-ink: #191919;
-    --color-muted: #9b9b9b;
-    --color-faint: #6f6e6b;
-    --color-whisper: #4a4946;
-}
-
-/* Linen dark: keep elevation steps close to the background. This avoids
-   bright slate slabs while preserving readable secondary text. */
-:root.dark {
-    --color-bg: #171615;
-    --color-bg-main: #1b1a19;
-    --color-surface: #201e1c;
-    --color-surface-soft: #24221f;
-    --color-surface-sunken: #2a2724;
-    --color-code-bg: #22201d;
-
-    --color-line: #393531;
-    --color-line-soft: #2b2926;
-    --color-line-strong: #47423d;
-
-    --color-ink: #ddd9cf;
-    --color-ink-soft: #c6c1b7;
-    --color-muted: #aaa39a;
-    --color-faint: #8c857b;
-    --color-whisper: #625b54;
-}
-
-:root.dark.palette-graphite {
-    --color-bg: #151719;
-    --color-bg-main: #191b1d;
-    --color-surface: #1d2022;
-    --color-surface-soft: #222629;
-    --color-surface-sunken: #282c30;
-    --color-code-bg: #202326;
-
-    --color-line: #373c41;
-    --color-line-soft: #2a2d31;
-    --color-line-strong: #454b52;
-
-    --color-ink: #dde1e6;
-    --color-ink-soft: #c5c9d0;
-    --color-muted: #aab0b7;
-    --color-faint: #8a9097;
-    --color-whisper: #636a71;
-}
-
-:root.dark.palette-raycast,
-:root.dark.palette-notion {
-    --color-bg: #181818;
-    --color-bg-main: #1c1c1c;
-    --color-surface: #222222;
-    --color-surface-soft: #272727;
-    --color-surface-sunken: #2d2d2d;
-    --color-code-bg: #242424;
-
-    --color-line: #3a3a3a;
-    --color-line-soft: #2d2d2d;
-    --color-line-strong: #484848;
-
-    --color-ink: #e3e0db;
-    --color-ink-soft: #c9c5bf;
-    --color-muted: #aaa59e;
-    --color-faint: #89837c;
-    --color-whisper: #625d58;
-}
-
 /* Selection */
-:root.dark ::selection { background: rgba(231, 138, 77, 0.28); }
+:root.dark ::selection { background: rgba(0, 112, 243, 0.28); }
 
 :root.dark .modal-error span { color: #e58075 !important; }
 

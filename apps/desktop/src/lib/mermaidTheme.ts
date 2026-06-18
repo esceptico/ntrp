@@ -4,12 +4,8 @@
 // absolute pixel dimensions (the panel relies on a real natural size for
 // fit-to-view math).
 
-// Our design tokens are OKLCH ramps (see lib/tokens/color.ts). Mermaid's
-// internal color lib (khroma) can't parse the oklch() function and throws
-// "Unsupported color format", so normalize every token to sRGB rgb()/rgba().
-// Setting fillStyle isn't enough — Chromium round-trips an oklch() fillStyle
-// back as oklch(). Rasterize a pixel and read its bytes instead: the canvas
-// backing store is 8-bit sRGB, so getImageData forces the conversion.
+// Mermaid's internal color lib (khroma) can't reliably parse all CSS color
+// formats, so normalize every token to sRGB rgb()/rgba() via a canvas probe.
 let probeCtx: CanvasRenderingContext2D | null = null;
 
 function toRgb(color: string): string {

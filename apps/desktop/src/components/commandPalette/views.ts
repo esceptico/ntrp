@@ -1,6 +1,5 @@
-import { Bot, Layers, Monitor, Moon, Palette as PaletteIcon, Sun, type LucideIcon } from "lucide-react";
+import { Bot, Layers, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { updateServerConfig } from "../../actions";
-import { PALETTES, type PaletteId } from "../../lib/palettes";
 import type { ThemeChoice } from "../../store";
 import { prettyProvider, stripProviderPrefix } from "./filter";
 import type { CommandView } from "./types";
@@ -77,23 +76,3 @@ export function buildThemeView(
   };
 }
 
-/** Color-palette picker (warm / graphite / raycast / notion). Labels
- *  come from PALETTES so adding a palette in lib/palettes.ts surfaces
- *  here automatically. */
-export function buildPaletteView(
-  current: PaletteId,
-  setPref: <K extends "palette">(key: K, value: PaletteId) => void,
-): CommandView {
-  return {
-    placeholder: "Choose palette...",
-    entries: PALETTES.map((p) => ({
-      id: `palette:${p.id}`,
-      section: "appearance" as const,
-      label: p.label,
-      hint: p.id === current ? "current" : undefined,
-      icon: PaletteIcon,
-      run: () => setPref("palette", p.id),
-      search: `${p.label.toLowerCase()} palette ${p.id}`,
-    })),
-  };
-}

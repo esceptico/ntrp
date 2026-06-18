@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Monitor,
   Moon,
-  Palette as PaletteIcon,
   PanelLeft,
   Pencil,
   Power,
@@ -39,7 +38,7 @@ import {
 import { compactSessionApi } from "../../api";
 import { formatRelativePast } from "../../lib/format";
 import { lastAssistantId } from "./filter";
-import { buildPaletteView, buildProviderView, buildThemeView } from "./views";
+import { buildProviderView, buildThemeView } from "./views";
 import type { CommandEntry } from "./types";
 
 export function useEntries(): CommandEntry[] {
@@ -53,7 +52,6 @@ export function useEntries(): CommandEntry[] {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const setPref = useStore((s) => s.setPref);
   const currentTheme = useStore((s) => s.prefs.theme);
-  const currentPalette = useStore((s) => s.prefs.palette);
   const skipApprovals = useStore((s) => s.skipApprovals);
   const running = useStore((s) => s.running);
   const order = useStore((s) => s.order);
@@ -260,16 +258,6 @@ export function useEntries(): CommandEntry[] {
       children: () => buildThemeView(currentTheme, setPref),
       search: "theme dark light system mode",
     });
-    entries.push({
-      id: "appearance:palette",
-      section: "appearance",
-      label: "Color palette",
-      hint: currentPalette,
-      icon: PaletteIcon,
-      children: () => buildPaletteView(currentPalette, setPref),
-      search: "palette color accent style",
-    });
-
     // System — Electron-only utilities.
     if (window.ntrpDesktop?.app) {
       entries.push({
@@ -319,7 +307,6 @@ export function useEntries(): CommandEntry[] {
     sidebarHidden,
     setPref,
     currentTheme,
-    currentPalette,
     skipApprovals,
     running,
     order,

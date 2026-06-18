@@ -4,18 +4,24 @@
  * styles.css (`--duration-*`, `--ease-*`) and must stay in sync with the
  * MOTION mirror below.
  *
- * Spec: docs/superpowers/specs/2026-05-17-design-system-tokens-design.md §2.2
- *       docs/internal/ui-ux-intelligence.md "Motion Direction"
+ * Geist design system alignment:
+ *   - Primary ease: cubic-bezier(0.175, 0.885, 0.32, 1.1)
+ *   - State transitions: 150ms · Popovers: 200ms · Overlays: 300ms
+ *   - Motion clarifies change, never decorates.
  */
-// ─── Springs ──────────────────────────────────────────────────
+
+// ─── Geist primary ease ─────────────────────────────────────
+
+/** Geist design-system primary easing — slight overshoot that "lands". */
+export const GEIST_EASE = [0.175, 0.885, 0.32, 1.1] as const;
+
+// ─── Springs ────────────────────────────────────────────────
 // Stiffness/damping pairs tuned to use case. Higher stiffness = faster
 // settle; higher damping = less overshoot. `mass: 1` keeps the visual
 // scale consistent with framer-motion defaults.
 
 /** Modals, sheets, drawers. Confident settle, no perceptible bounce. */
 export const SPRING_MODAL = { type: "spring", stiffness: 380, damping: 32, mass: 1 } as const;
-/** Cards lifting on hover, smaller surfaces. Softer than MODAL. */
-export const SPRING_CARD = { type: "spring", stiffness: 260, damping: 26, mass: 1 } as const;
 /** Press/release feedback. Snappy so an interrupted release re-targets. */
 export const SPRING_TAP = { type: "spring", stiffness: 380, damping: 30, mass: 1 } as const;
 /** Layout / FLIP / list reorders. Slower, longer settle for shared element. */
@@ -24,7 +30,7 @@ export const SPRING_LAYOUT = { type: "spring", stiffness: 220, damping: 28, mass
 export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mass: 1 } as const;
 /** Row settles — Control Center–style spring for sibling-row entrances.
  *  Used by `TurnGroup`'s work-block stagger. Snappier than SPRING_MODAL;
- *  livelier than SPRING_CARD. */
+ *  livelier than SPRING_MODAL. */
 export const SPRING_ROW_ENTRY = { type: "spring", stiffness: 360, damping: 28, mass: 0.8 } as const;
 /** Trace ticker rows. Heavier damping than ROW_ENTRY — zero overshoot so
  *  the most-fired animation in the app never wobbles mid-stream. */
@@ -46,26 +52,22 @@ export const EASE_EMPHASIZED = [0.32, 0.72, 0, 1] as const;
 export const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
 
 // ─── Durations (seconds) ─────────────────────────────────────
-// MOTION mirrors the CSS --duration-* scale (named by feel) so CSS
-// transitions and framer-motion props share one timing language. The
-// use-case-named DURATION_* aliases below derive from it — single set of
-// literals, no drift.
+// Geist-aligned: state 0.15, popover 0.2, overlay 0.3. The MOTION map
+// keeps the named-by-feel scale so existing call sites don't churn; the
+// values now snap to the Geist grid.
 
 export const MOTION = {
   fast: 0.1,
   check: 0.12,
-  row: 0.14,
-  palette: 0.18,
+  row: 0.15,
+  palette: 0.2,
   trace: 0.2,
-  panel: 0.22,
-  route: 0.36,
+  panel: 0.2,
+  route: 0.3,
 } as const;
 
-export const DURATION_TAP = MOTION.fast;
-export const DURATION_HOVER = MOTION.row;
 export const DURATION_POPOVER = MOTION.palette;
 export const DURATION_PANEL = MOTION.panel;
-export const DURATION_ROUTE = MOTION.route;
 
 // ─── Panel entry curve ───────────────────────────────────────
 

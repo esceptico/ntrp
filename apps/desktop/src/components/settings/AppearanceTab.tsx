@@ -1,19 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
+import { ArrowUp, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
-  type PaletteId,
   type ThemeChoice,
   type ThinkingAnimation,
   type ThinkingIntensity,
 } from "../../store";
-import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
 import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
@@ -42,7 +39,6 @@ export function AppearanceTab() {
   const thinking = useStore((s) => s.prefs.thinkingAnimation);
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
-  const palette = useStore((s) => s.prefs.palette);
   const setPref = useStore((s) => s.setPref);
 
   return (
@@ -63,11 +59,6 @@ export function AppearanceTab() {
               }))}
             />
           }
-        />
-        <SettingRow
-          title="Palette"
-          hint="Color scheme used across the app."
-          control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
         />
       </section>
 
@@ -248,152 +239,6 @@ function SettingRow({
       <div className="shrink-0 max-w-full">{control}</div>
     </div>
   );
-}
-
-/** Swatch chip used both as the dropdown trigger's icon and per-row icon
- *  inside the popover. Renders an "Aa" in the palette's accent color over
- *  the palette's background. */
-function PaletteIcon({ swatch }: { swatch: PaletteSwatch }) {
-  return (
-    <span
-      aria-hidden
-      className="grid place-items-center w-[22px] h-[22px] rounded-md text-xs font-semibold shrink-0 border border-line"
-      style={{ background: swatch.bg, color: swatch.accent }}
-    >
-      Aa
-    </span>
-  );
-}
-
-function PalettePicker({
-  value,
-  onChange,
-}: {
-  value: PaletteId;
-  onChange: (id: PaletteId) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const current = PALETTE_BY_ID[value];
-  // The trigger swatch reflects the active resolved scheme so it matches
-  // what the user sees rendered. Listen for OS-level changes when the
-  // theme is set to "system" so the swatch flips with the OS.
-  const theme = useStore((s) => s.prefs.theme);
-  const isDark = useResolvedDark(theme);
-  const triggerSwatch = isDark ? current.dark : current.light;
-
-  // Anchor the portaled popover to the trigger's bounding rect.
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 200) });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-[8px] border border-line-soft bg-surface hover:bg-surface-soft/60 transition-[background-color,scale] duration-check ease-out active:scale-[0.97] text-sm font-medium text-ink-soft"
-      >
-        <PaletteIcon swatch={triggerSwatch} />
-        <span>{current.label}</span>
-        <ChevronDown size={ICON.MD} strokeWidth={2} className="opacity-70" />
-      </button>
-      {createPortal(
-        <AnimatePresence>
-          {open && pos && (
-            <motion.div
-              ref={popoverRef}
-              initial={{ opacity: 0, scale: 0.98, y: -4 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-              transition={SPRING_POPOVER}
-              style={{ top: pos.top, left: pos.left, width: pos.width, transformOrigin: "top" }}
-              className="surface-panel surface-popover fixed z-[60] py-1"
-            >
-              {PALETTES.map((p) => (
-                <PaletteRow
-                  key={p.id}
-                  palette={p}
-                  dark={isDark}
-                  active={p.id === value}
-                  onClick={() => {
-                    onChange(p.id);
-                    setOpen(false);
-                  }}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body,
-      )}
-    </>
-  );
-}
-
-function PaletteRow({
-  palette,
-  dark,
-  active,
-  onClick,
-}: {
-  palette: PaletteMeta;
-  dark: boolean;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const swatch = dark ? palette.dark : palette.light;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-active={active ? "true" : undefined}
-      className="app-row w-full flex items-center gap-2.5 px-2.5 py-1.5 text-ink-soft text-left"
-    >
-      <PaletteIcon swatch={swatch} />
-      <span className="text-sm text-ink flex-1">{palette.label}</span>
-      {active && <Check size={ICON.MD} strokeWidth={2} className="text-accent-strong" />}
-    </button>
-  );
-}
-
-function useResolvedDark(theme: ThemeChoice): boolean {
-  const [systemDark, setSystemDark] = useState(() =>
-    window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-  useEffect(() => {
-    if (theme !== "system") return;
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setSystemDark(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [theme]);
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return systemDark;
 }
 
 /** Mini composer-shaped box that runs the variant continuously so the

@@ -63,19 +63,12 @@ export type ThinkingIntensity = "subtle" | "normal" | "strong";
 
 export type ThemeChoice = "light" | "dark" | "system";
 
-export type PaletteId =
-  | "warm"
-  | "graphite"
-  | "raycast"
-  | "notion";
-
 export type SidebarGroupBy = "project" | "time" | "type" | "status";
 
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
-  palette: PaletteId;
   /** How the sidebar session list is grouped. */
   sidebarGroupBy: SidebarGroupBy;
   /** Sidebar filter: show only unread (finished, unseen) sessions. */
