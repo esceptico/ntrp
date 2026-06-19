@@ -73,15 +73,21 @@ async def run_memory_init(
     recency_days: int | None = None,
     max_llm_calls: int = 400,
     integration_clients: dict[str, object] | None = None,
+    wipe: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
-    """Re-derive the whole memory from chat transcripts + connected integrations.
+    """(Re)derive memory from chat transcripts + connected integrations.
+
+    ADDITIVE by default (`wipe=False`): existing records are KEPT and the
+    re-derivation reconciles against them (ADD/UPDATE/SUPERSEDE/NOOP), so /init can
+    only enrich memory, never make it thinner. The re-derivation runs the curator
+    in BULK mode — a generous gate that captures the user's durable history
+    comprehensively, instead of the brutal turn-by-turn worthiness bar that admits
+    almost nothing over a full-history pass. `wipe=True` is the destructive reset
+    (wipe-except-pinned first) for when the pool is genuinely corrupt.
 
     Transcript re-derivation drains every chat session regardless of recency.
-    `recency_days` is an OVERRIDE: when None each integration uses its entry in
-    SOURCE_RECENCY_DAYS; when set it applies uniformly to every source.
-    `integration_clients` is the connected-client map (registry.clients); sources
-    not present are skipped. Returns a report dict.
+    `recency_days` overrides each integration's window. Returns a report dict.
     """
 
     def _report_progress(message: str) -> None:
@@ -106,13 +112,21 @@ async def run_memory_init(
     else:
         backup_path = ""
 
-    # --- P1: wipe + reset watermarks (FAIL-FAST) ----------------------------
-    # If the wipe raises we abort BEFORE re-deriving — the half-state is
-    # recoverable from backup_path, surfaced via the raised error's context.
-    wipe = await record_store.wipe_except_pinned()
+    # --- P1: (optional wipe) + reset watermarks (FAIL-FAST) -----------------
+    # Additive by default: keep existing records and let the bulk re-derivation
+    # reconcile against them. A wipe is destructive and opt-in; if it raises we
+    # abort BEFORE re-deriving (recoverable from backup_path). Watermarks are
+    # always reset so the curator re-reads the FULL history of every transcript /
+    # source rather than only new turns.
+    wipe_result = {"deleted": 0, "kept_pinned": 0}
+    if wipe:
+        wipe_result = await record_store.wipe_except_pinned()
     await curator.reset_watermarks()
     await consolidate.reset_watermark()
-    _report_progress(f"wiped {wipe['deleted']} records, kept {wipe['kept_pinned']} pinned")
+    if wipe:
+        _report_progress(f"wiped {wipe_result['deleted']} records, kept {wipe_result['kept_pinned']} pinned")
+    else:
+        _report_progress("additive run — keeping existing records, re-reading full history")
 
     # --- P2: re-derive from ALL chat transcripts ----------------------------
     scopes = await sessions.recent_session_scopes(_SESSION_ENUMERATION_LIMIT)
@@ -128,7 +142,7 @@ async def run_memory_init(
             break
         budget = max_llm_calls - llm_calls
         try:
-            result = await curator.curate_session_fully(row["session_id"], max_calls=budget)
+            result = await curator.curate_session_fully(row["session_id"], max_calls=budget, bulk=True)
         except Exception:
             _logger.warning("init: session curation failed", session_id=row["session_id"], exc_info=True)
             continue
@@ -161,7 +175,8 @@ async def run_memory_init(
             # reset in P1); _ingest_one_source advances the watermark afterwards so
             # the periodic ingest that follows is incremental.
             result = await _ingest_one_source(
-                curator, source, client, window_days=window, since=None, budget=budget, label=_INTEGRATION_LABEL
+                curator, source, client, window_days=window, since=None, budget=budget,
+                label=_INTEGRATION_LABEL, bulk=True,
             )
             integrations[source] = {"admitted": result["admitted"], "calls": result["calls"]}
             admitted += result["admitted"]
@@ -197,8 +212,9 @@ async def run_memory_init(
     _report_progress("rebuilt artifact projection")
 
     return {
-        "deleted": wipe["deleted"],
-        "kept_pinned": wipe["kept_pinned"],
+        "wiped": wipe,
+        "deleted": wipe_result["deleted"],
+        "kept_pinned": wipe_result["kept_pinned"],
         "sessions_processed": sessions_processed,
         "admitted": admitted,
         "capped": capped,
@@ -284,12 +300,14 @@ def _effective_window(window_days: int, since: datetime | None) -> int:
 
 
 async def _ingest_one_source(
-    curator, source: str, client, *, window_days: int, since: datetime | None, budget: int, label: str
+    curator, source: str, client, *, window_days: int, since: datetime | None, budget: int, label: str,
+    bulk: bool = False,
 ) -> dict:
     """Fetch (incrementally, if `since`), curate, and advance the watermark for one
-    source. Shared by /init (since=None, full window) and the periodic ingest."""
+    source. Shared by /init (since=None, full window, bulk gate) and the periodic
+    incremental ingest (since=watermark, default gate)."""
     items = await _fetch_source_items(source, client, _effective_window(window_days, since), since=since)
-    result = await curator.ingest_items(items, source_kind=source, source_label=label, max_calls=budget)
+    result = await curator.ingest_items(items, source_kind=source, source_label=label, max_calls=budget, bulk=bulk)
     # Advance the watermark to the newest item seen — but only on a clean (not
     # capped) pass, so a capped source re-fetches its tail next run.
     # ponytail: the max is over kept (post-noise-filter) items, so a window of

@@ -110,6 +110,22 @@ _SYSTEM_PROMPT = (
     "(5) Output ONLY the JSON object, no preamble."
 )
 
+# Appended to the system prompt for the /init BULK re-derivation. The default gate
+# is brutal on purpose (turn-by-turn pollution control); for a one-time pass over
+# the user's whole history that brutality yields almost nothing, so this OVERRIDES
+# rule (1) toward comprehensive capture. Rules (1b)-(5) still apply.
+_BULK_OVERRIDE = (
+    "\n\nBULK RE-DERIVATION MODE — OVERRIDE the worthiness bar in rule (1). This is a "
+    "one-time pass over the user's ENTIRE history to rebuild memory comprehensively. "
+    "Admit EVERY durable thing about the user and their world: identity, role, "
+    "employer, location, timezone, preferences, working style, the people / orgs / "
+    "products / projects they work with, ongoing work and goals, and stable personal "
+    "facts. Multiple records per batch are expected — do not collapse a rich batch "
+    "into one bland record. Skip ONLY pure transient noise (tool-call spam, bare "
+    "'ok' / 'thanks', one-off debugging chatter with no durable takeaway). When in "
+    "doubt, ADMIT — comprehensiveness is the goal and consolidation dedups later."
+)
+
 
 class Curator:
     """The sleep-time Dreamer. ONE LLM call per session: read new transcript
@@ -233,7 +249,7 @@ class Curator:
         await self._write_watermark(session_id, max_seq)
         return bool(ops)
 
-    async def curate_session_fully(self, session_id: str, *, max_calls: int | None = None) -> dict:
+    async def curate_session_fully(self, session_id: str, *, max_calls: int | None = None, bulk: bool = False) -> dict:
         """Full re-derivation of ONE session: loop curate_session-style batches,
         draining ALL transcript turns rather than the single 40-turn batch the
         incremental tick does. Advances the in-process watermark each iteration via
@@ -259,7 +275,7 @@ class Curator:
                 await self._write_watermark(session_id, max_seq)
                 break
 
-            ops = await self._complete(turns, header="NEW TURNS")
+            ops = await self._complete(turns, header="NEW TURNS", bulk=bulk)
             calls += 1
             if ops is None:
                 # Failed/empty completion: do NOT advance (the batch retries next
@@ -288,6 +304,7 @@ class Curator:
         source_kind: str,
         source_label: str,
         max_calls: int | None = None,
+        bulk: bool = False,
     ) -> dict:
         """Curate a list of source-agnostic RawItems (calendar/gmail/slack docs)
         through the SAME worthiness gate + reconciliation the chat path uses.
@@ -319,7 +336,7 @@ class Curator:
             if not batch:
                 break
 
-            ops = await self._complete(batch, header=source_label)
+            ops = await self._complete(batch, header=source_label, bulk=bulk)
             calls += 1
             if ops is None:
                 break
@@ -448,7 +465,7 @@ class Curator:
             except Exception:
                 _logger.warning("curation sweep failed", exc_info=True)
 
-    async def _complete(self, lines: list[str], header: str) -> list[dict] | None:
+    async def _complete(self, lines: list[str], header: str, *, bulk: bool = False) -> list[dict] | None:
         """ONE LLM call emitting the record-ops. Pre-searches the flat record pool
         for the candidate set so the model picks from REAL ids only, and carries
         the label vocabulary (top names by count + the recalled records' labels)
@@ -484,7 +501,7 @@ class Curator:
             f"{chr(10).join(lines)}"
         )
         messages = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": _SYSTEM_PROMPT + (_BULK_OVERRIDE if bulk else "")},
             {"role": "user", "content": user_prompt},
         ]
         try:

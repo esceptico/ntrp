@@ -239,14 +239,18 @@ def memory():
     help="Override the per-source integration recency window (applies to all sources)",
 )
 @click.option("--max-calls", "max_calls", default=400, type=int, help="LLM-call budget for re-derivation")
-def memory_init(yes: bool, recency_days: int | None, max_calls: int):
-    """Wipe all records except pinned and re-derive memory from transcripts + integrations."""
+@click.option("--wipe", is_flag=True, help="Destructive reset: wipe non-pinned records first (default is additive)")
+def memory_init(yes: bool, recency_days: int | None, max_calls: int, wipe: bool):
+    """(Re)derive memory from transcripts + integrations. Additive by default
+    (keeps existing records); pass --wipe for a destructive reset."""
     if not yes:
-        click.confirm(
-            "This wipes all non-pinned memory records and re-derives from transcripts + integrations. Continue?",
-            abort=True,
+        prompt = (
+            "This WIPES all non-pinned memory records, then re-derives from transcripts + integrations. Continue?"
+            if wipe
+            else "Re-derive memory from transcripts + integrations (additive — keeps existing records)?"
         )
-    report = asyncio.run(_run_memory_init(recency_days=recency_days, max_calls=max_calls))
+        click.confirm(prompt, abort=True)
+    report = asyncio.run(_run_memory_init(recency_days=recency_days, max_calls=max_calls, wipe=wipe))
     console.print("[bold]Memory init complete[/bold]")
     console.print(report)
 
@@ -283,7 +287,7 @@ async def _run_memory_classify_labels() -> dict:
         await runtime.close()
 
 
-async def _run_memory_init(*, recency_days: int | None, max_calls: int) -> dict:
+async def _run_memory_init(*, recency_days: int | None, max_calls: int, wipe: bool = False) -> dict:
     from ntrp.memory.init import run_memory_init
 
     runtime = Runtime()
@@ -297,6 +301,7 @@ async def _run_memory_init(*, recency_days: int | None, max_calls: int) -> dict:
             recency_days=recency_days,
             max_llm_calls=max_calls,
             integration_clients=runtime.integrations.clients,
+            wipe=wipe,
             progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
         )
     finally:

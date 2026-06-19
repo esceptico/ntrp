@@ -132,7 +132,7 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
     config = FakeConfig(db_path, artifacts_dir)
     knowledge = FakeKnowledge(records, curator, consolidate, config)
 
-    report = await run_memory_init(knowledge, max_llm_calls=50)
+    report = await run_memory_init(knowledge, max_llm_calls=50, wipe=True)
 
     # (a) pinned survives, (b) the 3 non-pinned are gone, (d) >=1 re-derived.
     active = await records.list(limit=None)
@@ -166,6 +166,46 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
 
     # Artifacts were rebuilt.
     assert (artifacts_dir / "facts" / "index.md").exists()
+
+    await consolidate.close()
+    await curator.stop()
+    await records.close()
+
+
+async def test_run_memory_init_additive_default_keeps_records_and_uses_bulk_gate(tmp_path: Path):
+    """Default /init is ADDITIVE: existing records survive (never go backwards) and
+    the re-derivation runs the curator in BULK mode (the generous gate)."""
+    db_path = tmp_path / "memory.db"
+    records = RecordStore(db_path, search_index=None)
+    await records.open()
+
+    # Pre-existing, non-pinned records that must SURVIVE an additive init.
+    for i in range(3):
+        await records.add(f"existing durable fact {i}", kind="fact")
+
+    sessions = StubSessions(
+        rows={"chat1": [_turn(0, "user", "I am a research engineer at ThirdLayer")]},
+        scopes=[_scope("chat1")],
+    )
+    curator_llm = CuratorStubLLM(
+        json.dumps({"records": [{"op": "ADD", "text": "the user is a research engineer at ThirdLayer", "kind": "fact"}]})
+    )
+    curator = Curator(curator_llm, sessions, model="memory-model", db_path=db_path, record_store=records)
+    consolidate = Consolidate(records, ConsolidateStubLLM(), model="memory-model", db_path=db_path)
+    knowledge = FakeKnowledge(records, curator, consolidate, FakeConfig(db_path, tmp_path / "artifacts"))
+
+    report = await run_memory_init(knowledge, max_llm_calls=50)  # wipe defaults to False
+
+    texts = {r.text for r in await records.list(limit=None)}
+    # Existing records kept (additive can only enrich), new one added.
+    assert all(f"existing durable fact {i}" in texts for i in range(3))
+    assert "the user is a research engineer at ThirdLayer" in texts
+    assert report["wiped"] is False
+    assert report["deleted"] == 0
+
+    # The re-derivation engaged the BULK gate (generous capture), not the brutal
+    # turn-by-turn worthiness bar.
+    assert "BULK RE-DERIVATION MODE" in curator_llm.calls[0]["messages"][0]["content"]
 
     await consolidate.close()
     await curator.stop()
