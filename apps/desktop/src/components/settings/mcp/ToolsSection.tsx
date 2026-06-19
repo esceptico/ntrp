@@ -4,7 +4,7 @@ import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "..
 import { fetchServerConfig, updateServerConfig } from "../../../actions";
 import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
-import { SegmentedControl } from "../../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
 import { SwitchControl } from "../../SwitchControl";
 import { SectionHeader } from "../../SectionHeader";
 
@@ -91,8 +91,13 @@ export function ToolsSection({
                 size="sm"
                 value={overrides[t.full_name] ?? baseDecision(t)}
                 onChange={(v) => setToolDecision(t, v as ToolOverrideDecision)}
-                options={TOOL_DECISIONS.map((d) => ({ value: d.value, label: d.label }))}
-              />
+              >
+                {TOOL_DECISIONS.map((d) => (
+                  <SegmentedControlItem key={d.value} value={d.value}>
+                    {d.label}
+                  </SegmentedControlItem>
+                ))}
+              </SegmentedControl>
             </li>
           );
         })}

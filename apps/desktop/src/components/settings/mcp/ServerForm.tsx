@@ -14,7 +14,7 @@ import { useMutationState } from "../../../lib/hooks";
 import { BlurSwap } from "../../BlurSwap";
 import { SettingsInlineError } from "../SettingsNotice";
 import { ICON } from "../../../lib/icons";
-import { SegmentedControl } from "../../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
 import { LabeledField } from "../Field";
 import { type KeyVal } from "./editors";
 import { buildMCPServerPayload, type MCPAuthMode } from "./payload";
@@ -158,11 +158,10 @@ export function ServerForm({
             size="sm"
             value={transport}
             onChange={(v) => setTransport(v as MCPTransport)}
-            options={[
-              { value: "stdio", label: "STDIO" },
-              { value: "http", label: "Streamable HTTP" },
-            ]}
-          />
+          >
+            <SegmentedControlItem value="stdio">STDIO</SegmentedControlItem>
+            <SegmentedControlItem value="http">Streamable HTTP</SegmentedControlItem>
+          </SegmentedControl>
         )}
 
         {transportLocked && (

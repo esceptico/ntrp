@@ -5,7 +5,7 @@ import { useStore } from "../../store";
 import { useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { SegmentedControl } from "../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
@@ -132,10 +132,15 @@ export function ToolsTab() {
                     </div>
                     <SegmentedControl
                       size="sm"
-                      options={DECISIONS}
                       value={current}
                       onChange={(v) => setOverride(tool, v as ToolOverrideDecision)}
-                    />
+                    >
+                      {DECISIONS.map((d) => (
+                        <SegmentedControlItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SegmentedControlItem>
+                      ))}
+                    </SegmentedControl>
                   </li>
                 );
               })}

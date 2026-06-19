@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { LabeledField } from "../Field";
 import { KeyValueEditor, ListEditor, type KeyVal } from "./editors";
-import { SegmentedControl } from "../../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
 import type { MCPAuthMode } from "./payload";
 
 export function StdioFields({
@@ -88,11 +88,10 @@ export function HttpFields({
               size="sm"
               value={auth}
               onChange={(v) => onAuth(v as MCPAuthMode)}
-              options={[
-                { value: "auto", label: "Auto" },
-                { value: "headers", label: "Headers" },
-              ]}
-            />
+            >
+              <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+              <SegmentedControlItem value="headers">Headers</SegmentedControlItem>
+            </SegmentedControl>
           </LabeledField>
 
           {auth === "headers" ? (

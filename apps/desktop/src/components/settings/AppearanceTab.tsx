@@ -14,7 +14,7 @@ import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { BlurSwap } from "../BlurSwap";
 import { IconButton } from "../IconButton";
-import { SegmentedControl } from "../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -52,12 +52,14 @@ export function AppearanceTab() {
               size="sm"
               value={theme}
               onChange={(v) => setPref("theme", v as ThemeChoice)}
-              options={THEMES.map((t) => ({
-                value: t.id,
-                label: t.label,
-                icon: <t.icon size={ICON.MD} strokeWidth={2} />,
-              }))}
-            />
+            >
+              {THEMES.map((t) => (
+                <SegmentedControlItem key={t.id} value={t.id}>
+                  <t.icon size={ICON.MD} strokeWidth={2} />
+                  {t.label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
           }
         />
       </section>
@@ -79,8 +81,13 @@ export function AppearanceTab() {
               size="sm"
               value={intensity}
               onChange={(v) => setPref("thinkingIntensity", v as ThinkingIntensity)}
-              options={INTENSITIES.map((o) => ({ value: o.id, label: o.label }))}
-            />
+            >
+              {INTENSITIES.map((o) => (
+                <SegmentedControlItem key={o.id} value={o.id}>
+                  {o.label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
           }
         />
         <div className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2">

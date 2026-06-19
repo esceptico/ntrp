@@ -32,7 +32,7 @@ import {
 } from "../../lib/tokens/motion";
 import { ICON } from "../../lib/icons";
 import { IconButton } from "../IconButton";
-import { SegmentedControl } from "../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
 import { Chip } from "../Chip";
 import { SwitchDisclosure } from "../ui/SwitchDisclosure";
 import { BlurSwap } from "../BlurSwap";
@@ -564,13 +564,12 @@ function ScheduleChip({
                 size="sm"
                 value={schedule.kind}
                 onChange={(kind) => onChange({ ...schedule, kind: kind as ScheduleKind })}
-                options={[
-                  { value: "at", label: "Time" },
-                  { value: "every", label: "Every" },
-                  { value: "event", label: "Event" },
-                  { value: "message", label: "Message" },
-                ]}
-              />
+              >
+                <SegmentedControlItem value="at">Time</SegmentedControlItem>
+                <SegmentedControlItem value="every">Every</SegmentedControlItem>
+                <SegmentedControlItem value="event">Event</SegmentedControlItem>
+                <SegmentedControlItem value="message">Message</SegmentedControlItem>
+              </SegmentedControl>
 
               <div className="grid">
                 <div

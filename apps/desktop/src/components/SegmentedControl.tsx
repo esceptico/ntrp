@@ -1,19 +1,16 @@
-import { CSSProperties, KeyboardEvent, ReactNode, Ref, useId, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useId,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { SPRING_LAYOUT } from "../lib/tokens/motion";
 
-type Option = string | { value: string; label: string; icon?: ReactNode };
-
-interface Props {
-  options: Option[];
-  value: string;
-  onChange: (value: string) => void;
-  size?: "sm" | "md" | "lg";
-  className?: string;
-  ref?: Ref<HTMLDivElement>;
-}
-
-type NormalizedOption = { value: string; label: string; icon?: ReactNode };
+type Size = "sm" | "md" | "lg";
 
 const SIZES = {
   sm: { pad: 4, h: 32, font: 12, gap: 2, padX: 14 },
@@ -24,65 +21,67 @@ const SIZES = {
 // The pill reads better slightly larger than the button it highlights.
 const PILL_GROW = 2;
 
-const BTN_STYLE_BASE: CSSProperties = {
-  position: "relative",
-  isolation: "isolate",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  lineHeight: 1,
-  background: "transparent",
-  border: "none",
-  borderRadius: 999,
-  cursor: "pointer",
-  appearance: "none",
-  WebkitAppearance: "none",
-  transition: "color var(--duration-trace) var(--ease-out-soft)",
-  userSelect: "none",
-};
-
-function normalize(opt: Option): NormalizedOption {
-  return typeof opt === "string" ? { value: opt, label: opt } : opt;
+interface SegmentedContextValue {
+  value: string;
+  onChange: (value: string) => void;
+  size: Size;
+  layoutId: string;
+  reduced: boolean;
 }
 
+const SegmentedContext = createContext<SegmentedContextValue | null>(null);
+
+interface SegmentedControlProps {
+  value: string;
+  onChange: (value: string) => void;
+  /** SegmentedControlItem children, composed directly (icon + label, icon-only, …). */
+  children: ReactNode;
+  size?: Size;
+  /** Accessible name for the group — maps to aria-label on the tablist. */
+  label?: string;
+  className?: string;
+  ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Compound segmented control. Compose options as <SegmentedControlItem> children
+ * so each segment can carry an icon, a label, or both (icon-only via aria-label) —
+ * the caller owns the content. Colors come from the --gt-* tokens (light + dark);
+ * the active pill slides between segments via a shared layout animation.
+ *
+ * Arrow-key navigation reads the rendered `[role="tab"]` buttons from the DOM, so
+ * items can be any direct children (including a `.map(...)`).
+ */
 export function SegmentedControl({
-  options,
   value,
   onChange,
+  children,
   size = "md",
+  label,
   className,
   ref,
-}: Props) {
-  const items = options.map(normalize);
+}: SegmentedControlProps) {
   const sz = SIZES[size];
-
   const layoutId = useId();
   const reduced = !!useReducedMotion();
-  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const activeIndex = items.findIndex((o) => o.value === value);
-
-  const focusAt = (i: number) => {
-    const next = (i + items.length) % items.length;
-    btnRefs.current[next]?.focus();
-    if (items[next].value !== value) onChange(items[next].value);
-  };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowRight") {
-      e.preventDefault();
-      focusAt(activeIndex + 1);
-    } else if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      focusAt(activeIndex - 1);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      focusAt(0);
-    } else if (e.key === "End") {
-      e.preventDefault();
-      focusAt(items.length - 1);
-    }
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const tabs = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    if (tabs.length === 0) return;
+    const idx = tabs.findIndex((t) => t.dataset.value === value);
+    let next = idx;
+    if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    const btn = tabs[next];
+    btn.focus();
+    const v = btn.dataset.value;
+    if (v && v !== value) onChange(v);
   };
 
   const trackStyle: CSSProperties = {
@@ -101,72 +100,97 @@ export function SegmentedControl({
     boxShadow: "var(--gt-track-shadow)",
   };
 
-  const pillStyle: CSSProperties = {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: -PILL_GROW,
-    right: -PILL_GROW,
-    zIndex: -1,
-    borderRadius: 999,
-    background: "var(--gt-pill-bg)",
-    border: "1px solid var(--gt-pill-border)",
-    boxShadow: "var(--gt-pill-shadow)",
-    pointerEvents: "none",
-  };
-
-  const classes = ["segmented-control", className].filter(Boolean).join(" ");
-
-  const btnSizing: CSSProperties = {
-    padding: `0 ${sz.padX}px`,
-    fontSize: sz.font,
-  };
+  const ctx: SegmentedContextValue = { value, onChange, size, layoutId, reduced };
 
   return (
     <div
       ref={ref}
       role="tablist"
-      className={classes}
+      aria-label={label}
+      className={["segmented-control", className].filter(Boolean).join(" ")}
       style={trackStyle}
       onKeyDown={onKeyDown}
     >
-      {items.map((opt, i) => {
-        const active = opt.value === value;
-        return (
-          <button
-            key={opt.value}
-            ref={(el) => {
-              btnRefs.current[i] = el;
-            }}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            tabIndex={active ? 0 : -1}
-            onClick={() => onChange(opt.value)}
-            style={{
-              ...BTN_STYLE_BASE,
-              ...btnSizing,
-              fontWeight: active ? 600 : 500,
-              color: active ? "var(--gt-fg)" : "var(--gt-fg-muted)",
-            }}
-          >
-            {active && (
-              <motion.span
-                aria-hidden
-                layoutId={`${layoutId}-pill`}
-                className="segmented-control-pill"
-                transition={reduced ? { layout: { duration: 0 } } : { layout: SPRING_LAYOUT }}
-                style={pillStyle}
-              />
-            )}
-            {opt.icon ? (
-              <span style={{ display: "inline-flex" }}>{opt.icon}</span>
-            ) : null}
-            {opt.label}
-          </button>
-        );
-      })}
+      <SegmentedContext.Provider value={ctx}>{children}</SegmentedContext.Provider>
     </div>
+  );
+}
+
+interface SegmentedControlItemProps {
+  value: string;
+  /** Segment content — text, an icon, or both (icon-only: pass `aria-label`). */
+  children?: ReactNode;
+  id?: string;
+  "aria-label"?: string;
+}
+
+export function SegmentedControlItem({
+  value,
+  children,
+  id,
+  "aria-label": ariaLabel,
+}: SegmentedControlItemProps) {
+  const ctx = useContext(SegmentedContext);
+  if (!ctx) throw new Error("SegmentedControlItem must be used within SegmentedControl");
+  const sz = SIZES[ctx.size];
+  const active = ctx.value === value;
+
+  return (
+    <button
+      id={id}
+      type="button"
+      role="tab"
+      data-value={value}
+      aria-selected={active}
+      aria-label={ariaLabel}
+      tabIndex={active ? 0 : -1}
+      onClick={() => ctx.onChange(value)}
+      style={{
+        position: "relative",
+        isolation: "isolate",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        lineHeight: 1,
+        padding: `0 ${sz.padX}px`,
+        fontSize: sz.font,
+        fontWeight: active ? 600 : 500,
+        color: active ? "var(--gt-fg)" : "var(--gt-fg-muted)",
+        background: "transparent",
+        border: "none",
+        borderRadius: 999,
+        cursor: "pointer",
+        appearance: "none",
+        WebkitAppearance: "none",
+        whiteSpace: "nowrap",
+        transition: "color var(--duration-trace) var(--ease-out-soft)",
+        userSelect: "none",
+      }}
+    >
+      {active && (
+        <motion.span
+          aria-hidden
+          layoutId={`${ctx.layoutId}-pill`}
+          className="segmented-control-pill"
+          transition={ctx.reduced ? { layout: { duration: 0 } } : { layout: SPRING_LAYOUT }}
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: -PILL_GROW,
+            right: -PILL_GROW,
+            zIndex: -1,
+            borderRadius: 999,
+            background: "var(--gt-pill-bg)",
+            border: "1px solid var(--gt-pill-border)",
+            boxShadow: "var(--gt-pill-shadow)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      {children}
+    </button>
   );
 }
 

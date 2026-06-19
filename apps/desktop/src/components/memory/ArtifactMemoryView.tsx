@@ -8,7 +8,7 @@ import { Markdown } from "../Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "../wikilink";
 import { ICON } from "../../lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
-import { SegmentedControl } from "../SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
 import { TabPanels } from "../ui/TabPanels";
 import {
   listMemoryArtifacts,
@@ -568,13 +568,12 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   const modeToggle = (
     <SegmentedControl
       size="sm"
-      options={[
-        { value: "files", label: "Files" },
-        { value: "records", label: "Records" },
-      ]}
       value={mode}
       onChange={(v) => setMode(v as MemoryViewMode)}
-    />
+    >
+      <SegmentedControlItem value="files">Files</SegmentedControlItem>
+      <SegmentedControlItem value="records">Records</SegmentedControlItem>
+    </SegmentedControl>
   );
 
   // ─── Files list pane ────────────────────────────────────────────────
