@@ -80,3 +80,16 @@ async def test_publish_artifacts_if_dirty_refreshes_when_records_change(tmp_path
     assert refreshed.refreshed is True
     assert refreshed.artifact_count == 1
     assert CountingArtifactStore.calls == 2
+
+
+async def test_artifact_fingerprint_includes_created_at(tmp_path: Path):
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    record = await records.add("created time affects artifact ordering", kind="fact")
+    runtime = _runtime(records, tmp_path)
+    before = await runtime._artifact_fingerprint()
+
+    conn = await records._ensure_conn()
+    await conn.execute("UPDATE records SET created_at = ? WHERE id = ?", ("2099-01-01T00:00:00+00:00", record.id))
+    await conn.commit()
+
+    assert await runtime._artifact_fingerprint() != before

@@ -108,6 +108,7 @@ class KnowledgeRuntime:
                     "kind": record.kind,
                     "scope_kind": record.scope_kind,
                     "scope_key": record.scope_key,
+                    "created_at": record.created_at,
                     "last_confirmed_at": record.last_confirmed_at,
                     "pinned": record.pinned,
                     "source_ref": record.source_ref.to_dict() if record.source_ref is not None else None,
