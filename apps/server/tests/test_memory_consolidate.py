@@ -401,6 +401,33 @@ async def test_idle_sweep_skips_label_hygiene_when_fingerprint_is_unchanged(tmp_
     await records.close()
 
 
+async def test_failed_label_hygiene_does_not_persist_fingerprint_and_idle_sweep_retries(tmp_path: Path):
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("Dex is the user's son")
+    b = await records.add("ntrp has a memory system")
+    await records.set_labels(a.id, ["Dex"])
+    await records.set_labels(b.id, ["ntrp"])
+    consolidate = _consolidate(tmp_path, records, StubLLM())
+
+    calls = {"n": 0}
+
+    async def _fail_judge(labels):
+        calls["n"] += 1
+        return None
+
+    consolidate._judge_labels = _fail_judge  # type: ignore[method-assign]
+
+    await consolidate.run_once()
+    assert calls["n"] == 1
+    assert await consolidate._read_label_fingerprint() is None
+
+    await consolidate.run_once()
+    assert calls["n"] == 2
+    assert await consolidate._read_label_fingerprint() is None
+    await consolidate.close()
+    await records.close()
+
+
 async def test_consolidate_report_changed_memory_tracks_all_mutations():
     assert ConsolidateReport().changed_memory is False
     assert ConsolidateReport(reclassified=1).changed_memory is True

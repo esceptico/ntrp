@@ -316,10 +316,10 @@ class Consolidate:
         current = self._label_fingerprint(labels)
         if not force and current == await self._read_label_fingerprint():
             return
-        await self._lint_labels(report, labels=labels)
-        await self._write_label_fingerprint(await self._current_label_fingerprint())
+        if await self._lint_labels(report, labels=labels):
+            await self._write_label_fingerprint(await self._current_label_fingerprint())
 
-    async def _lint_labels(self, report: ConsolidateReport, labels: list[dict] | None = None) -> None:
+    async def _lint_labels(self, report: ConsolidateReport, labels: list[dict] | None = None) -> bool:
         """Curate the label vocabulary: ONE LLM call over the whole list_labels()
         (it is small) both folds near-duplicate names (case/synonym variants like
         "dex"/"Dex memory") via rename_label AND classifies each label as
@@ -328,10 +328,10 @@ class Consolidate:
         changed. Skipped only when the vocabulary has < 2 labels."""
         labels = labels if labels is not None else await self._records.list_labels()
         if len(labels) < 2:
-            return
+            return True
         ops = await self._judge_labels(labels)
         if ops is None:
-            return
+            return False
         names = {entry["label"] for entry in labels}
         # Renames first — they mutate `names`; reclass then runs against the
         # post-rename name set so a folded `old` can't be retyped.
@@ -349,6 +349,7 @@ class Consolidate:
                 continue  # hallucinated label or bogus kind dropped, not dead-ended
             await self._records.set_label_kind(op.label, kind)
             report.reclassified += 1
+        return True
 
     async def _judge_labels(self, labels: list[dict]) -> LabelOps | None:
         listing = "\n".join(f"{entry['label']}: {entry['count']} [{entry['kind']}]" for entry in labels)
