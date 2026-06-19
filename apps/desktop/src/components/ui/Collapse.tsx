@@ -30,9 +30,9 @@ export function Collapse({ open, children, duration = MOTION.panel, className }:
     <AnimatePresence initial={false}>
       {open && (
         <motion.div
-          initial={{ gridTemplateRows: "0fr", opacity: 0, filter: "blur(2px)" }}
+          initial={{ gridTemplateRows: "0fr", opacity: 0, filter: "blur(3px)" }}
           animate={{ gridTemplateRows: "1fr", opacity: 1, filter: "blur(0px)" }}
-          exit={{ gridTemplateRows: "0fr", opacity: 0, filter: "blur(2px)" }}
+          exit={{ gridTemplateRows: "0fr", opacity: 0, filter: "blur(3px)" }}
           transition={{ duration, ease: EASE_EMPHASIZED }}
           style={{ display: "grid" }}
           className={className}

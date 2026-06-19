@@ -7,7 +7,7 @@ import { IconButton } from "../IconButton";
 import { Markdown } from "../Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "../wikilink";
 import { ICON } from "../../lib/icons";
-import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, SPRING_TAP } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, SPRING_TAP } from "../../lib/tokens/motion";
 import { TabPanels } from "../ui/TabPanels";
 import {
   listMemoryArtifacts,
@@ -211,6 +211,7 @@ function TreeRow({
   onToggle,
   selectedPath,
   onSelect,
+  reduce,
 }: {
   node: TreeNode;
   depth: number;
@@ -218,6 +219,7 @@ function TreeRow({
   onToggle: (path: string) => void;
   selectedPath: string | null;
   onSelect: (path: string) => void;
+  reduce: boolean;
 }) {
   const indent = depth * 14;
 
@@ -240,15 +242,27 @@ function TreeRow({
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-soft group-hover:text-ink">{node.name}</span>
           <span className="shrink-0 text-2xs tabular-nums text-faint">{countFiles(node)}</span>
         </button>
-        {/* grid-rows 0fr->1fr reveal — GPU-only, no JS height measure. */}
-        <div
-          className={clsx(
-            "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-            open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-          )}
-        >
-          <div className="overflow-hidden">
-            <div className="flex flex-col gap-px">
+        {/* Snap layout — no height-tween over the recursive subtree. The
+            revealed block rises in as one unit (bounded on big folders);
+            initial={false} keeps the all-expanded mount from animating. */}
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="children"
+              initial={reduce ? false : RISE_IN}
+              animate={RISE_SETTLED}
+              exit={
+                reduce
+                  ? { opacity: 0, transition: { duration: 0 } }
+                  : { opacity: 0, filter: "blur(3px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }
+              }
+              transition={
+                reduce
+                  ? { duration: 0 }
+                  : { duration: MOTION.panel, ease: EASE_EMPHASIZED }
+              }
+              className="flex flex-col gap-px"
+            >
               {node.children.map((child) => (
                 <TreeRow
                   key={child.kind === "directory" ? `d:${child.path}` : `f:${child.path}`}
@@ -258,11 +272,12 @@ function TreeRow({
                   onToggle={onToggle}
                   selectedPath={selectedPath}
                   onSelect={onSelect}
+                  reduce={reduce}
                 />
               ))}
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </>
     );
   }
@@ -342,6 +357,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   const [recordsRefreshKey, setRecordsRefreshKey] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [filesDirection, setFilesDirection] = useState(1);
+  const [recordsDirection, setRecordsDirection] = useState(1);
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -539,7 +555,13 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     if (from !== -1 && to !== -1 && from !== to) setFilesDirection(to > from ? 1 : -1);
     setSelected(path);
   };
-  const riseTransition = reduce ? { duration: 0.1 } : { duration: MOTION.panel, ease: EASE_OUT };
+  const selectRecord = (id: string) => {
+    const order = records.map((r) => r.id);
+    const from = order.indexOf(selectedRecord?.id ?? "");
+    const to = order.indexOf(id);
+    if (from !== -1 && to !== -1 && from !== to) setRecordsDirection(to > from ? 1 : -1);
+    setSelectedRecordId(id);
+  };
 
   // ─── Mode toggle (shared by both panes' headers) ────────────────────
   const modeToggle = (
@@ -625,6 +647,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
                 onToggle={toggleExpanded}
                 selectedPath={selectedMeta?.path ?? null}
                 onSelect={selectFile}
+                reduce={!!reduce}
               />
             ))}
           </div>
@@ -685,7 +708,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
           >
             <button
               type="button"
-              onClick={() => setSelectedRecordId(record.id)}
+              onClick={() => selectRecord(record.id)}
               className={clsx(
                 "w-full rounded-[10px] p-2 pr-7 text-left transition-colors",
                 selectedRecordId === record.id ? "bg-surface-sunken" : "hover:bg-surface-soft",
@@ -806,6 +829,11 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       Nothing selected
     </DetailPlaceholder>
   ) : (
+    <TabPanels
+      value={selectedRecord.id}
+      direction={recordsDirection}
+      className="h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden"
+    >
     <DetailShell
       header={
         <div className="flex items-start justify-between gap-3">
@@ -824,15 +852,9 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         </div>
       }
       body={
-        <motion.div
-          key={selectedRecord.id}
-          initial={reduce ? false : RISE_IN}
-          animate={RISE_SETTLED}
-          transition={riseTransition}
-          className="min-w-0 whitespace-pre-wrap break-words text-base leading-relaxed text-ink"
-        >
+        <div className="min-w-0 whitespace-pre-wrap break-words text-base leading-relaxed text-ink">
           {selectedRecord.content}
-        </motion.div>
+        </div>
       }
       meta={
         <MetaGrid
@@ -861,6 +883,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         ) : null
       }
     />
+    </TabPanels>
   );
 
   return (

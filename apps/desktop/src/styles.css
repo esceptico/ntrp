@@ -267,8 +267,8 @@ button:focus-visible,
   color: var(--color-ink);
   font-size: var(--text-base);
   outline: none;
-  transition: border-color var(--duration-palette) ease,
-    box-shadow var(--duration-palette) ease;
+  transition: border-color var(--duration-palette) var(--ease-out-soft),
+    box-shadow var(--duration-palette) var(--ease-out-soft);
 }
 .input-field::placeholder {
   color: var(--color-faint);
@@ -337,7 +337,7 @@ body.quick-capture-mode .quick-capture-card {
     inset 0 0 0 0.5px color-mix(in oklab, var(--color-ink) 10%, transparent),
     0 14px 38px -10px rgba(0, 0, 0, 0.32),
     0 2px 8px -2px rgba(0, 0, 0, 0.18);
-  transition: box-shadow var(--duration-palette) ease;
+  transition: box-shadow var(--duration-palette) var(--ease-out-soft);
 }
 .quick-capture-card:focus-within {
   /* Subtle accent ring on focus — signals "ready, type here" without
@@ -390,7 +390,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    Spec: docs/internal/apple-design-intel.md "Tap / Active States". */
 .sidebar button:not(:disabled) {
   transition:
-    scale var(--duration-check) ease,
+    scale var(--duration-check) var(--ease-out),
     background-color var(--duration-palette) ease,
     color var(--duration-palette) ease,
     border-color var(--duration-palette) ease,
@@ -654,7 +654,7 @@ button.app-row:not(:disabled):active,
   background-color: transparent;
   border: 0;
   cursor: pointer;
-  transition: color var(--duration-row) ease, opacity var(--duration-row) ease, background-color var(--duration-row) ease, transform var(--duration-palette) ease;
+  transition: color var(--duration-row) var(--ease-out-soft), opacity var(--duration-row) var(--ease-out-soft), background-color var(--duration-row) var(--ease-out-soft), transform var(--duration-palette) var(--ease-out-soft);
 }
 .md .code-block-copy:hover,
 .md .code-block-copy:focus-visible {

@@ -13,6 +13,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
+import { motion } from "motion/react";
+import { DURATION_POPOVER, EASE_DECELERATE } from "../lib/tokens/motion";
 import { useStore } from "../store";
 import { ICON } from "../lib/icons";
 import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
@@ -68,7 +70,13 @@ export function CommandPicker({
   const activeName = filtered[index]?.name;
 
   return (
-    <div className="surface-panel surface-popover absolute left-0 right-0 bottom-full mb-2 overflow-hidden">
+    <motion.div
+      className="surface-panel surface-popover absolute left-0 right-0 bottom-full mb-2 overflow-hidden"
+      initial={{ opacity: 0, y: 4, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
+      style={{ transformOrigin: "bottom left" }}
+    >
       <div ref={containerRef} className="max-h-[320px] overflow-y-auto scroll-thin">
         {builtins.length > 0 && (
           <Section title="Commands" entries={builtins} startIndex={0} activeIndex={index} onSelect={onSelect} setIndex={setIndex} />
@@ -86,7 +94,7 @@ export function CommandPicker({
         )}
       </div>
       <Footer activeName={activeName} />
-    </div>
+    </motion.div>
   );
 }
 

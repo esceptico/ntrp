@@ -4,6 +4,7 @@ import { activityItemStatus } from "../../lib/agent";
 import { resolutionFromResult, type HtmlWidgetResolution } from "../../lib/htmlWidget";
 import { respondToHtmlInput } from "../../actions";
 import { Badge, type BadgeTone } from "../Badge";
+import { BlurSwap } from "../BlurSwap";
 import type { ActivityItem } from "../../store";
 import { buildSrcdoc, snapshotThemeVars, WIDGET_SANDBOX } from "./srcdoc";
 
@@ -97,9 +98,9 @@ export function HtmlWidgetCard({ item }: { item: ActivityItem }) {
       <div className="px-3 py-2 border-b border-line-soft flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{widget.title}</span>
         {badge && (
-          <Badge tone={badge.tone} className="shrink-0">
-            {badge.label}
-          </Badge>
+          <BlurSwap swapKey={badge.label} blur={3} className="shrink-0">
+            <Badge tone={badge.tone}>{badge.label}</Badge>
+          </BlurSwap>
         )}
         {pending && (
           <button

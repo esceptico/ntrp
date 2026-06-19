@@ -492,28 +492,46 @@ function ProviderRow({
         )}
       </AnimatePresence>
 
-      {codexStatus?.status === "pending" && (
-        <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-sm text-muted">
-          <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
-          <span>Waiting for browser sign-in…</span>
-          {codexStatus.url && (
-            <a
-              href={codexStatus.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-info hover:underline underline-offset-2"
-            >
-              Open URL <ExternalLink size={ICON.XS} strokeWidth={2} />
-            </a>
-          )}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {codexStatus?.status === "pending" && (
+          <motion.div
+            key="codex-pending"
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-sm text-muted"
+          >
+            <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
+            <span>Waiting for browser sign-in…</span>
+            {codexStatus.url && (
+              <a
+                href={codexStatus.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-info hover:underline underline-offset-2"
+              >
+                Open URL <ExternalLink size={ICON.XS} strokeWidth={2} />
+              </a>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {codexStatus?.error && (
-        <div className="px-3.5 py-2.5 bg-bad-soft text-sm text-bad">
-          {codexStatus.error}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {codexStatus?.error && (
+          <motion.div
+            key="codex-error"
+            initial={{ ...RISE_IN, y: -4 }}
+            animate={RISE_SETTLED}
+            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+            transition={{ duration: MOTION.row, ease: EASE_OUT }}
+            className="px-3.5 py-2.5 bg-bad-soft text-sm text-bad"
+          >
+            {codexStatus.error}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {children}
     </div>

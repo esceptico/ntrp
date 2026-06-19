@@ -148,7 +148,7 @@ export function SessionRow({
             onMenu({ x: r.left, y: r.bottom + 4 });
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="grid place-items-center w-5 h-5 shrink-0 rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+          className="grid place-items-center w-5 h-5 shrink-0 rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
         >
           <MoreHorizontal size={ICON.SM} strokeWidth={2} />
         </button>

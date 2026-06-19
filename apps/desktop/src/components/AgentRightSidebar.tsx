@@ -891,26 +891,29 @@ export function AgentRightSidebar() {
                 </section>
               )}
 
-              {!visible && approvalCount === 0 && !hasBreadcrumb && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                  className="grid place-items-center gap-2.5 min-h-[120px] px-3 text-center"
-                >
-                  <span
-                    aria-hidden
-                    className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
+              <AnimatePresence initial={false}>
+                {!visible && approvalCount === 0 && !hasBreadcrumb && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, filter: "blur(3px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                    transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+                    className="grid place-items-center gap-2.5 min-h-[120px] px-3 text-center"
                   >
-                    <Bot size={ICON.MD} strokeWidth={2} />
-                  </span>
-                  <p className="text-xs text-muted leading-relaxed">
-                    No agents yet.
-                    <br />
-                    Background agents you start appear here.
-                  </p>
-                </motion.div>
-              )}
+                    <span
+                      aria-hidden
+                      className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
+                    >
+                      <Bot size={ICON.MD} strokeWidth={2} />
+                    </span>
+                    <p className="text-xs text-muted leading-relaxed">
+                      No agents yet.
+                      <br />
+                      Background agents you start appear here.
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>

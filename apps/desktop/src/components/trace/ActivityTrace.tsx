@@ -17,6 +17,7 @@ import {
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
 import { StatusDot } from "../StatusDot";
+import { Tooltip } from "../ui/Tooltip";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
 import { useWorkflows } from "../../hooks/useWorkflows";
 import { ExpandableWorkflowCard } from "../workflow/WorkflowDetail";
@@ -585,24 +586,19 @@ function AgentRow({
           <Bot size={ICON.XS} strokeWidth={2} />
         </span>
         {canStop && (
-          <button
-            type="button"
-            aria-label="Stop subagent"
-            title="Stop subagent"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (item.runId) void cancelSubagent(item.runId, item.id);
-            }}
-            className="group/stop absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] duration-row ease-out group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100"
-          >
-            <Square size={ICON.XS} strokeWidth={2} />
-            <span
-              aria-hidden
-              className="pointer-events-none absolute left-full top-1/2 z-10 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-2xs font-medium leading-none text-on-ink opacity-0 shadow-sm transition-opacity duration-row ease-out group-hover/stop:opacity-100 group-focus-visible/stop:opacity-100"
+          <Tooltip label="Stop subagent" side="right">
+            <button
+              type="button"
+              aria-label="Stop subagent"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (item.runId) void cancelSubagent(item.runId, item.id);
+              }}
+              className="absolute inset-0 grid place-items-center rounded-md border-0 p-0 m-0 bg-surface-soft text-faint opacity-0 pointer-events-none transition-[opacity,color] duration-row ease-out group-hover/agent:pointer-events-auto group-hover/agent:opacity-100 hover:text-bad focus-visible:pointer-events-auto focus-visible:opacity-100"
             >
-              Stop subagent
-            </span>
-          </button>
+              <Square size={ICON.XS} strokeWidth={2} />
+            </button>
+          </Tooltip>
         )}
       </span>
       <button

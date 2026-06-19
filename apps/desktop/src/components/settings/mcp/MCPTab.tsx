@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "../../../store";
 import { type MCPServer, listMCPServersApi } from "../../../api";
+import { RISE_IN, RISE_SETTLED, DISSOLVE_OUT, MOTION, EASE_EMPHASIZED } from "../../../lib/tokens/motion";
 import { TabPanels } from "../../ui/TabPanels";
 import { ServerForm } from "./ServerForm";
 import { ServerList } from "./ServerList";
@@ -42,16 +44,25 @@ export function MCPTab() {
       value={view.kind === "edit" ? `edit:${view.name}` : view.kind}
       direction={view.kind === "list" ? -1 : 1}
     >
-      {assistantOpen && (
-        <SetupAssistant
-          kind="mcp"
-          onClose={() => setAssistantOpen(false)}
-          onDone={async () => {
-            setAssistantOpen(false);
-            await refresh();
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {assistantOpen && (
+          <motion.div
+            initial={RISE_IN}
+            animate={RISE_SETTLED}
+            exit={DISSOLVE_OUT}
+            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+          >
+            <SetupAssistant
+              kind="mcp"
+              onClose={() => setAssistantOpen(false)}
+              onDone={async () => {
+                setAssistantOpen(false);
+                await refresh();
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {view.kind === "add" ? (
         <ServerForm
           mode="add"
