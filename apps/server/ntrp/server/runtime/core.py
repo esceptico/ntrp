@@ -227,6 +227,8 @@ class Runtime:
             cheap_model=self.config.memory_model,
             indexer=self.indexer,
             get_consolidate=lambda: self.knowledge._consolidate,
+            get_knowledge=lambda: self.knowledge,
+            get_integration_clients=lambda: self.integrations.clients,
         )
 
     async def _init_mcp(self) -> None:

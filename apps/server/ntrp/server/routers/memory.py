@@ -142,9 +142,14 @@ def list_artifacts(
 
 @router.post("/artifacts/rebuild")
 async def rebuild_artifacts(
-    store=Depends(_record_store), artifacts: ArtifactMemoryStore = Depends(_artifact_store)
+    knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime),
+    store=Depends(_record_store),
+    artifacts: ArtifactMemoryStore = Depends(_artifact_store),
 ) -> dict:
-    items = await artifacts.export_from_records(store)
+    # Explicit user-triggered rebuild → full LLM synthesis (me.md + dossiers +
+    # active-work), same as the startup/CLI rebuild paths.
+    llm, model = knowledge._memory_llm()
+    items = await artifacts.export_from_records(store, llm=llm, model=model)
     return {"artifacts": [artifact_to_json(a) for a in items]}
 
 

@@ -23,7 +23,12 @@ from ntrp.server.routers.memory import router as memory_router
 class _Knowledge:
     def __init__(self, records: RecordStore, artifacts_dir: Path):
         self._record_store = records
-        self.config = SimpleNamespace(memory_artifacts_dir=artifacts_dir)
+        self.config = SimpleNamespace(memory_artifacts_dir=artifacts_dir, memory_model=None)
+
+    def _memory_llm(self):
+        # Hermetic: no LLM → mechanical projection, same as the production helper
+        # when memory_model is unset.
+        return None, ""
 
 
 @pytest_asyncio.fixture

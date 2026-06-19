@@ -168,6 +168,13 @@ BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID = "builtin-automation-suggester-daily"
 AUTOMATION_SUGGESTER_DAILY_AT = "07:00"
 BUILTIN_MEMORY_CONSOLIDATE_ID = "builtin-memory-consolidate"
 MEMORY_CONSOLIDATE_AT = "03:00"
+# Incremental integration ingest runs before the maintenance pass so the night's
+# fresh calendar/gmail/slack deltas get consolidated + synthesized the same run.
+BUILTIN_INTEGRATION_SYNC_ID = "builtin-integration-sync"
+INTEGRATION_SYNC_AT = "02:30"
+# LLM-call ceiling for one incremental ingest run (across all sources). Gmail is
+# the highest-volume source; the per-source noise filter cuts most cost first.
+INTEGRATION_INGEST_MAX_LLM_CALLS = 100
 MAX_AUTOMATION_SUGGESTIONS = 6
 DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES = 5
 DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES = 5

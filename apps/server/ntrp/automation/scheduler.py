@@ -26,6 +26,11 @@ AUTOMATION_BUS_KEY = "automation:events"
 
 _logger = get_logger(__name__)
 
+# Builtin maintenance handlers whose missed daily run should be caught up on boot
+# (rather than skipped to tomorrow) if they haven't run within the cadence.
+_CATCH_UP_HANDLERS = {"memory_consolidate", "integration_sync"}
+_CATCH_UP_CADENCE = timedelta(hours=24)
+
 
 IterationDispatcher = Callable[[Automation, str | dict | None], Awaitable[str | None]]
 """Fire a session-bound automation in iteration mode (read_history=True):
@@ -206,6 +211,14 @@ class Scheduler:
                     "Recovered interrupted automation %s; leaving due for immediate retry", automation.task_id
                 )
                 continue
+            if self._should_catch_up_missed(automation, now):
+                # A daily maintenance builtin whose slot was missed (laptop asleep
+                # past 03:00) stays DUE so _tick fires it now, instead of skipping
+                # to tomorrow — otherwise memory maintenance can be skipped for days.
+                _logger.info(
+                    "Catch-up: leaving missed maintenance automation %s due for immediate run", automation.task_id
+                )
+                continue
             missed_at = automation.next_run_at
             next_run = self._advance_to_future(automation, now)
             if not next_run:
@@ -231,6 +244,20 @@ class Scheduler:
         while next_run and next_run <= now:
             next_run = trigger.next_run(next_run)
         return next_run
+
+    @staticmethod
+    def _should_catch_up_missed(automation: Automation, now: datetime) -> bool:
+        """A missed daily maintenance builtin should run immediately on boot rather
+        than skip to its next future slot. Scoped to builtin maintenance handlers
+        on a single daily TimeTrigger that haven't run within their cadence — so a
+        machine asleep/off at 03:00 still gets memory maintenance, without
+        surprising user-created reminders."""
+        if not (automation.builtin and automation.handler in _CATCH_UP_HANDLERS):
+            return False
+        if len(automation.triggers) != 1 or not isinstance(automation.triggers[0], TimeTrigger):
+            return False
+        last = automation.last_run_at
+        return last is None or (now - last) >= _CATCH_UP_CADENCE
 
     async def _loop(self) -> None:
         while True:

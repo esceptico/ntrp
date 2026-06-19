@@ -8,12 +8,15 @@ from ntrp.automation.service import AutomationService
 from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
 from ntrp.events.sse import AutomationSuggestionsUpdatedEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
+from ntrp.logging import get_logger
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
 from ntrp.server.runtime.outbox import RuntimeOutbox
 from ntrp.server.stores import Stores
+
+_logger = get_logger(__name__)
 
 
 class SuggesterUnavailableError(Exception):
@@ -34,6 +37,8 @@ class AutomationRuntime:
         cheap_model: str | None,
         indexer: Indexer | None,
         get_consolidate: Callable[[], object | None] = lambda: None,
+        get_knowledge: Callable[[], object | None] = lambda: None,
+        get_integration_clients: Callable[[], dict[str, object]] = dict,
     ):
         self.stores = stores
         self.get_records = get_records
@@ -41,6 +46,8 @@ class AutomationRuntime:
         self.get_slack_client = get_slack_client
         self.get_cheap_llm = get_cheap_llm
         self.get_consolidate = get_consolidate
+        self.get_knowledge = get_knowledge
+        self.get_integration_clients = get_integration_clients
         self.cheap_model = cheap_model
         self.scheduler = Scheduler(
             store=stores.automations,
@@ -76,6 +83,10 @@ class AutomationRuntime:
             "memory_consolidate",
             self._build_memory_consolidate_handler(),
         )
+        self.scheduler.register_handler(
+            "integration_sync",
+            self._build_integration_sync_handler(),
+        )
 
         await seed_builtins(self.stores.automations)
         await compile_schedules_to_automations(".", self.stores.automations)
@@ -103,11 +114,42 @@ class AutomationRuntime:
                     totals[k] += getattr(rep, k)
                 if not any(getattr(rep, k) for k in totals):
                     break
-            return (
+            summary = (
                 f"merged {totals['merged']}, superseded {totals['superseded']}, "
                 f"dropped {totals['dropped']}, retyped {totals['retyped']}, "
                 f"relabeled {totals['relabeled']}"
             )
+            # Re-synthesize the prose surface (me.md / dossiers / active-work.md)
+            # over the freshly consolidated pool so it refreshes nightly instead of
+            # rotting between manual rebuilds. rebuild_artifacts() LLM-synthesizes
+            # when a memory model is configured, else does a cheap mechanical
+            # re-projection — either way the projection stops drifting from records.
+            knowledge = self.get_knowledge()
+            if knowledge is not None:
+                try:
+                    count = await knowledge.rebuild_artifacts()
+                    summary += f"; refreshed {count} artifacts"
+                except Exception:
+                    _logger.warning("nightly artifact refresh failed", exc_info=True)
+                    summary += "; artifact refresh failed"
+            return summary
+
+        return handler
+
+    def _build_integration_sync_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            knowledge = self.get_knowledge()
+            if knowledge is None or not knowledge.memory_ready:
+                return "integration sync unavailable (memory not ready)"
+            clients = self.get_integration_clients() or {}
+            if not clients:
+                return "integration sync skipped (no integrations connected)"
+            from ntrp.memory.init import run_integration_ingest
+
+            report = await run_integration_ingest(knowledge, integration_clients=clients)
+            parts = [f"{src}: {d.get('admitted', 0)} new" for src, d in report["integrations"].items()]
+            tail = " (capped)" if report.get("capped") else ""
+            return ("; ".join(parts) or "no connected sources") + tail
 
         return handler
 

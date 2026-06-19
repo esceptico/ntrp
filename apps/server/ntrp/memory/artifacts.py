@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import logging
 import os
 import re
 import sqlite3
@@ -29,14 +30,24 @@ import stat
 import textwrap
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from ntrp.memory import prompts_synthesis
 from ntrp.memory.frontmatter import QuotedStr, dump_frontmatter, parse_frontmatter, strip_frontmatter
 from ntrp.memory.models import Record
 from ntrp.memory.records import RecordStore
 
+_logger = logging.getLogger(__name__)
+
 CANONICAL_KINDS = {"directive", "fact", "source"}
+
+# Frontmatter `source` marker on LLM-synthesized pages (me.md, dossiers,
+# active-work.md). The cheap mechanical sync preserves these instead of
+# clobbering them with bullet dumps; only a full LLM rebuild refreshes them.
+SYNTHESIS_SOURCE = "synthesis"
+ACTIVE_WORK_RECENT_DAYS = 7
+PROFILE_RECORD_CAP = 80
 LEGACY_KIND_MAP = {
     "preference": "fact",
     "project_fact": "fact",
@@ -45,6 +56,8 @@ LEGACY_KIND_MAP = {
 }
 
 ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
+    "me.md": ("topic", "Profile"),
+    "active-work.md": ("topic", "Active work"),
     "README.md": ("source", "Memory artifacts"),
     "tooling.md": ("source", "Agent memory tooling"),
     "directives.md": ("directive", "Directives"),
@@ -251,6 +264,28 @@ def _collision_slug(text: str | None, *, fallback: str) -> str:
     base = _slug(raw, fallback=fallback)
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8] if raw else "empty"
     return f"{base}-{digest}"
+
+
+def _cooccurring_labels(rows: list[Record], labels_by_id: dict[str, list], title: str) -> tuple[str, ...]:
+    """The labels that actually co-occur on a dossier's records (excluding the
+    subject title itself), most common first, top 6 — the frontmatter `labels`
+    for a topic page."""
+    counts = Counter(
+        (entry["label"] if isinstance(entry, dict) else entry)
+        for r in rows
+        for entry in labels_by_id.get(r.id, [])
+        if (entry["label"] if isinstance(entry, dict) else entry).lower() != title.lower()
+    )
+    return tuple(label for label, _count in counts.most_common(6))
+
+
+def _flat_labels(labels_by_id: dict[str, list]) -> dict[str, list[str]]:
+    """Flatten typed labels (dict[id, list[dict(label, kind)]]) to plain
+    dict[id, list[str]] for synthesis prompts. Tolerates already-flat input."""
+    out: dict[str, list[str]] = {}
+    for rid, entries in labels_by_id.items():
+        out[rid] = [e["label"] if isinstance(e, dict) else e for e in entries]
+    return out
 
 
 def _related_link(label: str, known_subjects: frozenset[str]) -> str:
@@ -600,12 +635,21 @@ class ArtifactMemoryStore:
         self._append_text_no_symlink(path, f"- {now.strftime('%d %H:%M')} — {_safe_log(event) or '[redacted]'}\n")
         self._write_changelog_rollups()
 
-    async def export_from_records(self, records: RecordStore, *, limit: int | None = None) -> list[MemoryArtifact]:
+    async def export_from_records(
+        self, records: RecordStore, *, limit: int | None = None, llm=None, model: str = ""
+    ) -> list[MemoryArtifact]:
         """Regenerate generated browse artifacts from active DB records.
 
         `limit=None` is intentional: rebuild/export has no silent cap. Markdown is
         an agent/UI read surface; SQLite records remain canonical for writes.
+
+        When `llm` (a completion client) and `model` are provided, the expensive
+        prose-synthesis pages are (re)generated: `me.md`, LLM-written entity/project
+        dossiers, and `active-work.md`. Without them the export is purely mechanical
+        (the cheap per-session/per-mutation sync path) and preserves any existing
+        synthesized pages rather than clobbering them with bullet dumps.
         """
+        synthesize = llm is not None and bool(model)
         self.ensure_dirs()
         rows = await records.list(limit=limit)
         labels_by_id = await records.labels_for([r.id for r in rows], include_kind=True) if rows else {}
@@ -630,20 +674,77 @@ class ArtifactMemoryStore:
         self._write_tooling()
         self._write_directives(directives)
         self._write_facts_index(facts)
-        self._write_entity_dossiers(rows, labels_by_id, label_vocab)
-        self._write_project_dossiers(facts, labels_by_id)
+        await self._write_entity_dossiers(rows, labels_by_id, label_vocab, llm=llm, model=model)
+        await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
         self._write_sources(rows, source_records)
         self._write_file_doc_buckets(rows)
+        if synthesize:
+            await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
+            await self._synthesize_active_work(rows, labels_by_id, llm=llm, model=model)
         self._ensure_changelog()
         return self.list_artifacts()
 
     def _clear_generated_artifacts(self) -> None:
+        # me.md / active-work.md (root) and per-subject dossier bodies are NOT
+        # cleared here: synthesized pages must survive a mechanical sync. The
+        # entity/project writers prune their own stale bodies (preserving
+        # synthesized ones) via _prune_dossier_dir.
         for rel in ("README.md", "tooling.md", "directives.md", "facts.md", "summaries.md", "sources.md"):
             self._unlink_regular_artifact(rel)
-        for dirname in ("facts", "entities", "projects", "sources", "files", "docs"):
+        for dirname in ("facts", "sources", "files", "docs"):
             directory = self.root / dirname
             self._remove_markdown_tree(directory)
         self._remove_defunct_dir("summaries")
+
+    def _synthesized_subject(self, rel: str) -> str | None:
+        """The subject TITLE of an existing LLM-synthesized page at `rel`, or None
+        if the file is absent or not synthesized. Returns the title (not just a
+        bool) so a mechanical sync can tell whether a synthesized page belongs to
+        the subject about to be written: two distinct labels can slugify to the
+        same file (e.g. 'O-1A' and 'O 1A' -> entities/o-1a.md), and a rank-flip
+        between runs must not let one subject squat the other's slug."""
+        try:
+            path = self._safe_path(rel)
+            st = path.lstat()
+        except (FileNotFoundError, OSError):
+            return None
+        if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+            return None
+        try:
+            fm, _ = parse_frontmatter(self._read_text_no_symlink(path))
+        except (FileNotFoundError, OSError):
+            return None
+        if fm.get("source") != SYNTHESIS_SOURCE:
+            return None
+        return str(fm.get("title") or "")
+
+    def _prune_dossier_dir(self, dirname: str, keep_rels: set[str]) -> None:
+        """Remove every generated dossier .md under `dirname` whose rel is not in
+        `keep_rels`. Stale synthesized pages (subject dropped below threshold) are
+        pruned too; symlinks are skipped (write-time safety handles those)."""
+        directory = self.root / dirname
+        try:
+            st = directory.lstat()
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+            return
+        try:
+            children = sorted(directory.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return
+        for child in children:
+            try:
+                child_st = child.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(child_st.st_mode) or not stat.S_ISREG(child_st.st_mode):
+                continue
+            if child.suffix != ".md":
+                continue
+            rel = child.relative_to(self.root).as_posix()
+            if rel not in keep_rels and self._within_root(child):
+                child.unlink(missing_ok=True)
 
     def _remove_defunct_dir(self, dirname: str) -> None:
         directory = self.root / dirname
@@ -743,33 +844,25 @@ class ArtifactMemoryStore:
         body.append(f"- other: {other} active fact records")
         return self._write("facts/index.md", "Facts", "fact", "global", None, "\n".join(body).rstrip() + "\n", None)
 
-    def _write_entity_dossiers(
-        self, rows: list[Record], labels_by_id: dict[str, list], label_vocab: list[dict]
-    ) -> None:
-        """Build entity dossiers from entity-typed labels only.
+    def _entity_candidates(
+        self, rows: list[Record], labels_by_id: dict[str, list]
+    ) -> tuple[list[tuple[str, str, list[Record]]], list[tuple[str, int]]]:
+        """Group records by entity-typed label, returning (candidates, triage).
 
-        `labels_by_id` may be a flat dict[id, list[str]] (legacy) or a typed
-        dict[id, list[dict(label, kind)]] (from labels_for(include_kind=True)).
-        Only labels with kind='entity' get dossiers; meta labels are ignored here.
+        Directives are excluded (global rules, not subject knowledge). Only labels
+        with kind='entity' qualify; meta/legacy labels are ignored. Candidates have
+        >= MIN_ENTITY_RECORDS and are ranked: most records, then most recent, then
+        alphabetical.
         """
         label_groups: dict[str, list[Record]] = defaultdict(list)
         canonical: dict[str, str] = {}
         for record in rows:
-            # Directives are global behaviour rules (they live in directives.md);
-            # they are not subject knowledge and smear across every co-occurring
-            # dossier, so keep them out of subject pages entirely.
             if canonical_kind(record.kind) == "directive":
                 continue
             for entry in labels_by_id.get(record.id, []):
-                if isinstance(entry, dict):
-                    if entry.get("kind") != "entity":
-                        continue
-                    raw = entry["label"]
-                else:
-                    # Legacy flat string — treat as meta; skip for dossiers.
-                    # (Old records pre-dating label_kind column land here until
-                    # the curator re-curates them with the new prompt.)
+                if not isinstance(entry, dict) or entry.get("kind") != "entity":
                     continue
+                raw = entry["label"]
                 if not raw or not raw.strip():
                     continue
                 key = raw.strip().lower()
@@ -779,27 +872,45 @@ class ArtifactMemoryStore:
         candidates: list[tuple[str, str, list[Record]]] = []
         triage: list[tuple[str, int]] = []
         for key, group in label_groups.items():
-            unique = {r.id: r for r in group}
-            grouped = list(unique.values())
+            grouped = list({r.id: r for r in group}.values())
             label = canonical[key]
             if len(grouped) >= MIN_ENTITY_RECORDS:
                 candidates.append((label, key, grouped))
             elif len(grouped) >= MIN_TRIAGE_RECORDS:
                 triage.append((label, len(grouped)))
-        _ = label_vocab
         candidates.sort(key=lambda item: item[0].lower())
         candidates.sort(key=lambda item: max((r.last_confirmed_at for r in item[2]), default=""), reverse=True)
         candidates.sort(key=lambda item: len(item[2]), reverse=True)
+        return candidates, triage
+
+    async def _write_entity_dossiers(
+        self, rows: list[Record], labels_by_id: dict[str, list], label_vocab: list[dict], *, llm=None, model: str = ""
+    ) -> None:
+        """Build entity dossiers from entity-typed labels only.
+
+        With `llm`+`model`, each dossier body is LLM-synthesized prose (falling
+        back to the mechanical bullet brief on synthesis failure). Without them,
+        bodies are the mechanical bullet brief, and any existing synthesized page
+        is preserved rather than downgraded.
+        """
+        _ = label_vocab
+        candidates, triage = self._entity_candidates(rows, labels_by_id)
         written: list[tuple[str, str, int, str | None]] = []
         used: set[str] = {"entities/index.md", "entities/needs-triage.md"}
         known_subjects = frozenset(label.lower() for label, _key, _grouped in candidates[:MAX_ENTITY_DOSSIERS])
+        known_titles = [label for label, _key, _grouped in candidates[:MAX_ENTITY_DOSSIERS]]
+        rel_for: list[tuple[str, str, list[Record]]] = []
         for label, _key, grouped in candidates[:MAX_ENTITY_DOSSIERS]:
             rel = f"entities/{_slug(label, fallback='entity')}.md"
             if rel in used:
                 rel = f"entities/{_collision_slug(label, fallback='entity')}.md"
             used.add(rel)
+            rel_for.append((rel, label, grouped))
+        # Prune stale bodies (dropped subjects), preserving valid ones.
+        self._prune_dossier_dir("entities", used)
+        for rel, label, grouped in rel_for:
             last = max((r.last_confirmed_at for r in grouped), default=None)
-            self._write_dossier(
+            await self._emit_dossier(
                 rel,
                 label,
                 grouped,
@@ -807,6 +918,9 @@ class ArtifactMemoryStore:
                 scope_key=_slug(label, fallback="entity"),
                 labels_by_id=labels_by_id,
                 known_subjects=known_subjects,
+                known_titles=[t for t in known_titles if t.lower() != label.lower()],
+                llm=llm,
+                model=model,
             )
             written.append((rel, label, len(grouped), last))
         for label, _key, grouped in candidates[MAX_ENTITY_DOSSIERS:]:
@@ -821,7 +935,7 @@ class ArtifactMemoryStore:
             "",
         ]
         if written:
-            for rel, label, count, last in written:
+            for _rel, label, count, last in written:
                 tail = f"; last updated {last[:10]}" if last else ""
                 index.append(f"- [[{label}]] — {count} records{tail}.")
         else:
@@ -850,7 +964,9 @@ class ArtifactMemoryStore:
             None,
         )
 
-    def _write_project_dossiers(self, facts: list[Record], labels_by_id: dict[str, list[str]]) -> None:
+    async def _write_project_dossiers(
+        self, facts: list[Record], labels_by_id: dict[str, list[str]], *, llm=None, model: str = ""
+    ) -> None:
         project_rows: defaultdict[str, list[Record]] = defaultdict(list)
         inbox: list[Record] = []
         for record in facts:
@@ -875,15 +991,19 @@ class ArtifactMemoryStore:
             "",
         ]
         project_subjects = frozenset(title.lower() for _key, title, _rel, _rows in entries)
+        project_titles = [title for _key, title, _rel, _rows in entries]
         if entries:
-            for _key, title, rel, rows in entries:
+            for _key, title, _rel, rows in entries:
                 last = max((r.last_confirmed_at for r in rows), default=None)
                 tail = f"; last updated {last[:10]}" if last else ""
                 index.append(f"- [[{title}]] — {len(rows)} records{tail}.")
         else:
             index.append("_No keyed project dossiers yet._")
         index.append(f"- [[Project inbox]] — {len(inbox)} records.")
+        keep = {"projects/index.md", "projects/inbox.md", *(rel for _key, _title, rel, _rows in entries)}
+        self._prune_dossier_dir("projects", keep)
         self._write("projects/index.md", "Projects", "topic", "global", None, "\n".join(index).rstrip() + "\n", None)
+        # Inbox stays mechanical — a low-value unscoped catch-all not worth a call.
         self._write_dossier(
             "projects/inbox.md",
             "Project inbox",
@@ -894,7 +1014,7 @@ class ArtifactMemoryStore:
             known_subjects=project_subjects,
         )
         for key, title, rel, grouped in entries:
-            self._write_dossier(
+            await self._emit_dossier(
                 rel,
                 title,
                 grouped,
@@ -902,6 +1022,9 @@ class ArtifactMemoryStore:
                 scope_key=key,
                 labels_by_id=labels_by_id,
                 known_subjects=project_subjects,
+                known_titles=[t for t in project_titles if t.lower() != title.lower()],
+                llm=llm,
+                model=model,
             )
 
     def _write_dossier(
@@ -973,6 +1096,138 @@ class ArtifactMemoryStore:
             "\n".join(body).rstrip() + "\n",
             len(rows),
             meta=ArtifactMeta(labels=tuple(label_counts), source="consolidate"),
+        )
+
+    # --- LLM synthesis -----------------------------------------------------
+
+    async def _synthesize(self, llm, model: str, system: str, user: str) -> str | None:
+        """One completion call (same client/contract as the curator). Returns the
+        stripped text, or None on any error / empty completion so callers degrade
+        to the mechanical projection instead of persisting garbage."""
+        try:
+            resp = await llm.completion(
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                model=model,
+                langfuse_name="memory.synthesize",
+            )
+        except Exception:
+            _logger.warning("memory synthesis LLM call failed", exc_info=True)
+            return None
+        content = resp.choices[0].message.content if resp.choices else None
+        return content.strip() if content and content.strip() else None
+
+    @staticmethod
+    def _validate_provenance(text: str, allowed: set[str]) -> bool:
+        """Every (record:XXXXXXXX) the model cited must be an id we actually
+        handed it — a single fabricated citation rejects the page (we fall back to
+        the mechanical brief rather than persist an unverifiable claim)."""
+        return prompts_synthesis.cited_ids(text).issubset({a[:8].lower() for a in allowed})
+
+    async def _emit_dossier(
+        self,
+        rel: str,
+        title: str,
+        rows: list[Record],
+        *,
+        scope_kind: str,
+        scope_key: str | None,
+        labels_by_id: dict[str, list],
+        known_subjects: frozenset[str],
+        known_titles: list[str],
+        llm=None,
+        model: str = "",
+    ) -> None:
+        """Write one dossier body. LLM path: synthesized prose (verified
+        provenance) with mechanical fallback. Mechanical path: bullet brief, but
+        an existing synthesized page is preserved (not downgraded)."""
+        if llm is not None and model:
+            body = await self._synthesize_dossier_body(
+                title, rows, known_titles, labels_by_id, llm=llm, model=model
+            )
+            if body is not None:
+                self._write(
+                    rel, title, "topic", scope_kind, scope_key, body,
+                    len(rows),
+                    meta=ArtifactMeta(labels=_cooccurring_labels(rows, labels_by_id, title), source=SYNTHESIS_SOURCE),
+                )
+                return
+            # fall through to mechanical brief on synthesis failure
+        elif (existing := self._synthesized_subject(rel)) is not None and existing.strip().lower() == title.strip().lower():
+            # Preserve a synthesized page ONLY when it belongs to THIS subject.
+            # On a slug-collision rank-flip the file holds a different subject's
+            # prose, so fall through and overwrite it with this subject's brief
+            # rather than skip (which would strand the current subject's content).
+            return
+        self._write_dossier(
+            rel, title, rows, scope_kind=scope_kind, scope_key=scope_key,
+            labels_by_id=labels_by_id, known_subjects=known_subjects,
+        )
+
+    async def _synthesize_dossier_body(
+        self, title: str, rows: list[Record], known_titles: list[str],
+        labels_by_id: dict[str, list], *, llm, model: str,
+    ) -> str | None:
+        flat = _flat_labels(labels_by_id)
+        ordered = sorted(rows, key=lambda r: r.last_confirmed_at, reverse=True)
+        user = prompts_synthesis.dossier_user_message(title, ordered, known_titles, flat)
+        out = await self._synthesize(llm, model, prompts_synthesis.DOSSIER_SYSTEM, user)
+        if not out or out.strip() == prompts_synthesis.INSUFFICIENT_DOSSIER:
+            return None
+        if not self._validate_provenance(out, {r.id for r in ordered}):
+            _logger.warning("dossier synthesis cited an unknown record id (%s); using mechanical brief", title)
+            return None
+        return out.rstrip() + "\n"
+
+    async def _synthesize_profile(
+        self, rows: list[Record], directives: list[Record], facts: list[Record],
+        labels_by_id: dict[str, list], *, llm, model: str,
+    ) -> None:
+        """me.md — a prose self-page from directives + user-scoped facts + pins."""
+        seen: set[str] = set()
+        selected: list[Record] = []
+        for r in [
+            *directives,
+            *(f for f in facts if (f.scope_kind or "").strip().lower() in ("user", "global", "")),
+            *(r for r in rows if r.pinned and canonical_kind(r.kind) != "source"),
+        ]:
+            if r.id not in seen:
+                seen.add(r.id)
+                selected.append(r)
+        if not selected:
+            return
+        selected.sort(key=lambda r: (r.pinned, r.last_confirmed_at), reverse=True)
+        selected = selected[:PROFILE_RECORD_CAP]
+        user = prompts_synthesis.profile_user_message(selected, _flat_labels(labels_by_id))
+        out = await self._synthesize(llm, model, prompts_synthesis.PROFILE_SYSTEM, user)
+        if not out or not self._validate_provenance(out, {r.id for r in selected}):
+            if out:
+                _logger.warning("profile synthesis cited an unknown record id; skipping me.md")
+            return
+        self._write(
+            "me.md", "Profile", "topic", "user", None, out.rstrip() + "\n",
+            len(selected), meta=ArtifactMeta(source=SYNTHESIS_SOURCE),
+        )
+
+    async def _synthesize_active_work(
+        self, rows: list[Record], labels_by_id: dict[str, list], *, llm, model: str,
+    ) -> None:
+        """active-work.md — current threads from recent + project-scoped records."""
+        cutoff = (datetime.now(UTC) - timedelta(days=ACTIVE_WORK_RECENT_DAYS)).isoformat()
+        recent = [r for r in rows if canonical_kind(r.kind) != "source" and (r.last_confirmed_at or "") >= cutoff]
+        project = [r for r in rows if (r.scope_kind or "").strip().lower() == "project"]
+        if not recent and not project:
+            return
+        user = prompts_synthesis.active_work_user_message(recent, project, _flat_labels(labels_by_id))
+        out = await self._synthesize(llm, model, prompts_synthesis.ACTIVE_WORK_SYSTEM, user)
+        if not out:
+            return
+        allowed = {r.id for r in [*recent, *project]}
+        if out.strip() != prompts_synthesis.NO_ACTIVE_WORK and not self._validate_provenance(out, allowed):
+            _logger.warning("active-work synthesis cited an unknown record id; skipping active-work.md")
+            return
+        self._write(
+            "active-work.md", "Active work", "topic", "global", None, out.rstrip() + "\n",
+            len({*allowed}), meta=ArtifactMeta(source=SYNTHESIS_SOURCE),
         )
 
     def _write_records(

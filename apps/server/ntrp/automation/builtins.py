@@ -8,7 +8,9 @@ from ntrp.automation.triggers import TimeTrigger, Trigger
 from ntrp.constants import (
     AUTOMATION_SUGGESTER_DAILY_AT,
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
+    BUILTIN_INTEGRATION_SYNC_ID,
     BUILTIN_MEMORY_CONSOLIDATE_ID,
+    INTEGRATION_SYNC_AT,
     MEMORY_CONSOLIDATE_AT,
 )
 from ntrp.logging import get_logger
@@ -41,12 +43,22 @@ BUILTINS = [
     ),
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_CONSOLIDATE_ID,
-        name="Memory Consolidation",
-        description="Sleep-time pass: merge duplicate records, supersede stale ones, and promote recurring patterns into higher-level facts/skills/rules.",
+        name="Memory Maintenance",
+        description="Nightly sleep-time pass: merge duplicate records, supersede stale or contradicted ones, retype mis-classified records, fold near-duplicate labels, prune tombstones, then re-synthesize the memory pages (profile, topic dossiers, active work) over the freshly consolidated pool.",
         triggers=[
             TimeTrigger(at=MEMORY_CONSOLIDATE_AT, days="daily"),
         ],
         handler="memory_consolidate",
+        auto_approve=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_INTEGRATION_SYNC_ID,
+        name="Integration Sync",
+        description="Incrementally pull new calendar, gmail, and slack activity since the last run into memory. Runs just before the nightly maintenance pass so the fresh items get consolidated and synthesized the same night.",
+        triggers=[
+            TimeTrigger(at=INTEGRATION_SYNC_AT, days="daily"),
+        ],
+        handler="integration_sync",
         auto_approve=True,
     ),
 ]

@@ -276,7 +276,8 @@ async def _run_memory_classify_labels() -> dict:
         report = ConsolidateReport()
         await consolidate._lint_labels(report)
         artifacts = ArtifactMemoryStore(knowledge.config.memory_artifacts_dir)
-        await artifacts.export_from_records(record_store)
+        llm, model = knowledge._memory_llm()
+        await artifacts.export_from_records(record_store, llm=llm, model=model)
         return {"relabeled": report.relabeled, "reclassified": report.reclassified}
     finally:
         await runtime.close()

@@ -34,15 +34,25 @@ class KnowledgeRuntime:
     def consolidate(self):
         return self._consolidate
 
+    def _memory_llm(self):
+        """(client, model) for memory-page synthesis — the same completion client
+        and model the curator/consolidate use. (None, "") when no memory_model is
+        configured, which keeps the export mechanical."""
+        if not self.config.memory_model:
+            return None, ""
+        return get_completion_client(self.config.memory_model), self.config.memory_model
+
     async def rebuild_artifacts(self) -> int:
         """Regenerate the markdown projection (entities/, projects/, …) from the
-        canonical record pool. Returns the artifact count."""
+        canonical record pool, LLM-synthesizing the prose pages. Returns the
+        artifact count."""
         if self._record_store is None:
             return 0
         from ntrp.memory.artifacts import ArtifactMemoryStore
 
+        llm, model = self._memory_llm()
         artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
-            self._record_store
+            self._record_store, llm=llm, model=model
         )
         return len(artifacts)
 
@@ -70,6 +80,11 @@ class KnowledgeRuntime:
                 await self._consolidate.lint_labels_once()
             from ntrp.memory.artifacts import ArtifactMemoryStore
 
+            # MECHANICAL only — the boot refresh exists to let pre-existing files
+            # adopt the current generator (frontmatter); synthesized pages survive
+            # a mechanical sync by design. Full LLM synthesis (~27 calls) belongs
+            # on the explicit triggers (/init, the rebuild endpoint, the CLI), not
+            # on every restart / crash-loop.
             await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(self._record_store)
         except Exception:
             _logger.warning("startup artifact refresh failed", exc_info=True)

@@ -38,7 +38,9 @@ def test_scope_for_write_rules():
 def test_scopes_for_read_and_source_mirroring():
     assert project_scope(project("ks", "p")) == MemoryScope("project", "ks")
     assert scopes_for_read(project=project("ks", "p"), session_id="s") == [GLOBAL_SCOPE, USER_SCOPE, MemoryScope("project", "ks")]
-    assert scopes_for_read(session_id="s") == [GLOBAL_SCOPE, USER_SCOPE, MemoryScope("session", "s")]
+    # No "session" read leg — nothing writes scope_kind="session", so reads are
+    # global + user (session_id is accepted but does not scope reads).
+    assert scopes_for_read(session_id="s") == [GLOBAL_SCOPE, USER_SCOPE]
     src = apply_scope_to_source(SourceRef(kind="chat_turn", ref="s:t"), MemoryScope("session", "s"))
     assert src is not None
     assert src.scope_kind == "session"

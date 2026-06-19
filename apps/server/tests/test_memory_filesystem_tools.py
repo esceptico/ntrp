@@ -39,7 +39,9 @@ def artifacts_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(
         memory_tools,
         "get_config",
-        lambda: types.SimpleNamespace(memory_artifacts_dir=root, memory_db_path=tmp_path / "memory.db"),
+        lambda: types.SimpleNamespace(
+            memory_artifacts_dir=root, memory_db_path=tmp_path / "memory.db", memory_model=None
+        ),
     )
     return root
 

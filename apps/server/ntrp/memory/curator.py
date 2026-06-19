@@ -79,6 +79,14 @@ _SYSTEM_PROMPT = (
     "unless they reveal durable user-level knowledge. Never turn one short task "
     "or debugging segment into a global fact or pattern. Explicit user "
     "corrections are maximal signal — always admit them, keep the user's wording.\n"
+    "(1b) DIRECTIVE GATE — `directive` is the RAREST kind, reserved for a short, "
+    "durable, user-STATED rule about how the assistant must behave (e.g. 'answer "
+    "concisely', 'never commit without my review'). Keep it to 1-2 sentences. A "
+    "context-specific instruction — about one codebase, tool, automation, "
+    "migration, or workflow — is a `fact`, NOT a directive. NEVER promote a "
+    "debugging fix, an implementation/SOP detail, a one-off task instruction, or a "
+    "design opinion to a directive; those are facts or nothing. When unsure between "
+    "directive and fact, choose fact.\n"
     "(2) Records are atomic, self-contained, short, and usable in future prompts (resolve pronouns inline), typed by "
     "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only). Choose the op against the EXISTING SIMILAR RECORDS: "
     "ADD (new), UPDATE (edit an existing one), SUPERSEDE (replace a now-wrong "
@@ -356,10 +364,33 @@ class Curator:
         return batch, idx
 
     async def reset_watermarks(self) -> None:
-        """/init: clear every per-session curate watermark so the next read returns
-        -1 (full re-curation from the start of each transcript)."""
+        """/init: clear every per-session curate watermark AND per-source ingest
+        watermark so the next read starts fresh (full re-curation from the start of
+        each transcript; full-window re-ingest of each integration source)."""
         conn = await self._ensure_conn()
         await conn.execute("DELETE FROM meta WHERE key LIKE 'curate_watermark:%'")
+        await conn.execute("DELETE FROM meta WHERE key LIKE 'ingest_watermark:%'")
+        await conn.commit()
+
+    @staticmethod
+    def _ingest_watermark_key(source_kind: str) -> str:
+        return f"ingest_watermark:{source_kind}"
+
+    async def read_ingest_watermark(self, source_kind: str) -> str | None:
+        """The ISO timestamp of the newest item last ingested for this source, or
+        None if the source has never been ingested. Drives incremental fetch."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT value FROM meta WHERE key = ?", (self._ingest_watermark_key(source_kind),)
+        )
+        return rows[0]["value"] if rows else None
+
+    async def write_ingest_watermark(self, source_kind: str, value: str) -> None:
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (self._ingest_watermark_key(source_kind), value),
+        )
         await conn.commit()
 
     async def stop(self) -> None:

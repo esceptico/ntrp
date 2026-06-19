@@ -76,6 +76,11 @@ class FakeKnowledge:
     def memory_ready(self) -> bool:
         return self._record_store is not None
 
+    def _memory_llm(self):
+        # These tests target P1–P3 (wipe/re-derive/budget); keep P4 mechanical so
+        # synthesis calls don't pollute the curation call-count assertions.
+        return None, ""
+
 
 async def _read_meta(db_path: Path, key_like: str) -> list[tuple[str, str]]:
     from ntrp.database import connect as db_connect
@@ -199,3 +204,20 @@ async def test_run_memory_init_caps_at_budget(tmp_path: Path):
     await consolidate.close()
     await curator.stop()
     await records.close()
+
+
+def test_prune_init_backups_keeps_newest(tmp_path: Path):
+    from ntrp.memory.init import _prune_init_backups
+
+    db = tmp_path / "memory.db"
+    db.write_text("db", encoding="utf-8")
+    # Lexicographic order == chronological (fixed-width stamps).
+    stamps = ["20260101T000000", "20260102T000000", "20260103T000000", "20260104T000000", "20260105T000000"]
+    for s in stamps:
+        (tmp_path / f"memory.db.init-bak-{s}").write_text("bak", encoding="utf-8")
+
+    _prune_init_backups(db, keep=3)
+
+    remaining = sorted(p.name for p in tmp_path.glob("memory.db.init-bak-*"))
+    assert remaining == [f"memory.db.init-bak-{s}" for s in stamps[-3:]]
+    assert db.exists()  # the live db is never pruned

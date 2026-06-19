@@ -459,8 +459,15 @@ async def memory_rebuild(execution: ToolExecution, args: MemoryRebuildInput) -> 
     if records is None:
         return _unavailable()
     store = _artifact_store()
+    # Explicit user-triggered rebuild → full LLM synthesis (consistent with the
+    # REST/CLI rebuild paths). The per-mutation sync (_sync_artifacts_if_live)
+    # stays mechanical.
+    from ntrp.llm.router import get_completion_client
+
+    cfg = get_config()
+    memory_llm = get_completion_client(cfg.memory_model) if cfg.memory_model else None
     try:
-        artifacts = await store.export_from_records(records)
+        artifacts = await store.export_from_records(records, llm=memory_llm, model=cfg.memory_model or "")
     except Exception as exc:
         _logger.warning("memory filesystem rebuild failed", exc_info=True)
         return ToolResult(content=f"Memory filesystem rebuild failed: {exc}", preview="Rebuild failed", is_error=True)

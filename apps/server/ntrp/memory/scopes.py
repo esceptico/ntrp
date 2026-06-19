@@ -14,7 +14,6 @@ class MemoryScope:
 
 GLOBAL_SCOPE = MemoryScope("global", None)
 USER_SCOPE = MemoryScope("user", None)
-SESSION_SOURCE_KINDS = {"chat_turn", "curator", "session_handoff"}
 INTEGRATION_SOURCE_KINDS = {"file", "web", "email", "gmail", "calendar", "slack", "mcp", "integration"}
 
 
@@ -42,10 +41,12 @@ def scope_for_write(
 
 
 def scopes_for_read(*, project=None, session_id: str | None = None) -> list[MemoryScope]:
+    # No "session" leg: scope_for_write never stamps scope_kind="session", so that
+    # read leg could only ever match nothing — it was dead surface that made
+    # per-session memory isolation look real. Reads are global + user (+ project).
+    # session_id is accepted (callers pass it) but does not scope reads.
     if project is not None:
         return [GLOBAL_SCOPE, USER_SCOPE, project_scope(project)]
-    if session_id:
-        return [GLOBAL_SCOPE, USER_SCOPE, MemoryScope("session", session_id)]
     return [GLOBAL_SCOPE, USER_SCOPE]
 
 

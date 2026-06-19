@@ -19,14 +19,17 @@ across transcripts + every source.
 from __future__ import annotations
 
 import shutil
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from ntrp.constants import INTEGRATION_INGEST_MAX_LLM_CALLS
 from ntrp.logging import get_logger
 from ntrp.memory.artifacts import ArtifactMemoryStore
 from ntrp.memory.models import now_iso
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from ntrp.server.runtime.knowledge import KnowledgeRuntime
 
@@ -36,6 +39,18 @@ _logger = get_logger(__name__)
 # is the sweep's bounded worklist; re-derivation wants every chat session).
 _SESSION_ENUMERATION_LIMIT = 100_000
 _MAX_CONSOLIDATE_PASSES = 3
+# Keep only the most recent N pre-wipe backups; older ones are pruned each /init
+# so they don't accumulate unbounded (every run mints a uniquely-named copy).
+INIT_BACKUP_KEEP = 3
+
+
+def _prune_init_backups(db_path: Path, *, keep: int) -> None:
+    backups = sorted(db_path.parent.glob(f"{db_path.name}.init-bak-*"))
+    for stale in backups[:-keep] if keep > 0 else backups:
+        try:
+            stale.unlink()
+        except OSError:
+            _logger.warning("failed to prune old init backup %s", stale, exc_info=True)
 
 # Per-source recency windows for the integration pass. Calendar is cheap and
 # spans planning horizons (180d); gmail is the highest-volume source so its
@@ -87,6 +102,7 @@ async def run_memory_init(
     if db_path.exists():
         shutil.copy2(db_path, backup_path)
         _report_progress(f"backed up memory.db to {backup_path}")
+        _prune_init_backups(db_path, keep=INIT_BACKUP_KEEP)
     else:
         backup_path = ""
 
@@ -141,12 +157,11 @@ async def run_memory_init(
         window = recency_days if recency_days is not None else SOURCE_RECENCY_DAYS[source]
         budget = max_llm_calls - llm_calls
         try:
-            items = await _fetch_source_items(source, client, window)
-            result = await curator.ingest_items(
-                items,
-                source_kind=source,
-                source_label=_INTEGRATION_LABEL,
-                max_calls=budget,
+            # /init re-derives the FULL window (since=None — watermarks were just
+            # reset in P1); _ingest_one_source advances the watermark afterwards so
+            # the periodic ingest that follows is incremental.
+            result = await _ingest_one_source(
+                curator, source, client, window_days=window, since=None, budget=budget, label=_INTEGRATION_LABEL
             )
             integrations[source] = {"admitted": result["admitted"], "calls": result["calls"]}
             admitted += result["admitted"]
@@ -171,8 +186,14 @@ async def run_memory_init(
     _report_progress(f"consolidated in {consolidate_summary['passes']} pass(es)")
 
     # --- P4: rebuild artifact projection ------------------------------------
+    # Full LLM synthesis (me.md + dossiers + active-work) when any LLM budget
+    # remains; once the curation/ingestion budget is spent, fall back to the
+    # mechanical projection so /init never blows past max_llm_calls.
     artifacts = ArtifactMemoryStore(knowledge.config.memory_artifacts_dir)
-    await artifacts.export_from_records(record_store)
+    synth_llm, synth_model = knowledge._memory_llm()
+    if llm_calls >= max_llm_calls:
+        synth_llm, synth_model = None, ""
+    await artifacts.export_from_records(record_store, llm=synth_llm, model=synth_model)
     _report_progress("rebuilt artifact projection")
 
     return {
@@ -187,17 +208,115 @@ async def run_memory_init(
     }
 
 
-async def _fetch_source_items(source: str, client, window_days: int) -> list:
-    """Pull RawItems for one source over its recency window, then apply the cheap
-    pre-LLM noise filter. Returns the survivors (the curator's worthiness gate is
-    the backstop; these filters just cut volume/cost before any LLM call)."""
+async def run_integration_ingest(
+    knowledge: KnowledgeRuntime,
+    *,
+    integration_clients: dict[str, object] | None = None,
+    recency_days: int | None = None,
+    max_llm_calls: int = INTEGRATION_INGEST_MAX_LLM_CALLS,
+    progress: Callable[[str], None] | None = None,
+) -> dict:
+    """Incremental, NON-destructive integration ingest — the periodic counterpart
+    to /init's P2.5. Per connected source, fetch only items newer than the stored
+    per-source watermark, curate them into the pool, and advance the watermark. It
+    does NOT wipe, reset, or rebuild artifacts; the nightly maintenance pass folds
+    the new records into consolidation + the artifact projection.
+
+    Each source is isolated (a fetch/scope/curation failure is recorded and the
+    others continue). `max_llm_calls` caps the run across all sources. Returns
+    {"admitted", "capped", "integrations"}."""
+    curator = knowledge.memory_curator
+    if curator is None:
+        raise RuntimeError("memory not ready: curator unavailable")
+
+    def _report(message: str) -> None:
+        if progress is not None:
+            progress(message)
+
+    integrations: dict[str, dict] = {}
+    clients = integration_clients or {}
+    admitted = 0
+    llm_calls = 0
+    capped = False
+    for source in ("calendar", "gmail", "slack"):
+        client = clients.get(source)
+        if client is None:
+            continue  # not connected — skip silently
+        if llm_calls >= max_llm_calls:
+            capped = True
+            integrations[source] = {"admitted": 0, "calls": 0, "capped": True}
+            continue
+        window = recency_days if recency_days is not None else SOURCE_RECENCY_DAYS[source]
+        budget = max_llm_calls - llm_calls
+        watermark = await curator.read_ingest_watermark(source)
+        since = datetime.fromisoformat(watermark) if watermark else None
+        try:
+            result = await _ingest_one_source(
+                curator, source, client, window_days=window, since=since, budget=budget, label=_INTEGRATION_LABEL
+            )
+            integrations[source] = {"admitted": result["admitted"], "calls": result["calls"]}
+            admitted += result["admitted"]
+            llm_calls += result["calls"]
+            if result["capped"]:
+                capped = True
+            _report(f"{source}: {result['admitted']} new records")
+        except Exception as e:
+            _logger.warning("ingest: integration source failed", source=source, exc_info=True)
+            integrations[source] = {"admitted": 0, "calls": 0, "error": str(e)}
+            _report(f"{source}: failed ({e})")
+    return {"admitted": admitted, "capped": capped, "integrations": integrations}
+
+
+def _item_ts(item) -> datetime:
+    """A RawItem's source timestamp as an aware-UTC datetime (the watermark axis).
+    updated_at catches both new and edited items; naive datetimes are read as UTC."""
+    ts = item.updated_at
+    return ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+
+
+def _effective_window(window_days: int, since: datetime | None) -> int:
+    """Shrink the fetch window to just past the watermark so an incremental run
+    pulls a day or two, not the full recency horizon. Capped by window_days."""
+    if since is None:
+        return window_days
+    days = (datetime.now(UTC) - since).days + 1
+    return max(1, min(window_days, days))
+
+
+async def _ingest_one_source(
+    curator, source: str, client, *, window_days: int, since: datetime | None, budget: int, label: str
+) -> dict:
+    """Fetch (incrementally, if `since`), curate, and advance the watermark for one
+    source. Shared by /init (since=None, full window) and the periodic ingest."""
+    items = await _fetch_source_items(source, client, _effective_window(window_days, since), since=since)
+    result = await curator.ingest_items(items, source_kind=source, source_label=label, max_calls=budget)
+    # Advance the watermark to the newest item seen — but only on a clean (not
+    # capped) pass, so a capped source re-fetches its tail next run.
+    # ponytail: the max is over kept (post-noise-filter) items, so a window of
+    # pure noise won't advance the watermark; bounded by window_days, no LLM cost.
+    if not result["capped"]:
+        newest = max((_item_ts(it) for it in items), default=None)
+        if newest is not None:
+            await curator.write_ingest_watermark(source, newest.isoformat())
+    return result
+
+
+async def _fetch_source_items(source: str, client, window_days: int, *, since: datetime | None = None) -> list:
+    """Pull RawItems for one source over its recency window, apply the cheap
+    pre-LLM noise filter, then drop anything at/older than `since` (the watermark).
+    Returns the survivors (the curator's worthiness gate is the backstop; these
+    filters just cut volume/cost before any LLM call)."""
     if source == "calendar":
-        return _filter_calendar(_fetch_calendar(client, window_days))
-    if source == "gmail":
-        return _filter_gmail(_fetch_gmail(client, window_days))
-    if source == "slack":
-        return _filter_slack(await _fetch_slack(client, window_days))
-    return []
+        items = _filter_calendar(_fetch_calendar(client, window_days))
+    elif source == "gmail":
+        items = _filter_gmail(_fetch_gmail(client, window_days))
+    elif source == "slack":
+        items = _filter_slack(await _fetch_slack(client, window_days))
+    else:
+        return []
+    if since is not None:
+        items = [it for it in items if _item_ts(it) > since]
+    return items
 
 
 # -- calendar ----------------------------------------------------------------
