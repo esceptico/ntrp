@@ -468,6 +468,9 @@ async def memory_rebuild(execution: ToolExecution, args: MemoryRebuildInput) -> 
     memory_llm = get_completion_client(cfg.memory_model) if cfg.memory_model else None
     try:
         artifacts = await store.export_from_records(records, llm=memory_llm, model=cfg.memory_model or "")
+        from ntrp.server.runtime.knowledge import write_artifact_publish_checkpoint
+
+        await write_artifact_publish_checkpoint(cfg.memory_db_path, records, cfg.memory_artifacts_dir)
     except Exception as exc:
         _logger.warning("memory filesystem rebuild failed", exc_info=True)
         return ToolResult(content=f"Memory filesystem rebuild failed: {exc}", preview="Rebuild failed", is_error=True)

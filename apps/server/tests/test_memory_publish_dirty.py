@@ -19,6 +19,7 @@ class CountingArtifactStore:
     async def export_from_records(self, records, *, llm=None, model="", limit=None):
         type(self).calls += 1
         self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "README.md").write_text("# generated\n")
         return [SimpleNamespace(path="README.md")]
 
 
@@ -80,6 +81,35 @@ async def test_publish_artifacts_if_dirty_refreshes_when_records_change(tmp_path
     assert refreshed.refreshed is True
     assert refreshed.artifact_count == 1
     assert CountingArtifactStore.calls == 2
+
+
+async def test_publish_artifacts_if_dirty_refreshes_when_artifact_tree_drifts(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(artifacts_mod, "ArtifactMemoryStore", CountingArtifactStore)
+    CountingArtifactStore.calls = 0
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    await records.add("artifact files can drift", kind="fact")
+    runtime = _runtime(records, tmp_path)
+
+    await runtime.publish_artifacts_if_dirty()
+    (tmp_path / "artifacts" / "README.md").unlink()
+    refreshed = await runtime.publish_artifacts_if_dirty()
+
+    assert refreshed.refreshed is True
+    assert CountingArtifactStore.calls == 2
+
+
+async def test_forced_rebuild_updates_dirty_checkpoint(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(artifacts_mod, "ArtifactMemoryStore", CountingArtifactStore)
+    CountingArtifactStore.calls = 0
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    await records.add("manual rebuild should satisfy scheduled publish", kind="fact")
+    runtime = _runtime(records, tmp_path)
+
+    assert await runtime.rebuild_artifacts() == 1
+    skipped = await runtime.publish_artifacts_if_dirty()
+
+    assert skipped.refreshed is False
+    assert CountingArtifactStore.calls == 1
 
 
 async def test_artifact_fingerprint_includes_created_at(tmp_path: Path):

@@ -265,9 +265,6 @@ def memory_classify_labels():
 
 
 async def _run_memory_classify_labels() -> dict:
-    from ntrp.memory.artifacts import ArtifactMemoryStore
-    from ntrp.memory.consolidate import ConsolidateReport
-
     runtime = Runtime()
     await runtime.connect()
     try:
@@ -276,12 +273,8 @@ async def _run_memory_classify_labels() -> dict:
             console.print("[red]Error:[/red] memory not ready (check memory_model / config)")
             raise SystemExit(1)
         consolidate = knowledge._consolidate
-        record_store = knowledge._record_store
-        report = ConsolidateReport()
-        await consolidate._lint_labels(report)
-        artifacts = ArtifactMemoryStore(knowledge.config.memory_artifacts_dir)
-        llm, model = knowledge._memory_llm()
-        await artifacts.export_from_records(record_store, llm=llm, model=model)
+        report = await consolidate.lint_labels_once()
+        await knowledge.rebuild_artifacts()
         return {"relabeled": report.relabeled, "reclassified": report.reclassified}
     finally:
         await runtime.close()

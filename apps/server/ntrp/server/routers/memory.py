@@ -14,7 +14,7 @@ from ntrp.memory.models import Record
 from ntrp.memory.scopes import MemoryScope, scope_for_write
 from ntrp.server.deps import require_knowledge_runtime
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.runtime.knowledge import KnowledgeRuntime
+from ntrp.server.runtime.knowledge import KnowledgeRuntime, write_artifact_publish_checkpoint
 
 router = APIRouter(prefix="/admin/memory", tags=["memory"])
 
@@ -150,6 +150,11 @@ async def rebuild_artifacts(
     # active-work), same as the startup/CLI rebuild paths.
     llm, model = knowledge._memory_llm()
     items = await artifacts.export_from_records(store, llm=llm, model=model)
+    await write_artifact_publish_checkpoint(
+        knowledge.config.memory_db_path,
+        store,
+        knowledge.config.memory_artifacts_dir,
+    )
     return {"artifacts": [artifact_to_json(a) for a in items]}
 
 

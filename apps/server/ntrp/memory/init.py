@@ -209,6 +209,13 @@ async def run_memory_init(
     if llm_calls >= max_llm_calls:
         synth_llm, synth_model = None, ""
     await artifacts.export_from_records(record_store, llm=synth_llm, model=synth_model)
+    from ntrp.server.runtime.knowledge import write_artifact_publish_checkpoint
+
+    await write_artifact_publish_checkpoint(
+        knowledge.config.memory_db_path,
+        record_store,
+        knowledge.config.memory_artifacts_dir,
+    )
     _report_progress("rebuilt artifact projection")
 
     return {
