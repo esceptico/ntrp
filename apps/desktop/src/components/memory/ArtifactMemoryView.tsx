@@ -7,7 +7,8 @@ import { IconButton } from "../IconButton";
 import { Markdown } from "../Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "../wikilink";
 import { ICON } from "../../lib/icons";
-import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, SPRING_TAP } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
+import { SegmentedControl } from "../SegmentedControl";
 import { TabPanels } from "../ui/TabPanels";
 import {
   listMemoryArtifacts,
@@ -565,28 +566,15 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
 
   // ─── Mode toggle (shared by both panes' headers) ────────────────────
   const modeToggle = (
-    <div className="flex items-center gap-1 rounded-full bg-surface-soft p-0.5 text-xs">
-      {(["files", "records"] as const).map((m) => (
-        <button
-          key={m}
-          type="button"
-          onClick={() => setMode(m)}
-          className={clsx(
-            "relative rounded-full px-3 py-1 capitalize transition-colors",
-            mode === m ? "text-ink" : "text-muted hover:text-ink",
-          )}
-        >
-          {mode === m && (
-            <motion.span
-              layoutId="memoryTab"
-              transition={reduce ? { duration: 0 } : SPRING_TAP}
-              className="absolute inset-0 -z-10 rounded-full bg-bg shadow-sm"
-            />
-          )}
-          {m}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      size="sm"
+      options={[
+        { value: "files", label: "Files" },
+        { value: "records", label: "Records" },
+      ]}
+      value={mode}
+      onChange={(v) => setMode(v as MemoryViewMode)}
+    />
   );
 
   // ─── Files list pane ────────────────────────────────────────────────
