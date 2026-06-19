@@ -84,6 +84,10 @@ class AutomationRuntime:
             self._build_memory_consolidate_handler(),
         )
         self.scheduler.register_handler(
+            "memory_publish",
+            self._build_memory_publish_handler(),
+        )
+        self.scheduler.register_handler(
             "integration_sync",
             self._build_integration_sync_handler(),
         )
@@ -117,26 +121,26 @@ class AutomationRuntime:
                 if not rep.changed_memory:
                     break
             assert totals is not None
-            summary = (
-                f"merged {totals['merged']}, superseded {totals['superseded']}, "
-                f"dropped {totals['dropped']}, retyped {totals['retyped']}, "
-                f"relabeled {totals['relabeled']}, reclassified {totals['reclassified']}, "
-                f"pruned {totals['pruned']}"
+            ordered_keys = (
+                "merged",
+                "superseded",
+                "dropped",
+                "retyped",
+                "relabeled",
+                "reclassified",
+                "pruned",
             )
-            # Re-synthesize the prose surface (me.md / dossiers / active-work.md)
-            # over the freshly consolidated pool so it refreshes nightly instead of
-            # rotting between manual rebuilds. rebuild_artifacts() LLM-synthesizes
-            # when a memory model is configured, else does a cheap mechanical
-            # re-projection — either way the projection stops drifting from records.
+            return ", ".join(f"{key} {totals[key]}" for key in ordered_keys if key in totals)
+
+        return handler
+
+    def _build_memory_publish_handler(self):
+        async def handler(context: dict | None) -> str | None:
             knowledge = self.get_knowledge()
-            if knowledge is not None:
-                try:
-                    count = await knowledge.rebuild_artifacts()
-                    summary += f"; refreshed {count} artifacts"
-                except Exception:
-                    _logger.warning("nightly artifact refresh failed", exc_info=True)
-                    summary += "; artifact refresh failed"
-            return summary
+            if knowledge is None or not knowledge.memory_ready:
+                return "memory publish unavailable (memory not ready)"
+            count = await knowledge.rebuild_artifacts()
+            return f"refreshed {count} artifacts"
 
         return handler
 

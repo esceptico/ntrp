@@ -168,6 +168,8 @@ BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID = "builtin-automation-suggester-daily"
 AUTOMATION_SUGGESTER_DAILY_AT = "07:00"
 BUILTIN_MEMORY_CONSOLIDATE_ID = "builtin-memory-consolidate"
 MEMORY_CONSOLIDATE_AT = "03:00"
+BUILTIN_MEMORY_PUBLISH_ID = "builtin-memory-publish"
+MEMORY_PUBLISH_AT = "03:30"
 # Incremental integration ingest runs before the maintenance pass so the night's
 # fresh calendar/gmail/slack deltas get consolidated + synthesized the same run.
 BUILTIN_INTEGRATION_SYNC_ID = "builtin-integration-sync"

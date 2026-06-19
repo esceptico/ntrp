@@ -10,8 +10,10 @@ from ntrp.constants import (
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
     BUILTIN_INTEGRATION_SYNC_ID,
     BUILTIN_MEMORY_CONSOLIDATE_ID,
+    BUILTIN_MEMORY_PUBLISH_ID,
     INTEGRATION_SYNC_AT,
     MEMORY_CONSOLIDATE_AT,
+    MEMORY_PUBLISH_AT,
 )
 from ntrp.logging import get_logger
 
@@ -44,11 +46,21 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_CONSOLIDATE_ID,
         name="Memory Maintenance",
-        description="Nightly sleep-time pass: merge duplicate records, supersede stale or contradicted ones, retype mis-classified records, fold near-duplicate labels, prune tombstones, then re-synthesize the memory pages (profile, topic dossiers, active work) over the freshly consolidated pool.",
+        description="Nightly sleep-time reconcile pass: merge duplicate records, supersede stale or contradicted ones, retype mis-classified records, fold near-duplicate labels, and prune tombstones from the canonical memory pool.",
         triggers=[
             TimeTrigger(at=MEMORY_CONSOLIDATE_AT, days="daily"),
         ],
         handler="memory_consolidate",
+        auto_approve=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_PUBLISH_ID,
+        name="Memory Publish",
+        description="Nightly publish pass: rebuild the projected memory artifacts (profile, topic dossiers, active work) from the reconciled canonical memory pool.",
+        triggers=[
+            TimeTrigger(at=MEMORY_PUBLISH_AT, days="daily"),
+        ],
+        handler="memory_publish",
         auto_approve=True,
     ),
     BuiltinSpec(

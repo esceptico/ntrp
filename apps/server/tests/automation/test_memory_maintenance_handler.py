@@ -1,6 +1,5 @@
-"""The nightly memory-maintenance builtin handler: consolidate the record pool,
-then re-synthesize the prose surface (me.md / dossiers / active-work.md) so it
-refreshes automatically instead of rotting between manual rebuilds."""
+"""Nightly memory automation handlers: reconcile the record pool, then publish
+artifacts in a separate builtin so each phase can run and report independently."""
 
 from __future__ import annotations
 
@@ -60,44 +59,39 @@ def _runtime(consolidate, knowledge) -> AutomationRuntime:
     return rt
 
 
-async def test_handler_consolidates_then_refreshes_prose():
+async def test_consolidate_handler_reconciles_without_refreshing_artifacts():
     consolidate = AsyncMock()
     consolidate.run_once = AsyncMock(
         side_effect=[_Rep(merged=2, dropped=1, reclassified=3, pruned=4), _Rep(changed_memory=False)]
     )
     knowledge = AsyncMock()
-    knowledge.rebuild_artifacts = AsyncMock(return_value=31)
 
     handler = _runtime(consolidate, knowledge)._build_memory_consolidate_handler()
     result = await handler(None)
 
-    # Consolidation ran, THEN the prose surface was rebuilt over the fresh pool.
-    knowledge.rebuild_artifacts.assert_awaited_once()
+    knowledge.rebuild_artifacts.assert_not_awaited()
     assert "merged 2" in result and "dropped 1" in result
     assert "reclassified 3" in result and "pruned 4" in result
-    assert "refreshed 31 artifacts" in result
+    assert "refreshed" not in result
 
 
-async def test_handler_unavailable_without_memory_model():
+async def test_consolidate_handler_unavailable_without_memory_model():
     handler = _runtime(None, None)._build_memory_consolidate_handler()
     assert "unavailable" in await handler(None)
 
 
-async def test_handler_survives_artifact_refresh_failure():
+async def test_consolidate_handler_does_not_raise_when_knowledge_is_missing():
     consolidate = AsyncMock()
-    consolidate.run_once = AsyncMock(side_effect=[_Rep(merged=1), _Rep()])
-    knowledge = AsyncMock()
-    knowledge.rebuild_artifacts = AsyncMock(side_effect=RuntimeError("boom"))
+    consolidate.run_once = AsyncMock(side_effect=[_Rep(merged=1), _Rep(changed_memory=False)])
 
-    handler = _runtime(consolidate, knowledge)._build_memory_consolidate_handler()
+    handler = _runtime(consolidate, None)._build_memory_consolidate_handler()
     result = await handler(None)
 
-    # A synthesis failure must not lose the consolidation result or raise.
     assert "merged 1" in result
-    assert "artifact refresh failed" in result
+    assert "artifact" not in result
 
 
-async def test_handler_continues_when_only_new_report_fields_changed():
+async def test_consolidate_handler_continues_when_only_new_report_fields_changed():
     consolidate = AsyncMock()
     consolidate.run_once = AsyncMock(
         side_effect=[
@@ -106,14 +100,36 @@ async def test_handler_continues_when_only_new_report_fields_changed():
             _Rep(changed_memory=False),
         ]
     )
-    knowledge = AsyncMock()
-    knowledge.rebuild_artifacts = AsyncMock(return_value=7)
-
-    handler = _runtime(consolidate, knowledge)._build_memory_consolidate_handler()
+    handler = _runtime(consolidate, AsyncMock())._build_memory_consolidate_handler()
     result = await handler(None)
 
     assert consolidate.run_once.await_count == 3
     assert "reclassified 1" in result and "pruned 2" in result
+
+
+async def test_publish_handler_refreshes_artifacts():
+    knowledge = AsyncMock()
+    knowledge.memory_ready = True
+    knowledge.rebuild_artifacts = AsyncMock(return_value=31)
+
+    handler = _runtime(None, knowledge)._build_memory_publish_handler()
+    result = await handler(None)
+
+    knowledge.rebuild_artifacts.assert_awaited_once()
+    assert result == "refreshed 31 artifacts"
+
+
+async def test_publish_handler_unavailable_without_memory():
+    handler = _runtime(None, None)._build_memory_publish_handler()
+    assert "unavailable" in await handler(None)
+
+
+async def test_publish_handler_unavailable_when_memory_not_ready():
+    knowledge = AsyncMock()
+    knowledge.memory_ready = False
+
+    handler = _runtime(None, knowledge)._build_memory_publish_handler()
+    assert "unavailable" in await handler(None)
 
 
 # --- integration_sync handler ------------------------------------------------

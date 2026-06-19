@@ -28,7 +28,7 @@ _logger = get_logger(__name__)
 
 # Builtin maintenance handlers whose missed daily run should be caught up on boot
 # (rather than skipped to tomorrow) if they haven't run within the cadence.
-_CATCH_UP_HANDLERS = {"memory_consolidate", "integration_sync"}
+_CATCH_UP_HANDLERS = {"memory_consolidate", "memory_publish", "integration_sync"}
 _CATCH_UP_CADENCE = timedelta(hours=24)
 
 
