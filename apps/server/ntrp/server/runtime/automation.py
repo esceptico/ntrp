@@ -139,8 +139,10 @@ class AutomationRuntime:
             knowledge = self.get_knowledge()
             if knowledge is None or not knowledge.memory_ready:
                 return "memory publish unavailable (memory not ready)"
-            count = await knowledge.rebuild_artifacts()
-            return f"refreshed {count} artifacts"
+            report = await knowledge.publish_artifacts_if_dirty()
+            if report.skipped:
+                return "skipped artifact publish (no memory changes)"
+            return f"refreshed {report.artifact_count} artifacts"
 
         return handler
 

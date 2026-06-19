@@ -1,12 +1,28 @@
 import asyncio
+import hashlib
+import json
+from dataclasses import dataclass
 
 from ntrp.config import Config
+from ntrp.database import connect as db_connect
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.server.indexer import Indexer
 from ntrp.server.stores import Stores
 
 _logger = get_logger(__name__)
+_ARTIFACT_FINGERPRINT_KEY = "memory_artifacts_fingerprint"
+
+
+@dataclass(frozen=True)
+class ArtifactPublishReport:
+    refreshed: bool
+    artifact_count: int
+    fingerprint: str
+
+    @property
+    def skipped(self) -> bool:
+        return not self.refreshed
 
 
 class KnowledgeRuntime:
@@ -50,11 +66,77 @@ class KnowledgeRuntime:
             return 0
         from ntrp.memory.artifacts import ArtifactMemoryStore
 
+        fingerprint = await self._artifact_fingerprint()
         llm, model = self._memory_llm()
         artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
             self._record_store, llm=llm, model=model
         )
+        await self._write_artifact_fingerprint(fingerprint)
         return len(artifacts)
+
+    async def publish_artifacts_if_dirty(self) -> ArtifactPublishReport:
+        """Publish artifacts only when canonical memory inputs changed."""
+        if self._record_store is None:
+            return ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint="")
+        fingerprint = await self._artifact_fingerprint()
+        if await self._read_artifact_fingerprint() == fingerprint:
+            return ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint=fingerprint)
+
+        from ntrp.memory.artifacts import ArtifactMemoryStore
+
+        llm, model = self._memory_llm()
+        artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
+            self._record_store, llm=llm, model=model
+        )
+        await self._write_artifact_fingerprint(fingerprint)
+        return ArtifactPublishReport(refreshed=True, artifact_count=len(artifacts), fingerprint=fingerprint)
+
+    async def _artifact_fingerprint(self) -> str:
+        records = await self._record_store.list(limit=None)
+        record_ids = [record.id for record in records]
+        labels_by_id = await self._record_store.labels_for(record_ids, include_kind=True) if record_ids else {}
+        payload = []
+        for record in sorted(records, key=lambda item: item.id):
+            labels = sorted(
+                labels_by_id.get(record.id, []),
+                key=lambda entry: (entry.get("label", ""), entry.get("kind", "")),
+            )
+            payload.append(
+                {
+                    "id": record.id,
+                    "text": record.text,
+                    "kind": record.kind,
+                    "scope_kind": record.scope_kind,
+                    "scope_key": record.scope_key,
+                    "last_confirmed_at": record.last_confirmed_at,
+                    "pinned": record.pinned,
+                    "source_ref": record.source_ref.to_dict() if record.source_ref is not None else None,
+                    "labels": labels,
+                }
+            )
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    async def _read_artifact_fingerprint(self) -> str | None:
+        conn = await db_connect(self.config.memory_db_path)
+        try:
+            await conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            rows = await conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (_ARTIFACT_FINGERPRINT_KEY,))
+            return rows[0]["value"] if rows else None
+        finally:
+            await conn.close()
+
+    async def _write_artifact_fingerprint(self, fingerprint: str) -> None:
+        conn = await db_connect(self.config.memory_db_path)
+        try:
+            await conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            await conn.execute(
+                "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_ARTIFACT_FINGERPRINT_KEY, fingerprint),
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
 
     async def connect(self, stores: Stores) -> None:
         await self._init_search()

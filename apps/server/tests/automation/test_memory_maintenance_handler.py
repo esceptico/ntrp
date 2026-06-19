@@ -10,6 +10,7 @@ import pytest
 
 import ntrp.memory.init as init_mod
 from ntrp.server.runtime.automation import AutomationRuntime
+from ntrp.server.runtime.knowledge import ArtifactPublishReport
 
 pytestmark = pytest.mark.asyncio
 
@@ -110,13 +111,28 @@ async def test_consolidate_handler_continues_when_only_new_report_fields_changed
 async def test_publish_handler_refreshes_artifacts():
     knowledge = AsyncMock()
     knowledge.memory_ready = True
-    knowledge.rebuild_artifacts = AsyncMock(return_value=31)
+    knowledge.publish_artifacts_if_dirty = AsyncMock(
+        return_value=ArtifactPublishReport(refreshed=True, artifact_count=31, fingerprint="abc")
+    )
 
     handler = _runtime(None, knowledge)._build_memory_publish_handler()
     result = await handler(None)
 
-    knowledge.rebuild_artifacts.assert_awaited_once()
+    knowledge.publish_artifacts_if_dirty.assert_awaited_once()
     assert result == "refreshed 31 artifacts"
+
+
+async def test_publish_handler_reports_noop_when_artifacts_clean():
+    knowledge = AsyncMock()
+    knowledge.memory_ready = True
+    knowledge.publish_artifacts_if_dirty = AsyncMock(
+        return_value=ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint="abc")
+    )
+
+    handler = _runtime(None, knowledge)._build_memory_publish_handler()
+    result = await handler(None)
+
+    assert result == "skipped artifact publish (no memory changes)"
 
 
 async def test_publish_handler_unavailable_without_memory():
