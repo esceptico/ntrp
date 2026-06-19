@@ -61,6 +61,18 @@ class ConsolidateReport:
     pruned: int = 0  # superseded tombstones hard-deleted by the LINT pass
 
     @property
+    def summary_counts(self) -> dict[str, int]:
+        return {
+            "merged": self.merged,
+            "superseded": self.superseded,
+            "dropped": self.dropped,
+            "retyped": self.retyped,
+            "relabeled": self.relabeled,
+            "reclassified": self.reclassified,
+            "pruned": self.pruned,
+        }
+
+    @property
     def mutating_count(self) -> int:
         return (
             self.merged
@@ -311,9 +323,9 @@ class Consolidate:
         """Curate the label vocabulary: ONE LLM call over the whole list_labels()
         (it is small) both folds near-duplicate names (case/synonym variants like
         "dex"/"Dex memory") via rename_label AND classifies each label as
-        entity|meta so entity dossiers can be built. Runs every sweep — including
-        the empty-delta one — so the cold-start backlog gets classified without
-        needing new records. Skipped only when the vocabulary has < 2 labels."""
+        entity|meta so entity dossiers can be built. Delta sweeps always run it;
+        idle sweeps rerun it only when the durable vocabulary fingerprint
+        changed. Skipped only when the vocabulary has < 2 labels."""
         labels = labels if labels is not None else await self._records.list_labels()
         if len(labels) < 2:
             return

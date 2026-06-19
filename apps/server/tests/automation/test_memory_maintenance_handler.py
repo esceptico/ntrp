@@ -22,6 +22,34 @@ class _Rep:
         self.dropped = kw.get("dropped", 0)
         self.retyped = kw.get("retyped", 0)
         self.relabeled = kw.get("relabeled", 0)
+        self.reclassified = kw.get("reclassified", 0)
+        self.pruned = kw.get("pruned", 0)
+        self.changed_memory = kw.get(
+            "changed_memory",
+            any(
+                [
+                    self.merged,
+                    self.superseded,
+                    self.dropped,
+                    self.retyped,
+                    self.relabeled,
+                    self.reclassified,
+                    self.pruned,
+                ]
+            ),
+        )
+
+    @property
+    def summary_counts(self):
+        return {
+            "merged": self.merged,
+            "superseded": self.superseded,
+            "dropped": self.dropped,
+            "retyped": self.retyped,
+            "relabeled": self.relabeled,
+            "reclassified": self.reclassified,
+            "pruned": self.pruned,
+        }
 
 
 def _runtime(consolidate, knowledge) -> AutomationRuntime:
@@ -34,7 +62,9 @@ def _runtime(consolidate, knowledge) -> AutomationRuntime:
 
 async def test_handler_consolidates_then_refreshes_prose():
     consolidate = AsyncMock()
-    consolidate.run_once = AsyncMock(side_effect=[_Rep(merged=2, dropped=1), _Rep()])
+    consolidate.run_once = AsyncMock(
+        side_effect=[_Rep(merged=2, dropped=1, reclassified=3, pruned=4), _Rep(changed_memory=False)]
+    )
     knowledge = AsyncMock()
     knowledge.rebuild_artifacts = AsyncMock(return_value=31)
 
@@ -44,6 +74,7 @@ async def test_handler_consolidates_then_refreshes_prose():
     # Consolidation ran, THEN the prose surface was rebuilt over the fresh pool.
     knowledge.rebuild_artifacts.assert_awaited_once()
     assert "merged 2" in result and "dropped 1" in result
+    assert "reclassified 3" in result and "pruned 4" in result
     assert "refreshed 31 artifacts" in result
 
 
@@ -64,6 +95,25 @@ async def test_handler_survives_artifact_refresh_failure():
     # A synthesis failure must not lose the consolidation result or raise.
     assert "merged 1" in result
     assert "artifact refresh failed" in result
+
+
+async def test_handler_continues_when_only_new_report_fields_changed():
+    consolidate = AsyncMock()
+    consolidate.run_once = AsyncMock(
+        side_effect=[
+            _Rep(reclassified=1, changed_memory=True),
+            _Rep(pruned=2, changed_memory=True),
+            _Rep(changed_memory=False),
+        ]
+    )
+    knowledge = AsyncMock()
+    knowledge.rebuild_artifacts = AsyncMock(return_value=7)
+
+    handler = _runtime(consolidate, knowledge)._build_memory_consolidate_handler()
+    result = await handler(None)
+
+    assert consolidate.run_once.await_count == 3
+    assert "reclassified 1" in result and "pruned 2" in result
 
 
 # --- integration_sync handler ------------------------------------------------

@@ -105,19 +105,23 @@ class AutomationRuntime:
             consolidate = self.get_consolidate()
             if consolidate is None:
                 return "memory consolidation unavailable (no memory model configured)"
-            totals = {"merged": 0, "superseded": 0, "dropped": 0, "retyped": 0, "relabeled": 0}
+            totals: dict[str, int] | None = None
             # run_once is O(delta)-bounded (200/call); loop so one scheduled run
             # drains the day's backlog. Empty pass -> done.
             for _ in range(8):
                 rep = await consolidate.run_once()
-                for k in totals:
-                    totals[k] += getattr(rep, k)
-                if not any(getattr(rep, k) for k in totals):
+                if totals is None:
+                    totals = {key: 0 for key in rep.summary_counts}
+                for key, value in rep.summary_counts.items():
+                    totals[key] += value
+                if not rep.changed_memory:
                     break
+            assert totals is not None
             summary = (
                 f"merged {totals['merged']}, superseded {totals['superseded']}, "
                 f"dropped {totals['dropped']}, retyped {totals['retyped']}, "
-                f"relabeled {totals['relabeled']}"
+                f"relabeled {totals['relabeled']}, reclassified {totals['reclassified']}, "
+                f"pruned {totals['pruned']}"
             )
             # Re-synthesize the prose surface (me.md / dossiers / active-work.md)
             # over the freshly consolidated pool so it refreshes nightly instead of

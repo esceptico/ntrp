@@ -272,8 +272,8 @@ async def test_label_hygiene_reclassifies_entity_vs_meta(tmp_path: Path):
     await records.close()
 
 
-async def test_empty_delta_still_classifies_labels(tmp_path: Path):
-    """An idle sweep re-runs label hygiene only when the durable vocabulary
+async def test_empty_delta_reruns_label_hygiene_when_fingerprint_changes(tmp_path: Path):
+    """An idle sweep re-runs label hygiene when the durable vocabulary
     fingerprint changed outside the record delta path."""
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     a = await records.add("Dex is the user's son")
