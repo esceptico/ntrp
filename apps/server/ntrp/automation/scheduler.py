@@ -250,15 +250,18 @@ class Scheduler:
     def _should_catch_up_missed(automation: Automation, now: datetime) -> bool:
         """A missed daily maintenance builtin should run immediately on boot rather
         than skip to its next future slot. Scoped to builtin maintenance handlers
-        on a single daily TimeTrigger that haven't run within their cadence — so a
-        machine asleep/off at 03:00 still gets memory maintenance, without
-        surprising user-created reminders."""
+        on a single daily TimeTrigger whose scheduled slot is now overdue and
+        still unsatisfied — so a machine asleep/off at 03:00 still gets memory
+        maintenance, without surprising user-created reminders."""
         if not (automation.builtin and automation.handler in _CATCH_UP_HANDLERS):
             return False
         if len(automation.triggers) != 1 or not isinstance(automation.triggers[0], TimeTrigger):
             return False
+        due_at = automation.next_run_at
+        if due_at is None or due_at > now:
+            return False
         last = automation.last_run_at
-        return last is None or (now - last) >= _CATCH_UP_CADENCE
+        return last is None or last < due_at
 
     @staticmethod
     def _catch_up_phase_index(handler: str | None) -> int | None:

@@ -86,3 +86,31 @@ cd /Users/escept1co/src/ntrp/apps/server && ./.venv/bin/python -m pytest -q test
 - Added ordered catch-up sequencing for overdue builtins: `integration_sync` runs first, `memory_consolidate` waits for it, and `memory_publish` waits for both.
 - Woke the scheduler when one catch-up phase finishes so the next overdue phase starts immediately instead of waiting for the next 60s poll.
 - Kept Task 3 dirty/no-op publish gating out of scope.
+
+## Fix: missed-slot catch-up detection
+
+### Files changed
+
+- `apps/server/ntrp/automation/scheduler.py`
+- `apps/server/tests/automation/test_scheduler_catchup.py`
+- `.superpowers/sdd/task-2-report.md`
+
+### Tests run
+
+Command:
+
+```bash
+cd /Users/escept1co/src/ntrp/apps/server && ./.venv/bin/python -m pytest -q tests/automation/test_scheduler_catchup.py tests/automation/test_memory_maintenance_handler.py
+```
+
+### Output summary
+
+- `19 passed in 2.07s`
+
+### Self-review
+
+- Replaced the 24-hour cadence heuristic in `_should_catch_up_missed()` with a missed-slot check keyed to `next_run_at`.
+- Catch-up now fires when the scheduled slot is overdue and `last_run_at` has not yet satisfied that specific slot.
+- Preserved the ordered same-boot sequencing from the prior fix: `integration_sync` -> `memory_consolidate` -> `memory_publish`.
+- Added a regression for the late previous-day catch-up case (`2026-06-18 16:00` run, missed `2026-06-19 03:30`, boot at `2026-06-19 09:00`).
+- Kept Task 3 dirty/no-op publish gating out of scope.

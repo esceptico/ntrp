@@ -52,6 +52,21 @@ def test_no_catch_up_when_recently_run():
     assert Scheduler._should_catch_up_missed(_auto(last_run_at=NOW - timedelta(hours=2)), NOW) is False
 
 
+def test_catch_up_when_previous_day_catch_up_was_late_but_todays_slot_was_missed():
+    assert (
+        Scheduler._should_catch_up_missed(
+            _auto(
+                handler="memory_publish",
+                triggers=[TimeTrigger(at="03:30", days="daily")],
+                next_run_at=datetime(2026, 6, 19, 3, 30, tzinfo=UTC),
+                last_run_at=datetime(2026, 6, 18, 16, 0, tzinfo=UTC),
+            ),
+            datetime(2026, 6, 19, 9, 0, tzinfo=UTC),
+        )
+        is True
+    )
+
+
 def test_no_catch_up_for_user_automation():
     assert Scheduler._should_catch_up_missed(_auto(builtin=False), NOW) is False
 
