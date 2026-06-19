@@ -19,6 +19,7 @@ high-trust flag path are all stripped — records are flat, edge-less, single-ax
 """
 
 import asyncio
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,7 @@ _KINDS = {"directive", "fact", "source"}
 MAX_ITEMS_PER_SWEEP = 200
 NEIGHBORHOOD_LIMIT = 8
 WATERMARK_KEY = "consolidate_watermark"
+LABEL_FINGERPRINT_KEY = "consolidate_label_fingerprint"
 
 
 @dataclass
@@ -57,6 +59,22 @@ class ConsolidateReport:
     relabeled: int = 0  # label spellings folded into a canonical name
     reclassified: int = 0  # labels retyped between entity/meta by the hygiene pass
     pruned: int = 0  # superseded tombstones hard-deleted by the LINT pass
+
+    @property
+    def mutating_count(self) -> int:
+        return (
+            self.merged
+            + self.retyped
+            + self.superseded
+            + self.dropped
+            + self.relabeled
+            + self.reclassified
+            + self.pruned
+        )
+
+    @property
+    def changed_memory(self) -> bool:
+        return self.mutating_count > 0
 
 
 class Consolidate:
@@ -91,9 +109,7 @@ class Consolidate:
 
         delta, capped, last_processed = await self._select_delta(watermark)
         if not delta:
-            # Classify the cold-start backlog even on an idle system: label
-            # hygiene must run every sweep, not only when new records arrive.
-            await self._lint_labels(report)
+            await self._sync_label_hygiene(report, force=False)
             report.pruned = (await self._records.prune())["records"]
             await self._write_watermark(sweep_start)
             return report
@@ -105,7 +121,7 @@ class Consolidate:
                 continue
             await self._apply(ops, hood, report)
 
-        await self._lint_labels(report)
+        await self._sync_label_hygiene(report, force=True)
         report.pruned = (await self._records.prune())["records"]
 
         # Durability: a full sweep advances to sweep_start; a capped catch-up
@@ -122,7 +138,7 @@ class Consolidate:
         report = ConsolidateReport()
         if self._llm is None or not self._model:
             return report
-        await self._lint_labels(report)
+        await self._sync_label_hygiene(report, force=True)
         report.pruned = (await self._records.prune())["records"]
         return report
 
@@ -283,14 +299,22 @@ class Consolidate:
 
     # --- label hygiene (one bounded call per sweep) -------------------------
 
-    async def _lint_labels(self, report: ConsolidateReport) -> None:
+    async def _sync_label_hygiene(self, report: ConsolidateReport, *, force: bool) -> None:
+        labels = await self._records.list_labels()
+        current = self._label_fingerprint(labels)
+        if not force and current == await self._read_label_fingerprint():
+            return
+        await self._lint_labels(report, labels=labels)
+        await self._write_label_fingerprint(await self._current_label_fingerprint())
+
+    async def _lint_labels(self, report: ConsolidateReport, labels: list[dict] | None = None) -> None:
         """Curate the label vocabulary: ONE LLM call over the whole list_labels()
         (it is small) both folds near-duplicate names (case/synonym variants like
         "dex"/"Dex memory") via rename_label AND classifies each label as
         entity|meta so entity dossiers can be built. Runs every sweep — including
         the empty-delta one — so the cold-start backlog gets classified without
         needing new records. Skipped only when the vocabulary has < 2 labels."""
-        labels = await self._records.list_labels()
+        labels = labels if labels is not None else await self._records.list_labels()
         if len(labels) < 2:
             return
         ops = await self._judge_labels(labels)
@@ -340,6 +364,17 @@ class Consolidate:
             _logger.warning("label hygiene: unparseable judgment", exc_info=True)
             return None
 
+    @staticmethod
+    def _label_fingerprint(labels: list[dict]) -> str:
+        payload = [
+            {"label": entry["label"], "count": entry["count"], "kind": entry["kind"]}
+            for entry in sorted(labels, key=lambda entry: (entry["label"], entry["kind"], entry["count"]))
+        ]
+        return hashlib.sha256(json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")).hexdigest()
+
+    async def _current_label_fingerprint(self) -> str:
+        return self._label_fingerprint(await self._records.list_labels())
+
     # --- metadata ---------------------------------------------------------
 
     async def _ensure_conn(self):
@@ -361,17 +396,29 @@ class Consolidate:
         await conn.commit()
 
     async def _read_watermark(self) -> str | None:
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (WATERMARK_KEY,))
-        return rows[0]["value"] if rows else None
+        return await self._read_meta(WATERMARK_KEY)
 
     async def _write_watermark(self, value: str | None) -> None:
         if value is None:
             return
+        await self._write_meta(WATERMARK_KEY, value)
+
+    async def _read_label_fingerprint(self) -> str | None:
+        return await self._read_meta(LABEL_FINGERPRINT_KEY)
+
+    async def _write_label_fingerprint(self, value: str) -> None:
+        await self._write_meta(LABEL_FINGERPRINT_KEY, value)
+
+    async def _read_meta(self, key: str) -> str | None:
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (key,))
+        return rows[0]["value"] if rows else None
+
+    async def _write_meta(self, key: str, value: str) -> None:
         conn = await self._ensure_conn()
         await conn.execute(
             "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (WATERMARK_KEY, value),
+            (key, value),
         )
         await conn.commit()
 

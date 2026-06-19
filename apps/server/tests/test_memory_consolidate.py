@@ -273,8 +273,8 @@ async def test_label_hygiene_reclassifies_entity_vs_meta(tmp_path: Path):
 
 
 async def test_empty_delta_still_classifies_labels(tmp_path: Path):
-    """An idle sweep (no records confirmed since the watermark) still runs the
-    label-hygiene/classification call — the cold-start backfill path."""
+    """An idle sweep re-runs label hygiene only when the durable vocabulary
+    fingerprint changed outside the record delta path."""
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     a = await records.add("Dex is the user's son")
     b = await records.add("the user works on ntrp")
@@ -282,19 +282,22 @@ async def test_empty_delta_still_classifies_labels(tmp_path: Path):
     await records.set_labels(b.id, ["ntrp"])
     consolidate = _consolidate(tmp_path, records, StubLLM())
 
-    # First sweep advances the watermark past both records.
+    # First sweep advances the watermark past both records and stores the label
+    # vocabulary fingerprint.
     await consolidate.run_once()
+    await records.set_label_kind("Dex", "entity")
 
     called = {"n": 0}
     orig = consolidate._lint_labels
 
-    async def _spy(report):
+    async def _spy(report, labels=None):
         called["n"] += 1
-        await orig(report)
+        await orig(report, labels=labels)
 
     consolidate._lint_labels = _spy  # type: ignore[method-assign]
 
-    # Second sweep: delta is empty, yet _lint_labels must still be invoked.
+    # Second sweep: delta is empty, but the label vocabulary changed, so
+    # _lint_labels must still be invoked.
     await consolidate.run_once()
     assert called["n"] == 1
     await consolidate.close()
@@ -363,6 +366,44 @@ async def test_second_sweep_is_a_noop_without_changes(tmp_path: Path):
     assert len(llm.calls) == first_calls
     await consolidate.close()
     await records.close()
+
+
+async def test_idle_sweep_skips_label_hygiene_when_fingerprint_is_unchanged(tmp_path: Path):
+    records = RecordStore(tmp_path / "memory.db", search_index=None)
+    a = await records.add("Dex is sleeping through the night")
+    b = await records.add("ntrp has a memory system")
+    extra = await records.add("temporary duplicate")
+    survivor = await records.add("temporary duplicate")
+    await records.set_labels(a.id, ["Dex"])
+    await records.set_labels(b.id, ["ntrp"])
+    llm = StubLLM(
+        LintOps().model_dump_json(),
+        LabelOps().model_dump_json(),
+    )
+    consolidate = _consolidate(tmp_path, records, llm)
+
+    await consolidate.run_once()
+    first_watermark = await consolidate._read_watermark()
+    first_label_calls = sum(1 for call in llm.calls if call["response_format"] is LabelOps)
+    assert first_label_calls == 1
+
+    await records.supersede(extra.id, survivor.id)
+
+    restarted = _consolidate(tmp_path, records, llm)
+    report = await restarted.run_once()
+
+    assert report.pruned == 1
+    assert sum(1 for call in llm.calls if call["response_format"] is LabelOps) == first_label_calls
+    assert await records.get(extra.id) is None
+    assert await restarted._read_watermark() > first_watermark
+    await restarted.close()
+    await consolidate.close()
+    await records.close()
+
+
+async def test_consolidate_report_changed_memory_tracks_all_mutations():
+    assert ConsolidateReport().changed_memory is False
+    assert ConsolidateReport(reclassified=1).changed_memory is True
 
 
 async def test_noop_without_llm(tmp_path: Path):
