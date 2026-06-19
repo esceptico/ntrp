@@ -3,13 +3,29 @@ the machine is asleep must run on boot, not skip to tomorrow."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+import pytest
+import pytest_asyncio
+
+import ntrp.database as database
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
+from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger
 
 NOW = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)
+
+
+@pytest_asyncio.fixture
+async def store(tmp_path: Path):
+    conn = await database.connect(tmp_path / "automation.db")
+    s = AutomationStore(conn)
+    await s.init_schema()
+    yield s
+    await conn.close()
 
 
 def _auto(**kw) -> Automation:
@@ -44,10 +60,80 @@ def test_no_catch_up_for_other_builtin_handler():
     assert Scheduler._should_catch_up_missed(_auto(handler="automation_suggester_daily"), NOW) is False
 
 
-def test_no_catch_up_for_memory_publish_handler():
-    assert Scheduler._should_catch_up_missed(_auto(handler="memory_publish"), NOW) is False
+def test_catch_up_for_memory_publish_handler():
+    assert Scheduler._should_catch_up_missed(_auto(handler="memory_publish"), NOW) is True
 
 
 def test_no_catch_up_with_extra_triggers():
     two = [TimeTrigger(at="03:00", days="daily"), TimeTrigger(at="15:00", days="daily")]
     assert Scheduler._should_catch_up_missed(_auto(triggers=two), NOW) is False
+
+
+async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("timed out waiting for condition")
+
+
+@pytest.mark.asyncio
+async def test_overdue_memory_builtins_catch_up_in_phase_order(store: AutomationStore):
+    started: list[str] = []
+    release_sync = asyncio.Event()
+    release_consolidate = asyncio.Event()
+    publish_started = asyncio.Event()
+
+    async def integration_sync(_ctx):
+        started.append("integration_sync")
+        await release_sync.wait()
+        return "integration_sync"
+
+    async def memory_consolidate(_ctx):
+        started.append("memory_consolidate")
+        await release_consolidate.wait()
+        return "memory_consolidate"
+
+    async def memory_publish(_ctx):
+        started.append("memory_publish")
+        publish_started.set()
+        return "memory_publish"
+
+    for task_id, handler, at in (
+        ("sync", "integration_sync", "02:30"),
+        ("consolidate", "memory_consolidate", "03:00"),
+        ("publish", "memory_publish", "03:30"),
+    ):
+        await store.save(
+            _auto(
+                task_id=task_id,
+                handler=handler,
+                triggers=[TimeTrigger(at=at, days="daily")],
+                last_run_at=NOW - timedelta(hours=30),
+                next_run_at=NOW - timedelta(hours=6),
+            )
+        )
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.register_handler("integration_sync", integration_sync)
+    sched.register_handler("memory_consolidate", memory_consolidate)
+    sched.register_handler("memory_publish", memory_publish)
+
+    loop_task = asyncio.create_task(sched._loop())
+    try:
+        await _wait_until(lambda: started == ["integration_sync"])
+
+        release_sync.set()
+        await _wait_until(lambda: started == ["integration_sync", "memory_consolidate"])
+
+        release_consolidate.set()
+        await asyncio.wait_for(publish_started.wait(), timeout=1.0)
+        await _wait_until(lambda: started == ["integration_sync", "memory_consolidate", "memory_publish"])
+
+        for task in list(sched._running):
+            await task
+    finally:
+        loop_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await loop_task

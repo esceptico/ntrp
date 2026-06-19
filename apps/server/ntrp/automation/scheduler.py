@@ -26,11 +26,10 @@ AUTOMATION_BUS_KEY = "automation:events"
 
 _logger = get_logger(__name__)
 
-# Builtin maintenance handlers whose missed daily run should be caught up on
-# boot (rather than skipped to tomorrow) if they haven't run within the
-# cadence. `memory_publish` stays scheduled-only so it can't overtake same-boot
-# catch-up runs for integration sync / consolidation.
-_CATCH_UP_HANDLERS = {"memory_consolidate", "integration_sync"}
+# Builtin daily memory maintenance phases. When multiple phases are overdue
+# after sleep/offline time, catch them up in this order on the same boot.
+_CATCH_UP_PHASE_ORDER = ("integration_sync", "memory_consolidate", "memory_publish")
+_CATCH_UP_HANDLERS = set(_CATCH_UP_PHASE_ORDER)
 _CATCH_UP_CADENCE = timedelta(hours=24)
 
 
@@ -261,6 +260,35 @@ class Scheduler:
         last = automation.last_run_at
         return last is None or (now - last) >= _CATCH_UP_CADENCE
 
+    @staticmethod
+    def _catch_up_phase_index(handler: str | None) -> int | None:
+        if handler is None:
+            return None
+        try:
+            return _CATCH_UP_PHASE_ORDER.index(handler)
+        except ValueError:
+            return None
+
+    def _should_defer_ordered_catch_up(
+        self,
+        automation: Automation,
+        due: list[Automation],
+        running_handlers: set[str],
+        now: datetime,
+    ) -> bool:
+        phase_index = self._catch_up_phase_index(automation.handler)
+        if phase_index is None or phase_index == 0:
+            return False
+        if not self._should_catch_up_missed(automation, now):
+            return False
+        earlier = set(_CATCH_UP_PHASE_ORDER[:phase_index])
+        due_handlers = {
+            auto.handler
+            for auto in due
+            if auto.task_id != automation.task_id and auto.handler and self._should_catch_up_missed(auto, now)
+        }
+        return any(handler in earlier for handler in due_handlers | running_handlers)
+
     async def _loop(self) -> None:
         while True:
             try:
@@ -306,7 +334,10 @@ class Scheduler:
         await self._release_untracked_running()
         now = datetime.now(UTC)
         due = await self.store.list_due(now)
+        running_handlers = {auto.handler for auto in await self.store.list_running() if auto.handler}
         for automation in due:
+            if self._should_defer_ordered_catch_up(automation, due, running_handlers, now):
+                continue
             if self._is_session_bound(automation) and not self._loop_can_fire(automation):
                 # Session-bound automation is due but the target session has
                 # an active run. Skip without claiming — next_run_at stays
@@ -315,6 +346,8 @@ class Scheduler:
                 # handle_run_completed).
                 continue
             await self._start_run(automation)
+            if automation.handler:
+                running_handlers.add(automation.handler)
         await self._drain_event_backlog()
         await self._evaluate_idle_triggers(now)
 
@@ -526,6 +559,8 @@ class Scheduler:
             except Exception as exc:
                 _logger.exception("Failed to clear running flag for automation %s", automation.task_id)
                 raise RuntimeError(f"Failed to clear running flag for automation {automation.task_id}") from exc
+            if automation.handler in _CATCH_UP_HANDLERS:
+                self._wake_event.set()
             if event_queue_id is not None and event_settlement_error is None:
                 try:
                     await self._start_next_queued_event_if_idle(automation.task_id)
