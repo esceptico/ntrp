@@ -44,8 +44,8 @@ def test_no_catch_up_for_other_builtin_handler():
     assert Scheduler._should_catch_up_missed(_auto(handler="automation_suggester_daily"), NOW) is False
 
 
-def test_catch_up_for_memory_publish_handler():
-    assert Scheduler._should_catch_up_missed(_auto(handler="memory_publish"), NOW) is True
+def test_no_catch_up_for_memory_publish_handler():
+    assert Scheduler._should_catch_up_missed(_auto(handler="memory_publish"), NOW) is False
 
 
 def test_no_catch_up_with_extra_triggers():
