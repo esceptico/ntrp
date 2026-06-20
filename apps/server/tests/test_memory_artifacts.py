@@ -377,7 +377,7 @@ async def test_v3_facts_index_replaces_fact_dumps(tmp_path: Path):
     await records.close()
 
 
-async def test_v3_file_doc_buckets_are_counts_only_pointers(tmp_path: Path):
+async def test_references_consolidate_sources_files_and_docs(tmp_path: Path):
     records = await _record_store(tmp_path)
     await records.add(
         "Edited the exporter in apps/server/ntrp/memory/artifacts.py for the bucket fix",
@@ -392,26 +392,27 @@ async def test_v3_file_doc_buckets_are_counts_only_pointers(tmp_path: Path):
 
     await artifacts.export_from_records(records)
 
+    references = artifacts.read_artifact("references/index.md")
+    source_records = artifacts.read_artifact("references/records.md")
     files = artifacts.read_artifact("files/index.md")
     docs = artifacts.read_artifact("docs/index.md")
+    sources = artifacts.read_artifact("sources/index.md")
 
-    for index in (files, docs):
-        assert index.kind == "source"
-        assert index.record_count is None
-        assert "intentionally does not contain record bullet dumps" in index.content
-        assert "## Counts" in index.content
-        # Agent-tool guidance lives in README.md / tooling.md, not human-facing indexes.
-        assert "## How to query" not in index.content
-        assert "recall" not in index.content
-        # No raw record text leaked into the projection (no fact bullet dump).
-        assert "artifacts.py for the bucket fix" not in index.content
-        assert "Reviewed the README documentation" not in index.content
-        # The only bullets are the count lines, never per-record fact bullets.
-        bullets = [line for line in index.content.splitlines() if line.startswith("- ")]
-        assert bullets
-        assert all("active" in b for b in bullets)
+    assert references.kind == "source"
+    assert references.record_count is None
+    assert "## Source types" in references.content
+    assert "## Buckets" in references.content
+    assert "## Recent pointers" in references.content
+    assert "files/repos: 1 records" in references.content
+    assert "docs/web: 1 records" in references.content
+    assert "artifacts.py for the bucket fix" in references.content
+    assert "README documentation" in references.content
+    assert source_records.path == "references/records.md"
 
-    assert "global: 1 active file-linked records" in files.content
+    for old in (files, docs, sources):
+        assert old.record_count is None
+        assert "This section has moved to `references/`." in old.content
+        assert "## Counts" not in old.content
     await records.close()
 
 

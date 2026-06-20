@@ -12,9 +12,7 @@ memory/
   facts/index.md
   entities/
   projects/
-  sources/
-  files/
-  docs/
+  references/
   changelog/
 """
 
@@ -66,6 +64,7 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",
     "entities": "topic",
     "projects": "topic",
+    "references": "source",
     "sources": "source",
     "files": "source",
     "docs": "source",
@@ -520,6 +519,25 @@ def _source_ref(record: Record) -> str:
     return str(record.source_ref.ref if record.source_ref is not None else "").lower()
 
 
+def _reference_snippet(record: Record) -> str:
+    text = _sanitize_visible_text(record.text, max_chars=220)
+    text = _LOCAL_PATH_RE.sub("[local path]", text)
+    text = _UUID_RE.sub("[id]", text)
+    text = _LONG_HEX_RE.sub("[id]", text)
+    text = _PROJECT_ID_RE.sub("[id]", text)
+    text = _OPERATIONAL_ID_RE.sub("[id]", text)
+    if record.source_ref is not None:
+        ref = _sanitize_visible_text(record.source_ref.ref, max_chars=120)
+        ref = _LOCAL_PATH_RE.sub("[local path]", ref)
+        ref = _UUID_RE.sub("[id]", ref)
+        ref = _LONG_HEX_RE.sub("[id]", ref)
+        ref = _PROJECT_ID_RE.sub("[id]", ref)
+        ref = _OPERATIONAL_ID_RE.sub("[id]", ref)
+        if ref and ref not in text:
+            text = f"{text} ({ref})" if text else ref
+    return _trim_at_word_boundary(text, 260)
+
+
 def _is_file_record(record: Record) -> bool:
     kind = _source_kind(record)
     ref = _source_ref(record)
@@ -677,8 +695,7 @@ class ArtifactMemoryStore:
         self._write_facts_index(facts)
         await self._write_entity_dossiers(rows, labels_by_id, label_vocab, llm=llm, model=model)
         await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
-        self._write_sources(rows, source_records)
-        self._write_file_doc_buckets(rows)
+        self._write_references(rows, source_records)
         if synthesize:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
             await self._synthesize_active_work(rows, labels_by_id, llm=llm, model=model)
@@ -692,7 +709,7 @@ class ArtifactMemoryStore:
         # synthesized ones) via _prune_dossier_dir.
         for rel in ("README.md", "tooling.md", "directives.md", "facts.md", "summaries.md", "sources.md"):
             self._unlink_regular_artifact(rel)
-        for dirname in ("facts", "sources", "files", "docs"):
+        for dirname in ("facts", "references", "sources", "files", "docs"):
             directory = self.root / dirname
             self._remove_markdown_tree(directory)
         self._remove_defunct_dir("summaries")
@@ -770,7 +787,7 @@ class ArtifactMemoryStore:
             "- `facts/index.md` — DB-backed fact counts and querying guidance; no fact dumps are generated.",
             "- `entities/` — emergent topic pages and triage.",
             "- `projects/` — project topic pages.",
-            "- `sources/`, `files/`, and `docs/` — concise context/registry indexes.",
+            "- `references/` — evidence, receipt, file, doc, and integration pointers.",
             "- `changelog/` — append-only monthly audit logs and generated rollups.",
             "",
             "## Operating rules",
@@ -801,7 +818,7 @@ class ArtifactMemoryStore:
             "- `recall` queries SQLite records and is the canonical retrieval path for facts.",
             "- `memory_tree`, `memory_read`, and `memory_search` browse generated dossiers/context/source docs.",
             "- Browse `entities/` and `projects/` for topic pages built from the records.",
-            "- Facts live in the database; `facts/index.md` and `files/`/`docs/` indexes carry counts only.",
+            "- Facts live in the database; `facts/index.md` carries counts, while `references/` carries concise pointers.",
             "- Monthly changelog files are append-only atomic event logs; rollups are regenerated indexes.",
             "",
             "## Non-goals",
@@ -1289,71 +1306,86 @@ class ArtifactMemoryStore:
             body.append(f"_No {kind} records yet._")
         return self._write(rel, title, kind, "global", scope_key, "\n".join(body).rstrip() + "\n", len(rows))
 
-    def _write_sources(self, rows: list[Record], source_records: list[Record]) -> None:
+    def _write_references(self, rows: list[Record], source_records: list[Record]) -> None:
         refs = [r.source_ref for r in rows if r.source_ref is not None]
         by_kind = Counter(ref.kind for ref in refs)
+        file_rows = [r for r in rows if _is_file_record(r)]
+        doc_rows = [r for r in rows if _is_doc_record(r)]
         body = [
-            "# Sources",
+            "# References",
             "",
-            "Receipts are evidence pointers, not canonical memory content.",
-            "They stay out of default recall and are summarized here without exposing raw internal IDs.",
+            "Evidence, receipts, files, docs, and integration pointers backing memory.",
+            "SQLite records remain canonical; this page is a compact browse index, not a fact dump.",
             "",
         ]
+        body.append("## Source types")
+        body.append("")
         if by_kind:
-            body.append("## Source types")
-            body.append("")
             for kind, count in sorted(by_kind.items(), key=lambda kv: (-kv[1], kv[0])):
                 safe_kind = _safe_source_label(kind)
                 body.append(f"- **{safe_kind}** — {count} records; {source_kind_description(safe_kind)}")
         else:
             body.append("_No source receipts yet._")
+        body.extend(["", "## Buckets", ""])
+        body.append(f"- files/repos: {len(file_rows)} records")
+        body.append(f"- docs/web: {len(doc_rows)} records")
+        body.append(f"- explicit source records: {len(source_records)} records")
+        recent = self._reference_examples(file_rows, doc_rows, source_records)
+        if recent:
+            body.extend(["", "## Recent pointers", "", *recent])
         if source_records:
-            body.extend(["", f"Explicit source records are in `sources/records.md` ({len(source_records)} records)."])
-        self._write("sources/index.md", "Sources", "source", "global", None, "\n".join(body).rstrip() + "\n", 0)
+            body.extend(["", f"Explicit source records are in `references/records.md` ({len(source_records)} records)."])
+        self._write("references/index.md", "References", "source", "global", None, "\n".join(body).rstrip() + "\n", None)
         self._write_records(
-            "sources/records.md",
+            "references/records.md",
             "Explicit source records",
             "source",
             source_records,
             intro="Records whose canonical kind is `source`; use these as receipts, not facts.",
         )
+        self._write_compat_reference_page("sources/index.md", "Sources")
+        self._write_compat_reference_page("sources/records.md", "Source records")
+        self._write_compat_reference_page("files/index.md", "Files")
+        self._write_compat_reference_page("docs/index.md", "Docs")
 
-    def _write_file_doc_buckets(self, rows: list[Record]) -> None:
-        file_rows = [r for r in rows if _is_file_record(r)]
-        doc_rows = [r for r in rows if _is_doc_record(r)]
-        self._write_record_pointer_index(
-            "files/index.md",
-            "Files",
-            file_rows,
-            blurb="Memory records linked to files, attachments, repository paths, or file-like source refs.",
-            noun="file-linked",
+    def _reference_examples(
+        self,
+        file_rows: list[Record],
+        doc_rows: list[Record],
+        source_records: list[Record],
+        *,
+        limit: int = 10,
+    ) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        candidates = sorted(
+            [*file_rows, *doc_rows, *source_records],
+            key=lambda r: r.last_confirmed_at,
+            reverse=True,
         )
-        self._write_record_pointer_index(
-            "docs/index.md",
-            "Docs",
-            doc_rows,
-            blurb="Memory records linked to documents, web/PDF receipts, READMEs, or docs-like source refs.",
-            noun="doc-linked",
-        )
+        for record in candidates:
+            if record.id in seen:
+                continue
+            seen.add(record.id)
+            snippet = _reference_snippet(record)
+            if not snippet:
+                continue
+            scope = record.scope_kind or "global"
+            kind = _safe_source_label(record.source_ref.kind) if record.source_ref is not None else canonical_kind(record.kind)
+            out.append(f"- **{kind}** · {scope}: {snippet}")
+            if len(out) >= limit:
+                break
+        return out
 
-    def _write_record_pointer_index(
-        self, rel: str, title: str, rows: list[Record], *, blurb: str, noun: str
-    ) -> MemoryArtifact:
-        by_scope = Counter((r.scope_kind or "global").strip().lower() or "global" for r in rows)
+    def _write_compat_reference_page(self, rel: str, title: str) -> MemoryArtifact:
         body = [
             f"# {title}",
             "",
-            blurb,
-            "Records are DB-backed; SQLite/RecordStore is canonical for retrieval and mutation.",
-            "This Markdown projection intentionally does not contain record bullet dumps.",
+            "This section has moved to `references/`.",
             "",
-            "## Counts",
-            "",
+            "- See `references/index.md` for evidence, file, doc, and integration pointers.",
+            "- See `references/records.md` for explicit source records.",
         ]
-        for scope in ("global", "user", "project"):
-            body.append(f"- {scope}: {by_scope.get(scope, 0)} active {noun} records")
-        other = sum(c for k, c in by_scope.items() if k not in {"global", "user", "project"})
-        body.append(f"- other: {other} active {noun} records")
         return self._write(rel, title, "source", "global", None, "\n".join(body).rstrip() + "\n", None)
 
     def _ensure_changelog(self) -> None:

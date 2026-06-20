@@ -96,16 +96,17 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     assert "README.md" in by_path
     assert "facts/index.md" in by_path
     assert "entities/index.md" in by_path
+    assert "references/index.md" in by_path
     assert "sources/index.md" in by_path
     assert "changelog/index.md" in by_path
     assert "facts/global.md" not in by_path
-    assert by_path["sources/index.md"]["record_count"] is None
+    assert by_path["references/index.md"]["record_count"] is None
     assert by_path["changelog/index.md"]["record_count"] is None
     assert by_path["facts/index.md"]["record_count"] is None
     assert by_path["projects/inbox.md"]["kind"] == "topic"
     assert by_path["projects/inbox.md"]["record_count"] == 0
     assert all(a["content"] == "" for a in artifacts)
-    detail = c.get("/admin/memory/artifacts/sources/index.md").json()["artifact"]
+    detail = c.get("/admin/memory/artifacts/references/index.md").json()["artifact"]
     assert set(detail.keys()) == expected_keys
     assert detail["record_count"] is None
 

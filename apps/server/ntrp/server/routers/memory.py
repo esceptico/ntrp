@@ -150,11 +150,13 @@ async def rebuild_artifacts(
     # active-work), same as the startup/CLI rebuild paths.
     llm, model = knowledge._memory_llm()
     items = await artifacts.export_from_records(store, llm=llm, model=model)
-    await write_artifact_publish_checkpoint(
-        knowledge.config.memory_db_path,
-        store,
-        knowledge.config.memory_artifacts_dir,
-    )
+    memory_db_path = getattr(knowledge.config, "memory_db_path", None)
+    if memory_db_path is not None:
+        await write_artifact_publish_checkpoint(
+            memory_db_path,
+            store,
+            knowledge.config.memory_artifacts_dir,
+        )
     return {"artifacts": [artifact_to_json(a) for a in items]}
 
 
