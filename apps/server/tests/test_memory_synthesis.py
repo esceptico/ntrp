@@ -89,6 +89,36 @@ async def test_synthesis_writes_profile_and_dossier(tmp_path: Path):
     await records.close()
 
 
+async def test_profile_links_only_generated_dossier_titles(tmp_path: Path):
+    records = await _store(tmp_path)
+    await records.add("the user relies on Codex for coding work", kind=Kind.FACT, scope_kind="user")
+    codex = await records.add("Codex is a coding tool the user uses heavily", kind=Kind.FACT)
+    await records.set_labels(codex.id, [], entity_labels=["Codex"])
+    await _two_subject_records(records)
+    store = ArtifactMemoryStore(tmp_path / "artifacts")
+
+    def linker(system: str, user: str) -> str:
+        first = _first_id(user)
+        if system.startswith("You write `me.md`"):
+            assert "- Regina" in user
+            assert "- Codex" not in user
+            return (
+                "# Profile\n\n"
+                "## Key relationships / tools\n"
+                f"[[Regina]] is a generated dossier (record:{first}).\n"
+                f"[[Codex]] is only mentioned once (record:{first})."
+            )
+        return FakeLLM()._default(system, user)
+
+    await store.export_from_records(records, llm=FakeLLM(linker), model="fake")
+
+    me = store.read_artifact("me.md")
+    assert "[[Regina]]" in me.content
+    assert "[[Codex]]" not in me.content
+    assert "Codex is only mentioned once" in me.content
+    await records.close()
+
+
 async def test_fabricated_citation_falls_back_to_mechanical(tmp_path: Path):
     records = await _store(tmp_path)
     await _two_subject_records(records)

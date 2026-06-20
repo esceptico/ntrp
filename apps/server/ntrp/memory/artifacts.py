@@ -92,6 +92,7 @@ _LEGACY_CHANGELOG_RE = re.compile(r"^-\s+(\d{4})-(\d{2})")
 _CHANGELOG_MONTH_RE = re.compile(r"^changelog/(\d{4})/(\d{4}-\d{2})\.md$")
 _CHANGELOG_YEAR_RE = re.compile(r"^changelog/(\d{4})\.md$")
 _SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_WIKILINK_RE = re.compile(r"\[\[([^\]#|]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]")
 _DEBUG_KEYS = (
     "scope",
     "scope_key",
@@ -1027,6 +1028,45 @@ class ArtifactMemoryStore:
                 model=model,
             )
 
+    def _project_dossier_titles(self, facts: list[Record]) -> list[str]:
+        keys = {
+            record.scope_key
+            for record in facts
+            if (record.scope_kind or "").strip().lower() == "project" and record.scope_key
+        }
+        return [self._project_title(key) for key in sorted(keys, key=lambda k: self._project_title(k).lower())]
+
+    def _profile_known_titles(
+        self,
+        rows: list[Record],
+        facts: list[Record],
+        labels_by_id: dict[str, list],
+    ) -> list[str]:
+        candidates, _triage = self._entity_candidates(rows, labels_by_id)
+        titles = [label for label, _key, _grouped in candidates[:MAX_ENTITY_DOSSIERS]]
+        titles.extend(self._project_dossier_titles(facts))
+        seen: set[str] = set()
+        out: list[str] = []
+        for title in titles:
+            key = title.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(title)
+        return out
+
+    @staticmethod
+    def _strip_unknown_profile_wikilinks(text: str, known_titles: list[str]) -> str:
+        known = {title.strip().lower() for title in known_titles}
+
+        def repl(match: re.Match) -> str:
+            title = match.group(1).strip()
+            display = (match.group(2) or title).strip()
+            if title.lower() in known:
+                return match.group(0)
+            return display
+
+        return _WIKILINK_RE.sub(repl, text)
+
     def _write_dossier(
         self,
         rel: str,
@@ -1197,12 +1237,18 @@ class ArtifactMemoryStore:
             return
         selected.sort(key=lambda r: (r.pinned, r.last_confirmed_at), reverse=True)
         selected = selected[:PROFILE_RECORD_CAP]
-        user = prompts_synthesis.profile_user_message(selected, _flat_labels(labels_by_id))
+        known_titles = self._profile_known_titles(rows, facts, labels_by_id)
+        user = prompts_synthesis.profile_user_message(
+            selected,
+            _flat_labels(labels_by_id),
+            known_subjects=known_titles,
+        )
         out = await self._synthesize(llm, model, prompts_synthesis.PROFILE_SYSTEM, user)
         if not out or not self._validate_provenance(out, {r.id for r in selected}):
             if out:
                 _logger.warning("profile synthesis cited an unknown record id; skipping me.md")
             return
+        out = self._strip_unknown_profile_wikilinks(out, known_titles)
         self._write(
             "me.md", "Profile", "topic", "user", None, out.rstrip() + "\n",
             len(selected), meta=ArtifactMeta(source=SYNTHESIS_SOURCE),

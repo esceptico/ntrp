@@ -190,6 +190,12 @@ with a one-line note on the relationship. Only those the records actually
 establish; cite each.
 ```
 
+You are also given `known_subjects`: the exact titles of generated dossier pages
+that exist elsewhere in the wiki. In `Key relationships / tools`, link ONLY
+those exact titles with `[[Title]]`. If a person/tool/system is record-backed
+but not in `known_subjects`, write it as plain text. Never imply a separate page
+exists for a non-dossier item.
+
 Keep the whole page tight — this is a briefing, not a biography. If two records
 say the same thing, merge them into one cited statement. Lead each section with
 its strongest, most durable facts.""",
@@ -202,13 +208,18 @@ its strongest, most durable facts.""",
 def profile_user_message(
     records: list[Record],
     labels_by_id: dict[str, list[str]] | None = None,
+    known_subjects: list[str] | None = None,
 ) -> str:
+    known = "\n".join(f"- {s}" for s in (known_subjects or [])) or "(none)"
     return (
         "Synthesize `me.md` from the records below. These are every directive, "
         "user-scoped fact, and pinned record on file about the user.\n\n"
         "<records>\n"
         f"{format_records_block(records, labels_by_id)}\n"
-        "</records>"
+        "</records>\n\n"
+        "<known_subjects>\n"
+        f"{known}\n"
+        "</known_subjects>"
     )
 
 
