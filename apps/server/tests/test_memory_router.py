@@ -97,7 +97,9 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     assert "facts/index.md" in by_path
     assert "entities/index.md" in by_path
     assert "references/index.md" in by_path
-    assert "sources/index.md" in by_path
+    assert "sources/index.md" not in by_path
+    assert "files/index.md" not in by_path
+    assert "docs/index.md" not in by_path
     assert "changelog/index.md" in by_path
     assert "facts/global.md" not in by_path
     assert by_path["references/index.md"]["record_count"] is None

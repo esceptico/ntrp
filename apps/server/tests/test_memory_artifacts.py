@@ -394,9 +394,6 @@ async def test_references_consolidate_sources_files_and_docs(tmp_path: Path):
 
     references = artifacts.read_artifact("references/index.md")
     source_records = artifacts.read_artifact("references/records.md")
-    files = artifacts.read_artifact("files/index.md")
-    docs = artifacts.read_artifact("docs/index.md")
-    sources = artifacts.read_artifact("sources/index.md")
 
     assert references.kind == "source"
     assert references.record_count is None
@@ -409,10 +406,9 @@ async def test_references_consolidate_sources_files_and_docs(tmp_path: Path):
     assert "README documentation" in references.content
     assert source_records.path == "references/records.md"
 
-    for old in (files, docs, sources):
-        assert old.record_count is None
-        assert "This section has moved to `references/`." in old.content
-        assert "## Counts" not in old.content
+    for old_path in ("files/index.md", "docs/index.md", "sources/index.md"):
+        with pytest.raises(FileNotFoundError):
+            artifacts.read_artifact(old_path)
     await records.close()
 
 

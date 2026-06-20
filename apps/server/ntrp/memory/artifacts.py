@@ -65,9 +65,6 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "entities": "topic",
     "projects": "topic",
     "references": "source",
-    "sources": "source",
-    "files": "source",
-    "docs": "source",
     "changelog": "changelog",
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
@@ -1343,10 +1340,6 @@ class ArtifactMemoryStore:
             source_records,
             intro="Records whose canonical kind is `source`; use these as receipts, not facts.",
         )
-        self._write_compat_reference_page("sources/index.md", "Sources")
-        self._write_compat_reference_page("sources/records.md", "Source records")
-        self._write_compat_reference_page("files/index.md", "Files")
-        self._write_compat_reference_page("docs/index.md", "Docs")
 
     def _reference_examples(
         self,
@@ -1376,17 +1369,6 @@ class ArtifactMemoryStore:
             if len(out) >= limit:
                 break
         return out
-
-    def _write_compat_reference_page(self, rel: str, title: str) -> MemoryArtifact:
-        body = [
-            f"# {title}",
-            "",
-            "This section has moved to `references/`.",
-            "",
-            "- See `references/index.md` for evidence, file, doc, and integration pointers.",
-            "- See `references/records.md` for explicit source records.",
-        ]
-        return self._write(rel, title, "source", "global", None, "\n".join(body).rstrip() + "\n", None)
 
     def _ensure_changelog(self) -> None:
         self._migrate_legacy_changelog()
