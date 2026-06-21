@@ -371,8 +371,11 @@ body.quick-capture-mode .quick-capture-card {
   z-index: 60;
   -webkit-app-region: no-drag;
 }
-.sidebar-toggle      { left: 84px; }
-html[data-fullscreen="true"] .sidebar-toggle { left: 18px; }
+/* Default (browser, or native fullscreen) — no traffic lights, so the toggle
+   hugs the left edge. Only the native macOS shell, when NOT fullscreen, pushes
+   it right to clear the traffic-light cluster. */
+.sidebar-toggle      { left: 18px; }
+html[data-desktop="true"]:not([data-fullscreen="true"]) .sidebar-toggle { left: 84px; }
 .right-sidebar-toggle { right: 14px; }
 .sidebar-toggle *,
 .right-sidebar-toggle * { -webkit-app-region: no-drag; }
@@ -1471,7 +1474,11 @@ main[data-has-approval="false"] .scroll-messages {
     --color-bg: #0a0a0a;
     --color-bg-main: #0a0a0a;
     --color-surface: #1a1a1a;
-    --color-surface-soft: #1a1a1a;
+    /* Highlight tint — must read as a distinct step above the base surface so
+       hover states, chips, and nested cards are visible on dark panels.
+       (Previously #1a1a1a, identical to --color-surface, which made all of
+       them invisible.) */
+    --color-surface-soft: #242424;
     --color-surface-sunken: #111111;
     --color-code-bg: #1a1a1a;
 

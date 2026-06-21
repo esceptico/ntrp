@@ -164,7 +164,7 @@ export function WorkflowProgressCard({
       type="button"
       onClick={onOpen}
       title={workflow.description ?? `${workflow.name ?? "Workflow"} — open`}
-      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line hover:bg-surface-sunken active:scale-[0.985]"
+      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-sunken px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line hover:bg-surface-soft active:scale-[0.985]"
     >
       <div className="flex min-w-0 items-center gap-2">
         <span

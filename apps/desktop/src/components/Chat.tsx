@@ -10,6 +10,7 @@ import { IconButton } from "./IconButton";
 import { BlurSwap } from "./BlurSwap";
 import { ICON } from "../lib/icons";
 import { DURATION_RIGHT_PANEL_HIDE, MOTION } from "../lib/tokens/motion";
+import { useHasTrafficLights } from "../lib/platform";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -37,6 +38,7 @@ function ChatHeader() {
   const sessionId = useStore((s) => s.currentSessionId);
   const sessions = useStore((s) => s.sessions);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const hasTrafficLights = useHasTrafficLights();
   const session = sessions.find((s) => s.session_id === sessionId);
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
@@ -50,14 +52,17 @@ function ChatHeader() {
 
   return (
     <div className="chat-header flex items-center h-[52px] px-[18px]">
-      {/* The sidebar toggle reveals 110px of headroom for the traffic
-          lights. The shift rides a GPU translate on the title row —
-          the right padding snaps once (re-truncating the title) while
-          the transform carries the visible travel. */}
+      {/* With the sidebar hidden, the title row clears the fixed toggle. The
+          travel depends on where the toggle sits: 110px when the macOS
+          traffic lights push it to left:84, but only 44px in the browser /
+          fullscreen where it sits at left:18 (no native lights). The shift
+          rides a GPU translate — the right padding snaps once (re-truncating
+          the title) while the transform carries the visible travel. */}
       <div
         className={clsx(
           "flex min-w-0 flex-1 items-center gap-2 transition-transform duration-route ease-emphasized",
-          sidebarHidden && "translate-x-[110px] pr-[110px]",
+          sidebarHidden &&
+            (hasTrafficLights ? "translate-x-[110px] pr-[110px]" : "translate-x-[44px] pr-[44px]"),
         )}
       >
         {isAgent && parentId && (

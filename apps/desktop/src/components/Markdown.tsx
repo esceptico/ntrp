@@ -223,12 +223,17 @@ function CopyButton({ text }: { text: string }) {
   const [copied, flashCopied] = useTimeoutFlag(1200);
 
   const onClick = async () => {
+    // Prefer the Electron bridge (same path every other copy button uses).
+    // navigator.clipboard.writeText silently resolves without writing in this
+    // webview, so it can't be trusted as the primary path.
+    if (await window.ntrpDesktop?.clipboard?.writeText(text)) {
+      flashCopied();
+      return;
+    }
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // Fallback for restrictive contexts (some Electron builds lock the
-      // navigator.clipboard write API behind permissions): use the legacy
-      // execCommand path.
+      // Last-resort fallback for restrictive contexts: legacy execCommand.
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";

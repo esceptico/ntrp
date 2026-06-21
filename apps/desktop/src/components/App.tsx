@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
 import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
+import { IS_DESKTOP_MAC } from "../lib/platform";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Chat } from "./Chat";
 import { CommandPalette } from "./commandPalette/CommandPalette";
@@ -48,14 +49,19 @@ function useHash(): string {
 
 function useFullscreenClass(): void {
   useEffect(() => {
+    const root = document.documentElement;
+    // Static flag: native macOS shell draws the traffic lights, the browser
+    // does not. CSS keys the toggle's left inset off this (+ fullscreen).
+    root.dataset.desktop = IS_DESKTOP_MAC ? "true" : "false";
     const setFullscreen = (isFullScreen: boolean) => {
-      document.documentElement.dataset.fullscreen = isFullScreen ? "true" : "false";
+      root.dataset.fullscreen = isFullScreen ? "true" : "false";
     };
     void window.ntrpDesktop?.window?.isFullScreen?.().then(setFullscreen);
     const unsubscribe = window.ntrpDesktop?.window?.onFullScreenChange?.(setFullscreen);
     return () => {
       unsubscribe?.();
-      delete document.documentElement.dataset.fullscreen;
+      delete root.dataset.fullscreen;
+      delete root.dataset.desktop;
     };
   }, []);
 }
