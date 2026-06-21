@@ -260,60 +260,61 @@ export function SessionList() {
         )}
       </div>
 
-      <AnimatePresence>
-        {menu && (
-          <SessionContextMenu
-            state={menu}
-            onClose={closeMenu}
-            isPinned={pinnedSet.has(menu.sessionId)}
-            onTogglePin={() => {
-              togglePin(menu.sessionId);
-              closeMenu();
-            }}
-            onRename={() => {
-              setRenamingId(menu.sessionId);
-              closeMenu();
-            }}
-            onCompact={async () => {
-              const sessionId = menu.sessionId;
-              closeMenu();
-              const cfg = useStore.getState().config;
-              try {
-                const result = await compactSessionApi(cfg, sessionId);
-                if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
-                  await loadHistory(sessionId);
-                }
-              } catch {
-                /* ignore */
-              }
-            }}
-            onArchive={async () => {
-              const sessionId = menu.sessionId;
-              closeMenu();
-              try {
-                await archiveSession(sessionId);
-              } catch {
-                useStore.getState().pushToast({
-                  id: `archive-fail:${sessionId}`,
-                  title: "Couldn’t archive session",
-                  status: "failed",
-                  target: { kind: "session", sessionId },
-                });
-              }
-            }}
-            onMoveProject={async (projectId) => {
-              const sessionId = menu.sessionId;
-              closeMenu();
-              try {
-                await moveSessionToProject(sessionId, projectId);
-              } catch {
-                /* ignore */
-              }
-            }}
-            projects={projects}
-          />
-        )}
-      </AnimatePresence>
+      <SessionContextMenu
+        state={menu}
+        onClose={closeMenu}
+        isPinned={menu ? pinnedSet.has(menu.sessionId) : false}
+        onTogglePin={() => {
+          if (!menu) return;
+          togglePin(menu.sessionId);
+          closeMenu();
+        }}
+        onRename={() => {
+          if (!menu) return;
+          setRenamingId(menu.sessionId);
+          closeMenu();
+        }}
+        onCompact={async () => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          const cfg = useStore.getState().config;
+          try {
+            const result = await compactSessionApi(cfg, sessionId);
+            if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
+              await loadHistory(sessionId);
+            }
+          } catch {
+            /* ignore */
+          }
+        }}
+        onArchive={async () => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          try {
+            await archiveSession(sessionId);
+          } catch {
+            useStore.getState().pushToast({
+              id: `archive-fail:${sessionId}`,
+              title: "Couldn’t archive session",
+              status: "failed",
+              target: { kind: "session", sessionId },
+            });
+          }
+        }}
+        onMoveProject={async (projectId) => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          try {
+            await moveSessionToProject(sessionId, projectId);
+          } catch {
+            /* ignore */
+          }
+        }}
+        projects={projects}
+      />
       <ProjectSettingsModal project={editingProject} onClose={() => setEditingProjectId(null)} />
     </div>
   );
