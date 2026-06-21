@@ -180,6 +180,96 @@ _PROVENANCE_PHRASE_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _WHITESPACE_RE = re.compile(r"\s+")
+_SKILL_CANDIDATE_NAME_MAX_CHARS = 32
+_SKILL_CANDIDATE_ACTION_WORDS = {
+    "ask",
+    "avoid",
+    "build",
+    "check",
+    "cite",
+    "commit",
+    "compare",
+    "create",
+    "document",
+    "exclude",
+    "expose",
+    "extract",
+    "fix",
+    "generate",
+    "include",
+    "inspect",
+    "keep",
+    "load",
+    "merge",
+    "open",
+    "prefer",
+    "preserve",
+    "promote",
+    "propose",
+    "prune",
+    "push",
+    "read",
+    "redact",
+    "review",
+    "route",
+    "run",
+    "search",
+    "split",
+    "stage",
+    "summarize",
+    "update",
+    "use",
+    "verify",
+    "write",
+}
+_SKILL_CANDIDATE_LEADING_WORDS = {
+    "always",
+    "please",
+    "assistant",
+    "agent",
+    "codex",
+    "must",
+    "never",
+    "should",
+    "the",
+    "you",
+}
+_SKILL_CANDIDATE_SKIP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "by",
+    "for",
+    "from",
+    "id",
+    "ids",
+    "in",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "user",
+    "with",
+}
+_SKILL_CANDIDATE_BOUNDARY_WORDS = {
+    "after",
+    "before",
+    "because",
+    "but",
+    "if",
+    "instead",
+    "rather",
+    "unless",
+    "when",
+    "where",
+    "while",
+}
+_SKILL_CANDIDATE_NEGATION_WORDS = {"never", "not", "dont", "don", "t"}
 
 
 def now_iso() -> str:
@@ -294,11 +384,70 @@ def _slug(text: str | None, *, fallback: str) -> str:
 
 
 def _skill_candidate_name(text: str) -> str:
-    name = _slug(text, fallback="memory-directive-skill")
-    name = re.sub(r"[^a-z0-9-]+", "-", name).strip("-")
-    if not name or not name[0].isalpha():
-        name = f"memory-{name or 'directive-skill'}"
-    return name[:48].rstrip("-") or "memory-directive-skill"
+    words = re.findall(r"[a-z0-9]+", str(text or "").lower())
+    index = 0
+    negation_index = next(
+        (i for i, word in enumerate(words[:6]) if word in _SKILL_CANDIDATE_NEGATION_WORDS),
+        -1,
+    )
+    while index < len(words) and words[index] in _SKILL_CANDIDATE_LEADING_WORDS:
+        index += 1
+
+    window_end = min(len(words), index + 8)
+    action_index = next(
+        (i for i in range(index, window_end) if words[i] in _SKILL_CANDIDATE_ACTION_WORDS),
+        index,
+    )
+    action = words[action_index] if action_index < len(words) else "follow"
+    if action not in _SKILL_CANDIDATE_ACTION_WORDS:
+        action = "follow"
+    if negation_index >= 0 and negation_index < action_index and action != "avoid":
+        action = "avoid"
+
+    label_words = [action]
+    scan_index = action_index + 1
+    while scan_index < len(words) and len(label_words) < 3:
+        word = words[scan_index]
+        if word in _SKILL_CANDIDATE_BOUNDARY_WORDS:
+            break
+        scan_index += 1
+        if word in _SKILL_CANDIDATE_SKIP_WORDS or word == action:
+            continue
+        next_word = next(
+            (
+                candidate
+                for candidate in words[scan_index:]
+                if candidate not in _SKILL_CANDIDATE_SKIP_WORDS
+                and candidate not in _SKILL_CANDIDATE_BOUNDARY_WORDS
+            ),
+            "",
+        )
+        if word.endswith("ed") and len(label_words) > 1 and next_word:
+            continue
+        label_words.append(word)
+
+    if len(label_words) == 1 and action == "follow":
+        label_words.append("directive")
+
+    name = "-".join(label_words)
+    if not name[0].isalpha():
+        name = f"use-{name}"
+    return name[:_SKILL_CANDIDATE_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
+
+
+def _skill_candidate_title(name: str) -> str:
+    return name.replace("-", " ").capitalize()
+
+
+def _unique_skill_candidate_slug(name: str, used: set[str]) -> str:
+    slug = name[:_SKILL_CANDIDATE_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
+    index = 2
+    while slug in used:
+        suffix = f"-{index}"
+        stem = name[: _SKILL_CANDIDATE_NAME_MAX_CHARS - len(suffix)].rstrip("-")
+        slug = f"{stem or 'follow-directive'}{suffix}"
+        index += 1
+    return slug
 
 
 def _collision_slug(text: str | None, *, fallback: str) -> str:
@@ -1443,13 +1592,9 @@ class ArtifactMemoryStore:
             if not snippet:
                 continue
             skill_name = _skill_candidate_name(snippet)
-            slug = skill_name
-            index = 2
-            while slug in used:
-                slug = f"{skill_name}-{index}"
-                index += 1
+            slug = _unique_skill_candidate_slug(skill_name, used)
             used.add(slug)
-            title = f"Skill candidate: {skill_name}"
+            title = _skill_candidate_title(skill_name)
             rel = f"context/skill-candidates/{slug}.md"
             self._write_skill_candidate_page(rel, title, skill_name, snippet)
             entries.append((title, rel, snippet))

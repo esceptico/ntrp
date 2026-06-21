@@ -13,6 +13,7 @@ from ntrp.memory.artifacts import (
     ArtifactMemoryStore,
     _redact_changelog,
     _sanitize_visible_text,
+    _skill_candidate_name,
 )
 from ntrp.memory.models import Kind, SourceRef
 from ntrp.memory.records import RecordStore
@@ -25,6 +26,15 @@ pytestmark = pytest.mark.asyncio
 
 async def _record_store(tmp_path: Path) -> RecordStore:
     return RecordStore(tmp_path / "memory.db", search_index=None)
+
+
+async def test_skill_candidate_names_are_short_actions():
+    assert _skill_candidate_name("Always use repo-grounded evidence before making codebase claims") == (
+        "use-repo-evidence"
+    )
+    assert _skill_candidate_name("Never use keyword heuristics for contextual suggestions") == (
+        "avoid-keyword-heuristics"
+    )
 
 
 def _symlink_or_skip(link: Path, target: Path) -> None:
@@ -465,13 +475,16 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     assert "create_skill" in page.content
     assert "Use when" in page.content
     assert "repo-grounded evidence" in page.content
+    assert page.title == "Use repo evidence"
+    assert page.path == "context/skill-candidates/use-repo-evidence.md"
+    assert "`use-repo-evidence`" in page.content
     assert "rec_secret123456" not in page.content
     assert "rec_" not in page.content
     assert "123e4567-e89b-12d3-a456-426614174000" not in page.content
     assert "abcdef1234567890abcdef1234567890" not in page.content
     assert "project:proj_secret123456" not in page.content
     assert page.path.removeprefix("context/skill-candidates/").removesuffix(".md")[0].isalpha()
-    assert len(page.path.removeprefix("context/skill-candidates/").removesuffix(".md")) <= 48
+    assert len(page.path.removeprefix("context/skill-candidates/").removesuffix(".md")) <= 32
     await records.close()
 
 
