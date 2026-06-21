@@ -321,7 +321,7 @@ async def search(
         kinds=[kind] if kind else None,
     )
     return {
-        "mode": "fts",
+        "mode": "hybrid" if store._search_index is not None else "fts",
         "items": await hydrated_items_json(store, records),
         "degraded": store._search_index is None,
     }

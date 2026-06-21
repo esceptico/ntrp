@@ -187,6 +187,25 @@ def test_search_fts(client):
     assert all("content" in i for i in body["items"])
 
 
+def test_search_reports_hybrid_when_semantic_index_is_available(client):
+    class _EmptyEmbedder:
+        async def embed_one(self, _query: str):
+            return [0.0]
+
+    class _EmptyVectorStore:
+        async def vector_search(self, *_args, **_kwargs):
+            return []
+
+    c, records = client
+    records.attach_search_index(SimpleNamespace(embedder=_EmptyEmbedder(), store=_EmptyVectorStore()))
+
+    body = c.get("/admin/memory/search", params={"q": "Regina"}).json()
+
+    assert body["mode"] == "hybrid"
+    assert body["degraded"] is False
+    assert all("content" in i for i in body["items"])
+
+
 def test_search_filters_by_kind(client):
     c, *_ = client
 

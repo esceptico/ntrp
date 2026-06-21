@@ -6,10 +6,11 @@ description: "Admin APIs for memory records, search, pinning, and the markdown a
 ## Mental model
 
 The memory API is exposed under `/admin/memory/*`. The substrate is a flat pool
-of atomic **records** (typed `directive`, `fact`, `source`, or `summary`) with
-scope metadata for visibility. There is no graph, no lenses, and no derivation
-edges — record detail returns empty `parents`/`children` for client
-compatibility only.
+of atomic **records** with scope metadata for visibility. That flat record pool
+is canonical for storage, retrieval, and mutation. User-created records are
+typed `directive`, `fact`, or `source`; `changelog` is generated audit output,
+not a user-create kind. There is no graph, no lenses, and no derivation edges —
+record detail returns empty `parents`/`children` for client compatibility only.
 
 Most users should manage memory from the desktop Memory view. These endpoints
 back that surface and other admin clients.
@@ -19,7 +20,7 @@ back that surface and other admin clients.
 ### Create record
 
 Quick-capture a single record into the pool. `kind_tag` is one of
-`directive | fact | summary | source`.
+`directive | fact | source`.
 
 ```bash
 curl -X POST http://localhost:6877/admin/memory/record \
@@ -98,7 +99,12 @@ curl -X POST http://localhost:6877/admin/memory/prune \
 
 ## Artifacts
 
-A generated, read-only markdown projection of memory for browsing.
+A generated, read-only markdown projection of memory for browsing. Generated
+artifacts include `context/`, `references/`, `entities/`, `projects/`,
+`facts/index.md`, `directives.md`, `me.md`, `active-work.md`, and `changelog/`.
+The `context/` tree is agent-facing context derived from the flat record pool.
+`context/integrations/` is generated from existing records and source refs, not
+from integration configuration.
 
 ### List artifacts
 
