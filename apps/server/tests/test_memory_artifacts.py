@@ -412,7 +412,7 @@ async def test_references_consolidate_sources_files_and_docs(tmp_path: Path):
     await records.close()
 
 
-async def test_context_index_and_schema_are_generated(tmp_path: Path):
+async def test_context_index_and_readme_are_generated(tmp_path: Path):
     records = await _record_store(tmp_path)
     await records.add("ntrp memory keeps records canonical", kind=Kind.FACT)
     artifacts = ArtifactMemoryStore(tmp_path / "artifacts")
@@ -420,20 +420,22 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     await artifacts.export_from_records(records)
 
     context = artifacts.read_artifact("context/index.md")
-    schema = artifacts.read_artifact("context/SCHEMA.md")
+    readme = artifacts.read_artifact("context/README.md")
     assert context.kind == "topic"
-    assert schema.kind == "topic"
+    assert readme.kind == "topic"
     assert "me.md" in context.content
     assert "active-work.md" in context.content
-    assert "SQLite" in schema.content
-    assert "directive | fact | source" in schema.content
-    assert "changelog` is generated audit output" in schema.content
+    assert "context/README.md" in context.content
+    assert "SQLite" in readme.content
+    assert "memory_tree" in readme.content
+    assert "No generated skill proposals" in readme.content
     assert "context/index.md" in {artifact.path for artifact in artifacts.list_artifacts()}
-    assert "context/SCHEMA.md" in {artifact.path for artifact in artifacts.list_artifacts(q="SQLite")}
+    assert "context/README.md" in {artifact.path for artifact in artifacts.list_artifacts(q="memory_tree")}
     for old_path in (
         "sources/index.md",
         "files/index.md",
         "docs/index.md",
+        "context/SCHEMA.md",
         "context/skill-drafts/index.md",
     ):
         with pytest.raises(FileNotFoundError):

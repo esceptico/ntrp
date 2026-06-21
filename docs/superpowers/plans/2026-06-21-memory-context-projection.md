@@ -35,32 +35,32 @@
 
 - [ ] **Step 1: Write failing tests**
 
-Add a test asserting an export creates `context/index.md` and `context/SCHEMA.md`, both readable through `ArtifactMemoryStore`, and that legacy folders remain absent.
+Add a test asserting an export creates `context/index.md` and `context/README.md`, both readable through `ArtifactMemoryStore`, and that legacy folders remain absent.
 
 Expected assertions:
 
 ```python
 context = artifacts.read_artifact("context/index.md")
-schema = artifacts.read_artifact("context/SCHEMA.md")
+readme = artifacts.read_artifact("context/README.md")
 assert context.kind == "topic"
-assert schema.kind == "topic"
+assert readme.kind == "topic"
 assert "me.md" in context.content
 assert "active-work.md" in context.content
-assert "SQLite" in schema.content
-assert "directive | fact | source" in schema.content
+assert "SQLite" in readme.content
+assert "memory_tree" in readme.content
 for old_path in ("sources/index.md", "files/index.md", "docs/index.md"):
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact(old_path)
 ```
 
-Update router artifact shape test to expect `context/index.md` and `context/SCHEMA.md`.
+Update router artifact shape test to expect `context/index.md` and `context/README.md`.
 
 - [ ] **Step 2: Run tests and see failure**
 
 Run from `apps/server`:
 
 ```bash
-uv run pytest -q -p no:cacheprovider tests/test_memory_artifacts.py::test_context_index_and_schema_are_generated tests/test_memory_router.py::test_rebuild_artifacts_endpoint_shape_and_counts
+uv run pytest -q -p no:cacheprovider tests/test_memory_artifacts.py::test_context_index_and_readme_are_generated tests/test_memory_router.py::test_rebuild_artifacts_endpoint_shape_and_counts
 ```
 
 Expected: fail because `context/` is not registered/generated yet.
@@ -73,8 +73,8 @@ In `apps/server/ntrp/memory/artifacts.py`:
 - Include `context` in generated cleanup.
 - Add `_write_context_docs()` called by `export_from_records()` after project/entity/reference writers.
 - Generate:
-  - `context/index.md`: links `me.md`, `active-work.md`, `entities/index.md`, `projects/index.md`, `references/index.md`, `changelog/index.md`, and future `context/integrations/index.md`.
-  - `context/SCHEMA.md`: explains records are canonical, markdown is projection, supported user-create record kinds are `directive | fact | source`, `changelog` is generated/audit-only, and no graph/lens/facet model exists.
+  - `context/index.md`: links `context/README.md`, `me.md`, `active-work.md`, `entities/index.md`, `projects/index.md`, `references/index.md`, `changelog/index.md`, and `context/integrations/index.md`.
+  - `context/README.md`: explains how agents/tools should use the generated memory artifact tree; this replaced the old `context/SCHEMA.md`.
 - Update README/tooling directory maps to mention `context/`.
 
 - [ ] **Step 4: Run tests**
