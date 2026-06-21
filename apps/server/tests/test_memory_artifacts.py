@@ -441,7 +441,7 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     await records.add(
         "Always use repo-grounded evidence before making codebase claims from "
         "rec_secret123456 and 123e4567-e89b-12d3-a456-426614174000 and "
-        "abcdef1234567890abcdef1234567890",
+        "abcdef1234567890abcdef1234567890 and project:proj_secret123456",
         kind=Kind.DIRECTIVE,
     )
     await records.add("The user has a plain fact that should not be a skill", kind=Kind.FACT)
@@ -469,6 +469,9 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     assert "rec_" not in page.content
     assert "123e4567-e89b-12d3-a456-426614174000" not in page.content
     assert "abcdef1234567890abcdef1234567890" not in page.content
+    assert "project:proj_secret123456" not in page.content
+    assert page.path.removeprefix("context/skill-candidates/").removesuffix(".md")[0].isalpha()
+    assert len(page.path.removeprefix("context/skill-candidates/").removesuffix(".md")) <= 48
     await records.close()
 
 

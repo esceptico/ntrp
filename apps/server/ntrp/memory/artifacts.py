@@ -216,6 +216,7 @@ def _sanitize_skill_candidate_snippet(text: str, *, max_chars: int) -> str:
     visible = _RECORD_ID_RE.sub("[id]", visible)
     visible = _UUID_RE.sub("[id]", visible)
     visible = _LONG_HEX_RE.sub("[id]", visible)
+    visible = _PROJECT_ID_RE.sub("[id]", visible)
     visible = _OPERATIONAL_ID_RE.sub("[id]", visible)
     visible = _WHITESPACE_RE.sub(" ", visible).strip()
     return _trim_at_word_boundary(visible, max_chars)
@@ -290,6 +291,14 @@ def _slug(text: str | None, *, fallback: str) -> str:
     base_source = fallback if _PROJECT_ID_RE.fullmatch(raw) else raw
     base = _SLUG_RE.sub("-", base_source).strip(".-_").lower()
     return base[:60].strip(".-_") or fallback
+
+
+def _skill_candidate_name(text: str) -> str:
+    name = _slug(text, fallback="memory-directive-skill")
+    name = re.sub(r"[^a-z0-9-]+", "-", name).strip("-")
+    if not name or not name[0].isalpha():
+        name = f"memory-{name or 'directive-skill'}"
+    return name[:48].rstrip("-") or "memory-directive-skill"
 
 
 def _collision_slug(text: str | None, *, fallback: str) -> str:
@@ -1433,7 +1442,7 @@ class ArtifactMemoryStore:
             snippet = _sanitize_skill_candidate_snippet(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
             if not snippet:
                 continue
-            skill_name = _slug(snippet, fallback="memory-directive-skill")
+            skill_name = _skill_candidate_name(snippet)
             slug = skill_name
             index = 2
             while slug in used:
