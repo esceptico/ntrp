@@ -446,7 +446,7 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
         "Gmail receipt for a customer follow-up",
         kind=Kind.SOURCE,
         scope_kind="integration",
-        scope_key="gmail",
+        scope_key="gmail:gmail:batch",
         source_ref=SourceRef(kind="gmail", ref="message:abc"),
     )
     await records.add(
@@ -467,6 +467,8 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
     assert gmail.record_count == 1
     assert "channel #eng" in slack.content
     assert "Gmail receipt" in gmail.content
+    with pytest.raises(FileNotFoundError):
+        artifacts.read_artifact("context/integrations/gmail-gmail-batch.md")
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/curator.md")
     await records.close()

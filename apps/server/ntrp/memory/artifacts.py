@@ -541,11 +541,18 @@ def _source_ref(record: Record) -> str:
 
 
 def _integration_key(record: Record) -> str | None:
-    if (record.scope_kind or "").strip().lower() == "integration":
-        raw = str(record.scope_key or "").strip()
-        return _slug(raw, fallback="integration") if raw else None
     kind = _source_kind(record).strip().lower()
-    return kind if kind in KNOWN_INTEGRATION_SOURCE_KINDS else None
+    if kind in KNOWN_INTEGRATION_SOURCE_KINDS:
+        return kind
+    if (record.scope_kind or "").strip().lower() != "integration":
+        return None
+    raw = str(record.scope_key or "").strip()
+    if not raw:
+        return None
+    provider = raw.split(":", 1)[0].strip().lower()
+    if provider in KNOWN_INTEGRATION_SOURCE_KINDS:
+        return provider
+    return _slug(raw, fallback="integration")
 
 
 def _integration_title(key: str) -> str:
