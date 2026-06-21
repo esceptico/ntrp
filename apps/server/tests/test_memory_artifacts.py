@@ -438,7 +438,10 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
 
 async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Path):
     records = await _record_store(tmp_path)
-    await records.add("Always use repo-grounded evidence before making codebase claims", kind=Kind.DIRECTIVE)
+    await records.add(
+        "Always use repo-grounded evidence before making codebase claims from rec_secret123456",
+        kind=Kind.DIRECTIVE,
+    )
     await records.add("The user has a plain fact that should not be a skill", kind=Kind.FACT)
     await records.add("A source receipt that should not be a skill", kind=Kind.SOURCE)
     artifacts = ArtifactMemoryStore(tmp_path / "artifacts")
@@ -459,6 +462,8 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     assert "not an installed skill" in page.content
     assert "create_skill" in page.content
     assert "Use when" in page.content
+    assert "repo-grounded evidence" in page.content
+    assert "rec_secret123456" not in page.content
     assert "rec_" not in page.content
     await records.close()
 

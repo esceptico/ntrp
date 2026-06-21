@@ -161,6 +161,7 @@ _SHORT_COMMIT_RE = re.compile(r"(?i)(?=.*[a-f])\b[0-9a-f]{7,15}\b")
 # `exact_match`, `avg_loss`, `no_act`, and dashed slugs must remain readable.
 _DASHED_ID_RE = re.compile(r"\b[A-Z0-9]{5,}(?:-[A-Z0-9]{4,})+\b")
 _PROJECT_ID_RE = re.compile(r"\bproject:proj_[A-Za-z0-9_-]+\b|\bproj_[A-Za-z0-9_-]{8,}\b")
+_RECORD_ID_RE = re.compile(r"\brec_[A-Za-z0-9_-]{6,}\b")
 _OPERATIONAL_ID_RE = re.compile(
     r"\b(?:prod|run|span|tool|toolu|call|trigger|task|thread|msg)_[A-Za-z0-9-]{8,}\b"
     r"|\btr_dev_[A-Za-z0-9-]{8,}\b"
@@ -207,6 +208,16 @@ def _sanitize_visible_text(text: str, *, max_chars: int) -> str:
     useless [path]/[id] placeholders. Redaction here was a regex blacklist that
     made memory less useful, not more."""
     visible = _WHITESPACE_RE.sub(" ", str(text or "")).strip()
+    return _trim_at_word_boundary(visible, max_chars)
+
+
+def _sanitize_skill_candidate_snippet(text: str, *, max_chars: int) -> str:
+    visible = _sanitize_visible_text(text, max_chars=max_chars)
+    visible = _RECORD_ID_RE.sub("[id]", visible)
+    visible = _UUID_RE.sub("[id]", visible)
+    visible = _LONG_HEX_RE.sub("[id]", visible)
+    visible = _OPERATIONAL_ID_RE.sub("[id]", visible)
+    visible = _WHITESPACE_RE.sub(" ", visible).strip()
     return _trim_at_word_boundary(visible, max_chars)
 
 
@@ -1419,7 +1430,7 @@ class ArtifactMemoryStore:
         entries: list[tuple[str, str, str]] = []
         used: set[str] = set()
         for record in selected:
-            snippet = _sanitize_visible_text(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
+            snippet = _sanitize_skill_candidate_snippet(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
             if not snippet:
                 continue
             skill_name = _slug(snippet, fallback="memory-directive-skill")
