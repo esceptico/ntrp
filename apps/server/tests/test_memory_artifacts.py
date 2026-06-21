@@ -450,6 +450,20 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
         source_ref=SourceRef(kind="gmail", ref="message:abc"),
     )
     await records.add(
+        "Email receipt for a customer follow-up",
+        kind=Kind.SOURCE,
+        scope_kind="integration",
+        scope_key="email:message:xyz",
+        source_ref=SourceRef(kind="email", ref="message:xyz"),
+    )
+    await records.add(
+        "Generic integration receipt for external ingest",
+        kind=Kind.SOURCE,
+        scope_kind="integration",
+        scope_key="integration:external:item",
+        source_ref=SourceRef(kind="integration", ref="external:item"),
+    )
+    await records.add(
         "Curator wrote an internal fact and should not get an integration page",
         kind=Kind.FACT,
         source_ref=SourceRef(kind="curator", ref="internal"),
@@ -461,14 +475,26 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
     index = artifacts.read_artifact("context/integrations/index.md")
     slack = artifacts.read_artifact("context/integrations/slack.md")
     gmail = artifacts.read_artifact("context/integrations/gmail.md")
+    email = artifacts.read_artifact("context/integrations/email.md")
+    integration = artifacts.read_artifact("context/integrations/integration.md")
     assert "[[Slack]]" in index.content
     assert "[[Gmail]]" in index.content
+    assert "[[Email]]" in index.content
+    assert "[[Integration]]" in index.content
     assert slack.record_count == 1
     assert gmail.record_count == 1
+    assert email.record_count == 1
+    assert integration.record_count == 1
     assert "channel #eng" in slack.content
     assert "Gmail receipt" in gmail.content
+    assert "Email receipt" in email.content
+    assert "Generic integration receipt" in integration.content
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/gmail-gmail-batch.md")
+    with pytest.raises(FileNotFoundError):
+        artifacts.read_artifact("context/integrations/email-message-xyz.md")
+    with pytest.raises(FileNotFoundError):
+        artifacts.read_artifact("context/integrations/integration-external-item.md")
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/curator.md")
     await records.close()

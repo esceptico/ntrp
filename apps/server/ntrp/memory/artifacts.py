@@ -36,6 +36,7 @@ from ntrp.memory import prompts_synthesis
 from ntrp.memory.frontmatter import QuotedStr, dump_frontmatter, parse_frontmatter, strip_frontmatter
 from ntrp.memory.models import Record
 from ntrp.memory.records import RecordStore
+from ntrp.memory.scopes import INTEGRATION_SOURCE_KINDS as SCOPE_INTEGRATION_SOURCE_KINDS
 
 _logger = logging.getLogger(__name__)
 
@@ -71,19 +72,15 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
 KNOWN_INTEGRATION_SOURCE_KINDS = frozenset({
-    "slack",
-    "gmail",
-    "calendar",
+    *SCOPE_INTEGRATION_SOURCE_KINDS,
     "github",
     "notion",
     "obsidian",
-    "mcp",
-    "web",
-    "file",
 })
 INTEGRATION_TITLES = {
     "slack": "Slack",
     "gmail": "Gmail",
+    "email": "Email",
     "calendar": "Calendar",
     "github": "GitHub",
     "notion": "Notion",
@@ -91,6 +88,9 @@ INTEGRATION_TITLES = {
     "mcp": "MCP",
     "web": "Web",
     "file": "File",
+    # Generic source_ref.kind="integration" is part of the write/provenance
+    # contract. Roll it up deliberately instead of fragmenting by scope ref.
+    "integration": "Integration",
 }
 
 ARTIFACT_WRAP_WIDTH = 100
