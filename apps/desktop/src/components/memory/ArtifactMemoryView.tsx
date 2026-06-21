@@ -43,7 +43,8 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-const DIRECTORY_ORDER = ["memory", "facts", "entities", "projects", "sources", "files", "docs", "changelog"];
+const DIRECTORY_ORDER = ["memory", "context", "facts", "entities", "projects", "references", "changelog"];
+const DEFAULT_EXPANDED_DIRS = new Set(["memory", "context", "context/integrations", "entities", "projects"]);
 
 function displayFileName(a: MemoryArtifact) {
   const leaf = a.path.split("/").pop() ?? a.path;
@@ -100,12 +101,12 @@ function buildArtifactTree(artifacts: MemoryArtifact[]) {
   return root.children;
 }
 
-function collectFolderPaths(nodes: TreeNode[]): string[] {
+function collectDefaultFolderPaths(nodes: TreeNode[]): string[] {
   const out: string[] = [];
   const walk = (ns: TreeNode[]) => {
     for (const n of ns) {
       if (n.kind === "directory") {
-        out.push(n.path);
+        if (DEFAULT_EXPANDED_DIRS.has(n.path)) out.push(n.path);
         walk(n.children);
       }
     }
@@ -140,6 +141,29 @@ function searchMatches(a: MemoryArtifact, q: string) {
     .join(" ")
     .toLowerCase()
     .includes(q);
+}
+
+function aliasKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function addAlias(map: Map<string, Set<string>>, key: string, path: string) {
+  const exact = aliasKey(key);
+  if (!exact) return;
+  const paths = map.get(exact) ?? new Set<string>();
+  paths.add(path);
+  map.set(exact, paths);
+}
+
+function preferredAlias(map: Map<string, Set<string>>, key: string): string | null {
+  const paths = map.get(aliasKey(key));
+  if (!paths) return null;
+  if (paths.size === 1) return [...paths][0];
+  const slug = wikiSlug(key);
+  for (const candidate of [`entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
+    if (paths.has(candidate)) return candidate;
+  }
+  return null;
 }
 
 function isMissingArtifactError(error: unknown) {
@@ -349,6 +373,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   const [activeArtifact, setActiveArtifact] = useState<MemoryArtifact | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [contentNotice, setContentNotice] = useState<string | null>(null);
   const [contentRefreshKey, setContentRefreshKey] = useState(0);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<MemoryViewMode>("files");
@@ -444,37 +469,50 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     return [...filtered].sort((a, b) => a.path.localeCompare(b.path));
   }, [filtered, trimmedQuery]);
 
-  // Folders default ALL-EXPANDED on first load; keep user toggles afterward.
+  // Default-open only hot context folders; changelog/references stay collapsed
+  // until the user asks for provenance or audit history.
   useEffect(() => {
     if (seededExpansion.current || tree.length === 0) return;
     seededExpansion.current = true;
-    setExpanded(new Set(collectFolderPaths(tree)));
+    setExpanded(new Set(collectDefaultFolderPaths(tree)));
   }, [tree]);
 
   const selectedMeta = filtered.find((a) => a.path === selected) ?? filtered[0] ?? null;
   const active = activeArtifact?.path === selectedMeta?.path ? activeArtifact : selectedMeta;
 
-  // [[Subject]] → a topic page, resolved against the full artifact set (not the
-  // search-filtered view, so a wikilink stays navigable even while a query is
-  // active — navigating clears the query so the target is visible). Subjects
-  // live under entities/ AND projects/, so check both (the server emits project
-  // wikilinks too, e.g. [[Project inbox]] → projects/inbox.md).
+  // [[Subject]] → a generated note, resolved against the full artifact set
+  // (not the search-filtered view, so links remain navigable while searching).
+  // Accept exact paths, directory indexes, titles, slugs, and file stems.
   const artifactPaths = useMemo(() => new Set(artifacts.map((a) => a.path)), [artifacts]);
+  const artifactAliasMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const artifact of artifacts) {
+      const path = artifact.path;
+      const leaf = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+      addAlias(map, path, path);
+      addAlias(map, path.replace(/\.md$/, ""), path);
+      addAlias(map, artifact.title, path);
+      addAlias(map, wikiSlug(artifact.title), path);
+      addAlias(map, leaf, path);
+      addAlias(map, wikiSlug(leaf), path);
+    }
+    return map;
+  }, [artifacts]);
   const resolveWiki = useMemo(
     () => (target: string): string | null => {
       const t = target.trim();
       // A literal artifact path: `directives.md`, `changelog/2026.md`, `facts/index.md`.
       if (artifactPaths.has(t)) return t;
-      // A directory reference (`entities/`) → its index page.
-      if (t.endsWith("/") && artifactPaths.has(`${t}index.md`)) return `${t}index.md`;
-      // A [[Subject]] name → its topic page under entities/ or projects/.
-      const slug = wikiSlug(t);
-      for (const path of [`entities/${slug}.md`, `projects/${slug}.md`]) {
-        if (artifactPaths.has(path)) return path;
-      }
+      // A directory reference (`entities/` or `entities`) → its index page.
+      const directory = t.replace(/\/+$/, "");
+      if (directory && artifactPaths.has(`${directory}/index.md`)) return `${directory}/index.md`;
+      const exact = preferredAlias(artifactAliasMap, t);
+      if (exact) return exact;
+      const slug = preferredAlias(artifactAliasMap, wikiSlug(t));
+      if (slug) return slug;
       return null;
     },
-    [artifactPaths],
+    [artifactAliasMap, artifactPaths],
   );
   const wikiHandlers = useMemo<WikiLinkHandlers>(
     () => ({
@@ -508,6 +546,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
           setArtifacts((prev) => prev.filter((artifact) => artifact.path !== missingPath));
           setSelected((prev) => (prev === missingPath ? null : prev));
           setActiveArtifact(null);
+          setContentNotice("That generated memory note changed or disappeared; refreshed the list.");
           void load(serverQuery);
           return;
         }
@@ -547,6 +586,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   const rebuild = () => {
     const selectedBefore = selected;
     setRebuilding(true);
+    setContentNotice(null);
     rebuildMemoryArtifacts(config)
       .then(() => load(serverQuery))
       .then((refreshed) => {
@@ -567,6 +607,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     const from = filesOrder.indexOf(selectedMeta?.path ?? selected ?? "");
     const to = filesOrder.indexOf(path);
     if (from !== -1 && to !== -1 && from !== to) setFilesDirection(to > from ? 1 : -1);
+    setContentNotice(null);
     setSelected(path);
   };
   const selectRecord = (id: string) => {
@@ -779,6 +820,11 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
           {active.readonly_reason && (
             <div className="mb-4 rounded-[10px] bg-surface-soft px-3 py-2 text-sm text-muted">
               {active.readonly_reason}
+            </div>
+          )}
+          {contentNotice && (
+            <div className="mb-4 rounded-[10px] bg-surface-soft px-3 py-2 text-sm text-muted">
+              {contentNotice}
             </div>
           )}
           {contentError && !active.content ? (

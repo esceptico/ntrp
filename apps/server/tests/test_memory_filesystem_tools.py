@@ -113,6 +113,42 @@ async def test_memory_tree_read_and_search_use_artifact_store_safety(store: Reco
     assert search.data["matches"]
 
 
+async def test_memory_read_resolves_titles_directories_and_wikilinks(store: RecordStore, artifacts_dir: Path):
+    await _export(store, artifacts_dir)
+    execution = _execution(store)
+
+    by_title = await memory_read(execution, MemoryReadInput(path="Context README", offset=1, limit=3))
+    assert not by_title.is_error
+    assert by_title.data["path"] == "context/README.md"
+
+    by_directory = await memory_read(execution, MemoryReadInput(path="context", offset=1, limit=3))
+    assert not by_directory.is_error
+    assert by_directory.data["path"] == "context/index.md"
+
+    by_wikilink = await memory_read(execution, MemoryReadInput(path="[[Memory artifacts]]", offset=1, limit=3))
+    assert not by_wikilink.is_error
+    assert by_wikilink.data["path"] == "README.md"
+
+    artifact_store = memory_tools.ArtifactMemoryStore(artifacts_dir)
+    artifact_store._write("entities/dex.md", "Dex", "topic", "entity", "dex", "# Dex\n\nEntity page.\n", 1)
+    artifact_store._write("projects/dex.md", "Dex", "topic", "project", "dex", "# Dex\n\nProject page.\n", 1)
+    duplicate_title = await memory_read(execution, MemoryReadInput(path="Dex", offset=1, limit=3))
+    assert not duplicate_title.is_error
+    assert duplicate_title.data["path"] == "entities/dex.md"
+
+    artifact_store._write("entities/foo_bar.md", "Foo_bar", "topic", "entity", "foo_bar", "# Foo_bar\n\nEntity page.\n", 1)
+    artifact_store._write("projects/foo_bar.md", "Foo_bar", "topic", "project", "foo_bar", "# Foo_bar\n\nProject page.\n", 1)
+    underscore_title = await memory_read(execution, MemoryReadInput(path="Foo_bar", offset=1, limit=3))
+    assert not underscore_title.is_error
+    assert underscore_title.data["path"] == "entities/foo_bar.md"
+
+    artifact_store._write("entities/a.b.md", "A.B", "topic", "entity", "a.b", "# A.B\n\nEntity page.\n", 1)
+    artifact_store._write("projects/a.b.md", "A.B", "topic", "project", "a.b", "# A.B\n\nProject page.\n", 1)
+    dotted_title = await memory_read(execution, MemoryReadInput(path="A.B", offset=1, limit=3))
+    assert not dotted_title.is_error
+    assert dotted_title.data["path"] == "entities/a.b.md"
+
+
 @pytest.mark.parametrize("bad_path", ["/tmp/README.md", "../README.md", ".secret/file.md", "README.txt"])
 async def test_memory_read_search_patch_reject_bad_paths(store: RecordStore, artifacts_dir: Path, bad_path: str):
     await _export(store, artifacts_dir)

@@ -757,6 +757,7 @@ class ArtifactMemoryStore:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
             await self._synthesize_active_work(rows, labels_by_id, llm=llm, model=model)
         self._ensure_changelog()
+        self._write_context_links()
         return self.list_artifacts()
 
     def _clear_generated_artifacts(self) -> None:
@@ -766,10 +767,11 @@ class ArtifactMemoryStore:
         # synthesized ones) via _prune_dossier_dir.
         for rel in ("README.md", "tooling.md", "directives.md", "facts.md", "summaries.md", "sources.md"):
             self._unlink_regular_artifact(rel)
-        for dirname in ("facts", "context", "references", "sources", "files", "docs"):
+        for dirname in ("facts", "context", "references"):
             directory = self.root / dirname
             self._remove_markdown_tree(directory)
-        self._remove_defunct_dir("summaries")
+        for dirname in ("sources", "files", "docs", "summaries"):
+            self._remove_defunct_dir(dirname)
 
     def _synthesized_subject(self, rel: str) -> str | None:
         """The subject TITLE of an existing LLM-synthesized page at `rel`, or None
@@ -842,7 +844,7 @@ class ArtifactMemoryStore:
             "",
             "- `directives.md` — generated standing behavior rules.",
             "- `facts/index.md` — DB-backed fact counts and querying guidance; no fact dumps are generated.",
-            "- `context/` — generated agent context index and schema notes.",
+            "- `context/` — generated agent context index, readme, and link map.",
             "- `entities/` — emergent topic pages and triage.",
             "- `projects/` — project topic pages.",
             "- `references/` — evidence, receipt, file, doc, and integration pointers.",
@@ -875,7 +877,7 @@ class ArtifactMemoryStore:
             "",
             "- `recall` queries SQLite records and is the canonical retrieval path for facts.",
             "- `memory_tree`, `memory_read`, and `memory_search` browse generated dossiers/context/source docs.",
-            "- Browse `context/` for the generated context index and schema contract.",
+            "- Browse `context/` for the lookup guide and exact generated-note link map.",
             "- Browse `entities/` and `projects/` for topic pages built from the records.",
             "- Facts live in the database; `facts/index.md` carries counts, while `references/` carries concise pointers.",
             "- Monthly changelog files are append-only atomic event logs; rollups are regenerated indexes.",
@@ -1362,6 +1364,7 @@ class ArtifactMemoryStore:
             "## Primary surfaces",
             "",
             "- `context/README.md` — how to use this memory artifact tree.",
+            "- `context/links.md` — exact `memory_read` paths for generated notes.",
             "- `me.md` — synthesized profile when a model-backed rebuild is available.",
             "- `active-work.md` — synthesized current-work summary when a model-backed rebuild is available.",
             "- `entities/index.md` — generated entity topic index.",
@@ -1373,8 +1376,9 @@ class ArtifactMemoryStore:
             "## Lookup flow",
             "",
             "1. Read `me.md` and `active-work.md` for the hot working set.",
-            "2. Search `entities/`, `projects/`, and `context/integrations/` for topic detail.",
-            "3. Use `references/` and `changelog/` when provenance or mutation history matters.",
+            "2. Read `context/links.md` when you need exact paths or titles.",
+            "3. Search `entities/`, `projects/`, and `context/integrations/` for topic detail.",
+            "4. Use `references/` and `changelog/` when provenance or mutation history matters.",
         ]
         self._write(
             "context/index.md",
@@ -1403,6 +1407,7 @@ class ArtifactMemoryStore:
             "## What To Read",
             "",
             "- Start at `context/index.md` for navigation.",
+            "- Read `context/links.md` for exact tool-readable paths.",
             "- Read `me.md` for stable profile and working-style context.",
             "- Read `active-work.md` for current project state.",
             "- Read `context/integrations/index.md` for source-specific overviews.",
@@ -1422,6 +1427,73 @@ class ArtifactMemoryStore:
             "global",
             None,
             "\n".join(readme).rstrip() + "\n",
+            None,
+        )
+
+    def _write_context_links(self) -> None:
+        artifacts = [a for a in self.list_artifacts() if a.path != "context/links.md"]
+
+        def line(artifact: MemoryArtifact) -> str:
+            count = f" — {artifact.record_count} records" if artifact.record_count is not None else ""
+            return f'- `memory_read(path="{artifact.path}")` — {artifact.title}{count}'
+
+        def section(title: str, paths: list[str]) -> list[str]:
+            by_path = {a.path: a for a in artifacts}
+            lines = [f"## {title}", ""]
+            selected = [by_path[path] for path in paths if path in by_path]
+            if not selected:
+                lines.append("_No generated notes yet._")
+            else:
+                lines.extend(line(artifact) for artifact in selected)
+            lines.append("")
+            return lines
+
+        context = sorted(
+            (a for a in artifacts if a.path.startswith("context/") and a.path not in {"context/index.md", "context/README.md"}),
+            key=lambda a: a.path,
+        )
+        facts = sorted((a for a in artifacts if a.path.startswith("facts/")), key=lambda a: a.path)
+        entities = sorted((a for a in artifacts if a.path.startswith("entities/")), key=lambda a: a.path)
+        projects = sorted((a for a in artifacts if a.path.startswith("projects/")), key=lambda a: a.path)
+        references = sorted((a for a in artifacts if a.path.startswith("references/")), key=lambda a: a.path)
+        changelog = sorted((a for a in artifacts if a.path.startswith("changelog/")), key=lambda a: a.path)
+        body = [
+            "# Context Links",
+            "",
+            "Exact generated-note addresses for agents and memory tools.",
+            "SQLite records remain canonical; these links are regenerated from the artifact tree.",
+            "Use `memory_search` when the title/path below is not enough.",
+            "",
+        ]
+        body.extend(
+            section(
+                "Hot Entries",
+                ["me.md", "active-work.md", "context/index.md", "context/README.md", "tooling.md", "directives.md"],
+            )
+        )
+        body.insert(len(body) - 1, '- `memory_read(path="context/links.md")` — Context links')
+        for title, rows in (
+            ("Context Pages", context),
+            ("Fact Pages", facts),
+            ("Entity Pages", entities),
+            ("Project Pages", projects),
+            ("Reference Pages", references),
+            ("Audit Pages", changelog),
+        ):
+            body.extend([f"## {title}", ""])
+            if rows:
+                body.extend(line(artifact) for artifact in rows)
+            else:
+                body.append("_No generated notes yet._")
+            body.append("")
+
+        self._write(
+            "context/links.md",
+            "Context links",
+            "topic",
+            "global",
+            None,
+            "\n".join(body).rstrip() + "\n",
             None,
         )
 

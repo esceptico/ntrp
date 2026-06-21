@@ -19,6 +19,7 @@ other candidates instead of dead-ending.
 import asyncio
 import difflib
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -97,7 +98,7 @@ class MemoryTreeInput(BaseModel):
 
 
 class MemoryReadInput(BaseModel):
-    path: str = Field(description="Relative .md artifact path under the memory artifact root.")
+    path: str = Field(description="Relative .md artifact path, directory, title, file stem, or [[wikilink]] under memory artifacts.")
     offset: int = Field(default=1, ge=1, description="1-based line number to start reading.")
     limit: int = Field(default=500, ge=1, le=2000, description="Maximum lines to return.")
 
@@ -175,6 +176,77 @@ def _validate_relative_path(raw: str, *, allow_empty: bool = False) -> str | Non
     if Path(rel).suffix and not rel.endswith(".md"):
         return None
     return rel
+
+
+def _artifact_ref_slug(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"[^A-Za-z0-9._-]+", "-", text)
+    return text.strip(".-_").lower()[:60].strip(".-_")
+
+
+def _normalize_artifact_ref(raw: str) -> str:
+    text = (raw or "").strip().strip("`").strip()
+    if text.startswith("[[") and text.endswith("]]"):
+        text = text[2:-2].strip()
+    return text.strip()
+
+
+def _preferred_artifact_match(paths: list[str], slug: str) -> str | None:
+    unique = set(paths)
+    if len(unique) == 1:
+        return next(iter(unique))
+    for candidate in (
+        f"entities/{slug}.md",
+        f"projects/{slug}.md",
+        f"context/integrations/{slug}.md",
+    ):
+        if candidate in unique:
+            return candidate
+    return None
+
+
+def _resolve_artifact_read_path(store: ArtifactMemoryStore, raw: str) -> str | None:
+    ref = _normalize_artifact_ref(raw)
+    if not ref:
+        return None
+
+    rel = _validate_relative_path(ref, allow_empty=False)
+    if rel is not None:
+        candidates = [rel]
+        if not rel.endswith(".md"):
+            candidates.extend([f"{rel}/index.md", f"{rel}.md"])
+        for candidate in candidates:
+            try:
+                store.read_artifact(candidate)
+                return candidate
+            except FileNotFoundError:
+                continue
+    else:
+        unsafe = Path(ref)
+        if unsafe.is_absolute() or ".." in unsafe.parts or any(part.startswith(".") for part in unsafe.parts):
+            return None
+
+    ref_lower = ref.lower()
+    ref_slug = _artifact_ref_slug(ref)
+    unsupported_suffix = bool(Path(ref).suffix and not ref.endswith(".md"))
+    matches: list[str] = []
+    for artifact in store.list_artifacts():
+        path = artifact.path
+        stem = Path(path).stem
+        title_keys = {
+            artifact.title.lower(),
+            _artifact_ref_slug(artifact.title),
+        }
+        path_keys = {
+            path.lower(),
+            path.removesuffix(".md").lower(),
+            stem.lower(),
+            _artifact_ref_slug(stem),
+        }
+        keys = title_keys if unsupported_suffix else title_keys | path_keys
+        if ref_lower in keys or ref_slug in keys:
+            matches.append(path)
+    return _preferred_artifact_match(matches, ref_slug)
 
 
 def _artifact_generated(artifact) -> bool:
@@ -321,10 +393,10 @@ async def memory_tree(execution: ToolExecution, args: MemoryTreeInput) -> ToolRe
 
 
 def _memory_read_sync(args: MemoryReadInput) -> ToolResult:
-    rel = _validate_relative_path(args.path)
+    store = _artifact_store()
+    rel = _resolve_artifact_read_path(store, args.path)
     if rel is None or not rel.endswith(".md"):
         return _path_error(args.path)
-    store = _artifact_store()
     try:
         artifact = store.read_artifact(rel)
     except (FileNotFoundError, OSError):

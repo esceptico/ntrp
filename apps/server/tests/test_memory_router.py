@@ -97,6 +97,7 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     assert "facts/index.md" in by_path
     assert "context/index.md" in by_path
     assert "context/README.md" in by_path
+    assert "context/links.md" in by_path
     assert "context/integrations/index.md" in by_path
     assert "entities/index.md" in by_path
     assert "references/index.md" in by_path
@@ -108,6 +109,7 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     assert by_path["references/index.md"]["record_count"] is None
     assert by_path["context/index.md"]["record_count"] is None
     assert by_path["context/README.md"]["record_count"] is None
+    assert by_path["context/links.md"]["record_count"] is None
     assert by_path["context/integrations/index.md"]["record_count"] is None
     assert by_path["changelog/index.md"]["record_count"] is None
     assert by_path["facts/index.md"]["record_count"] is None

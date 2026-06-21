@@ -421,15 +421,25 @@ async def test_context_index_and_readme_are_generated(tmp_path: Path):
 
     context = artifacts.read_artifact("context/index.md")
     readme = artifacts.read_artifact("context/README.md")
+    links = artifacts.read_artifact("context/links.md")
     assert context.kind == "topic"
     assert readme.kind == "topic"
+    assert links.kind == "topic"
     assert "me.md" in context.content
     assert "active-work.md" in context.content
     assert "context/README.md" in context.content
+    assert "context/links.md" in context.content
     assert "SQLite" in readme.content
     assert "memory_tree" in readme.content
     assert "No generated skill proposals" in readme.content
+    assert 'memory_read(path="context/index.md")' in links.content
+    assert 'memory_read(path="context/README.md")' in links.content
+    assert 'memory_read(path="context/links.md")' in links.content
+    assert 'memory_read(path="facts/index.md")' in links.content
+    assert 'memory_read(path="changelog/index.md")' in links.content
+    assert "`memory_search`" in links.content
     assert "context/index.md" in {artifact.path for artifact in artifacts.list_artifacts()}
+    assert "context/links.md" in {artifact.path for artifact in artifacts.list_artifacts(q="memory_read")}
     assert "context/README.md" in {artifact.path for artifact in artifacts.list_artifacts(q="memory_tree")}
     for old_path in (
         "sources/index.md",
@@ -440,6 +450,8 @@ async def test_context_index_and_readme_are_generated(tmp_path: Path):
     ):
         with pytest.raises(FileNotFoundError):
             artifacts.read_artifact(old_path)
+    for old_dir in ("sources", "files", "docs"):
+        assert not (artifacts.root / old_dir).exists()
     await records.close()
 
 
