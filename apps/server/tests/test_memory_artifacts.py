@@ -436,6 +436,33 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     await records.close()
 
 
+async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Path):
+    records = await _record_store(tmp_path)
+    await records.add("Always use repo-grounded evidence before making codebase claims", kind=Kind.DIRECTIVE)
+    await records.add("The user has a plain fact that should not be a skill", kind=Kind.FACT)
+    await records.add("A source receipt that should not be a skill", kind=Kind.SOURCE)
+    artifacts = ArtifactMemoryStore(tmp_path / "artifacts")
+
+    await artifacts.export_from_records(records)
+
+    index = artifacts.read_artifact("context/skill-candidates/index.md")
+    candidates = [
+        a for a in artifacts.list_artifacts(q="create_skill") if a.path.startswith("context/skill-candidates/")
+    ]
+    assert "repo-grounded" in index.content
+    assert "plain fact" not in index.content
+    assert any(a.path != "context/skill-candidates/index.md" for a in candidates)
+    page = artifacts.read_artifact(next(a.path for a in candidates if a.path != "context/skill-candidates/index.md"))
+    assert page.kind == "topic"
+    assert page.source == "deterministic"
+    assert page.record_count == 1
+    assert "not an installed skill" in page.content
+    assert "create_skill" in page.content
+    assert "Use when" in page.content
+    assert "rec_" not in page.content
+    await records.close()
+
+
 async def test_integration_reference_pages_are_generated_from_existing_records(tmp_path: Path):
     records = await _record_store(tmp_path)
     await records.add(

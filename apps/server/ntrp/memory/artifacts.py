@@ -100,6 +100,7 @@ MAX_TITLE_CHARS = 120
 MAX_DOSSIER_SNIPPET_CHARS = 280
 MAX_DOSSIER_ITEMS = 5
 MAX_ENTITY_DOSSIERS = 25
+MAX_SKILL_CANDIDATES = 25
 MIN_ENTITY_RECORDS = 2
 MIN_TRIAGE_RECORDS = 1
 
@@ -751,6 +752,7 @@ class ArtifactMemoryStore:
         await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
         self._write_references(rows, source_records)
         self._write_context_docs()
+        self._write_skill_candidates(directives)
         self._write_integration_context(rows)
         if synthesize:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
@@ -1366,6 +1368,8 @@ class ArtifactMemoryStore:
             "- `references/index.md` — generated evidence and pointer index.",
             "- `changelog/index.md` — generated memory mutation rollup.",
             "- `context/integrations/index.md` — generated integration overview pages.",
+            "- `context/skill-candidates/index.md` — generated review surfaces for directive-derived "
+            "skill candidates.",
             "",
             "## Schema",
             "",
@@ -1406,6 +1410,92 @@ class ArtifactMemoryStore:
             None,
             "\n".join(schema).rstrip() + "\n",
             None,
+        )
+
+    def _write_skill_candidates(self, directives: list[Record]) -> None:
+        selected = sorted(directives, key=lambda r: (r.created_at, r.id), reverse=True)[
+            :MAX_SKILL_CANDIDATES
+        ]
+        entries: list[tuple[str, str, str]] = []
+        used: set[str] = set()
+        for record in selected:
+            snippet = _sanitize_visible_text(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
+            if not snippet:
+                continue
+            skill_name = _slug(snippet, fallback="memory-directive-skill")
+            slug = skill_name
+            index = 2
+            while slug in used:
+                slug = f"{skill_name}-{index}"
+                index += 1
+            used.add(slug)
+            title = f"Skill candidate: {skill_name}"
+            rel = f"context/skill-candidates/{slug}.md"
+            self._write_skill_candidate_page(rel, title, skill_name, snippet)
+            entries.append((title, rel, snippet))
+
+        index_body = [
+            "# Skill Candidates",
+            "",
+            "Generated review surfaces from explicit directive records only.",
+            "These are not installed skills; promotion remains approval-gated through `create_skill`.",
+            "",
+            "## Candidates",
+            "",
+        ]
+        if entries:
+            for title, rel, snippet in entries:
+                index_body.append(f"- [[{title}]] — {_trim_at_word_boundary(snippet, 160)} (`{rel}`).")
+        else:
+            index_body.append("_No directive-derived skill candidates yet._")
+        self._write(
+            "context/skill-candidates/index.md",
+            "Skill candidates",
+            "topic",
+            "global",
+            None,
+            "\n".join(index_body).rstrip() + "\n",
+            None,
+            meta=ArtifactMeta(source="deterministic"),
+        )
+
+    def _write_skill_candidate_page(self, rel: str, title: str, skill_name: str, snippet: str) -> None:
+        description = f"Use when work requires this standing directive: {snippet}"
+        body = [
+            f"# {title}",
+            "",
+            "This is not an installed skill. It is a generated, read-only review surface from one explicit "
+            "directive record.",
+            "",
+            "## Directive snippet",
+            "",
+            f"> {snippet}",
+            "",
+            "## Suggested skill name",
+            "",
+            f"`{skill_name}`",
+            "",
+            "## Suggested description",
+            "",
+            description,
+            "",
+            "## Draft body seed",
+            "",
+            f"Use when {snippet[0].lower() + snippet[1:] if snippet else 'this directive applies'}.",
+            "",
+            "## Promotion",
+            "",
+            "Review this candidate, then promote it only through the approved `create_skill` flow.",
+        ]
+        self._write(
+            rel,
+            title,
+            "topic",
+            "global",
+            None,
+            "\n".join(body).rstrip() + "\n",
+            1,
+            meta=ArtifactMeta(source="deterministic"),
         )
 
     def _write_integration_context(self, rows: list[Record]) -> None:
