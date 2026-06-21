@@ -100,7 +100,7 @@ MAX_TITLE_CHARS = 120
 MAX_DOSSIER_SNIPPET_CHARS = 280
 MAX_DOSSIER_ITEMS = 5
 MAX_ENTITY_DOSSIERS = 25
-MAX_SKILL_CANDIDATES = 25
+MAX_SKILL_DRAFTS = 25
 MIN_ENTITY_RECORDS = 2
 MIN_TRIAGE_RECORDS = 1
 
@@ -180,8 +180,8 @@ _PROVENANCE_PHRASE_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _WHITESPACE_RE = re.compile(r"\s+")
-_SKILL_CANDIDATE_NAME_MAX_CHARS = 32
-_SKILL_CANDIDATE_ACTION_WORDS = {
+_SKILL_DRAFT_NAME_MAX_CHARS = 32
+_SKILL_DRAFT_ACTION_WORDS = {
     "ask",
     "avoid",
     "build",
@@ -222,7 +222,7 @@ _SKILL_CANDIDATE_ACTION_WORDS = {
     "verify",
     "write",
 }
-_SKILL_CANDIDATE_LEADING_WORDS = {
+_SKILL_DRAFT_LEADING_WORDS = {
     "always",
     "please",
     "assistant",
@@ -234,7 +234,7 @@ _SKILL_CANDIDATE_LEADING_WORDS = {
     "the",
     "you",
 }
-_SKILL_CANDIDATE_SKIP_WORDS = {
+_SKILL_DRAFT_SKIP_WORDS = {
     "a",
     "an",
     "and",
@@ -256,7 +256,7 @@ _SKILL_CANDIDATE_SKIP_WORDS = {
     "user",
     "with",
 }
-_SKILL_CANDIDATE_BOUNDARY_WORDS = {
+_SKILL_DRAFT_BOUNDARY_WORDS = {
     "after",
     "before",
     "because",
@@ -269,7 +269,7 @@ _SKILL_CANDIDATE_BOUNDARY_WORDS = {
     "where",
     "while",
 }
-_SKILL_CANDIDATE_NEGATION_WORDS = {"never", "not", "dont", "don", "t"}
+_SKILL_DRAFT_NEGATION_WORDS = {"never", "not", "dont", "don", "t"}
 
 
 def now_iso() -> str:
@@ -301,7 +301,7 @@ def _sanitize_visible_text(text: str, *, max_chars: int) -> str:
     return _trim_at_word_boundary(visible, max_chars)
 
 
-def _sanitize_skill_candidate_snippet(text: str, *, max_chars: int) -> str:
+def _sanitize_skill_draft_snippet(text: str, *, max_chars: int) -> str:
     visible = _sanitize_visible_text(text, max_chars=max_chars)
     visible = _RECORD_ID_RE.sub("[id]", visible)
     visible = _UUID_RE.sub("[id]", visible)
@@ -383,23 +383,23 @@ def _slug(text: str | None, *, fallback: str) -> str:
     return base[:60].strip(".-_") or fallback
 
 
-def _skill_candidate_name(text: str) -> str:
+def _skill_draft_name(text: str) -> str:
     words = re.findall(r"[a-z0-9]+", str(text or "").lower())
     index = 0
     negation_index = next(
-        (i for i, word in enumerate(words[:6]) if word in _SKILL_CANDIDATE_NEGATION_WORDS),
+        (i for i, word in enumerate(words[:6]) if word in _SKILL_DRAFT_NEGATION_WORDS),
         -1,
     )
-    while index < len(words) and words[index] in _SKILL_CANDIDATE_LEADING_WORDS:
+    while index < len(words) and words[index] in _SKILL_DRAFT_LEADING_WORDS:
         index += 1
 
     window_end = min(len(words), index + 8)
     action_index = next(
-        (i for i in range(index, window_end) if words[i] in _SKILL_CANDIDATE_ACTION_WORDS),
+        (i for i in range(index, window_end) if words[i] in _SKILL_DRAFT_ACTION_WORDS),
         index,
     )
     action = words[action_index] if action_index < len(words) else "follow"
-    if action not in _SKILL_CANDIDATE_ACTION_WORDS:
+    if action not in _SKILL_DRAFT_ACTION_WORDS:
         action = "follow"
     if negation_index >= 0 and negation_index < action_index and action != "avoid":
         action = "avoid"
@@ -408,17 +408,17 @@ def _skill_candidate_name(text: str) -> str:
     scan_index = action_index + 1
     while scan_index < len(words) and len(label_words) < 3:
         word = words[scan_index]
-        if word in _SKILL_CANDIDATE_BOUNDARY_WORDS:
+        if word in _SKILL_DRAFT_BOUNDARY_WORDS:
             break
         scan_index += 1
-        if word in _SKILL_CANDIDATE_SKIP_WORDS or word == action:
+        if word in _SKILL_DRAFT_SKIP_WORDS or word == action:
             continue
         next_word = next(
             (
                 candidate
                 for candidate in words[scan_index:]
-                if candidate not in _SKILL_CANDIDATE_SKIP_WORDS
-                and candidate not in _SKILL_CANDIDATE_BOUNDARY_WORDS
+                if candidate not in _SKILL_DRAFT_SKIP_WORDS
+                and candidate not in _SKILL_DRAFT_BOUNDARY_WORDS
             ),
             "",
         )
@@ -432,19 +432,19 @@ def _skill_candidate_name(text: str) -> str:
     name = "-".join(label_words)
     if not name[0].isalpha():
         name = f"use-{name}"
-    return name[:_SKILL_CANDIDATE_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
+    return name[:_SKILL_DRAFT_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
 
 
-def _skill_candidate_title(name: str) -> str:
+def _skill_draft_title(name: str) -> str:
     return name.replace("-", " ").capitalize()
 
 
-def _unique_skill_candidate_slug(name: str, used: set[str]) -> str:
-    slug = name[:_SKILL_CANDIDATE_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
+def _unique_skill_draft_slug(name: str, used: set[str]) -> str:
+    slug = name[:_SKILL_DRAFT_NAME_MAX_CHARS].rstrip("-") or "follow-directive"
     index = 2
     while slug in used:
         suffix = f"-{index}"
-        stem = name[: _SKILL_CANDIDATE_NAME_MAX_CHARS - len(suffix)].rstrip("-")
+        stem = name[: _SKILL_DRAFT_NAME_MAX_CHARS - len(suffix)].rstrip("-")
         slug = f"{stem or 'follow-directive'}{suffix}"
         index += 1
     return slug
@@ -921,7 +921,7 @@ class ArtifactMemoryStore:
         await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
         self._write_references(rows, source_records)
         self._write_context_docs()
-        self._write_skill_candidates(directives)
+        self._write_skill_drafts(directives)
         self._write_integration_context(rows)
         if synthesize:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
@@ -1537,8 +1537,7 @@ class ArtifactMemoryStore:
             "- `references/index.md` — generated evidence and pointer index.",
             "- `changelog/index.md` — generated memory mutation rollup.",
             "- `context/integrations/index.md` — generated integration overview pages.",
-            "- `context/skill-candidates/index.md` — generated review surfaces for directive-derived "
-            "skill candidates.",
+            "- `context/skill-drafts/index.md` — generated review surfaces for directive-derived skill drafts.",
             "",
             "## Schema",
             "",
@@ -1581,31 +1580,31 @@ class ArtifactMemoryStore:
             None,
         )
 
-    def _write_skill_candidates(self, directives: list[Record]) -> None:
+    def _write_skill_drafts(self, directives: list[Record]) -> None:
         selected = sorted(directives, key=lambda r: (r.created_at, r.id), reverse=True)[
-            :MAX_SKILL_CANDIDATES
+            :MAX_SKILL_DRAFTS
         ]
         entries: list[tuple[str, str, str]] = []
         used: set[str] = set()
         for record in selected:
-            snippet = _sanitize_skill_candidate_snippet(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
+            snippet = _sanitize_skill_draft_snippet(record.text, max_chars=MAX_DOSSIER_SNIPPET_CHARS)
             if not snippet:
                 continue
-            skill_name = _skill_candidate_name(snippet)
-            slug = _unique_skill_candidate_slug(skill_name, used)
+            skill_name = _skill_draft_name(snippet)
+            slug = _unique_skill_draft_slug(skill_name, used)
             used.add(slug)
-            title = _skill_candidate_title(skill_name)
-            rel = f"context/skill-candidates/{slug}.md"
-            self._write_skill_candidate_page(rel, title, skill_name, snippet)
+            title = _skill_draft_title(skill_name)
+            rel = f"context/skill-drafts/{slug}.md"
+            self._write_skill_draft_page(rel, title, skill_name, snippet)
             entries.append((title, rel, snippet))
 
         index_body = [
-            "# Skill Candidates",
+            "# Skill Drafts",
             "",
             "Generated review surfaces from explicit directive records only.",
             "These are not installed skills; promotion remains approval-gated through `create_skill`.",
             "",
-            "## Candidates",
+            "## Drafts",
             "",
         ]
         if entries:
@@ -1613,10 +1612,10 @@ class ArtifactMemoryStore:
                 link = Path(rel).stem
                 index_body.append(f"- [[{link}|{title}]] — {_trim_at_word_boundary(snippet, 160)} (`{rel}`).")
         else:
-            index_body.append("_No directive-derived skill candidates yet._")
+            index_body.append("_No directive-derived skill drafts yet._")
         self._write(
-            "context/skill-candidates/index.md",
-            "Skill candidates",
+            "context/skill-drafts/index.md",
+            "Skill drafts",
             "topic",
             "global",
             None,
@@ -1625,12 +1624,12 @@ class ArtifactMemoryStore:
             meta=ArtifactMeta(source="deterministic"),
         )
 
-    def _write_skill_candidate_page(self, rel: str, title: str, skill_name: str, snippet: str) -> None:
+    def _write_skill_draft_page(self, rel: str, title: str, skill_name: str, snippet: str) -> None:
         description = f"Use when work requires this standing directive: {snippet}"
         body = [
             f"# {title}",
             "",
-            "This is not an installed skill. It is a generated, read-only review surface from one explicit "
+            "This is not an installed skill. It is a generated, read-only skill draft from one explicit "
             "directive record.",
             "",
             "## Directive snippet",
@@ -1651,7 +1650,7 @@ class ArtifactMemoryStore:
             "",
             "## Promotion",
             "",
-            "Review this candidate, then promote it only through the approved `create_skill` flow.",
+            "Review this draft, then promote it only through the approved `create_skill` flow.",
         ]
         self._write(
             rel,

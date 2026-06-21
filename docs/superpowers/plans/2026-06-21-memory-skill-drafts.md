@@ -1,10 +1,10 @@
-# Memory Skill Candidates Implementation Plan
+# Memory Skill Drafts Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an Eve-style markdown skill bridge above memory without making memory itself a skill store.
 
-**Architecture:** SQLite records remain canonical. Skills remain filesystem packages loaded by the existing `SkillRegistry`. Memory export generates read-only skill candidate artifacts under `context/skill-candidates/`; promotion to a real skill still goes through existing approved `create_skill`.
+**Architecture:** SQLite records remain canonical. Skills remain filesystem packages loaded by the existing `SkillRegistry`. Memory export generates read-only skill draft artifacts under `context/skill-drafts/`; promotion to a real skill still goes through existing approved `create_skill`.
 
 **Tech Stack:** Python 3.13, `ArtifactMemoryStore`, existing skill registry/service, pytest.
 
@@ -15,10 +15,10 @@
 - Do not auto-create real skills from memory.
 - Do not write to `agent/skills`, `.skills`, or `~/.ntrp/skills`.
 - Do not add a new skill runtime, Eve runtime, sandbox, policy engine, or canonical memory kind.
-- Keep generated candidate pages read-only artifacts.
+- Keep generated draft pages read-only artifacts.
 - Keep edits away from unrelated dirty files in `apps/server/ntrp/agent/`, `apps/server/ntrp/core/`, and `apps/server/tests/test_agent_lib.py`.
 
-## Task 1: Generated Skill Candidate Artifacts
+## Task 1: Generated Skill Draft Artifacts
 
 **Files:**
 - Modify: `apps/server/ntrp/memory/artifacts.py`
@@ -30,43 +30,43 @@
 Add a memory artifact test with one directive and one fact/source. Expected behavior:
 
 ```python
-candidate_index = artifacts.read_artifact("context/skill-candidates/index.md")
-candidate = artifacts.read_artifact("context/skill-candidates/<expected-slug>.md")
-assert candidate.kind == "topic"
-assert candidate.record_count == 1
-assert candidate.source == "deterministic"
-assert "not an installed skill" in candidate.content
-assert "create_skill" in candidate.content
-assert "Use when" in candidate.content
-assert "The user has a plain fact" not in candidate_index.content
+draft_index = artifacts.read_artifact("context/skill-drafts/index.md")
+draft = artifacts.read_artifact("context/skill-drafts/<expected-slug>.md")
+assert draft.kind == "topic"
+assert draft.record_count == 1
+assert draft.source == "deterministic"
+assert "not an installed skill" in draft.content
+assert "create_skill" in draft.content
+assert "Use when" in draft.content
+assert "The user has a plain fact" not in draft_index.content
 ```
 
-Also assert the candidate pages are browseable via `list_artifacts(q="create_skill")`.
+Also assert the draft pages are browseable via `list_artifacts(q="create_skill")`.
 
 - [ ] **Step 2: Implement deterministic export**
 
 In `ArtifactMemoryStore.export_from_records()`:
 
-- Call `_write_skill_candidate_context(directives, labels_by_id)` after `_write_context_docs()`.
-- Generate `context/skill-candidates/index.md` on every export.
-- Generate at most 25 candidate pages from directive records only.
-- Candidate pages must state they are generated review surfaces, not installed skills.
-- Candidate pages should include:
+- Call `_write_skill_drafts(directives)` after `_write_context_docs()`.
+- Generate `context/skill-drafts/index.md` on every export.
+- Generate at most 25 draft pages from directive records only.
+- Draft pages must state they are generated review surfaces, not installed skills.
+- Draft pages should include:
   - source directive snippet
   - suggested skill name
   - suggested description
   - draft body seed
   - promotion instructions: review/rewrite, then use `create_skill`
 - Use `_write()` and existing sanitizers.
-- Set `meta.source="deterministic"` on candidate pages.
+- Set `meta.source="deterministic"` on draft pages.
 - Avoid exposing raw record ids in page body.
 
 - [ ] **Step 3: Update docs**
 
 Update `docs/api-reference/memory.mdx` artifact section:
 
-- Mention `context/skill-candidates/`.
-- State candidates are generated from directives and are not installed skills.
+- Mention `context/skill-drafts/`.
+- State drafts are generated from directives and are not installed skills.
 - Promotion remains approval-gated through `create_skill`.
 
 - [ ] **Step 4: Verify and commit**
@@ -81,7 +81,7 @@ Commit only touched files:
 
 ```bash
 git add apps/server/ntrp/memory/artifacts.py apps/server/tests/test_memory_artifacts.py docs/api-reference/memory.mdx
-git commit -m "Add memory skill candidate artifacts"
+git commit -m "Add memory skill draft artifacts"
 ```
 
 ## Task 2: Operator Skill Inventory Parity

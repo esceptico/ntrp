@@ -13,7 +13,7 @@ from ntrp.memory.artifacts import (
     ArtifactMemoryStore,
     _redact_changelog,
     _sanitize_visible_text,
-    _skill_candidate_name,
+    _skill_draft_name,
 )
 from ntrp.memory.models import Kind, SourceRef
 from ntrp.memory.records import RecordStore
@@ -28,11 +28,11 @@ async def _record_store(tmp_path: Path) -> RecordStore:
     return RecordStore(tmp_path / "memory.db", search_index=None)
 
 
-async def test_skill_candidate_names_are_short_actions():
-    assert _skill_candidate_name("Always use repo-grounded evidence before making codebase claims") == (
+async def test_skill_draft_names_are_short_actions():
+    assert _skill_draft_name("Always use repo-grounded evidence before making codebase claims") == (
         "use-repo-evidence"
     )
-    assert _skill_candidate_name("Never use keyword heuristics for contextual suggestions") == (
+    assert _skill_draft_name("Never use keyword heuristics for contextual suggestions") == (
         "avoid-keyword-heuristics"
     )
 
@@ -446,7 +446,7 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     await records.close()
 
 
-async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Path):
+async def test_skill_drafts_are_generated_from_directives_only(tmp_path: Path):
     records = await _record_store(tmp_path)
     await records.add(
         "Always use repo-grounded evidence before making codebase claims from "
@@ -460,14 +460,14 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
 
     await artifacts.export_from_records(records)
 
-    index = artifacts.read_artifact("context/skill-candidates/index.md")
-    candidates = [
-        a for a in artifacts.list_artifacts(q="create_skill") if a.path.startswith("context/skill-candidates/")
+    index = artifacts.read_artifact("context/skill-drafts/index.md")
+    drafts = [
+        a for a in artifacts.list_artifacts(q="create_skill") if a.path.startswith("context/skill-drafts/")
     ]
     assert "repo-grounded" in index.content
     assert "plain fact" not in index.content
-    assert any(a.path != "context/skill-candidates/index.md" for a in candidates)
-    page = artifacts.read_artifact(next(a.path for a in candidates if a.path != "context/skill-candidates/index.md"))
+    assert any(a.path != "context/skill-drafts/index.md" for a in drafts)
+    page = artifacts.read_artifact(next(a.path for a in drafts if a.path != "context/skill-drafts/index.md"))
     assert page.kind == "topic"
     assert page.source == "deterministic"
     assert page.record_count == 1
@@ -476,15 +476,15 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     assert "Use when" in page.content
     assert "repo-grounded evidence" in page.content
     assert page.title == "Use repo evidence"
-    assert page.path == "context/skill-candidates/use-repo-evidence.md"
+    assert page.path == "context/skill-drafts/use-repo-evidence.md"
     assert "`use-repo-evidence`" in page.content
     assert "rec_secret123456" not in page.content
     assert "rec_" not in page.content
     assert "123e4567-e89b-12d3-a456-426614174000" not in page.content
     assert "abcdef1234567890abcdef1234567890" not in page.content
     assert "project:proj_secret123456" not in page.content
-    assert page.path.removeprefix("context/skill-candidates/").removesuffix(".md")[0].isalpha()
-    assert len(page.path.removeprefix("context/skill-candidates/").removesuffix(".md")) <= 32
+    assert page.path.removeprefix("context/skill-drafts/").removesuffix(".md")[0].isalpha()
+    assert len(page.path.removeprefix("context/skill-drafts/").removesuffix(".md")) <= 32
     await records.close()
 
 

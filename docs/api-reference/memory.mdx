@@ -101,14 +101,14 @@ curl -X POST http://localhost:6877/admin/memory/prune \
 ## Artifacts
 
 A generated, read-only markdown projection of memory for browsing. Generated
-artifacts include `context/`, `context/skill-candidates/`, `references/`,
+artifacts include `context/`, `context/skill-drafts/`, `references/`,
 `entities/`, `projects/`, `facts/index.md`, `directives.md`, `me.md`,
 `active-work.md`, and `changelog/`.
 The `context/` tree is agent-facing context derived from the flat record pool.
 `context/integrations/` is generated from existing records and source refs, not
 from integration configuration.
-`context/skill-candidates/` is generated from directive records only. Candidate
-pages are review surfaces, not installed skills, and promotion remains
+`context/skill-drafts/` is generated from directive records only. Draft pages
+are review surfaces, not installed skills, and promotion remains
 approval-gated through `create_skill`.
 
 ### List artifacts
