@@ -12,8 +12,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../../lib/tokens/motion";
-
-type Side = "top" | "bottom" | "left" | "right";
+import { calculateTooltipPlacement, type TooltipPlacement, type TooltipSide } from "./tooltipPlacement";
 
 const GAP = 6;
 /** Min distance the tooltip should keep from the viewport edge before flipping
@@ -34,7 +33,7 @@ interface TooltipProps {
   /** A single focusable element. Handlers + ref are merged onto it directly —
    *  no wrapper, so the tooltip never perturbs the trigger's layout. */
   children: ReactElement;
-  side?: Side;
+  side?: TooltipSide;
   className?: string;
 }
 
@@ -46,14 +45,12 @@ interface TooltipProps {
  */
 export function Tooltip({ label, children, side = "top", className }: TooltipProps) {
   const triggerRef = useRef<HTMLElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
   const showTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const [instant, setInstant] = useState(false);
-  const [coords, setCoords] = useState<Record<string, number> | null>(null);
-  // Side actually used after edge-flipping (a `top` tooltip on a trigger near
-  // the viewport top would render off-screen — flip it to `bottom`).
-  const [effSide, setEffSide] = useState<Side>(side);
+  const [placement, setPlacement] = useState<TooltipPlacement | null>(null);
   const tipId = useId();
 
   const clear = () => {
@@ -64,6 +61,7 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   };
   const show = () => {
     clear();
+    setPlacement(null);
     if (Date.now() - lastTooltipClosedAt < INSTANT_GRACE_MS) {
       setInstant(true);
       setOpen(true);
@@ -88,36 +86,35 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {
-      const r = triggerRef.current!.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      // Flip to the opposite side when the preferred side lacks room. EST is a
-      // conservative one-line tooltip extent (height/width) — exact size isn't
-      // known pre-paint, but this reliably catches edge-hugging triggers.
-      const EST = 36;
-      let s = side;
-      if (side === "top" && r.top - GAP - EST < SAFE_MARGIN) s = "bottom";
-      else if (side === "bottom" && r.bottom + GAP + EST > window.innerHeight - SAFE_MARGIN) s = "top";
-      else if (side === "left" && r.left - GAP - EST < SAFE_MARGIN) s = "right";
-      else if (side === "right" && r.right + GAP + EST > window.innerWidth - SAFE_MARGIN) s = "left";
-      setEffSide(s);
-      if (s === "top") setCoords({ bottom: window.innerHeight - r.top + GAP, left: cx });
-      else if (s === "bottom") setCoords({ top: r.bottom + GAP, left: cx });
-      else if (s === "left") setCoords({ right: window.innerWidth - r.left + GAP, top: cy });
-      else setCoords({ left: r.right + GAP, top: cy });
+      const trigger = triggerRef.current!.getBoundingClientRect();
+      const tooltip = tipRef.current?.getBoundingClientRect();
+      if (!tooltip) return;
+      setPlacement(
+        calculateTooltipPlacement({
+          preferredSide: side,
+          trigger,
+          tooltip,
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          gap: GAP,
+          safeMargin: SAFE_MARGIN,
+        }),
+      );
     };
     update();
+    const ro = tipRef.current ? new ResizeObserver(update) : null;
+    if (tipRef.current) ro?.observe(tipRef.current);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
+      ro?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open, side]);
+  }, [open, side, label]);
 
+  const effSide = placement?.side ?? side;
   const axis = effSide === "left" || effSide === "right" ? "x" : "y";
   const sign = effSide === "top" || effSide === "left" ? 1 : -1;
-  const center = effSide === "top" || effSide === "bottom" ? "translateX(-50%)" : "translateY(-50%)";
   const origin =
     effSide === "top"
       ? "bottom center"
@@ -157,8 +154,9 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
       {trigger}
       {createPortal(
         <AnimatePresence>
-          {open && coords && (
+          {open && (
             <motion.div
+              ref={tipRef}
               id={tipId}
               role="tooltip"
               initial={{ opacity: 0, scale: 0.96, [axis]: sign * 3 }}
@@ -169,9 +167,10 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
               }
               style={{
                 position: "fixed",
-                ...coords,
+                top: placement?.top ?? 0,
+                left: placement?.left ?? 0,
+                visibility: placement ? undefined : "hidden",
                 zIndex: 70,
-                transform: center,
                 transformOrigin: origin,
               }}
               className={clsx(
