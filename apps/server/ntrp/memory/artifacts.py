@@ -552,7 +552,7 @@ def _integration_key(record: Record) -> str | None:
     provider = raw.split(":", 1)[0].strip().lower()
     if provider in KNOWN_INTEGRATION_SOURCE_KINDS:
         return provider
-    return _slug(raw, fallback="integration")
+    return _slug(provider, fallback="integration")
 
 
 def _integration_title(key: str) -> str:
@@ -1389,7 +1389,8 @@ class ArtifactMemoryStore:
             "",
             "## Record kinds",
             "",
-            "Supported record kinds: `directive | fact | source | changelog`.",
+            "User-created record kinds: `directive | fact | source`.",
+            "`changelog` is generated audit output, not a user-created memory record.",
             "",
             "## Model",
             "",

@@ -66,8 +66,9 @@ curl http://localhost:6877/admin/memory/items/item_123 \
 
 ### Search items
 
-Hybrid keyword + semantic search over the record pool. Accepts `limit`,
-`include_inactive`, and `scope_kind` / `scope_key` / `kind` filters.
+Keyword search over the record pool, with semantic hybrid ranking when a search
+index is attached. Accepts `limit`, `include_inactive`, and `scope_kind` /
+`scope_key` / `kind` filters.
 
 ```bash
 curl "http://localhost:6877/admin/memory/search?q=backend%20preferences&limit=20" \

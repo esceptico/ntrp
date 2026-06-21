@@ -426,7 +426,8 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     assert "me.md" in context.content
     assert "active-work.md" in context.content
     assert "SQLite" in schema.content
-    assert "directive | fact | source | changelog" in schema.content
+    assert "directive | fact | source" in schema.content
+    assert "changelog` is generated audit output" in schema.content
     assert "context/index.md" in {artifact.path for artifact in artifacts.list_artifacts()}
     assert "context/SCHEMA.md" in {artifact.path for artifact in artifacts.list_artifacts(q="SQLite")}
     for old_path in ("sources/index.md", "files/index.md", "docs/index.md"):
@@ -464,6 +465,12 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
         source_ref=SourceRef(kind="integration", ref="external:item"),
     )
     await records.add(
+        "Linear issue receipt for roadmap context",
+        kind=Kind.SOURCE,
+        scope_kind="integration",
+        scope_key="linear:issue:ABC-123",
+    )
+    await records.add(
         "Curator wrote an internal fact and should not get an integration page",
         kind=Kind.FACT,
         source_ref=SourceRef(kind="curator", ref="internal"),
@@ -477,24 +484,30 @@ async def test_integration_reference_pages_are_generated_from_existing_records(t
     gmail = artifacts.read_artifact("context/integrations/gmail.md")
     email = artifacts.read_artifact("context/integrations/email.md")
     integration = artifacts.read_artifact("context/integrations/integration.md")
+    linear = artifacts.read_artifact("context/integrations/linear.md")
     assert "[[Slack]]" in index.content
     assert "[[Gmail]]" in index.content
     assert "[[Email]]" in index.content
     assert "[[Integration]]" in index.content
+    assert "[[Linear]]" in index.content
     assert slack.record_count == 1
     assert gmail.record_count == 1
     assert email.record_count == 1
     assert integration.record_count == 1
+    assert linear.record_count == 1
     assert "channel #eng" in slack.content
     assert "Gmail receipt" in gmail.content
     assert "Email receipt" in email.content
     assert "Generic integration receipt" in integration.content
+    assert "Linear issue receipt" in linear.content
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/gmail-gmail-batch.md")
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/email-message-xyz.md")
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/integration-external-item.md")
+    with pytest.raises(FileNotFoundError):
+        artifacts.read_artifact("context/integrations/linear-issue-abc-123.md")
     with pytest.raises(FileNotFoundError):
         artifacts.read_artifact("context/integrations/curator.md")
     await records.close()
