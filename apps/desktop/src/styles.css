@@ -372,9 +372,12 @@ body.quick-capture-mode .quick-capture-card {
   -webkit-app-region: no-drag;
 }
 /* Default (browser, or native fullscreen) — no traffic lights, so the toggle
-   hugs the left edge. Only the native macOS shell, when NOT fullscreen, pushes
-   it right to clear the traffic-light cluster. */
-.sidebar-toggle      { left: 18px; }
+   sits on the sidebar's icon column: motion.div left-2 (8) + nav px-2.5 (10) +
+   row px-2 (8) + half the 16px icon col (8) = center 34; button is 22 wide, so
+   left = 34 − 11 = 23. This lines the toggle up vertically with the nav icons.
+   Only the native macOS shell, when NOT fullscreen, pushes it right to clear
+   the traffic-light cluster. */
+.sidebar-toggle      { left: 23px; }
 html[data-desktop="true"]:not([data-fullscreen="true"]) .sidebar-toggle { left: 84px; }
 .right-sidebar-toggle { right: 14px; }
 .sidebar-toggle *,

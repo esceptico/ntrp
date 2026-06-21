@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import {
@@ -38,7 +38,18 @@ import {
   SPRING_ROW_ENTRY,
 } from "../lib/tokens/motion";
 import { ICON } from "../lib/icons";
-import { getState, useStore, type BackgroundAgent, type TodoListState, type UiMessage } from "../store";
+import {
+  getState,
+  RIGHT_PANEL_DEFAULT_WIDTH,
+  RIGHT_PANEL_MAX_WIDTH,
+  RIGHT_PANEL_MIN_WIDTH,
+  RIGHT_PANEL_SNAP_POINTS,
+  RIGHT_PANEL_SNAP_THRESHOLD_PX,
+  useStore,
+  type BackgroundAgent,
+  type TodoListState,
+  type UiMessage,
+} from "../store";
 import {
   agentRunFromAutomation,
   agentRunFromBackgroundAgent,
@@ -71,11 +82,71 @@ export function latestTodoListFromMessages(
   return null;
 }
 
-export const RIGHT_PANEL_WIDTH = 320;
-export const RIGHT_PANEL_BODY_WIDTH = 304;
+export const RIGHT_PANEL_WIDTH = RIGHT_PANEL_DEFAULT_WIDTH;
+const RIGHT_PANEL_GUTTER = 16;
 // Short rightward drift on hide — enough to give the fade/blur a direction
 // without it reading as a full slide-back.
 const RIGHT_PANEL_HIDE_DRIFT = 48;
+
+function RightPanelResizeHandle() {
+  const setPref = useStore((s) => s.setPref);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+
+  const onMouseDown = useCallback(
+    (event: ReactMouseEvent) => {
+      event.preventDefault();
+      startXRef.current = event.clientX;
+      startWidthRef.current = useStore.getState().prefs.rightPanelWidth;
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+
+      let liveWidth = startWidthRef.current;
+      const onMove = (moveEv: globalThis.MouseEvent) => {
+        // Left-edge handle: dragging left increases the dock width.
+        const next = startWidthRef.current + (startXRef.current - moveEv.clientX);
+        liveWidth = Math.max(RIGHT_PANEL_MIN_WIDTH, Math.min(RIGHT_PANEL_MAX_WIDTH, next));
+        document.documentElement.style.setProperty("--right-panel-width", `${liveWidth}px`);
+      };
+
+      const onUp = () => {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+
+        let nearest = liveWidth;
+        let nearestDelta = Infinity;
+        for (const point of RIGHT_PANEL_SNAP_POINTS) {
+          const delta = Math.abs(liveWidth - point);
+          if (delta < nearestDelta) {
+            nearest = point;
+            nearestDelta = delta;
+          }
+        }
+        const final = nearestDelta <= RIGHT_PANEL_SNAP_THRESHOLD_PX ? nearest : liveWidth;
+        setPref("rightPanelWidth", final);
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [setPref],
+  );
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize right sidebar"
+      onMouseDown={onMouseDown}
+      onDoubleClick={() => setPref("rightPanelWidth", RIGHT_PANEL_DEFAULT_WIDTH)}
+      className="absolute top-0 bottom-0 left-0 z-10 w-1 cursor-ew-resize group/resize"
+    >
+      <div className="absolute inset-y-0 left-0 w-px bg-transparent group-hover/resize:bg-accent/40 transition-colors" />
+    </div>
+  );
+}
 
 const RECENT_AGENT_LIMIT = 6;
 
@@ -639,6 +710,7 @@ export function AgentRightSidebar() {
   const todo = useStore((s) => latestTodoListFromMessages(s.order, s.messages));
   // Shared (in prefs) so the chat area can reflow to dock the panel.
   const collapsed = useStore((s) => s.prefs.rightPanelCollapsed);
+  const rightPanelWidth = useStore((s) => s.prefs.rightPanelWidth);
   const setPref = useStore((s) => s.setPref);
 
   const toggleCollapsed = () => setPref("rightPanelCollapsed", !collapsed);
@@ -789,7 +861,7 @@ export function AgentRightSidebar() {
         animate={
           collapsed
             ? { x: RIGHT_PANEL_HIDE_DRIFT, opacity: 0, filter: "blur(6px)" }
-            : { x: [RIGHT_PANEL_WIDTH, 0], opacity: 1, filter: "blur(0px)" }
+            : { x: [rightPanelWidth, 0], opacity: 1, filter: "blur(0px)" }
         }
         transition={
           collapsed
@@ -801,7 +873,7 @@ export function AgentRightSidebar() {
               }
         }
         style={{
-          width: RIGHT_PANEL_BODY_WIDTH,
+          width: `calc(var(--right-panel-width, ${RIGHT_PANEL_WIDTH}px) - ${RIGHT_PANEL_GUTTER}px)`,
           pointerEvents: collapsed ? "none" : "auto",
         }}
         aria-hidden={collapsed}
@@ -818,6 +890,7 @@ export function AgentRightSidebar() {
             Active
           </span>
         </div>
+        <RightPanelResizeHandle />
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
             <ScrollFadeTop />

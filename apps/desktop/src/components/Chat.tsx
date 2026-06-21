@@ -54,15 +54,15 @@ function ChatHeader() {
     <div className="chat-header flex items-center h-[52px] px-[18px]">
       {/* With the sidebar hidden, the title row clears the fixed toggle. The
           travel depends on where the toggle sits: 110px when the macOS
-          traffic lights push it to left:84, but only 44px in the browser /
-          fullscreen where it sits at left:18 (no native lights). The shift
+          traffic lights push it to left:84, but only 49px in the browser /
+          fullscreen where it sits at left:23 (no native lights). The shift
           rides a GPU translate — the right padding snaps once (re-truncating
           the title) while the transform carries the visible travel. */}
       <div
         className={clsx(
           "flex min-w-0 flex-1 items-center gap-2 transition-transform duration-route ease-emphasized",
           sidebarHidden &&
-            (hasTrafficLights ? "translate-x-[110px] pr-[110px]" : "translate-x-[44px] pr-[44px]"),
+            (hasTrafficLights ? "translate-x-[110px] pr-[110px]" : "translate-x-[49px] pr-[49px]"),
         )}
       >
         {isAgent && parentId && (
@@ -135,17 +135,18 @@ export function Chat() {
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
       data-right-open={rightPanelCollapsed ? "false" : "true"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[var(--right-panel-width,320px)] bg-bg overflow-hidden"
       style={{
-        // Per-property transitions so the left-sidebar reflow stays on its own
-        // route/emphasized timing, while the RIGHT-inset reflow is matched
-        // exactly to the panel: on hide it borrows the panel's faster
-        // EASE_OUT + DURATION_RIGHT_PANEL_HIDE so the chat edge and the fading
-        // card move as one (no overlap); on open it uses route/emphasized to
-        // mirror the panel's slide-in.
-        transition: `left ${MOTION.route * 1000}ms var(--ease-emphasized), right ${
-          (rightPanelCollapsed ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000
-        }ms ${rightPanelCollapsed ? "var(--ease-out-soft)" : "var(--ease-emphasized)"}`,
+        // Per-property transitions so each edge matches its own panel. On
+        // HIDE the inset borrows the panel's faster EASE_OUT +
+        // DURATION_RIGHT_PANEL_HIDE so the fading card and the expanding edge
+        // move as one (no overlap); on OPEN it uses route/emphasized to mirror
+        // the panel's slide-in.
+        transition: `left ${(sidebarHidden ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000}ms ${
+          sidebarHidden ? "var(--ease-out-soft)" : "var(--ease-emphasized)"
+        }, right ${(rightPanelCollapsed ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000}ms ${
+          rightPanelCollapsed ? "var(--ease-out-soft)" : "var(--ease-emphasized)"
+        }`,
       } as CSSProperties}
     >
       <div className="relative w-full h-full">

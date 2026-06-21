@@ -103,6 +103,11 @@ export type { Workflow, WorkflowAgent, WorkflowPhase } from "./workflow-domain";
 export { selectWorkflowsForSession } from "./workflow-domain";
 export {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
+  RIGHT_PANEL_DEFAULT_WIDTH,
+  RIGHT_PANEL_MAX_WIDTH,
+  RIGHT_PANEL_MIN_WIDTH,
+  RIGHT_PANEL_SNAP_POINTS,
+  RIGHT_PANEL_SNAP_THRESHOLD_PX,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_SNAP_POINTS,

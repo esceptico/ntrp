@@ -5,6 +5,12 @@ export const SIDEBAR_MAX_WIDTH = 380;
 export const SIDEBAR_SNAP_POINTS = [220, 244, 280, 320] as const;
 export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 
+export const RIGHT_PANEL_DEFAULT_WIDTH = 320;
+export const RIGHT_PANEL_MIN_WIDTH = 280;
+export const RIGHT_PANEL_MAX_WIDTH = 520;
+export const RIGHT_PANEL_SNAP_POINTS = [320, 360, 420, 480] as const;
+export const RIGHT_PANEL_SNAP_THRESHOLD_PX = 12;
+
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const PREFS_KEY = "ntrp.desktop.prefs";
@@ -22,6 +28,7 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarHidden: false,
   rightPanelCollapsed: true,
   sidebarWidth: 272,
+  rightPanelWidth: RIGHT_PANEL_DEFAULT_WIDTH,
   quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
 };
 

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
-import { MOTION, EASE_EMPHASIZED } from "../lib/tokens/motion";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT, DURATION_RIGHT_PANEL_HIDE } from "../lib/tokens/motion";
 import { IS_DESKTOP_MAC } from "../lib/platform";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Chat } from "./Chat";
@@ -11,6 +11,13 @@ import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Toaster } from "./Toaster";
+import { useStore } from "../store";
+import { useEvents } from "../hooks/useEvents";
+import { useActiveRuns } from "../hooks/useActiveRuns";
+import { useAutomationEvents } from "../hooks/useAutomationEvents";
+import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
+import { useThemeEffect } from "../lib/theme";
+import { bootstrap, createSession, sendMessage, switchSession } from "../actions";
 
 // The five "open from chrome" modals only mount when the user actually
 // opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/
@@ -29,13 +36,10 @@ const MemoryModal = lazy(() =>
 const ToolViewer = lazy(() =>
   import("./ToolViewer").then((m) => ({ default: m.ToolViewer })),
 );
-import { useStore } from "../store";
-import { useEvents } from "../hooks/useEvents";
-import { useActiveRuns } from "../hooks/useActiveRuns";
-import { useAutomationEvents } from "../hooks/useAutomationEvents";
-import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
-import { useThemeEffect } from "../lib/theme";
-import { bootstrap, createSession, sendMessage, switchSession } from "../actions";
+
+// Short leftward drift on hide — gives the fade/blur a direction without
+// reading as a full slide-back (mirror of the right sidebar's drift).
+const SIDEBAR_HIDE_DRIFT = 48;
 
 function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash);
@@ -71,16 +75,19 @@ export function App() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const sidebarWidth = useStore((s) => s.prefs.sidebarWidth);
+  const rightPanelWidth = useStore((s) => s.prefs.rightPanelWidth);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const openSettings = useStore((s) => s.openSettings);
 
-  // Publish the sidebar width as a CSS var so the chat shell's
-  // `left-[var(--sidebar-width,272px)]` can stay flush with the
-  // sidebar's right edge as it resizes (without React having to
-  // re-render Chat on every drag tick).
+  // Publish dock widths as CSS vars so the chat shell can stay flush with
+  // both sidebars as they resize. Drag handles update these imperatively
+  // during pointer movement, then prefs re-sync them after release.
   useEffect(() => {
     document.documentElement.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
   }, [sidebarWidth]);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--right-panel-width", `${rightPanelWidth}px`);
+  }, [rightPanelWidth]);
 
   useThemeEffect();
   useFullscreenClass();
@@ -183,11 +190,31 @@ export function App() {
        this covers the JS-driven side (motion.div springs, layout anims,
        AnimatePresence). */
     <MotionConfig reducedMotion="user">
+      {/* Asymmetric motion mirroring the right sidebar: SHOW slides in from
+          the left edge (x: off-edge → 0); HIDE dissolves — a short leftward
+          drift + fade + blur on the faster EASE_OUT, kept off pointer/focus
+          while hidden. The chat's left-inset reflow (Chat.tsx) borrows the
+          same curve on hide so the fading panel and the expanding edge read
+          as one motion. */}
       <motion.div
         className="surface-panel surface-radius-md absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] overflow-hidden"
         initial={false}
-        animate={{ x: sidebarHidden ? -sidebarWidth : 0 }}
-        transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
+        animate={
+          sidebarHidden
+            ? { x: -SIDEBAR_HIDE_DRIFT, opacity: 0, filter: "blur(6px)" }
+            : { x: [-sidebarWidth, 0], opacity: 1, filter: "blur(0px)" }
+        }
+        transition={
+          sidebarHidden
+            ? { duration: DURATION_RIGHT_PANEL_HIDE, ease: EASE_OUT }
+            : {
+                x: { duration: MOTION.route, ease: EASE_EMPHASIZED },
+                opacity: { duration: 0 },
+                filter: { duration: 0 },
+              }
+        }
+        style={{ pointerEvents: sidebarHidden ? "none" : "auto" }}
+        aria-hidden={sidebarHidden}
       >
         <Sidebar />
         <SidebarResizeHandle />
