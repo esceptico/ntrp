@@ -14,7 +14,7 @@ from ntrp.memory.artifacts import (
     _redact_changelog,
     _sanitize_visible_text,
 )
-from ntrp.memory.models import Kind
+from ntrp.memory.models import Kind, SourceRef
 from ntrp.memory.records import RecordStore
 
 if TYPE_CHECKING:
@@ -432,6 +432,43 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     for old_path in ("sources/index.md", "files/index.md", "docs/index.md"):
         with pytest.raises(FileNotFoundError):
             artifacts.read_artifact(old_path)
+    await records.close()
+
+
+async def test_integration_reference_pages_are_generated_from_existing_records(tmp_path: Path):
+    records = await _record_store(tmp_path)
+    await records.add(
+        "Slack channel #eng discussed memory publish ordering",
+        kind=Kind.FACT,
+        source_ref=SourceRef(kind="slack", ref="channel:eng"),
+    )
+    await records.add(
+        "Gmail receipt for a customer follow-up",
+        kind=Kind.SOURCE,
+        scope_kind="integration",
+        scope_key="gmail",
+        source_ref=SourceRef(kind="gmail", ref="message:abc"),
+    )
+    await records.add(
+        "Curator wrote an internal fact and should not get an integration page",
+        kind=Kind.FACT,
+        source_ref=SourceRef(kind="curator", ref="internal"),
+    )
+    artifacts = ArtifactMemoryStore(tmp_path / "artifacts")
+
+    await artifacts.export_from_records(records)
+
+    index = artifacts.read_artifact("context/integrations/index.md")
+    slack = artifacts.read_artifact("context/integrations/slack.md")
+    gmail = artifacts.read_artifact("context/integrations/gmail.md")
+    assert "[[Slack]]" in index.content
+    assert "[[Gmail]]" in index.content
+    assert slack.record_count == 1
+    assert gmail.record_count == 1
+    assert "channel #eng" in slack.content
+    assert "Gmail receipt" in gmail.content
+    with pytest.raises(FileNotFoundError):
+        artifacts.read_artifact("context/integrations/curator.md")
     await records.close()
 
 

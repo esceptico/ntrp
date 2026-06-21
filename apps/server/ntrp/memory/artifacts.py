@@ -70,6 +70,28 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "changelog": "changelog",
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
+KNOWN_INTEGRATION_SOURCE_KINDS = frozenset({
+    "slack",
+    "gmail",
+    "calendar",
+    "github",
+    "notion",
+    "obsidian",
+    "mcp",
+    "web",
+    "file",
+})
+INTEGRATION_TITLES = {
+    "slack": "Slack",
+    "gmail": "Gmail",
+    "calendar": "Calendar",
+    "github": "GitHub",
+    "notion": "Notion",
+    "obsidian": "Obsidian",
+    "mcp": "MCP",
+    "web": "Web",
+    "file": "File",
+}
 
 ARTIFACT_WRAP_WIDTH = 100
 MAX_BULLET_CHARS = 1000
@@ -518,6 +540,32 @@ def _source_ref(record: Record) -> str:
     return str(record.source_ref.ref if record.source_ref is not None else "").lower()
 
 
+def _integration_key(record: Record) -> str | None:
+    if (record.scope_kind or "").strip().lower() == "integration":
+        raw = str(record.scope_key or "").strip()
+        return _slug(raw, fallback="integration") if raw else None
+    kind = _source_kind(record).strip().lower()
+    return kind if kind in KNOWN_INTEGRATION_SOURCE_KINDS else None
+
+
+def _integration_title(key: str) -> str:
+    normalized = _slug(key, fallback="integration")
+    if normalized in INTEGRATION_TITLES:
+        return INTEGRATION_TITLES[normalized]
+    words = [word for word in re.split(r"[-_.\s]+", normalized) if word]
+    return " ".join(word.capitalize() for word in words) or "Integration"
+
+
+def _safe_source_ref_label(ref: str) -> str:
+    label = _sanitize_visible_text(ref, max_chars=120)
+    label = _LOCAL_PATH_RE.sub("[local path]", label)
+    label = _UUID_RE.sub("[id]", label)
+    label = _LONG_HEX_RE.sub("[id]", label)
+    label = _PROJECT_ID_RE.sub("[id]", label)
+    label = _OPERATIONAL_ID_RE.sub("[id]", label)
+    return _trim_at_word_boundary(label, 120) or "unknown"
+
+
 def _reference_snippet(record: Record) -> str:
     text = _sanitize_visible_text(record.text, max_chars=220)
     text = _LOCAL_PATH_RE.sub("[local path]", text)
@@ -696,6 +744,7 @@ class ArtifactMemoryStore:
         await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
         self._write_references(rows, source_records)
         self._write_context_docs()
+        self._write_integration_context(rows)
         if synthesize:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
             await self._synthesize_active_work(rows, labels_by_id, llm=llm, model=model)
@@ -1309,7 +1358,7 @@ class ArtifactMemoryStore:
             "- `projects/index.md` — generated project topic index.",
             "- `references/index.md` — generated evidence and pointer index.",
             "- `changelog/index.md` — generated memory mutation rollup.",
-            "- `context/integrations/index.md` — reserved future generated integration context.",
+            "- `context/integrations/index.md` — generated integration overview pages.",
             "",
             "## Schema",
             "",
@@ -1349,6 +1398,90 @@ class ArtifactMemoryStore:
             None,
             "\n".join(schema).rstrip() + "\n",
             None,
+        )
+
+    def _write_integration_context(self, rows: list[Record]) -> None:
+        grouped: defaultdict[str, list[Record]] = defaultdict(list)
+        for record in rows:
+            key = _integration_key(record)
+            if key:
+                grouped[key].append(record)
+
+        entries: list[tuple[str, str, int, str | None]] = []
+        for key in sorted(grouped, key=lambda k: (_integration_title(k).lower(), k)):
+            records = sorted(grouped[key], key=lambda r: (r.last_confirmed_at, r.created_at, r.id), reverse=True)
+            title = _integration_title(key)
+            rel = f"context/integrations/{_slug(key, fallback='integration')}.md"
+            self._write_integration_page(rel, title, key, records)
+            entries.append((key, title, len(records), max((r.last_confirmed_at for r in records), default=None)))
+
+        index = [
+            "# Integrations",
+            "",
+            "Generated from flat records, scopes, and source refs; this is not canonical integration config.",
+            "",
+            "## Pages",
+            "",
+        ]
+        if entries:
+            for _key, title, count, last in entries:
+                suffix = f"; last updated {last[:10]}" if last else ""
+                index.append(f"- [[{title}]] — {count} records{suffix}.")
+        else:
+            index.append("_No integration records detected yet._")
+        self._write(
+            "context/integrations/index.md",
+            "Integrations",
+            "topic",
+            "global",
+            None,
+            "\n".join(index).rstrip() + "\n",
+            None,
+        )
+
+    def _write_integration_page(self, rel: str, title: str, key: str, rows: list[Record]) -> None:
+        last = max((r.last_confirmed_at for r in rows), default=None)
+        last_date = last[:10] if last else "unknown"
+        body = [
+            f"# {title}",
+            "",
+            "## What this page is",
+            "",
+            f"Generated from {len(rows)} flat memory records whose scope or source refs identify {title}.",
+            f"Last updated {last_date}. This is not canonical integration config.",
+            "",
+            "## Recent records",
+            "",
+        ]
+        snippets = [_reference_snippet(record) for record in rows[:10]]
+        snippets = [snippet for snippet in snippets if snippet]
+        body.extend(f"- {snippet}" for snippet in snippets)
+        if not snippets:
+            body.append("_No visible record snippets._")
+
+        receipt_counts: Counter[tuple[str, str]] = Counter()
+        for record in rows:
+            if record.source_ref is None:
+                receipt_counts[("scope", "integration")] += 1
+                continue
+            kind = _safe_source_label(record.source_ref.kind)
+            ref = _safe_source_ref_label(record.source_ref.ref)
+            receipt_counts[(kind, ref)] += 1
+        body.extend(["", "## Source receipts", ""])
+        for (kind, ref), count in sorted(receipt_counts.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][1]))[:10]:
+            body.append(f"- **{kind}** · {ref} — {count} records")
+        if not receipt_counts:
+            body.append("_No source receipts._")
+
+        self._write(
+            rel,
+            title,
+            "topic",
+            "integration",
+            key,
+            "\n".join(body).rstrip() + "\n",
+            len(rows),
+            meta=ArtifactMeta(source="consolidate"),
         )
 
     def _write_records(
