@@ -142,6 +142,10 @@ function searchMatches(a: MemoryArtifact, q: string) {
     .includes(q);
 }
 
+function isMissingArtifactError(error: unknown) {
+  return error instanceof Error && error.message.toLowerCase().includes("memory artifact not found");
+}
+
 // ─── Detail header bits ───────────────────────────────────────────────
 
 function CopyPath({ path }: { path: string }) {
@@ -498,7 +502,16 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         if (!cancelled) setActiveArtifact(r.artifact);
       })
       .catch((e) => {
-        if (!cancelled) setContentError(e instanceof Error ? e.message : String(e));
+        if (cancelled) return;
+        if (isMissingArtifactError(e)) {
+          const missingPath = selectedMeta.path;
+          setArtifacts((prev) => prev.filter((artifact) => artifact.path !== missingPath));
+          setSelected((prev) => (prev === missingPath ? null : prev));
+          setActiveArtifact(null);
+          void load(serverQuery);
+          return;
+        }
+        setContentError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {
         if (!cancelled) setContentLoading(false);

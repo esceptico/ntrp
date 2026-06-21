@@ -18,7 +18,7 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   const api = readFileSync(new URL("../src/api/memoryArtifacts.ts", import.meta.url), "utf8");
   const items = readFileSync(new URL("../src/api/memoryItems.ts", import.meta.url), "utf8");
 
-  expect(items).toContain('"dossier"');
+  expect(items).toContain('"directive" | "fact" | "source"');
   expect(api).toContain('record_count: number | null');
   expect(api).toContain('snippet: string | null');
   expect(api).toContain('generated: boolean');
@@ -26,13 +26,12 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   expect(api).toContain('readonly_reason: string | null');
   expect(api).toContain('q: params.q');
 
-  expect(view).toContain('entities: { title: "entities/", subtitle: "Emergent dossiers and triage" }');
-  expect(view).toContain('dossier: "Generated entity/project briefs"');
   expect(view).toContain('record_count !== null');
-  expect(view).toContain('DB-backed facts');
   expect(view).toContain('Copy path');
   expect(view).toContain('navigator.clipboard');
   expect(view).toContain('setServerQuery');
   expect(view).toContain('buildArtifactTree');
+  expect(view).toContain('isMissingArtifactError');
+  expect(view).toContain('setArtifacts((prev) => prev.filter');
   expect(view).not.toContain('Fact shards');
 });

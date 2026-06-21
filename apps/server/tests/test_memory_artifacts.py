@@ -13,7 +13,6 @@ from ntrp.memory.artifacts import (
     ArtifactMemoryStore,
     _redact_changelog,
     _sanitize_visible_text,
-    _skill_draft_name,
 )
 from ntrp.memory.models import Kind, SourceRef
 from ntrp.memory.records import RecordStore
@@ -26,15 +25,6 @@ pytestmark = pytest.mark.asyncio
 
 async def _record_store(tmp_path: Path) -> RecordStore:
     return RecordStore(tmp_path / "memory.db", search_index=None)
-
-
-async def test_skill_draft_names_are_short_actions():
-    assert _skill_draft_name("Always use repo-grounded evidence before making codebase claims") == (
-        "use-repo-evidence"
-    )
-    assert _skill_draft_name("Never use keyword heuristics for contextual suggestions") == (
-        "avoid-keyword-heuristics"
-    )
 
 
 def _symlink_or_skip(link: Path, target: Path) -> None:
@@ -440,51 +430,14 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
     assert "changelog` is generated audit output" in schema.content
     assert "context/index.md" in {artifact.path for artifact in artifacts.list_artifacts()}
     assert "context/SCHEMA.md" in {artifact.path for artifact in artifacts.list_artifacts(q="SQLite")}
-    for old_path in ("sources/index.md", "files/index.md", "docs/index.md"):
+    for old_path in (
+        "sources/index.md",
+        "files/index.md",
+        "docs/index.md",
+        "context/skill-drafts/index.md",
+    ):
         with pytest.raises(FileNotFoundError):
             artifacts.read_artifact(old_path)
-    await records.close()
-
-
-async def test_skill_drafts_are_generated_from_directives_only(tmp_path: Path):
-    records = await _record_store(tmp_path)
-    await records.add(
-        "Always use repo-grounded evidence before making codebase claims from "
-        "rec_secret123456 and 123e4567-e89b-12d3-a456-426614174000 and "
-        "abcdef1234567890abcdef1234567890 and project:proj_secret123456",
-        kind=Kind.DIRECTIVE,
-    )
-    await records.add("The user has a plain fact that should not be a skill", kind=Kind.FACT)
-    await records.add("A source receipt that should not be a skill", kind=Kind.SOURCE)
-    artifacts = ArtifactMemoryStore(tmp_path / "artifacts")
-
-    await artifacts.export_from_records(records)
-
-    index = artifacts.read_artifact("context/skill-drafts/index.md")
-    drafts = [
-        a for a in artifacts.list_artifacts(q="create_skill") if a.path.startswith("context/skill-drafts/")
-    ]
-    assert "repo-grounded" in index.content
-    assert "plain fact" not in index.content
-    assert any(a.path != "context/skill-drafts/index.md" for a in drafts)
-    page = artifacts.read_artifact(next(a.path for a in drafts if a.path != "context/skill-drafts/index.md"))
-    assert page.kind == "topic"
-    assert page.source == "deterministic"
-    assert page.record_count == 1
-    assert "not an installed skill" in page.content
-    assert "create_skill" in page.content
-    assert "Use when" in page.content
-    assert "repo-grounded evidence" in page.content
-    assert page.title == "Use repo evidence"
-    assert page.path == "context/skill-drafts/use-repo-evidence.md"
-    assert "`use-repo-evidence`" in page.content
-    assert "rec_secret123456" not in page.content
-    assert "rec_" not in page.content
-    assert "123e4567-e89b-12d3-a456-426614174000" not in page.content
-    assert "abcdef1234567890abcdef1234567890" not in page.content
-    assert "project:proj_secret123456" not in page.content
-    assert page.path.removeprefix("context/skill-drafts/").removesuffix(".md")[0].isalpha()
-    assert len(page.path.removeprefix("context/skill-drafts/").removesuffix(".md")) <= 32
     await records.close()
 
 
