@@ -95,6 +95,8 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     by_path = {a["path"]: a for a in artifacts}
     assert "README.md" in by_path
     assert "facts/index.md" in by_path
+    assert "context/index.md" in by_path
+    assert "context/SCHEMA.md" in by_path
     assert "entities/index.md" in by_path
     assert "references/index.md" in by_path
     assert "sources/index.md" not in by_path
@@ -103,6 +105,8 @@ def test_rebuild_artifacts_endpoint_shape_and_counts(client):
     assert "changelog/index.md" in by_path
     assert "facts/global.md" not in by_path
     assert by_path["references/index.md"]["record_count"] is None
+    assert by_path["context/index.md"]["record_count"] is None
+    assert by_path["context/SCHEMA.md"]["record_count"] is None
     assert by_path["changelog/index.md"]["record_count"] is None
     assert by_path["facts/index.md"]["record_count"] is None
     assert by_path["projects/inbox.md"]["kind"] == "topic"

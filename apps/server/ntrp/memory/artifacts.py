@@ -10,6 +10,7 @@ memory/
   tooling.md
   directives.md
   facts/index.md
+  context/
   entities/
   projects/
   references/
@@ -62,6 +63,7 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
 }
 ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",
+    "context": "topic",
     "entities": "topic",
     "projects": "topic",
     "references": "source",
@@ -693,6 +695,7 @@ class ArtifactMemoryStore:
         await self._write_entity_dossiers(rows, labels_by_id, label_vocab, llm=llm, model=model)
         await self._write_project_dossiers(facts, labels_by_id, llm=llm, model=model)
         self._write_references(rows, source_records)
+        self._write_context_docs()
         if synthesize:
             await self._synthesize_profile(rows, directives, facts, labels_by_id, llm=llm, model=model)
             await self._synthesize_active_work(rows, labels_by_id, llm=llm, model=model)
@@ -706,7 +709,7 @@ class ArtifactMemoryStore:
         # synthesized ones) via _prune_dossier_dir.
         for rel in ("README.md", "tooling.md", "directives.md", "facts.md", "summaries.md", "sources.md"):
             self._unlink_regular_artifact(rel)
-        for dirname in ("facts", "references", "sources", "files", "docs"):
+        for dirname in ("facts", "context", "references", "sources", "files", "docs"):
             directory = self.root / dirname
             self._remove_markdown_tree(directory)
         self._remove_defunct_dir("summaries")
@@ -782,6 +785,7 @@ class ArtifactMemoryStore:
             "",
             "- `directives.md` — generated standing behavior rules.",
             "- `facts/index.md` — DB-backed fact counts and querying guidance; no fact dumps are generated.",
+            "- `context/` — generated agent context index and schema notes.",
             "- `entities/` — emergent topic pages and triage.",
             "- `projects/` — project topic pages.",
             "- `references/` — evidence, receipt, file, doc, and integration pointers.",
@@ -814,6 +818,7 @@ class ArtifactMemoryStore:
             "",
             "- `recall` queries SQLite records and is the canonical retrieval path for facts.",
             "- `memory_tree`, `memory_read`, and `memory_search` browse generated dossiers/context/source docs.",
+            "- Browse `context/` for the generated context index and schema contract.",
             "- Browse `entities/` and `projects/` for topic pages built from the records.",
             "- Facts live in the database; `facts/index.md` carries counts, while `references/` carries concise pointers.",
             "- Monthly changelog files are append-only atomic event logs; rollups are regenerated indexes.",
@@ -1288,6 +1293,62 @@ class ArtifactMemoryStore:
         self._write(
             "active-work.md", "Active work", "topic", "global", None, out.rstrip() + "\n",
             len({*allowed}), meta=ArtifactMeta(source=SYNTHESIS_SOURCE),
+        )
+
+    def _write_context_docs(self) -> None:
+        index = [
+            "# Context",
+            "",
+            "Generated context map for agents. SQLite records remain canonical; these files are read-only.",
+            "",
+            "## Primary surfaces",
+            "",
+            "- `me.md` — synthesized profile when a model-backed rebuild is available.",
+            "- `active-work.md` — synthesized current-work summary when a model-backed rebuild is available.",
+            "- `entities/index.md` — generated entity topic index.",
+            "- `projects/index.md` — generated project topic index.",
+            "- `references/index.md` — generated evidence and pointer index.",
+            "- `changelog/index.md` — generated memory mutation rollup.",
+            "- `context/integrations/index.md` — reserved future generated integration context.",
+            "",
+            "## Schema",
+            "",
+            "- `context/SCHEMA.md` — mechanical contract for this generated projection.",
+        ]
+        self._write(
+            "context/index.md",
+            "Context",
+            "topic",
+            "global",
+            None,
+            "\n".join(index).rstrip() + "\n",
+            None,
+        )
+
+        schema = [
+            "# Context Schema",
+            "",
+            "SQLite `memory.db` records are canonical for memory storage, retrieval, and mutation.",
+            "Markdown artifacts are generated read surfaces for agents and UI browsing.",
+            "",
+            "## Record kinds",
+            "",
+            "Supported record kinds: `directive | fact | source | changelog`.",
+            "",
+            "## Model",
+            "",
+            "- Records stay flat.",
+            "- There is no graph, lens, facet, derivation-edge, or CRM-style typing model.",
+            "- `context/` is generated context for agents, not a write target.",
+        ]
+        self._write(
+            "context/SCHEMA.md",
+            "Context schema",
+            "topic",
+            "global",
+            None,
+            "\n".join(schema).rstrip() + "\n",
+            None,
         )
 
     def _write_records(
