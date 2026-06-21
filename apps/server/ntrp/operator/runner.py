@@ -67,10 +67,12 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         if agent_config.deferred_tools
         else None
     )
+    skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
 
     system_prompt = build_system_prompt(
         source_details=deps.source_details,
         memory_context=memory_context,
+        skills_context=skills_context,
         directives=load_directives(),
         notifiers=deps.notifiers or None,
         deferred_tools_context=deferred_tools_context,
