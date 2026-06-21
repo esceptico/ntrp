@@ -439,7 +439,9 @@ async def test_context_index_and_schema_are_generated(tmp_path: Path):
 async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Path):
     records = await _record_store(tmp_path)
     await records.add(
-        "Always use repo-grounded evidence before making codebase claims from rec_secret123456",
+        "Always use repo-grounded evidence before making codebase claims from "
+        "rec_secret123456 and 123e4567-e89b-12d3-a456-426614174000 and "
+        "abcdef1234567890abcdef1234567890",
         kind=Kind.DIRECTIVE,
     )
     await records.add("The user has a plain fact that should not be a skill", kind=Kind.FACT)
@@ -465,6 +467,8 @@ async def test_skill_candidates_are_generated_from_directives_only(tmp_path: Pat
     assert "repo-grounded evidence" in page.content
     assert "rec_secret123456" not in page.content
     assert "rec_" not in page.content
+    assert "123e4567-e89b-12d3-a456-426614174000" not in page.content
+    assert "abcdef1234567890abcdef1234567890" not in page.content
     await records.close()
 
 

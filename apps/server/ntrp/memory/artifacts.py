@@ -1456,7 +1456,8 @@ class ArtifactMemoryStore:
         ]
         if entries:
             for title, rel, snippet in entries:
-                index_body.append(f"- [[{title}]] — {_trim_at_word_boundary(snippet, 160)} (`{rel}`).")
+                link = Path(rel).stem
+                index_body.append(f"- [[{link}|{title}]] — {_trim_at_word_boundary(snippet, 160)} (`{rel}`).")
         else:
             index_body.append("_No directive-derived skill candidates yet._")
         self._write(
