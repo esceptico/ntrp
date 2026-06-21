@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import {
   ArrowLeft,
+  ArrowRight,
   Bot,
   CheckCircle2,
   Circle,
@@ -26,6 +27,7 @@ import {
 import { nextTodoStatus, todoSignature } from "../lib/todoOverride";
 import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import {
+  DURATION_RIGHT_PANEL_HIDE,
   EASE_EMPHASIZED,
   EASE_OUT,
   MOTION,
@@ -50,6 +52,7 @@ import { useWorkflows } from "../hooks/useWorkflows";
 import { isActiveWorkflow, workflowKey } from "../store/workflow-domain";
 import { ExpandableWorkflowCard } from "./workflow/WorkflowDetail";
 import { ScrollFadeTop } from "./ScrollBlur";
+import { BlurSwap } from "./BlurSwap";
 import { StatusDot } from "./StatusDot";
 import { AgentRunRow } from "./agents/AgentRunRow";
 import { Collapse } from "./ui/Collapse";
@@ -70,6 +73,9 @@ export function latestTodoListFromMessages(
 
 export const RIGHT_PANEL_WIDTH = 320;
 export const RIGHT_PANEL_BODY_WIDTH = 304;
+// Short rightward drift on hide — enough to give the fade/blur a direction
+// without it reading as a full slide-back.
+const RIGHT_PANEL_HIDE_DRIFT = 48;
 
 const RECENT_AGENT_LIMIT = 6;
 
@@ -738,19 +744,14 @@ export function AgentRightSidebar() {
   const activeCount =
     runningAgentCount + runningWorkflowCount + runningAutomations.length + todoOpenCount;
 
-  // Right panel runs at a fixed width — it used to share the
-  // `--sidebar-width` CSS var with the left rail, so dragging the left
-  // resize-handle would visibly stretch this one too. Hard-coded so the
-  // two are independent. Bump alongside RIGHT_PANEL_WIDTH below if you
-  // want to make it adjustable later.
-  const panelTranslateWidth = RIGHT_PANEL_WIDTH;
-
   return (
     <>
-      {/* Fixed-position dots toggle — the single open/close control for
-          the agent hub (mirror of `.sidebar-toggle`). Stays in viewport-
-          fixed coords regardless of panel state; when open it floats over
-          the panel header's right edge (z-60 > panel z-40). A running-
+      {/* Fixed-position toggle — the single open/close control for the
+          agent hub (mirror of `.sidebar-toggle`). Stays in viewport-fixed
+          coords regardless of panel state; when open it floats over the
+          panel header's right edge (z-60 > panel z-40). The glyph swaps
+          from dots (open me) to a right arrow (close → push the panel
+          off-edge) so the control reads as a direct action. A running-
           status dot rides alongside when the panel is collapsed and work
           is active. Aligned with the macOS traffic lights (center y=25). */}
       <button
@@ -761,17 +762,47 @@ export function AgentRightSidebar() {
         className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-row ease-out active:scale-[0.96]"
       >
         {collapsed && activeCount > 0 && <StatusDot status="running" pulse />}
-        <MoreHorizontal size={ICON.MD} strokeWidth={2} />
+        <BlurSwap swapKey={collapsed ? "open" : "close"}>
+          {collapsed ? (
+            <MoreHorizontal size={ICON.MD} strokeWidth={2} />
+          ) : (
+            <ArrowRight size={ICON.MD} strokeWidth={2} />
+          )}
+        </BlurSwap>
       </button>
 
-      {/* Panel — always rendered, slides via `x` transform (GPU-
-          composited, preserves internal state). Same animation shape as
-          App.tsx's left sidebar so the two feel like one system. */}
+      {/* Panel — always rendered (preserves internal state). Asymmetric
+          motion:
+          • OPEN slides in from the right edge (x: off-edge → 0) with the
+            same MOTION.route/EASE_EMPHASIZED recipe as App.tsx's left
+            sidebar; opacity/blur are reset instantly while still off-edge so
+            the entrance is a clean slide, not a fade.
+          • HIDE keeps it an opaque card that fades + blurs out while drifting
+            a short distance right (direction without a full slide-back). The
+            chat reflows on the SAME duration (DURATION_RIGHT_PANEL_HIDE), so
+            the fading card crossfades to reveal the expanding content rather
+            than overlapping it or pausing. */}
       <motion.aside
         initial={false}
-        animate={{ x: collapsed ? panelTranslateWidth : 0 }}
-        transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-        style={{ width: RIGHT_PANEL_BODY_WIDTH }}
+        animate={
+          collapsed
+            ? { x: RIGHT_PANEL_HIDE_DRIFT, opacity: 0, filter: "blur(6px)" }
+            : { x: [RIGHT_PANEL_WIDTH, 0], opacity: 1, filter: "blur(0px)" }
+        }
+        transition={
+          collapsed
+            ? { duration: DURATION_RIGHT_PANEL_HIDE, ease: EASE_OUT }
+            : {
+                x: { duration: MOTION.route, ease: EASE_EMPHASIZED },
+                opacity: { duration: 0 },
+                filter: { duration: 0 },
+              }
+        }
+        style={{
+          width: RIGHT_PANEL_BODY_WIDTH,
+          pointerEvents: collapsed ? "none" : "auto",
+        }}
+        aria-hidden={collapsed}
         className="surface-panel surface-radius-md absolute top-2 bottom-2 right-2 z-40 flex flex-col overflow-hidden"
       >
         {/* Drag region height tuned so the "Active" label's vertical

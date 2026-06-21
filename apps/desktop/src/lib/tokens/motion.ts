@@ -68,6 +68,11 @@ export const MOTION = {
 
 export const DURATION_POPOVER = MOTION.palette;
 export const DURATION_PANEL = MOTION.panel;
+/** Right sidebar hide: slower than a normal panel exit so the fade + blur
+ *  dissolve reads while the panel drifts right and the chat reclaims the
+ *  space on the SAME duration (kept in lockstep so the opaque card
+ *  crossfades to reveal the expanding content — no overlap, no pause). */
+export const DURATION_RIGHT_PANEL_HIDE = 0.4;
 
 // ─── Panel entry curve ───────────────────────────────────────
 

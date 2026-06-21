@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import clsx from "clsx";
 import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useStore } from "../store";
@@ -9,6 +9,7 @@ import { ApprovalBanner } from "./ApprovalBanner";
 import { IconButton } from "./IconButton";
 import { BlurSwap } from "./BlurSwap";
 import { ICON } from "../lib/icons";
+import { DURATION_RIGHT_PANEL_HIDE, MOTION } from "../lib/tokens/motion";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -129,7 +130,10 @@ export function Chat() {
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
       data-right-open={rightPanelCollapsed ? "false" : "true"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] transition-[left,right] duration-route ease-emphasized bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] transition-[left,right] duration-[var(--chat-route-duration)] ease-emphasized bg-bg overflow-hidden"
+      style={{
+        "--chat-route-duration": `${(rightPanelCollapsed ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000}ms`,
+      } as CSSProperties}
     >
       <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />
