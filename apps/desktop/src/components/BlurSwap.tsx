@@ -11,6 +11,13 @@ interface BlurSwapProps {
   blur?: number;
   /** Crossfade duration in seconds; defaults to MOTION.check. */
   duration?: number;
+  /**
+   * When set, also scale from this value → 1, swapping the tween for the
+   * no-bounce icon-swap spring. Pass 0.25 for the contextual-icon-animation
+   * recipe (scale 0.25 → 1, opacity 0 → 1, blur 4px → 0). Omit for a plain
+   * opacity + blur crossfade (text, multi-char glyphs).
+   */
+  scaleFrom?: number;
   className?: string;
 }
 
@@ -28,18 +35,32 @@ export function BlurSwap({
   children,
   blur = 4,
   duration = MOTION.check,
+  scaleFrom,
   className,
 }: BlurSwapProps) {
+  const scaled = scaleFrom != null;
+  const hidden = {
+    opacity: 0,
+    filter: `blur(${blur}px)`,
+    ...(scaled ? { scale: scaleFrom } : {}),
+  };
+  const shown = {
+    opacity: 1,
+    filter: "blur(0px)",
+    ...(scaled ? { scale: 1 } : {}),
+  };
   return (
     <span className={clsx("inline-grid place-items-center", className)}>
       <AnimatePresence initial={false}>
         <motion.span
           key={swapKey}
           className="col-start-1 row-start-1 inline-flex"
-          initial={{ opacity: 0, filter: `blur(${blur}px)` }}
-          animate={{ opacity: 1, filter: "blur(0px)" }}
-          exit={{ opacity: 0, filter: `blur(${blur}px)` }}
-          transition={{ duration, ease: EASE_OUT }}
+          initial={hidden}
+          animate={shown}
+          exit={hidden}
+          // Icon swaps (scaleFrom set) ride the mandated no-bounce spring;
+          // plain glyph/text crossfades keep the soft tween.
+          transition={scaled ? { type: "spring", duration: 0.3, bounce: 0 } : { duration, ease: EASE_OUT }}
         >
           {children}
         </motion.span>

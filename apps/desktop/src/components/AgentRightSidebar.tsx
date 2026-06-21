@@ -762,7 +762,7 @@ export function AgentRightSidebar() {
         className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-row ease-out active:scale-[0.96]"
       >
         {collapsed && activeCount > 0 && <StatusDot status="running" pulse />}
-        <BlurSwap swapKey={collapsed ? "open" : "close"}>
+        <BlurSwap swapKey={collapsed ? "open" : "close"} scaleFrom={0.25}>
           {collapsed ? (
             <MoreHorizontal size={ICON.MD} strokeWidth={2} />
           ) : (
@@ -778,10 +778,12 @@ export function AgentRightSidebar() {
             sidebar; opacity/blur are reset instantly while still off-edge so
             the entrance is a clean slide, not a fade.
           • HIDE keeps it an opaque card that fades + blurs out while drifting
-            a short distance right (direction without a full slide-back). The
-            chat reflows on the SAME duration (DURATION_RIGHT_PANEL_HIDE), so
-            the fading card crossfades to reveal the expanding content rather
-            than overlapping it or pausing. */}
+            a short distance right (direction without a full slide-back). It
+            uses EASE_OUT, which front-loads the opacity fade so the card is
+            visually gone before the chat's expanding edge slides under it —
+            that's what prevents the overlap. The chat's right-inset reflow is
+            matched to the SAME duration AND the SAME EASE_OUT curve so the two
+            read as one synchronized motion. */}
       <motion.aside
         initial={false}
         animate={

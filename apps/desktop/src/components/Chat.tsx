@@ -22,7 +22,7 @@ function SidebarToggle() {
       title={sidebarHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
     >
-      <BlurSwap swapKey={sidebarHidden ? "show" : "hide"} blur={3}>
+      <BlurSwap swapKey={sidebarHidden ? "show" : "hide"} scaleFrom={0.25}>
         {sidebarHidden ? (
           <PanelLeftOpen size={ICON.MD} strokeWidth={2} />
         ) : (
@@ -130,9 +130,17 @@ export function Chat() {
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
       data-right-open={rightPanelCollapsed ? "false" : "true"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] transition-[left,right] duration-[var(--chat-route-duration)] ease-emphasized bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[320px] bg-bg overflow-hidden"
       style={{
-        "--chat-route-duration": `${(rightPanelCollapsed ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000}ms`,
+        // Per-property transitions so the left-sidebar reflow stays on its own
+        // route/emphasized timing, while the RIGHT-inset reflow is matched
+        // exactly to the panel: on hide it borrows the panel's faster
+        // EASE_OUT + DURATION_RIGHT_PANEL_HIDE so the chat edge and the fading
+        // card move as one (no overlap); on open it uses route/emphasized to
+        // mirror the panel's slide-in.
+        transition: `left ${MOTION.route * 1000}ms var(--ease-emphasized), right ${
+          (rightPanelCollapsed ? DURATION_RIGHT_PANEL_HIDE : MOTION.route) * 1000
+        }ms ${rightPanelCollapsed ? "var(--ease-out-soft)" : "var(--ease-emphasized)"}`,
       } as CSSProperties}
     >
       <div className="relative w-full h-full">

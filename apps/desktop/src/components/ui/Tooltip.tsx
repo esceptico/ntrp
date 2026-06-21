@@ -16,6 +16,9 @@ import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../../lib/t
 type Side = "top" | "bottom" | "left" | "right";
 
 const GAP = 6;
+/** Min distance the tooltip should keep from the viewport edge before flipping
+ *  to the opposite side. */
+const SAFE_MARGIN = 8;
 /** Open delay so the tip doesn't flash on every passing hover; hide is fast. */
 const OPEN_DELAY_MS = 350;
 const HIDE_DELAY_MS = 60;
@@ -48,6 +51,9 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   const [open, setOpen] = useState(false);
   const [instant, setInstant] = useState(false);
   const [coords, setCoords] = useState<Record<string, number> | null>(null);
+  // Side actually used after edge-flipping (a `top` tooltip on a trigger near
+  // the viewport top would render off-screen — flip it to `bottom`).
+  const [effSide, setEffSide] = useState<Side>(side);
   const tipId = useId();
 
   const clear = () => {
@@ -85,9 +91,19 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
       const r = triggerRef.current!.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
-      if (side === "top") setCoords({ bottom: window.innerHeight - r.top + GAP, left: cx });
-      else if (side === "bottom") setCoords({ top: r.bottom + GAP, left: cx });
-      else if (side === "left") setCoords({ right: window.innerWidth - r.left + GAP, top: cy });
+      // Flip to the opposite side when the preferred side lacks room. EST is a
+      // conservative one-line tooltip extent (height/width) — exact size isn't
+      // known pre-paint, but this reliably catches edge-hugging triggers.
+      const EST = 36;
+      let s = side;
+      if (side === "top" && r.top - GAP - EST < SAFE_MARGIN) s = "bottom";
+      else if (side === "bottom" && r.bottom + GAP + EST > window.innerHeight - SAFE_MARGIN) s = "top";
+      else if (side === "left" && r.left - GAP - EST < SAFE_MARGIN) s = "right";
+      else if (side === "right" && r.right + GAP + EST > window.innerWidth - SAFE_MARGIN) s = "left";
+      setEffSide(s);
+      if (s === "top") setCoords({ bottom: window.innerHeight - r.top + GAP, left: cx });
+      else if (s === "bottom") setCoords({ top: r.bottom + GAP, left: cx });
+      else if (s === "left") setCoords({ right: window.innerWidth - r.left + GAP, top: cy });
       else setCoords({ left: r.right + GAP, top: cy });
     };
     update();
@@ -99,15 +115,15 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
     };
   }, [open, side]);
 
-  const axis = side === "left" || side === "right" ? "x" : "y";
-  const sign = side === "top" || side === "left" ? 1 : -1;
-  const center = side === "top" || side === "bottom" ? "translateX(-50%)" : "translateY(-50%)";
+  const axis = effSide === "left" || effSide === "right" ? "x" : "y";
+  const sign = effSide === "top" || effSide === "left" ? 1 : -1;
+  const center = effSide === "top" || effSide === "bottom" ? "translateX(-50%)" : "translateY(-50%)";
   const origin =
-    side === "top"
+    effSide === "top"
       ? "bottom center"
-      : side === "bottom"
+      : effSide === "bottom"
         ? "top center"
-        : side === "left"
+        : effSide === "left"
           ? "center right"
           : "center left";
 
