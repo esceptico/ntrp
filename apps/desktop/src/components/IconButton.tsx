@@ -33,12 +33,18 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     { className, size = "md", tone = "muted", danger = false, type, children, title, ...rest },
     ref,
   ) {
-    // `title` becomes an animated Tooltip instead of the OS bubble; keep
-    // aria-label (in `rest`) on the button as the accessible name.
+    // `title` becomes an animated Tooltip instead of the OS bubble. The
+    // Tooltip only wires aria-describedby while open, so an icon-only button
+    // with just a `title` would otherwise have no accessible name — derive
+    // one from the title. An explicit aria-label in `rest` still wins.
+    const accessibleName =
+      (rest["aria-label"] as string | undefined) ??
+      (typeof title === "string" ? title : undefined);
     const button = (
       <button
         ref={ref}
         type={type ?? "button"}
+        aria-label={accessibleName}
         className={clsx(
           "grid place-items-center transition-[background-color,color,transform,scale] duration-check ease-out hover:bg-surface-soft active:scale-[0.97]",
           "disabled:opacity-[0.45] disabled:cursor-not-allowed",

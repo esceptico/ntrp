@@ -11,7 +11,7 @@ import {
   MOTION,
   POSE_MODAL,
 } from "../lib/tokens/motion";
-import { useEscapeKey } from "../lib/hooks";
+import { useEscapeKey, useFocusTrap } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 import { ScrollFadeTop } from "./ScrollBlur";
@@ -54,6 +54,8 @@ export function ApprovalReviewModal() {
   const originDelta = modalOriginTransform(snapshotRef.current);
 
   useEscapeKey(() => close(null), !!approval);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -71,7 +73,12 @@ export function ApprovalReviewModal() {
           onClick={() => close(null)}
         >
           <motion.div
-            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Review ${approval.toolName}`}
+            tabIndex={-1}
+            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden focus:outline-none"
             initial={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }

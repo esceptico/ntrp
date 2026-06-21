@@ -16,6 +16,7 @@ export function CompactionIndicatorContent({ compacting }: { compacting: boolean
       {compacting ? (
         <motion.div
           key="compacting"
+          role="status"
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -2, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
@@ -25,6 +26,7 @@ export function CompactionIndicatorContent({ compacting }: { compacting: boolean
           <Loader2
             size={ICON.XS}
             strokeWidth={2}
+            aria-hidden
             className="text-muted animate-spin"
           />
           <span className="text-sm font-medium text-muted">

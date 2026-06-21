@@ -114,7 +114,18 @@ export function SessionList() {
       onStartRename={() => setRenamingId(session.session_id)}
       onCancelRename={() => setRenamingId(null)}
       onMenu={(pos) => setMenu({ sessionId: session.session_id, x: pos.x, y: pos.y })}
-      onArchive={() => void archiveSession(session.session_id)}
+      onArchive={async () => {
+        try {
+          await archiveSession(session.session_id);
+        } catch {
+          useStore.getState().pushToast({
+            id: `archive-fail:${session.session_id}`,
+            title: "Couldn’t archive session",
+            status: "failed",
+            target: { kind: "session", sessionId: session.session_id },
+          });
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
@@ -277,11 +288,17 @@ export function SessionList() {
               }
             }}
             onArchive={async () => {
+              const sessionId = menu.sessionId;
               closeMenu();
               try {
-                await archiveSession(menu.sessionId);
+                await archiveSession(sessionId);
               } catch {
-                /* ignore */
+                useStore.getState().pushToast({
+                  id: `archive-fail:${sessionId}`,
+                  title: "Couldn’t archive session",
+                  status: "failed",
+                  target: { kind: "session", sessionId },
+                });
               }
             }}
             onMoveProject={async (projectId) => {

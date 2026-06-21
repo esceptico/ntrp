@@ -8,21 +8,26 @@ export function Row({
   entry,
   active,
   activeRef,
+  optionId,
   onHover,
   onClick,
 }: {
   entry: CommandEntry;
   active: boolean;
   activeRef?: React.RefObject<HTMLButtonElement | null>;
+  optionId?: string;
   onHover: () => void;
   onClick: () => void;
 }) {
   const Icon = entry.icon;
   return (
-    <li>
+    <li role="presentation">
       <PickerRow
         ref={activeRef}
         active={active}
+        id={optionId}
+        role="option"
+        aria-selected={active}
         onMouseMove={onHover}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}

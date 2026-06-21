@@ -34,7 +34,39 @@ export function SessionContextMenu({
   projects: Project[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
   const [pos, setPos] = useState({ left: state.x, top: state.y, ready: false });
+
+  // Snapshot the element that opened the menu (the session row) and return
+  // focus to it on close — WAI-ARIA APG menu pattern.
+  useEffect(() => {
+    restoreRef.current = document.activeElement as HTMLElement | null;
+    return () => {
+      const el = restoreRef.current;
+      if (el && document.contains(el)) el.focus();
+    };
+  }, []);
+
+  // Move focus into the menu once it's positioned so arrow keys work
+  // immediately for keyboard users.
+  useEffect(() => {
+    if (!pos.ready) return;
+    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [pos.ready]);
+
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const items = Array.from(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (items.length === 0) return;
+    e.preventDefault();
+    const idx = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === "Home" ? 0
+      : e.key === "End" ? items.length - 1
+      : e.key === "ArrowDown" ? (idx + 1) % items.length
+      : (idx <= 0 ? items.length - 1 : idx - 1);
+    items[next]?.focus();
+  };
 
   // After mount, measure the menu and clamp to the viewport so it never
   // hangs off the right or bottom edge.
@@ -89,13 +121,16 @@ export function SessionContextMenu({
       className="surface-panel surface-popover fixed z-50 w-[220px] py-1"
       style={{ left: pos.left, top: pos.top, transformOrigin: `${originY} ${originX}` }}
       onContextMenu={(e) => e.preventDefault()}
+      role="menu"
+      aria-label="Session actions"
+      onKeyDown={onMenuKeyDown}
     >
       <ContextItem
         icon={isPinned ? <PinOff size={ICON.MD} strokeWidth={2} /> : <Pin size={ICON.MD} strokeWidth={2} />}
         label={isPinned ? "Unpin" : "Pin to top"}
         onClick={onTogglePin}
       />
-      <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={2} />} label="Rename" onClick={onRename} />
+      <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={2} />} label="Rename…" onClick={onRename} />
       <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={2} />} label="Compact context" onClick={onCompact} />
       <ContextItem icon={<Archive size={ICON.MD} strokeWidth={2} />} label="Archive" onClick={onArchive} />
       <div className="my-1 h-px bg-line-soft" />
@@ -130,9 +165,11 @@ function ContextItem({
   return (
     <motion.button
       type="button"
+      role="menuitem"
+      tabIndex={-1}
       variants={ITEM_VARIANTS}
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.98]"
+      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink focus-visible:bg-surface-soft/60 focus-visible:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.98]"
     >
       <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
       <span className="truncate">{label}</span>

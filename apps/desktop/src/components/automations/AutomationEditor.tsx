@@ -187,11 +187,13 @@ export function buildPayload(f: FormState): CreateAutomationPayload {
   if (s.kind === "at") {
     p.trigger_type = "time";
     p.at = s.at;
-    if (s.days) p.days = s.days;
+    const days = s.days.trim();
+    if (days) p.days = days;
   } else if (s.kind === "every") {
     p.trigger_type = "time";
-    p.every = s.every;
-    if (s.days) p.days = s.days;
+    p.every = s.every.trim();
+    const days = s.days.trim();
+    if (days) p.days = days;
     if (s.start) p.start = s.start;
     if (s.end) p.end = s.end;
   } else if (s.kind === "message") {
@@ -209,7 +211,8 @@ export function buildPayload(f: FormState): CreateAutomationPayload {
   } else {
     p.trigger_type = "event";
     p.event_type = s.event;
-    if (s.lead) p.lead_minutes = s.lead;
+    const lead = s.lead.trim();
+    if (lead) p.lead_minutes = lead;
   }
   if (f.from_suggestion_id) p.from_suggestion_id = f.from_suggestion_id;
   return p;

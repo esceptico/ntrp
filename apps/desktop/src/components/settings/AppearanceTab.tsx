@@ -222,7 +222,7 @@ function ShortcutRecorder() {
         </AnimatePresence>
       </div>
       {error && (
-        <span className="text-xs text-bad text-right max-w-[260px]">{error}</span>
+        <span role="alert" className="text-xs text-bad text-right max-w-[260px]">{error}</span>
       )}
     </div>
   );

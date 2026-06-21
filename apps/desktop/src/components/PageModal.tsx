@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
@@ -9,7 +9,7 @@ import {
   MOTION,
   POSE_MODAL,
 } from "../lib/tokens/motion";
-import { useEscapeKey } from "../lib/hooks";
+import { useEscapeKey, useFocusTrap } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
@@ -47,6 +47,9 @@ export interface PageModalProps {
    *  modal owns the Escape key (e.g., automation editor inside the
    *  Automations modal). */
   disableEscape?: boolean;
+  /** Accessible name for the dialog. Defaults to the header title when it's a
+   *  string; pass explicitly for modals with a custom (headerless) layout. */
+  ariaLabel?: string;
 }
 
 const DEFAULT_SIZE =
@@ -66,11 +69,16 @@ export function PageModal({
   size = DEFAULT_SIZE,
   grid = DEFAULT_GRID,
   disableEscape,
+  ariaLabel,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   const root = document.querySelector("#app");
   if (!root) return null;
+
+  const dialogLabel = ariaLabel ?? (typeof header?.title === "string" ? header.title : undefined);
 
   return createPortal(
     <AnimatePresence>
@@ -85,7 +93,12 @@ export function PageModal({
           onClick={onClose}
         >
           <motion.div
-            className={`surface-panel surface-radius-md ${size} grid ${grid} overflow-hidden`}
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={dialogLabel}
+            tabIndex={-1}
+            className={`surface-panel surface-radius-md ${size} grid ${grid} overflow-hidden focus:outline-none`}
             initial={POSE_MODAL}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{

@@ -247,6 +247,32 @@ def _deterministic_cancel_salvage(child_messages: list[dict]) -> str:
     )
 
 
+def _deterministic_empty_salvage(child_messages: list[dict]) -> str:
+    tool_results: list[str] = []
+    for msg in child_messages:
+        if msg.get("role") not in ("tool", "assistant"):
+            continue
+        content = (msg.get("content") or "")[:300]
+        if content:
+            tool_results.append(f"- {content}")
+    if not tool_results:
+        return "[partial — sub-agent returned empty final answer]\nNo recoverable tool results were produced."
+    body = "\n".join(tool_results[-_SALVAGE_TAIL_RESULTS:])
+    return (
+        "[partial — sub-agent returned empty final answer]\n"
+        f"Last {min(len(tool_results), _SALVAGE_TAIL_RESULTS)} recoverable findings:\n{body}"
+    )
+
+
+async def _emit_visible_child_final(child_io: IOBridge | None, text: str) -> None:
+    if child_io is None or child_io.emit is None or not text.strip():
+        return
+    message_id = f"salvage-{uuid4().hex[:10]}"
+    await child_io.emit(TextMessageStartEvent(message_id=message_id, role="assistant"))
+    await child_io.emit(TextMessageContentEvent(message_id=message_id, delta=text))
+    await child_io.emit(TextMessageEndEvent(message_id=message_id, content=text))
+
+
 def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
     if isolation == IsolationLevel.SHARED:
         return calling_ctx.session_state
@@ -737,7 +763,7 @@ def create_spawn_fn(
                 return agent_label if agent_label != "Agent" else agent_slug
 
             async def _run_foreground() -> tuple[str, str]:
-                nonlocal label_update_task
+                nonlocal label_update_task, stream_failed
                 if parent_emit:
                     await parent_emit(
                         TaskStartedEvent(
@@ -763,6 +789,21 @@ def create_spawn_fn(
                 if parent_emit is not None and agent_label_task is not None:
                     label_update_task = asyncio.create_task(_emit_agent_label_when_ready())
                 text = await _stream_to(_noop_child_events if child_io is not None else _foreground_child_events)
+                if not text.strip():
+                    stream_failed = True
+                    summary = await _salvage_summary(
+                        child_model,
+                        child_messages,
+                        "completed with empty final answer",
+                        task,
+                    )
+                    text = (
+                        f"[partial — sub-agent returned empty final answer]\n\n{summary}"
+                        if summary
+                        else _deterministic_empty_salvage(child_messages)
+                    )
+                if stream_failed:
+                    await _emit_visible_child_final(child_io, text)
                 return _current_agent_label(), text
 
             stream_task = asyncio.create_task(_run_foreground())
@@ -816,6 +857,7 @@ def create_spawn_fn(
                         if summary
                         else _deterministic_cancel_salvage(child_messages)
                     )
+                    await _emit_visible_child_final(child_io, text)
                     await _settle_agent_label_update()
                     await _save_child_session("cancelled")
                     if parent_emit:
@@ -889,12 +931,16 @@ def create_spawn_fn(
                 _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)
                 summary = await _salvage_summary(child_model, child_messages, f"timed out after {timeout}s", task)
                 if summary:
+                    text = f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}"
+                    await _emit_visible_child_final(child_io, text)
                     return _settle_with(
-                        f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}",
+                        text,
                         status="failed",
                     )
+                text = _deterministic_salvage(child_messages, f"timed out after {timeout}s")
+                await _emit_visible_child_final(child_io, text)
                 return _settle_with(
-                    _deterministic_salvage(child_messages, f"timed out after {timeout}s"),
+                    text,
                     status="failed",
                 )
             finally:
@@ -1003,6 +1049,11 @@ def create_spawn_fn(
                 result = f"Error: {e}"
                 status = "failed"
                 _logger.warning("Background task %s failed: %s", task_id, e)
+            if not result.strip():
+                result = _deterministic_empty_salvage(child_messages)
+                status = "failed"
+            if stream_failed or status != "completed":
+                await _emit_visible_child_final(child_io, result)
             # A steering message can land after the loop drained but before the
             # task is marked done; it can't be honored now, so surface the drop
             # instead of silently discarding it on cleanup.

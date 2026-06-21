@@ -19,6 +19,7 @@ export function SettingsConnectionHint({
 export function SettingsInlineError({ title, message }: { title: string; message: string }) {
   return (
     <motion.div
+      role="alert"
       className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
       initial={{ ...RISE_IN, y: -4 }}
       animate={RISE_SETTLED}

@@ -71,13 +71,43 @@ export function Tab({
   const active = ctx.value === value;
   const transition = ctx.reduced ? { layout: { duration: 0 } } : { layout: SPRING_LAYOUT };
 
+  // APG tabs pattern: arrow keys (orientation-aware) + Home/End move between
+  // tabs with automatic activation; roving tabindex keeps only the selected
+  // tab in the Tab sequence.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const horizontal = ctx.orientation === "horizontal";
+    const nextKey = horizontal ? "ArrowRight" : "ArrowDown";
+    const prevKey = horizontal ? "ArrowLeft" : "ArrowUp";
+    if (![nextKey, prevKey, "Home", "End"].includes(e.key)) return;
+    const tablist = e.currentTarget.closest('[role="tablist"]');
+    if (!tablist) return;
+    const tabs = Array.from(
+      tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]:not([disabled])'),
+    );
+    const idx = tabs.indexOf(e.currentTarget);
+    if (idx === -1) return;
+    e.preventDefault();
+    const next =
+      e.key === "Home" ? 0
+      : e.key === "End" ? tabs.length - 1
+      : e.key === nextKey ? (idx + 1) % tabs.length
+      : (idx - 1 + tabs.length) % tabs.length;
+    const target = tabs[next];
+    target.focus();
+    const nextValue = target.getAttribute("data-tab-value");
+    if (nextValue !== null) ctx.onChange(nextValue);
+  };
+
   return (
     <button
       type="button"
       role="tab"
       aria-selected={active}
+      tabIndex={active ? 0 : -1}
       data-active={active ? "true" : undefined}
+      data-tab-value={value}
       onClick={() => ctx.onChange(value)}
+      onKeyDown={onKeyDown}
       className={clsx("group relative isolate", className)}
     >
       {active && ctx.variant === "pill" && (

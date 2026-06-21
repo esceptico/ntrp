@@ -36,7 +36,14 @@ from ntrp.core.spawner import (
     _salvage_summary,
     create_spawn_fn,
 )
-from ntrp.events.sse import BackgroundTaskEvent, TaskFinishedEvent, TaskProgressEvent, TaskStartedEvent, TokenUsageEvent
+from ntrp.events.sse import (
+    BackgroundTaskEvent,
+    TaskFinishedEvent,
+    TaskProgressEvent,
+    TaskStartedEvent,
+    TextMessageContentEvent,
+    TokenUsageEvent,
+)
 from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
 from ntrp.tools.core.context import BackgroundTaskRegistry, ChildSession, IOBridge, RunContext, ToolContext
@@ -357,6 +364,69 @@ async def test_spawn_wait_false_returns_running_child_run(monkeypatch):
 
     task = bg_registry._tasks[result.child_run_id]
     await task
+
+
+@pytest.mark.asyncio
+async def test_background_spawn_empty_final_is_visible_in_child_messages(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    child_emitted = []
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def factory(params):
+        async def _finish(_status):
+            return None
+
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
+
+    executor = make_executor()
+    bg_registry = BackgroundTaskRegistry(session_id="parent")
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
+    ctx = ToolContext(
+        session_state=SessionState(session_id="parent", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=run,
+        io=IOBridge(),
+        background_tasks=bg_registry,
+        run_registry=RunRegistry(),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "background research",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-background",
+        agent_type="background_research",
+        wait=False,
+        timeout=1,
+    )
+
+    await bg_registry._tasks[result.child_run_id]
+
+    child_text = "".join(e.delta for e in child_emitted if isinstance(e, TextMessageContentEvent))
+    assert "[partial — sub-agent returned empty final answer]" in child_text
+    assert "No recoverable tool results were produced." in child_text
 
 
 @pytest.mark.asyncio
@@ -720,7 +790,9 @@ async def test_spawn_cost_budget_uses_parent_spend(monkeypatch):
     )
     result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
 
-    assert result.text == ""
+    assert result.text == (
+        "[partial — sub-agent returned empty final answer]\nNo recoverable tool results were produced."
+    )
 
 
 @pytest.mark.asyncio
@@ -752,7 +824,9 @@ async def test_spawn_tool_call_budget_is_shared_with_parent(monkeypatch):
     )
     result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
 
-    assert result.text == ""
+    assert result.text == (
+        "[partial — sub-agent returned empty final answer]\nNo recoverable tool results were produced."
+    )
 
 
 @pytest.mark.asyncio
@@ -782,7 +856,9 @@ async def test_spawn_wall_time_budget_uses_parent_start(monkeypatch):
     )
     result = await spawn(ctx, "research task", system_prompt="sys", tools=[], timeout=1)
 
-    assert result.text == ""
+    assert result.text == (
+        "[partial — sub-agent returned empty final answer]\nNo recoverable tool results were produced."
+    )
 
 
 @pytest.mark.asyncio
@@ -962,13 +1038,30 @@ async def test_spawn_uses_reasoning_effort_for_model_override(monkeypatch):
 
     monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
 
+    child_emitted = []
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def factory(params):
+        async def _finish(_status):
+            return None
+
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
+
     executor = make_executor()
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
     ctx = ToolContext(
         session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
         registry=executor.registry,
-        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        run=run,
         io=IOBridge(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
+        run_registry=RunRegistry(),
     )
 
     spawn = create_spawn_fn(
@@ -1065,13 +1158,30 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
 
     monkeypatch.setattr("ntrp.core.spawner.NtrpToolExecutor", lambda *_args, **_kwargs: FinderExecutor())
 
+    child_emitted = []
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def factory(params):
+        async def _finish(_status):
+            return None
+
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
+
     executor = make_executor()
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
     ctx = ToolContext(
         session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
         registry=executor.registry,
-        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        run=run,
         io=IOBridge(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
+        run_registry=RunRegistry(),
     )
 
     spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
@@ -1092,6 +1202,123 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
     tool_msgs = [m for m in salvage_msgs if m.get("role") == "tool"]
     assert tool_msgs, f"no tool messages in salvage payload: {salvage_msgs}"
     assert any("apricots are good" in (m.get("content") or "") for m in tool_msgs)
+
+
+@pytest.mark.asyncio
+async def test_spawn_salvages_when_inner_agent_returns_empty_final(monkeypatch):
+    captured_salvage_messages: list = []
+
+    class FakeLLM:
+        def __init__(self):
+            self.stream_calls = 0
+
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            self.stream_calls += 1
+            if self.stream_calls == 1:
+                yield CompletionResponse(
+                    choices=[
+                        Choice(
+                            message=Message(
+                                role="assistant",
+                                content=None,
+                                tool_calls=[
+                                    ToolCall(
+                                        id="call_1",
+                                        type="function",
+                                        function=FunctionCall(name="finder", arguments="{}"),
+                                    )
+                                ],
+                                reasoning_content=None,
+                            ),
+                            finish_reason="tool_calls",
+                        )
+                    ],
+                    usage=Usage(),
+                    model=model,
+                )
+                return
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+        async def complete(self, model, messages, **kwargs):
+            captured_salvage_messages.append(messages)
+            return CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(
+                            role="assistant",
+                            content="Recovered from tool results: apricots are good.",
+                            tool_calls=None,
+                            reasoning_content=None,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    class FinderExecutor:
+        async def execute(self, name, args, tool_call_id):
+            return AgentToolResult(content="apricots are good", preview="apricots", is_error=False)
+
+        def get_meta(self, name):
+            return ToolMeta(name="finder", display_name="Finder", kind="tool")
+
+    monkeypatch.setattr("ntrp.core.spawner.NtrpToolExecutor", lambda *_args, **_kwargs: FinderExecutor())
+
+    child_emitted = []
+
+    async def child_emit(event):
+        child_emitted.append(event)
+
+    async def factory(params):
+        async def _finish(_status):
+            return None
+
+        async def _aclose():
+            return None
+
+        return ChildSession(io=IOBridge(emit=child_emit), finish=_finish, aclose=_aclose)
+
+    executor = make_executor()
+    run = RunContext(run_id="run-1", current_depth=0, max_depth=3)
+    run.child_io_factory = factory
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=run,
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+        run_registry=RunRegistry(),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "find things about apricots",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call",
+        timeout=5,
+    )
+
+    assert "[partial — sub-agent returned empty final answer]" in result.text
+    assert "Recovered from tool results: apricots are good." in result.text
+    tool_msgs = [m for m in captured_salvage_messages[0] if m.get("role") == "tool"]
+    assert any("apricots are good" in (m.get("content") or "") for m in tool_msgs)
+    child_text = "".join(e.delta for e in child_emitted if isinstance(e, TextMessageContentEvent))
+    assert "Recovered from tool results: apricots are good." in child_text
 
 
 @pytest.mark.asyncio

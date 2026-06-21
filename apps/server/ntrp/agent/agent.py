@@ -140,18 +140,18 @@ class Agent:
                 await self._drain_pending(messages)
 
                 if self.max_iterations is not None and step >= self.max_iterations:
-                    yield self._result(result_text, StopReason.MAX_ITERATIONS, step)
+                    yield self._result(result_text, StopReason.MAX_ITERATIONS, step, messages)
                     return
 
                 if reason := self._budget_stop_reason(started_at):
-                    yield self._result(result_text, reason, step)
+                    yield self._result(result_text, reason, step, messages)
                     return
 
                 budget_reminder = self._budget_pressure_reminder()
                 step_model, step_tools, step_tool_choice, step_reasoning_effort = await self._prepare(step, messages)
 
                 if reason := self._budget_stop_reason(started_at):
-                    yield self._result(result_text, reason, step)
+                    yield self._result(result_text, reason, step, messages)
                     return
 
                 async for event in self._call_llm(
@@ -168,7 +168,7 @@ class Agent:
                 if reason := self._budget_stop_reason(started_at):
                     if response_message.tool_calls:
                         self._append_budget_denials(messages, response_message.tool_calls, reason)
-                    yield self._result(result_text, reason, step)
+                    yield self._result(result_text, reason, step, messages)
                     return
 
                 # Model hit its per-response max_tokens mid-generation. Tool calls in a
@@ -176,7 +176,7 @@ class Agent:
                 # runaway). Surface the partial text and stop.
                 if self._last_response.choices[0].finish_reason == FinishReason.LENGTH:
                     result_text = (response_message.content or "").strip()
-                    yield self._result(result_text, StopReason.MAX_OUTPUT_LENGTH, step)
+                    yield self._result(result_text, StopReason.MAX_OUTPUT_LENGTH, step, messages)
                     return
 
                 if not response_message.tool_calls:
@@ -202,7 +202,7 @@ class Agent:
                 calls = parse_tool_calls(response_message.tool_calls)
                 if self._would_exceed_tool_budget(len(calls)):
                     self._append_budget_denials(messages, response_message.tool_calls, StopReason.MAX_TOOL_CALLS)
-                    yield self._result(result_text, StopReason.MAX_TOOL_CALLS, step)
+                    yield self._result(result_text, StopReason.MAX_TOOL_CALLS, step, messages)
                     return
                 self._record_tool_calls(len(calls))
 
@@ -213,7 +213,26 @@ class Agent:
                     yield event
 
                 if reason := self._budget_stop_reason(started_at):
-                    yield self._result(result_text, reason, step)
+                    if reason == StopReason.MAX_TOKEN_BUDGET:
+                        try:
+                            async for event in self._call_llm(
+                                messages,
+                                step_model,
+                                [],
+                                ToolChoiceMode.NONE,
+                                step_reasoning_effort,
+                                budget_reminder=(
+                                    "Output-token budget exhausted. Return the final answer now from the tool results "
+                                    "already present. No new tool calls, no apology, no process recap. If incomplete, "
+                                    "report partial findings and gaps."
+                                ),
+                            ):
+                                yield event
+                            response_message = self._last_response.choices[0].message
+                            result_text = (response_message.content or "").strip()
+                        except Exception:
+                            result_text = ""
+                    yield self._result(result_text, reason, step, messages)
                     return
 
                 step += 1
@@ -222,7 +241,7 @@ class Agent:
 
         except asyncio.CancelledError:
             result_text = "Cancelled."
-            yield self._result(result_text, StopReason.CANCELLED, step)
+            yield self._result(result_text, StopReason.CANCELLED, step, messages)
             raise
 
         finally:
@@ -238,8 +257,20 @@ class Agent:
 
     # -- internals --
 
-    def _result(self, text: str, reason: StopReason, step: int) -> Result:
+    def _result(self, text: str, reason: StopReason, step: int, messages: list[dict] | None = None) -> Result:
+        if messages is not None and reason != StopReason.END_TURN and not text.strip():
+            text = self._fallback_result_text(messages, reason) or text
         return Result(text=text, stop_reason=reason, steps=step, usage=self._usage)
+
+    def _fallback_result_text(self, messages: list[dict], reason: StopReason) -> str:
+        tool_outputs = [str(msg.get("content") or "").strip() for msg in messages if msg.get("role") == Role.TOOL]
+        tool_outputs = [item for item in tool_outputs if item]
+        if not tool_outputs:
+            return ""
+        excerpt = "\n\n".join(f"- {item}" for item in tool_outputs[-6:])
+        if len(excerpt) > 4000:
+            excerpt = excerpt[:4000].rstrip() + "\n... [truncated]"
+        return f"Stopped because {reason.value} was reached after tool work. Recent tool results:\n{excerpt}"
 
     def _budget_stop_reason(self, started_at: float) -> StopReason | None:
         if self.max_tool_calls is not None and self._budget.tool_calls >= self.max_tool_calls:
@@ -259,11 +290,11 @@ class Agent:
         ratio = remaining / self._budget.total
         prefix = f"Output-token budget pressure: {remaining} of {self._budget.total} tokens remain. "
         if ratio <= 0.05:
-            return prefix + "Finalize with current evidence."
+            return prefix + "Finalize with current evidence now. Return partial findings if incomplete."
         if ratio <= 0.10:
-            return prefix + "Wrap up now; do not start broad new work."
+            return prefix + "Wrap up now; do not start broad new work. Preserve a useful final answer."
         if ratio <= 0.25:
-            return prefix + "Budget is limited; prioritize the final answer."
+            return prefix + "Budget is limited; prioritize finishing the current objective."
         return None
 
     def _current_cost(self) -> float:

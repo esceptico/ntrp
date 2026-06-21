@@ -130,7 +130,7 @@ function ArchivedRow({
           {session.message_count === 1 ? "" : "s"}
         </div>
         {error && (
-          <div className="mt-1 text-xs text-bad truncate" title={error}>
+          <div aria-live="polite" className="mt-1 text-xs text-bad truncate" title={error}>
             {error}
           </div>
         )}

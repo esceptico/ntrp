@@ -4,7 +4,67 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
 } from "react";
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "textarea:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+/** Trap Tab focus inside `ref` while `active`: move focus into the panel on
+ *  open (unless a child already grabbed it via autoFocus), wrap Tab/Shift+Tab
+ *  at the edges, and restore focus to the previously-focused element on
+ *  close/unmount. Pair with role="dialog" aria-modal and tabIndex={-1} on the
+ *  trapped container (so it can receive focus when it has no focusable child).
+ *  WAI-ARIA APG dialog pattern. */
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean): void {
+  useEffect(() => {
+    if (!active) return;
+    const node = ref.current;
+    if (!node) return;
+    const restoreTo = document.activeElement as HTMLElement | null;
+
+    if (!node.contains(document.activeElement)) {
+      const first = node.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? node).focus();
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusable = Array.from(
+        node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((el) => el.offsetParent !== null);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        node.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (e.shiftKey) {
+        if (current === first || !node.contains(current)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (current === last || !node.contains(current)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    node.addEventListener("keydown", onKey);
+    return () => {
+      node.removeEventListener("keydown", onKey);
+      if (restoreTo && document.contains(restoreTo)) restoreTo.focus();
+    };
+  }, [ref, active]);
+}
 
 /** Returns `[flag, fire]`. `fire()` flips the flag true and schedules
  *  it back to false after `durationMs`. The pending timeout is cleared

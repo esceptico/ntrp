@@ -562,14 +562,17 @@ function ServiceRow({
               onChange={(event) => onKeyChange(event.target.value)}
               placeholder="Token"
               autoFocus
+              spellCheck={false}
+              autoComplete="off"
               className="input-field"
             />
             <button
               type="button"
               onClick={onConnect}
               disabled={!serviceKey.trim() || pending}
-              className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
             >
+              {pending && <RefreshCw size={ICON.SM} strokeWidth={2} className="animate-spin" />}
               Connect
             </button>
             <button

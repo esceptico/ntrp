@@ -47,7 +47,7 @@ export function GoalStatusBar() {
             {goal.status.replace("_", " ")}
           </span>
         </div>
-        <div className="max-h-36 overflow-auto text-sm text-ink-soft whitespace-pre-wrap">
+        <div className="scroll-thin max-h-36 overflow-auto text-sm text-ink-soft whitespace-pre-wrap">
           {goal.objective}
         </div>
         <div className="mt-3 flex items-center gap-1">

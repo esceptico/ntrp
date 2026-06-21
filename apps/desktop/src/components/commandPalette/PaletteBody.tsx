@@ -12,6 +12,9 @@ import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
 import { ScrollFadeTop } from "../ScrollBlur";
 import { SLIDE_PAGE_VARIANTS } from "../ui/TabPanels";
 
+const LIST_ID = "command-palette-listbox";
+const optionId = (entryId: string) => `${LIST_ID}-opt-${entryId}`;
+
 export function PaletteBody({
   query,
   setQuery,
@@ -41,7 +44,7 @@ export function PaletteBody({
   // disappeared), we collapse back to root rather than show a dead view.
   const { view, staleCrumbs } = useMemo(() => {
     let entries = rootEntries;
-    let placeholder = "Search commands, sessions, memory...";
+    let placeholder = "Search commands, sessions, memory…";
     for (let i = 0; i < crumbs.length; i++) {
       const crumb = crumbs[i];
       const folder = entries.find((e) => e.id === crumb.id && e.children);
@@ -154,6 +157,11 @@ export function PaletteBody({
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-expanded
+            aria-controls={LIST_ID}
+            aria-autocomplete="list"
+            aria-activedescendant={filtered[safe] ? optionId(filtered[safe].id) : undefined}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -187,6 +195,9 @@ export function PaletteBody({
         ref={listRef}
         layout={morph}
         layoutScroll
+        role="listbox"
+        id={LIST_ID}
+        aria-label="Results"
         className="overflow-y-auto overflow-x-hidden scroll-thin pb-2"
       >
         <ScrollFadeTop />
@@ -206,11 +217,14 @@ export function PaletteBody({
               </div>
             ) : (
               grouped.map(({ section, items }) => (
-                <div key={section}>
-                  <div className="px-4 pt-3 pb-1 text-2xs font-medium uppercase tracking-[0.10em] text-faint">
+                <div key={section} role="presentation">
+                  <div
+                    aria-hidden
+                    className="px-4 pt-3 pb-1 text-2xs font-medium uppercase tracking-[0.10em] text-faint"
+                  >
                     {SECTION_LABEL[section]}
                   </div>
-                  <ul className="m-0 px-1.5 list-none">
+                  <ul role="group" aria-label={SECTION_LABEL[section]} className="m-0 px-1.5 list-none">
                     {items.map((entry) => {
                       const isActive = entry === filtered[safe];
                       return (
@@ -219,6 +233,7 @@ export function PaletteBody({
                           entry={entry}
                           active={isActive}
                           activeRef={isActive ? activeRowRef : undefined}
+                          optionId={optionId(entry.id)}
                           onHover={() => setIndex(filtered.indexOf(entry))}
                           onClick={() => activate(entry)}
                         />

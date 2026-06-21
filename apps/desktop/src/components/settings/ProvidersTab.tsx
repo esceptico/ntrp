@@ -471,14 +471,17 @@ function ProviderRow({
               onChange={(event) => onKeyChange(event.target.value)}
               placeholder="API key"
               autoFocus
+              spellCheck={false}
+              autoComplete="off"
               className="input-field"
             />
             <button
               type="button"
               onClick={onConnect}
               disabled={!apiKey.trim() || pending}
-              className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
             >
+              {pending && <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />}
               Connect
             </button>
             <button
@@ -595,12 +598,15 @@ function CustomModelsPanel({
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
             placeholder="model id"
+            spellCheck={false}
             className="input-field"
           />
           <input
             value={draft.base_url}
             onChange={(event) => onDraftChange({ base_url: event.target.value })}
             placeholder="base URL"
+            spellCheck={false}
+            autoComplete="off"
             className="input-field"
           />
         </div>
@@ -626,6 +632,8 @@ function CustomModelsPanel({
             value={draft.api_key}
             onChange={(event) => onDraftChange({ api_key: event.target.value })}
             placeholder="API key (optional)"
+            spellCheck={false}
+            autoComplete="off"
             className="input-field"
           />
           <button

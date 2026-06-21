@@ -89,6 +89,7 @@ export function SettingsModal() {
       size="w-[min(1000px,calc(100vw-32px))] h-[min(740px,calc(100vh-32px))] sm:w-[min(1000px,calc(100vw-64px))] sm:h-[min(740px,calc(100vh-64px))]"
       grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       disableEscape={saving}
+      ariaLabel="Settings"
     >
         <aside className="sidebar surface-panel settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
           <div className="drag-spacer shrink-0 h-[22px]" />

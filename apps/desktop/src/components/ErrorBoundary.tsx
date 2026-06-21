@@ -51,7 +51,7 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
           The rest of the app is still running. You can try again, or reload
           the window if it keeps happening.
         </div>
-        <pre className="mt-3 text-xs text-faint font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto">
+        <pre className="scroll-thin mt-3 text-xs text-faint font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto">
           {error.message}
         </pre>
         <div className="mt-4 flex items-center gap-2">

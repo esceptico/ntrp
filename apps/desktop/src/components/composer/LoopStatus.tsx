@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Repeat2, X } from "lucide-react";
 import { useStore, type ServerLoop } from "../../store";
 import { refreshLoops, stopLoop } from "../../actions";
-import { useEscapeKey } from "../../lib/hooks";
+import { useEscapeKey, useFocusTrap } from "../../lib/hooks";
 import { ICON } from "../../lib/icons";
 import { EASE_DECELERATE, EASE_OUT, ENTRY_PANEL, MOTION, POSE_MODAL } from "../../lib/tokens/motion";
 import { formatLoopCountdown } from "../../lib/loops";
@@ -151,6 +151,8 @@ export function LoopStatusBar() {
 
 function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: () => void }) {
   useEscapeKey(onClose, !!loop);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, !!loop);
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -168,9 +170,12 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
           onClick={onClose}
         >
           <motion.div
+            ref={panelRef}
             role="dialog"
+            aria-modal="true"
             aria-label="Loop detail"
-            className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto]"
+            tabIndex={-1}
+            className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] focus:outline-none"
             initial={POSE_MODAL}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
@@ -187,7 +192,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
                 <X size={ICON.SM} strokeWidth={2} />
               </IconButton>
             </div>
-            <div className="overflow-y-auto px-4 py-3">
+            <div className="scroll-thin overflow-y-auto px-4 py-3">
               <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
             </div>
             <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">

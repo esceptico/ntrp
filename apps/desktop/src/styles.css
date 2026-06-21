@@ -464,6 +464,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 .scroll-fade-bottom {
+  overscroll-behavior: contain;
   -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
           mask-image: linear-gradient(to top, transparent 0, #000 24px);
 }
@@ -495,11 +496,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 * { scrollbar-width: none; }
 *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
+/* Independent scrollers (modal/popover/drawer panels) must not chain their
+   overscroll to the frameless window — a flick past the end of a settings
+   list or context viewer would otherwise scroll/bounce the whole app behind
+   it. `scroll-thin` is the shared marker class already applied to all such
+   scrollers; this is its sole job. */
+.scroll-thin { overscroll-behavior: contain; }
+
 /* Messages list — both the header (top) and composer (bottom) are
    absolute overlays. Padding clears them so content lands cleanly at
    scroll=0; mask-image fades the thin gap below the floating composer
    card so text doesn't peek in the lift between card and viewport edge. */
 .scroll-messages {
+  overscroll-behavior: contain;
   padding-top: 88px;
   /* Padding must clear the composer (`--chat-bottom-h`) AND the
      bg-color fade above it (24px overshoot) AND leave a visible

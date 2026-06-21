@@ -497,6 +497,26 @@ async def test_max_iterations_stops_with_reason():
 
 
 @pytest.mark.asyncio
+async def test_zero_text_non_end_turn_stop_after_tool_work_returns_fallback():
+    llm = FakeLLM(
+        [
+            _response(tool_calls=[_tc("1", "t", {})]),
+            _response(text="unreached"),
+        ]
+    )
+    executor = FakeExecutor({"t": ToolResult(content="useful result", preview="useful")})
+    agent = _make_agent(llm, executor, max_iterations=1)
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_ITERATIONS
+    assert result.text == (
+        "Stopped because max_iterations was reached after tool work. Recent tool results:\n"
+        "- useful result"
+    )
+
+
+@pytest.mark.asyncio
 async def test_truncated_response_stops_instead_of_looping_on_tool_calls():
     # A model that hits its per-response max_tokens (finish_reason=length) WITH
     # pending tool calls must STOP, not execute the truncated calls and loop. Only
@@ -651,6 +671,8 @@ async def test_max_cost_stops_after_tool_dispatch_when_shared_cost_rolls_up():
     assert result.stop_reason == StopReason.MAX_COST
     assert llm.call_count == 1
     assert executor.call_log == [("t", {})]
+    assert "Stopped because max_cost" in result.text
+    assert "- r" in result.text
 
 
 @pytest.mark.asyncio
@@ -671,6 +693,54 @@ async def test_max_token_budget_stops_after_model_response_before_tool_dispatch(
             "content": "Tool call denied: max output-token budget of 50 exceeded.",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_max_token_budget_after_tool_work_returns_recent_result():
+    budget = RunBudget(total=50)
+
+    def child_agent_result(args):
+        budget.output_tokens = 75
+        return ToolResult(content="child agent completed the requested analysis", preview="child done")
+
+    llm = FakeLLM([_response(tool_calls=[_tc("c1", "t", {})], usage=Usage(completion_tokens=10))])
+    executor = FakeExecutor({"t": child_agent_result})
+    agent = _make_agent(llm, executor, budget=budget)
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_TOKEN_BUDGET
+    assert llm.call_count == 2
+    assert executor.call_log == [("t", {})]
+    assert result.text == (
+        "Stopped because max_token_budget was reached after tool work. Recent tool results:\n"
+        "- child agent completed the requested analysis"
+    )
+
+
+@pytest.mark.asyncio
+async def test_max_token_budget_after_tool_work_tries_final_answer_once():
+    budget = RunBudget(total=50)
+
+    def child_agent_result(args):
+        budget.output_tokens = 75
+        return ToolResult(content="child evidence", preview="child done")
+
+    llm = FakeLLM(
+        [
+            _response(tool_calls=[_tc("c1", "t", {})], usage=Usage(completion_tokens=10)),
+            _response(text="final answer from evidence", usage=Usage(completion_tokens=5)),
+        ]
+    )
+    executor = FakeExecutor({"t": child_agent_result})
+    agent = _make_agent(llm, executor, budget=budget)
+
+    result = await agent.run(_msgs())
+
+    assert result.stop_reason == StopReason.MAX_TOKEN_BUDGET
+    assert llm.call_count == 2
+    assert result.text == "final answer from evidence"
+    assert any("Return the final answer now from the tool results" in str(m.get("content")) for m in llm.last_messages or [])
 
 
 @pytest.mark.asyncio
@@ -697,7 +767,7 @@ async def test_token_budget_reminder_is_sent_when_budget_is_low():
         "role": Role.SYSTEM,
         "content": (
             "Output-token budget pressure: 100 of 1000 tokens remain. "
-            "Wrap up now; do not start broad new work."
+            "Wrap up now; do not start broad new work. Preserve a useful final answer."
         ),
     }
 
