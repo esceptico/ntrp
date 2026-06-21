@@ -1,5 +1,6 @@
 import {
   apiWithConfig,
+  archiveProjectApi,
   archiveSessionApi,
   branchSessionApi,
   createProjectApi,
@@ -60,6 +61,17 @@ export async function saveProject(
   const project = await updateProjectApi(s.config, projectId, patch);
   s.setProjects(s.projects.map((item) => (item.project_id === project.project_id ? project : item)));
   return project;
+}
+
+export async function archiveProject(projectId: string): Promise<void> {
+  const s = getState();
+  await archiveProjectApi(s.config, projectId);
+  s.setProjects(s.projects.filter((project) => project.project_id !== projectId));
+  s.setSessions(
+    s.sessions.map((session) =>
+      session.project_id === projectId ? { ...session, project_id: null } : session,
+    ),
+  );
 }
 
 export async function moveSessionToProject(sessionId: string, projectId: string | null): Promise<void> {

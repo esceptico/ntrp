@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { apiWithConfig, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "../src/api.ts";
+import { apiWithConfig, archiveProjectApi, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "../src/api.ts";
 import { runBuiltinCommand } from "../src/actions/builtins.ts";
 import { getState, setState } from "../src/store/index.ts";
 import { searchMemory } from "../src/api/memoryItems.ts";
@@ -67,6 +67,36 @@ test("standard API calls use the default timeout", async () => {
   expect(request).toEqual({
     path: "/projects",
     method: "GET",
+    body: undefined,
+    timeout: 60_000,
+  });
+});
+
+test("archiveProjectApi sends DELETE to the project route", async () => {
+  let request: { path: string; method?: string; body?: string; timeout?: number } | null = null;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, req: typeof request) => {
+          request = req;
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: { status: "archived", project_id: "proj/1" },
+            text: "",
+          };
+        },
+      },
+    },
+  };
+
+  await archiveProjectApi({ serverUrl: "http://localhost:6877", apiKey: "" }, "proj/1");
+
+  expect(request).toEqual({
+    path: "/projects/proj%2F1",
+    method: "DELETE",
     body: undefined,
     timeout: 60_000,
   });

@@ -18,6 +18,7 @@ export {
 } from "./server";
 export { fetchSkills, viewSkill } from "./skills";
 export {
+  archiveProject,
   archiveSession,
   branchAtMessage,
   createProject,

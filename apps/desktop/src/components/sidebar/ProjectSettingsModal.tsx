@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen } from "lucide-react";
 import type { Project } from "../../api";
-import { saveProject } from "../../actions";
+import { archiveProject, saveProject } from "../../actions";
 import { selectDirectory } from "../../lib/directoryPicker";
 import { ICON } from "../../lib/icons";
 import { PageModal } from "../PageModal";
+import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
 
 interface ProjectSettingsModalProps {
   project: Project | null;
@@ -16,6 +17,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
   const [cwd, setCwd] = useState("");
   const [instructions, setInstructions] = useState("");
   const [saving, setSaving] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [pickingCwd, setPickingCwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,10 +28,12 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
     setInstructions(project.instructions ?? "");
     setError(null);
     setSaving(false);
+    setArchiving(false);
     setPickingCwd(false);
   }, [project]);
 
-  const canSave = useMemo(() => Boolean(project && name.trim() && !saving), [project, name, saving]);
+  const busy = saving || archiving;
+  const canSave = useMemo(() => Boolean(project && name.trim() && !busy), [project, name, busy]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -51,7 +55,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
   }
 
   async function pickCwd() {
-    if (saving || pickingCwd) return;
+    if (busy || pickingCwd) return;
     setPickingCwd(true);
     setError(null);
     try {
@@ -64,11 +68,25 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
     }
   }
 
+  async function archive() {
+    if (!project || archiving) return;
+    setArchiving(true);
+    setError(null);
+    try {
+      await archiveProject(project.project_id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   return (
     <PageModal
       open={Boolean(project)}
-      onClose={saving ? () => {} : onClose}
-      disableEscape={saving}
+      onClose={busy ? () => {} : onClose}
+      disableEscape={busy}
       size="w-[min(640px,calc(100vw-32px))] h-[min(520px,calc(100vh-32px))]"
       header={{ title: project?.name ?? "Project" }}
     >
@@ -94,7 +112,7 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
               />
               <button
                 type="button"
-                disabled={saving || pickingCwd}
+                disabled={busy || pickingCwd}
                 onClick={pickCwd}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
               >
@@ -113,22 +131,30 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
           </label>
           {error && <div className="text-sm text-bad">{error}</div>}
         </div>
-        <footer className="flex items-center justify-end gap-2 px-5 py-4 border-t border-line-soft">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!canSave}
-            className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-          >
-            Save
-          </button>
+        <footer className="flex items-center justify-between gap-2 px-5 py-4 border-t border-line-soft">
+          <ConfirmDeleteButton
+            size="md"
+            label={`Archive ${project?.name ?? "project"}`}
+            busy={busy}
+            onConfirm={() => void archive()}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!canSave}
+              className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+            >
+              Save
+            </button>
+          </div>
         </footer>
       </form>
     </PageModal>

@@ -615,6 +615,12 @@ export async function updateProjectApi(
   });
 }
 
+export async function archiveProjectApi(config: AppConfig, projectId: string): Promise<void> {
+  await apiWithConfig(config, `/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function moveSessionToProjectApi(
   config: AppConfig,
   sessionId: string,

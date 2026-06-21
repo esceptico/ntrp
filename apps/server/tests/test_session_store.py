@@ -77,6 +77,19 @@ async def test_project_round_trip_and_session_scoping(store: SessionStore):
     assert loaded_after_save is not None
     assert loaded_after_save.state.project_id is None
 
+    archived_state = _make_state(session_id="archived-project-session", name="Archived project chat")
+    archived_state.project_id = project["project_id"]
+    await store.save_session(archived_state, [{"role": "user", "content": "archive project"}])
+
+    assert await store.archive_project(project["project_id"])
+    assert await store.get_project(project["project_id"]) is None
+    assert project["project_id"] not in {row["project_id"] for row in await store.list_projects()}
+    assert not await store.archive_project(project["project_id"])
+
+    loaded_after_project_archive = await store.load_session("archived-project-session")
+    assert loaded_after_project_archive is not None
+    assert loaded_after_project_archive.state.project_id is None
+
 
 @pytest.mark.asyncio
 async def test_project_schema_migrates_existing_sessions_table(tmp_path: Path):
