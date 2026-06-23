@@ -133,7 +133,20 @@ def artifact_to_json(a) -> dict:
              "src": l.src, "pinned": l.pinned, "superseded": l.superseded}
             for l in (getattr(a, "timeline", ()) or ())
         ],
+        "frontmatter": _json_safe(getattr(a, "frontmatter", {}) or {}),
     }
+
+
+def _json_safe(fm: dict) -> dict:
+    """Frontmatter values can carry YAML wrapper types (e.g. QuotedStr); coerce to
+    plain JSON-friendly scalars/lists so the client renders them as Obsidian properties."""
+    def coerce(v):
+        if isinstance(v, (list, tuple)):
+            return [coerce(x) for x in v]
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            return v
+        return str(v)
+    return {str(k): coerce(v) for k, v in fm.items()}
 
 
 @router.get("/artifacts")

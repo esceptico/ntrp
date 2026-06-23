@@ -28,6 +28,7 @@ import {
   MetaGrid,
   PaneShell,
   Pill,
+  Properties,
   relativeTime,
 } from "./shared";
 
@@ -883,6 +884,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
             <DetailPlaceholder>Loading artifact…</DetailPlaceholder>
           ) : (
             <WikiLinkContext.Provider value={wikiHandlers}>
+              <Properties frontmatter={active.frontmatter} />
               <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
               <TimelineDisclosure timeline={active.timeline} />
             </WikiLinkContext.Provider>
@@ -892,9 +894,6 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       meta={
         <MetaGrid
           rows={[
-            { label: "Kind", value: kindLabel(active.kind) },
-            { label: "Scope", value: scopeLabel(active.scope) },
-            { label: "Updated", value: relativeTime(active.updated_at) },
             active.record_count !== null && { label: "Records", value: String(active.record_count) },
             !!active.source && { label: "Source", value: active.source! },
             !active.editable && { label: "Access", value: "read-only" },

@@ -28,7 +28,7 @@ import sqlite3
 import stat
 import textwrap
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -665,6 +665,7 @@ class MemoryArtifact:
     labels: tuple[str, ...] = ()
     source: str | None = None
     timeline: tuple = ()  # parsed timeline atoms (read_artifact only; () in list view)
+    frontmatter: dict = field(default_factory=dict)  # raw YAML properties (read_artifact only)
 
 
 class ArtifactMemoryStore:
@@ -1945,6 +1946,7 @@ class ArtifactMemoryStore:
             labels=tuple(fm.get("labels") or ()),
             source=fm.get("source"),
             timeline=timeline,
+            frontmatter=dict(fm),
         )
 
     def _artifact_meta(self, rel: str, content: str) -> tuple[str, str, str, str | None]:

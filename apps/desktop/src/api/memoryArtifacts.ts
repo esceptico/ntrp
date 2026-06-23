@@ -30,6 +30,7 @@ export interface MemoryArtifact {
     pinned: boolean;
     superseded: boolean;
   }>;
+  frontmatter?: Record<string, string | number | boolean | null | Array<string | number | boolean | null>>;
 }
 
 export interface MemoryArtifactsResponse {
