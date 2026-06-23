@@ -381,10 +381,13 @@ class FilePageStore:
         return {"entities": len(slugs), "promoted": len(now - existed), "demoted": len(existed - now)}
 
     def _heal_structural_pages(self) -> None:
-        """Repair page identity contamination and normalize structural titles.
-        Idempotent: a `scope_key` belongs only to a project page, so strip it from any
-        non-project page (a project-scoped directive used to stamp it onto the global
-        directives.md); and give the fixed root pages canonical, properly-cased titles."""
+        """Repair page identity contamination, normalize structural titles, and keep
+        Obsidian wikilinks resolvable. Idempotent: a `scope_key` belongs only to a
+        project page, so strip it from any non-project page (a project-scoped directive
+        used to stamp it onto the global directives.md); give the fixed root pages
+        canonical, properly-cased titles; and ensure each page's human title is in its
+        `aliases` so prose `[[Title]]` links resolve to the dash-slug filename in
+        Obsidian (preserving any aliases the user added in the vault)."""
         for path, page in self._pages.items():
             rel = path.relative_to(self._root)
             changed = False
@@ -394,6 +397,14 @@ class FilePageStore:
             if want and page.frontmatter.get("title") != want:
                 page.frontmatter["title"] = want
                 changed = True
+            title = page.frontmatter.get("title")
+            if title and title != rel.stem:
+                aliases = page.frontmatter.get("aliases") or []
+                if isinstance(aliases, str):
+                    aliases = [aliases]
+                if title not in aliases:
+                    page.frontmatter["aliases"] = [*aliases, title]
+                    changed = True
             if changed:
                 self._persist(path)
 
@@ -528,7 +539,11 @@ class FilePageStore:
                 rel = path
             page_type = {"entities": "entity", "projects": "project"}.get(rel.parts[0], "topic") if len(rel.parts) > 1 else "topic"
             canonical = _STRUCTURAL_TITLES.get(rel.name) if len(rel.parts) == 1 else None
-            page = Page(frontmatter={"type": page_type, "title": title or canonical or path.stem, "updated": now_iso()[:10]})
+            resolved = title or canonical or path.stem
+            fm = {"type": page_type, "title": resolved, "updated": now_iso()[:10]}
+            if resolved != path.stem:
+                fm["aliases"] = [resolved]  # Obsidian wikilink target: [[Title]] -> <slug>.md
+            page = Page(frontmatter=fm)
             self._pages[path] = page
         return page
 
@@ -1092,9 +1107,18 @@ if __name__ == "__main__":
                 dpage = st._pages[Path(d2) / _DIRECTIVES]
                 assert dpage.frontmatter["title"] == "Directives", dpage.frontmatter
                 assert "scope_key" not in dpage.frontmatter, "project scope must not leak onto directives.md"
+                # multi-word entity title gets an Obsidian alias so [[Interaction Lab]]
+                # resolves to the dash-slug file interaction-lab.md.
+                e1 = await st.add("Lab note one.", kind="fact", source_ref=SourceRef("user", ""))
+                await st.set_labels(e1.id, [], entity_labels=["Interaction Lab"])
+                e2 = await st.add("Lab note two.", kind="fact", source_ref=SourceRef("user", ""))
+                await st.set_labels(e2.id, [], entity_labels=["Interaction Lab"])
+                lab = st._pages[Path(d2) / "entities" / "interaction-lab.md"]
+                assert lab.frontmatter.get("aliases") == ["Interaction Lab"], lab.frontmatter
                 reopened = FilePageStore(Path(d2))
                 await reopened.open()  # heal is idempotent + repairs any prior contamination
                 assert reopened._pages[Path(d2) / _DIRECTIVES].frontmatter["title"] == "Directives"
+                assert reopened._pages[Path(d2) / "entities" / "interaction-lab.md"].frontmatter["aliases"] == ["Interaction Lab"]
             print("file_store.py self-check OK")
 
     async def _demo_vec():
