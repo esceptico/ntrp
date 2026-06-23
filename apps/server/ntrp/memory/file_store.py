@@ -25,7 +25,7 @@ from uuid import uuid4
 from ntrp.constants import MEMORY_MIN_ENTITY_RECORDS, RRF_K
 from ntrp.database import serialize_embedding
 from ntrp.logging import get_logger
-from ntrp.memory.models import Kind, Record, SourceRef, now_iso
+from ntrp.memory.models import TRUST_DEFAULT, TRUST_LEVEL, Kind, Record, SourceRef, now_iso
 from ntrp.memory.pages import Line, Page, parse_page, render_page
 from ntrp.memory.scorer import salience
 from ntrp.search.retrieval import rrf_merge
@@ -52,7 +52,7 @@ _STRUCTURAL_TITLES = {
     "active-work.md": "Active work",
 }
 
-_CONVENTIONS = """\
+_CONVENTIONS_TEMPLATE = """\
 # Memory conventions (AGENTS.md)
 
 This directory is a personal memory wiki — plain markdown, the single source of
@@ -94,7 +94,67 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 
 Navigation is the file tree itself — the desktop file browser, Obsidian's explorer,
 or the agent's memory_tree tool. There is no generated index file.
+
+## Source trust
+When sources conflict, the higher-trust source wins — update the claim in place. A
+lower-trust source never overrides a higher one. Integration- and dream-sourced claims
+are phrased tentatively; never launder them into user-stated confidence.
+
+| trust | source | how to treat it |
+|-------|--------|-----------------|
+{trust_rows}
+
+## Grounding
+Cite only real record ids you were given — never invent, reformat, or guess one. Assert
+only what the cited records support; bring in no outside knowledge. On conflict between
+records: directive > fact > source. Pinned records are never dropped; changelog records
+are ignored for synthesis. Never leak a record id or file path into user-facing prose.
+Cite dialects: synthesized pages write `(record:<8hex>)`; dream insights write
+`(because of ^id1, ^id2)`.
+
+## Authoring
+Re-read a page before editing it. Update prose IN PLACE — don't append corrections as new
+sentences. Edit the prose ABOVE the sentinel, never the timeline below. Prune stale claims.
+Two learnings channels — not parallel systems: `lessons.md` (the distilled, agent-facing
+playbook) rides the resident profile into every turn; `.maintenance/<automation>-learnings.md`
+holds per-automation operational notes read ONLY by that automation, never shown in chat.
 """
+
+
+def _trust_rows() -> str:
+    """Render the source-trust table FROM models.TRUST_LEVEL so the manual can't drift
+    from the code that enforces it. Descending trust; the default tier (integration/
+    unknown) is synthesized from TRUST_DEFAULT."""
+    notes = {
+        4: "direct statements & corrections — always win",
+        3: "distilled from the user's own conversations",
+        2: "passive signals — verify before acting",
+        1: "inferred cross-domain — hold loosely",
+    }
+    tiers: dict[int, list[str]] = {TRUST_DEFAULT: ["integration:*", "unknown"]}
+    for src, lvl in TRUST_LEVEL.items():
+        tiers.setdefault(lvl, [])
+        if src not in tiers[lvl]:
+            tiers[lvl].append(src)
+    return "\n".join(
+        f"| {lvl} | {', '.join(tiers[lvl])} | {notes.get(lvl, '')} |"
+        for lvl in sorted(tiers, reverse=True)
+    )
+
+
+def _build_conventions() -> str:
+    return _CONVENTIONS_TEMPLATE.replace("{trust_rows}", _trust_rows())
+
+
+_CONVENTIONS = _build_conventions()  # the written AGENTS.md AND what load_conventions() serves
+
+
+def load_conventions() -> str:
+    """The operating manual the maintenance LLM passes prepend as shared context — the
+    same bytes _write_conventions() writes to AGENTS.md (single source of truth)."""
+    return _CONVENTIONS
+
+
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
 
 
@@ -139,8 +199,10 @@ class FilePageStore:
         for path in sorted(self._root.rglob("*.md")):
             # Generated reports live at ROOT only; a nested file like topics/health.md
             # is a real content page (the user's "health" topic), not the generated audit.
-            if ".index" in path.parts or (path.parent == self._root and path.name in _GENERATED_FILES):
-                continue  # .index = throwaway; root index.md/AGENTS.md/health.md = generated
+            # .maintenance/ holds per-automation learnings sidecars — never record pages
+            # (rglob DOES descend dotdirs, so this filter is mandatory).
+            if {".index", ".maintenance"} & set(path.parts) or (path.parent == self._root and path.name in _GENERATED_FILES):
+                continue  # .index/.maintenance = throwaway; root index.md/AGENTS.md/health.md = generated
             try:
                 page = parse_page(path.read_text(encoding="utf-8"))
             except Exception:

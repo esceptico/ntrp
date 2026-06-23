@@ -60,8 +60,9 @@ async def test_dream_connects_observations_to_facts(tmp_path: Path):
     listed = {r.id for r in await store.list(scopes=None, limit=None)}
     assert obs.id in listed and fact.id in listed
 
-    out = await run_dream(store, DreamLLM(obs.id, fact.id), "memory-model")
+    out, learnings = await run_dream(store, DreamLLM(obs.id, fact.id), "memory-model")
     assert "insights written" in out and "skipped" not in out, out
+    assert isinstance(learnings, list)
 
     # An insight was authored (src:dreamer), connecting the observation + the fact.
     dreamed = [r for r in await store.list(scopes=None, limit=None) if r.source_ref and r.source_ref.kind == "dreamer"]

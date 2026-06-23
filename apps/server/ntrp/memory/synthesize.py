@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ntrp.logging import get_logger
 from ntrp.memory import prompts_synthesis as ps
-from ntrp.memory.file_store import _slug
+from ntrp.memory.file_store import _slug, load_conventions
 from ntrp.memory.models import Record, now_iso
 from ntrp.memory.project_names import resolve_project_title
 
@@ -28,7 +28,7 @@ DAILY_RECENT_DAYS = 7  # regenerate daily logs for this trailing window; older d
 DAILY_MIN_RECORDS = 2  # a day with fewer meaningful records gets no page
 PROFILE_RECORD_CAP = 80
 REGRESSION_FLOOR = 0.60  # reject a re-synthesis that drops below 60% of prior size/cites (anti-collapse)
-_SKIP_DIRS = {"changelog", "context", "facts", ".index", "sources", "insights"}
+_SKIP_DIRS = {"changelog", "context", "facts", ".index", ".maintenance", "sources", "insights"}
 _SKIP_NAMES = {"directives.md", "references.md", "lessons.md", "needs-triage.md", "inbox.md", "index.md", "README.md", "AGENTS.md", "health.md"}
 _WIKILINK_RE = re.compile(r"\[\[([^\]#|]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]")
 
@@ -66,6 +66,12 @@ async def _complete(llm, model, system, user, effort) -> str | None:
         return None
     content = resp.choices[0].message.content if resp.choices else None
     return content.strip() if content and content.strip() else None
+
+
+def _pre(system: str, conventions: str) -> str:
+    """Prepend the shared operating manual as a static cacheable block ahead of the
+    tuned task system prompt (additive — the task prompt is never altered)."""
+    return f"<operating_manual>\n{conventions}\n</operating_manual>\n\n{system}" if conventions else system
 
 
 def _provenance_ok(text: str, allowed: set[str]) -> bool:
@@ -173,7 +179,7 @@ def _rename_project_pages(store) -> None:
 # -- per-page synthesizers -----------------------------------------------------
 
 
-async def _synth_profile(store, labels, llm, model, effort) -> str | None:
+async def _synth_profile(store, labels, llm, model, effort, conventions: str = "") -> str | None:
     rows = await store.list(limit=None, scopes=None)
     directives = [r for r in rows if r.kind == "directive"]
     facts = [
@@ -195,13 +201,13 @@ async def _synth_profile(store, labels, llm, model, effort) -> str | None:
     sel = sel[:PROFILE_RECORD_CAP]
     known = _known_titles(store)
     user = ps.profile_user_message(sel, _flat(labels, sel), known_subjects=known)
-    out = await _complete(llm, model, ps.PROFILE_SYSTEM, user, effort)
+    out = await _complete(llm, model, _pre(ps.PROFILE_SYSTEM, conventions), user, effort)
     if not out or not _provenance_ok(out, {r.id for r in sel}):
         return None
     return _strip_unknown_wikilinks(out, known).rstrip()
 
 
-async def _synth_dossier(store, path, labels, llm, model, effort) -> str | None:
+async def _synth_dossier(store, path, labels, llm, model, effort, conventions: str = "") -> str | None:
     page = store._pages[path]
     rows = [store._to_record(ln, path) for ln in page.active_lines() if ln.src != "dreamer"]
     if page.frontmatter.get("scope_key"):  # a project page (now in topics/) — resolve human name
@@ -210,7 +216,7 @@ async def _synth_dossier(store, path, labels, llm, model, effort) -> str | None:
         title = str(page.frontmatter.get("title") or path.stem)
     ordered = sorted(rows, key=lambda r: r.last_confirmed_at, reverse=True)
     user = ps.dossier_user_message(title, ordered, _known_titles(store), _flat(labels, ordered))
-    out = await _complete(llm, model, ps.DOSSIER_SYSTEM, user, effort)
+    out = await _complete(llm, model, _pre(ps.DOSSIER_SYSTEM, conventions), user, effort)
     if not out or out.strip() == ps.INSUFFICIENT_DOSSIER:
         return None
     if not _provenance_ok(out, {r.id for r in ordered}):
@@ -218,7 +224,7 @@ async def _synth_dossier(store, path, labels, llm, model, effort) -> str | None:
     return out.rstrip()
 
 
-async def _synth_active_work(store, labels, llm, model, effort) -> str | None:
+async def _synth_active_work(store, labels, llm, model, effort, conventions: str = "") -> str | None:
     rows = await store.list(limit=None, scopes=None)
     cutoff = (datetime.now(UTC) - timedelta(days=ACTIVE_WORK_RECENT_DAYS)).isoformat()
     recent = [
@@ -231,7 +237,7 @@ async def _synth_active_work(store, labels, llm, model, effort) -> str | None:
     if not recent and not project:
         return None
     user = ps.active_work_user_message(recent, project, _flat(labels, [*recent, *project]))
-    out = await _complete(llm, model, ps.ACTIVE_WORK_SYSTEM, user, effort)
+    out = await _complete(llm, model, _pre(ps.ACTIVE_WORK_SYSTEM, conventions), user, effort)
     if not out:
         return None
     if out.strip() == ps.NO_ACTIVE_WORK:
@@ -241,7 +247,7 @@ async def _synth_active_work(store, labels, llm, model, effort) -> str | None:
     return out.rstrip()
 
 
-async def _synth_overview(store, path, labels, llm, model, effort) -> str | None:
+async def _synth_overview(store, path, labels, llm, model, effort, conventions: str = "") -> str | None:
     """Integration-source overview (the dex-style SOP): synthesize the raw
     observation stream on observations/<source>.md into a 'what's here / patterns'
     map, written into the page's prose zone above the timeline."""
@@ -251,7 +257,7 @@ async def _synth_overview(store, path, labels, llm, model, effort) -> str | None
         return None
     ordered = sorted(rows, key=lambda r: r.last_confirmed_at, reverse=True)
     user = ps.overview_user_message(path.stem, ordered, _flat(labels, ordered))
-    out = await _complete(llm, model, ps.OVERVIEW_SYSTEM, user, effort)
+    out = await _complete(llm, model, _pre(ps.OVERVIEW_SYSTEM, conventions), user, effort)
     if not out or out.strip() == ps.NO_OVERVIEW:
         return None
     if not _provenance_ok(out, {r.id for r in ordered}):
@@ -276,14 +282,14 @@ def _daily_records(store, day: str) -> list:
     return out
 
 
-async def _synth_daily(store, path, labels, llm, model, effort) -> str | None:
+async def _synth_daily(store, path, labels, llm, model, effort, conventions: str = "") -> str | None:
     day = path.stem
     recs = _daily_records(store, day)
     if len(recs) < DAILY_MIN_RECORDS:
         return None
     recs.sort(key=lambda r: r.last_confirmed_at)
     user = ps.daily_user_message(day, recs, _flat(labels, recs))
-    out = await _complete(llm, model, ps.DAILY_SYSTEM, user, effort)
+    out = await _complete(llm, model, _pre(ps.DAILY_SYSTEM, conventions), user, effort)
     if not out or out.strip() == ps.NO_DAILY:
         return None
     if not _provenance_ok(out, {r.id for r in recs}):
@@ -297,6 +303,7 @@ async def _synth_daily(store, path, labels, llm, model, effort) -> str | None:
 async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None = None) -> str:
     if llm is None or not model:
         return "synthesis skipped: no memory model configured"
+    conventions = load_conventions()  # shared operating manual, prepended to every pass (additive)
     _rename_project_pages(store)  # fix opaque names + titles BEFORE synth so cites/links use the human name
     # active-work.md is a cross-cutting thread with no timeline of its own — ensure
     # the page exists so the loop synthesizes it (the synthesizer pulls from across
@@ -326,15 +333,15 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         if not force and not _stale(page):
             continue
         if kind == "profile":
-            prose = await _synth_profile(store, labels, llm, model, reasoning_effort)
+            prose = await _synth_profile(store, labels, llm, model, reasoning_effort, conventions)
         elif kind == "active_work":
-            prose = await _synth_active_work(store, labels, llm, model, reasoning_effort)
+            prose = await _synth_active_work(store, labels, llm, model, reasoning_effort, conventions)
         elif kind == "daily":
-            prose = await _synth_daily(store, path, labels, llm, model, reasoning_effort)
+            prose = await _synth_daily(store, path, labels, llm, model, reasoning_effort, conventions)
         elif kind == "overview":
-            prose = await _synth_overview(store, path, labels, llm, model, reasoning_effort)
+            prose = await _synth_overview(store, path, labels, llm, model, reasoning_effort, conventions)
         else:
-            prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort)
+            prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort, conventions)
         if prose is None:
             continue
         # Sentinels are deliberate short strings — exempt from the regression guard.

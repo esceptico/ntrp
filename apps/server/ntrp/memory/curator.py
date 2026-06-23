@@ -496,8 +496,11 @@ class Curator:
             f"{header}:\n"
             f"{chr(10).join(lines)}"
         )
+        from ntrp.memory.file_store import load_conventions
+
         messages = [
-            {"role": "system", "content": _SYSTEM_PROMPT + (_BULK_OVERRIDE if bulk else "")},
+            {"role": "system", "content": f"<operating_manual>\n{load_conventions()}\n</operating_manual>\n\n"
+             + _SYSTEM_PROMPT + (_BULK_OVERRIDE if bulk else "")},
             {"role": "user", "content": user_prompt},
         ]
         try:

@@ -148,10 +148,21 @@ class AutomationRuntime:
             if knowledge is None or not knowledge.memory_ready:
                 return "memory dream unavailable (memory not ready)"
             from ntrp.memory.dreamer import run_dream
+            from ntrp.memory.file_store import load_conventions
+            from ntrp.memory.maintenance import append_learnings, read_learnings
+            from ntrp.memory.models import now_iso
 
             llm, model = knowledge._memory_llm()
             effort = knowledge._memory_reasoning_effort(knowledge.config.memory_model)
-            return await run_dream(knowledge.record_store, llm, model, reasoning_effort=effort)
+            # B: per-automation continual learning — read prior gotchas, append new ones.
+            root = knowledge.record_store._root
+            learnings = read_learnings(root, "memory_dream")
+            summary, new = await run_dream(
+                knowledge.record_store, llm, model, reasoning_effort=effort,
+                conventions=load_conventions(), learnings=learnings,
+            )
+            append_learnings(root, "memory_dream", new, date=now_iso())
+            return summary
 
         return handler
 

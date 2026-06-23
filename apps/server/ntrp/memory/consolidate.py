@@ -197,8 +197,10 @@ class Consolidate:
             )
             for r in hood
         )
+        from ntrp.memory.file_store import load_conventions
+
         messages = [
-            {"role": "system", "content": LINT_RUBRIC},
+            {"role": "system", "content": f"<operating_manual>\n{load_conventions()}\n</operating_manual>\n\n" + LINT_RUBRIC},
             {"role": "user", "content": f"NEIGHBORHOOD:\n{cards}"},
         ]
         try:
@@ -352,9 +354,11 @@ class Consolidate:
         return True
 
     async def _judge_labels(self, labels: list[dict]) -> LabelOps | None:
+        from ntrp.memory.file_store import load_conventions
+
         listing = "\n".join(f"{entry['label']}: {entry['count']} [{entry['kind']}]" for entry in labels)
         messages = [
-            {"role": "system", "content": LABEL_HYGIENE_RUBRIC},
+            {"role": "system", "content": f"<operating_manual>\n{load_conventions()}\n</operating_manual>\n\n" + LABEL_HYGIENE_RUBRIC},
             {"role": "user", "content": f"VOCABULARY (label: active records):\n{listing}"},
         ]
         try:

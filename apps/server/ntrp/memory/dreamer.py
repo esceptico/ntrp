@@ -41,8 +41,27 @@ _INSIGHTS_SYSTEM = (
     "from DIFFERENT topics. Do not restate a single line. Do not speculate beyond the evidence.\n"
     "Format EXACTLY one insight per line:\n"
     "<insight sentence> (because of ^id1, ^id2)\n"
-    "If nothing genuinely cross-domain emerges, output NOTHING."
+    "If nothing genuinely cross-domain emerges, output NOTHING.\n"
+    "After the insights, on a FINAL separate line, you MAY emit "
+    "`LEARNINGS: <one short factual gotcha about THIS run>` (e.g. evidence too thin to "
+    "bridge two domains, or a source that keeps surfacing noise). Omit the line entirely "
+    "if nothing notable."
 )
+
+
+def _with_preamble(system: str, conventions: str | None, learnings: str | None) -> str:
+    """Prepend the shared operating manual (static, cacheable) then any prior-run
+    learnings (volatile) ahead of the task system prompt."""
+    parts: list[str] = []
+    if conventions:
+        parts.append(f"<operating_manual>\n{conventions}\n</operating_manual>")
+    if learnings:
+        parts.append(
+            "<learnings>\nOperational gotchas from prior dream runs — avoid repeating these:\n"
+            f"{learnings}\n</learnings>"
+        )
+    parts.append(system)
+    return "\n\n".join(parts)
 
 _CITE_RE = re.compile(r"\^?\b[0-9a-f]{6,}\b")
 
@@ -62,13 +81,18 @@ async def _build_catalog(store) -> list:
     return durable + observations
 
 
-async def run_dream(store, llm, model: str, *, reasoning_effort: str | None = None) -> str:
+async def run_dream(
+    store, llm, model: str, *, reasoning_effort: str | None = None,
+    conventions: str | None = None, learnings: str | None = None,
+) -> tuple[str, list[str]]:
+    """Returns (summary, new_learnings). new_learnings are operational gotchas the run
+    surfaced (for the handler to append to .maintenance/) — NEVER ingested as records."""
     if llm is None or not model:
-        return "dream skipped: no memory model configured"
+        return ("dream skipped: no memory model configured", [])
 
     recent = await _build_catalog(store)
     if len(recent) < MIN_RECORDS:
-        return f"dream skipped: only {len(recent)} non-insight records"
+        return (f"dream skipped: only {len(recent)} non-insight records", [])
 
     def _page(rid: str) -> str:
         path = store._loc.get(rid)
@@ -77,25 +101,38 @@ async def run_dream(store, llm, model: str, *, reasoning_effort: str | None = No
     catalog = "\n".join(f"- ^{r.id} [{_page(r.id)}] {r.text}" for r in recent)
 
     questions = await _ask(
-        llm, model, reasoning_effort, _QUESTIONS_SYSTEM, f"MEMORY CATALOG:\n{catalog}", "memory.dream.questions"
+        llm, model, reasoning_effort, _with_preamble(_QUESTIONS_SYSTEM, conventions, None),
+        f"MEMORY CATALOG:\n{catalog}", "memory.dream.questions",
     )
     qs = [q.strip("-• ").strip() for q in (questions or "").splitlines() if q.strip()][:3]
     if not qs:
-        return "dream produced no questions"
+        return ("dream produced no questions", [])
 
     seen: dict[str, str] = {}
     for q in qs:
         for hit in await store.search(q, limit=EVIDENCE_PER_Q, scopes=None):
             seen[hit.id] = f"- ^{hit.id} [{_page(hit.id)}] {hit.text}"
     if len(seen) < 2:
-        return "dream found too little evidence"
+        return ("dream found too little evidence", [])
     evidence = "\n".join(seen.values())
 
     raw = await _ask(
-        llm, model, reasoning_effort, _INSIGHTS_SYSTEM,
+        llm, model, reasoning_effort, _with_preamble(_INSIGHTS_SYSTEM, conventions, learnings),
         f"QUESTIONS:\n" + "\n".join(qs) + f"\n\nEVIDENCE:\n{evidence}", "memory.dream.insights",
     )
     insight_lines = [ln.strip("-• ").strip() for ln in (raw or "").splitlines() if ln.strip()]
+
+    # Partition out any LEARNINGS: trailer BEFORE the ingest loop — a learnings gotcha
+    # must never become a Kind.FACT insight (the loop writes every cited line).
+    learnings_out: list[str] = []
+    kept: list[str] = []
+    for ln in insight_lines:
+        m = re.match(r"(?i)^learnings:\s*(.+)$", ln)
+        if m:
+            learnings_out.append(m.group(1).strip())
+        else:
+            kept.append(ln)
+    insight_lines = kept
 
     written = 0
     today = now_iso()
@@ -114,7 +151,7 @@ async def run_dream(store, llm, model: str, *, reasoning_effort: str | None = No
 
     msg = f"dream: {len(qs)} questions, {len(seen)} evidence, {written} insights written"
     _logger.info(msg)
-    return msg
+    return (msg, learnings_out)
 
 
 async def _ask(llm, model, effort, system: str, user: str, name: str) -> str | None:
