@@ -41,7 +41,7 @@ class FakeLLM:
         first = _first_id(user)
         if system.startswith("You write `me.md`"):
             return f"# Profile\n\n## Identity\nYou test ntrp memory (record:{first})."
-        if system.startswith("You write a single dossier"):
+        if system.startswith("You write a single topic page"):
             title = user.split("\n", 1)[0].removeprefix("Subject: ").strip()
             return f"# {title}\n\n## What we know\n{title} is a synthesized subject (record:{first})."
         if system.startswith("You write `active-work.md`"):
@@ -126,7 +126,7 @@ async def test_fabricated_citation_falls_back_to_mechanical(tmp_path: Path):
 
     # Cite an id we never handed the model -> provenance check fails -> mechanical.
     def liar(system: str, user: str) -> str:
-        if system.startswith("You write a single dossier"):
+        if system.startswith("You write a single topic page"):
             return "# Regina\n\n## What we know\nFabricated (record:deadbeef)."
         return FakeLLM()._default(system, user)
 
@@ -145,7 +145,7 @@ async def test_insufficient_sentinel_falls_back_to_mechanical(tmp_path: Path):
     store = ArtifactMemoryStore(tmp_path / "artifacts")
 
     def gate_fail(system: str, user: str) -> str:
-        if system.startswith("You write a single dossier"):
+        if system.startswith("You write a single topic page"):
             return prompts_synthesis.INSUFFICIENT_DOSSIER
         return FakeLLM()._default(system, user)
 
@@ -241,7 +241,7 @@ async def test_quoted_record_token_does_not_reject_valid_page(tmp_path: Path):
     # phrasing. The quoted token must be ignored by the provenance check.
     def quoter(system: str, user: str) -> str:
         first = _first_id(user)
-        if system.startswith("You write a single dossier"):
+        if system.startswith("You write a single topic page"):
             return f"# Regina\n\nReverted commit record:65c334bf during the rebuild (record:{first})."
         return FakeLLM()._default(system, user)
 

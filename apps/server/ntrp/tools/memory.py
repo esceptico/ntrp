@@ -198,7 +198,8 @@ def _preferred_artifact_match(paths: list[str], slug: str) -> str | None:
     if len(unique) == 1:
         return next(iter(unique))
     for candidate in (
-        f"entities/{slug}.md",
+        f"topics/{slug}.md",
+        f"entities/{slug}.md",  # legacy fallback (pre-unification leftovers)
         f"projects/{slug}.md",
         f"context/integrations/{slug}.md",
     ):
@@ -624,7 +625,7 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
 
 
 def _entity_brief_nudge(query: str) -> str | None:
-    """If the query slug matches an existing compiled entity dossier, point the
+    """If the query slug matches an existing compiled topic page, point the
     agent at it. Read-only filesystem probe; never raises into the recall path."""
     from ntrp.memory.artifacts import _slug
 
@@ -632,8 +633,8 @@ def _entity_brief_nudge(query: str) -> str | None:
     if not slug:
         return None
     try:
-        if (get_config().memory_artifacts_dir / "entities" / f"{slug}.md").is_file():
-            return f'_Compiled brief: memory_read("entities/{slug}.md")_'
+        if (get_config().memory_artifacts_dir / "topics" / f"{slug}.md").is_file():
+            return f'_Compiled brief: memory_read("topics/{slug}.md")_'
     except Exception:
         return None
     return None
@@ -641,9 +642,10 @@ def _entity_brief_nudge(query: str) -> str | None:
 
 
 _MEMORY_FS_DESCRIPTION = (
-    "Use recall for DB-backed facts/atomic records; use memory_tree/read/search for generated "
-    "dossiers/context/source docs; memory_patch edits filesystem projection files only and does "
-    "not mutate canonical DB records."
+    "The memory wiki is plain markdown: me.md (profile), directives.md, topics/<slug>.md "
+    "(one page per subject — people, products, projects), observations/, insights/, daily/. "
+    "index.md is the file-tree map of the wiki. Use recall for atomic facts; use memory_tree "
+    "for the live tree (or read index.md) then memory_read a page by path/title to go deep."
 )
 
 memory_tree_tool = tool(

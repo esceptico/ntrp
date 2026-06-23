@@ -11,7 +11,7 @@ not a `(from slack)`-style source tag. The model may cite ONLY the ids it was
 given, and may assert ONLY what those records support.
 
   - PROFILE_SYSTEM     -> me.md
-  - DOSSIER_SYSTEM     -> entities/<subject>.md, projects/<subject>.md
+  - DOSSIER_SYSTEM     -> topics/<subject>.md  (one page per subject)
   - ACTIVE_WORK_SYSTEM -> active-work.md
 
 Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog.
@@ -198,11 +198,11 @@ with a one-line note on the relationship. Only those the records actually
 establish; cite each.
 ```
 
-You are also given `known_subjects`: the exact titles of generated dossier pages
-that exist elsewhere in the wiki. In `Key relationships / tools`, link ONLY
-those exact titles with `[[Title]]`. If a person/tool/system is record-backed
-but not in `known_subjects`, write it as plain text. Never imply a separate page
-exists for a non-dossier item.
+You are also given `known_subjects`: the exact titles of topic pages that exist
+elsewhere in the wiki. In `Key relationships / tools`, link ONLY those exact
+titles with `[[Title]]`. If a person/tool/system is record-backed but not in
+`known_subjects`, write it as plain text. Never imply a separate page exists for
+a subject that has none.
 
 Keep the whole page tight — this is a briefing, not a biography. If two records
 say the same thing, merge them into one cited statement. Lead each section with
@@ -232,12 +232,12 @@ def profile_user_message(
 
 
 # ===========================================================================
-# 2) DOSSIER  ->  entities/<subject>.md, projects/<subject>.md
+# 2) DOSSIER_SYSTEM  ->  topics/<subject>.md  (one page per subject)
 # ===========================================================================
 
 DOSSIER_SYSTEM = "\n\n".join([
     """\
-You write a single dossier page for ONE subject (a person, project, product,
+You write a single topic page for ONE subject (a person, project, product,
 company, place, or named topic) in a personal memory wiki. The page is a durable
 operational briefing on that subject, written from the user's perspective: who
 or what this is to the user, what's known, and what's unresolved.
@@ -298,7 +298,7 @@ def dossier_user_message(
         "<known_subjects>\n"
         f"{known}\n"
         "</known_subjects>\n\n"
-        f'Write the dossier for "{title}". Apply the 3-fact gate first.'
+        f'Write the topic page for "{title}". Apply the 3-fact gate first.'
     )
 
 

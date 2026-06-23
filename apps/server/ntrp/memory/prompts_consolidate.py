@@ -112,10 +112,10 @@ NEVER fold genuinely different things ("health" vs "medication"). When unsure, l
 
 (2) KIND — classify each label that is currently mis-kinded. Emit a reclass op only to
 CHANGE a label's kind.
-- entity = a concrete named SUBJECT worth its own dossier: a person, project, product,
+- entity = a concrete named SUBJECT worth its own topic page: a person, project, product,
   company, place, or named topic the user actually cares about
   (e.g. "Dex", "ntrp", "Health", "O-1A Visa", "Obsidian", "Memory design").
-- meta = a process/status/category tag that is NOT a subject and must NOT get a dossier
+- meta = a process/status/category tag that is NOT a subject and must NOT get a topic page
   (e.g. "Bug", "Server", "Tools", "Approval required", "Aside", "Audit", "Application",
   "UI/UX", "Read-only", "Research request").
 Rule of thumb: if "What do we know about <label>?" reads as a sensible question about a
