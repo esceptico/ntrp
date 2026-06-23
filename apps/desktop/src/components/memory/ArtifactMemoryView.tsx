@@ -63,6 +63,12 @@ function stripCites(s: string): string {
   return s.replace(_CITE_RE, "");
 }
 
+// The detail header already shows the page title, so a leading `# Title` H1 in the
+// body just double-prints it (index.md, health.md, topic pages). Drop it for the view.
+function stripLeadingH1(s: string): string {
+  return s.replace(/^\s*#\s+.*\r?\n+/, "");
+}
+
 function TimelineDisclosure({ timeline }: { timeline?: MemoryArtifact["timeline"] }) {
   const records = (timeline ?? []).filter((l) => !l.superseded);
   const supersededCount = (timeline ?? []).length - records.length;
@@ -120,8 +126,9 @@ function addNode(parent: TreeNode, parts: string[], artifact: MemoryArtifact, pa
 function buildArtifactTree(artifacts: MemoryArtifact[]) {
   const root: TreeNode = { name: "root", path: "", kind: "directory", children: [] };
   for (const artifact of artifacts) {
-    const parts = artifact.path.includes("/") ? artifact.path.split("/") : ["memory", artifact.path];
-    addNode(root, parts, artifact);
+    // Root files (me.md, index.md, …) live AT the vault root — render them at the top
+    // level alongside the real folders (daily/, topics/, …), not under a fake "memory" dir.
+    addNode(root, artifact.path.split("/"), artifact);
   }
   const sortRec = (node: TreeNode) => {
     node.children.sort(directorySort);
@@ -876,7 +883,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
             <DetailPlaceholder>Loading artifact…</DetailPlaceholder>
           ) : (
             <WikiLinkContext.Provider value={wikiHandlers}>
-              <Markdown content={stripCites(active.content)} className="max-w-none" />
+              <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
               <TimelineDisclosure timeline={active.timeline} />
             </WikiLinkContext.Provider>
           )}
