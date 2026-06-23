@@ -398,12 +398,16 @@ def _artifact_editable(rel: str, content: str) -> bool:
 
 
 def _readonly_reason(rel: str, kind: str, generated: bool) -> str | None:
+    if rel == "AGENTS.md":
+        return "Conventions doc — regenerated on load."
+    if rel == "health.md":
+        return "Self-audit — regenerated on load from the current pages."
     if rel == "facts/index.md":
         return "Generated from DB records; use recall/record tools for facts."
     if rel.startswith("changelog/"):
         return "Generated audit log; append events through memory tools."
     if generated:
-        return "Generated from DB records; edit canonical records via memory tools."
+        return "Synthesized prose above the timeline — edits are overwritten; change the records below."
     return None
 
 
