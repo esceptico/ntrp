@@ -110,7 +110,7 @@ export function ListColumn<T>({
         )}
       </div>
       {totalLabel && (
-        <div className="px-4 py-2 text-xs text-faint tabular-nums">{totalLabel}</div>
+        <div className="px-4 py-2 text-xs text-muted tabular-nums">{totalLabel}</div>
       )}
     </>
   );
@@ -251,7 +251,7 @@ function EmptyState({ icon: Icon = Inbox, children, hint, action, className }: E
           <Icon size={22} strokeWidth={1.75} />
         </div>
         <div className="text-sm text-muted">{children}</div>
-        {hint && <div className="text-xs text-faint">{hint}</div>}
+        {hint && <div className="text-xs text-muted">{hint}</div>}
         {action && <div className="mt-1">{action}</div>}
       </div>
     </div>

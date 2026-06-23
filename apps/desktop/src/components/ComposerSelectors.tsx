@@ -130,7 +130,7 @@ export function ModelReasoningPicker({
         {efforts.length > 0 && (
           <>
             <span className="composer-effort-separator text-whisper">·</span>
-            <span className="text-faint">{currentEffort ?? "off"}</span>
+            <span className="text-muted">{currentEffort ?? "off"}</span>
           </>
         )}
         <ChevronDown size={ICON.SM} strokeWidth={2} className="shrink-0 opacity-70" />
@@ -186,7 +186,7 @@ export function ModelReasoningPicker({
             />
             <div className="max-h-[260px] overflow-y-auto scroll-thin py-1">
               {filteredGroups.length === 0 && (
-                <div className="px-3 py-2 text-sm text-faint italic">No matches.</div>
+                <div className="px-3 py-2 text-sm text-muted italic">No matches.</div>
               )}
               {filteredGroups.map((g) => (
                 <div key={g.provider}>
@@ -214,7 +214,7 @@ export function ModelReasoningPicker({
                         </span>
                         <span className="min-w-0 flex-1 truncate">{m}</span>
                         {savedEffort && (
-                          <span className="shrink-0 text-xs font-sans text-faint">
+                          <span className="shrink-0 text-xs font-sans text-muted">
                             {savedEffort}
                           </span>
                         )}

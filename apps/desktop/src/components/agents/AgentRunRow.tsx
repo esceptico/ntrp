@@ -310,7 +310,7 @@ export function AgentRunContent({
             {run.recentStatuses && !paused && <StatusSparkline statuses={run.recentStatuses} />}
             <StatusDot status={dotStatus} pulse={running} />
             {run.elapsedLabel && (
-              <span className="text-2xs tabular-nums text-faint">{run.elapsedLabel}</span>
+              <span className="text-2xs tabular-nums text-muted">{run.elapsedLabel}</span>
             )}
           </span>
           {hasLane && (

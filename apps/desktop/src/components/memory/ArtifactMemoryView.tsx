@@ -244,6 +244,7 @@ function TreeSearch({ value, onChange, placeholder }: { value: string; onChange:
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder}
         spellCheck={false}
         className="h-full w-full bg-transparent pl-10 pr-9 text-sm text-ink-soft placeholder:text-muted outline-none"
       />
@@ -288,6 +289,9 @@ function TreeRow({
       <>
         <button
           type="button"
+          role="treeitem"
+          aria-expanded={open}
+          aria-level={depth + 1}
           onClick={() => onToggle(node.path)}
           title={node.name}
           className="group mt-1 flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left transition-colors hover:bg-surface-soft"
@@ -299,7 +303,7 @@ function TreeRow({
           />
           {open ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-faint" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-faint" />}
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-soft group-hover:text-ink">{node.name}</span>
-          <span className="shrink-0 text-2xs tabular-nums text-faint">{countFiles(node)}</span>
+          <span className="shrink-0 text-2xs tabular-nums text-muted">{countFiles(node)}</span>
         </button>
         {/* Snap layout — no height-tween over the recursive subtree. The
             revealed block rises in as one unit (bounded on big folders);
@@ -346,6 +350,8 @@ function TreeRow({
   return (
     <button
       type="button"
+      role="treeitem"
+      aria-level={depth + 1}
       onClick={() => onSelect(a.path)}
       title={`${displayTitle(a)} — ${a.path}`}
       className={clsx(
@@ -708,7 +714,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
             No memory notes yet
           </Empty>
         ) : (
-          <div className="flex flex-col gap-px">
+          <div role="tree" aria-label="Memory notes" className="flex flex-col gap-px">
             {tree.map((node) => (
               <TreeRow
                 key={node.kind === "directory" ? `d:${node.path}` : `f:${node.path}`}
@@ -732,6 +738,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     <select
       value={recordKind}
       onChange={(e) => setRecordKind(e.target.value as MemoryKind | "")}
+      aria-label="Filter by record kind"
       className="h-7 rounded-[10px] bg-surface-soft px-2 text-sm text-ink-soft outline-none"
     >
       <option value="">All kinds</option>
@@ -809,8 +816,10 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
               tone="faint"
               disabled={pinningId === record.id}
               title={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
+              aria-label={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
+              aria-pressed={record.pinned}
               onClick={() => togglePinned(record)}
-              className={clsx("absolute right-1 top-1", record.pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}
+              className={clsx("absolute right-1 top-1 focus-visible:opacity-100", record.pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100")}
             >
               <Pin className="h-3.5 w-3.5" fill={record.pinned ? "currentColor" : "none"} strokeWidth={2} />
             </IconButton>
@@ -823,7 +832,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   // ─── Files detail pane ──────────────────────────────────────────────
   const filesDetail = !active ? (
     loading ? (
-      <DetailPlaceholder>{""}</DetailPlaceholder>
+      <DetailPlaceholder>Loading…</DetailPlaceholder>
     ) : (
       <DetailPlaceholder icon={FileText} hint="Pick a note from the list to read it.">
         Nothing selected

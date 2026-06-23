@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useStore } from "../../../store";
 import {
   type MCPServer,
@@ -11,9 +11,10 @@ import {
   updateMCPServerApi,
 } from "../../../api";
 import { useMutationState } from "../../../lib/hooks";
-import { BlurSwap } from "../../BlurSwap";
 import { SettingsInlineError } from "../SettingsNotice";
+import { SaveStatus } from "../SaveStatus";
 import { ICON } from "../../../lib/icons";
+import { ConfirmDeleteButton } from "../../ui/ConfirmDeleteButton";
 import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
 import { LabeledField } from "../Field";
 import { type KeyVal } from "./editors";
@@ -36,7 +37,7 @@ export function ServerForm({
   onRemoved?: () => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
-  const { busy, error, run } = useMutationState();
+  const { busy, saved, error, run } = useMutationState();
 
   const initialTransport: MCPTransport =
     server?.transport === "http" || server?.transport === "stdio" ? server.transport : "http";
@@ -101,7 +102,6 @@ export function ServerForm({
 
   async function remove() {
     if (!server) return;
-    if (!confirm(`Uninstall MCP server "${server.name}"? This cannot be undone.`)) return;
     await run(async () => {
       await removeMCPServerApi(config, server.name);
       if (onRemoved) await onRemoved();
@@ -121,14 +121,12 @@ export function ServerForm({
           <ArrowLeft size={ICON.SM} strokeWidth={2} /> Back
         </button>
         {mode === "edit" && server && (
-          <button
-            type="button"
-            onClick={() => void remove()}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-          >
-            <Trash2 size={ICON.SM} strokeWidth={2} /> Uninstall
-          </button>
+          <ConfirmDeleteButton
+            label="Uninstall"
+            busy={busy}
+            size="md"
+            onConfirm={() => void remove()}
+          />
         )}
       </div>
 
@@ -165,7 +163,7 @@ export function ServerForm({
         )}
 
         {transportLocked && (
-          <p className="m-0 text-xs text-faint">
+          <p className="m-0 text-xs text-muted">
             To switch transport type, uninstall first.
           </p>
         )}
@@ -203,16 +201,15 @@ export function ServerForm({
 
       {error && <SettingsInlineError title="Couldn't save MCP server" message={error} />}
 
-      <div className="flex justify-end pt-1">
+      <div className="flex items-center justify-end gap-3 pt-1">
+        <SaveStatus busy={busy} saved={saved} />
         <button
           type="button"
           onClick={() => void save()}
           disabled={!valid || busy}
           className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
         >
-          <BlurSwap swapKey={busy ? "saving" : "save"} blur={2}>
-            {busy ? "Saving…" : "Save"}
-          </BlurSwap>
+          Save
         </button>
       </div>
     </div>

@@ -56,7 +56,7 @@ export function ServerRow({
             {server.name}
           </span>
         </div>
-        <div className="mt-0.5 ml-3.5 text-xs text-faint tabular-nums">
+        <div className="mt-0.5 ml-3.5 text-xs text-muted tabular-nums">
           {subtitleParts.join(" · ")}
         </div>
         {(error || (server.error && !needsAuth)) && (

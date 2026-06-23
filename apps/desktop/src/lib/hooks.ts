@@ -112,20 +112,27 @@ export function useEscapeKey(onEscape: () => void, active = true): void {
 
 export interface MutationState {
   busy: boolean;
+  /** Transient flag — true for ~1.5s after a `run` resolves without error.
+   *  Drives the shared "Saved" confirmation (see SaveStatus). */
+  saved: boolean;
   error: string | null;
   run: (fn: () => Promise<void>) => Promise<void>;
 }
 
-/** Shared busy/error state for save+delete handlers. */
+const SAVED_HOLD_MS = 1500;
+
+/** Shared busy/saved/error state for save+delete handlers. */
 export function useMutationState(): MutationState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, fireSaved] = useTimeoutFlag(SAVED_HOLD_MS);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);
     try {
       await fn();
+      fireSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -133,7 +140,7 @@ export function useMutationState(): MutationState {
     }
   }
 
-  return { busy, error, run };
+  return { busy, saved, error, run };
 }
 
 /** Forces a re-render every `intervalMs` ms. Use to refresh relative-time

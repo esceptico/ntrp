@@ -96,8 +96,8 @@ export function SessionList() {
   const closeMenu = () => setMenu(null);
 
   const renderRow = (session: SessionListItem) => (
+    <div key={session.session_id} role="listitem">
     <SessionRow
-      key={session.session_id}
       sessionId={session.session_id}
       name={session.name ?? null}
       lastActivity={session.last_activity}
@@ -131,6 +131,7 @@ export function SessionList() {
         setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
       }}
     />
+    </div>
   );
 
   const hasFilter = unreadOnly || channelsOnly;
@@ -178,7 +179,7 @@ export function SessionList() {
                     type="button"
                     onClick={() => toggleGroup(group.key)}
                     aria-expanded={!isCollapsed}
-                    className="flex-1 flex items-center gap-1 min-w-0 pl-[18px] pt-1.5 pb-0.5 text-base font-medium text-faint hover:text-ink transition-colors cursor-pointer select-none"
+                    className="flex-1 flex items-center gap-1 min-w-0 pl-[18px] pt-1.5 pb-0.5 text-base font-medium text-muted hover:text-ink transition-colors cursor-pointer select-none"
                   >
                     {group.pinned && (
                       <Pin size={ICON.XS} strokeWidth={2} className="shrink-0 -ml-[2px] mr-0.5 text-faint" />
@@ -217,7 +218,7 @@ export function SessionList() {
                       exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
                       transition={{ duration: MOTION.row, ease: EASE_OUT }}
                     >
-                      <div className="px-2.5 flex flex-col gap-0">
+                      <div role="list" aria-label={group.label} className="px-2.5 flex flex-col gap-0">
                         {head.map(renderRow)}
                         <AnimatePresence initial={false}>
                           {isExpanded && rest.length > 0 && (

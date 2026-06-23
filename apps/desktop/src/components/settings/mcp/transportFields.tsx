@@ -103,7 +103,7 @@ export function HttpFields({
                 valuePlaceholder={hasExistingHeaders ? "•••••• unchanged" : "Value"}
               />
               {hasExistingHeaders && (
-                <p className="mt-1.5 m-0 text-xs text-faint">
+                <p className="mt-1.5 m-0 text-xs text-muted">
                   Existing values are hidden. Leave a value blank to keep it.
                 </p>
               )}

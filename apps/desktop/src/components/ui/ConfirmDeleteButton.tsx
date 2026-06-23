@@ -104,17 +104,17 @@ export function ConfirmDeleteButton({
         "relative inline-flex items-center justify-center overflow-hidden rounded-[6px] font-medium transition-[background-color,color] duration-check ease-out active:scale-[0.96]",
         grown ? sz.grown : sz.idle,
         state === "done"
-          ? "text-emerald-600 bg-emerald-500/10"
+          ? "text-ok bg-ok-soft"
           : counting
-            ? "text-rose-500 bg-rose-500/10"
-            : "text-faint hover:text-rose-500 hover:bg-surface-soft/70",
+            ? "text-bad bg-bad-soft"
+            : "text-faint hover:text-bad hover:bg-surface-soft/70",
         className,
       )}
     >
       {counting && (
         <motion.span
           aria-hidden
-          className="absolute inset-0 origin-left bg-rose-500/20"
+          className="absolute inset-0 origin-left bg-bad/15"
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           transition={{ duration: seconds, ease: "linear" }}

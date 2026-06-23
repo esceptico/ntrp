@@ -93,7 +93,7 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
             ["http", "HTTP", "Connect to a streamable HTTP MCP endpoint."],
           ].map(([id, label, detail]) => (
             <label key={id} className="rounded-md border border-line-soft bg-surface-soft/35 px-3 py-2 text-sm">
-              <input type="radio" className="mr-2" checked={transport === id} onChange={() => setTransport(id as MCPTransport)} />
+              <input type="radio" name="mcp-transport-choice" className="mr-2" checked={transport === id} onChange={() => setTransport(id as MCPTransport)} />
               <span className="font-medium text-ink-soft">{label}</span>
               <span className="block pl-5 text-xs text-muted">{detail}</span>
             </label>

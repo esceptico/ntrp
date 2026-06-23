@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { useStore } from "../../store";
+import { useFocusTrap } from "../../lib/hooks";
 import { SPRING_POPOVER } from "../../lib/tokens/motion";
 import { PaletteBody } from "./PaletteBody";
 import type { Crumb } from "./types";
@@ -16,6 +17,8 @@ export function CommandPalette() {
   // Height-morph is disabled until the panel finishes animating in, so the
   // first content-height settle on open doesn't animate as a bump.
   const [morphReady, setMorphReady] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   // Global Cmd/Ctrl+K toggle + Esc close.
   useEffect(() => {
@@ -57,6 +60,11 @@ export function CommandPalette() {
       onClick={close}
     >
       <motion.div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        tabIndex={-1}
         layout={morphReady}
         className="surface-panel surface-radius-md w-[min(660px,calc(100vw-80px))] max-h-[62vh] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden origin-top"
         transition={{ layout: SPRING_POPOVER }}

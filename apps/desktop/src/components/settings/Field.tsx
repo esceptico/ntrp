@@ -17,16 +17,18 @@ export function Field({
 }) {
   return (
     <div className="grid gap-1">
-      <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        spellCheck={false}
-        autoComplete="off"
-        className="input-field w-full"
-      />
+      <label className="grid gap-1">
+        <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          autoComplete="off"
+          className="input-field w-full"
+        />
+      </label>
       {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
     </div>
   );
@@ -49,17 +51,19 @@ export function NumberField({
   help?: string;
   suffix?: string;
 }) {
+  const id = `numfield-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
         <div className="flex items-baseline gap-1.5">
-          <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
+          <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
           {suffix && <span className="text-xs text-faint">{suffix}</span>}
         </div>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
       <div className="flex items-center gap-2">
         <input
+          id={id}
           type="number"
           value={value}
           min={min}
@@ -93,14 +97,16 @@ export function PercentField({
   max?: number;
 }) {
   const percent = Math.round(value * 100);
+  const id = `pctfield-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <label className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
+        <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
       <div className="relative">
         <input
+          id={id}
           type="number"
           value={percent}
           min={min}
@@ -132,9 +138,9 @@ export function LabeledField({
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-1.5">
+    <div role="group" aria-label={label} className="grid gap-1.5">
       <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
