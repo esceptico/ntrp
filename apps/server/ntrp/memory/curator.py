@@ -5,7 +5,10 @@ watermark, reconciles them against existing similar records (ADD/UPDATE/
 SUPERSEDE/NOOP), and applies the ops — text AND labels — to the flat record
 pool. Labels are open-vocabulary names (referents and categories) decided once
 at write time; the prompt carries the existing vocabulary so names get reused
-instead of re-minted. Writes only directives/facts/sources; no lens write path.
+instead of re-minted. The chat path writes durable directives/facts/sources
+through the worthiness gate; integration items bypass it via store_observations
+(low-trust `observation` records the dream mines), since routine email/events
+aren't durable facts but are the cross-domain texture the dream connects.
 
 The watermark lives in a tiny `meta(key, value)` table the Dreamer OWNS inside
 `config.memory_db_path`. Key form: `curate_watermark:{session_id}`. Anti-heartbeat:
@@ -19,7 +22,7 @@ from pathlib import Path
 
 from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
-from ntrp.memory.models import Record, SourceRef
+from ntrp.memory.models import Kind, Record, SourceRef
 from ntrp.memory.records import RecordStore
 from ntrp.memory.scopes import apply_scope_to_source, scope_for_write
 
@@ -33,6 +36,7 @@ SWEEP_SESSION_LIMIT = 50
 CURATION_BATCH_MAX_TURNS = 40
 CURATION_BATCH_MAX_CHARS = 6_000
 CURATION_TURN_MAX_CHARS = 2_000
+OBSERVATION_MAX_CHARS = 280  # raw integration observations are kept terse (scannable timeline + focused vector)
 CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
@@ -197,6 +201,12 @@ class Curator:
                 continue
             self.schedule_curation(row["session_id"])
             scheduled += 1
+        # Off-hot-path importance backfill: score any unscored lines (file store).
+        if hasattr(self._record_store, "score_pending"):
+            try:
+                await self._record_store.score_pending()
+            except Exception:
+                _logger.warning("score_pending failed", exc_info=True)
         return scheduled
 
     async def curate_session(self, session_id: str) -> bool:
@@ -297,61 +307,31 @@ class Curator:
 
         return {"admitted": admitted, "calls": calls, "capped": capped}
 
-    async def ingest_items(
-        self,
-        items,
-        *,
-        source_kind: str,
-        source_label: str,
-        max_calls: int | None = None,
-        bulk: bool = False,
-    ) -> dict:
-        """Curate a list of source-agnostic RawItems (calendar/gmail/slack docs)
-        through the SAME worthiness gate + reconciliation the chat path uses.
+    async def store_observations(self, items, *, source_kind: str) -> dict:
+        """Land raw integration RawItems (calendar/gmail/slack) as low-trust
+        `observation` records — NO worthiness gate, NO LLM call.
 
-        Each item renders to a `title\\ncontent` line (content truncated to
-        CURATION_TURN_MAX_CHARS, mirroring _flatten_turn). Lines are batched by the
-        SAME bounds as _select_batch (CURATION_BATCH_MAX_TURNS / _CHARS), and each
-        batch is one `_complete` call applied via the existing `_apply_op`. There is
-        NO watermark: /init re-derives the whole window each time.
+        The chat worthiness gate is right for chat (most chatter is noise) but wrong
+        for integrations: a routine email/event/message is not a "durable fact about
+        the user", yet it IS the cross-domain texture the dream connects. So we store
+        the (already noise-filtered) stream verbatim-but-tagged at integration trust;
+        the dream promotes the valuable ones into durable insights and retention ages
+        the rest out (MEMORY_RETENTION_TTL_OBSERVATION_DAYS). The file store routes
+        each to observations/<source>.md by source_ref.kind.
 
-        One SourceRef per batch (`SourceRef(kind=source_kind, ref="{source_kind}:batch")`)
-        — ops don't map 1:1 to items, and scope_for_write only needs source_ref.kind
-        ∈ INTEGRATION_SOURCE_KINDS to route to the integration scope. `max_calls`
-        caps total LLM calls (stop + capped=true). Returns
-        {"admitted", "calls", "capped"}.
-        """
-        lines = [line for item in items if (line := self._render_item(item))]
-        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:batch")
+        Returns {"admitted", "calls", "capped"} like the old gate, so the ingest
+        flow's watermark/accounting is unchanged; calls is always 0 (no LLM)."""
+        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:observation")
         admitted = 0
-        calls = 0
-        capped = False
-
-        idx = 0
-        while idx < len(lines):
-            if max_calls is not None and calls >= max_calls:
-                capped = True
-                break
-            batch, idx = self._take_batch(lines, idx)
-            if not batch:
-                break
-
-            ops = await self._complete(batch, header=source_label, bulk=bulk)
-            calls += 1
-            if ops is None:
-                break
-
-            new_records: list[Record] = []
-            for op in ops:
-                try:
-                    record = await self._apply_op(op, None, source_ref)
-                    if record is not None:
-                        new_records.append(record)
-                except Exception:
-                    _logger.warning("ingest op failed; skipping", op=op.get("op"), exc_info=True)
-            admitted += len(new_records)
-
-        return {"admitted": admitted, "calls": calls, "capped": capped}
+        for item in items:
+            text = self._render_item(item)
+            if not text:
+                continue
+            if len(text) > OBSERVATION_MAX_CHARS:
+                text = text[:OBSERVATION_MAX_CHARS].rstrip()
+            await self._record_store.add(text, kind=Kind.OBSERVATION, source_ref=source_ref)
+            admitted += 1
+        return {"admitted": admitted, "calls": 0, "capped": False}
 
     @staticmethod
     def _render_item(item) -> str:
@@ -363,22 +343,6 @@ class Curator:
             content = content[:CURATION_TURN_MAX_CHARS].rstrip()
         line = "\n".join(part for part in (title, content) if part)
         return line.strip()
-
-    @staticmethod
-    def _take_batch(lines: list[str], start: int) -> tuple[list[str], int]:
-        """Slice `lines[start:]` into one batch under the same bounds as
-        _select_batch. Returns (batch, next_index)."""
-        batch: list[str] = []
-        total_chars = 0
-        idx = start
-        while idx < len(lines):
-            line = lines[idx]
-            if batch and (len(batch) >= CURATION_BATCH_MAX_TURNS or total_chars + len(line) > CURATION_BATCH_MAX_CHARS):
-                break
-            batch.append(line)
-            total_chars += len(line)
-            idx += 1
-        return batch, idx
 
     async def reset_watermarks(self) -> None:
         """/init: clear every per-session curate watermark AND per-source ingest

@@ -10,10 +10,14 @@ from ntrp.constants import (
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
     BUILTIN_INTEGRATION_SYNC_ID,
     BUILTIN_MEMORY_CONSOLIDATE_ID,
-    BUILTIN_MEMORY_PUBLISH_ID,
+    BUILTIN_MEMORY_DREAM_ID,
+    BUILTIN_MEMORY_RETENTION_ID,
+    BUILTIN_MEMORY_SYNTHESIZE_ID,
     INTEGRATION_SYNC_AT,
     MEMORY_CONSOLIDATE_AT,
-    MEMORY_PUBLISH_AT,
+    MEMORY_DREAM_AT,
+    MEMORY_RETENTION_AT,
+    MEMORY_SYNTHESIZE_AT,
 )
 from ntrp.logging import get_logger
 
@@ -52,15 +56,36 @@ BUILTINS = [
         ],
         handler="memory_consolidate",
         auto_approve=True,
+        enabled=False,  # file-canonical build: SQLite-engine consolidation deferred
     ),
     BuiltinSpec(
-        task_id=BUILTIN_MEMORY_PUBLISH_ID,
-        name="Memory Publish",
-        description="Nightly publish pass: rebuild the projected memory artifacts (profile, topic dossiers, active work) from the reconciled canonical memory pool.",
+        task_id=BUILTIN_MEMORY_SYNTHESIZE_ID,
+        name="Memory Synthesis",
+        description="Nightly file-native synthesis: rewrite the prose summary of me.md, entity/project pages, and active-work.md from the canonical timeline atoms, with inline (record:id) provenance. Stale-gated so only changed pages re-synthesize.",
         triggers=[
-            TimeTrigger(at=MEMORY_PUBLISH_AT, days="daily"),
+            TimeTrigger(at=MEMORY_SYNTHESIZE_AT, days="daily"),
         ],
-        handler="memory_publish",
+        handler="memory_synthesize",
+        auto_approve=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_DREAM_ID,
+        name="Memory Dream",
+        description="Nightly cross-domain reflection: derive the most salient questions spanning different topics, retrieve cross-topic evidence, and write up to 5 cited cross-domain insights back into memory.",
+        triggers=[
+            TimeTrigger(at=MEMORY_DREAM_AT, days="daily"),
+        ],
+        handler="memory_dream",
+        auto_approve=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_RETENTION_ID,
+        name="Memory Retention",
+        description="Nightly deterministic retention: supersede source lines older than 180 days and fact/changelog lines older than 730 days; pinned records and directives are exempt.",
+        triggers=[
+            TimeTrigger(at=MEMORY_RETENTION_AT, days="daily"),
+        ],
+        handler="memory_retention",
         auto_approve=True,
     ),
     BuiltinSpec(
@@ -79,7 +104,7 @@ _CURRENT_BUILTIN_IDS = {spec.task_id for spec in BUILTINS}
 # Handlers we seed today, plus retired ones whose registration is gone — both
 # must be swept so previously-seeded automations don't dangle on a missing
 # handler. (pattern_finder/skill_inducer died with the claims+lens pipeline.)
-_RETIRED_HANDLERS = {"pattern_finder_daily", "skill_inducer_daily"}
+_RETIRED_HANDLERS = {"pattern_finder_daily", "skill_inducer_daily", "memory_publish"}
 _KNOWLEDGE_HANDLERS = {spec.handler for spec in BUILTINS} | _RETIRED_HANDLERS
 
 

@@ -1,5 +1,5 @@
 """Consolidate/Lint — the background pass that turns the raw record pile into a
-SMALL, CLEAN, CURRENT body. THIS is the memory: records alone are raw atoms.
+SMALL, CLEAN, CURRENT body. THIS is the memory: records alone are raw and uncurated.
 
 A periodic health-check of the active record pool. The only stage that removes
 records from circulation: MERGE duplicates onto one survivor, SUPERSEDE

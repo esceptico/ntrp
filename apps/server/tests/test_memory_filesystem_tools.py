@@ -210,19 +210,16 @@ async def test_memory_patch_requires_unique_old_text(store: RecordStore, artifac
     assert result.preview == "Ambiguous"
 
 
-async def test_memory_rebuild_uses_record_store_and_returns_artifacts(store: RecordStore, artifacts_dir: Path):
-    await store.add("the user likes rebuild tests", kind="fact")
+async def test_memory_rebuild_is_noop_under_file_canonical(store: RecordStore, artifacts_dir: Path):
+    # Memory is file-canonical: rebuild is a no-op (no projection to re-derive,
+    # exporting would clobber the canonical pages).
     result = await memory_rebuild(_execution(store), MemoryRebuildInput(reason="test"))
-
     assert not result.is_error
-    assert result.data["artifact_count"] > 0
-    assert result.data["root"] == str(artifacts_dir)
-    assert (artifacts_dir / "README.md").exists()
-    assert any(path.endswith("index.md") for path in result.data["artifacts"])
+    assert result.data["rebuilt"] is False
 
 
-async def test_memory_rebuild_requires_memory_records_service(artifacts_dir: Path):
+async def test_memory_rebuild_noop_without_memory_records_service(artifacts_dir: Path):
+    # The no-op needs no store and never errors.
     result = await memory_rebuild(_execution(None), MemoryRebuildInput())
-
-    assert result.is_error
-    assert result.preview == "Memory unavailable"
+    assert not result.is_error
+    assert result.data["rebuilt"] is False

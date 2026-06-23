@@ -527,26 +527,13 @@ async def approve_memory_rebuild(execution: ToolExecution, args: MemoryRebuildIn
 
 
 async def memory_rebuild(execution: ToolExecution, args: MemoryRebuildInput) -> ToolResult:
-    records = execution.ctx.services.get(MEMORY_RECORDS_SERVICE)
-    if records is None:
-        return _unavailable()
-    store = _artifact_store()
-    # Explicit user-triggered rebuild → full LLM synthesis (consistent with the
-    # REST/CLI rebuild paths). The per-mutation sync (_sync_artifacts_if_live)
-    # stays mechanical.
-    from ntrp.llm.router import get_completion_client
-
-    cfg = get_config()
-    memory_llm = get_completion_client(cfg.memory_model) if cfg.memory_model else None
-    try:
-        artifacts = await store.export_from_records(records, llm=memory_llm, model=cfg.memory_model or "")
-        from ntrp.server.runtime.knowledge import write_artifact_publish_checkpoint
-
-        await write_artifact_publish_checkpoint(cfg.memory_db_path, records, cfg.memory_artifacts_dir)
-    except Exception as exc:
-        _logger.warning("memory filesystem rebuild failed", exc_info=True)
-        return ToolResult(content=f"Memory filesystem rebuild failed: {exc}", preview="Rebuild failed", is_error=True)
-    return ToolResult(content=f"Rebuilt {len(artifacts)} memory artifacts under {store.root}.", preview=f"{len(artifacts)} artifacts", data={"root": str(store.root), "artifact_count": len(artifacts), "artifacts": [a.path for a in artifacts]})
+    # Memory is file-canonical: the markdown pages ARE the source of truth, so
+    # there is no projection to rebuild — and exporting would clobber the pages.
+    return ToolResult(
+        content="Memory is file-canonical: pages are the source of truth, nothing to rebuild. Edit pages directly.",
+        preview="no-op (file-canonical)",
+        data={"rebuilt": False},
+    )
 
 def _normalize_text(text: str) -> str:
     return " ".join(text.split()).strip().lower().rstrip(".!?")

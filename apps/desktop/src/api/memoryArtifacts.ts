@@ -21,6 +21,15 @@ export interface MemoryArtifact {
   updated_at: string | null;
   labels: string[];
   source: string | null;
+  timeline: Array<{
+    id: string;
+    text: string;
+    kind: string;
+    date: string;
+    src: string;
+    pinned: boolean;
+    superseded: boolean;
+  }>;
 }
 
 export interface MemoryArtifactsResponse {

@@ -14,7 +14,7 @@ from ntrp.memory.models import Record
 from ntrp.memory.scopes import MemoryScope, scope_for_write
 from ntrp.server.deps import require_knowledge_runtime
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.runtime.knowledge import KnowledgeRuntime, write_artifact_publish_checkpoint
+from ntrp.server.runtime.knowledge import KnowledgeRuntime
 
 router = APIRouter(prefix="/admin/memory", tags=["memory"])
 
@@ -128,6 +128,11 @@ def artifact_to_json(a) -> dict:
         "updated_at": a.updated_at,
         "labels": list(a.labels),
         "source": a.source,
+        "timeline": [
+            {"id": l.id, "text": l.text, "kind": l.kind, "date": l.date,
+             "src": l.src, "pinned": l.pinned, "superseded": l.superseded}
+            for l in (getattr(a, "timeline", ()) or ())
+        ],
     }
 
 
@@ -142,22 +147,13 @@ def list_artifacts(
 
 @router.post("/artifacts/rebuild")
 async def rebuild_artifacts(
-    knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime),
-    store=Depends(_record_store),
     artifacts: ArtifactMemoryStore = Depends(_artifact_store),
 ) -> dict:
-    # Explicit user-triggered rebuild → full LLM synthesis (me.md + dossiers +
-    # active-work), same as the startup/CLI rebuild paths.
-    llm, model = knowledge._memory_llm()
-    items = await artifacts.export_from_records(store, llm=llm, model=model)
-    memory_db_path = getattr(knowledge.config, "memory_db_path", None)
-    if memory_db_path is not None:
-        await write_artifact_publish_checkpoint(
-            memory_db_path,
-            store,
-            knowledge.config.memory_artifacts_dir,
-        )
-    return {"artifacts": [artifact_to_json(a) for a in items]}
+    # Memory is file-canonical: the markdown pages ARE the source of truth, there
+    # is no projection to re-derive. Exporting here would clobber the pages, so
+    # this is a no-op that just returns the current pages.
+    items = artifacts.list_artifacts()
+    return {"artifacts": [artifact_to_json(a) for a in items], "detail": "no-op: memory is file-canonical"}
 
 
 class InitBody(BaseModel):
@@ -234,8 +230,9 @@ async def create_record(
     explicit = MemoryScope(body.scope_kind, body.scope_key) if body.scope_kind or body.scope_key else None
     scope = scope_for_write(kind=body.kind_tag, explicit_scope=explicit)
     record = await store.add(body.text, kind=body.kind_tag, scope_kind=scope.kind, scope_key=scope.key)
-    artifacts.append_event(f"Remembered: {body.text}")
-    await artifacts.export_from_records(store)
+    artifacts.append_event(f"Remembered: {body.text}")  # changelog audit (separate from canonical pages)
+    # store.add already persists the page (canonical). Do NOT export_from_records —
+    # that would re-derive the old projection over the canonical pages, clobbering them.
     return {"record": record_to_item_json(record, [])}
 
 

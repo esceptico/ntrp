@@ -164,8 +164,8 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
     # Exactly one curator LLM call: one batch drained the single-turn session.
     assert len(curator_llm.calls) == 1
 
-    # Artifacts were rebuilt.
-    assert (artifacts_dir / "facts" / "index.md").exists()
+    # File-canonical: no artifact projection is rebuilt (records were written
+    # straight to their pages).
 
     await consolidate.close()
     await curator.stop()

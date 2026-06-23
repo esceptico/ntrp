@@ -10,7 +10,6 @@ import pytest
 
 import ntrp.memory.init as init_mod
 from ntrp.server.runtime.automation import AutomationRuntime
-from ntrp.server.runtime.knowledge import ArtifactPublishReport
 
 pytestmark = pytest.mark.asyncio
 
@@ -108,46 +107,6 @@ async def test_consolidate_handler_continues_when_only_new_report_fields_changed
     assert "reclassified 1" in result and "pruned 2" in result
 
 
-async def test_publish_handler_refreshes_artifacts():
-    knowledge = AsyncMock()
-    knowledge.memory_ready = True
-    knowledge.publish_artifacts_if_dirty = AsyncMock(
-        return_value=ArtifactPublishReport(refreshed=True, artifact_count=31, fingerprint="abc")
-    )
-
-    handler = _runtime(None, knowledge)._build_memory_publish_handler()
-    result = await handler(None)
-
-    knowledge.publish_artifacts_if_dirty.assert_awaited_once()
-    assert result == "refreshed 31 artifacts"
-
-
-async def test_publish_handler_reports_noop_when_artifacts_clean():
-    knowledge = AsyncMock()
-    knowledge.memory_ready = True
-    knowledge.publish_artifacts_if_dirty = AsyncMock(
-        return_value=ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint="abc")
-    )
-
-    handler = _runtime(None, knowledge)._build_memory_publish_handler()
-    result = await handler(None)
-
-    assert result == "skipped artifact publish (no memory changes)"
-
-
-async def test_publish_handler_unavailable_without_memory():
-    handler = _runtime(None, None)._build_memory_publish_handler()
-    assert "unavailable" in await handler(None)
-
-
-async def test_publish_handler_unavailable_when_memory_not_ready():
-    knowledge = AsyncMock()
-    knowledge.memory_ready = False
-
-    handler = _runtime(None, knowledge)._build_memory_publish_handler()
-    assert "unavailable" in await handler(None)
-
-
 # --- integration_sync handler ------------------------------------------------
 
 
@@ -163,7 +122,7 @@ async def test_sync_handler_runs_incremental_ingest(monkeypatch):
 
     async def fake_ingest(knowledge, *, integration_clients, **kw):
         captured["clients"] = integration_clients
-        return {"admitted": 3, "capped": False, "integrations": {"calendar": {"admitted": 2}, "gmail": {"admitted": 1}}}
+        return {"admitted": 3, "integrations": {"calendar": {"admitted": 2}, "gmail": {"admitted": 1}}}
 
     monkeypatch.setattr(init_mod, "run_integration_ingest", fake_ingest)
     knowledge = SimpleNamespace(memory_ready=True)

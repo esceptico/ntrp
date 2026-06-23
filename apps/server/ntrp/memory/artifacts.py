@@ -35,6 +35,8 @@ from pathlib import Path
 from ntrp.memory import prompts_synthesis
 from ntrp.memory.frontmatter import QuotedStr, dump_frontmatter, parse_frontmatter, strip_frontmatter
 from ntrp.memory.models import Record
+from ntrp.memory.pages import SENTINEL as _PAGE_SENTINEL
+from ntrp.memory.pages import parse_line as _parse_line
 from ntrp.memory.records import RecordStore
 from ntrp.memory.scopes import INTEGRATION_SOURCE_KINDS as SCOPE_INTEGRATION_SOURCE_KINDS
 
@@ -68,6 +70,7 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "entities": "topic",
     "projects": "topic",
     "references": "source",
+    "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
     "changelog": "changelog",
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
@@ -348,6 +351,9 @@ def _record_count_for_artifact(rel: str, kind: str, content: str) -> int | None:
     if rel.endswith("/index.md"):
         return None
     fm, body = parse_frontmatter(content)
+    if _PAGE_SENTINEL in body:  # two-zone canonical page: count active timeline atoms
+        _, _, tl = body.partition(_PAGE_SENTINEL)
+        return sum(1 for raw in tl.splitlines() if (ln := _parse_line(raw)) is not None and not ln.superseded)
     if "record_count" in fm:
         value = fm["record_count"]
         return int(value) if value is not None else None
@@ -363,6 +369,9 @@ def _artifact_directory(rel: str) -> str:
 
 
 def _artifact_generated(rel: str, content: str) -> bool:
+    # Two-zone canonical pages (file-canonical memory) are NOT generated projections.
+    if _PAGE_SENTINEL in content:
+        return False
     fm, _ = parse_frontmatter(content)
     if "generated" in fm:
         return bool(fm["generated"])
@@ -373,6 +382,8 @@ def _artifact_generated(rel: str, content: str) -> bool:
 def _artifact_editable(rel: str, content: str) -> bool:
     if rel.startswith("changelog/"):
         return False
+    if _PAGE_SENTINEL in content:  # canonical two-zone pages are directly editable
+        return True
     fm, _ = parse_frontmatter(content)
     if "editable" in fm:
         return bool(fm["editable"])
@@ -391,6 +402,8 @@ def _readonly_reason(rel: str, kind: str, generated: bool) -> str | None:
 
 def _artifact_snippet(content: str, query: str | None = None) -> str | None:
     content = strip_frontmatter(content)
+    if _PAGE_SENTINEL in content:  # two-zone page: preview the prose, not the timeline dump
+        content = content.partition(_PAGE_SENTINEL)[0]
     lines = [_sanitize_visible_text(line, max_chars=MAX_DOSSIER_SNIPPET_CHARS) for line in content.splitlines()]
     lines = [
         line
@@ -640,6 +653,7 @@ class MemoryArtifact:
     snippet: str | None = None
     labels: tuple[str, ...] = ()
     source: str | None = None
+    timeline: tuple = ()  # parsed timeline atoms (read_artifact only; () in list view)
 
 
 class ArtifactMemoryStore:
@@ -1889,6 +1903,16 @@ class ArtifactMemoryStore:
             st = path.lstat()
         content = self._read_text_no_symlink(path)
         fm, body = parse_frontmatter(content)
+        # Two-zone pages: serve the synthesized PROSE zone (the wiki view) as the
+        # body, and surface the timeline atoms separately so the client can show
+        # them as secondary/collapsed evidence. The timeline stays canonical on disk.
+        timeline: tuple = ()
+        if _PAGE_SENTINEL in body:
+            prose, _, timeline_text = body.partition(_PAGE_SENTINEL)
+            timeline = tuple(ln for ln in (_parse_line(r) for r in timeline_text.splitlines()) if ln is not None)
+            body = prose.strip() or "_No synthesized summary yet — synthesis pass pending._"
+            # Drop the synthesizer's own leading `# Title` h1 (the chrome shows the title) — never a `## Section`.
+            body = re.sub(r"^\s*#[^#][^\n]*\n+", "", body, count=1).lstrip("\n")
         kind, title, scope_kind, scope_key = self._artifact_meta(rel_posix, content)
         generated = _artifact_generated(rel_posix, content)
         editable = _artifact_editable(rel_posix, content)
@@ -1909,6 +1933,7 @@ class ArtifactMemoryStore:
             snippet=_artifact_snippet(content),
             labels=tuple(fm.get("labels") or ()),
             source=fm.get("source"),
+            timeline=timeline,
         )
 
     def _artifact_meta(self, rel: str, content: str) -> tuple[str, str, str, str | None]:
