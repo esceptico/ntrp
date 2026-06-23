@@ -78,6 +78,7 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 - `references.md` — source pointers.
 - `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
+- `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
 - `index.md` — this directory's navigational map (generated).
 - `.index/` — throwaway search index (rebuildable, never canonical).
 """
