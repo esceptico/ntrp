@@ -133,6 +133,7 @@ class FilePageStore:
             self._pages[path] = page
             for line in page.lines:
                 self._loc[line.id] = path
+        self._migrate_insights()  # relocate pre-insights/ dream records (one-time, idempotent)
         self._backfill_entities()
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
@@ -367,6 +368,29 @@ class FilePageStore:
             self._reconcile_entity(slug)
         now = {s for s in slugs if self._entity_path(s) in self._pages}
         return {"entities": len(slugs), "promoted": len(now - existed), "demoted": len(existed - now)}
+
+    def _migrate_insights(self) -> None:
+        """One-time/idempotent: dream insights used to file to entities/insights.md via
+        [ent:Insights]; they now belong in insights/<month>.md. Relocate any stray
+        src=dreamer record so the emptied entity page is then dropped by reconcile."""
+        for path in list(self._pages.keys()):
+            if path.parent.name == _INSIGHTS:
+                continue
+            page = self._pages.get(path)
+            if page is None:
+                continue
+            movers = [ln for ln in page.lines if ln.src == "dreamer"]
+            if not movers:
+                continue
+            page.lines = [ln for ln in page.lines if ln.src != "dreamer"]
+            for ln in movers:
+                ln.entity = None
+                month = (ln.date or now_iso())[:7]
+                dest = self._root / _INSIGHTS / f"{month}.md"
+                self._ensure_page(dest, title=f"Insights {month}").lines.append(ln)
+                self._loc[ln.id] = dest
+                self._persist(dest)
+            self._persist(path)
 
     def _backfill_entities(self) -> None:
         """One-time: entity pages predate the per-line `entity` tag. Stamp each
