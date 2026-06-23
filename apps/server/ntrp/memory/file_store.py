@@ -88,8 +88,11 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 - `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
 - `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
-- `index.md` — this directory's navigational map (generated).
 - `.index/` — throwaway search index (rebuildable, never canonical).
+
+Navigation is the vault itself — open it in Obsidian (file explorer + graph) or the
+desktop memory tree. There is no generated index file. `health.md` (this folder)
+is a self-audit of gaps, not a catalog.
 """
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
 
@@ -148,8 +151,8 @@ class FilePageStore:
         self._backfill_entities()
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
-        self._write_index()        # index.md (OKF nav backbone) — deterministic, every open
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
+        self._drop_legacy_index()  # remove the old root index.md (Obsidian + UI tree already navigate)
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -453,33 +456,16 @@ class FilePageStore:
         if not path.exists():
             path.write_text(_CONVENTIONS, encoding="utf-8")
 
-    def _write_index(self) -> None:
-        """index.md (OKF navigational backbone) — every page grouped by area with a
-        one-line description. Deterministic, regenerated each open(); not a record page."""
-        groups: dict[str, list[tuple[str, str, str]]] = {}
-        for path, page in self._pages.items():
+    def _drop_legacy_index(self) -> None:
+        """Remove a stale root index.md left by older versions. The vault is browsed
+        directly (Obsidian file explorer + graph, the desktop tree); a generated flat
+        catalog of every page was write-only chrome that nothing read."""
+        legacy = self._root / "index.md"
+        if legacy.exists():
             try:
-                rel = path.relative_to(self._root)
-            except ValueError:
-                continue
-            if rel.name in _GENERATED_FILES:
-                continue
-            area = rel.parts[0] if len(rel.parts) > 1 else "(root)"
-            title = str(page.frontmatter.get("title") or rel.stem)
-            active = len(page.active_lines())
-            prose = (page.prose or "").strip()
-            desc = ""
-            if prose:
-                first = next((ln.strip() for ln in prose.splitlines() if ln.strip() and not ln.lstrip().startswith("#")), "")
-                desc = first[:110]
-            desc = desc or f"{active} record{'s' if active != 1 else ''}"
-            groups.setdefault(area, []).append((rel.as_posix(), title, desc))
-        parts = ["# Memory index", ""]
-        for area in sorted(groups):
-            parts.append(f"## {area}")
-            parts.extend(f"- **{title}** (`{rel}`) — {desc}" for rel, title, desc in sorted(groups[area]))
-            parts.append("")
-        (self._root / "index.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
+                legacy.unlink()
+            except OSError:
+                pass
 
     def _write_health(self) -> None:
         """health.md — a deterministic self-audit that surfaces blind spots (doc
@@ -1070,10 +1056,14 @@ if __name__ == "__main__":
             assert (await again.get(ins.id)).scope_kind == "user"
             assert any(p.parent.name == "insights" for p in again._pages), "dream insight filed under insights/"
 
-            # OKF nav + conventions are generated on open()
+            # conventions + self-audit are generated on open(); a flat index.md is NOT
+            # (the vault is browsed directly in Obsidian / the desktop tree). A stale one
+            # left by an older version is removed.
             assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
-            idx = Path(d) / "index.md"
-            assert idx.exists() and "# Memory index" in idx.read_text(encoding="utf-8"), "index.md generated"
+            (Path(d) / "index.md").write_text("# stale\n", encoding="utf-8")
+            once2 = FilePageStore(Path(d))
+            await once2.open()
+            assert not (Path(d) / "index.md").exists(), "legacy root index.md is dropped, not regenerated"
             hp = Path(d) / "health.md"
             assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 
