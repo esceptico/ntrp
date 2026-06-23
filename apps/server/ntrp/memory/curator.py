@@ -18,6 +18,7 @@ a session with no new turns costs one DB read and no LLM call.
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 
 from ntrp.database import connect as db_connect
@@ -37,6 +38,20 @@ CURATION_BATCH_MAX_TURNS = 40
 CURATION_BATCH_MAX_CHARS = 6_000
 CURATION_TURN_MAX_CHARS = 2_000
 OBSERVATION_MAX_CHARS = 280  # raw integration observations are kept terse (scannable timeline + focused vector)
+# Defense-in-depth atop source-trust: drop passive integration items that look like
+# prompt injection before they ever enter memory (a poisoned email/message can't
+# launder instructions into the store for the dream/agent to later read). Heuristic,
+# not exhaustive — source-trust (observations are low-trust, the dream phrases them
+# tentatively) remains the primary mitigation.
+_INJECTION_RE = re.compile(
+    r"ignore (?:all |any |the )?(?:previous|prior|above|earlier) (?:instructions|prompts|messages|context)"
+    r"|disregard (?:all |any |the )?(?:previous|prior|above) (?:instructions|prompts)"
+    r"|(?:new|updated) (?:system )?instructions\s*:"
+    r"|you are now (?:a |an |the )"
+    r"|pretend (?:to be|you are)"
+    r"|(?:reveal|print|show|repeat) (?:your |the )?system prompt",
+    re.IGNORECASE,
+)
 CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
@@ -334,14 +349,20 @@ class Curator:
         flow's watermark/accounting is unchanged; calls is always 0 (no LLM)."""
         source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:observation")
         admitted = 0
+        dropped = 0
         for item in items:
             text = self._render_item(item)
             if not text:
+                continue
+            if _INJECTION_RE.search(text):
+                dropped += 1  # passive item looks like prompt injection — keep it out of memory
                 continue
             if len(text) > OBSERVATION_MAX_CHARS:
                 text = text[:OBSERVATION_MAX_CHARS].rstrip()
             await self._record_store.add(text, kind=Kind.OBSERVATION, source_ref=source_ref)
             admitted += 1
+        if dropped:
+            _logger.info("observations: dropped suspected injection", source=source_kind, dropped=dropped)
         return {"admitted": admitted, "calls": 0, "capped": False}
 
     @staticmethod
