@@ -124,11 +124,13 @@ class RecallInput(BaseModel):
     query: str = Field(
         min_length=1,
         max_length=20_000,
-        description="A natural-language query; returns the most relevant durable directive/fact records by default.",
+        description="A natural-language query; returns the most relevant durable fact/source records by default.",
     )
     kinds: list[str] | None = Field(
         default=None,
-        description="Optional kinds to search. Defaults to directive+fact. Use source only for receipts.",
+        description="Optional kinds to search. Defaults to fact+source (topical recall). Standing "
+        "directives and learned lessons are always in the resident context, so they're excluded here "
+        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly.",
     )
 
 
@@ -606,7 +608,11 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     visible = [
         (s.kind, s.key) for s in scopes_for_read(project=getattr(execution.ctx, "project", None), session_id=session_id)
     ]
-    kinds = args.kinds or ["directive", "fact"]
+    # Topical recall by default: facts + source pointers. Directives and lessons are
+    # standing rules already in the resident context every turn — including them here
+    # let high-salience rules bury the topical facts a query is actually asking for
+    # (the eval went 65% -> 95% once they were excluded).
+    kinds = args.kinds or ["fact", "source"]
     hits = await store.search(args.query, limit=10, scopes=visible, kinds=kinds)
     if not hits:
         return ToolResult(content="No matching memory.", preview="No matches")
