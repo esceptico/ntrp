@@ -109,7 +109,7 @@ def _page_kind(root: Path, path: Path) -> str | None:
         return "daily"
     if rel.parts and rel.parts[0] == "observations":
         return "overview"
-    if rel.parts and rel.parts[0] in ("entities", "projects"):
+    if rel.parts and rel.parts[0] in ("topics", "entities", "projects"):
         return "dossier"
     return None
 
@@ -132,8 +132,9 @@ def _known_titles(store) -> list[str]:
 
 
 def _rename_project_pages(store) -> None:
-    """Retitle + rename projects/<opaque-id>.md to projects/<human-name>.md using
-    the store's project-name map. Idempotent (once renamed, slug == filename)."""
+    """Retitle + rename a project page filed under its opaque scope-id to its human
+    name, within the unified topics/ folder. A project page is any topics/ page with a
+    scope_key. Idempotent (once renamed, slug == filename)."""
     names = getattr(store, "_project_names", {}) or {}
     if not names:
         return
@@ -143,7 +144,7 @@ def _rename_project_pages(store) -> None:
             rel = path.relative_to(root)
         except ValueError:
             continue
-        if not rel.parts or rel.parts[0] != "projects":
+        if not rel.parts or rel.parts[0] != "topics":
             continue
         page = store._pages[path]
         key = page.frontmatter.get("scope_key")
@@ -151,7 +152,7 @@ def _rename_project_pages(store) -> None:
         if not human:
             continue
         page.frontmatter["title"] = human
-        new_path = root / "projects" / f"{_slug(human)}.md"
+        new_path = root / "topics" / f"{_slug(human)}.md"
         if new_path == path:
             store._persist(path)
             continue
@@ -203,7 +204,7 @@ async def _synth_profile(store, labels, llm, model, effort) -> str | None:
 async def _synth_dossier(store, path, labels, llm, model, effort) -> str | None:
     page = store._pages[path]
     rows = [store._to_record(ln, path) for ln in page.active_lines() if ln.src != "dreamer"]
-    if path.parts and "projects" in path.parts:
+    if page.frontmatter.get("scope_key"):  # a project page (now in topics/) — resolve human name
         title = resolve_project_title(page, getattr(store, "_project_names", {}) or {})
     else:
         title = str(page.frontmatter.get("title") or path.stem)
@@ -386,7 +387,7 @@ if __name__ == "__main__":
             await store.set_labels(r.id, [], entity_labels=["Bicycles"])
             rb = await store.add("Tim's bike has 700c wheels.", kind="fact", source_ref=SourceRef("user", ""))
             await store.set_labels(rb.id, [], entity_labels=["Bicycles"])
-            bike_path = root / "entities" / "bicycles.md"
+            bike_path = root / "topics" / "bicycles.md"
             assert bike_path in store._pages, "two records should promote the entity to its own page"
 
             fake = _FakeLLM()
@@ -413,7 +414,7 @@ if __name__ == "__main__":
             await store.set_labels(r2b.id, [], entity_labels=["Cats"])
             fake.mode = "fabricate"
             await run_synthesis(store, fake, "m")
-            assert store._pages[root / "entities" / "cats.md"].prose == "", "fabricated cite must be rejected"
+            assert store._pages[root / "topics" / "cats.md"].prose == "", "fabricated cite must be rejected"
 
             # integration overview: an observation source gets a synthesized SOP above its raw stream
             fake.mode = "echo"
@@ -439,14 +440,14 @@ if __name__ == "__main__":
 
             # project rename: opaque-id page -> human name (add files under slug of scope_key)
             await store.add("ntrp is the OS.", kind="fact", scope_kind="project", scope_key="proj_x", source_ref=SourceRef("user", ""))
-            opaque = root / "projects" / "proj-x.md"  # _slug("proj_x") == "proj-x"
-            assert opaque.exists(), f"project page filed under slug of scope_key; got {list((root/'projects').iterdir())}"
+            opaque = root / "topics" / "proj-x.md"  # _slug("proj_x") == "proj-x"
+            assert opaque.exists(), f"project page filed under slug of scope_key; got {list((root/'topics').iterdir())}"
             store._project_names = {"proj_x": "ntrp"}  # name map now available (e.g. from sessions.db)
             _rename_project_pages(store)
-            assert (root / "projects" / "ntrp.md").exists(), "project renamed to human name"
+            assert (root / "topics" / "ntrp.md").exists(), "project renamed to human name"
             assert not opaque.exists(), "opaque project page removed"
             _rename_project_pages(store)  # idempotent
-            assert (root / "projects" / "ntrp.md").exists()
+            assert (root / "topics" / "ntrp.md").exists()
             print("synthesize.py self-check OK")
 
     asyncio.run(_demo())

@@ -37,7 +37,8 @@ _DIRECTIVES = "directives.md"
 _REFERENCES = "references.md"
 _ME = "me.md"
 _LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records)
-_ENTITIES = "entities"
+_ENTITIES = "topics"  # one folder for every emergent subject (people/products/projects/topics)
+_LEGACY_SUBJECT_DIRS = ("entities", "projects")  # folded into topics/ at open() (migration)
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
 _INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
 _GENERATED_FILES = {"index.md", "AGENTS.md", "health.md"}  # generated reports, not record pages
@@ -81,9 +82,9 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 - `me.md` — the user's profile (root of the wiki).
 - `directives.md` — standing behaviour rules.   `lessons.md` — learned playbook.
 - `active-work.md` — current work, synthesized across the store.
-- `entities/<slug>.md` — emergent subjects (people/products/projects/topics),
-  created only once an entity has ≥2 records (else parked on me.md).
-- `projects/<slug>.md` — project-scoped pages.
+- `topics/<slug>.md` — one page per emergent subject (people, products, projects,
+  topics). A subject emerges once it has ≥2 records (else parked on me.md); a page
+  with a `scope_key` is a project workstream. No separate people/ or projects/ split.
 - `references.md` — source pointers.
 - `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
@@ -136,8 +137,10 @@ class FilePageStore:
         self._pages.clear()
         self._loc.clear()
         for path in sorted(self._root.rglob("*.md")):
-            if ".index" in path.parts or path.name in _GENERATED_FILES:
-                continue  # .index = throwaway; index.md/AGENTS.md = generated, not record pages
+            # Generated reports live at ROOT only; a nested file like topics/health.md
+            # is a real content page (the user's "health" topic), not the generated audit.
+            if ".index" in path.parts or (path.parent == self._root and path.name in _GENERATED_FILES):
+                continue  # .index = throwaway; root index.md/AGENTS.md/health.md = generated
             try:
                 page = parse_page(path.read_text(encoding="utf-8"))
             except Exception:
@@ -147,6 +150,7 @@ class FilePageStore:
             for line in page.lines:
                 self._loc[line.id] = path
         self._migrate_insights()  # relocate pre-insights/ dream records (one-time, idempotent)
+        self._migrate_to_topics()  # fold entities/+projects/ into one topics/ folder (idempotent)
         self._heal_structural_pages()  # repair cross-contaminated identity + canonical titles
         self._backfill_entities()
         stats = await self.reconcile_entities()
@@ -261,8 +265,13 @@ class FilePageStore:
             rel = path.relative_to(self._root)
         except ValueError:
             rel = path
-        if rel.parts and rel.parts[0] == "projects":
-            key = self._pages[path].frontmatter.get("scope_key") or rel.stem
+        # Scope is a property of the page (frontmatter scope_key), not its folder — a
+        # project page and an emergent topic both live in topics/; only the scope_key
+        # tells them apart. This keeps active-work's project view working after the
+        # entities/+projects/ folders were unified.
+        page = self._pages.get(path)
+        key = page.frontmatter.get("scope_key") if page else None
+        if key:
             return ("project", str(key))
         if kind in (Kind.DIRECTIVE, Kind.LESSON):
             return ("global", None)  # behaviour rules + distilled playbook apply everywhere
@@ -296,7 +305,7 @@ class FilePageStore:
         if kind == Kind.LESSON:
             return self._root / _LESSONS
         if scope_kind == "project" and scope_key:
-            return self._root / "projects" / f"{_slug(self._project_names.get(scope_key, scope_key))}.md"
+            return self._root / _ENTITIES / f"{_slug(self._project_names.get(scope_key, scope_key))}.md"
         if kind == Kind.SOURCE:
             return self._root / _REFERENCES
         return self._root / _ME
@@ -339,7 +348,10 @@ class FilePageStore:
             return None
         if display is None:
             display = (existing.frontmatter.get("title") if existing else None) or _deslug(slug)
-        promoted = sum(1 for _, ln in members if not ln.superseded) >= MEMORY_MIN_ENTITY_RECORDS
+        # A project page (frontmatter scope_key) is a real workstream — its lifecycle
+        # follows the project, not the entity-tag count, so it is never demoted/parked.
+        is_project = existing is not None and bool(existing.frontmatter.get("scope_key"))
+        promoted = is_project or sum(1 for _, ln in members if not ln.superseded) >= MEMORY_MIN_ENTITY_RECORDS
         touched: set[Path] = set()
         for path, line in members:
             dest = entity_page if promoted else self._park_path(line)
@@ -394,7 +406,9 @@ class FilePageStore:
         for path, page in self._pages.items():
             rel = path.relative_to(self._root)
             changed = False
-            if rel.parts[0] != "projects" and page.frontmatter.pop("scope_key", None) is not None:
+            # scope_key belongs only on a topics/ subject page; strip it elsewhere (a
+            # project-scoped directive used to stamp it onto the global directives.md).
+            if rel.parts[0] != _ENTITIES and page.frontmatter.pop("scope_key", None) is not None:
                 changed = True
             want = _STRUCTURAL_TITLES.get(rel.name) if len(rel.parts) == 1 else None
             if want and page.frontmatter.get("title") != want:
@@ -410,6 +424,49 @@ class FilePageStore:
                     changed = True
             if changed:
                 self._persist(path)
+
+    def _migrate_to_topics(self) -> None:
+        """Fold the legacy entities/ + projects/ folders into one topics/ folder.
+        The split was incoherent: projects/ pages existed only when a CHAT was tagged
+        to a project workspace, while entities/ emerged from labels — so the same
+        subject (e.g. Dex) landed in BOTH, and real workstreams (e.g. MATS) hid under
+        entities/. A subject now has exactly one topics/<slug>.md; scope lives in
+        frontmatter (scope_key), not the folder. Idempotent: a no-op once migrated."""
+        legacy = [p for p in list(self._pages.keys()) if p.parent.name in _LEGACY_SUBJECT_DIRS]
+        for src in legacy:
+            page = self._pages[src]
+            target = self._root / _ENTITIES / src.name
+            if target == src:
+                continue
+            existing = self._pages.get(target)
+            if existing is None:  # reparent
+                self._pages[target] = page
+                del self._pages[src]
+                for ln in page.lines:
+                    self._loc[ln.id] = target
+                page.frontmatter["type"] = "project" if page.frontmatter.get("scope_key") else "topic"
+                self._persist(target)
+            else:  # collision (e.g. Dex as both entity + project) — merge onto one page
+                existing.lines.extend(page.lines)
+                for ln in page.lines:
+                    self._loc[ln.id] = target
+                for key in ("scope_key", "title", "aliases", "entity_labels", "meta_labels"):
+                    if key not in existing.frontmatter and key in page.frontmatter:
+                        existing.frontmatter[key] = page.frontmatter[key]
+                existing.frontmatter["type"] = "project" if existing.frontmatter.get("scope_key") else "topic"
+                del self._pages[src]
+                self._persist(target)
+            try:
+                src.unlink()
+            except OSError:
+                pass
+        for name in _LEGACY_SUBJECT_DIRS:  # drop the now-empty legacy folders
+            d = self._root / name
+            if d.is_dir() and not any(d.iterdir()):
+                try:
+                    d.rmdir()
+                except OSError:
+                    pass
 
     def _migrate_insights(self) -> None:
         """One-time/idempotent: dream insights used to file to entities/insights.md via
@@ -451,9 +508,11 @@ class FilePageStore:
 
     def _write_conventions(self) -> None:
         """AGENTS.md (OKF conventions) — how this memory dir is shaped, so any agent
-        reading it understands the format. Static; written once if absent."""
+        reading it understands the format. Deterministic; refreshed each open() so the
+        doc never drifts from the code."""
         path = self._root / "AGENTS.md"
-        if not path.exists():
+        current = path.read_text(encoding="utf-8") if path.exists() else None
+        if current != _CONVENTIONS:
             path.write_text(_CONVENTIONS, encoding="utf-8")
 
     def _drop_legacy_index(self) -> None:
@@ -497,7 +556,7 @@ class FilePageStore:
                 newest = max((ln.date for ln in pg.active_lines()), default="")
                 a = _age(newest)
                 if a is not None and a > STALE_DAYS:
-                    gaps.append(f"- Stale topic: `entities/{path.stem}.md` — no update in {a}d (since {newest}).")
+                    gaps.append(f"- Stale topic: `topics/{path.stem}.md` — no update in {a}d (since {newest}).")
             elif path.parent.name == _OBSERVATIONS:
                 newest = max((ln.date for ln in pg.active_lines()), default="")
                 a = _age(newest)
@@ -598,15 +657,17 @@ class FilePageStore:
             if primary and base.name in _PARKABLE:
                 line.entity = primary  # remembered even while parked, so a later record can promote it
             # A project-scoped directive/lesson routes to the GLOBAL directives.md/
-            # lessons.md by kind — its project identity must NOT stamp that page.
-            on_project_page = scope_kind == "project" and scope_key and base.parent.name == "projects"
+            # lessons.md by kind — its project identity must NOT stamp that page. Only a
+            # subject page in topics/ takes the project title/scope_key.
+            on_project_page = scope_kind == "project" and scope_key and base.parent.name == _ENTITIES
             title = self._project_names.get(scope_key, scope_key) if on_project_page else None
         self._append(base, line, title=title)
         # Persist the raw project key so non-slug-safe keys round-trip (the filename
-        # is a lossy slug; _scope_for reads scope_key from frontmatter first). Only on
-        # the actual project page — never on a global page a project-scoped rule landed on.
-        if scope_kind == "project" and scope_key and base.parent.name == "projects":
+        # is a lossy slug; _scope_for reads scope_key from frontmatter). Only on the
+        # actual topics/ subject page — never on a global page a project rule landed on.
+        if scope_kind == "project" and scope_key and base.parent.name == _ENTITIES:
             self._pages[base].frontmatter["scope_key"] = scope_key
+            self._pages[base].frontmatter["type"] = "project"
             self._persist(base)
         self._index_line(line)
         if line.entity:
@@ -961,7 +1022,7 @@ if __name__ == "__main__":
             await store.add("Always greet Tim by name.", kind="directive", source_ref=SourceRef("user", ""))
             await store.add("Tim's wife is Lena.", kind="fact", pinned=True, source_ref=SourceRef("user", ""))
 
-            bike_page = Path(d) / "entities" / "bicycles.md"
+            bike_page = Path(d) / "topics" / "bicycles.md"
             # ONE record for an entity must NOT spawn a topic page; it parks on me.md
             # remembering its entity so a second record can promote it later.
             assert not bike_page.exists(), "single-record entity must not get its own page"
@@ -1016,7 +1077,7 @@ if __name__ == "__main__":
             # the canonical records survive on me.md and re-synthesize there).
             p1 = await again.add("Acme ships widgets.", kind="fact", source_ref=SourceRef("curator", ""), entity_labels=["Acme"])
             p2 = await again.add("Acme is based in Berlin.", kind="fact", source_ref=SourceRef("curator", ""), entity_labels=["Acme"])
-            acme = Path(d) / "entities" / "acme.md"
+            acme = Path(d) / "topics" / "acme.md"
             assert acme.exists() and len(again._pages[acme].active_lines()) == 2
             again._pages[acme].prose = f"Acme is a Berlin widget maker. (record:{p1.id})"  # simulate synthesis
             again._persist(acme)
@@ -1029,7 +1090,7 @@ if __name__ == "__main__":
             # dead file; the sweep drops it (delete/prune/wipe don't reconcile themselves).
             q1 = await again.add("Zeta fact one.", kind="fact", source_ref=SourceRef("curator", ""), entity_labels=["Zeta"])
             q2 = await again.add("Zeta fact two.", kind="fact", source_ref=SourceRef("curator", ""), entity_labels=["Zeta"])
-            zeta = Path(d) / "entities" / "zeta.md"
+            zeta = Path(d) / "topics" / "zeta.md"
             assert zeta.exists()
             await again.delete(q1.id)
             await again.delete(q2.id)
@@ -1040,7 +1101,7 @@ if __name__ == "__main__":
             # (never an entity page), stays user-scoped + dream-listable.
             obs = await again.add("Email from Kevin re: PRD-407 review.", kind="observation", source_ref=SourceRef("gmail", "g1"))
             assert (Path(d) / "observations" / "gmail.md").exists(), "observation streams to observations/<source>.md"
-            assert not (Path(d) / "entities" / "gmail.md").exists(), "observation never spawns an entity page"
+            assert not (Path(d) / "topics" / "gmail.md").exists(), "observation never spawns an entity page"
             got = await again.get(obs.id)
             assert got.kind == "observation" and got.scope_kind == "user", (got.kind, got.scope_kind)
             assert any(r.id == obs.id for r in await again.list(scopes=None, limit=None)), "observation is dream-listable"
@@ -1103,12 +1164,12 @@ if __name__ == "__main__":
                 await st.set_labels(e1.id, [], entity_labels=["Interaction Lab"])
                 e2 = await st.add("Lab note two.", kind="fact", source_ref=SourceRef("user", ""))
                 await st.set_labels(e2.id, [], entity_labels=["Interaction Lab"])
-                lab = st._pages[Path(d2) / "entities" / "interaction-lab.md"]
+                lab = st._pages[Path(d2) / "topics" / "interaction-lab.md"]
                 assert lab.frontmatter.get("aliases") == ["Interaction Lab"], lab.frontmatter
                 reopened = FilePageStore(Path(d2))
                 await reopened.open()  # heal is idempotent + repairs any prior contamination
                 assert reopened._pages[Path(d2) / _DIRECTIVES].frontmatter["title"] == "Directives"
-                assert reopened._pages[Path(d2) / "entities" / "interaction-lab.md"].frontmatter["aliases"] == ["Interaction Lab"]
+                assert reopened._pages[Path(d2) / "topics" / "interaction-lab.md"].frontmatter["aliases"] == ["Interaction Lab"]
             print("file_store.py self-check OK")
 
     async def _demo_vec():

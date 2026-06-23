@@ -71,8 +71,9 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
 ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",
     "context": "topic",
-    "entities": "topic",
-    "projects": "topic",
+    "topics": "topic",  # unified subject folder (people/products/projects/topics)
+    "entities": "topic",  # legacy — folded into topics/ (kept so leftovers still read)
+    "projects": "topic",  # legacy — folded into topics/
     "references": "source",
     "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
     "insights": "topic",  # cross-domain dream outputs (OKF insights/)
@@ -1963,6 +1964,12 @@ class ArtifactMemoryStore:
         fallback = Path(rel).stem.replace("-", " ").replace("_", " ").title()
         title = _title_from_content(content, fallback)
         name = Path(rel).name
+        # topics/ unifies entities + projects: a page is a project (scope "project") when
+        # its frontmatter carries a scope_key, otherwise an emergent subject (scope "entity").
+        if dirname == "topics" and name not in {"index.md", "needs-triage.md"}:
+            fm, _ = parse_frontmatter(content)
+            sk = fm.get("scope_key")
+            return (kind, title, "project", str(sk)) if sk else (kind, title, "entity", Path(rel).stem)
         if dirname == "entities" and name not in {"index.md", "needs-triage.md"}:
             return kind, title, "entity", Path(rel).stem
         if dirname == "projects" and name not in {"index.md", "inbox.md"}:
