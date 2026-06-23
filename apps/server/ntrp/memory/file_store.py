@@ -89,13 +89,33 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 - `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
 - `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
+- `index.md` — a generated ASCII file-tree map of the wiki; the agent reads it to see
+  what exists, you scan it in Obsidian. Write your own notes below the marker line.
+- `health.md` — generated self-audit of gaps (stale topics, idle sources).
 - `.index/` — throwaway search index (rebuildable, never canonical).
-
-Navigation is the vault itself — open it in Obsidian (file explorer + graph) or the
-desktop memory tree. There is no generated index file. `health.md` (this folder)
-is a self-audit of gaps, not a catalog.
 """
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
+_INDEX_MARKER = "<!-- everything above is auto-generated; add your own notes below this line -->"
+
+
+def _ascii_tree(rels: list[str]) -> str:
+    """Deterministic ├──/└── file tree from a list of relative posix paths (dex-style)."""
+    root: dict = {}
+    for rel in rels:
+        node = root
+        for part in rel.split("/"):
+            node = node.setdefault(part, {})
+    lines = ["."]
+
+    def walk(node: dict, prefix: str) -> None:
+        kids = sorted(node.items(), key=lambda kv: (not kv[1], kv[0]))  # directories first
+        for i, (name, child) in enumerate(kids):
+            last = i == len(kids) - 1
+            lines.append(f"{prefix}{'└── ' if last else '├── '}{name}{'/' if child else ''}")
+            walk(child, prefix + ("    " if last else "│   "))
+
+    walk(root, "")
+    return "\n".join(lines)
 
 
 def _slug(label: str) -> str:
@@ -155,8 +175,8 @@ class FilePageStore:
         self._backfill_entities()
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
+        self._write_index()        # index.md — dex-style file-tree map (two-zone; user notes preserved)
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
-        self._drop_legacy_index()  # remove the old root index.md (Obsidian + UI tree already navigate)
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -515,16 +535,21 @@ class FilePageStore:
         if current != _CONVENTIONS:
             path.write_text(_CONVENTIONS, encoding="utf-8")
 
-    def _drop_legacy_index(self) -> None:
-        """Remove a stale root index.md left by older versions. The vault is browsed
-        directly (Obsidian file explorer + graph, the desktop tree); a generated flat
-        catalog of every page was write-only chrome that nothing read."""
-        legacy = self._root / "index.md"
-        if legacy.exists():
-            try:
-                legacy.unlink()
-            except OSError:
-                pass
+    def _write_index(self) -> None:
+        """index.md — a deterministic ASCII file-tree of the wiki (dex-style). The
+        stable map: an agent file_reads it to see what pages exist before diving in,
+        and a human scans it in Obsidian. Two-zone like the other generated files —
+        the tree above _INDEX_MARKER is rebuilt each open(); whatever the user writes
+        below it (pins, reading order, notes) is preserved verbatim."""
+        rels = sorted(p.relative_to(self._root).as_posix() for p in self._pages if p.name != "index.md")
+        tree = _ascii_tree(rels)
+        path = self._root / "index.md"
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        i = existing.find(_INDEX_MARKER)
+        below = existing[i + len(_INDEX_MARKER):] if i != -1 else "\n"
+        content = f"# Memory index\n\n```\n{tree}\n```\n\n{_INDEX_MARKER}{below}"
+        if content != existing:
+            path.write_text(content, encoding="utf-8")
 
     def _write_health(self) -> None:
         """health.md — a deterministic self-audit that surfaces blind spots (doc
@@ -1117,14 +1142,18 @@ if __name__ == "__main__":
             assert (await again.get(ins.id)).scope_kind == "user"
             assert any(p.parent.name == "insights" for p in again._pages), "dream insight filed under insights/"
 
-            # conventions + self-audit are generated on open(); a flat index.md is NOT
-            # (the vault is browsed directly in Obsidian / the desktop tree). A stale one
-            # left by an older version is removed.
+            # conventions, index (dex-style file tree), and self-audit are generated on
+            # open(). The index is two-zone: tree rebuilt above the marker, user notes
+            # below it preserved verbatim.
             assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
-            (Path(d) / "index.md").write_text("# stale\n", encoding="utf-8")
+            idx = Path(d) / "index.md"
+            idx.write_text(idx.read_text(encoding="utf-8") + "\nMY PINNED NOTE\n", encoding="utf-8")
             once2 = FilePageStore(Path(d))
             await once2.open()
-            assert not (Path(d) / "index.md").exists(), "legacy root index.md is dropped, not regenerated"
+            itext = idx.read_text(encoding="utf-8")
+            assert "# Memory index" in itext and "└── " in itext, "index.md regenerated as a file tree"
+            assert _INDEX_MARKER in itext and "MY PINNED NOTE" in itext, "user notes below the marker are preserved"
+            assert "index.md" not in itext.split(_INDEX_MARKER)[0], "index does not list itself"
             hp = Path(d) / "health.md"
             assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 
