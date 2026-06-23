@@ -15,6 +15,7 @@ _logger = get_logger(__name__)
 
 _DIR = ".maintenance"
 _CAP = 20
+_ITEM_MAX = 200  # a learnings bullet is "one short gotcha"; truncate a runaway line
 
 
 def _path(root: Path, name: str) -> Path:
@@ -51,7 +52,7 @@ def append_learnings(root: Path, name: str, items: list[str], *, date: str, cap:
     """Append new gotchas (deduped by date-stripped fingerprint), keep only the newest
     `cap`. Deterministic, no LLM; lazily creates .maintenance/. A failure is swallowed —
     learnings are an optimization, never load-bearing."""
-    cleaned = [" ".join(i.split()) for i in items if i and i.strip()]
+    cleaned = [" ".join(i.split())[:_ITEM_MAX] for i in items if i and i.strip()]
     if not cleaned:
         return
     try:

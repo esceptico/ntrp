@@ -137,7 +137,7 @@ def _trust_rows() -> str:
         if src not in tiers[lvl]:
             tiers[lvl].append(src)
     return "\n".join(
-        f"| {lvl} | {', '.join(tiers[lvl])} | {notes.get(lvl, '')} |"
+        f"| {lvl} | {', '.join(tiers[lvl])} | {notes.get(lvl, 'weigh by trust level')} |"
         for lvl in sorted(tiers, reverse=True)
     )
 

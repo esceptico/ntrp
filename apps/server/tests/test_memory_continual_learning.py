@@ -72,8 +72,10 @@ class _DreamLLM:
         if self.n == 1:
             content = "What connects the user's work and their tools?"
         else:
+            # INLINE trailer (the hard case): the gotcha is collapsed onto the insight
+            # line, not on its own line — it must still be stripped before ingest.
             content = (
-                f"Work focus shapes tool choice. (because of ^{self._a}, ^{self._b})\n"
+                f"Work focus shapes tool choice. (because of ^{self._a}, ^{self._b}) "
                 "LEARNINGS: evidence too thin to bridge finance and health"
             )
         msg = type("M", (), {"content": content})()

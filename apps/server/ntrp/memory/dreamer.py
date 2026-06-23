@@ -64,6 +64,7 @@ def _with_preamble(system: str, conventions: str | None, learnings: str | None) 
     return "\n\n".join(parts)
 
 _CITE_RE = re.compile(r"\^?\b[0-9a-f]{6,}\b")
+_LEARNINGS_RE = re.compile(r"(?i)\blearnings:\s*(.+)$")  # gotcha trailer; matched anywhere in a line
 
 
 async def _build_catalog(store) -> list:
@@ -122,14 +123,21 @@ async def run_dream(
     )
     insight_lines = [ln.strip("-• ").strip() for ln in (raw or "").splitlines() if ln.strip()]
 
-    # Partition out any LEARNINGS: trailer BEFORE the ingest loop — a learnings gotcha
-    # must never become a Kind.FACT insight (the loop writes every cited line).
+    # Strip any LEARNINGS: trailer BEFORE the ingest loop — a gotcha must never become a
+    # Kind.FACT insight. Match anywhere in the line (not just line-start): models often
+    # collapse the trailer inline onto the final insight, so split there and keep only the
+    # insight head for ingest.
     learnings_out: list[str] = []
     kept: list[str] = []
     for ln in insight_lines:
-        m = re.match(r"(?i)^learnings:\s*(.+)$", ln)
+        m = _LEARNINGS_RE.search(ln)
         if m:
-            learnings_out.append(m.group(1).strip())
+            gotcha = m.group(1).strip()
+            if gotcha:
+                learnings_out.append(gotcha)
+            head = ln[: m.start()].strip()
+            if head:
+                kept.append(head)
         else:
             kept.append(ln)
     insight_lines = kept
