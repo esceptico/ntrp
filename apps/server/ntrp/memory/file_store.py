@@ -35,6 +35,7 @@ _MEMORY_LINE_SOURCE = "memory_line"  # search.db partition for per-line vectors 
 _DIRECTIVES = "directives.md"
 _REFERENCES = "references.md"
 _ME = "me.md"
+_LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records)
 _ENTITIES = "entities"
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
@@ -202,8 +203,8 @@ class FilePageStore:
         if rel.parts and rel.parts[0] == "projects":
             key = self._pages[path].frontmatter.get("scope_key") or rel.stem
             return ("project", str(key))
-        if kind == Kind.DIRECTIVE:
-            return ("global", None)
+        if kind in (Kind.DIRECTIVE, Kind.LESSON):
+            return ("global", None)  # behaviour rules + distilled playbook apply everywhere
         return ("user", None)
 
     def _to_record(self, line: Line, path: Path) -> Record:
@@ -231,6 +232,8 @@ class FilePageStore:
         MEMORY_MIN_ENTITY_RECORDS, via _reconcile_entity."""
         if kind == Kind.DIRECTIVE:
             return self._root / _DIRECTIVES
+        if kind == Kind.LESSON:
+            return self._root / _LESSONS
         if scope_kind == "project" and scope_key:
             return self._root / "projects" / f"{_slug(self._project_names.get(scope_key, scope_key))}.md"
         if kind == Kind.SOURCE:
@@ -848,6 +851,12 @@ if __name__ == "__main__":
             got = await again.get(obs.id)
             assert got.kind == "observation" and got.scope_kind == "user", (got.kind, got.scope_kind)
             assert any(r.id == obs.id for r in await again.list(scopes=None, limit=None)), "observation is dream-listable"
+
+            # LESSON routing: continual-learning playbook records stream to lessons.md, global scope.
+            les = await again.add("Verify against the running system before reporting status.", kind="lesson", source_ref=SourceRef("curator", ""))
+            assert (Path(d) / "lessons.md").exists(), "lesson routes to lessons.md"
+            lr = await again.get(les.id)
+            assert lr.kind == "lesson" and lr.scope_kind == "global", (lr.kind, lr.scope_kind)
 
             # importance: heuristic scorer fills unscored lines, persists, survives reload
             async def _heur(text, kind, pinned):

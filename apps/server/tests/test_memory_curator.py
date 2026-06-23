@@ -393,14 +393,14 @@ async def test_narrative_summary_kind_is_not_minted(tmp_path: Path):
 
 
 async def test_curator_add_kinds_exclude_summary(tmp_path: Path):
-    """The curator's writable ADD kinds are directive|fact|source only — the
-    prompt no longer offers 'summary'."""
+    """The curator's writable ADD kinds are directive|fact|source|lesson — the
+    prompt no longer offers 'summary'. `lesson` is the continual-learning playbook kind."""
     from ntrp.memory.curator import ALLOWED_KINDS, _SYSTEM_PROMPT
 
-    assert ALLOWED_KINDS == {"directive", "fact", "source"}
+    assert ALLOWED_KINDS == {"directive", "fact", "source", "lesson"}
     assert "summary" not in ALLOWED_KINDS
     assert '"summary"' not in _SYSTEM_PROMPT
-    assert "directive|fact|source" in _SYSTEM_PROMPT
+    assert "directive|fact|source|lesson" in _SYSTEM_PROMPT
 
 
 async def test_legacy_note_action_kinds_are_dropped(tmp_path: Path):

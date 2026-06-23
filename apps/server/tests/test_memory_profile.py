@@ -39,6 +39,21 @@ async def test_profile_is_none_without_a_store():
     assert await resident_profile(None) is None
 
 
+async def test_profile_surfaces_learned_playbook(tmp_path: Path):
+    """Continual learning: distilled `lesson` records ride in the resident block as a
+    Playbook section, so the agent applies what it learned."""
+    store = _store(tmp_path)
+    await store.add("the user lives in Munich", kind="fact", scope_kind="user")
+    await store.add("Verify against the running system before reporting status.", kind="lesson", scope_kind="global")
+
+    block = await resident_profile(store)
+
+    assert "## Playbook (learned)" in block
+    assert "Verify against the running system before reporting status." in block
+    assert "the user lives in Munich" in block  # profile + playbook coexist
+    await store.close()
+
+
 async def test_profile_respects_char_budget(tmp_path: Path):
     store = _store(tmp_path)
     await store.add("ALWAYS keep this rule", kind="directive", scope_kind="global")

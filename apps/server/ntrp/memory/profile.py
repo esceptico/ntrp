@@ -18,7 +18,30 @@ PROFILE_RECORD_LIMIT = 60
 # versa) — each kind is guaranteed its own room every turn.
 DIRECTIVE_CHAR_BUDGET = 3000
 FACT_CHAR_BUDGET = 2000
+LESSON_CHAR_BUDGET = 2000
 SYNTHESIZED_PROSE_CHAR_LIMIT = 4000
+
+
+async def _playbook(memory_records: object, scopes: list) -> str | None:
+    """The continual-learning playbook: lesson records the agent has DISTILLED
+    from past interactions, surfaced every turn so they're actually applied (the
+    active half of continual learning — capture is useless if never read)."""
+    try:
+        lessons = await memory_records.list(kinds=["lesson"], scopes=scopes, limit=PROFILE_RECORD_LIMIT)
+    except Exception:
+        _logger.warning("playbook load failed", exc_info=True)
+        return None
+    if not lessons:
+        return None
+    lines: list[str] = []
+    used = 0
+    for r in lessons:
+        line = f"- {r.text}"
+        if lines and used + len(line) > LESSON_CHAR_BUDGET:
+            break
+        lines.append(line)
+        used += len(line)
+    return "## Playbook (learned)\n\n" + "\n".join(lines)
 
 
 def _synthesized_prose(memory_records: object) -> str | None:
@@ -67,13 +90,21 @@ async def resident_profile(
     after the LINT pass, so durable facts ride along without a manual pin."""
     if memory_records is None:
         return None
+    scopes = [(s.kind, s.key) for s in scopes_for_read(project=project_context, session_id=session_id)]
+    # The distilled playbook is appended to whichever profile form we return, so
+    # the agent's learned lessons ride along every turn.
+    playbook = await _playbook(memory_records, scopes)
+
+    def _join(base: str | None) -> str | None:
+        parts = [p for p in (base, playbook) if p]
+        return "\n\n".join(parts) if parts else None
+
     # Prefer the synthesized me.md prose (clean wiki block); fall back to the
     # recency/char-budget bullet dump only before the first synthesis has run.
     prose = _synthesized_prose(memory_records)
     if prose is not None:
-        return prose
+        return _join(prose)
     try:
-        scopes = [(s.kind, s.key) for s in scopes_for_read(project=project_context, session_id=session_id)]
         # Directives queried on their own so a flood of recent facts can't evict
         # behaviour rules by recency before the char budget even applies.
         directives = await memory_records.list(kinds=["directive"], scopes=scopes, limit=PROFILE_RECORD_LIMIT)
@@ -100,6 +131,4 @@ async def resident_profile(
     fact_recs = _dedup([*(p for p in pinned if p.kind != "directive"), *facts])
 
     lines = _take(dir_recs, DIRECTIVE_CHAR_BUDGET) + _take(fact_recs, FACT_CHAR_BUDGET)
-    if not lines:
-        return None
-    return "## Profile\n\n" + "\n".join(lines)
+    return _join("## Profile\n\n" + "\n".join(lines) if lines else None)

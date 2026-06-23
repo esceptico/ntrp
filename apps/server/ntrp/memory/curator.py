@@ -40,7 +40,7 @@ OBSERVATION_MAX_CHARS = 280  # raw integration observations are kept terse (scan
 CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
-ALLOWED_KINDS = {"directive", "fact", "source"}
+ALLOWED_KINDS = {"directive", "fact", "source", "lesson"}
 # Legacy/alias kinds that map onto a writable kind. Narrative kinds ("note",
 # "action", "summary") are intentionally absent: junk/narrative is SKIPPED at
 # write time, not coerced into a record.
@@ -65,7 +65,7 @@ _SYSTEM_PROMPT = (
     "JSON object:\n"
     "{\n"
     '  "records": [\n'
-    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "directive|fact|source", "entity_labels": ["Dex", "Regina Lin"], "meta_labels": ["Bug", "Open loop"]},\n'
+    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "directive|fact|source|lesson", "entity_labels": ["Dex", "Regina Lin"], "meta_labels": ["Bug", "Open loop"]},\n'
     '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
     '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "...", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
     '    {"op": "NOOP",      "id": "<existing id>"}\n'
@@ -91,8 +91,19 @@ _SYSTEM_PROMPT = (
     "debugging fix, an implementation/SOP detail, a one-off task instruction, or a "
     "design opinion to a directive; those are facts or nothing. When unsure between "
     "directive and fact, choose fact.\n"
+    "(1c) LESSON CAPTURE (continual learning) — a `lesson` record is the assistant's "
+    "PLAYBOOK: a durable working-pattern you DISTILL from how the interaction actually "
+    "went — a recurring user correction turned into a forward rule, a failure-mode to "
+    "avoid, or a strategy that worked. It differs from a `directive` (a rule the user "
+    "explicitly STATED) in that YOU infer it from the exchange. This is the ONE "
+    "exception to the drop-meta rule: capture lessons even from dev/process/ntrp "
+    "exchanges, because that is where the assistant learns to improve. Each lesson is "
+    "ONE actionable, second-person sentence (e.g. 'Verify claims against the running "
+    "system before reporting status — the user is repeatedly burned by confident-but-"
+    "wrong updates.'). Mint a lesson only for a pattern likely to recur, not a one-off. "
+    "Lessons take no entity_labels.\n"
     "(2) Records are atomic, self-contained, short, and usable in future prompts (resolve pronouns inline), typed by "
-    "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only). Choose the op against the EXISTING SIMILAR RECORDS: "
+    "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only), lesson (distilled playbook rule, see 1c). Choose the op against the EXISTING SIMILAR RECORDS: "
     "ADD (new), UPDATE (edit an existing one), SUPERSEDE (replace a now-wrong "
     "one), NOOP (reconfirm an unchanged one). Use ONLY ids that appear in "
     "EXISTING SIMILAR RECORDS; never invent an id.\n"

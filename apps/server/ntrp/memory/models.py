@@ -55,6 +55,7 @@ class Kind(StrEnum):
     SOURCE = "source"
     CHANGELOG = "changelog"
     OBSERVATION = "observation"  # low-trust raw integration item (gmail/slack/calendar); the dream mines these
+    LESSON = "lesson"  # continual-learning playbook item — a working-pattern the agent DISTILLED (vs directive = user-stated)
 
 
 # Source-trust precedence: a direct user statement outranks a curator-compiled

@@ -63,6 +63,7 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
     "README.md": ("source", "Memory artifacts"),
     "tooling.md": ("source", "Agent memory tooling"),
     "directives.md": ("directive", "Directives"),
+    "lessons.md": ("directive", "Playbook (learned)"),
 }
 ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",

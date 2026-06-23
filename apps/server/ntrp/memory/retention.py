@@ -30,6 +30,7 @@ _TTL: dict[str, int | None] = {
     Kind.CHANGELOG: MEMORY_RETENTION_TTL_DURABLE_DAYS,
     Kind.SOURCE: MEMORY_RETENTION_TTL_TRANSIENT_DAYS,
     Kind.OBSERVATION: MEMORY_RETENTION_TTL_OBSERVATION_DAYS,  # raw integration items age out fast
+    Kind.LESSON: None,  # continual-learning playbook persists (superseded when the agent learns better)
 }
 _DEFAULT_TTL = MEMORY_RETENTION_TTL_DURABLE_DAYS  # unknown kinds -> durable
 _DREAMER_TTL = MEMORY_RETENTION_TTL_TRANSIENT_DAYS  # machine-authored insights are provisional
