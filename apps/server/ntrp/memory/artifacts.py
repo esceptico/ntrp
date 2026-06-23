@@ -76,6 +76,7 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "references": "source",
     "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
     "insights": "topic",  # cross-domain dream outputs (OKF insights/)
+    "daily": "source",  # dated activity logs (daily/<date>.md) — browsable history, prose-only
     "changelog": "changelog",
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}

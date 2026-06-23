@@ -24,6 +24,8 @@ from ntrp.memory.project_names import resolve_project_title
 _logger = get_logger(__name__)
 
 ACTIVE_WORK_RECENT_DAYS = 7
+DAILY_RECENT_DAYS = 7  # regenerate daily logs for this trailing window; older days freeze
+DAILY_MIN_RECORDS = 2  # a day with fewer meaningful records gets no page
 PROFILE_RECORD_CAP = 80
 REGRESSION_FLOOR = 0.60  # reject a re-synthesis that drops below 60% of prior size/cites (anti-collapse)
 _SKIP_DIRS = {"changelog", "context", "facts", ".index", "sources", "insights"}
@@ -103,6 +105,8 @@ def _page_kind(root: Path, path: Path) -> str | None:
         return "profile"
     if rel.name == "active-work.md":
         return "active_work"
+    if rel.parts and rel.parts[0] == "daily":
+        return "daily"
     if rel.parts and rel.parts[0] == "observations":
         return "overview"
     if rel.parts and rel.parts[0] in ("entities", "projects"):
@@ -254,6 +258,38 @@ async def _synth_overview(store, path, labels, llm, model, effort) -> str | None
     return out.rstrip()
 
 
+_DAILY_SKIP_KINDS = {"observation", "changelog"}
+
+
+def _daily_records(store, day: str) -> list:
+    """Meaningful records that entered memory on `day` (by append date), gathered
+    across the whole store. Integration observations and housekeeping are excluded
+    so the daily log reads as what the USER did, not inbox noise."""
+    out: list = []
+    for path, page in store._pages.items():
+        if _page_kind(store._root, path) == "daily":
+            continue
+        for ln in page.active_lines():
+            if ln.date == day and ln.kind not in _DAILY_SKIP_KINDS:
+                out.append(store._to_record(ln, path))
+    return out
+
+
+async def _synth_daily(store, path, labels, llm, model, effort) -> str | None:
+    day = path.stem
+    recs = _daily_records(store, day)
+    if len(recs) < DAILY_MIN_RECORDS:
+        return None
+    recs.sort(key=lambda r: r.last_confirmed_at)
+    user = ps.daily_user_message(day, recs, _flat(labels, recs))
+    out = await _complete(llm, model, ps.DAILY_SYSTEM, user, effort)
+    if not out or out.strip() == ps.NO_DAILY:
+        return None
+    if not _provenance_ok(out, {r.id for r in recs}):
+        return None
+    return out.rstrip()
+
+
 # -- driver --------------------------------------------------------------------
 
 
@@ -265,6 +301,14 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
     # the page exists so the loop synthesizes it (the synthesizer pulls from across
     # the store, not from this page's lines).
     store._ensure_page(store._root / "active-work.md", title="Active work")
+    # Daily logs: a dated page per recent day that has meaningful (non-observation)
+    # records. Pages in the trailing window are regenerated each run (a day can gain
+    # records); days that scroll past the window keep their last prose and freeze.
+    today = datetime.now(UTC).date()
+    recent_days = {(today - timedelta(days=i)).isoformat() for i in range(DAILY_RECENT_DAYS)}
+    for d in recent_days:
+        if len(_daily_records(store, d)) >= DAILY_MIN_RECORDS:
+            store._ensure_page(store._root / "daily" / f"{d}.md", title=d)
     all_records = await store.list(limit=None, scopes=None)
     labels = await store.labels_for([r.id for r in all_records], include_kind=True)
     done: list[str] = []
@@ -273,14 +317,19 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         if kind is None:
             continue
         page = store._pages[path]
-        # active_work has no timeline of its own, so _stale (which reads local lines)
-        # can't judge it — always re-synth so it tracks the whole store's current state.
-        if kind != "active_work" and not _stale(page):
+        # active_work and in-window daily pages have no timeline of their own, so
+        # _stale (which reads local lines) can't judge them — force re-synth so they
+        # track the store's current state. Past-window daily pages fall through to
+        # _stale and freeze once written.
+        force = kind == "active_work" or (kind == "daily" and path.stem in recent_days)
+        if not force and not _stale(page):
             continue
         if kind == "profile":
             prose = await _synth_profile(store, labels, llm, model, reasoning_effort)
         elif kind == "active_work":
             prose = await _synth_active_work(store, labels, llm, model, reasoning_effort)
+        elif kind == "daily":
+            prose = await _synth_daily(store, path, labels, llm, model, reasoning_effort)
         elif kind == "overview":
             prose = await _synth_overview(store, path, labels, llm, model, reasoning_effort)
         else:
@@ -351,10 +400,11 @@ if __name__ == "__main__":
             aw = root / "active-work.md"
             assert aw in store._pages and store._pages[aw].prose, "active-work.md synthesized from across the store"
 
-            # stale gate: unchanged dossiers are skipped; only active-work always refreshes.
+            # stale gate: unchanged dossiers are skipped; active-work and today's
+            # daily log always refresh (both are timeline-less, window-current pages).
             before = fake.calls
             await run_synthesis(store, fake, "m")
-            assert fake.calls == before + 1, "only active-work re-synthesizes; stale dossiers are skipped"
+            assert fake.calls == before + 2, "only active-work + today's daily re-synthesize; stale dossiers are skipped"
 
             # provenance rejection: a new page whose synthesis cites a fake id is rejected
             r2 = await store.add("Cats are great.", kind="fact", source_ref=SourceRef("user", ""))
@@ -374,6 +424,18 @@ if __name__ == "__main__":
             await run_synthesis(store, fake, "m")
             assert store._pages[gmail_obs].prose, "observation source got a synthesized overview"
             assert len(store._pages[gmail_obs].active_lines()) == 3, "raw observation stream survives under the overview"
+
+            # daily log: a dated, prose-only page aggregating the day's MEANINGFUL
+            # records (facts), with integration observations filtered out.
+            today = datetime.now(UTC).date().isoformat()
+            day_recs = _daily_records(store, today)
+            assert all(r.kind not in _DAILY_SKIP_KINDS for r in day_recs), "observations/changelog excluded from daily"
+            assert any(r.kind == "fact" for r in day_recs), "facts feed the daily log"
+            daily_path = root / "daily" / f"{today}.md"
+            assert daily_path in store._pages, "daily page created for today"
+            dp = store._pages[daily_path]
+            assert dp.prose and "(record:" in dp.prose, "daily page synthesized with cites"
+            assert not dp.active_lines(), "daily page is a prose-only projection (no own records)"
 
             # project rename: opaque-id page -> human name (add files under slug of scope_key)
             await store.add("ntrp is the OS.", kind="fact", scope_kind="project", scope_key="proj_x", source_ref=SourceRef("user", ""))
