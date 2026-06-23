@@ -38,6 +38,48 @@ _ME = "me.md"
 _LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records)
 _ENTITIES = "entities"
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
+_INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
+_GENERATED_FILES = {"index.md", "AGENTS.md"}  # OKF nav + conventions — generated, not record pages
+
+_CONVENTIONS = """\
+# Memory conventions (AGENTS.md)
+
+This directory is a personal memory wiki — plain markdown, the single source of
+truth (no DB). An agent reads it to understand the user and act on their behalf.
+
+## Page format (two zones)
+Each page is synthesized **prose** above a sentinel, then an append-only
+**timeline** of atomic records below it:
+
+    <compiled prose — the current, human-readable briefing>
+    <!-- timeline (append-only; edit prose above, not below) -->
+    - 2026-06-21 ^a1b2c3d4 [fact] [imp:6] (src:curator) Tim rides a gravel bike.
+
+A timeline line is the canonical record. Tags: `[pin]` (never dropped),
+`[imp:1-10]` (poignancy), `[ent:slug]` (primary entity), `[superseded]`.
+`(src:…)` is provenance. The prose cites records as `(record:<8hex>)`.
+
+## Record kinds (by FUNCTION, not subject)
+- `directive` — a standing behaviour rule the USER stated.
+- `fact` — a stable, durable truth about the user or their world.
+- `source` — a re-findable pointer (receipt), evidence for a fact.
+- `lesson` — a working-pattern the agent DISTILLED (the continual-learning playbook).
+- `observation` — a raw integration item (low-trust, ages out fast).
+- `changelog` — housekeeping; ignore for synthesis.
+
+## Layout
+- `me.md` — the user's profile (root of the wiki).
+- `directives.md` — standing behaviour rules.   `lessons.md` — learned playbook.
+- `active-work.md` — current work, synthesized across the store.
+- `entities/<slug>.md` — emergent subjects (people/products/projects/topics),
+  created only once an entity has ≥2 records (else parked on me.md).
+- `projects/<slug>.md` — project-scoped pages.
+- `references.md` — source pointers.
+- `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
+- `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
+- `index.md` — this directory's navigational map (generated).
+- `.index/` — throwaway search index (rebuildable, never canonical).
+"""
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
 
 
@@ -80,8 +122,8 @@ class FilePageStore:
         self._pages.clear()
         self._loc.clear()
         for path in sorted(self._root.rglob("*.md")):
-            if ".index" in path.parts:
-                continue
+            if ".index" in path.parts or path.name in _GENERATED_FILES:
+                continue  # .index = throwaway; index.md/AGENTS.md = generated, not record pages
             try:
                 page = parse_page(path.read_text(encoding="utf-8"))
             except Exception:
@@ -92,6 +134,8 @@ class FilePageStore:
                 self._loc[line.id] = path
         self._backfill_entities()
         stats = await self.reconcile_entities()
+        self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
+        self._write_index()        # index.md (OKF nav backbone) — deterministic, every open
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -337,6 +381,41 @@ class FilePageStore:
             if changed:
                 self._persist(path)
 
+    def _write_conventions(self) -> None:
+        """AGENTS.md (OKF conventions) — how this memory dir is shaped, so any agent
+        reading it understands the format. Static; written once if absent."""
+        path = self._root / "AGENTS.md"
+        if not path.exists():
+            path.write_text(_CONVENTIONS, encoding="utf-8")
+
+    def _write_index(self) -> None:
+        """index.md (OKF navigational backbone) — every page grouped by area with a
+        one-line description. Deterministic, regenerated each open(); not a record page."""
+        groups: dict[str, list[tuple[str, str, str]]] = {}
+        for path, page in self._pages.items():
+            try:
+                rel = path.relative_to(self._root)
+            except ValueError:
+                continue
+            if rel.name in _GENERATED_FILES:
+                continue
+            area = rel.parts[0] if len(rel.parts) > 1 else "(root)"
+            title = str(page.frontmatter.get("title") or rel.stem)
+            active = len(page.active_lines())
+            prose = (page.prose or "").strip()
+            desc = ""
+            if prose:
+                first = next((ln.strip() for ln in prose.splitlines() if ln.strip() and not ln.lstrip().startswith("#")), "")
+                desc = first[:110]
+            desc = desc or f"{active} record{'s' if active != 1 else ''}"
+            groups.setdefault(area, []).append((rel.as_posix(), title, desc))
+        parts = ["# Memory index", ""]
+        for area in sorted(groups):
+            parts.append(f"## {area}")
+            parts.extend(f"- **{title}** (`{rel}`) — {desc}" for rel, title, desc in sorted(groups[area]))
+            parts.append("")
+        (self._root / "index.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
+
     def _ensure_page(self, path: Path, *, title: str | None = None) -> Page:
         page = self._pages.get(path)
         if page is None:
@@ -396,7 +475,12 @@ class FilePageStore:
             src=(source_ref.kind if source_ref else "unknown"),
             pinned=pinned,
         )
-        if str(kind) == Kind.OBSERVATION and source_ref is not None:
+        if source_ref is not None and source_ref.kind == "dreamer":
+            # Cross-domain dream insights get their own dated folder (OKF insights/),
+            # separate from facts/entities; retention ages them as provisional.
+            base = self._root / _INSIGHTS / f"{line.date[:7]}.md"
+            title = f"Insights {line.date[:7]}"
+        elif str(kind) == Kind.OBSERVATION and source_ref is not None:
             # Raw integration observations stream to a per-source page (never entity
             # pages, no promotion); the dream mines them across sources and retention
             # ages them out. A distinct page per source keeps cross-source insights
@@ -857,6 +941,16 @@ if __name__ == "__main__":
             assert (Path(d) / "lessons.md").exists(), "lesson routes to lessons.md"
             lr = await again.get(les.id)
             assert lr.kind == "lesson" and lr.scope_kind == "global", (lr.kind, lr.scope_kind)
+
+            # dream insights route to insights/<month>.md (OKF insights/), never me.md/entities
+            ins = await again.add("Cross-domain insight.", kind="fact", source_ref=SourceRef("dreamer", "2026-06-23"))
+            assert (await again.get(ins.id)).scope_kind == "user"
+            assert any(p.parent.name == "insights" for p in again._pages), "dream insight filed under insights/"
+
+            # OKF nav + conventions are generated on open()
+            assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
+            idx = Path(d) / "index.md"
+            assert idx.exists() and "# Memory index" in idx.read_text(encoding="utf-8"), "index.md generated"
 
             # importance: heuristic scorer fills unscored lines, persists, survives reload
             async def _heur(text, kind, pinned):

@@ -24,7 +24,6 @@ OBS_CATALOG_CAP = 40  # observations are recent TEXTURE, not the backbone — ca
 _DURABLE_KINDS = [Kind.DIRECTIVE, Kind.FACT, Kind.SOURCE, Kind.CHANGELOG]
 EVIDENCE_PER_Q = 8
 MAX_INSIGHTS = 5
-INSIGHTS_LABEL = "Insights"
 
 _QUESTIONS_SYSTEM = (
     "You are the reflective 'dream' pass of a personal memory system. Given a catalog "
@@ -110,8 +109,7 @@ async def run_dream(store, llm, model: str, *, reasoning_effort: str | None = No
             line,
             kind=Kind.FACT,
             source_ref=SourceRef(kind="dreamer", ref=today),
-            entity_labels=[INSIGHTS_LABEL],
-        )
+        )  # file_store routes src=dreamer -> insights/<month>.md (OKF insights/)
         written += 1
 
     msg = f"dream: {len(qs)} questions, {len(seen)} evidence, {written} insights written"

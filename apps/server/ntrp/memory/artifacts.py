@@ -64,6 +64,8 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
     "tooling.md": ("source", "Agent memory tooling"),
     "directives.md": ("directive", "Directives"),
     "lessons.md": ("directive", "Playbook (learned)"),
+    "index.md": ("topic", "Index"),
+    "AGENTS.md": ("source", "Memory conventions"),
 }
 ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",
@@ -72,6 +74,7 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "projects": "topic",
     "references": "source",
     "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
+    "insights": "topic",  # cross-domain dream outputs (OKF insights/)
     "changelog": "changelog",
 }
 ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
