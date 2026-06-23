@@ -66,6 +66,7 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
     "lessons.md": ("directive", "Playbook (learned)"),
     "index.md": ("topic", "Index"),
     "AGENTS.md": ("source", "Memory conventions"),
+    "health.md": ("topic", "Health & gaps"),
 }
 ARTIFACT_DIR_KINDS: dict[str, str] = {
     "facts": "fact",

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -39,7 +40,7 @@ _LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records
 _ENTITIES = "entities"
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
 _INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
-_GENERATED_FILES = {"index.md", "AGENTS.md"}  # OKF nav + conventions — generated, not record pages
+_GENERATED_FILES = {"index.md", "AGENTS.md", "health.md"}  # generated reports, not record pages
 
 _CONVENTIONS = """\
 # Memory conventions (AGENTS.md)
@@ -136,6 +137,7 @@ class FilePageStore:
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
         self._write_index()        # index.md (OKF nav backbone) — deterministic, every open
+        self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -415,6 +417,55 @@ class FilePageStore:
             parts.extend(f"- **{title}** (`{rel}`) — {desc}" for rel, title, desc in sorted(groups[area]))
             parts.append("")
         (self._root / "index.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
+
+    def _write_health(self) -> None:
+        """health.md — a deterministic self-audit that surfaces blind spots (doc
+        principle 11): stale topics, idle integration sources, and whether the dream/
+        synthesis have run. Makes gaps visible instead of silently rotting."""
+        today = datetime.now(UTC).date()
+        STALE_DAYS, IDLE_DAYS, DREAM_DAYS = 90, 14, 7
+
+        def _age(d: str) -> int | None:
+            try:
+                return (today - date.fromisoformat(d[:10])).days
+            except ValueError:
+                return None
+
+        records = [ln for pg in self._pages.values() for ln in pg.active_lines()]
+        by_kind: dict[str, int] = {}
+        for ln in records:
+            by_kind[ln.kind] = by_kind.get(ln.kind, 0) + 1
+        last_dream = max((ln.date for ln in records if ln.src == "dreamer"), default=None)
+        last_synth = max((str(pg.frontmatter.get("prose_synced")) for pg in self._pages.values()
+                          if pg.frontmatter.get("prose_synced")), default=None)
+
+        gaps: list[str] = []
+        dream_age = _age(last_dream) if last_dream else None  # None != 0 — don't let a same-day dream read as "never"
+        if dream_age is None or dream_age > DREAM_DAYS:
+            gaps.append(f"- Cross-domain dream hasn't run recently (last: {last_dream or 'never'}) — fewer net-new insights.")
+        for path, pg in sorted(self._pages.items()):
+            if path.parent.name == _ENTITIES:
+                newest = max((ln.date for ln in pg.active_lines()), default="")
+                a = _age(newest)
+                if a is not None and a > STALE_DAYS:
+                    gaps.append(f"- Stale topic: `entities/{path.stem}.md` — no update in {a}d (since {newest}).")
+            elif path.parent.name == _OBSERVATIONS:
+                newest = max((ln.date for ln in pg.active_lines()), default="")
+                a = _age(newest)
+                if a is not None and a > IDLE_DAYS:
+                    gaps.append(f"- Idle source: `observations/{path.stem}.md` — nothing new in {a}d (sync/connection?).")
+
+        parts = [
+            "# Memory health", "",
+            f"{len(records)} active records across {len(self._pages)} pages — "
+            + (", ".join(f"{k} {v}" for k, v in sorted(by_kind.items())) or "empty"),
+            "",
+            f"Last synthesis: {last_synth or 'never'} · last dream: {last_dream or 'never'}",
+            "", "## Gaps", "",
+            *(sorted(gaps) or ["- None — memory is current."]),
+            "", "_Contradiction detection (conflicting records) is a future LLM-assisted check._",
+        ]
+        (self._root / "health.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
 
     def _ensure_page(self, path: Path, *, title: str | None = None) -> Page:
         page = self._pages.get(path)
@@ -951,6 +1002,8 @@ if __name__ == "__main__":
             assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
             idx = Path(d) / "index.md"
             assert idx.exists() and "# Memory index" in idx.read_text(encoding="utf-8"), "index.md generated"
+            hp = Path(d) / "health.md"
+            assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 
             # importance: heuristic scorer fills unscored lines, persists, survives reload
             async def _heur(text, kind, pinned):

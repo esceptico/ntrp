@@ -27,7 +27,7 @@ ACTIVE_WORK_RECENT_DAYS = 7
 PROFILE_RECORD_CAP = 80
 REGRESSION_FLOOR = 0.60  # reject a re-synthesis that drops below 60% of prior size/cites (anti-collapse)
 _SKIP_DIRS = {"changelog", "context", "facts", ".index", "sources", "insights"}
-_SKIP_NAMES = {"directives.md", "references.md", "lessons.md", "needs-triage.md", "inbox.md", "index.md", "README.md", "AGENTS.md"}
+_SKIP_NAMES = {"directives.md", "references.md", "lessons.md", "needs-triage.md", "inbox.md", "index.md", "README.md", "AGENTS.md", "health.md"}
 _WIKILINK_RE = re.compile(r"\[\[([^\]#|]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]")
 
 
