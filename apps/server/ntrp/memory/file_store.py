@@ -175,8 +175,8 @@ class FilePageStore:
         self._backfill_entities()
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
-        self._write_index()        # index.md — dex-style file-tree map (two-zone; user notes preserved)
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
+        self._write_index()        # index.md — dex-style file-tree map; LAST so it lists AGENTS.md + health.md
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -541,7 +541,14 @@ class FilePageStore:
         and a human scans it in Obsidian. Two-zone like the other generated files —
         the tree above _INDEX_MARKER is rebuilt each open(); whatever the user writes
         below it (pins, reading order, notes) is preserved verbatim."""
-        rels = sorted(p.relative_to(self._root).as_posix() for p in self._pages if p.name != "index.md")
+        # Build from the ACTUAL on-disk files (like dex's buildContextIndex), not just
+        # loaded record-pages — so the generated AGENTS.md + health.md show up too. The
+        # index excludes only itself and the throwaway .index/ search dir.
+        rels = sorted(
+            p.relative_to(self._root).as_posix()
+            for p in self._root.rglob("*.md")
+            if ".index" not in p.parts and p.name != "index.md"
+        )
         tree = _ascii_tree(rels)
         path = self._root / "index.md"
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -1151,9 +1158,11 @@ if __name__ == "__main__":
             once2 = FilePageStore(Path(d))
             await once2.open()
             itext = idx.read_text(encoding="utf-8")
+            above = itext.split(_INDEX_MARKER)[0]
             assert "# Memory index" in itext and "└── " in itext, "index.md regenerated as a file tree"
             assert _INDEX_MARKER in itext and "MY PINNED NOTE" in itext, "user notes below the marker are preserved"
-            assert "index.md" not in itext.split(_INDEX_MARKER)[0], "index does not list itself"
+            assert "index.md" not in above, "index does not list itself"
+            assert "AGENTS.md" in above and "health.md" in above, "index lists the generated AGENTS.md + health.md (dex parity)"
             hp = Path(d) / "health.md"
             assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 
