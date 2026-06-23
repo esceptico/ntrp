@@ -89,33 +89,13 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 - `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
 - `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
-- `index.md` — a generated ASCII file-tree map of the wiki; the agent reads it to see
-  what exists, you scan it in Obsidian. Write your own notes below the marker line.
 - `health.md` — generated self-audit of gaps (stale topics, idle sources).
 - `.index/` — throwaway search index (rebuildable, never canonical).
+
+Navigation is the file tree itself — the desktop file browser, Obsidian's explorer,
+or the agent's memory_tree tool. There is no generated index file.
 """
 _PARKABLE = (_ME, _REFERENCES)  # generic pages whose records may promote to an entity page
-_INDEX_MARKER = "<!-- everything above is auto-generated; add your own notes below this line -->"
-
-
-def _ascii_tree(rels: list[str]) -> str:
-    """Deterministic ├──/└── file tree from a list of relative posix paths (dex-style)."""
-    root: dict = {}
-    for rel in rels:
-        node = root
-        for part in rel.split("/"):
-            node = node.setdefault(part, {})
-    lines = ["."]
-
-    def walk(node: dict, prefix: str) -> None:
-        kids = sorted(node.items(), key=lambda kv: (not kv[1], kv[0]))  # directories first
-        for i, (name, child) in enumerate(kids):
-            last = i == len(kids) - 1
-            lines.append(f"{prefix}{'└── ' if last else '├── '}{name}{'/' if child else ''}")
-            walk(child, prefix + ("    " if last else "│   "))
-
-    walk(root, "")
-    return "\n".join(lines)
 
 
 def _slug(label: str) -> str:
@@ -176,7 +156,7 @@ class FilePageStore:
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
-        self._write_index()        # index.md — dex-style file-tree map; LAST so it lists AGENTS.md + health.md
+        self._drop_index()         # the file browser IS the index; a static tree-of-files file is redundant
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -535,28 +515,17 @@ class FilePageStore:
         if current != _CONVENTIONS:
             path.write_text(_CONVENTIONS, encoding="utf-8")
 
-    def _write_index(self) -> None:
-        """index.md — a deterministic ASCII file-tree of the wiki (dex-style). The
-        stable map: an agent file_reads it to see what pages exist before diving in,
-        and a human scans it in Obsidian. Two-zone like the other generated files —
-        the tree above _INDEX_MARKER is rebuilt each open(); whatever the user writes
-        below it (pins, reading order, notes) is preserved verbatim."""
-        # Build from the ACTUAL on-disk files (like dex's buildContextIndex), not just
-        # loaded record-pages — so the generated AGENTS.md + health.md show up too. The
-        # index excludes only itself and the throwaway .index/ search dir.
-        rels = sorted(
-            p.relative_to(self._root).as_posix()
-            for p in self._root.rglob("*.md")
-            if ".index" not in p.parts and p.name != "index.md"
-        )
-        tree = _ascii_tree(rels)
-        path = self._root / "index.md"
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
-        i = existing.find(_INDEX_MARKER)
-        below = existing[i + len(_INDEX_MARKER):] if i != -1 else "\n"
-        content = f"# Memory index\n\n```\n{tree}\n```\n\n{_INDEX_MARKER}{below}"
-        if content != existing:
-            path.write_text(content, encoding="utf-8")
+    def _drop_index(self) -> None:
+        """Navigation is the file tree itself — the desktop file browser for a human,
+        the memory_tree tool for the agent. A generated index.md that draws an ASCII
+        tree of the same files is redundant (dex keeps one only because its agent has
+        no file browser). Remove any leftover so it stops cluttering the vault."""
+        legacy = self._root / "index.md"
+        if legacy.exists():
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
 
     def _write_health(self) -> None:
         """health.md — a deterministic self-audit that surfaces blind spots (doc
@@ -1149,20 +1118,13 @@ if __name__ == "__main__":
             assert (await again.get(ins.id)).scope_kind == "user"
             assert any(p.parent.name == "insights" for p in again._pages), "dream insight filed under insights/"
 
-            # conventions, index (dex-style file tree), and self-audit are generated on
-            # open(). The index is two-zone: tree rebuilt above the marker, user notes
-            # below it preserved verbatim.
+            # conventions + self-audit are generated on open(). NO index.md: the file
+            # tree itself (browser / memory_tree) is the navigation; a leftover is removed.
             assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
-            idx = Path(d) / "index.md"
-            idx.write_text(idx.read_text(encoding="utf-8") + "\nMY PINNED NOTE\n", encoding="utf-8")
+            (Path(d) / "index.md").write_text("# stale\n", encoding="utf-8")
             once2 = FilePageStore(Path(d))
             await once2.open()
-            itext = idx.read_text(encoding="utf-8")
-            above = itext.split(_INDEX_MARKER)[0]
-            assert "# Memory index" in itext and "└── " in itext, "index.md regenerated as a file tree"
-            assert _INDEX_MARKER in itext and "MY PINNED NOTE" in itext, "user notes below the marker are preserved"
-            assert "index.md" not in above, "index does not list itself"
-            assert "AGENTS.md" in above and "health.md" in above, "index lists the generated AGENTS.md + health.md (dex parity)"
+            assert not (Path(d) / "index.md").exists(), "redundant index.md removed, not regenerated"
             hp = Path(d) / "health.md"
             assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 

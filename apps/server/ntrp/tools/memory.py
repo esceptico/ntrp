@@ -644,8 +644,8 @@ def _entity_brief_nudge(query: str) -> str | None:
 _MEMORY_FS_DESCRIPTION = (
     "The memory wiki is plain markdown: me.md (profile), directives.md, topics/<slug>.md "
     "(one page per subject — people, products, projects), observations/, insights/, daily/. "
-    "index.md is the file-tree map of the wiki. Use recall for atomic facts; use memory_tree "
-    "for the live tree (or read index.md) then memory_read a page by path/title to go deep."
+    "Use recall for atomic facts; use memory_tree for the live file tree, then memory_read a "
+    "page by path/title to go deep."
 )
 
 memory_tree_tool = tool(
