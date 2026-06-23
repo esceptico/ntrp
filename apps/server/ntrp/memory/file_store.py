@@ -41,6 +41,15 @@ _ENTITIES = "entities"
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
 _INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
 _GENERATED_FILES = {"index.md", "AGENTS.md", "health.md"}  # generated reports, not record pages
+# Canonical, properly-cased titles for the fixed structural pages (root). Keeps the
+# index + Obsidian note titles clean ("Me", not "me") and self-heals contamination.
+_STRUCTURAL_TITLES = {
+    _ME: "Me",
+    _DIRECTIVES: "Directives",
+    _LESSONS: "Playbook",
+    _REFERENCES: "References",
+    "active-work.md": "Active work",
+}
 
 _CONVENTIONS = """\
 # Memory conventions (AGENTS.md)
@@ -135,6 +144,7 @@ class FilePageStore:
             for line in page.lines:
                 self._loc[line.id] = path
         self._migrate_insights()  # relocate pre-insights/ dream records (one-time, idempotent)
+        self._heal_structural_pages()  # repair cross-contaminated identity + canonical titles
         self._backfill_entities()
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
@@ -370,6 +380,23 @@ class FilePageStore:
         now = {s for s in slugs if self._entity_path(s) in self._pages}
         return {"entities": len(slugs), "promoted": len(now - existed), "demoted": len(existed - now)}
 
+    def _heal_structural_pages(self) -> None:
+        """Repair page identity contamination and normalize structural titles.
+        Idempotent: a `scope_key` belongs only to a project page, so strip it from any
+        non-project page (a project-scoped directive used to stamp it onto the global
+        directives.md); and give the fixed root pages canonical, properly-cased titles."""
+        for path, page in self._pages.items():
+            rel = path.relative_to(self._root)
+            changed = False
+            if rel.parts[0] != "projects" and page.frontmatter.pop("scope_key", None) is not None:
+                changed = True
+            want = _STRUCTURAL_TITLES.get(rel.name) if len(rel.parts) == 1 else None
+            if want and page.frontmatter.get("title") != want:
+                page.frontmatter["title"] = want
+                changed = True
+            if changed:
+                self._persist(path)
+
     def _migrate_insights(self) -> None:
         """One-time/idempotent: dream insights used to file to entities/insights.md via
         [ent:Insights]; they now belong in insights/<month>.md. Relocate any stray
@@ -500,7 +527,8 @@ class FilePageStore:
             except ValueError:
                 rel = path
             page_type = {"entities": "entity", "projects": "project"}.get(rel.parts[0], "topic") if len(rel.parts) > 1 else "topic"
-            page = Page(frontmatter={"type": page_type, "title": title or path.stem, "updated": now_iso()[:10]})
+            canonical = _STRUCTURAL_TITLES.get(rel.name) if len(rel.parts) == 1 else None
+            page = Page(frontmatter={"type": page_type, "title": title or canonical or path.stem, "updated": now_iso()[:10]})
             self._pages[path] = page
         return page
 
@@ -568,11 +596,15 @@ class FilePageStore:
             primary = _slug(entity_labels[0]) if entity_labels else None
             if primary and base.name in _PARKABLE:
                 line.entity = primary  # remembered even while parked, so a later record can promote it
-            title = self._project_names.get(scope_key, scope_key) if (scope_kind == "project" and scope_key) else None
+            # A project-scoped directive/lesson routes to the GLOBAL directives.md/
+            # lessons.md by kind — its project identity must NOT stamp that page.
+            on_project_page = scope_kind == "project" and scope_key and base.parent.name == "projects"
+            title = self._project_names.get(scope_key, scope_key) if on_project_page else None
         self._append(base, line, title=title)
         # Persist the raw project key so non-slug-safe keys round-trip (the filename
-        # is a lossy slug; _scope_for reads scope_key from frontmatter first).
-        if scope_kind == "project" and scope_key:
+        # is a lossy slug; _scope_for reads scope_key from frontmatter first). Only on
+        # the actual project page — never on a global page a project-scoped rule landed on.
+        if scope_kind == "project" and scope_key and base.parent.name == "projects":
             self._pages[base].frontmatter["scope_key"] = scope_key
             self._persist(base)
         self._index_line(line)
@@ -1047,6 +1079,22 @@ if __name__ == "__main__":
             assert all(not ln.superseded for p in once._pages.values() for ln in p.lines), "prune cleared tombstones"
             wp = await once.wipe_except_pinned()
             assert wp["kept_pinned"] >= 1 and all(ln.pinned for p in once._pages.values() for ln in p.lines), wp
+
+            # a PROJECT-SCOPED directive routes to the global directives.md by kind —
+            # it must NOT stamp the project's title/scope_key onto that page, and the
+            # heal pass gives directives.md its canonical title.
+            with tempfile.TemporaryDirectory() as d2:
+                st = FilePageStore(Path(d2))
+                st._project_names = {"proj_abc": "Interaction Lab"}
+                await st.open()
+                await st.add("Always ask before deploying.", kind="directive",
+                             scope_kind="project", scope_key="proj_abc", source_ref=SourceRef("user", ""))
+                dpage = st._pages[Path(d2) / _DIRECTIVES]
+                assert dpage.frontmatter["title"] == "Directives", dpage.frontmatter
+                assert "scope_key" not in dpage.frontmatter, "project scope must not leak onto directives.md"
+                reopened = FilePageStore(Path(d2))
+                await reopened.open()  # heal is idempotent + repairs any prior contamination
+                assert reopened._pages[Path(d2) / _DIRECTIVES].frontmatter["title"] == "Directives"
             print("file_store.py self-check OK")
 
     async def _demo_vec():
