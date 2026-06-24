@@ -55,9 +55,11 @@ BUILTINS = [
         description="Nightly sleep-time reconcile pass: merge duplicate records, supersede stale or contradicted ones, retype mis-classified records, fold near-duplicate labels, and prune tombstones from the canonical memory pool.",
         triggers=[
             TimeTrigger(at=MEMORY_CONSOLIDATE_AT, days="daily"),
+            CountTrigger(every_n=MEMORY_SYNTHESIZE_EVERY_N_RUNS),
         ],
         handler="memory_consolidate",
         auto_approve=True,
+        cooldown_minutes=MEMORY_SYNTHESIZE_COOLDOWN_MINUTES,
     ),
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_SYNTHESIZE_ID,
