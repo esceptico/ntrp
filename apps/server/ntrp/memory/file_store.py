@@ -954,6 +954,111 @@ class FilePageStore:
                     row["count"] += active
         return sorted(counts.values(), key=lambda r: (-r["count"], r["label"]))
 
+    # -- consolidation primitives (the nightly Consolidate/dedup engine uses these) --
+
+    async def neighborhood(self, record: Record, *, limit: int = 8) -> list[Record]:
+        """Active records that resemble `record` (hybrid recall) minus itself — its
+        consolidation neighborhood (the merge-candidate set)."""
+        hits = await self.search(record.text, limit=limit + 1, scopes=None)
+        return [h for h in hits if h.id != record.id][:limit]
+
+    async def updated_since(self, watermark: str | None, *, limit: int) -> list[Record]:
+        """Active records confirmed at/after the watermark, oldest-first (the O(delta)
+        consolidation candidate set). `>=`-inclusive so a boundary tie-group is never
+        skipped; None returns the whole active pool oldest-first."""
+        recs = await self.list(limit=None, scopes=None)
+        if watermark is not None:
+            recs = [r for r in recs if (r.last_confirmed_at or "") >= watermark]
+        recs.sort(key=lambda r: r.last_confirmed_at or "")
+        return recs[:limit]
+
+    async def merge(
+        self, survivor_id: str, loser_ids: list[str], *, text: str | None = None, kind: str | None = None
+    ) -> Record | None:
+        """Collapse N records into ONE: each loser is superseded onto the survivor and
+        evicted from the vector index; the survivor gains the union of all members' meta
+        labels. `text` re-texts + re-confirms (re-scores) the survivor; `kind` retypes it.
+        Aborts (None) if the survivor or ANY loser is pinned — pinned records are never
+        merged away."""
+        survivor = await self.get(survivor_id)
+        if survivor is None or survivor.pinned:
+            return None
+        losers: list[Record] = []
+        for lid in loser_ids:
+            if lid == survivor_id:
+                continue
+            loser = await self.get(lid)
+            if loser is None:
+                continue
+            if loser.pinned:
+                return None  # never merge a pinned record away
+            losers.append(loser)
+        labels = await self.labels_for([survivor_id, *[lz.id for lz in losers]], include_kind=True)
+        metas = sorted({e["label"] for entries in labels.values() for e in entries if e["kind"] == "meta"})
+        if text is not None:
+            await self.update(survivor_id, text)  # also re-confirms (sets date) + re-indexes
+        if kind is not None:
+            await self.set_kind(survivor_id, kind)
+        if metas:
+            await self.set_labels(survivor_id, metas)
+        for loser in losers:
+            await self.supersede(loser.id, survivor_id)
+        return await self.get(survivor_id)
+
+    async def rename_label(self, old: str, new: str) -> None:
+        """Fold the label `old` into `new` (lint canonicalization) across meta labels
+        and entity tags, then reconcile the entity pages that changed."""
+        old_slug, new_slug = _slug(old), _slug(new)
+        touched_pages: set[Path] = set()
+        touched_slugs: set[str] = set()
+        for path, page in self._pages.items():
+            for key in ("meta_labels", "entity_labels"):
+                vals = page.frontmatter.get(key)
+                if vals and old in vals:
+                    page.frontmatter[key] = sorted({(new if v == old else v) for v in vals})
+                    touched_pages.add(path)
+            for line in page.lines:
+                if line.entity == old_slug:
+                    line.entity = new_slug
+                    touched_pages.add(path)
+                    touched_slugs.update({old_slug, new_slug})
+        for path in touched_pages:
+            self._persist(path)
+        for slug in touched_slugs:
+            self._reconcile_entity(slug)
+
+    async def set_label_kind(self, label: str, kind: str) -> int:
+        """Retype a label between 'entity' and 'meta'. entity->meta: untag the entity
+        lines and record `label` as a page meta tag. meta->entity: drop the page meta tag.
+        Returns the number of pages changed. Idempotent."""
+        n = 0
+        slug = _slug(label)
+        for path, page in list(self._pages.items()):
+            changed = False
+            if kind == "meta":
+                tagged = [ln for ln in page.lines if ln.entity == slug]
+                if tagged:
+                    for ln in tagged:
+                        ln.entity = None
+                    cur = page.frontmatter.get("meta_labels", [])
+                    page.frontmatter["meta_labels"] = sorted({*cur, label})
+                    changed = True
+                ents = page.frontmatter.get("entity_labels")
+                if ents and label in ents:
+                    page.frontmatter["entity_labels"] = [e for e in ents if e != label]
+                    changed = True
+            else:  # -> entity
+                metas = page.frontmatter.get("meta_labels")
+                if metas and label in metas:
+                    page.frontmatter["meta_labels"] = [m for m in metas if m != label]
+                    changed = True
+            if changed:
+                self._persist(path)
+                n += 1
+        if kind == "meta" and slug:
+            self._reconcile_entity(slug)
+        return n
+
     # -- reads ---------------------------------------------------------------
 
     async def get(self, record_id: str) -> Record | None:

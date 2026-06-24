@@ -149,13 +149,24 @@ class KnowledgeRuntime:
             search_index=self.search_index,
             project_names=load_project_names(self.config.memory_artifacts_dir),
         )
-        # File-native consolidation is deferred (the nightly consolidate builtin
-        # is disabled); the curator writes pages directly. None -> the consolidate
-        # handler and inline pass both no-op.
-        self._consolidate = None
+        self._consolidate = None  # set below once the memory model is resolved
 
         memory_llm = get_completion_client(self.config.memory_model) if self.config.memory_model else None
         memory_effort = self._memory_reasoning_effort(self.config.memory_model)
+
+        # File-native record consolidation: the nightly Consolidate engine runs its
+        # vector-neighborhood dedup/merge/retype directly on the canonical FilePageStore
+        # (it duck-types the store API; db_path is just its own watermark meta table).
+        if self.config.memory_model:
+            from ntrp.memory.consolidate import Consolidate
+
+            self._consolidate = Consolidate(
+                self._record_store,
+                memory_llm,
+                model=self.config.memory_model,
+                db_path=self.config.memory_db_path,
+                reasoning_effort=memory_effort,
+            )
 
         # Importance scorer (off hot path: curator sweep + migrate backfill). Falls
         # back to a heuristic when no memory_model, so it's always safe to attach.

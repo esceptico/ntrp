@@ -56,7 +56,6 @@ BUILTINS = [
         ],
         handler="memory_consolidate",
         auto_approve=True,
-        enabled=False,  # file-canonical build: SQLite-engine consolidation deferred
     ),
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_SYNTHESIZE_ID,

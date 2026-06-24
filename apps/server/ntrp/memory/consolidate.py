@@ -46,6 +46,10 @@ _KINDS = {"directive", "fact", "source"}
 
 MAX_ITEMS_PER_SWEEP = 200
 NEIGHBORHOOD_LIMIT = 8
+# Consolidation only touches the DURABLE pool. Observations are low-trust integration
+# noise that ages out via retention; lessons are the agent's playbook. Neither should be
+# merged into / retyped to a durable fact (that would launder trust) — exclude them.
+_SKIP_KINDS = {"observation", "lesson"}
 WATERMARK_KEY = "consolidate_watermark"
 LABEL_FINGERPRINT_KEY = "consolidate_label_fingerprint"
 
@@ -158,6 +162,7 @@ class Consolidate:
 
     async def _select_delta(self, watermark: str | None) -> tuple[list[Record], bool, str | None]:
         rows = await self._records.updated_since(watermark, limit=MAX_ITEMS_PER_SWEEP + 1)
+        rows = [r for r in rows if r.kind not in _SKIP_KINDS]
         capped = len(rows) > MAX_ITEMS_PER_SWEEP
         if capped:
             rows = rows[:MAX_ITEMS_PER_SWEEP]
@@ -174,6 +179,8 @@ class Consolidate:
         for record in delta:
             members = {record.id: record}
             for hit in await self._records.neighborhood(record, limit=NEIGHBORHOOD_LIMIT):
+                if hit.kind in _SKIP_KINDS:
+                    continue  # never pull an observation/lesson into a durable-record merge
                 members.setdefault(hit.id, hit)
             key = frozenset(members)
             if key in seen:

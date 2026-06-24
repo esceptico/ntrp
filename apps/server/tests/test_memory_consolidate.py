@@ -64,6 +64,39 @@ def _orphan_ops(record_id: str) -> str:
     return LintOps.model_validate({"orphans": [{"record_id": record_id}]}).model_dump_json()
 
 
+# --- file-canonical store (the revived nightly path) --------------------------
+
+
+async def test_consolidate_runs_on_file_page_store_and_skips_observations(tmp_path: Path):
+    """The nightly consolidation now runs on the canonical FilePageStore: it merges
+    duplicate DURABLE records but never pulls a low-trust observation/lesson into a
+    merge (that would launder trust)."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    a = await store.add("The user rides a Trek Marlin 5 gravel bike.", kind="fact", source_ref=SourceRef("user", ""))
+    b = await store.add("The user rides a Trek Marlin gravel bicycle.", kind="fact", source_ref=SourceRef("user", ""))
+    obs = await store.add("Email from Kevin about the bike order.", kind="observation", source_ref=SourceRef("gmail", "g1"))
+
+    llm = StubLLM(_merge_ops([a.id, b.id], merged_text="The user rides a Trek Marlin 5 gravel bike."))
+    consolidate = Consolidate(store, llm, model="memory-model", db_path=tmp_path / "meta.db")
+
+    report = await consolidate.run_once()
+
+    assert report.merged == 1
+    active = await store.list(limit=None, scopes=None)
+    durable = [r for r in active if r.kind == "fact"]
+    assert len(durable) == 1 and "Trek Marlin 5" in durable[0].text, durable
+    assert any(r.id == obs.id and r.kind == "observation" for r in active), "observation untouched"
+    # the observation never entered a judged neighborhood
+    for call in llm.calls:
+        assert '"kind": "observation"' not in call["messages"][-1]["content"]
+    await consolidate.close()
+    await store.close()
+
+
 # --- merge --------------------------------------------------------------------
 
 
