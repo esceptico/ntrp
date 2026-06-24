@@ -86,7 +86,7 @@ def _ops_json(records: list[dict] | None = None) -> str:
     return json.dumps({"records": records or []})
 
 
-def _make_curator(tmp_path: Path, llm, sessions, *, artifacts_dir: Path | None = None) -> tuple[Curator, RecordStore]:
+def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore]:
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     curator = Curator(
         llm,
@@ -94,40 +94,8 @@ def _make_curator(tmp_path: Path, llm, sessions, *, artifacts_dir: Path | None =
         model="memory-model",
         db_path=tmp_path / "memory.db",
         record_store=records,
-        artifacts_dir=artifacts_dir,
     )
     return curator, records
-
-
-# --- artifact sync -------------------------------------------------------------
-
-
-async def test_curator_syncs_artifacts_after_record_changes(tmp_path: Path):
-    artifacts_dir = tmp_path / "artifacts"
-    llm = StubLLM(_ops_json([{"op": "ADD", "text": "The user prefers green tea", "kind": "fact"}]))
-    sessions = StubSessions({"s1": [_turn(0, "user", "I prefer green tea")]})
-    curator, records = _make_curator(tmp_path, llm, sessions, artifacts_dir=artifacts_dir)
-
-    changed = await curator.curate_session("s1")
-
-    assert changed is True
-    facts = (artifacts_dir / "facts" / "index.md").read_text(encoding="utf-8")
-    assert "Facts are DB-backed" in facts
-    assert "The user prefers green tea" not in facts
-    changelog = (artifacts_dir / "changelog" / "index.md").read_text(encoding="utf-8")
-    assert "curator updated 1 memory record(s) from chat transcript" not in changelog
-    assert "The user prefers green tea" not in changelog  # index is a count-only rollup
-    assert "events across" in changelog
-    monthly = "\n".join(path.read_text(encoding="utf-8") for path in (artifacts_dir / "changelog").glob("*/*.md"))
-    assert "Learned: The user prefers green tea" in monthly
-    assert "s1" not in monthly
-    assert "source_ref" not in monthly
-    assert "curator:" not in monthly
-    for record in await records.list(limit=None):
-        assert record.id not in changelog
-        assert record.id not in monthly
-    await curator.stop()
-    await records.close()
 
 
 # --- admit gate / watermark -----------------------------------------------------

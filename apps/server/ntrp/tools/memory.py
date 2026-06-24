@@ -40,27 +40,6 @@ _logger = get_logger(__name__)
 MEMORY_RECORDS_SERVICE = "memory_records"
 
 
-def _should_sync_artifacts(store) -> bool:
-    db_path = getattr(store, "_db_path", None)
-    if db_path is None:
-        return False
-    try:
-        return db_path.resolve() == get_config().memory_db_path.resolve()
-    except Exception:
-        return False
-
-
-async def _sync_artifacts_if_live(store, event: str) -> None:
-    if not _should_sync_artifacts(store):
-        return
-    try:
-        artifacts = ArtifactMemoryStore(get_config().memory_artifacts_dir)
-        artifacts.append_event(event)
-        await artifacts.export_from_records(store)
-    except Exception:
-        _logger.warning("memory artifact sync failed after tool memory mutation", exc_info=True)
-
-
 class RememberInput(BaseModel):
     text: str = Field(
         min_length=1,
@@ -572,7 +551,6 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
     )
     source = apply_scope_to_source(base, scope)
     await store.add(args.text, kind=args.kind, scope_kind=scope.kind, scope_key=scope.key, source_ref=source)
-    await _sync_artifacts_if_live(store, f"Remembered: {args.text}")
     return ToolResult(content="Remembered", preview="Remembered")
 
 
@@ -591,7 +569,6 @@ async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
 
     best = hits[0]
     await store.delete(best.id)
-    await _sync_artifacts_if_live(store, f"Forgot: {best.text}")
     others = hits[1:]
     content = f"Forgot: {best.text}"
     if others:

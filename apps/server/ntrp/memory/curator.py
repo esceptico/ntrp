@@ -173,7 +173,6 @@ class Curator:
         record_store: RecordStore,  # the flat record pool; ops land here
         consolidate=None,  # Consolidate — the CONSOLIDATE/LINT step (None -> skip)
         reasoning_effort: str | None = None,
-        artifacts_dir: Path | None = None,
     ) -> None:
         self._llm = llm
         self._sessions = sessions
@@ -181,7 +180,6 @@ class Curator:
         self._record_store = record_store
         self._consolidate = consolidate
         self._reasoning_effort = reasoning_effort
-        self._artifacts_dir = artifacts_dir
 
         # The Dreamer owns this meta DB (watermark). Co-located with the records.
         self._db_path = db_path
@@ -282,7 +280,6 @@ class Curator:
             except Exception:
                 _logger.warning("consolidation failed", exc_info=True)
 
-        await self._sync_artifacts_after_changes(new_records)
         await self._write_watermark(session_id, max_seq)
         return bool(ops)
 
@@ -438,19 +435,6 @@ class Curator:
             current = self._tasks.get(session_id)
             if current is asyncio.current_task():
                 self._tasks.pop(session_id, None)
-
-    async def _sync_artifacts_after_changes(self, changed_records: list[Record]) -> None:
-        if self._artifacts_dir is None or not changed_records:
-            return
-        try:
-            from ntrp.memory.artifacts import ArtifactMemoryStore, summarize_changelog_text
-
-            artifacts = ArtifactMemoryStore(self._artifacts_dir)
-            summary = summarize_changelog_text([record.text for record in changed_records], max_items=3)
-            artifacts.append_event(f"Learned: {summary}")
-            await artifacts.export_from_records(self._record_store)
-        except Exception:
-            _logger.warning("artifact sync after curation failed", exc_info=True)
 
     async def _sweep_loop(self) -> None:
         # Sleep first so startup isn't a thundering herd of curations.

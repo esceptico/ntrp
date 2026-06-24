@@ -175,7 +175,6 @@ class KnowledgeRuntime:
                 record_store=self._record_store,
                 consolidate=None,
                 reasoning_effort=memory_effort,
-                artifacts_dir=None,  # no markdown projection — files ARE canonical
             )
         else:
             _logger.warning("memory enabled but no memory_model; curator disabled")
