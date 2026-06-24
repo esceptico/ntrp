@@ -829,10 +829,13 @@ class FilePageStore:
         if not found:
             return
         path, line = found
+        entity = line.entity
         self._pages[path].lines = [ln for ln in self._pages[path].lines if ln.id != record_id]
         self._loc.pop(record_id, None)
         self._persist(path)
         self._unindex_line(record_id)
+        if entity:  # a delete that drops a topic below the threshold must fold it now, not next sweep
+            self._reconcile_entity(entity)
 
     async def prune(self) -> dict[str, int]:
         """Hard-delete tombstoned (superseded) lines from their pages + evict their
@@ -1129,8 +1132,8 @@ class FilePageStore:
         for rid, (line, _) in cand.items():
             tl = line.text.lower()
             score = float(len(q_tokens & _tokens(line.text)))
-            if q_lower and (q_lower in tl or tl in q_lower):
-                score += 5.0
+            if q_lower and q_lower in tl:  # query is a phrase IN the record (not the reverse:
+                score += 5.0               # a 3-char record must not match every long query)
             if score > 0:
                 lex.append((rid, score))
         lex.sort(key=lambda t: t[1], reverse=True)

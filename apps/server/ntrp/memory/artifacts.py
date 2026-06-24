@@ -35,6 +35,7 @@ ROOT_ARTIFACTS: dict[str, tuple[str, str]] = {
     "tooling.md": ("source", "Agent memory tooling"),
     "directives.md": ("directive", "Directives"),
     "lessons.md": ("directive", "Playbook (learned)"),
+    "references.md": ("source", "References"),
     "index.md": ("topic", "Index"),
     "AGENTS.md": ("source", "Memory conventions"),
     "health.md": ("topic", "Health & gaps"),

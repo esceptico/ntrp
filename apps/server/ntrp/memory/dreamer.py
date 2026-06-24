@@ -63,7 +63,7 @@ def _with_preamble(system: str, conventions: str | None, learnings: str | None) 
     parts.append(system)
     return "\n\n".join(parts)
 
-_CITE_RE = re.compile(r"\^?\b[0-9a-f]{6,}\b")
+_CITE_RE = re.compile(r"\^([0-9a-f]{8})\b")  # record ids are exactly 8 hex, prefixed with ^
 _LEARNINGS_RE = re.compile(r"(?i)\blearnings:\s*(.+)$")  # gotcha trailer; matched anywhere in a line
 
 
@@ -142,13 +142,24 @@ async def run_dream(
             kept.append(ln)
     insight_lines = kept
 
+    def _domain(rid: str) -> str | None:
+        """The subject a cited record belongs to — its entity tag when set, else its
+        page. Using the entity (not the physical page) means two sub-threshold subjects
+        both parked on me.md still count as TWO domains, so a young memory's genuine
+        cross-domain insight isn't dropped just because neither subject has a page yet."""
+        found = store._find(rid)
+        if found and found[1].entity:
+            return found[1].entity
+        path = store._loc.get(rid)
+        return path.stem if path is not None else None
+
     written = 0
     today = now_iso()
     for line in insight_lines[:MAX_INSIGHTS]:
-        cited = {c.lstrip("^") for c in _CITE_RE.findall(line)}
-        # require >=2 citations that resolve to real records on >=2 different pages
-        pages = {store._loc[c].stem for c in cited if c in store._loc}
-        if len(pages) < 2:
+        cited = set(_CITE_RE.findall(line))  # capturing group -> bare 8-hex ids
+        # require >=2 citations that resolve to real records spanning >=2 different subjects
+        domains = {d for d in (_domain(c) for c in cited if c in store._loc) if d}
+        if len(domains) < 2:
             continue
         await store.add(
             line,

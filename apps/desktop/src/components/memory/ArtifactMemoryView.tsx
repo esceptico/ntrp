@@ -44,8 +44,17 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-const DIRECTORY_ORDER = ["memory", "context", "facts", "entities", "projects", "references", "changelog"];
-const DEFAULT_EXPANDED_DIRS = new Set(["memory", "context", "context/integrations", "entities", "projects"]);
+// Folder sort + default-expand order, post topics/-unification (entities/ & projects/
+// are folded into topics/).
+const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"];
+const DEFAULT_EXPANDED_DIRS = new Set(["topics", "daily", "insights", "observations"]);
+
+// Pages whose body already IS their records (never prose-synthesized) — keep in sync
+// with the server's artifacts._is_record_list_page.
+const RECORD_LIST_PAGES = new Set(["directives.md", "lessons.md", "references.md"]);
+function isRecordListPage(path: string): boolean {
+  return RECORD_LIST_PAGES.has(path) || path.split("/")[0] === "insights";
+}
 
 function displayFileName(a: MemoryArtifact) {
   const leaf = a.path.split("/").pop() ?? a.path;
@@ -204,7 +213,7 @@ function preferredAlias(map: Map<string, Set<string>>, key: string): string | nu
   if (!paths) return null;
   if (paths.size === 1) return [...paths][0];
   const slug = wikiSlug(key);
-  for (const candidate of [`entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
+  for (const candidate of [`topics/${slug}.md`, `entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
     if (paths.has(candidate)) return candidate;
   }
   return null;
@@ -892,7 +901,9 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
             <WikiLinkContext.Provider value={wikiHandlers}>
               <Properties frontmatter={active.frontmatter} />
               <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
-              <TimelineDisclosure timeline={active.timeline} />
+              {/* Record-list pages (directives/lessons/references/insights) already render
+                  their records as the body — don't repeat them in the timeline disclosure. */}
+              {!isRecordListPage(active.path) && <TimelineDisclosure timeline={active.timeline} />}
             </WikiLinkContext.Provider>
           )}
         </>
@@ -900,7 +911,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       meta={
         <MetaGrid
           rows={[
-            active.record_count !== null && { label: "Records", value: String(active.record_count) },
+            // record count lives in the Timeline disclosure header — don't repeat it here
             !!active.source && { label: "Source", value: active.source! },
             !active.editable && { label: "Access", value: "read-only" },
           ]}

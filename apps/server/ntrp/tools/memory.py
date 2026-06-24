@@ -675,7 +675,7 @@ remember_tool = tool(
         "their world. Use for stable preferences, decisions, and facts worth "
         "recalling in future sessions — not transient task state. State one "
         "statement per call; set `kind` to its function "
-        "(directive | fact | source)."
+        "(directive | fact | source | lesson)."
     ),
     input_model=RememberInput,
     policy=ToolPolicy(
