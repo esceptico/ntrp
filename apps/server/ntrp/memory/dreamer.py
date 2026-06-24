@@ -146,19 +146,19 @@ async def run_dream(
         """The subject a cited record belongs to — its entity tag when set, else its
         page. Using the entity (not the physical page) means two sub-threshold subjects
         both parked on me.md still count as TWO domains, so a young memory's genuine
-        cross-domain insight isn't dropped just because neither subject has a page yet."""
+        cross-domain insight isn't dropped just because neither subject has a page yet.
+        Returns None for a superseded record (a tombstone is not live evidence)."""
         found = store._find(rid)
-        if found and found[1].entity:
-            return found[1].entity
-        path = store._loc.get(rid)
-        return path.stem if path is not None else None
+        if not found or found[1].superseded:
+            return None
+        return found[1].entity or found[0].stem
 
     written = 0
     today = now_iso()
     for line in insight_lines[:MAX_INSIGHTS]:
         cited = set(_CITE_RE.findall(line))  # capturing group -> bare 8-hex ids
-        # require >=2 citations that resolve to real records spanning >=2 different subjects
-        domains = {d for d in (_domain(c) for c in cited if c in store._loc) if d}
+        # require >=2 citations that resolve to LIVE records spanning >=2 different subjects
+        domains = {d for d in (_domain(c) for c in cited) if d}
         if len(domains) < 2:
             continue
         await store.add(

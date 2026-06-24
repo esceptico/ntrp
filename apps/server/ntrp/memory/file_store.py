@@ -1170,7 +1170,10 @@ class FilePageStore:
                 continue
             if not self._scope_ok(rec, scopes):
                 continue
-            final = rrf * salience(line.imp, line.date)
+            # Salience is a SOFT boost (×0.6–1.0), not a hard multiplier: recency/
+            # importance break ties and lift fresh records, but can't bury an exact match
+            # (a stale durable fact keeps 60% of its relevance rather than 3%).
+            final = rrf * (0.6 + 0.4 * salience(line.imp, line.date))
             scored.append((final, rec.last_confirmed_at, rec))
         scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
         return [rec for _, _, rec in scored[:limit]]

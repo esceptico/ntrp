@@ -110,7 +110,8 @@ class RecallInput(BaseModel):
         default=None,
         description="Optional kinds to search. Defaults to fact+source (topical recall). Standing "
         "directives and learned lessons are always in the resident context, so they're excluded here "
-        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly.",
+        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly. Raw integration "
+        "items (emails/events/messages) are kind 'observation' — pass kinds=['observation'] to search them.",
     )
 
 

@@ -57,6 +57,9 @@ CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
 ALLOWED_KINDS = {"directive", "fact", "source", "lesson"}
+# A backfill subject equal to one of these is the USER, not an external entity — skip it
+# (the user is me.md, not a topic page). The prompt also handles the user's actual name.
+_SELF_REFERENCES = {"me", "i", "self", "user", "the user", "myself", "you"}
 # Legacy/alias kinds that map onto a writable kind. Narrative kinds ("note",
 # "action", "summary") are intentionally absent: junk/narrative is SKIPPED at
 # write time, not coerced into a record.
@@ -392,7 +395,11 @@ class Curator:
             return 0
         rows = await self._record_store.list(limit=None, scopes=None, kinds=["fact", "source"])
         labels = await self._record_store.labels_for([r.id for r in rows], include_kind=True)
-        untagged = [r for r in rows if not any(e["kind"] == "entity" for e in labels.get(r.id, []))][:limit]
+        untagged = [r for r in rows if not any(e["kind"] == "entity" for e in labels.get(r.id, []))]
+        # Newest first: a one-off bundled/self-fact the model leaves null must not crowd
+        # the cap and starve genuinely new untagged records of a tag.
+        untagged.sort(key=lambda r: r.last_confirmed_at or "", reverse=True)
+        untagged = untagged[:limit]
         if not untagged:
             return 0
         vocab = [row["label"] for row in await self._record_store.list_labels() if row["kind"] == "entity"]
@@ -425,6 +432,9 @@ class Curator:
         tagged = 0
         for rid, subject in mapping.items():
             if rid in by_id and isinstance(subject, str) and subject.strip():
+                # Never promote the USER themselves to a topic page — that just duplicates me.md.
+                if subject.strip().lower() in _SELF_REFERENCES:
+                    continue
                 await self._record_store.set_labels(rid, [], entity_labels=[subject.strip()])
                 tagged += 1
         if tagged:

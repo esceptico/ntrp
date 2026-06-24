@@ -55,10 +55,13 @@ JUDGES_PER_SWEEP = 200  # cap LLM judgments/run; changed hoods beyond it roll to
 
 
 def _hood_fingerprint(hood: list[Record]) -> str:
-    """Content hash of a neighborhood (member ids + texts). A clean judge is cached by
-    this fingerprint so an unchanged hood is never re-judged; any text edit, new
-    neighbor, or member removal changes the hash and re-judges it."""
-    payload = "\n".join(f"{m.id}:{m.text}" for m in sorted(hood, key=lambda r: r.id))
+    """Content hash of a neighborhood. A clean judge is cached by this fingerprint so an
+    unchanged hood is never re-judged; any text edit, new neighbor, member removal, PIN,
+    or re-confirmation (all of which the judge sees + acts on) changes the hash and
+    re-judges it."""
+    payload = "\n".join(
+        f"{m.id}:{int(m.pinned)}:{m.last_confirmed_at}:{m.text}" for m in sorted(hood, key=lambda r: r.id)
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -148,7 +151,10 @@ class Consolidate:
             if ops is not None:
                 await self._apply(ops, hood, report)
 
-        await self._prune_fingerprints({r.id for r in delta})
+        # Prune against the TRUE active pool, not the (judge-capped) delta, so a large
+        # corpus doesn't wrongly evict + re-judge fingerprints below the cap.
+        active_ids = {r.id for r in await self._records.list(limit=None, scopes=None)}
+        await self._prune_fingerprints(active_ids)
         await self._sync_label_hygiene(report, force=bool(judged))
         report.pruned = (await self._records.prune())["records"]
         return report

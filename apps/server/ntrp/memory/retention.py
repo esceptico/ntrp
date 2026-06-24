@@ -33,7 +33,9 @@ _TTL: dict[str, int | None] = {
     Kind.LESSON: None,  # continual-learning playbook persists (superseded when the agent learns better)
 }
 _DEFAULT_TTL = MEMORY_RETENTION_TTL_DURABLE_DAYS  # unknown kinds -> durable
-_DREAMER_TTL = MEMORY_RETENTION_TTL_TRANSIENT_DAYS  # machine-authored insights are provisional
+# Machine-authored insights are provisional AND cite their evidence — capped at the most
+# perishable citable kind (observations, 90d) so a dream can't outlive what it cites.
+_DREAMER_TTL = MEMORY_RETENTION_TTL_OBSERVATION_DAYS
 
 
 @dataclass

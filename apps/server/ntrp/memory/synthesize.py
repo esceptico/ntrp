@@ -320,6 +320,7 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
     all_records = await store.list(limit=None, scopes=None)
     labels = await store.labels_for([r.id for r in all_records], include_kind=True)
     known_titles = _known_titles(store)  # links survive only to real topic pages (no dangling [[X]] in Obsidian)
+    live_ids = {r.id.lower() for r in all_records}  # for dangling-cite detection
     done: list[str] = []
     for path in list(store._pages.keys()):
         kind = _page_kind(store._root, path)
@@ -331,7 +332,10 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         # track the store's current state. Past-window daily pages fall through to
         # _stale and freeze once written.
         force = kind == "active_work" or (kind == "daily" and path.stem in recent_days)
-        if not force and not _stale(page):
+        # Re-synthesize if a new record arrived OR a prose cite went dangling (the cited
+        # record was merged/superseded/pruned away) — so provenance never rots on disk.
+        dangling = not ps.cited_ids(page.prose).issubset(live_ids) if page.prose else False
+        if not force and not dangling and not _stale(page):
             continue
         if kind == "profile":
             prose = await _synth_profile(store, labels, llm, model, reasoning_effort, conventions)
