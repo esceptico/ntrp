@@ -18,6 +18,7 @@ a session with no new turns costs one DB read and no LLM call.
 import asyncio
 import json
 import os
+import html
 import re
 from pathlib import Path
 
@@ -368,9 +369,10 @@ class Curator:
     @staticmethod
     def _render_item(item) -> str:
         """Render a RawItem to a `title\\ncontent` line; truncate content to
-        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn)."""
-        title = (getattr(item, "title", "") or "").strip()
-        content = (getattr(item, "content", "") or "").strip()
+        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn). HTML entities are
+        decoded so email/PR observations read as text, not `&gt;`/`&lt;` soup."""
+        title = html.unescape((getattr(item, "title", "") or "").strip())
+        content = html.unescape((getattr(item, "content", "") or "").strip())
         if len(content) > CURATION_TURN_MAX_CHARS:
             content = content[:CURATION_TURN_MAX_CHARS].rstrip()
         line = "\n".join(part for part in (title, content) if part)
