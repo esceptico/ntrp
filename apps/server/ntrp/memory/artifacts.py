@@ -55,6 +55,10 @@ ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
 
 MAX_LOG_CHARS = 500
 MAX_DOSSIER_SNIPPET_CHARS = 280
+# Root pages that are intentionally NEVER prose-synthesized (synthesize._SKIP_NAMES):
+# their value is the verbatim timeline records, so render those instead of a "synthesis
+# pending" placeholder that never resolves.
+_RECORD_LIST_PAGES = {"directives.md", "lessons.md", "references.md"}
 
 _CHANGELOG_HEADER_TEMPLATE = (
     "# Changelog {month}\n\n"
@@ -731,7 +735,17 @@ class ArtifactMemoryStore:
         if _PAGE_SENTINEL in body:
             prose, _, timeline_text = body.partition(_PAGE_SENTINEL)
             timeline = tuple(ln for ln in (_parse_line(r) for r in timeline_text.splitlines()) if ln is not None)
-            body = prose.strip() or "_No synthesized summary yet — synthesis pass pending._"
+            prose = prose.strip()
+            if not prose:
+                if rel_posix in _RECORD_LIST_PAGES:
+                    # Intentionally never synthesized — these are verbatim rules/lessons/
+                    # pointers (paraphrasing would distort them). Show the records, not a
+                    # "synthesis pending" note that will never resolve.
+                    active = [ln for ln in timeline if not ln.superseded]
+                    prose = "\n".join(f"- {ln.text}" for ln in active) or "_No entries yet._"
+                else:
+                    prose = "_No synthesized summary yet — synthesis pass pending._"
+            body = prose
             # Drop the synthesizer's own leading `# Title` h1 (the chrome shows the title) — never a `## Section`.
             body = re.sub(r"^\s*#[^#][^\n]*\n+", "", body, count=1).lstrip("\n")
         kind, title, scope_kind, scope_key = self._artifact_meta(rel_posix, content)
