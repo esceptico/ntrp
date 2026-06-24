@@ -429,7 +429,11 @@ class FilePageStore:
             touched.add(dest)
         if promoted:
             page = self._ensure_page(entity_page, title=display)
-            want = sorted({*page.frontmatter.get("entity_labels", []), display})
+            # entity_labels is the page's OWN subject — exactly [display], NOT a growing
+            # union of every secondary subject mentioned in its records (that made the
+            # frontmatter a junk drawer: dex.md carrying GitHub/NTRP/Obsidian) and kept
+            # casing duplicates (NTRP + ntrp) alive. Reset to the canonical display.
+            want = [display]
             if page.frontmatter.get("title") != display or page.frontmatter.get("entity_labels") != want:
                 page.frontmatter["title"] = display
                 page.frontmatter["entity_labels"] = want
