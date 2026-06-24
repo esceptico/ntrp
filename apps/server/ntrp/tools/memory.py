@@ -72,10 +72,11 @@ class RememberInput(BaseModel):
     )
     kind: str = Field(
         default="fact",
-        pattern="^(directive|fact|source)$",
+        pattern="^(directive|fact|source|lesson)$",
         description=(
-            "The record's function: directive | fact | source. "
-            "Preferences and project facts are facts with the right scope; procedures that should steer behavior are directives."
+            "The record's function: directive | fact | source | lesson. "
+            "Preferences and project facts are facts with the right scope; a standing rule the user states is a directive; "
+            "a working pattern YOU distilled that should change how you act next time is a lesson (rides your resident playbook)."
         ),
     )
 

@@ -477,12 +477,17 @@ class FilePageStore:
                 page.frontmatter["title"] = want
                 changed = True
             title = page.frontmatter.get("title")
-            if title and title != rel.stem:
+            if title:
                 aliases = page.frontmatter.get("aliases") or []
                 if isinstance(aliases, str):
                     aliases = [aliases]
-                if title not in aliases:
+                needs_alias = title.lower() != rel.stem  # Obsidian's case-insensitive match would miss
+                if needs_alias and title not in aliases:
                     page.frontmatter["aliases"] = [*aliases, title]
+                    changed = True
+                elif not needs_alias and aliases == [title]:
+                    # redundant auto-alias (e.g. "Dex" on dex.md) — Obsidian resolves it already; drop the noise
+                    del page.frontmatter["aliases"]
                     changed = True
             if changed:
                 self._persist(path)
@@ -649,8 +654,8 @@ class FilePageStore:
             canonical = _STRUCTURAL_TITLES.get(rel.name) if len(rel.parts) == 1 else None
             resolved = title or canonical or path.stem
             fm = {"type": page_type, "title": resolved, "updated": now_iso()[:10]}
-            if resolved != path.stem:
-                fm["aliases"] = [resolved]  # Obsidian wikilink target: [[Title]] -> <slug>.md
+            if resolved.lower() != path.stem:  # only when Obsidian's case-insensitive filename match fails
+                fm["aliases"] = [resolved]  # e.g. [[Interaction Lab]] -> interaction-lab.md (not for "Dex"->dex.md)
             page = Page(frontmatter=fm)
             self._pages[path] = page
         return page

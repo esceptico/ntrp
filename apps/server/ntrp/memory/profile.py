@@ -67,6 +67,28 @@ def _synthesized_prose(memory_records: object) -> str | None:
     return prose
 
 
+async def _directives_block(memory_records: object, scopes: list) -> str | None:
+    """Standing behaviour rules, verbatim. Always resident — even on the synthesized-
+    prose path — so a rule can't silently stop being enforced just because the prose
+    synthesizer paraphrased or dropped it. Rules ride exactly as the user stated them."""
+    try:
+        directives = await memory_records.list(kinds=["directive"], scopes=scopes, limit=PROFILE_RECORD_LIMIT)
+    except Exception:
+        _logger.warning("directives load failed", exc_info=True)
+        return None
+    if not directives:
+        return None
+    lines: list[str] = []
+    used = 0
+    for r in directives:
+        line = f"- {r.text}"
+        if lines and used + len(line) > DIRECTIVE_CHAR_BUDGET:
+            break
+        lines.append(line)
+        used += len(line)
+    return "## Directives\n\n" + "\n".join(lines) if lines else None
+
+
 def _take(records: list, budget: int) -> list[str]:
     lines: list[str] = []
     used = 0
@@ -103,7 +125,10 @@ async def resident_profile(
     # recency/char-budget bullet dump only before the first synthesis has run.
     prose = _synthesized_prose(memory_records)
     if prose is not None:
-        return _join(prose)
+        # Directives ride verbatim alongside the prose — never only via paraphrase.
+        directives = await _directives_block(memory_records, scopes)
+        parts = [p for p in (prose, directives, playbook) if p]
+        return "\n\n".join(parts) if parts else None
     try:
         # Directives queried on their own so a flood of recent facts can't evict
         # behaviour rules by recency before the char budget even applies.

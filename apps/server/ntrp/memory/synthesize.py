@@ -319,6 +319,7 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
             store._ensure_page(store._root / "daily" / f"{d}.md", title=d)
     all_records = await store.list(limit=None, scopes=None)
     labels = await store.labels_for([r.id for r in all_records], include_kind=True)
+    known_titles = _known_titles(store)  # links survive only to real topic pages (no dangling [[X]] in Obsidian)
     done: list[str] = []
     for path in list(store._pages.keys()):
         kind = _page_kind(store._root, path)
@@ -344,6 +345,9 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
             prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort, conventions)
         if prose is None:
             continue
+        # Strip wikilinks to subjects that have no page (parked sub-threshold entities)
+        # so the vault has no dangling [[X]] links in Obsidian — every pass, not just profile.
+        prose = _strip_unknown_wikilinks(prose, known_titles)
         # Sentinels are deliberate short strings — exempt from the regression guard.
         if prose not in (ps.NO_ACTIVE_WORK, ps.INSUFFICIENT_DOSSIER, ps.NO_OVERVIEW) and not _regression_ok(page, prose):
             continue
