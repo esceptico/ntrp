@@ -55,10 +55,16 @@ ARTIFACT_DIR_ORDER = {name: i for i, name in enumerate(ARTIFACT_DIR_KINDS)}
 
 MAX_LOG_CHARS = 500
 MAX_DOSSIER_SNIPPET_CHARS = 280
-# Root pages that are intentionally NEVER prose-synthesized (synthesize._SKIP_NAMES):
-# their value is the verbatim timeline records, so render those instead of a "synthesis
-# pending" placeholder that never resolves.
+# Pages that are intentionally NEVER prose-synthesized (synthesize._SKIP_NAMES / _SKIP_DIRS):
+# their value IS the timeline records (verbatim rules/lessons/pointers, or dream insights),
+# so render those instead of a "synthesis pending" placeholder that never resolves.
 _RECORD_LIST_PAGES = {"directives.md", "lessons.md", "references.md"}
+_RECORD_LIST_DIRS = {"insights"}  # insights/<month>.md — dream insights are the records
+
+
+def _is_record_list_page(rel: str) -> bool:
+    parts = Path(rel).parts
+    return rel in _RECORD_LIST_PAGES or (len(parts) > 1 and parts[0] in _RECORD_LIST_DIRS)
 
 _CHANGELOG_HEADER_TEMPLATE = (
     "# Changelog {month}\n\n"
@@ -737,7 +743,7 @@ class ArtifactMemoryStore:
             timeline = tuple(ln for ln in (_parse_line(r) for r in timeline_text.splitlines()) if ln is not None)
             prose = prose.strip()
             if not prose:
-                if rel_posix in _RECORD_LIST_PAGES:
+                if _is_record_list_page(rel_posix):
                     # Intentionally never synthesized — these are verbatim rules/lessons/
                     # pointers (paraphrasing would distort them). Show the records, not a
                     # "synthesis pending" note that will never resolve.
