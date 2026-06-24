@@ -106,6 +106,7 @@ export function SessionRow({
       }}
       data-streaming={streaming ? "true" : undefined}
       data-active={active ? "true" : undefined}
+      aria-current={active ? "true" : undefined}
       data-depth={depth || undefined}
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
       className="app-row session-row group/row relative grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
@@ -114,7 +115,7 @@ export function SessionRow({
       {/* Title uses the full width at rest; on hover its right edge fades under
           the overlaid time + ⋯ cluster (mask is color-independent, so it works
           on any row background and needs no reserved gutter). */}
-      <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em] group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%_-_6.25rem),transparent_calc(100%_-_4.5rem))]">
+      <span title={name || "untitled"} className="min-w-0 truncate text-base font-medium tracking-[-0.005em] group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%_-_6.25rem),transparent_calc(100%_-_4.5rem))]">
         {name || "untitled"}
       </span>
       <span

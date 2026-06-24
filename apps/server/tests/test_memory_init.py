@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from ntrp.memory.consolidate import WATERMARK_KEY, Consolidate
+from ntrp.memory.consolidate import Consolidate
 from ntrp.memory.curator import Curator
 from ntrp.memory.init import run_memory_init
 from ntrp.memory.records import RecordStore
@@ -123,9 +123,9 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
     )
 
     consolidate = Consolidate(records, ConsolidateStubLLM(), model="memory-model", db_path=db_path)
-    # Seed a stale consolidate watermark + stale curator watermarks so we can prove
-    # they were cleared then re-written.
-    await consolidate._write_watermark("2000-01-01T00:00:00Z")
+    # Seed a stale consolidate fingerprint + stale curator watermarks so we can prove
+    # they were cleared.
+    await consolidate._write_fingerprint("stale-record", "deadbeefdeadbeef")
     await curator._write_watermark("chat1", 999)
     await curator._write_watermark("ghost", 5)
 
@@ -142,12 +142,11 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
     assert "the user prefers green tea over coffee" in texts
 
     # (c) curator watermarks cleared (the stale 999/ghost gone) then a fresh one
-    # re-written for the drained chat1; consolidate watermark advanced off the seed.
+    # re-written for the drained chat1; the stale consolidate fingerprint was cleared.
     curate_rows = dict(await _read_meta(db_path, "curate_watermark:%"))
     assert "curate_watermark:ghost" not in curate_rows  # the reset wiped the ghost
     assert curate_rows.get("curate_watermark:chat1") == "0"  # re-derived from seq 0
-    consolidate_rows = dict(await _read_meta(db_path, WATERMARK_KEY))
-    assert consolidate_rows.get(WATERMARK_KEY) not in (None, "2000-01-01T00:00:00Z")
+    assert "stale-record" not in await consolidate._read_fingerprints()  # /init cleared it
 
     # (e) backup exists.
     assert report["backup_path"]
@@ -164,8 +163,8 @@ async def test_run_memory_init_wipes_resets_and_rederives(tmp_path: Path):
     # Exactly one curator LLM call: one batch drained the single-turn session.
     assert len(curator_llm.calls) == 1
 
-    # Artifacts were rebuilt.
-    assert (artifacts_dir / "facts" / "index.md").exists()
+    # File-canonical: no artifact projection is rebuilt (records were written
+    # straight to their pages).
 
     await consolidate.close()
     await curator.stop()

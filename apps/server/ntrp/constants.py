@@ -170,13 +170,33 @@ BUILTIN_MEMORY_CONSOLIDATE_ID = "builtin-memory-consolidate"
 MEMORY_CONSOLIDATE_AT = "03:00"
 BUILTIN_MEMORY_PUBLISH_ID = "builtin-memory-publish"
 MEMORY_PUBLISH_AT = "03:30"
+# Cross-domain DREAM: nightly reflection that authors cited cross-topic insights.
+BUILTIN_MEMORY_DREAM_ID = "builtin-memory-dream"
+MEMORY_DREAM_AT = "04:00"
+# Nightly file-native SYNTHESIS: rewrite each page's prose zone from its atoms.
+BUILTIN_MEMORY_SYNTHESIZE_ID = "builtin-memory-synthesize"
+MEMORY_SYNTHESIZE_AT = "03:30"
+# Synthesis also fires after this many completed conversation runs (so topic prose
+# stays current, not 24h stale), throttled by the cooldown. Stale-gated => cheap.
+MEMORY_SYNTHESIZE_EVERY_N_RUNS = 25
+MEMORY_SYNTHESIZE_COOLDOWN_MINUTES = 30
+# Deterministic nightly RETENTION (forgetting): TTL-by-kind + salience floor.
+BUILTIN_MEMORY_RETENTION_ID = "builtin-memory-retention"
+MEMORY_RETENTION_AT = "03:45"
+MEMORY_RETENTION_TTL_DURABLE_DAYS = 730  # fact/changelog
+MEMORY_RETENTION_TTL_TRANSIENT_DAYS = 180  # source (re-findable pointers)
+# Raw integration observations are high-volume and low-trust: keep them short so
+# they don't accrete. The dream promotes the valuable ones into durable insights
+# (src:dreamer, fact TTL) before they expire; the rest age out.
+MEMORY_RETENTION_TTL_OBSERVATION_DAYS = 90
+# An entity earns its own entities/<slug>.md page only once it has this many
+# active atoms; below it, atoms park on me.md (remembering their entity) so a
+# single stray label can't spawn a dead-end one-fact topic page.
+MEMORY_MIN_ENTITY_RECORDS = 2
 # Incremental integration ingest runs before the maintenance pass so the night's
 # fresh calendar/gmail/slack deltas get consolidated + synthesized the same run.
 BUILTIN_INTEGRATION_SYNC_ID = "builtin-integration-sync"
 INTEGRATION_SYNC_AT = "02:30"
-# LLM-call ceiling for one incremental ingest run (across all sources). Gmail is
-# the highest-volume source; the per-source noise filter cuts most cost first.
-INTEGRATION_INGEST_MAX_LLM_CALLS = 100
 MAX_AUTOMATION_SUGGESTIONS = 6
 DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES = 5
 DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES = 5

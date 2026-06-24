@@ -183,7 +183,7 @@ export function BudgetDial() {
               doesn't meter per-token from us. */}
           {usage.totalCost > 0 && (
             <>
-              <span className="text-faint">Session spend</span>
+              <span className="text-muted">Session spend</span>
               <span className="tabular-nums text-ink-soft text-right">
                 {formatCost(usage.totalCost)}
               </span>
@@ -191,14 +191,14 @@ export function BudgetDial() {
           )}
           {usage.totalTokens > 0 && (
             <>
-              <span className="text-faint">Total tokens</span>
+              <span className="text-muted">Total tokens</span>
               <span className="tabular-nums text-ink-soft text-right">
                 {formatTokens(usage.totalTokens)}
               </span>
             </>
           )}
         </div>
-        <div className="mt-2 text-2xs text-faint leading-snug">
+        <div className="mt-2 text-2xs text-muted leading-snug">
           Auto-compacts at {formatTokens(tokenTrigger)} tokens or when messages hit 100%. Tool-agent tokens count toward session totals, not context pressure.
         </div>
       </HoverPopover>
@@ -222,7 +222,7 @@ function Row({
   return (
     <div className="py-0.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-faint">
+        <span className="flex items-center gap-1.5 text-muted">
           <span
             aria-hidden
             className="inline-block w-1.5 h-1.5 rounded-full"
@@ -232,11 +232,11 @@ function Row({
         </span>
         <span className="tabular-nums text-ink-soft">
           {value}{" "}
-          <span className="text-faint">· {hint}</span>
+          <span className="text-muted">· {hint}</span>
         </span>
       </div>
       {detail && (
-        <div className="pl-3 text-2xs text-faint tabular-nums">{detail}</div>
+        <div className="pl-3 text-2xs text-muted tabular-nums">{detail}</div>
       )}
     </div>
   );

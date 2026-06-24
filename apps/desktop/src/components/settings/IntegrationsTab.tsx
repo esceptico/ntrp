@@ -352,7 +352,7 @@ function GoogleCard({
                 <div
                   className={clsx(
                     "text-xs truncate",
-                    account.error ? "text-bad" : "text-faint",
+                    account.error ? "text-bad" : "text-muted",
                   )}
                 >
                   {account.error
@@ -561,6 +561,7 @@ function ServiceRow({
               value={serviceKey}
               onChange={(event) => onKeyChange(event.target.value)}
               placeholder="Token"
+              aria-label="Token"
               autoFocus
               spellCheck={false}
               autoComplete="off"

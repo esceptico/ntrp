@@ -6,7 +6,7 @@ import { LabeledField } from "../Field";
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-2 min-w-0">
-      <span className="shrink-0 text-faint">{label}</span>
+      <span className="shrink-0 text-muted">{label}</span>
       <span className="truncate font-mono text-ink-soft" title={value}>
         {value}
       </span>

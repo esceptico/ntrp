@@ -49,22 +49,11 @@ def test_no_frontmatter_parses_via_convention():
     assert body == content
 
 
-class EmptyRecords:
-    async def list(self, *, limit):
-        return []
-
-    async def labels_for(self, record_ids):
-        return {rid: [] for rid in record_ids}
-
-    async def list_labels(self):
-        return []
-
-
-async def test_read_artifact_strips_frontmatter(tmp_path: Path):
+def test_read_artifact_strips_frontmatter(tmp_path: Path):
     root = tmp_path / "artifacts"
     root.mkdir()
     store = ArtifactMemoryStore(root)
-    await store.export_from_records(EmptyRecords())  # type: ignore[arg-type]
+    store._write("README.md", "Memory", "topic", "global", None, "# Memory\n\nbody text\n", None)
 
     readme = store.read_artifact("README.md")
     assert not readme.content.startswith("---")

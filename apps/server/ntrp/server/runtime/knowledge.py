@@ -1,116 +1,12 @@
 import asyncio
-import hashlib
-import json
-from dataclasses import dataclass
-from pathlib import Path
 
 from ntrp.config import Config
-from ntrp.database import connect as db_connect
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.server.indexer import Indexer
 from ntrp.server.stores import Stores
 
 _logger = get_logger(__name__)
-_ARTIFACT_FINGERPRINT_KEY = "memory_artifacts_fingerprint"
-
-
-@dataclass(frozen=True)
-class ArtifactPublishReport:
-    refreshed: bool
-    artifact_count: int
-    fingerprint: str
-
-    @property
-    def skipped(self) -> bool:
-        return not self.refreshed
-
-
-async def artifact_memory_fingerprint(record_store) -> str:
-    records = await record_store.list(limit=None)
-    record_ids = [record.id for record in records]
-    labels_by_id = await record_store.labels_for(record_ids, include_kind=True) if record_ids else {}
-    payload = []
-    for record in sorted(records, key=lambda item: item.id):
-        labels = sorted(
-            labels_by_id.get(record.id, []),
-            key=lambda entry: (entry.get("label", ""), entry.get("kind", "")),
-        )
-        payload.append(
-            {
-                "id": record.id,
-                "text": record.text,
-                "kind": record.kind,
-                "scope_kind": record.scope_kind,
-                "scope_key": record.scope_key,
-                "created_at": record.created_at,
-                "last_confirmed_at": record.last_confirmed_at,
-                "pinned": record.pinned,
-                "source_ref": record.source_ref.to_dict() if record.source_ref is not None else None,
-                "labels": labels,
-            }
-        )
-    return _hash_json(payload)
-
-
-def artifact_tree_fingerprint(root: Path) -> str:
-    payload = []
-    if root.exists():
-        for path in sorted(root.rglob("*.md")):
-            try:
-                st = path.lstat()
-            except OSError:
-                continue
-            if path.is_symlink() or not path.is_file():
-                continue
-            rel = path.relative_to(root).as_posix()
-            try:
-                digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            except OSError:
-                continue
-            payload.append({"path": rel, "sha256": digest, "size": st.st_size})
-    return _hash_json(payload)
-
-
-async def write_artifact_publish_checkpoint(memory_db_path: Path, record_store, artifacts_dir: Path) -> str:
-    checkpoint = _checkpoint_value(
-        memory=await artifact_memory_fingerprint(record_store),
-        artifacts=artifact_tree_fingerprint(artifacts_dir),
-    )
-    await _write_artifact_fingerprint(memory_db_path, checkpoint)
-    return checkpoint
-
-
-def _checkpoint_value(*, memory: str, artifacts: str) -> str:
-    return _hash_json({"memory": memory, "artifacts": artifacts})
-
-
-def _hash_json(payload) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-async def _read_artifact_fingerprint(memory_db_path: Path) -> str | None:
-    conn = await db_connect(memory_db_path)
-    try:
-        await conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        rows = await conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (_ARTIFACT_FINGERPRINT_KEY,))
-        return rows[0]["value"] if rows else None
-    finally:
-        await conn.close()
-
-
-async def _write_artifact_fingerprint(memory_db_path: Path, fingerprint: str) -> None:
-    conn = await db_connect(memory_db_path)
-    try:
-        await conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        await conn.execute(
-            "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (_ARTIFACT_FINGERPRINT_KEY, fingerprint),
-        )
-        await conn.commit()
-    finally:
-        await conn.close()
 
 
 class KnowledgeRuntime:
@@ -146,55 +42,6 @@ class KnowledgeRuntime:
             return None, ""
         return get_completion_client(self.config.memory_model), self.config.memory_model
 
-    async def rebuild_artifacts(self) -> int:
-        """Regenerate the markdown projection (entities/, projects/, …) from the
-        canonical record pool, LLM-synthesizing the prose pages. Returns the
-        artifact count."""
-        if self._record_store is None:
-            return 0
-        from ntrp.memory.artifacts import ArtifactMemoryStore
-
-        llm, model = self._memory_llm()
-        artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
-            self._record_store, llm=llm, model=model
-        )
-        await write_artifact_publish_checkpoint(
-            self.config.memory_db_path,
-            self._record_store,
-            self.config.memory_artifacts_dir,
-        )
-        return len(artifacts)
-
-    async def publish_artifacts_if_dirty(self) -> ArtifactPublishReport:
-        """Publish artifacts only when canonical memory inputs or artifact files changed."""
-        if self._record_store is None:
-            return ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint="")
-        fingerprint = await self._current_artifact_checkpoint()
-        if await _read_artifact_fingerprint(self.config.memory_db_path) == fingerprint:
-            return ArtifactPublishReport(refreshed=False, artifact_count=0, fingerprint=fingerprint)
-
-        from ntrp.memory.artifacts import ArtifactMemoryStore
-
-        llm, model = self._memory_llm()
-        artifacts = await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(
-            self._record_store, llm=llm, model=model
-        )
-        fingerprint = await write_artifact_publish_checkpoint(
-            self.config.memory_db_path,
-            self._record_store,
-            self.config.memory_artifacts_dir,
-        )
-        return ArtifactPublishReport(refreshed=True, artifact_count=len(artifacts), fingerprint=fingerprint)
-
-    async def _artifact_fingerprint(self) -> str:
-        return await artifact_memory_fingerprint(self._record_store)
-
-    async def _current_artifact_checkpoint(self) -> str:
-        return _checkpoint_value(
-            memory=await artifact_memory_fingerprint(self._record_store),
-            artifacts=artifact_tree_fingerprint(self.config.memory_artifacts_dir),
-        )
-
     async def connect(self, stores: Stores) -> None:
         await self._init_search()
         await self._init_memory(stores)
@@ -202,31 +49,7 @@ class KnowledgeRuntime:
             stores.sessions.store.attach_search_index(self.search_index)
         if self.memory_curator is not None:
             self.memory_curator.start_sweep()
-        if self.memory_ready:
-            # Refresh the markdown projection once on boot so pre-existing files
-            # adopt the current generator (e.g. frontmatter) with no manual
-            # rebuild. Background + best-effort: never blocks startup.
-            self._artifact_refresh_task = asyncio.create_task(self._refresh_artifacts_on_start())
-
-    async def _refresh_artifacts_on_start(self) -> None:
-        if self._record_store is None:
-            return
-        try:
-            # Classify the label vocabulary first (cold-start backlog → entity
-            # dossiers) so a fresh deploy self-populates subject pages on boot
-            # instead of waiting for the daily consolidation.
-            if self._consolidate is not None:
-                await self._consolidate.lint_labels_once()
-            from ntrp.memory.artifacts import ArtifactMemoryStore
-
-            # MECHANICAL only — the boot refresh exists to let pre-existing files
-            # adopt the current generator (frontmatter); synthesized pages survive
-            # a mechanical sync by design. Full LLM synthesis (~27 calls) belongs
-            # on the explicit triggers (/init, the rebuild endpoint, the CLI), not
-            # on every restart / crash-loop.
-            await ArtifactMemoryStore(self.config.memory_artifacts_dir).export_from_records(self._record_store)
-        except Exception:
-            _logger.warning("startup artifact refresh failed", exc_info=True)
+        # No boot artifact refresh: files are canonical, there is no projection.
 
     async def reload_config(self, config: Config, stores: Stores | None) -> None:
         self.config = config
@@ -314,50 +137,113 @@ class KnowledgeRuntime:
             _logger.info("memory disabled by config")
             return
 
-        from ntrp.memory.consolidate import Consolidate
         from ntrp.memory.curator import Curator
-        from ntrp.memory.records import RecordStore
+        from ntrp.memory.file_store import FilePageStore
+        from ntrp.memory.project_names import load_project_names
 
-        # Flat record pool (rows in memory.db, vectors via the shared index).
-        self._record_store = RecordStore(
-            db_path=self.config.memory_db_path,
+        # Filesystem-canonical memory: two-zone markdown pages are the single
+        # source of truth. Mounted under the same surface tools/profile/curator
+        # already duck-type, so canonicality flips with one assignment.
+        self._record_store = FilePageStore(
+            root=self.config.memory_artifacts_dir,
             search_index=self.search_index,
+            project_names=load_project_names(self.config.memory_artifacts_dir),
         )
+        self._consolidate = None  # set below once the memory model is resolved
 
         memory_llm = get_completion_client(self.config.memory_model) if self.config.memory_model else None
         memory_effort = self._memory_reasoning_effort(self.config.memory_model)
 
-        # CONSOLIDATE/LINT — the background pass that turns the raw record pile
-        # into the actual memory (merge/supersede/drop). O(delta), watermark-durable.
-        self._consolidate = Consolidate(
-            self._record_store,
-            memory_llm,
-            model=self.config.memory_model,
-            db_path=self.config.memory_db_path,
-            reasoning_effort=memory_effort,
-        )
+        # File-native record consolidation: the nightly Consolidate engine runs its
+        # vector-neighborhood dedup/merge/retype directly on the canonical FilePageStore
+        # (it duck-types the store API; db_path is just its own watermark meta table).
+        if self.config.memory_model:
+            from ntrp.memory.consolidate import Consolidate
+
+            self._consolidate = Consolidate(
+                self._record_store,
+                memory_llm,
+                model=self.config.memory_model,
+                db_path=self.config.memory_db_path,
+                reasoning_effort=memory_effort,
+            )
+
+        # Importance scorer (off hot path: curator sweep + migrate backfill). Falls
+        # back to a heuristic when no memory_model, so it's always safe to attach.
+        from ntrp.memory.scorer import score_importance
+
+        async def _scorer(text: str, kind: str, pinned: bool) -> int:
+            return await score_importance(text, kind, pinned, memory_llm, self.config.memory_model, memory_effort)
+
+        self._record_store.attach_scorer(_scorer)
 
         if self.config.memory_model:
             self.memory_curator = Curator(
                 memory_llm,
                 stores.sessions,
                 model=self.config.memory_model,
-                db_path=self.config.memory_db_path,
+                db_path=self.config.memory_db_path,  # curator owns only its watermark meta here
                 record_store=self._record_store,
-                consolidate=self._consolidate,
+                consolidate=None,
                 reasoning_effort=memory_effort,
-                artifacts_dir=self.config.memory_artifacts_dir,
             )
         else:
             _logger.warning("memory enabled but no memory_model; curator disabled")
 
-        # Run the record-store schema migration NOW, serially, while it is the
-        # only open connection to memory.db. Deferring it to the first lazy
-        # _ensure_conn lets the consolidate/curator connections race the
-        # one-time DROP/ALTER rebuild (writer-vs-writer lock contention).
         await self._record_store.open()
+        await self._migrate_legacy_if_needed()
+        # Evict stale old-engine vectors (source="record") from the shared index.
+        # Only touches that partition — transcripts + memory_line are untouched.
+        if self.search_index is not None:
+            try:
+                await self.search_index.store.clear_source("record")
+            except Exception:
+                _logger.warning("clear stale record vectors failed", exc_info=True)
+        _logger.info("memory ready (file-canonical)", root=str(self.config.memory_artifacts_dir))
 
-        _logger.info("memory ready", db_path=str(self.config.memory_db_path))
+        # Synthesize the prose layer (the wiki view) off the hot path: stale-gated,
+        # so a freshly-migrated store gets full prose once and later boots are cheap.
+        if memory_llm is not None:
+            from ntrp.memory.synthesize import run_synthesis
+
+            self._artifact_refresh_task = asyncio.create_task(
+                run_synthesis(self._record_store, memory_llm, self.config.memory_model, reasoning_effort=memory_effort)
+            )
+
+    async def _migrate_legacy_if_needed(self) -> None:
+        """One-time boot migration: if the file store is empty but the legacy
+        SQLite pool still has records, convert them to pages. Backs up the db and
+        any existing projection dir first; idempotent (skips once pages exist)."""
+        if await self._record_store.count_active() > 0:
+            return
+        db_path = self.config.memory_db_path
+        if not db_path.exists():
+            return
+
+        from ntrp.memory.records import RecordStore
+
+        legacy = RecordStore(db_path=db_path)
+        await legacy.open()
+        try:
+            if await legacy.count_active() == 0:
+                return  # nothing to migrate
+
+            import shutil
+            from datetime import UTC, datetime
+
+            from ntrp.memory.migrate_to_files import migrate
+
+            root = self.config.memory_artifacts_dir
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(db_path, db_path.parent / f"{db_path.name}.premigrate-{stamp}.bak")
+            if root.exists():
+                shutil.copytree(root, root.parent / f"{root.name}.bak-{stamp}")
+                shutil.rmtree(root)
+            result = await migrate(legacy, root)
+            _logger.info("auto-migrated legacy memory to files on boot", **result)
+        finally:
+            await legacy.close()
+        await self._record_store.open()  # reload the freshly-written pages
 
     def _memory_reasoning_effort(self, model_id: str | None) -> str | None:
         """Effort for memory's structured calls: the user's configured effort if set,

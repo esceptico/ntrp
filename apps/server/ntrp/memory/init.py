@@ -4,16 +4,17 @@ Wipes every record EXCEPT pinned, resets the curator + consolidate watermarks,
 re-derives memory from ALL chat transcripts through the worthiness curator,
 consolidates the resulting pile, and rebuilds the artifact projection.
 
-Re-derives from chat transcripts AND the connected integrations (calendar,
-gmail, slack) via the source-agnostic curator (`ingest_items`).
+Re-derives from chat transcripts (durable facts, through the worthiness curator)
+AND the connected integrations (calendar, gmail, slack), the latter stored as
+low-trust observations via the curator (`store_observations`) — no LLM gate.
 
 Order matters: backup first (P0), then a FAIL-FAST wipe (P1 — abort the whole
 run if it raises, surfacing the backup path), then per-session transcript
 re-derivation (P2, isolated so one bad session can't abort the rest), the
 integration pass (P2.5, each source isolated so one failing source — incl. a
 missing OAuth scope — can't abort the others or the run), consolidation (P3),
-and the artifact rebuild (P4). The shared `max_llm_calls` budget is threaded
-across transcripts + every source.
+and the artifact rebuild (P4). The `max_llm_calls` budget bounds transcript
+curation; integration observations use no LLM and always run.
 """
 
 from __future__ import annotations
@@ -22,9 +23,7 @@ import shutil
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from ntrp.constants import INTEGRATION_INGEST_MAX_LLM_CALLS
 from ntrp.logging import get_logger
-from ntrp.memory.artifacts import ArtifactMemoryStore
 from ntrp.memory.models import now_iso
 
 if TYPE_CHECKING:
@@ -64,7 +63,6 @@ _SOURCE_FETCH_LIMIT = {"calendar": 200, "gmail": 150, "slack": 300}
 _GMAIL_NOISE_LABELS = frozenset(
     {"CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "SPAM"}
 )
-_INTEGRATION_LABEL = "NEW DOCUMENTS"
 
 
 async def run_memory_init(
@@ -122,7 +120,8 @@ async def run_memory_init(
     if wipe:
         wipe_result = await record_store.wipe_except_pinned()
     await curator.reset_watermarks()
-    await consolidate.reset_watermark()
+    if consolidate is not None:  # file-canonical build has no consolidate engine
+        await consolidate.reset_watermark()
     if wipe:
         _report_progress(f"wiped {wipe_result['deleted']} records, kept {wipe_result['kept_pinned']} pinned")
     else:
@@ -164,59 +163,38 @@ async def run_memory_init(
         client = clients.get(source)
         if client is None:
             continue  # not connected — skip silently
-        if llm_calls >= max_llm_calls:
-            capped = True
-            integrations[source] = {"admitted": 0, "calls": 0, "capped": True}
-            continue
         window = recency_days if recency_days is not None else SOURCE_RECENCY_DAYS[source]
-        budget = max_llm_calls - llm_calls
         try:
             # /init re-derives the FULL window (since=None — watermarks were just
             # reset in P1); _ingest_one_source advances the watermark afterwards so
-            # the periodic ingest that follows is incremental.
-            result = await _ingest_one_source(
-                curator, source, client, window_days=window, since=None, budget=budget,
-                label=_INTEGRATION_LABEL, bulk=True,
-            )
-            integrations[source] = {"admitted": result["admitted"], "calls": result["calls"]}
+            # the periodic ingest that follows is incremental. Integration items are
+            # stored as low-trust observations (no LLM) — they don't consume the chat
+            # curation budget, so they always run.
+            result = await _ingest_one_source(curator, source, client, window_days=window, since=None)
+            integrations[source] = {"admitted": result["admitted"]}
             admitted += result["admitted"]
-            llm_calls += result["calls"]
-            if result["capped"]:
-                capped = True
-            _report_progress(f"{source}: {result['admitted']} records admitted")
+            _report_progress(f"{source}: {result['admitted']} observations")
         except Exception as e:
             _logger.warning("init: integration source failed", source=source, exc_info=True)
-            integrations[source] = {"admitted": 0, "calls": 0, "error": str(e)}
+            integrations[source] = {"admitted": 0, "error": str(e)}
             _report_progress(f"{source}: failed ({e})")
 
     # --- P3: consolidate (bounded loop) -------------------------------------
     consolidate_summary = {"merged": 0, "pruned": 0, "passes": 0}
-    for _ in range(_MAX_CONSOLIDATE_PASSES):
-        report = await consolidate.run_once()
-        consolidate_summary["merged"] += report.merged
-        consolidate_summary["pruned"] += report.pruned
-        consolidate_summary["passes"] += 1
-        if report.pruned == 0 and report.merged == 0:
-            break
+    if consolidate is not None:  # file-canonical build: consolidation deferred
+        for _ in range(_MAX_CONSOLIDATE_PASSES):
+            report = await consolidate.run_once()
+            consolidate_summary["merged"] += report.merged
+            consolidate_summary["pruned"] += report.pruned
+            consolidate_summary["passes"] += 1
+            if report.pruned == 0 and report.merged == 0:
+                break
     _report_progress(f"consolidated in {consolidate_summary['passes']} pass(es)")
 
-    # --- P4: rebuild artifact projection ------------------------------------
-    # Full LLM synthesis (me.md + dossiers + active-work) when any LLM budget
-    # remains; once the curation/ingestion budget is spent, fall back to the
-    # mechanical projection so /init never blows past max_llm_calls.
-    artifacts = ArtifactMemoryStore(knowledge.config.memory_artifacts_dir)
-    synth_llm, synth_model = knowledge._memory_llm()
-    if llm_calls >= max_llm_calls:
-        synth_llm, synth_model = None, ""
-    await artifacts.export_from_records(record_store, llm=synth_llm, model=synth_model)
-    from ntrp.server.runtime.knowledge import write_artifact_publish_checkpoint
-
-    await write_artifact_publish_checkpoint(
-        knowledge.config.memory_db_path,
-        record_store,
-        knowledge.config.memory_artifacts_dir,
-    )
-    _report_progress("rebuilt artifact projection")
+    # --- P4: artifact projection (removed) ----------------------------------
+    # File-canonical: the markdown pages ARE the source of truth. The curator
+    # wrote each re-derived record straight to its page; exporting a projection
+    # here would clobber those canonical pages.
 
     return {
         "wiped": wipe,
@@ -236,18 +214,16 @@ async def run_integration_ingest(
     *,
     integration_clients: dict[str, object] | None = None,
     recency_days: int | None = None,
-    max_llm_calls: int = INTEGRATION_INGEST_MAX_LLM_CALLS,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     """Incremental, NON-destructive integration ingest — the periodic counterpart
     to /init's P2.5. Per connected source, fetch only items newer than the stored
-    per-source watermark, curate them into the pool, and advance the watermark. It
-    does NOT wipe, reset, or rebuild artifacts; the nightly maintenance pass folds
-    the new records into consolidation + the artifact projection.
+    per-source watermark, store them as low-trust observations, and advance the
+    watermark. No LLM (observations bypass the chat worthiness gate) and no wipe;
+    the nightly dream mines the new observations and retention ages them out.
 
-    Each source is isolated (a fetch/scope/curation failure is recorded and the
-    others continue). `max_llm_calls` caps the run across all sources. Returns
-    {"admitted", "capped", "integrations"}."""
+    Each source is isolated (a fetch/store failure is recorded and the others
+    continue). Returns {"admitted", "integrations"}."""
     curator = knowledge.memory_curator
     if curator is None:
         raise RuntimeError("memory not ready: curator unavailable")
@@ -259,35 +235,23 @@ async def run_integration_ingest(
     integrations: dict[str, dict] = {}
     clients = integration_clients or {}
     admitted = 0
-    llm_calls = 0
-    capped = False
     for source in ("calendar", "gmail", "slack"):
         client = clients.get(source)
         if client is None:
             continue  # not connected — skip silently
-        if llm_calls >= max_llm_calls:
-            capped = True
-            integrations[source] = {"admitted": 0, "calls": 0, "capped": True}
-            continue
         window = recency_days if recency_days is not None else SOURCE_RECENCY_DAYS[source]
-        budget = max_llm_calls - llm_calls
         watermark = await curator.read_ingest_watermark(source)
         since = datetime.fromisoformat(watermark) if watermark else None
         try:
-            result = await _ingest_one_source(
-                curator, source, client, window_days=window, since=since, budget=budget, label=_INTEGRATION_LABEL
-            )
-            integrations[source] = {"admitted": result["admitted"], "calls": result["calls"]}
+            result = await _ingest_one_source(curator, source, client, window_days=window, since=since)
+            integrations[source] = {"admitted": result["admitted"]}
             admitted += result["admitted"]
-            llm_calls += result["calls"]
-            if result["capped"]:
-                capped = True
-            _report(f"{source}: {result['admitted']} new records")
+            _report(f"{source}: {result['admitted']} new observations")
         except Exception as e:
             _logger.warning("ingest: integration source failed", source=source, exc_info=True)
-            integrations[source] = {"admitted": 0, "calls": 0, "error": str(e)}
+            integrations[source] = {"admitted": 0, "error": str(e)}
             _report(f"{source}: failed ({e})")
-    return {"admitted": admitted, "capped": capped, "integrations": integrations}
+    return {"admitted": admitted, "integrations": integrations}
 
 
 def _item_ts(item) -> datetime:
@@ -307,22 +271,20 @@ def _effective_window(window_days: int, since: datetime | None) -> int:
 
 
 async def _ingest_one_source(
-    curator, source: str, client, *, window_days: int, since: datetime | None, budget: int, label: str,
-    bulk: bool = False,
+    curator, source: str, client, *, window_days: int, since: datetime | None
 ) -> dict:
-    """Fetch (incrementally, if `since`), curate, and advance the watermark for one
-    source. Shared by /init (since=None, full window, bulk gate) and the periodic
-    incremental ingest (since=watermark, default gate)."""
+    """Fetch (incrementally, if `since`), store as low-trust observations, and
+    advance the watermark for one source. Shared by /init (since=None, full window)
+    and the periodic incremental ingest (since=watermark). No LLM — the chat
+    worthiness gate is bypassed; integration items are observations the dream mines."""
     items = await _fetch_source_items(source, client, _effective_window(window_days, since), since=since)
-    result = await curator.ingest_items(items, source_kind=source, source_label=label, max_calls=budget, bulk=bulk)
-    # Advance the watermark to the newest item seen — but only on a clean (not
-    # capped) pass, so a capped source re-fetches its tail next run.
-    # ponytail: the max is over kept (post-noise-filter) items, so a window of
-    # pure noise won't advance the watermark; bounded by window_days, no LLM cost.
-    if not result["capped"]:
-        newest = max((_item_ts(it) for it in items), default=None)
-        if newest is not None:
-            await curator.write_ingest_watermark(source, newest.isoformat())
+    result = await curator.store_observations(items, source_kind=source)
+    # Advance the watermark to the newest item seen so the next run is incremental.
+    # ponytail: the max is over kept (post-noise-filter) items, so a window of pure
+    # noise (nothing kept) leaves the watermark put. No LLM cost.
+    newest = max((_item_ts(it) for it in items), default=None)
+    if newest is not None:
+        await curator.write_ingest_watermark(source, newest.isoformat())
     return result
 
 

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { createAutomation, updateAutomation } from "../../actions";
+import { useFocusTrap } from "../../lib/hooks";
 import type {
   Automation,
   AutomationTrigger,
@@ -269,6 +270,8 @@ export function AutomationEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = !!seed;
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   // (Re)hydrate the form whenever a new seed arrives.
   useEffect(() => {
@@ -342,6 +345,11 @@ export function AutomationEditor({
           onClick={onClose}
         >
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Automation editor"
+            tabIndex={-1}
             className="auto-editor surface-panel surface-radius-md w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -383,6 +391,7 @@ export function AutomationEditor({
               {unsafeAutoApprove && (
                 <motion.div
                   key="unsafe"
+                  role="alert"
                   initial={RISE_IN}
                   animate={RISE_SETTLED}
                   exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
@@ -450,6 +459,7 @@ export function AutomationEditor({
                 <button
                   type="button"
                   onClick={onClose}
+                  disabled={saving}
                   className="inline-flex items-center h-8 px-3 rounded-[9px] text-sm font-medium text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
                 >
                   Cancel

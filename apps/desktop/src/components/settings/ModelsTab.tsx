@@ -3,7 +3,9 @@ import { useStore } from "../../store";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ModelGroup } from "../../api";
 import { ModelReasoningPicker } from "../ComposerSelectors";
+import { useTimeoutFlag } from "../../lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { SaveStatus } from "./SaveStatus";
 
 type ModelKind = "research_model" | "workflow_model" | "memory_model";
 
@@ -30,6 +32,7 @@ export function ModelsTab() {
   const models = useStore((s) => s.serverModels);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saved, fireSaved] = useTimeoutFlag(1500);
 
   if (!cfg) {
     if (!connected) return <SettingsConnectionHint />;
@@ -73,6 +76,10 @@ export function ModelsTab() {
         Each chat keeps its own model — switch it from the composer. The default below applies to newly created chats. Research and memory models are for background work.
       </div>
 
+      <div className="flex min-h-5 items-center justify-end">
+        <SaveStatus busy={!!saving} saved={saved} />
+      </div>
+
       <div className="grid divide-y divide-line-soft">
         <Section
           title="Default chat (new chats)"
@@ -89,6 +96,7 @@ export function ModelsTab() {
             setError(null);
             try {
               await updateServerConfig({ chat_model: model });
+              fireSaved();
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
               await fetchServerConfig();
@@ -105,6 +113,7 @@ export function ModelsTab() {
                 reasoning_model: cfg.chat_model,
                 reasoning_effort: effort,
               });
+              fireSaved();
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
               await fetchServerConfig();
@@ -135,6 +144,7 @@ export function ModelsTab() {
                 setError(null);
                 try {
                   await updateServerConfig({ [kind]: model });
+                  fireSaved();
                 } catch (err) {
                   setError(err instanceof Error ? err.message : String(err));
                   await fetchServerConfig();
@@ -151,6 +161,7 @@ export function ModelsTab() {
                     reasoning_model: current,
                     reasoning_effort: effort,
                   });
+                  fireSaved();
                 } catch (err) {
                   setError(err instanceof Error ? err.message : String(err));
                   await fetchServerConfig();

@@ -416,6 +416,7 @@ export function Composer() {
           <textarea
             ref={inputRef}
             id="message-input"
+            aria-label="Message ntrp"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {

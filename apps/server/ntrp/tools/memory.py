@@ -40,27 +40,6 @@ _logger = get_logger(__name__)
 MEMORY_RECORDS_SERVICE = "memory_records"
 
 
-def _should_sync_artifacts(store) -> bool:
-    db_path = getattr(store, "_db_path", None)
-    if db_path is None:
-        return False
-    try:
-        return db_path.resolve() == get_config().memory_db_path.resolve()
-    except Exception:
-        return False
-
-
-async def _sync_artifacts_if_live(store, event: str) -> None:
-    if not _should_sync_artifacts(store):
-        return
-    try:
-        artifacts = ArtifactMemoryStore(get_config().memory_artifacts_dir)
-        artifacts.append_event(event)
-        await artifacts.export_from_records(store)
-    except Exception:
-        _logger.warning("memory artifact sync failed after tool memory mutation", exc_info=True)
-
-
 class RememberInput(BaseModel):
     text: str = Field(
         min_length=1,
@@ -72,10 +51,11 @@ class RememberInput(BaseModel):
     )
     kind: str = Field(
         default="fact",
-        pattern="^(directive|fact|source)$",
+        pattern="^(directive|fact|source|lesson)$",
         description=(
-            "The record's function: directive | fact | source. "
-            "Preferences and project facts are facts with the right scope; procedures that should steer behavior are directives."
+            "The record's function: directive | fact | source | lesson. "
+            "Preferences and project facts are facts with the right scope; a standing rule the user states is a directive; "
+            "a working pattern YOU distilled that should change how you act next time is a lesson (rides your resident playbook)."
         ),
     )
 
@@ -124,11 +104,14 @@ class RecallInput(BaseModel):
     query: str = Field(
         min_length=1,
         max_length=20_000,
-        description="A natural-language query; returns the most relevant durable directive/fact records by default.",
+        description="A natural-language query; returns the most relevant durable fact/source records by default.",
     )
     kinds: list[str] | None = Field(
         default=None,
-        description="Optional kinds to search. Defaults to directive+fact. Use source only for receipts.",
+        description="Optional kinds to search. Defaults to fact+source (topical recall). Standing "
+        "directives and learned lessons are always in the resident context, so they're excluded here "
+        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly. Raw integration "
+        "items (emails/events/messages) are kind 'observation' — pass kinds=['observation'] to search them.",
     )
 
 
@@ -196,7 +179,8 @@ def _preferred_artifact_match(paths: list[str], slug: str) -> str | None:
     if len(unique) == 1:
         return next(iter(unique))
     for candidate in (
-        f"entities/{slug}.md",
+        f"topics/{slug}.md",
+        f"entities/{slug}.md",  # legacy fallback (pre-unification leftovers)
         f"projects/{slug}.md",
         f"context/integrations/{slug}.md",
     ):
@@ -527,26 +511,13 @@ async def approve_memory_rebuild(execution: ToolExecution, args: MemoryRebuildIn
 
 
 async def memory_rebuild(execution: ToolExecution, args: MemoryRebuildInput) -> ToolResult:
-    records = execution.ctx.services.get(MEMORY_RECORDS_SERVICE)
-    if records is None:
-        return _unavailable()
-    store = _artifact_store()
-    # Explicit user-triggered rebuild → full LLM synthesis (consistent with the
-    # REST/CLI rebuild paths). The per-mutation sync (_sync_artifacts_if_live)
-    # stays mechanical.
-    from ntrp.llm.router import get_completion_client
-
-    cfg = get_config()
-    memory_llm = get_completion_client(cfg.memory_model) if cfg.memory_model else None
-    try:
-        artifacts = await store.export_from_records(records, llm=memory_llm, model=cfg.memory_model or "")
-        from ntrp.server.runtime.knowledge import write_artifact_publish_checkpoint
-
-        await write_artifact_publish_checkpoint(cfg.memory_db_path, records, cfg.memory_artifacts_dir)
-    except Exception as exc:
-        _logger.warning("memory filesystem rebuild failed", exc_info=True)
-        return ToolResult(content=f"Memory filesystem rebuild failed: {exc}", preview="Rebuild failed", is_error=True)
-    return ToolResult(content=f"Rebuilt {len(artifacts)} memory artifacts under {store.root}.", preview=f"{len(artifacts)} artifacts", data={"root": str(store.root), "artifact_count": len(artifacts), "artifacts": [a.path for a in artifacts]})
+    # Memory is file-canonical: the markdown pages ARE the source of truth, so
+    # there is no projection to rebuild — and exporting would clobber the pages.
+    return ToolResult(
+        content="Memory is file-canonical: pages are the source of truth, nothing to rebuild. Edit pages directly.",
+        preview="no-op (file-canonical)",
+        data={"rebuilt": False},
+    )
 
 def _normalize_text(text: str) -> str:
     return " ".join(text.split()).strip().lower().rstrip(".!?")
@@ -581,7 +552,6 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
     )
     source = apply_scope_to_source(base, scope)
     await store.add(args.text, kind=args.kind, scope_kind=scope.kind, scope_key=scope.key, source_ref=source)
-    await _sync_artifacts_if_live(store, f"Remembered: {args.text}")
     return ToolResult(content="Remembered", preview="Remembered")
 
 
@@ -600,7 +570,6 @@ async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
 
     best = hits[0]
     await store.delete(best.id)
-    await _sync_artifacts_if_live(store, f"Forgot: {best.text}")
     others = hits[1:]
     content = f"Forgot: {best.text}"
     if others:
@@ -619,7 +588,11 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     visible = [
         (s.kind, s.key) for s in scopes_for_read(project=getattr(execution.ctx, "project", None), session_id=session_id)
     ]
-    kinds = args.kinds or ["directive", "fact"]
+    # Topical recall by default: facts + source pointers. Directives and lessons are
+    # standing rules already in the resident context every turn — including them here
+    # let high-salience rules bury the topical facts a query is actually asking for
+    # (the eval went 65% -> 95% once they were excluded).
+    kinds = args.kinds or ["fact", "source"]
     hits = await store.search(args.query, limit=10, scopes=visible, kinds=kinds)
     if not hits:
         return ToolResult(content="No matching memory.", preview="No matches")
@@ -631,7 +604,7 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
 
 
 def _entity_brief_nudge(query: str) -> str | None:
-    """If the query slug matches an existing compiled entity dossier, point the
+    """If the query slug matches an existing compiled topic page, point the
     agent at it. Read-only filesystem probe; never raises into the recall path."""
     from ntrp.memory.artifacts import _slug
 
@@ -639,8 +612,8 @@ def _entity_brief_nudge(query: str) -> str | None:
     if not slug:
         return None
     try:
-        if (get_config().memory_artifacts_dir / "entities" / f"{slug}.md").is_file():
-            return f'_Compiled brief: memory_read("entities/{slug}.md")_'
+        if (get_config().memory_artifacts_dir / "topics" / f"{slug}.md").is_file():
+            return f'_Compiled brief: memory_read("topics/{slug}.md")_'
     except Exception:
         return None
     return None
@@ -648,9 +621,10 @@ def _entity_brief_nudge(query: str) -> str | None:
 
 
 _MEMORY_FS_DESCRIPTION = (
-    "Use recall for DB-backed facts/atomic records; use memory_tree/read/search for generated "
-    "dossiers/context/source docs; memory_patch edits filesystem projection files only and does "
-    "not mutate canonical DB records."
+    "The memory wiki is plain markdown: me.md (profile), directives.md, topics/<slug>.md "
+    "(one page per subject — people, products, projects), observations/, insights/, daily/. "
+    "Use recall for atomic facts; use memory_tree for the live file tree, then memory_read a "
+    "page by path/title to go deep."
 )
 
 memory_tree_tool = tool(
@@ -702,7 +676,7 @@ remember_tool = tool(
         "their world. Use for stable preferences, decisions, and facts worth "
         "recalling in future sessions — not transient task state. State one "
         "statement per call; set `kind` to its function "
-        "(directive | fact | source)."
+        "(directive | fact | source | lesson)."
     ),
     input_model=RememberInput,
     policy=ToolPolicy(

@@ -1,6 +1,6 @@
 """LLM synthesis prompts for memory pages.
 
-Three prose-page synthesizers that replace the bullet-dump projection. Each
+Five prose-page synthesizers that replace the bullet-dump projection. Each
 receives a list of atomic RECORDS (id, text, kind, labels, pinned,
 last_confirmed_at) and synthesizes a grounded markdown page FROM them.
 
@@ -11,23 +11,27 @@ not a `(from slack)`-style source tag. The model may cite ONLY the ids it was
 given, and may assert ONLY what those records support.
 
   - PROFILE_SYSTEM     -> me.md
-  - DOSSIER_SYSTEM     -> entities/<subject>.md, projects/<subject>.md
+  - DOSSIER_SYSTEM     -> topics/<subject>.md  (one page per subject)
   - ACTIVE_WORK_SYSTEM -> active-work.md
+  - OVERVIEW_SYSTEM    -> observations/<source>.md  (integration source overview)
+  - DAILY_SYSTEM       -> daily/<date>.md  (per-day activity log)
 
-Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog.
-Scopes are visibility metadata, not shown to the model.
+Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog |
+observation | lesson. Scopes are visibility metadata, not shown to the model.
 """
 
 from __future__ import annotations
 
 import re
 
-from ntrp.memory.models import Record
+from ntrp.memory.models import TRUST_DEFAULT, Record, source_trust
 
 # Sentinel strings the synthesizers emit when their content gate fails. The
 # caller matches these exactly and skips the file rather than persisting a stub.
 INSUFFICIENT_DOSSIER = "_Insufficient records to synthesize a brief._"
 NO_ACTIVE_WORK = "_No active threads in the recent window._"
+NO_OVERVIEW = "_Not enough observations to summarize this source yet._"
+NO_DAILY = "_No notable activity this day._"
 
 # A citation is only counted inside a well-formed parenthetical group —
 # `(record:3f2a1b9c)` or `(record:3f2a1b9c, record:7d1e0a44)` — the exact form the
@@ -64,6 +68,10 @@ in brackets, e.g. `[3f2a1b9c]`. That id is your only currency.
   world. A `source` is a receipt/pointer; cite it for the fact it evidences, not
   as a fact of its own. Ignore `changelog` records — they are housekeeping.
 - A `pinned` record is user-blessed; never omit or contradict it.
+- An `integration-sourced` record was machine-extracted from an external system
+  (calendar/email/slack), not stated by the user. Cite it, but phrase the claim
+  tentatively ("appears to", "as of last sync") — it is evidence, not a confirmed
+  user fact.
 - When two records conflict, prefer the one confirmed more recently and the
   higher-authority kind (directive > fact > source). State the current truth;
   do not narrate the contradiction.
@@ -125,6 +133,8 @@ def format_record_line(record: Record, labels: list[str] | None = None) -> str:
     meta = [record.kind]
     if record.pinned:
         meta.append("pinned")
+    if record.source_ref and source_trust(record.source_ref.kind) <= TRUST_DEFAULT:
+        meta.append("integration-sourced")
     if record.last_confirmed_at:
         meta.append(f"confirmed {record.last_confirmed_at[:10]}")
     line = f"[{record.id[:8]}] ({', '.join(meta)}) {record.text.strip()}"
@@ -190,11 +200,11 @@ with a one-line note on the relationship. Only those the records actually
 establish; cite each.
 ```
 
-You are also given `known_subjects`: the exact titles of generated dossier pages
-that exist elsewhere in the wiki. In `Key relationships / tools`, link ONLY
-those exact titles with `[[Title]]`. If a person/tool/system is record-backed
-but not in `known_subjects`, write it as plain text. Never imply a separate page
-exists for a non-dossier item.
+You are also given `known_subjects`: the exact titles of topic pages that exist
+elsewhere in the wiki. In `Key relationships / tools`, link ONLY those exact
+titles with `[[Title]]`. If a person/tool/system is record-backed but not in
+`known_subjects`, write it as plain text. Never imply a separate page exists for
+a subject that has none.
 
 Keep the whole page tight — this is a briefing, not a biography. If two records
 say the same thing, merge them into one cited statement. Lead each section with
@@ -224,12 +234,12 @@ def profile_user_message(
 
 
 # ===========================================================================
-# 2) DOSSIER  ->  entities/<subject>.md, projects/<subject>.md
+# 2) DOSSIER_SYSTEM  ->  topics/<subject>.md  (one page per subject)
 # ===========================================================================
 
 DOSSIER_SYSTEM = "\n\n".join([
     """\
-You write a single dossier page for ONE subject (a person, project, product,
+You write a single topic page for ONE subject (a person, project, product,
 company, place, or named topic) in a personal memory wiki. The page is a durable
 operational briefing on that subject, written from the user's perspective: who
 or what this is to the user, what's known, and what's unresolved.
@@ -290,7 +300,7 @@ def dossier_user_message(
         "<known_subjects>\n"
         f"{known}\n"
         "</known_subjects>\n\n"
-        f'Write the dossier for "{title}". Apply the 3-fact gate first.'
+        f'Write the topic page for "{title}". Apply the 3-fact gate first.'
     )
 
 
@@ -366,4 +376,114 @@ def active_work_user_message(
         "<records>\n"
         f"{format_records_block(merged, labels_by_id)}\n"
         "</records>"
+    )
+
+
+# ===========================================================================
+# 4) OVERVIEW  ->  observations/<source>.md (prose zone above the raw stream)
+# ===========================================================================
+
+OVERVIEW_SYSTEM = "\n\n".join([
+    """\
+You write the overview for ONE integration source (gmail, calendar, slack, …) in
+a personal memory wiki. Below this prose sits the raw observation stream the agent
+ingested from that source; your job is the SOP above it — a durable, current map
+of what this source is to the user and what flows through it.
+
+You are given the source name and its recent observation records. Output:
+
+```
+# <Source> — overview
+
+<one sentence: what this source is to the user>
+
+## What's here
+The recurring correspondents, topics, and threads that show up — SYNTHESIZED, not
+a list of messages. Group related observations into themes. Cite (record:XXXXXXXX).
+
+## Patterns
+How the user uses this source / what recurs (standing senders, notification types,
+cadences). Cite each. Omit the section if the observations don't support it.
+```
+
+These are integration-sourced observations, NOT user-stated facts: describe
+PATTERNS across the stream, phrase tentatively, and never elevate a single
+email/event into a durable fact about the user.
+
+HARD GATE — if there are fewer than 3 substantive observations (bot/notification
+noise doesn't count), output EXACTLY this and nothing else:
+
+""" + NO_OVERVIEW + """""",
+    _GROUNDING,
+    _SYNTHESIS_QUALITY,
+    _NO_SLOP,
+])
+
+
+def overview_user_message(
+    source: str,
+    records: list[Record],
+    labels_by_id: dict[str, list[str]] | None = None,
+) -> str:
+    return (
+        f"Source: {source}\n\n"
+        "<records>\n"
+        f"{format_records_block(records, labels_by_id)}\n"
+        "</records>\n\n"
+        f'Write the overview for "{source}". Apply the 3-observation gate first.'
+    )
+
+
+# ===========================================================================
+# 5) DAILY  ->  daily/<YYYY-MM-DD>.md (a dated activity log)
+# ===========================================================================
+
+DAILY_SYSTEM = "\n\n".join([
+    """\
+You write one day's page in a personal memory wiki: `daily/<date>.md`, a concise
+log of what the user actually did, decided, or learned on that date. Unlike the
+timeless pages, this one IS dated — it captures that day's activity so the user
+can later recall "what was I doing then".
+
+You are given the date and the records that entered memory on that date. Merge
+them into a tight narrative — combine related records into a single line, drop
+trivia, lead with what mattered. Output:
+
+```
+# <date>
+
+- One merged event per meaningful thread that day, past tense, citing the
+  record(s): `Shipped the entity-promotion fix and reconciled 19 pages to 7
+  (record:XXXXXXXX).` Two or three closely-related records become ONE line.
+```
+
+Rules:
+- This is a LOG of that day, so past tense and event-shaped ("Decided…",
+  "Shipped…", "Met with…", "Learned…") — not the timeless present the other
+  pages use.
+- Aggressively merge. A day is a handful of lines, not one per record. If five
+  records describe one work session, that's one line.
+- Cite every line with `(record:XXXXXXXX)`. Skip pure housekeeping.
+
+If the records describe nothing worth logging, output EXACTLY:
+
+""" + NO_DAILY + """
+
+and nothing else.""",
+    _GROUNDING,
+    _NO_SLOP,
+])
+
+
+def daily_user_message(
+    day: str,
+    records: list[Record],
+    labels_by_id: dict[str, list[str]] | None = None,
+) -> str:
+    return (
+        f"Date: {day}\n\n"
+        "<records>\n"
+        f"{format_records_block(records, labels_by_id)}\n"
+        "</records>\n\n"
+        f"Write the log for {day}. Merge aggressively."
     )

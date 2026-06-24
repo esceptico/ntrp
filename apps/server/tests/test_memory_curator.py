@@ -86,7 +86,7 @@ def _ops_json(records: list[dict] | None = None) -> str:
     return json.dumps({"records": records or []})
 
 
-def _make_curator(tmp_path: Path, llm, sessions, *, artifacts_dir: Path | None = None) -> tuple[Curator, RecordStore]:
+def _make_curator(tmp_path: Path, llm, sessions) -> tuple[Curator, RecordStore]:
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     curator = Curator(
         llm,
@@ -94,40 +94,8 @@ def _make_curator(tmp_path: Path, llm, sessions, *, artifacts_dir: Path | None =
         model="memory-model",
         db_path=tmp_path / "memory.db",
         record_store=records,
-        artifacts_dir=artifacts_dir,
     )
     return curator, records
-
-
-# --- artifact sync -------------------------------------------------------------
-
-
-async def test_curator_syncs_artifacts_after_record_changes(tmp_path: Path):
-    artifacts_dir = tmp_path / "artifacts"
-    llm = StubLLM(_ops_json([{"op": "ADD", "text": "The user prefers green tea", "kind": "fact"}]))
-    sessions = StubSessions({"s1": [_turn(0, "user", "I prefer green tea")]})
-    curator, records = _make_curator(tmp_path, llm, sessions, artifacts_dir=artifacts_dir)
-
-    changed = await curator.curate_session("s1")
-
-    assert changed is True
-    facts = (artifacts_dir / "facts" / "index.md").read_text(encoding="utf-8")
-    assert "Facts are DB-backed" in facts
-    assert "The user prefers green tea" not in facts
-    changelog = (artifacts_dir / "changelog" / "index.md").read_text(encoding="utf-8")
-    assert "curator updated 1 memory record(s) from chat transcript" not in changelog
-    assert "The user prefers green tea" not in changelog  # index is a count-only rollup
-    assert "events across" in changelog
-    monthly = "\n".join(path.read_text(encoding="utf-8") for path in (artifacts_dir / "changelog").glob("*/*.md"))
-    assert "Learned: The user prefers green tea" in monthly
-    assert "s1" not in monthly
-    assert "source_ref" not in monthly
-    assert "curator:" not in monthly
-    for record in await records.list(limit=None):
-        assert record.id not in changelog
-        assert record.id not in monthly
-    await curator.stop()
-    await records.close()
 
 
 # --- admit gate / watermark -----------------------------------------------------
@@ -393,14 +361,14 @@ async def test_narrative_summary_kind_is_not_minted(tmp_path: Path):
 
 
 async def test_curator_add_kinds_exclude_summary(tmp_path: Path):
-    """The curator's writable ADD kinds are directive|fact|source only — the
-    prompt no longer offers 'summary'."""
+    """The curator's writable ADD kinds are directive|fact|source|lesson — the
+    prompt no longer offers 'summary'. `lesson` is the continual-learning playbook kind."""
     from ntrp.memory.curator import ALLOWED_KINDS, _SYSTEM_PROMPT
 
-    assert ALLOWED_KINDS == {"directive", "fact", "source"}
+    assert ALLOWED_KINDS == {"directive", "fact", "source", "lesson"}
     assert "summary" not in ALLOWED_KINDS
     assert '"summary"' not in _SYSTEM_PROMPT
-    assert "directive|fact|source" in _SYSTEM_PROMPT
+    assert "directive|fact|source|lesson" in _SYSTEM_PROMPT
 
 
 async def test_legacy_note_action_kinds_are_dropped(tmp_path: Path):
@@ -674,3 +642,29 @@ async def test_sweep_curates_only_sessions_with_new_turns(tmp_path: Path):
     assert await curator._read_watermark("fresh") == 0
     await curator.stop()
     await records.close()
+
+
+async def test_backfill_entity_labels_promotes_recurring_subject(tmp_path: Path):
+    """Untagged records that share a named subject get entity-tagged, so the subject
+    accumulates >=2 records and promotes to a topic page; pure self-facts stay untagged."""
+    import json as _json
+
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    a = await store.add("You worked at Replika on post-training.", kind="fact", source_ref=SourceRef("user", ""))
+    b = await store.add("Replika reached roughly 2M daily active users.", kind="fact", source_ref=SourceRef("user", ""))
+    c = await store.add("Your birthday is January 24.", kind="fact", source_ref=SourceRef("user", ""))
+
+    llm = StubLLM(_json.dumps({a.id: "Replika", b.id: "Replika", c.id: None}))
+    curator = Curator(llm, StubSessions(), model="memory-model", db_path=tmp_path / "m.db", record_store=store)
+
+    tagged = await curator.backfill_entity_labels()
+
+    assert tagged == 2
+    assert (tmp_path / "memory" / "topics" / "replika.md").exists(), "recurring subject promoted to a topic"
+    assert "Replika" in {l["label"] for l in await store.list_labels()}
+    await curator.stop()
+    await store.close()

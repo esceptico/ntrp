@@ -30,6 +30,8 @@ interface HoverPopoverProps {
   anchor?: "left" | "right";
   /** Panel classes on top of surface-panel/surface-popover (width, padding). */
   className?: string;
+  /** Accessible label for the portaled dialog panel. */
+  label?: string;
   /** Close on mousedown outside trigger + panel. Cheap insurance for the
    *  case where hover misbehaves on a flaky trackpad and the popover gets
    *  stuck open. */
@@ -48,6 +50,7 @@ export function HoverPopover({
   children,
   anchor = "left",
   className,
+  label = "Popover",
   dismissOnOutsideClick = false,
 }: HoverPopoverProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -109,6 +112,15 @@ export function HoverPopover({
     return () => window.removeEventListener("mousedown", onClick);
   }, [open, dismissOnOutsideClick]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   return (
     <>
       {trigger({
@@ -127,6 +139,8 @@ export function HoverPopover({
           {open && coords && (
             <motion.div
               ref={popoverRef}
+              role="dialog"
+              aria-label={label}
               onMouseEnter={show}
               onMouseLeave={scheduleHide}
               initial={{ opacity: 0, y: 4, scale: 0.98 }}

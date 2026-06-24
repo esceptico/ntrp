@@ -47,6 +47,7 @@ export function ListEditor({
             value={v}
             onChange={(e) => update(i, e.target.value)}
             placeholder={placeholder}
+            aria-label={`${placeholder} ${i + 1}`}
             spellCheck={false}
             className={clsx(
               "flex-1 input-field input-field-sm",
@@ -90,6 +91,7 @@ export function KeyValueEditor({
             value={e.key}
             onChange={(ev) => update(i, { key: ev.target.value })}
             placeholder="Key"
+            aria-label={`Key ${i + 1}`}
             spellCheck={false}
             className="input-field input-field-sm font-mono"
           />
@@ -98,6 +100,7 @@ export function KeyValueEditor({
             value={e.value}
             onChange={(ev) => update(i, { value: ev.target.value })}
             placeholder={valuePlaceholder}
+            aria-label={`${valuePlaceholder} ${i + 1}`}
             spellCheck={false}
             className="input-field input-field-sm font-mono"
           />

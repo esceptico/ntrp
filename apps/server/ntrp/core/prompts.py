@@ -64,10 +64,13 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 ## MEMORY
 
-recall() = search your full knowledge store. MEMORY CONTEXT above is curated and incomplete — recall() finds contextual knowledge when the current task needs it.
-When in doubt, recall() first. web_search = external web info; email/calendar/Slack are deferred data sources, so load the relevant group before using them.
-Knowledge connects by lexical/semantic match, temporal proximity, scope, source support, and feedback score.
-Do not remember more just to make context richer. Remember only direct evidence or reusable lessons/procedures that can support future activation."""
+Your memory is a markdown wiki of the user, not just a flat fact store. Two ways in:
+- recall() = search the full store for atomic facts/sources. When in doubt, recall() first.
+- The wiki has a compiled page per subject. memory_tree shows the page tree; memory_read('topics/<subject>.md') reads the briefing on a person/product/project (e.g. 'topics/dex.md'), me.md is the user's profile, active-work.md the current threads. Read the page when a question is about one subject in depth — it's richer than scattered recall hits.
+MEMORY CONTEXT above is curated and incomplete; recall()/memory_read find the rest.
+web_search = external web info; email/calendar/Slack are deferred data sources, so load the relevant group before using them.
+Writing: remember() one self-contained item per call — kind 'fact'/'source' for durable truths/pointers, 'directive' for a standing rule the user states, 'lesson' for a working pattern YOU learned that should change how you act next time. forget() archives stale items. Editing a wiki page: memory_read it first, then edit prose ABOVE the `<!-- timeline -->` sentinel, never the records below.
+Do not remember more just to make context richer — only direct evidence or reusable lessons/procedures."""
 
 
 _RESEARCH_BASE = """You are a research agent with access to all read-only tools: emails, calendar, web search, memory recall, and local file listing/search/reading.

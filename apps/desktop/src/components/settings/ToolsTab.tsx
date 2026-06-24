@@ -5,6 +5,7 @@ import { useStore } from "../../store";
 import { useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { SaveStatus } from "./SaveStatus";
 import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
@@ -16,7 +17,7 @@ const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
 export function ToolsTab() {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
-  const { error, run } = useMutationState();
+  const { busy, saved, error, run } = useMutationState();
   const [tools, setTools] = useState<ToolMetadata[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -94,13 +95,17 @@ export function ToolsTab() {
         <p className="m-0 text-sm text-muted leading-[1.45] max-w-[520px]">
           Override tool approval behavior. Denied tools are hidden from the agent and blocked at execution.
         </p>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search tools"
-          spellCheck={false}
-          className="w-[220px] h-8 px-2.5 rounded-md border border-line-soft bg-surface text-sm text-ink outline-none focus:border-line transition-colors"
-        />
+        <div className="flex items-center gap-2.5">
+          <SaveStatus busy={busy} saved={saved} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search tools"
+            aria-label="Search tools"
+            spellCheck={false}
+            className="w-[220px] h-8 px-2.5 rounded-md border border-line-soft bg-surface text-sm text-ink outline-none focus:border-line transition-colors"
+          />
+        </div>
       </div>
 
       {error && <SettingsInlineError title="Couldn't save tool override" message={error} />}
@@ -123,7 +128,7 @@ export function ToolsTab() {
                           {tool.policy.action}
                         </span>
                       </div>
-                      <div className="mt-0.5 text-xs text-faint font-mono truncate">{tool.name}</div>
+                      <div className="mt-0.5 text-xs text-muted font-mono truncate">{tool.name}</div>
                       {tool.description && (
                         <div className="mt-1 text-xs text-muted leading-snug line-clamp-2">
                           {tool.description}

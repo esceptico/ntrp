@@ -64,6 +64,57 @@ def _orphan_ops(record_id: str) -> str:
     return LintOps.model_validate({"orphans": [{"record_id": record_id}]}).model_dump_json()
 
 
+# --- file-canonical store (the revived nightly path) --------------------------
+
+
+async def test_consolidate_runs_on_file_page_store_and_skips_observations(tmp_path: Path):
+    """The nightly consolidation now runs on the canonical FilePageStore: it merges
+    duplicate DURABLE records but never pulls a low-trust observation/lesson into a
+    merge (that would launder trust)."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    a = await store.add("The user rides a Trek Marlin 5 gravel bike.", kind="fact", source_ref=SourceRef("user", ""))
+    b = await store.add("The user rides a Trek Marlin gravel bicycle.", kind="fact", source_ref=SourceRef("user", ""))
+    obs = await store.add("Email from Kevin about the bike order.", kind="observation", source_ref=SourceRef("gmail", "g1"))
+
+    llm = StubLLM(_merge_ops([a.id, b.id], merged_text="The user rides a Trek Marlin 5 gravel bike."))
+    consolidate = Consolidate(store, llm, model="memory-model", db_path=tmp_path / "meta.db")
+
+    report = await consolidate.run_once()
+
+    assert report.merged == 1
+    active = await store.list(limit=None, scopes=None)
+    durable = [r for r in active if r.kind == "fact"]
+    assert len(durable) == 1 and "Trek Marlin 5" in durable[0].text, durable
+    assert any(r.id == obs.id and r.kind == "observation" for r in active), "observation untouched"
+    # the observation never entered a judged neighborhood
+    for call in llm.calls:
+        assert '"kind": "observation"' not in call["messages"][-1]["content"]
+    await consolidate.close()
+    await store.close()
+
+
+async def test_file_store_set_label_kind_meta_to_entity_is_not_data_loss(tmp_path: Path):
+    """meta->entity has no faithful mapping on the page-level meta model — it must leave
+    the label in place, never silently delete it."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    r = await store.add("The user filed a bug.", kind="fact", source_ref=SourceRef("user", ""))
+    await store.set_labels(r.id, ["Bug"])  # a page meta label
+    assert any(l["label"] == "Bug" for l in await store.list_labels())
+
+    changed = await store.set_label_kind("Bug", "entity")  # ill-defined direction
+    assert changed == 0
+    assert any(l["label"] == "Bug" for l in await store.list_labels()), "meta label must survive"
+    await store.close()
+
+
 # --- merge --------------------------------------------------------------------
 
 
@@ -368,35 +419,29 @@ async def test_second_sweep_is_a_noop_without_changes(tmp_path: Path):
     await records.close()
 
 
-async def test_idle_sweep_skips_label_hygiene_when_fingerprint_is_unchanged(tmp_path: Path):
+async def test_idle_sweep_makes_zero_llm_calls(tmp_path: Path):
+    """The fingerprint cache: once a clean night has judged every neighborhood, a
+    subsequent sweep with nothing changed re-judges nothing and re-runs no label
+    hygiene — zero LLM calls (the waste-elimination over a full re-scan)."""
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     a = await records.add("Dex is sleeping through the night")
     b = await records.add("ntrp has a memory system")
-    extra = await records.add("temporary duplicate")
-    survivor = await records.add("temporary duplicate")
     await records.set_labels(a.id, ["Dex"])
     await records.set_labels(b.id, ["ntrp"])
-    llm = StubLLM(
-        LintOps().model_dump_json(),
-        LabelOps().model_dump_json(),
-    )
+    llm = StubLLM()  # default no-op LintOps/LabelOps for every call
     consolidate = _consolidate(tmp_path, records, llm)
 
     await consolidate.run_once()
-    first_watermark = await consolidate._read_watermark()
-    first_label_calls = sum(1 for call in llm.calls if call["response_format"] is LabelOps)
-    assert first_label_calls == 1
+    calls_after_first = len(llm.calls)
+    assert calls_after_first > 0  # judged the two new records + one label-hygiene call
 
-    await records.supersede(extra.id, survivor.id)
+    await consolidate.run_once()  # nothing changed
+    assert len(llm.calls) == calls_after_first, "an idle sweep must make zero LLM calls"
 
-    restarted = _consolidate(tmp_path, records, llm)
-    report = await restarted.run_once()
-
-    assert report.pruned == 1
-    assert sum(1 for call in llm.calls if call["response_format"] is LabelOps) == first_label_calls
-    assert await records.get(extra.id) is None
-    assert await restarted._read_watermark() > first_watermark
-    await restarted.close()
+    # a changed record re-enters: its hood fingerprint differs, so it IS re-judged
+    await records.update(a.id, "Dex now sleeps in his own room")
+    await consolidate.run_once()
+    assert len(llm.calls) > calls_after_first, "a changed record is re-judged"
     await consolidate.close()
     await records.close()
 

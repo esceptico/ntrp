@@ -83,6 +83,20 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   // unrelated hover open with no delay.
   useLayoutEffect(() => clear, []);
 
+  // Escape dismisses the tip without moving focus off the trigger.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        clear();
+        setOpen(false);
+        lastTooltipClosedAt = Date.now();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {

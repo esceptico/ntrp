@@ -84,12 +84,20 @@ class AutomationRuntime:
             self._build_memory_consolidate_handler(),
         )
         self.scheduler.register_handler(
-            "memory_publish",
-            self._build_memory_publish_handler(),
-        )
-        self.scheduler.register_handler(
             "integration_sync",
             self._build_integration_sync_handler(),
+        )
+        self.scheduler.register_handler(
+            "memory_dream",
+            self._build_memory_dream_handler(),
+        )
+        self.scheduler.register_handler(
+            "memory_synthesize",
+            self._build_memory_synthesize_handler(),
+        )
+        self.scheduler.register_handler(
+            "memory_retention",
+            self._build_memory_retention_handler(),
         )
 
         await seed_builtins(self.stores.automations)
@@ -134,15 +142,63 @@ class AutomationRuntime:
 
         return handler
 
-    def _build_memory_publish_handler(self):
+    def _build_memory_dream_handler(self):
         async def handler(context: dict | None) -> str | None:
             knowledge = self.get_knowledge()
             if knowledge is None or not knowledge.memory_ready:
-                return "memory publish unavailable (memory not ready)"
-            report = await knowledge.publish_artifacts_if_dirty()
-            if report.skipped:
-                return "skipped artifact publish (no memory changes)"
-            return f"refreshed {report.artifact_count} artifacts"
+                return "memory dream unavailable (memory not ready)"
+            from ntrp.memory.dreamer import run_dream
+            from ntrp.memory.file_store import load_conventions
+            from ntrp.memory.maintenance import append_learnings, read_learnings
+            from ntrp.memory.models import now_iso
+
+            llm, model = knowledge._memory_llm()
+            effort = knowledge._memory_reasoning_effort(knowledge.config.memory_model)
+            # B: per-automation continual learning — read prior gotchas, append new ones.
+            root = knowledge.record_store._root
+            learnings = read_learnings(root, "memory_dream")
+            summary, new = await run_dream(
+                knowledge.record_store, llm, model, reasoning_effort=effort,
+                conventions=load_conventions(), learnings=learnings,
+            )
+            append_learnings(root, "memory_dream", new, date=now_iso())
+            return summary
+
+        return handler
+
+    def _build_memory_synthesize_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            knowledge = self.get_knowledge()
+            if knowledge is None or not knowledge.memory_ready:
+                return "memory synthesis unavailable (memory not ready)"
+            from ntrp.memory.synthesize import run_synthesis
+
+            llm, model = knowledge._memory_llm()
+            effort = knowledge._memory_reasoning_effort(knowledge.config.memory_model)
+            # Tag untagged records with their named subject FIRST, so recurring people/
+            # orgs/products promote to topic pages that this same pass then synthesizes.
+            tagged = 0
+            if knowledge.memory_curator is not None:
+                tagged = await knowledge.memory_curator.backfill_entity_labels()
+            summary = await run_synthesis(knowledge.record_store, llm, model, reasoning_effort=effort)
+            return f"{summary} (+{tagged} entity tags)" if tagged else summary
+
+        return handler
+
+    def _build_memory_retention_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            knowledge = self.get_knowledge()
+            if knowledge is None or not knowledge.memory_ready:
+                return "memory retention unavailable (memory not ready)"
+            from ntrp.memory.retention import run_retention
+
+            store = knowledge.record_store
+            report = await run_retention(store)
+            # Retention tombstones atoms; fold any entity page that just dropped
+            # below the promotion threshold back into me.md the same night.
+            stats = await store.reconcile_entities()
+            detail = f"; entities {stats}" if (stats["promoted"] or stats["demoted"]) else ""
+            return report.summary() + detail
 
         return handler
 
@@ -158,8 +214,7 @@ class AutomationRuntime:
 
             report = await run_integration_ingest(knowledge, integration_clients=clients)
             parts = [f"{src}: {d.get('admitted', 0)} new" for src, d in report["integrations"].items()]
-            tail = " (capped)" if report.get("capped") else ""
-            return ("; ".join(parts) or "no connected sources") + tail
+            return "; ".join(parts) or "no connected sources"
 
         return handler
 

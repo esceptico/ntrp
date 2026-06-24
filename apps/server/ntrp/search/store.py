@@ -11,6 +11,11 @@ from ntrp.search.migrations import run_migrations
 
 _logger = get_logger(__name__)
 
+# Bump when the items_vec schema changes (forces a rebuild + full re-embed).
+# v2: added a `source` partition key so per-source KNN doesn't starve small
+# partitions (e.g. ~89 memory_line vectors vs ~53k transcript vectors).
+_VEC_SCHEMA_VERSION = "2"
+
 SNIPPET_DISPLAY_LIMIT = 500
 
 
@@ -61,14 +66,14 @@ class SearchStore:
             CREATE INDEX IF NOT EXISTS idx_items_hash ON items(source, content_hash);
         """)
 
-        # Check if embedding dimension changed since last run
+        # Rebuild the vec table (and force a full re-embed) when the embedding dim
+        # OR the vec schema version changed. v2 adds the `source` partition key.
         stored_dim = await self._get_meta("embedding_dim")
-        if stored_dim is not None and int(stored_dim) != self.embedding_dim:
-            _logger.info(
-                "Embedding dimension changed (%s → %d), rebuilding vec table",
-                stored_dim,
-                self.embedding_dim,
-            )
+        stored_vec_ver = await self._get_meta("vec_schema_version")
+        dim_changed = stored_dim is not None and int(stored_dim) != self.embedding_dim
+        ver_changed = stored_vec_ver != _VEC_SCHEMA_VERSION
+        if dim_changed or ver_changed:
+            _logger.info("rebuilding vec table (dim_changed=%s ver_changed=%s) — full re-embed", dim_changed, ver_changed)
             await self.conn.execute("DROP TABLE IF EXISTS items_vec")
             await self.conn.execute("DELETE FROM items")
             await self.conn.commit()
@@ -107,7 +112,8 @@ class SearchStore:
             await self.conn.execute(f"""
                 CREATE VIRTUAL TABLE IF NOT EXISTS items_vec USING vec0(
                     item_id INTEGER PRIMARY KEY,
-                    embedding float[{self.embedding_dim}] distance_metric=cosine
+                    embedding float[{self.embedding_dim}] distance_metric=cosine,
+                    source text partition key
                 );
             """)
             self._has_vec = True
@@ -116,6 +122,7 @@ class SearchStore:
             self._has_vec = False
 
         await self._set_meta("embedding_dim", str(self.embedding_dim))
+        await self._set_meta("vec_schema_version", _VEC_SCHEMA_VERSION)
         await run_migrations(self.conn)
         await self.conn.commit()
 
@@ -136,7 +143,8 @@ class SearchStore:
             await self.conn.execute(f"""
                 CREATE VIRTUAL TABLE items_vec USING vec0(
                     item_id INTEGER PRIMARY KEY,
-                    embedding float[{self.embedding_dim}] distance_metric=cosine
+                    embedding float[{self.embedding_dim}] distance_metric=cosine,
+                    source text partition key
                 );
             """)
             self._has_vec = True
@@ -237,8 +245,8 @@ class SearchStore:
             if self._has_vec:
                 await self.conn.execute("DELETE FROM items_vec WHERE item_id = ?", (item_id,))
                 await self.conn.execute(
-                    "INSERT INTO items_vec(item_id, embedding) VALUES (?, ?)",
-                    (item_id, embedding),
+                    "INSERT INTO items_vec(item_id, embedding, source) VALUES (?, ?, ?)",
+                    (item_id, embedding, source),
                 )
         else:
             cursor = await self.conn.execute(
@@ -252,8 +260,8 @@ class SearchStore:
             item_id = cursor.lastrowid
             if self._has_vec:
                 await self.conn.execute(
-                    "INSERT INTO items_vec(item_id, embedding) VALUES (?, ?)",
-                    (item_id, embedding),
+                    "INSERT INTO items_vec(item_id, embedding, source) VALUES (?, ?, ?)",
+                    (item_id, embedding, source),
                 )
 
         await self.conn.commit()
@@ -317,14 +325,15 @@ class SearchStore:
         try:
             if sources:
                 placeholders = ",".join("?" * len(sources))
+                # Filter by the `source` partition key INSIDE the KNN so a small
+                # partition (memory_line) isn't starved by a large one (transcript).
                 rows = await self.conn.execute_fetchall(
                     f"""
-                    SELECT v.item_id, v.distance
-                    FROM items_vec v
-                    JOIN items i ON v.item_id = i.id
-                    WHERE v.embedding MATCH ? AND k = ?
-                      AND i.source IN ({placeholders})
-                    ORDER BY v.distance
+                    SELECT item_id, distance
+                    FROM items_vec
+                    WHERE embedding MATCH ? AND k = ?
+                      AND source IN ({placeholders})
+                    ORDER BY distance
                     """,
                     [query_embedding, limit * 2, *sources],
                 )

@@ -214,6 +214,7 @@ function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Filter…"
+        aria-label="Filter"
         spellCheck={false}
         className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-muted outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
       />

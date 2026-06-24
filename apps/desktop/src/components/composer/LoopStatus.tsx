@@ -130,7 +130,7 @@ export function LoopStatusBar() {
                   title="Show full prompt"
                 >
                   <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
-                  <div className="mt-0.5 text-xs text-faint">
+                  <div className="mt-0.5 text-xs text-muted">
                     Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
                     {loop.max_iterations
                       ? ` · ${loop.iteration_count}/${loop.max_iterations}`
@@ -185,7 +185,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
             <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
               <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
               <div className="text-sm font-medium text-ink">Loop</div>
-              <div className="ml-auto text-xs text-faint">
+              <div className="ml-auto text-xs text-muted">
                 Every {loop.every} · next in {formatLoopCountdown(loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY)}
               </div>
               <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
@@ -195,7 +195,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
             <div className="scroll-thin overflow-y-auto px-4 py-3">
               <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
             </div>
-            <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">
+            <div className="px-4 py-2 border-t border-line text-xs text-muted flex flex-wrap gap-x-3 gap-y-1">
               {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
               {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
               {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}

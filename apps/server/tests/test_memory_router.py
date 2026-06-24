@@ -69,60 +69,13 @@ def test_scopes_empty(client):
     assert c.get("/admin/memory/scopes").json() == {"scopes": []}
 
 
-def test_rebuild_artifacts_endpoint_shape_and_counts(client):
+def test_rebuild_artifacts_endpoint_is_noop(client):
+    # File-canonical: /artifacts/rebuild no longer re-derives a projection (that
+    # would clobber the canonical pages); it returns the current pages + a detail.
     c, *_ = client
     body = c.post("/admin/memory/artifacts/rebuild").json()
-    artifacts = body["artifacts"]
-    assert artifacts
-    expected_keys = {
-        "path",
-        "title",
-        "kind",
-        "type",
-        "directory",
-        "scope",
-        "content",
-        "snippet",
-        "record_count",
-        "generated",
-        "editable",
-        "readonly_reason",
-        "updated_at",
-        "labels",
-        "source",
-    }
-    assert all(set(a.keys()) == expected_keys for a in artifacts)
-    by_path = {a["path"]: a for a in artifacts}
-    assert "README.md" in by_path
-    assert "facts/index.md" in by_path
-    assert "context/index.md" in by_path
-    assert "context/README.md" in by_path
-    assert "context/links.md" in by_path
-    assert "context/integrations/index.md" in by_path
-    assert "entities/index.md" in by_path
-    assert "references/index.md" in by_path
-    assert "sources/index.md" not in by_path
-    assert "files/index.md" not in by_path
-    assert "docs/index.md" not in by_path
-    assert "changelog/index.md" in by_path
-    assert "facts/global.md" not in by_path
-    assert by_path["references/index.md"]["record_count"] is None
-    assert by_path["context/index.md"]["record_count"] is None
-    assert by_path["context/README.md"]["record_count"] is None
-    assert by_path["context/links.md"]["record_count"] is None
-    assert by_path["context/integrations/index.md"]["record_count"] is None
-    assert by_path["changelog/index.md"]["record_count"] is None
-    assert by_path["facts/index.md"]["record_count"] is None
-    assert by_path["projects/inbox.md"]["kind"] == "topic"
-    assert by_path["projects/inbox.md"]["record_count"] == 0
-    assert all(a["content"] == "" for a in artifacts)
-    detail = c.get("/admin/memory/artifacts/references/index.md").json()["artifact"]
-    assert set(detail.keys()) == expected_keys
-    assert detail["record_count"] is None
-
-    search = c.get("/admin/memory/artifacts", params={"q": "Regina"}).json()["artifacts"]
-    assert any(a["path"].startswith("entities/") or a["path"].startswith("projects/") for a in search)
-    assert all(a["content"] == "" for a in search)
+    assert "file-canonical" in body["detail"]
+    assert isinstance(body["artifacts"], list)
 
 
 def test_list_items_shape(client):

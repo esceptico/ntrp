@@ -424,7 +424,7 @@ function ProviderRow({
               : providerDescription(provider.id)}
           </div>
           {!provider.connected && (
-            <div className="text-xs text-faint font-mono truncate">
+            <div className="text-xs text-muted font-mono truncate">
               {providerModelCountLabel(provider)}
             </div>
           )}
@@ -470,6 +470,7 @@ function ProviderRow({
               value={apiKey}
               onChange={(event) => onKeyChange(event.target.value)}
               placeholder="API key"
+              aria-label="API key"
               autoFocus
               spellCheck={false}
               autoComplete="off"
@@ -574,7 +575,7 @@ function CustomModelsPanel({
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-ink-soft truncate">{model.id}</div>
-                  <div className="text-xs text-faint truncate">
+                  <div className="text-xs text-muted truncate">
                     {model.base_url || "default base URL"} · {model.context_window.toLocaleString()} ctx
                   </div>
                 </div>
@@ -598,6 +599,7 @@ function CustomModelsPanel({
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
             placeholder="model id"
+            aria-label="Model ID"
             spellCheck={false}
             className="input-field"
           />
@@ -605,6 +607,7 @@ function CustomModelsPanel({
             value={draft.base_url}
             onChange={(event) => onDraftChange({ base_url: event.target.value })}
             placeholder="base URL"
+            aria-label="Base URL"
             spellCheck={false}
             autoComplete="off"
             className="input-field"

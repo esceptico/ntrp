@@ -206,7 +206,7 @@ export function ActivityHeader({
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate
           independently instead of the whole string snapping. */}
-      <span className="mr-1.5 inline-flex h-full items-center leading-none">
+      <span aria-live="polite" className="mr-1.5 inline-flex h-full items-center leading-none">
         <RollingToken value={heading} motionDisabled={suppressMotion} />
       </span>
       <span className="inline-flex h-full items-center gap-1 leading-none">
@@ -623,7 +623,7 @@ function AgentRow({
           {run.name}
         </span>
         {detail && (
-          <span className={clsx("min-w-0 flex-1 truncate text-faint", running && "italic")}>
+          <span className={clsx("min-w-0 flex-1 truncate text-muted", running && "italic")}>
             {detail}
           </span>
         )}

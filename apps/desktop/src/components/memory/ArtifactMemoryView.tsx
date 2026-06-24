@@ -28,6 +28,7 @@ import {
   MetaGrid,
   PaneShell,
   Pill,
+  Properties,
   relativeTime,
 } from "./shared";
 
@@ -43,8 +44,17 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-const DIRECTORY_ORDER = ["memory", "context", "facts", "entities", "projects", "references", "changelog"];
-const DEFAULT_EXPANDED_DIRS = new Set(["memory", "context", "context/integrations", "entities", "projects"]);
+// Folder sort + default-expand order, post topics/-unification (entities/ & projects/
+// are folded into topics/).
+const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"];
+const DEFAULT_EXPANDED_DIRS = new Set(["topics", "daily", "insights", "observations"]);
+
+// Pages whose body already IS their records (never prose-synthesized) — keep in sync
+// with the server's artifacts._is_record_list_page.
+const RECORD_LIST_PAGES = new Set(["directives.md", "lessons.md", "references.md"]);
+function isRecordListPage(path: string): boolean {
+  return RECORD_LIST_PAGES.has(path) || path.split("/")[0] === "insights";
+}
 
 function displayFileName(a: MemoryArtifact) {
   const leaf = a.path.split("/").pop() ?? a.path;
@@ -55,13 +65,55 @@ function displayTitle(a: MemoryArtifact) {
   return a.title || displayFileName(a);
 }
 
+// Strip inline (record:XXXXXXXX) provenance groups from synthesized prose for the
+// human view — they stay on disk. Mirrors the server's _CITATION_GROUP_RE so a lone
+// 8-hex token not wrapped in (record:…) is left alone.
+const _CITE_RE = /\s*\(record:[0-9a-fA-F]{8}(?:,\s*record:[0-9a-fA-F]{8})*\)/g;
+function stripCites(s: string): string {
+  return s.replace(_CITE_RE, "");
+}
+
+// The detail header already shows the page title, so a leading `# Title` H1 in the
+// body just double-prints it (index.md, health.md, topic pages). Drop it for the view.
+function stripLeadingH1(s: string): string {
+  return s.replace(/^\s*#\s+.*\r?\n+/, "");
+}
+
+function TimelineDisclosure({ timeline }: { timeline?: MemoryArtifact["timeline"] }) {
+  const records = (timeline ?? []).filter((l) => !l.superseded);
+  const supersededCount = (timeline ?? []).length - records.length;
+  if (records.length === 0) return null;
+  const label = records.length === 1 ? "record" : "records";
+  return (
+    <details className="mt-6 border-t border-line pt-3">
+      <summary className="cursor-pointer text-xs font-medium text-muted">Timeline · {records.length} {label}</summary>
+      <ol className="mt-2 space-y-1">
+        {records.map((l) => (
+          <li key={l.id} className="flex gap-2 text-xs">
+            <span className="shrink-0 font-mono tabular-nums text-muted">{l.date}</span>
+            <span className="min-w-0 break-words text-ink">{l.text}</span>
+            <span className="ml-auto shrink-0 text-muted">{l.src}</span>
+          </li>
+        ))}
+      </ol>
+      {supersededCount > 0 && <div className="mt-2 text-xs text-muted">+{supersededCount} superseded</div>}
+    </details>
+  );
+}
+
 function scopeLabel(scope: { kind: string; key: string | null }) {
   return scope.key ? `${scope.kind}:${scope.key}` : scope.kind;
 }
 
 // Plain user-facing words for internal kind values.
+const _KIND_LABELS: Record<string, string> = {
+  directive: "rule",
+  observation: "observed",
+  lesson: "lesson",
+  changelog: "change",
+};
 function kindLabel(kind: string) {
-  return kind === "directive" ? "rule" : kind;
+  return _KIND_LABELS[kind] ?? kind;
 }
 
 function directorySort(a: TreeNode, b: TreeNode) {
@@ -90,8 +142,9 @@ function addNode(parent: TreeNode, parts: string[], artifact: MemoryArtifact, pa
 function buildArtifactTree(artifacts: MemoryArtifact[]) {
   const root: TreeNode = { name: "root", path: "", kind: "directory", children: [] };
   for (const artifact of artifacts) {
-    const parts = artifact.path.includes("/") ? artifact.path.split("/") : ["memory", artifact.path];
-    addNode(root, parts, artifact);
+    // Root files (me.md, index.md, …) live AT the vault root — render them at the top
+    // level alongside the real folders (daily/, topics/, …), not under a fake "memory" dir.
+    addNode(root, artifact.path.split("/"), artifact);
   }
   const sortRec = (node: TreeNode) => {
     node.children.sort(directorySort);
@@ -160,7 +213,7 @@ function preferredAlias(map: Map<string, Set<string>>, key: string): string | nu
   if (!paths) return null;
   if (paths.size === 1) return [...paths][0];
   const slug = wikiSlug(key);
-  for (const candidate of [`entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
+  for (const candidate of [`topics/${slug}.md`, `entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
     if (paths.has(candidate)) return candidate;
   }
   return null;
@@ -214,6 +267,7 @@ function TreeSearch({ value, onChange, placeholder }: { value: string; onChange:
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder}
         spellCheck={false}
         className="h-full w-full bg-transparent pl-10 pr-9 text-sm text-ink-soft placeholder:text-muted outline-none"
       />
@@ -258,6 +312,9 @@ function TreeRow({
       <>
         <button
           type="button"
+          role="treeitem"
+          aria-expanded={open}
+          aria-level={depth + 1}
           onClick={() => onToggle(node.path)}
           title={node.name}
           className="group mt-1 flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left transition-colors hover:bg-surface-soft"
@@ -269,7 +326,7 @@ function TreeRow({
           />
           {open ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-faint" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-faint" />}
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-soft group-hover:text-ink">{node.name}</span>
-          <span className="shrink-0 text-2xs tabular-nums text-faint">{countFiles(node)}</span>
+          <span className="shrink-0 text-2xs tabular-nums text-muted">{countFiles(node)}</span>
         </button>
         {/* Snap layout — no height-tween over the recursive subtree. The
             revealed block rises in as one unit (bounded on big folders);
@@ -316,6 +373,8 @@ function TreeRow({
   return (
     <button
       type="button"
+      role="treeitem"
+      aria-level={depth + 1}
       onClick={() => onSelect(a.path)}
       title={`${displayTitle(a)} — ${a.path}`}
       className={clsx(
@@ -636,8 +695,8 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       <TreeSearch value={query} onChange={setQuery} placeholder="Search paths, titles, snippets…" />
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
         {modeToggle}
-        <GhostBtn onClick={rebuild} disabled={rebuilding} title="Regenerate memory artifacts from the record substrate">
-          {rebuilding ? "Rebuilding…" : "Rebuild"}
+        <GhostBtn onClick={rebuild} disabled={rebuilding} title="Reload memory pages from disk (pick up edits made in Obsidian)">
+          {rebuilding ? "Reloading…" : "Reload"}
         </GhostBtn>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-3 pb-3 pt-1">
@@ -668,17 +727,17 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         ) : tree.length === 0 ? (
           <Empty
             icon={FileText}
-            hint="Memory notes are generated from your records."
+            hint="Memory pages are written as you chat and synthesized nightly."
             action={
               <GhostBtn onClick={rebuild} disabled={rebuilding}>
-                {rebuilding ? "Rebuilding…" : "Rebuild memory"}
+                {rebuilding ? "Reloading…" : "Reload"}
               </GhostBtn>
             }
           >
             No memory notes yet
           </Empty>
         ) : (
-          <div className="flex flex-col gap-px">
+          <div role="tree" aria-label="Memory notes" className="flex flex-col gap-px">
             {tree.map((node) => (
               <TreeRow
                 key={node.kind === "directory" ? `d:${node.path}` : `f:${node.path}`}
@@ -702,6 +761,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     <select
       value={recordKind}
       onChange={(e) => setRecordKind(e.target.value as MemoryKind | "")}
+      aria-label="Filter by record kind"
       className="h-7 rounded-[10px] bg-surface-soft px-2 text-sm text-ink-soft outline-none"
     >
       <option value="">All kinds</option>
@@ -779,8 +839,10 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
               tone="faint"
               disabled={pinningId === record.id}
               title={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
+              aria-label={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
+              aria-pressed={record.pinned}
               onClick={() => togglePinned(record)}
-              className={clsx("absolute right-1 top-1", record.pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}
+              className={clsx("absolute right-1 top-1 focus-visible:opacity-100", record.pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100")}
             >
               <Pin className="h-3.5 w-3.5" fill={record.pinned ? "currentColor" : "none"} strokeWidth={2} />
             </IconButton>
@@ -793,7 +855,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   // ─── Files detail pane ──────────────────────────────────────────────
   const filesDetail = !active ? (
     loading ? (
-      <DetailPlaceholder>{""}</DetailPlaceholder>
+      <DetailPlaceholder>Loading…</DetailPlaceholder>
     ) : (
       <DetailPlaceholder icon={FileText} hint="Pick a note from the list to read it.">
         Nothing selected
@@ -837,7 +899,11 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
             <DetailPlaceholder>Loading artifact…</DetailPlaceholder>
           ) : (
             <WikiLinkContext.Provider value={wikiHandlers}>
-              <Markdown content={active.content} className="max-w-none" />
+              <Properties frontmatter={active.frontmatter} />
+              <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
+              {/* Record-list pages (directives/lessons/references/insights) already render
+                  their records as the body — don't repeat them in the timeline disclosure. */}
+              {!isRecordListPage(active.path) && <TimelineDisclosure timeline={active.timeline} />}
             </WikiLinkContext.Provider>
           )}
         </>
@@ -845,10 +911,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       meta={
         <MetaGrid
           rows={[
-            { label: "Kind", value: kindLabel(active.kind) },
-            { label: "Scope", value: scopeLabel(active.scope) },
-            { label: "Updated", value: relativeTime(active.updated_at) },
-            active.record_count !== null && { label: "Records", value: String(active.record_count) },
+            // record count lives in the Timeline disclosure header — don't repeat it here
             !!active.source && { label: "Source", value: active.source! },
             !active.editable && { label: "Access", value: "read-only" },
           ]}

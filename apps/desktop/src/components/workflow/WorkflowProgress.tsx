@@ -160,9 +160,17 @@ export function WorkflowProgressCard({
     .join(" · ");
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          if (e.key === " ") e.preventDefault();
+          onOpen();
+        }
+      }}
       title={workflow.description ?? `${workflow.name ?? "Workflow"} — open`}
       className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-sunken px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line hover:bg-surface-soft active:scale-[0.985]"
     >
@@ -194,29 +202,21 @@ export function WorkflowProgressCard({
           </BlurSwap>
         </Badge>
         {running && (
-          // span[role=button]: the card root is already a <button>, and nested
-          // buttons are invalid HTML. Stops the parent run — the workflow is
-          // awaited by it, so this is the kill switch for a runaway fan-out.
-          <span
-            role="button"
-            tabIndex={0}
+          // Stops the parent run — the workflow is awaited by it, so this is
+          // the kill switch for a runaway fan-out. stopPropagation keeps the
+          // card's open handler from firing too.
+          <button
+            type="button"
             title="Stop run"
             aria-label="Stop run"
             onClick={(e) => {
               e.stopPropagation();
               void stopRun();
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                void stopRun();
-              }
-            }}
             className="grid place-items-center w-5 h-5 shrink-0 rounded text-faint transition-[background-color,color,scale] duration-check ease-out hover:bg-bad-soft hover:text-bad active:scale-[0.97]"
           >
             <Square size={ICON.XS} strokeWidth={2} fill="currentColor" />
-          </span>
+          </button>
         )}
         <ChevronRight
           size={ICON.XS}
@@ -253,10 +253,10 @@ export function WorkflowProgressCard({
             ) : (
               <span className="flex-1" />
             )}
-            {meta && <span className="shrink-0 text-2xs tabular-nums text-faint">{meta}</span>}
+            {meta && <span className="shrink-0 text-2xs tabular-nums text-muted">{meta}</span>}
           </div>
         </div>
       )}
-    </button>
+    </div>
   );
 }

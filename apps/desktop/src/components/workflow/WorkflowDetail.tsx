@@ -182,7 +182,7 @@ export function WorkflowDetail({
   if (phases.length === 0) {
     return (
       <div className="py-1.5">
-        <div className="px-2 text-2xs text-faint">
+        <div className="px-2 text-2xs text-muted">
           {isActiveWorkflow(workflow) ? "Spinning up agents…" : "No agents ran."}
         </div>
         {summary}
@@ -239,7 +239,7 @@ function PhaseGroup({
             transition={{ duration: MOTION.row, ease: EASE_OUT }}
           >
             {agents.length === 0 ? (
-              <div className="pl-6 py-0.5 text-2xs text-faint">No agents yet.</div>
+              <div className="pl-6 py-0.5 text-2xs text-muted">No agents yet.</div>
             ) : (
               agents.map((agent) => (
                 <AgentRow key={agent.taskId} agent={agent} onOpenAgent={onOpenAgent} />
@@ -293,8 +293,8 @@ function AgentRow({
       >
         {agent.name ?? agent.taskId}
       </span>
-      {tokens > 0 && <span className="shrink-0 text-2xs tabular-nums text-faint">{formatTokens(tokens)}</span>}
-      {elapsedLabel && <span className="shrink-0 text-2xs tabular-nums text-faint">{elapsedLabel}</span>}
+      {tokens > 0 && <span className="shrink-0 text-2xs tabular-nums text-muted">{formatTokens(tokens)}</span>}
+      {elapsedLabel && <span className="shrink-0 text-2xs tabular-nums text-muted">{elapsedLabel}</span>}
     </>
   );
 

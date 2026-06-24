@@ -1,7 +1,9 @@
 """run_integration_ingest (ntrp/memory/init.py) — the periodic, NON-destructive,
-incremental integration ingest. Per-source watermark advances on each run; a run
-with no items newer than the watermark makes ZERO LLM calls. Hermetic: stubbed
-clients, the CountingCuratorLLM pattern, a real tmp RecordStore (FTS-only)."""
+incremental integration ingest. Under the observation model each connected source
+is fetched incrementally past its per-source watermark and every item is stored as
+a low-trust `observation` — NO LLM call, NO worthiness gate. The watermark advances
+so a run with nothing newer ingests zero. Hermetic: stubbed clients, a real tmp
+RecordStore (FTS-only)."""
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,28 +42,30 @@ async def test_incremental_ingest_advances_watermark_and_skips_seen(tmp_path: Pa
         _raw_at("calendar", "ev1", "1:1 with Regina", "MATS roadmap", t0),
         _raw_at("calendar", "ev2", "Standup", "daily", t0 + timedelta(hours=1)),
     ])
-    llm = CountingCuratorLLM("the user has a 1:1 with Regina about MATS")
+    llm = CountingCuratorLLM("SHOULD NOT BE USED")
     knowledge, curator, records = await _knowledge(tmp_path, llm)
 
-    # Run 1: both events are new -> one batch -> one LLM call; watermark set to newest.
+    # Run 1: both events are new -> two observations, no LLM; watermark = newest.
     r1 = await run_integration_ingest(knowledge, integration_clients={"calendar": cal})
-    assert r1["integrations"]["calendar"]["admitted"] == 1
-    assert len(llm.calls) == 1
+    assert r1["integrations"]["calendar"]["admitted"] == 2
+    assert len(llm.calls) == 0
     assert await curator.read_ingest_watermark("calendar") == (t0 + timedelta(hours=1)).isoformat()
 
-    # Run 2: nothing newer than the watermark -> ZERO new LLM calls.
+    # Run 2: nothing newer than the watermark -> zero ingested, watermark unchanged.
     r2 = await run_integration_ingest(knowledge, integration_clients={"calendar": cal})
     assert r2["integrations"]["calendar"]["admitted"] == 0
-    assert len(llm.calls) == 1  # unchanged
 
-    # Run 3: a newer event arrives -> only it reaches the LLM.
+    # Run 3: a newer event arrives -> only it is observed; seen items are not re-added.
     cal._items.append(_raw_at("calendar", "ev3", "New plan", "Q3 planning", t0 + timedelta(days=1)))
-    llm._texts.append("the user is planning Q3")
-    await run_integration_ingest(knowledge, integration_clients={"calendar": cal})
-    assert len(llm.calls) == 2
-    last_prompt = llm.calls[-1]["messages"][-1]["content"]
-    assert "New plan" in last_prompt
-    assert "1:1 with Regina" not in last_prompt  # already-seen items are not re-sent
+    r3 = await run_integration_ingest(knowledge, integration_clients={"calendar": cal})
+    assert r3["integrations"]["calendar"]["admitted"] == 1
+    assert len(llm.calls) == 0
+
+    recs = await records.list(limit=None)
+    assert all(r.kind == "observation" for r in recs)
+    assert len(recs) == 3  # 2 from run 1 + 1 from run 3, no duplicates
+    assert sum(1 for r in recs if "Regina" in r.text) == 1  # ev1 observed once, never re-sent
+    assert any("New plan" in r.text for r in recs)
 
     await curator.stop()
     await records.close()
@@ -75,7 +79,7 @@ async def test_ingest_is_non_destructive_and_isolates_a_failing_source(tmp_path:
         async def list_dms(self, limit: int = 50):
             raise RuntimeError("missing_scope — needs im:read")
 
-    llm = CountingCuratorLLM("the user has a daily standup")
+    llm = CountingCuratorLLM("SHOULD NOT BE USED")
     knowledge, curator, records = await _knowledge(tmp_path, llm)
     # A pre-existing record must survive — ingest only ADDs, never wipes.
     await records.add("the user is named Tim", kind="fact")
@@ -84,9 +88,10 @@ async def test_ingest_is_non_destructive_and_isolates_a_failing_source(tmp_path:
         knowledge, integration_clients={"calendar": cal, "slack": StubSlackBoom()}
     )
 
-    assert report["integrations"]["calendar"]["admitted"] == 1
+    assert report["integrations"]["calendar"]["admitted"] == 1  # one event -> one observation
     assert "error" in report["integrations"]["slack"]  # isolated, run still completes
     assert "missing_scope" in report["integrations"]["slack"]["error"]
+    assert len(llm.calls) == 0  # observations are gate-free
     texts = {r.text for r in await records.list(limit=None)}
     assert "the user is named Tim" in texts  # not wiped
 

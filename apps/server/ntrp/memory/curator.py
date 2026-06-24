@@ -5,7 +5,10 @@ watermark, reconciles them against existing similar records (ADD/UPDATE/
 SUPERSEDE/NOOP), and applies the ops — text AND labels — to the flat record
 pool. Labels are open-vocabulary names (referents and categories) decided once
 at write time; the prompt carries the existing vocabulary so names get reused
-instead of re-minted. Writes only directives/facts/sources; no lens write path.
+instead of re-minted. The chat path writes durable directives/facts/sources
+through the worthiness gate; integration items bypass it via store_observations
+(low-trust `observation` records the dream mines), since routine email/events
+aren't durable facts but are the cross-domain texture the dream connects.
 
 The watermark lives in a tiny `meta(key, value)` table the Dreamer OWNS inside
 `config.memory_db_path`. Key form: `curate_watermark:{session_id}`. Anti-heartbeat:
@@ -15,11 +18,13 @@ a session with no new turns costs one DB read and no LLM call.
 import asyncio
 import json
 import os
+import html
+import re
 from pathlib import Path
 
 from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
-from ntrp.memory.models import Record, SourceRef
+from ntrp.memory.models import Kind, Record, SourceRef
 from ntrp.memory.records import RecordStore
 from ntrp.memory.scopes import apply_scope_to_source, scope_for_write
 
@@ -33,10 +38,28 @@ SWEEP_SESSION_LIMIT = 50
 CURATION_BATCH_MAX_TURNS = 40
 CURATION_BATCH_MAX_CHARS = 6_000
 CURATION_TURN_MAX_CHARS = 2_000
+OBSERVATION_MAX_CHARS = 280  # raw integration observations are kept terse (scannable timeline + focused vector)
+# Defense-in-depth atop source-trust: drop passive integration items that look like
+# prompt injection before they ever enter memory (a poisoned email/message can't
+# launder instructions into the store for the dream/agent to later read). Heuristic,
+# not exhaustive — source-trust (observations are low-trust, the dream phrases them
+# tentatively) remains the primary mitigation.
+_INJECTION_RE = re.compile(
+    r"ignore (?:all |any |the )?(?:previous|prior|above|earlier) (?:instructions|prompts|messages|context)"
+    r"|disregard (?:all |any |the )?(?:previous|prior|above) (?:instructions|prompts)"
+    r"|(?:new|updated) (?:system )?instructions\s*:"
+    r"|you are now (?:a |an |the )"
+    r"|pretend (?:to be|you are)"
+    r"|(?:reveal|print|show|repeat) (?:your |the )?system prompt",
+    re.IGNORECASE,
+)
 CURATION_ROLES = {"user", "assistant"}
 LABEL_VOCAB_LIMIT = 40
 MAX_LABELS_PER_RECORD = 4
-ALLOWED_KINDS = {"directive", "fact", "source"}
+ALLOWED_KINDS = {"directive", "fact", "source", "lesson"}
+# A backfill subject equal to one of these is the USER, not an external entity — skip it
+# (the user is me.md, not a topic page). The prompt also handles the user's actual name.
+_SELF_REFERENCES = {"me", "i", "self", "user", "the user", "myself", "you"}
 # Legacy/alias kinds that map onto a writable kind. Narrative kinds ("note",
 # "action", "summary") are intentionally absent: junk/narrative is SKIPPED at
 # write time, not coerced into a record.
@@ -61,7 +84,7 @@ _SYSTEM_PROMPT = (
     "JSON object:\n"
     "{\n"
     '  "records": [\n'
-    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "directive|fact|source", "entity_labels": ["Dex", "Regina Lin"], "meta_labels": ["Bug", "Open loop"]},\n'
+    '    {"op": "ADD",       "text": "<self-contained statement>", "kind": "directive|fact|source|lesson", "entity_labels": ["Dex", "Regina Lin"], "meta_labels": ["Bug", "Open loop"]},\n'
     '    {"op": "UPDATE",    "id": "<existing id>", "text": "<corrected statement>", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
     '    {"op": "SUPERSEDE", "id": "<existing id>", "text": "<replacement statement>", "kind": "...", "entity_labels": ["..."], "meta_labels": ["..."]},\n'
     '    {"op": "NOOP",      "id": "<existing id>"}\n'
@@ -87,20 +110,37 @@ _SYSTEM_PROMPT = (
     "debugging fix, an implementation/SOP detail, a one-off task instruction, or a "
     "design opinion to a directive; those are facts or nothing. When unsure between "
     "directive and fact, choose fact.\n"
+    "(1c) LESSON CAPTURE (continual learning) — a `lesson` record is the assistant's "
+    "PLAYBOOK: a durable working-pattern you DISTILL from how the interaction actually "
+    "went — a recurring user correction turned into a forward rule, a failure-mode to "
+    "avoid, or a strategy that worked. It differs from a `directive` (a rule the user "
+    "explicitly STATED) in that YOU infer it from the exchange. This is the ONE "
+    "exception to the drop-meta rule: capture lessons even from dev/process/ntrp "
+    "exchanges, because that is where the assistant learns to improve. Each lesson is "
+    "ONE actionable, second-person sentence (e.g. 'Verify claims against the running "
+    "system before reporting status — the user is repeatedly burned by confident-but-"
+    "wrong updates.'). Mint a lesson only for a pattern likely to recur, not a one-off. "
+    "Lessons take no entity_labels.\n"
     "(2) Records are atomic, self-contained, short, and usable in future prompts (resolve pronouns inline), typed by "
-    "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only). Choose the op against the EXISTING SIMILAR RECORDS: "
+    "FUNCTION not subject. Allowed kinds: directive (standing instruction), fact (stable durable statement), source (receipt pointer only), lesson (distilled playbook rule, see 1c). Choose the op against the EXISTING SIMILAR RECORDS: "
     "ADD (new), UPDATE (edit an existing one), SUPERSEDE (replace a now-wrong "
     "one), NOOP (reconfirm an unchanged one). Use ONLY ids that appear in "
     "EXISTING SIMILAR RECORDS; never invent an id.\n"
     "(3) LABELS — attach labels to every ADD/UPDATE/SUPERSEDE using two distinct fields:\n"
-    "  entity_labels: 0-2 — the record's PRIMARY subject only: the specific person (Regina Lin), "
-    "product (Dex, ntrp), company (Anthropic), project (MATS), or named concept (O-1A) the record is "
-    "FUNDAMENTALLY ABOUT. NOT subjects merely mentioned, listed as examples, or referenced in passing "
-    "— a directive about ntrp memory design that says 'dossiers such as O-1A and health' is about "
-    "ntrp/Memory design, NOT O-1A or health. A general rule/process with no single subject gets an "
-    "EMPTY list. This drives dossier generation, so a stray label creates a junk subject page.\n"
+    "  entity_labels: 0-2 — the NAMED subject the record is fundamentally about: a person "
+    "(Regina Lin, Kevin Gu), company/org (Replika, Anthropic, ThirdLayer), product (Dex, ntrp), "
+    "project (MATS), place (Yerevan), or named concept (O-1A). TAG the named subject even when the "
+    "fact is about the USER'S relationship or history with it: 'you worked at Replika on post-training' "
+    "-> Replika; 'Kevin is your main reviewer' -> Kevin Gu; 'you live in Yerevan' -> Yerevan. Recurring "
+    "people, orgs, and products SHOULD become their own topic pages. But NOT subjects merely mentioned in "
+    "passing or listed as examples (a rule about ntrp that says 'pages such as O-1A and health' is about "
+    "ntrp, NOT O-1A/health). A pure self-fact with no external named subject (your birthday, a generic "
+    "preference) gets an EMPTY list. ONE subject per record: if a fact bundles several people/orgs (a "
+    "collaborator list), SPLIT it into one ADD per subject so each accumulates its own records. Tag "
+    "freely — a single mention does NOT create a page (the promotion threshold parks a one-record subject "
+    "on me.md until it recurs), so only sustained subjects ever get a page.\n"
     "  meta_labels: 0-3 category/workflow tags — Bug, Open loop, Health, Skills, Automation, "
-    "etc. These classify the record but don't get their own dossiers.\n"
+    "etc. These classify the record but never get their own page.\n"
     "REUSE names from LABEL VOCABULARY whenever they fit, with exact casing; mint new ones only "
     "when nothing fits. UPDATE labels REPLACE the record's labels; omit both fields to keep them.\n"
     "(4) Never store assistant implementation reports, verification transcripts, migration summaries, or UI/file-path churn as memory. "
@@ -108,6 +148,19 @@ _SYSTEM_PROMPT = (
     "Never expose internal ids/provenance strings like project-proj_..., source=curator:..., facts/project-..., or summaries/project-... in record text. "
     "Write record text as clean human prose: keep meaningful names (people, products, experiment/metric names) but omit raw absolute file paths, commit hashes, UUIDs, and opaque run/tool ids — they are noise the projection now renders verbatim.\n"
     "(5) Output ONLY the JSON object, no preamble."
+)
+
+_ENTITY_BACKFILL_SYSTEM = (
+    "You tag memory records with the one NAMED subject each is fundamentally about, so "
+    "recurring people/orgs/products become their own topic pages. For EACH record below, return "
+    "the single named subject — a person (Kevin Gu), company/org (Replika, ThirdLayer), product "
+    "(Dex, ntrp), project (MATS), or place (Yerevan) — that the record is centrally about, INCLUDING "
+    "when it states the user's relationship or history with that subject ('worked at Replika' -> "
+    "Replika; 'Kevin is the reviewer' -> Kevin Gu). Return null for a pure self-fact with no external "
+    "named subject (birthday, a generic preference), or for a record that bundles several subjects at "
+    "once (leave those for the curator to split). Reuse an EXISTING SUBJECT's exact casing when one "
+    'fits. Output ONLY a JSON object mapping record id -> subject string or null, e.g. '
+    '{"a1b2c3d4": "Kevin Gu", "e5f6a7b8": null}.'
 )
 
 # Appended to the system prompt for the /init BULK re-derivation. The default gate
@@ -142,7 +195,6 @@ class Curator:
         record_store: RecordStore,  # the flat record pool; ops land here
         consolidate=None,  # Consolidate — the CONSOLIDATE/LINT step (None -> skip)
         reasoning_effort: str | None = None,
-        artifacts_dir: Path | None = None,
     ) -> None:
         self._llm = llm
         self._sessions = sessions
@@ -150,7 +202,6 @@ class Curator:
         self._record_store = record_store
         self._consolidate = consolidate
         self._reasoning_effort = reasoning_effort
-        self._artifacts_dir = artifacts_dir
 
         # The Dreamer owns this meta DB (watermark). Co-located with the records.
         self._db_path = db_path
@@ -197,6 +248,12 @@ class Curator:
                 continue
             self.schedule_curation(row["session_id"])
             scheduled += 1
+        # Off-hot-path importance backfill: score any unscored lines (file store).
+        if hasattr(self._record_store, "score_pending"):
+            try:
+                await self._record_store.score_pending()
+            except Exception:
+                _logger.warning("score_pending failed", exc_info=True)
         return scheduled
 
     async def curate_session(self, session_id: str) -> bool:
@@ -245,7 +302,6 @@ class Curator:
             except Exception:
                 _logger.warning("consolidation failed", exc_info=True)
 
-        await self._sync_artifacts_after_changes(new_records)
         await self._write_watermark(session_id, max_seq)
         return bool(ops)
 
@@ -297,88 +353,105 @@ class Curator:
 
         return {"admitted": admitted, "calls": calls, "capped": capped}
 
-    async def ingest_items(
-        self,
-        items,
-        *,
-        source_kind: str,
-        source_label: str,
-        max_calls: int | None = None,
-        bulk: bool = False,
-    ) -> dict:
-        """Curate a list of source-agnostic RawItems (calendar/gmail/slack docs)
-        through the SAME worthiness gate + reconciliation the chat path uses.
+    async def store_observations(self, items, *, source_kind: str) -> dict:
+        """Land raw integration RawItems (calendar/gmail/slack) as low-trust
+        `observation` records — NO worthiness gate, NO LLM call.
 
-        Each item renders to a `title\\ncontent` line (content truncated to
-        CURATION_TURN_MAX_CHARS, mirroring _flatten_turn). Lines are batched by the
-        SAME bounds as _select_batch (CURATION_BATCH_MAX_TURNS / _CHARS), and each
-        batch is one `_complete` call applied via the existing `_apply_op`. There is
-        NO watermark: /init re-derives the whole window each time.
+        The chat worthiness gate is right for chat (most chatter is noise) but wrong
+        for integrations: a routine email/event/message is not a "durable fact about
+        the user", yet it IS the cross-domain texture the dream connects. So we store
+        the (already noise-filtered) stream verbatim-but-tagged at integration trust;
+        the dream promotes the valuable ones into durable insights and retention ages
+        the rest out (MEMORY_RETENTION_TTL_OBSERVATION_DAYS). The file store routes
+        each to observations/<source>.md by source_ref.kind.
 
-        One SourceRef per batch (`SourceRef(kind=source_kind, ref="{source_kind}:batch")`)
-        — ops don't map 1:1 to items, and scope_for_write only needs source_ref.kind
-        ∈ INTEGRATION_SOURCE_KINDS to route to the integration scope. `max_calls`
-        caps total LLM calls (stop + capped=true). Returns
-        {"admitted", "calls", "capped"}.
-        """
-        lines = [line for item in items if (line := self._render_item(item))]
-        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:batch")
+        Returns {"admitted", "calls", "capped"} like the old gate, so the ingest
+        flow's watermark/accounting is unchanged; calls is always 0 (no LLM)."""
+        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:observation")
         admitted = 0
-        calls = 0
-        capped = False
+        dropped = 0
+        for item in items:
+            text = self._render_item(item)
+            if not text:
+                continue
+            if _INJECTION_RE.search(text):
+                dropped += 1  # passive item looks like prompt injection — keep it out of memory
+                continue
+            if len(text) > OBSERVATION_MAX_CHARS:
+                text = text[:OBSERVATION_MAX_CHARS].rstrip()
+            await self._record_store.add(text, kind=Kind.OBSERVATION, source_ref=source_ref)
+            admitted += 1
+        if dropped:
+            _logger.info("observations: dropped suspected injection", source=source_kind, dropped=dropped)
+        return {"admitted": admitted, "calls": 0, "capped": False}
 
-        idx = 0
-        while idx < len(lines):
-            if max_calls is not None and calls >= max_calls:
-                capped = True
-                break
-            batch, idx = self._take_batch(lines, idx)
-            if not batch:
-                break
-
-            ops = await self._complete(batch, header=source_label, bulk=bulk)
-            calls += 1
-            if ops is None:
-                break
-
-            new_records: list[Record] = []
-            for op in ops:
-                try:
-                    record = await self._apply_op(op, None, source_ref)
-                    if record is not None:
-                        new_records.append(record)
-                except Exception:
-                    _logger.warning("ingest op failed; skipping", op=op.get("op"), exc_info=True)
-            admitted += len(new_records)
-
-        return {"admitted": admitted, "calls": calls, "capped": capped}
+    async def backfill_entity_labels(self, *, limit: int = 80) -> int:
+        """Tag active fact/source records that carry NO entity label with the single
+        NAMED subject they're about, so recurring people/orgs/products accumulate into
+        topic pages (the promotion threshold still gates page creation). One LLM call
+        over the untagged set; idempotent (already-tagged records are skipped) and a
+        no-op without an LLM. Returns the count newly tagged."""
+        if self._llm is None or not self._model:
+            return 0
+        rows = await self._record_store.list(limit=None, scopes=None, kinds=["fact", "source"])
+        labels = await self._record_store.labels_for([r.id for r in rows], include_kind=True)
+        untagged = [r for r in rows if not any(e["kind"] == "entity" for e in labels.get(r.id, []))]
+        # Newest first: a one-off bundled/self-fact the model leaves null must not crowd
+        # the cap and starve genuinely new untagged records of a tag.
+        untagged.sort(key=lambda r: r.last_confirmed_at or "", reverse=True)
+        untagged = untagged[:limit]
+        if not untagged:
+            return 0
+        vocab = [row["label"] for row in await self._record_store.list_labels() if row["kind"] == "entity"]
+        listing = "\n".join(f'{{"id": "{r.id}", "text": {json.dumps(r.text)}}}' for r in untagged)
+        messages = [
+            {"role": "system", "content": _ENTITY_BACKFILL_SYSTEM},
+            {"role": "user", "content": f"EXISTING SUBJECTS (reuse exact casing when one fits): "
+             f"{', '.join(vocab) or '(none yet)'}\n\nRECORDS:\n{listing}"},
+        ]
+        try:
+            resp = await self._llm.completion(
+                messages=messages, model=self._model, reasoning_effort=self._reasoning_effort,
+                langfuse_name="memory.entity_backfill",
+            )
+        except Exception:
+            _logger.warning("entity backfill LLM call failed", exc_info=True)
+            return 0
+        content = resp.choices[0].message.content if resp.choices else None
+        body = (content or "").strip()
+        if body.startswith("```"):
+            body = body.split("\n", 1)[-1]
+            body = body[: body.rfind("```")] if "```" in body else body
+        try:
+            mapping = json.loads(body.strip())
+        except (ValueError, TypeError):
+            return 0
+        if not isinstance(mapping, dict):
+            return 0
+        by_id = {r.id: r for r in untagged}
+        tagged = 0
+        for rid, subject in mapping.items():
+            if rid in by_id and isinstance(subject, str) and subject.strip():
+                # Never promote the USER themselves to a topic page — that just duplicates me.md.
+                if subject.strip().lower() in _SELF_REFERENCES:
+                    continue
+                await self._record_store.set_labels(rid, [], entity_labels=[subject.strip()])
+                tagged += 1
+        if tagged:
+            _logger.info("entity backfill tagged records", tagged=tagged, examined=len(untagged))
+        return tagged
 
     @staticmethod
     def _render_item(item) -> str:
         """Render a RawItem to a `title\\ncontent` line; truncate content to
-        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn)."""
-        title = (getattr(item, "title", "") or "").strip()
-        content = (getattr(item, "content", "") or "").strip()
+        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn). HTML entities are
+        decoded so email/PR observations read as text, not `&gt;`/`&lt;` soup."""
+        title = html.unescape((getattr(item, "title", "") or "").strip())
+        content = html.unescape((getattr(item, "content", "") or "").strip())
         if len(content) > CURATION_TURN_MAX_CHARS:
             content = content[:CURATION_TURN_MAX_CHARS].rstrip()
         line = "\n".join(part for part in (title, content) if part)
         return line.strip()
-
-    @staticmethod
-    def _take_batch(lines: list[str], start: int) -> tuple[list[str], int]:
-        """Slice `lines[start:]` into one batch under the same bounds as
-        _select_batch. Returns (batch, next_index)."""
-        batch: list[str] = []
-        total_chars = 0
-        idx = start
-        while idx < len(lines):
-            line = lines[idx]
-            if batch and (len(batch) >= CURATION_BATCH_MAX_TURNS or total_chars + len(line) > CURATION_BATCH_MAX_CHARS):
-                break
-            batch.append(line)
-            total_chars += len(line)
-            idx += 1
-        return batch, idx
 
     async def reset_watermarks(self) -> None:
         """/init: clear every per-session curate watermark AND per-source ingest
@@ -441,19 +514,6 @@ class Curator:
             if current is asyncio.current_task():
                 self._tasks.pop(session_id, None)
 
-    async def _sync_artifacts_after_changes(self, changed_records: list[Record]) -> None:
-        if self._artifacts_dir is None or not changed_records:
-            return
-        try:
-            from ntrp.memory.artifacts import ArtifactMemoryStore, summarize_changelog_text
-
-            artifacts = ArtifactMemoryStore(self._artifacts_dir)
-            summary = summarize_changelog_text([record.text for record in changed_records], max_items=3)
-            artifacts.append_event(f"Learned: {summary}")
-            await artifacts.export_from_records(self._record_store)
-        except Exception:
-            _logger.warning("artifact sync after curation failed", exc_info=True)
-
     async def _sweep_loop(self) -> None:
         # Sleep first so startup isn't a thundering herd of curations.
         while True:
@@ -500,8 +560,11 @@ class Curator:
             f"{header}:\n"
             f"{chr(10).join(lines)}"
         )
+        from ntrp.memory.file_store import load_conventions
+
         messages = [
-            {"role": "system", "content": _SYSTEM_PROMPT + (_BULK_OVERRIDE if bulk else "")},
+            {"role": "system", "content": f"<operating_manual>\n{load_conventions()}\n</operating_manual>\n\n"
+             + _SYSTEM_PROMPT + (_BULK_OVERRIDE if bulk else "")},
             {"role": "user", "content": user_prompt},
         ]
         try:

@@ -4,6 +4,7 @@ import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "..
 import { fetchServerConfig, updateServerConfig } from "../../../actions";
 import { useMutationState } from "../../../lib/hooks";
 import { SettingsInlineError } from "../SettingsNotice";
+import { SaveStatus } from "../SaveStatus";
 import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
 import { SwitchControl } from "../../SwitchControl";
 import { SectionHeader } from "../../SectionHeader";
@@ -23,7 +24,7 @@ export function ToolsSection({
 }) {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
-  const { busy, error, run } = useMutationState();
+  const { busy, saved, error, run } = useMutationState();
   const overrides = serverConfig?.tool_overrides ?? {};
 
   const enabledNames = useMemo(
@@ -58,7 +59,11 @@ export function ToolsSection({
 
   return (
     <div className="grid gap-2">
-      <SectionHeader label="Tools" count={server.tools.length} />
+      <SectionHeader
+        label="Tools"
+        count={server.tools.length}
+        action={<SaveStatus busy={busy} saved={saved} />}
+      />
       <ul className="rounded-md border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
         {server.tools.map((t) => {
           const checked = enabledNames.has(t.name);
@@ -82,7 +87,7 @@ export function ToolsSection({
                   {t.name}
                 </div>
                 {t.description && (
-                  <div className="text-xs text-faint leading-snug line-clamp-2">
+                  <div className="text-xs text-muted leading-snug line-clamp-2">
                     {t.description}
                   </div>
                 )}

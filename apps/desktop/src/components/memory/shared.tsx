@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ComponentType, Ref, ReactNode } from "react";
-import { AlertCircle, Inbox, Loader2, Search, X } from "lucide-react";
+import { AlertCircle, Calendar, Inbox, List, Loader2, Search, Text, X } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "../../lib/icons";
 import { ScrollFadeTop } from "../ScrollBlur";
@@ -110,7 +110,7 @@ export function ListColumn<T>({
         )}
       </div>
       {totalLabel && (
-        <div className="px-4 py-2 text-xs text-faint tabular-nums">{totalLabel}</div>
+        <div className="px-4 py-2 text-xs text-muted tabular-nums">{totalLabel}</div>
       )}
     </>
   );
@@ -217,6 +217,68 @@ export function MetaGrid({ rows }: { rows: (MetaGridRow | null | false)[] }) {
   );
 }
 
+// ─── Obsidian-style frontmatter properties ────────────────────────────
+
+type FmValue = string | number | boolean | null | Array<string | number | boolean | null>;
+
+// Internal/opaque bookkeeping a human shouldn't see as a property: the title is the
+// page header, scope_key is an opaque id, aliases mirror the title, type is folder-derived,
+// prose_* are synthesis telemetry. What's left is meaningful (updated + the label tags).
+const _HIDE_PROPS = new Set([
+  "title", "labels", "type", "aliases", "scope_key", "prose_synced", "prose_tokens", "prose_cites",
+]);
+const _DATE_KEYS = new Set(["created", "updated", "prose_synced", "last_updated_at", "date"]);
+
+function humanizeKey(k: string): string {
+  return k.replace(/_/g, " ");
+}
+function fmtDate(v: string): string {
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : v;
+}
+
+/** Render a page's YAML frontmatter as Obsidian-style typed properties (text / date /
+ *  list-of-tags), each with an icon. Hides internal bookkeeping keys. */
+export function Properties({ frontmatter }: { frontmatter?: Record<string, FmValue> }) {
+  const entries = Object.entries(frontmatter ?? {}).filter(
+    ([k, v]) => !_HIDE_PROPS.has(k) && v != null && v !== "" && !(Array.isArray(v) && v.length === 0),
+  );
+  if (entries.length === 0) return null;
+  return (
+    <div className="mb-5">
+      <div className="mb-2.5 text-sm font-medium text-ink">Properties</div>
+      <dl className="flex flex-col gap-2">
+        {entries.map(([key, value]) => {
+          const isList = Array.isArray(value);
+          const isDate = !isList && _DATE_KEYS.has(key) && typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value);
+          const Icon = isList ? List : isDate ? Calendar : Text;
+          return (
+            <div key={key} className="grid grid-cols-[140px_minmax(0,1fr)] items-start gap-2 text-sm">
+              <dt className="flex items-center gap-1.5 pt-0.5 text-muted">
+                <Icon className="h-3.5 w-3.5 shrink-0 text-faint" strokeWidth={2} />
+                <span className="truncate">{humanizeKey(key)}</span>
+              </dt>
+              <dd className="min-w-0 text-ink-soft">
+                {isList ? (
+                  <div className="flex flex-wrap gap-1">
+                    {(value as Array<string | number | boolean | null>).map((v, i) => (
+                      <Pill key={`${String(v)}-${i}`} tone="neutral">{String(v)}</Pill>
+                    ))}
+                  </div>
+                ) : isDate ? (
+                  <span className="inline-flex items-center gap-1.5 tabular-nums">{fmtDate(value as string)}</span>
+                ) : (
+                  <span className="break-words">{String(value)}</span>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
 function MetaRow({ row }: { row: MetaGridRow }) {
   return (
     <>
@@ -251,7 +313,7 @@ function EmptyState({ icon: Icon = Inbox, children, hint, action, className }: E
           <Icon size={22} strokeWidth={1.75} />
         </div>
         <div className="text-sm text-muted">{children}</div>
-        {hint && <div className="text-xs text-faint">{hint}</div>}
+        {hint && <div className="text-xs text-muted">{hint}</div>}
         {action && <div className="mt-1">{action}</div>}
       </div>
     </div>

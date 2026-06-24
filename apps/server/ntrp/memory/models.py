@@ -54,6 +54,20 @@ class Kind(StrEnum):
     FACT = "fact"
     SOURCE = "source"
     CHANGELOG = "changelog"
+    OBSERVATION = "observation"  # low-trust raw integration item (gmail/slack/calendar); the dream mines these
+    LESSON = "lesson"  # continual-learning playbook item — a working-pattern the agent DISTILLED (vs directive = user-stated)
+
+
+# Source-trust precedence: a direct user statement outranks a curator-compiled
+# fact, which outranks a passively-ingested integration fact, which outranks a
+# machine-authored dream insight. Used by synthesis (phrasing/exclusion) so
+# low-trust sources aren't laundered into user-confidence claims.
+TRUST_LEVEL: dict[str, int] = {"user": 4, "curator": 3, "chat_turn": 3, "dreamer": 1}
+TRUST_DEFAULT = 2  # integration:* and unknown
+
+
+def source_trust(kind: str) -> int:
+    return TRUST_LEVEL.get((kind or "").split(":")[0].lower(), TRUST_DEFAULT)
 
 
 @dataclass
