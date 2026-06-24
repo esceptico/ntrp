@@ -97,8 +97,14 @@ function scopeLabel(scope: { kind: string; key: string | null }) {
 }
 
 // Plain user-facing words for internal kind values.
+const _KIND_LABELS: Record<string, string> = {
+  directive: "rule",
+  observation: "observed",
+  lesson: "lesson",
+  changelog: "change",
+};
 function kindLabel(kind: string) {
-  return kind === "directive" ? "rule" : kind;
+  return _KIND_LABELS[kind] ?? kind;
 }
 
 function directorySort(a: TreeNode, b: TreeNode) {
@@ -680,8 +686,8 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       <TreeSearch value={query} onChange={setQuery} placeholder="Search paths, titles, snippets…" />
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
         {modeToggle}
-        <GhostBtn onClick={rebuild} disabled={rebuilding} title="Regenerate memory artifacts from the record substrate">
-          {rebuilding ? "Rebuilding…" : "Rebuild"}
+        <GhostBtn onClick={rebuild} disabled={rebuilding} title="Reload memory pages from disk (pick up edits made in Obsidian)">
+          {rebuilding ? "Reloading…" : "Reload"}
         </GhostBtn>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-3 pb-3 pt-1">
@@ -712,10 +718,10 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
         ) : tree.length === 0 ? (
           <Empty
             icon={FileText}
-            hint="Memory notes are generated from your records."
+            hint="Memory pages are written as you chat and synthesized nightly."
             action={
               <GhostBtn onClick={rebuild} disabled={rebuilding}>
-                {rebuilding ? "Rebuilding…" : "Rebuild memory"}
+                {rebuilding ? "Reloading…" : "Reload"}
               </GhostBtn>
             }
           >

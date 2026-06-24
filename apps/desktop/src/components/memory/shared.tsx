@@ -221,8 +221,12 @@ export function MetaGrid({ rows }: { rows: (MetaGridRow | null | false)[] }) {
 
 type FmValue = string | number | boolean | null | Array<string | number | boolean | null>;
 
-// Internal bookkeeping the synthesizer writes but a human shouldn't see as a property.
-const _HIDE_PROPS = new Set(["title", "labels", "prose_tokens", "prose_cites"]);
+// Internal/opaque bookkeeping a human shouldn't see as a property: the title is the
+// page header, scope_key is an opaque id, aliases mirror the title, type is folder-derived,
+// prose_* are synthesis telemetry. What's left is meaningful (updated + the label tags).
+const _HIDE_PROPS = new Set([
+  "title", "labels", "type", "aliases", "scope_key", "prose_synced", "prose_tokens", "prose_cites",
+]);
 const _DATE_KEYS = new Set(["created", "updated", "prose_synced", "last_updated_at", "date"]);
 
 function humanizeKey(k: string): string {
