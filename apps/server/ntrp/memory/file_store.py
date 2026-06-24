@@ -215,6 +215,9 @@ class FilePageStore:
         self._migrate_to_topics()  # fold entities/+projects/ into one topics/ folder (idempotent)
         self._heal_structural_pages()  # repair cross-contaminated identity + canonical titles
         self._backfill_entities()
+        from ntrp.memory.synthesize import _rename_project_pages
+
+        _rename_project_pages(self)  # opaque scope-id -> human name, so a renamed project doesn't split
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
@@ -639,7 +642,8 @@ class FilePageStore:
             f"Last synthesis: {last_synth or 'never'} · last dream: {last_dream or 'never'}",
             "", "## Gaps", "",
             *(sorted(gaps) or ["- None — memory is current."]),
-            "", "_Contradiction detection (conflicting records) is a future LLM-assisted check._",
+            "", "_Conflicting records are reconciled nightly by the consolidation pass "
+            "(it supersedes a contradicted record into the newer one)._",
         ]
         (self._root / "health.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
 
