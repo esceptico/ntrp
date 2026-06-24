@@ -963,13 +963,16 @@ class FilePageStore:
         return [h for h in hits if h.id != record.id][:limit]
 
     async def updated_since(self, watermark: str | None, *, limit: int) -> list[Record]:
-        """Active records confirmed at/after the watermark, oldest-first (the O(delta)
-        consolidation candidate set). `>=`-inclusive so a boundary tie-group is never
-        skipped; None returns the whole active pool oldest-first."""
+        """The whole active pool, oldest-first. The `watermark` is intentionally NOT used
+        as a skip filter: file records are DAY-granular (last_confirmed_at = '<date>T00:00')
+        with non-monotonic ids, so a second-granular watermark would permanently skip
+        records added after a same-day sweep. The store is small, so consolidation full-
+        scans instead.
+        # ponytail: full-scan, fine under a few hundred durable records; the `limit`/200
+        #   cap means a larger pool only consolidates its oldest slice — add a real
+        #   append-cursor if the durable pool ever grows past that."""
         recs = await self.list(limit=None, scopes=None)
-        if watermark is not None:
-            recs = [r for r in recs if (r.last_confirmed_at or "") >= watermark]
-        recs.sort(key=lambda r: r.last_confirmed_at or "")
+        recs.sort(key=lambda r: (r.last_confirmed_at or "", r.id))
         return recs[:limit]
 
     async def merge(
@@ -993,16 +996,33 @@ class FilePageStore:
             if loser.pinned:
                 return None  # never merge a pinned record away
             losers.append(loser)
+        # Entity slugs touched by this merge — reconcile them after the losers are
+        # superseded so a now-thin entity page folds (and the survivor's page is correct).
+        sf = self._find(survivor_id)
+        survivor_entity = sf[1].entity if sf else None
+        slugs: set[str] = {survivor_entity} if survivor_entity else set()
+        inherited_entity: str | None = None
+        for loser in losers:
+            lf = self._find(loser.id)
+            if lf and lf[1].entity:
+                slugs.add(lf[1].entity)
+                if inherited_entity is None:
+                    inherited_entity = self._entity_display(lf[1].entity)
         labels = await self.labels_for([survivor_id, *[lz.id for lz in losers]], include_kind=True)
         metas = sorted({e["label"] for entries in labels.values() for e in entries if e["kind"] == "meta"})
         if text is not None:
             await self.update(survivor_id, text)  # also re-confirms (sets date) + re-indexes
         if kind is not None:
             await self.set_kind(survivor_id, kind)
-        if metas:
-            await self.set_labels(survivor_id, metas)
+        # The survivor keeps its own entity; it inherits a loser's only if it had none,
+        # so a uniquely-tagged loser isn't silently de-placed by the merge.
+        ent_arg = [inherited_entity] if (inherited_entity and not survivor_entity) else None
+        if metas or ent_arg:
+            await self.set_labels(survivor_id, metas, entity_labels=ent_arg)
         for loser in losers:
             await self.supersede(loser.id, survivor_id)
+        for slug in slugs:
+            self._reconcile_entity(slug)
         return await self.get(survivor_id)
 
     async def rename_label(self, old: str, new: str) -> None:
@@ -1028,34 +1048,32 @@ class FilePageStore:
             self._reconcile_entity(slug)
 
     async def set_label_kind(self, label: str, kind: str) -> int:
-        """Retype a label between 'entity' and 'meta'. entity->meta: untag the entity
-        lines and record `label` as a page meta tag. meta->entity: drop the page meta tag.
-        Returns the number of pages changed. Idempotent."""
+        """Retype a label between 'entity' and 'meta'. Only entity->meta is well-defined
+        on the file model: untag the entity lines and record `label` as a page meta tag.
+        meta->entity is a NO-OP — a page-level meta tag has no per-record membership to
+        promote into per-line entity tags, so we leave it as meta rather than DELETE it
+        (deleting without retagging would silently drop the label). Returns pages changed."""
+        if kind != "meta":
+            return 0  # meta->entity: can't faithfully map; leave the label untouched
         n = 0
         slug = _slug(label)
         for path, page in list(self._pages.items()):
             changed = False
-            if kind == "meta":
-                tagged = [ln for ln in page.lines if ln.entity == slug]
-                if tagged:
-                    for ln in tagged:
-                        ln.entity = None
-                    cur = page.frontmatter.get("meta_labels", [])
-                    page.frontmatter["meta_labels"] = sorted({*cur, label})
-                    changed = True
-                ents = page.frontmatter.get("entity_labels")
-                if ents and label in ents:
-                    page.frontmatter["entity_labels"] = [e for e in ents if e != label]
-                    changed = True
-            else:  # -> entity
-                metas = page.frontmatter.get("meta_labels")
-                if metas and label in metas:
-                    page.frontmatter["meta_labels"] = [m for m in metas if m != label]
-                    changed = True
+            tagged = [ln for ln in page.lines if ln.entity == slug]
+            if tagged:
+                for ln in tagged:
+                    ln.entity = None
+                cur = page.frontmatter.get("meta_labels", [])
+                page.frontmatter["meta_labels"] = sorted({*cur, label})
+                changed = True
+            ents = page.frontmatter.get("entity_labels")
+            if ents and label in ents:
+                page.frontmatter["entity_labels"] = [e for e in ents if e != label]
+                changed = True
             if changed:
                 self._persist(path)
                 n += 1
-        if kind == "meta" and slug:
+        if slug:
             self._reconcile_entity(slug)
         return n
 

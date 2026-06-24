@@ -97,6 +97,24 @@ async def test_consolidate_runs_on_file_page_store_and_skips_observations(tmp_pa
     await store.close()
 
 
+async def test_file_store_set_label_kind_meta_to_entity_is_not_data_loss(tmp_path: Path):
+    """meta->entity has no faithful mapping on the page-level meta model — it must leave
+    the label in place, never silently delete it."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    r = await store.add("The user filed a bug.", kind="fact", source_ref=SourceRef("user", ""))
+    await store.set_labels(r.id, ["Bug"])  # a page meta label
+    assert any(l["label"] == "Bug" for l in await store.list_labels())
+
+    changed = await store.set_label_kind("Bug", "entity")  # ill-defined direction
+    assert changed == 0
+    assert any(l["label"] == "Bug" for l in await store.list_labels()), "meta label must survive"
+    await store.close()
+
+
 # --- merge --------------------------------------------------------------------
 
 

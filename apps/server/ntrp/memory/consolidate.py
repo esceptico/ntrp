@@ -262,7 +262,10 @@ class Consolidate:
         survivor = self._pick_survivor(members)
         loser_ids = [m.id for m in members if m.id != survivor.id]
         kind = op.kind if op.kind in _KINDS else None
-        merged = await self._records.merge(survivor.id, loser_ids, text=op.merged_text, kind=kind)
+        # An empty/whitespace merged_text would blank the survivor + evict its vector;
+        # keep the survivor's existing text in that case.
+        text = op.merged_text if (op.merged_text and op.merged_text.strip()) else None
+        merged = await self._records.merge(survivor.id, loser_ids, text=text, kind=kind)
         if merged is None:
             return
         report.merged += len(loser_ids)
