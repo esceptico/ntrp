@@ -642,3 +642,29 @@ async def test_sweep_curates_only_sessions_with_new_turns(tmp_path: Path):
     assert await curator._read_watermark("fresh") == 0
     await curator.stop()
     await records.close()
+
+
+async def test_backfill_entity_labels_promotes_recurring_subject(tmp_path: Path):
+    """Untagged records that share a named subject get entity-tagged, so the subject
+    accumulates >=2 records and promotes to a topic page; pure self-facts stay untagged."""
+    import json as _json
+
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    a = await store.add("You worked at Replika on post-training.", kind="fact", source_ref=SourceRef("user", ""))
+    b = await store.add("Replika reached roughly 2M daily active users.", kind="fact", source_ref=SourceRef("user", ""))
+    c = await store.add("Your birthday is January 24.", kind="fact", source_ref=SourceRef("user", ""))
+
+    llm = StubLLM(_json.dumps({a.id: "Replika", b.id: "Replika", c.id: None}))
+    curator = Curator(llm, StubSessions(), model="memory-model", db_path=tmp_path / "m.db", record_store=store)
+
+    tagged = await curator.backfill_entity_labels()
+
+    assert tagged == 2
+    assert (tmp_path / "memory" / "topics" / "replika.md").exists(), "recurring subject promoted to a topic"
+    assert "Replika" in {l["label"] for l in await store.list_labels()}
+    await curator.stop()
+    await store.close()

@@ -124,14 +124,20 @@ _SYSTEM_PROMPT = (
     "one), NOOP (reconfirm an unchanged one). Use ONLY ids that appear in "
     "EXISTING SIMILAR RECORDS; never invent an id.\n"
     "(3) LABELS — attach labels to every ADD/UPDATE/SUPERSEDE using two distinct fields:\n"
-    "  entity_labels: 0-2 — the record's PRIMARY subject only: the specific person (Regina Lin), "
-    "product (Dex, ntrp), company (Anthropic), project (MATS), or named concept (O-1A) the record is "
-    "FUNDAMENTALLY ABOUT. NOT subjects merely mentioned, listed as examples, or referenced in passing "
-    "— a directive about ntrp memory design that says 'dossiers such as O-1A and health' is about "
-    "ntrp/Memory design, NOT O-1A or health. A general rule/process with no single subject gets an "
-    "EMPTY list. This drives dossier generation, so a stray label creates a junk subject page.\n"
+    "  entity_labels: 0-2 — the NAMED subject the record is fundamentally about: a person "
+    "(Regina Lin, Kevin Gu), company/org (Replika, Anthropic, ThirdLayer), product (Dex, ntrp), "
+    "project (MATS), place (Yerevan), or named concept (O-1A). TAG the named subject even when the "
+    "fact is about the USER'S relationship or history with it: 'you worked at Replika on post-training' "
+    "-> Replika; 'Kevin is your main reviewer' -> Kevin Gu; 'you live in Yerevan' -> Yerevan. Recurring "
+    "people, orgs, and products SHOULD become their own topic pages. But NOT subjects merely mentioned in "
+    "passing or listed as examples (a rule about ntrp that says 'pages such as O-1A and health' is about "
+    "ntrp, NOT O-1A/health). A pure self-fact with no external named subject (your birthday, a generic "
+    "preference) gets an EMPTY list. ONE subject per record: if a fact bundles several people/orgs (a "
+    "collaborator list), SPLIT it into one ADD per subject so each accumulates its own records. Tag "
+    "freely — a single mention does NOT create a page (the promotion threshold parks a one-record subject "
+    "on me.md until it recurs), so only sustained subjects ever get a page.\n"
     "  meta_labels: 0-3 category/workflow tags — Bug, Open loop, Health, Skills, Automation, "
-    "etc. These classify the record but don't get their own dossiers.\n"
+    "etc. These classify the record but never get their own page.\n"
     "REUSE names from LABEL VOCABULARY whenever they fit, with exact casing; mint new ones only "
     "when nothing fits. UPDATE labels REPLACE the record's labels; omit both fields to keep them.\n"
     "(4) Never store assistant implementation reports, verification transcripts, migration summaries, or UI/file-path churn as memory. "
@@ -139,6 +145,19 @@ _SYSTEM_PROMPT = (
     "Never expose internal ids/provenance strings like project-proj_..., source=curator:..., facts/project-..., or summaries/project-... in record text. "
     "Write record text as clean human prose: keep meaningful names (people, products, experiment/metric names) but omit raw absolute file paths, commit hashes, UUIDs, and opaque run/tool ids — they are noise the projection now renders verbatim.\n"
     "(5) Output ONLY the JSON object, no preamble."
+)
+
+_ENTITY_BACKFILL_SYSTEM = (
+    "You tag memory records with the one NAMED subject each is fundamentally about, so "
+    "recurring people/orgs/products become their own topic pages. For EACH record below, return "
+    "the single named subject — a person (Kevin Gu), company/org (Replika, ThirdLayer), product "
+    "(Dex, ntrp), project (MATS), or place (Yerevan) — that the record is centrally about, INCLUDING "
+    "when it states the user's relationship or history with that subject ('worked at Replika' -> "
+    "Replika; 'Kevin is the reviewer' -> Kevin Gu). Return null for a pure self-fact with no external "
+    "named subject (birthday, a generic preference), or for a record that bundles several subjects at "
+    "once (leave those for the curator to split). Reuse an EXISTING SUBJECT's exact casing when one "
+    'fits. Output ONLY a JSON object mapping record id -> subject string or null, e.g. '
+    '{"a1b2c3d4": "Kevin Gu", "e5f6a7b8": null}.'
 )
 
 # Appended to the system prompt for the /init BULK re-derivation. The default gate
@@ -362,6 +381,55 @@ class Curator:
         if dropped:
             _logger.info("observations: dropped suspected injection", source=source_kind, dropped=dropped)
         return {"admitted": admitted, "calls": 0, "capped": False}
+
+    async def backfill_entity_labels(self, *, limit: int = 80) -> int:
+        """Tag active fact/source records that carry NO entity label with the single
+        NAMED subject they're about, so recurring people/orgs/products accumulate into
+        topic pages (the promotion threshold still gates page creation). One LLM call
+        over the untagged set; idempotent (already-tagged records are skipped) and a
+        no-op without an LLM. Returns the count newly tagged."""
+        if self._llm is None or not self._model:
+            return 0
+        rows = await self._record_store.list(limit=None, scopes=None, kinds=["fact", "source"])
+        labels = await self._record_store.labels_for([r.id for r in rows], include_kind=True)
+        untagged = [r for r in rows if not any(e["kind"] == "entity" for e in labels.get(r.id, []))][:limit]
+        if not untagged:
+            return 0
+        vocab = [row["label"] for row in await self._record_store.list_labels() if row["kind"] == "entity"]
+        listing = "\n".join(f'{{"id": "{r.id}", "text": {json.dumps(r.text)}}}' for r in untagged)
+        messages = [
+            {"role": "system", "content": _ENTITY_BACKFILL_SYSTEM},
+            {"role": "user", "content": f"EXISTING SUBJECTS (reuse exact casing when one fits): "
+             f"{', '.join(vocab) or '(none yet)'}\n\nRECORDS:\n{listing}"},
+        ]
+        try:
+            resp = await self._llm.completion(
+                messages=messages, model=self._model, reasoning_effort=self._reasoning_effort,
+                langfuse_name="memory.entity_backfill",
+            )
+        except Exception:
+            _logger.warning("entity backfill LLM call failed", exc_info=True)
+            return 0
+        content = resp.choices[0].message.content if resp.choices else None
+        body = (content or "").strip()
+        if body.startswith("```"):
+            body = body.split("\n", 1)[-1]
+            body = body[: body.rfind("```")] if "```" in body else body
+        try:
+            mapping = json.loads(body.strip())
+        except (ValueError, TypeError):
+            return 0
+        if not isinstance(mapping, dict):
+            return 0
+        by_id = {r.id: r for r in untagged}
+        tagged = 0
+        for rid, subject in mapping.items():
+            if rid in by_id and isinstance(subject, str) and subject.strip():
+                await self._record_store.set_labels(rid, [], entity_labels=[subject.strip()])
+                tagged += 1
+        if tagged:
+            _logger.info("entity backfill tagged records", tagged=tagged, examined=len(untagged))
+        return tagged
 
     @staticmethod
     def _render_item(item) -> str:

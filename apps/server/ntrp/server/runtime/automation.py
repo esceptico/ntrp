@@ -175,7 +175,13 @@ class AutomationRuntime:
 
             llm, model = knowledge._memory_llm()
             effort = knowledge._memory_reasoning_effort(knowledge.config.memory_model)
-            return await run_synthesis(knowledge.record_store, llm, model, reasoning_effort=effort)
+            # Tag untagged records with their named subject FIRST, so recurring people/
+            # orgs/products promote to topic pages that this same pass then synthesizes.
+            tagged = 0
+            if knowledge.memory_curator is not None:
+                tagged = await knowledge.memory_curator.backfill_entity_labels()
+            summary = await run_synthesis(knowledge.record_store, llm, model, reasoning_effort=effort)
+            return f"{summary} (+{tagged} entity tags)" if tagged else summary
 
         return handler
 
