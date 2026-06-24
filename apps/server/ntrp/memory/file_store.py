@@ -1123,7 +1123,7 @@ class FilePageStore:
         if scopes == []:
             return []
         q_tokens = _tokens(query)
-        q_lower = query.lower().strip()
+        q_lower = _norm(query).lower()  # normalized like record text, so a multi-line query still phrase-matches
         window = max(limit * 8, 80)
 
         # Candidate lines (id -> (line, path)), honoring superseded visibility.

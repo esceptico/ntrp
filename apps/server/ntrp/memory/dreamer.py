@@ -74,10 +74,13 @@ async def _build_catalog(store) -> list:
     connective texture. The cap is load-bearing: without it a high-volume integration
     day floods the date-sorted list and evicts every durable fact, collapsing the
     cross-domain dream into gmail↔calendar noise (the starvation re-introduced)."""
+    budget = CATALOG_LIMIT - OBS_CATALOG_CAP
+    # Over-fetch then drop prior dream insights, so they don't eat the durable budget
+    # before truncation (filter-after-limit would silently under-represent real facts).
     durable = [
-        r for r in await store.list(limit=CATALOG_LIMIT - OBS_CATALOG_CAP, scopes=None, kinds=_DURABLE_KINDS)
+        r for r in await store.list(limit=budget * 2, scopes=None, kinds=_DURABLE_KINDS)
         if not (r.source_ref and r.source_ref.kind == "dreamer")
-    ]
+    ][:budget]
     observations = await store.list(limit=OBS_CATALOG_CAP, scopes=None, kinds=[Kind.OBSERVATION])
     return durable + observations
 
