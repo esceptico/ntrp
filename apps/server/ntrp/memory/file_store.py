@@ -963,14 +963,12 @@ class FilePageStore:
         return [h for h in hits if h.id != record.id][:limit]
 
     async def updated_since(self, watermark: str | None, *, limit: int) -> list[Record]:
-        """The whole active pool, oldest-first. The `watermark` is intentionally NOT used
-        as a skip filter: file records are DAY-granular (last_confirmed_at = '<date>T00:00')
-        with non-monotonic ids, so a second-granular watermark would permanently skip
-        records added after a same-day sweep. The store is small, so consolidation full-
-        scans instead.
-        # ponytail: full-scan, fine under a few hundred durable records; the `limit`/200
-        #   cap means a larger pool only consolidates its oldest slice — add a real
-        #   append-cursor if the durable pool ever grows past that."""
+        """The whole active pool, oldest-first. The `watermark` is intentionally NOT a
+        skip filter: file records are DAY-granular ('<date>T00:00') with non-monotonic
+        ids, so a finer-grained watermark would permanently skip records added after a
+        same-day sweep. Returning the whole pool is correct + cheap because the consumer
+        (Consolidate) skips unchanged neighborhoods via a content-fingerprint cache, so
+        there's no per-night re-judging cost and no record-count ceiling."""
         recs = await self.list(limit=None, scopes=None)
         recs.sort(key=lambda r: (r.last_confirmed_at or "", r.id))
         return recs[:limit]

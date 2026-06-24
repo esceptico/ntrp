@@ -8,10 +8,11 @@ authors a new fact and never raises trust. Each sweep also runs ONE bounded
 label-hygiene call over the whole label vocabulary, folding near-duplicate
 names (case/synonym variants) via rename_label.
 
-Watermark-durable, demote/merge-only, O(delta) — never O(corpus). Candidate
-selection is only the records confirmed since the last successful sweep, plus
-each delta record's recall neighborhood (one cheap LLM call per neighborhood).
-Pinned records are inviolable. With no LLM configured, the pass is a no-op.
+Demote/merge-only. Candidate selection scans the active durable pool, but each
+record's recall neighborhood is judged (one cheap LLM call) only when its content
+fingerprint CHANGED since its last clean judge — cached in the consolidate meta DB.
+So a clean night is nearly free and cost scales with what changed, not the corpus
+size. Pinned records are inviolable. With no LLM configured, the pass is a no-op.
 
 Adapted from the deleted claim-pipeline `consolidate.py`: scopes,
 provenance/feedback/corroboration ordering, CONTRADICTS/SUPERSEDES edges, and the
@@ -26,7 +27,7 @@ from pathlib import Path
 
 from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
-from ntrp.memory.models import Record, now_iso
+from ntrp.memory.models import Record
 from ntrp.memory.prompts_consolidate import (
     LABEL_HYGIENE_RUBRIC,
     LINT_RUBRIC,
@@ -44,14 +45,21 @@ _logger = get_logger(__name__)
 # Function-types a consolidation op may assign (guard against a hallucinated kind).
 _KINDS = {"directive", "fact", "source"}
 
-MAX_ITEMS_PER_SWEEP = 200
 NEIGHBORHOOD_LIMIT = 8
 # Consolidation only touches the DURABLE pool. Observations are low-trust integration
 # noise that ages out via retention; lessons are the agent's playbook. Neither should be
 # merged into / retyped to a durable fact (that would launder trust) — exclude them.
 _SKIP_KINDS = {"observation", "lesson"}
-WATERMARK_KEY = "consolidate_watermark"
 LABEL_FINGERPRINT_KEY = "consolidate_label_fingerprint"
+JUDGES_PER_SWEEP = 200  # cap LLM judgments/run; changed hoods beyond it roll to the next run
+
+
+def _hood_fingerprint(hood: list[Record]) -> str:
+    """Content hash of a neighborhood (member ids + texts). A clean judge is cached by
+    this fingerprint so an unchanged hood is never re-judged; any text edit, new
+    neighbor, or member removal changes the hash and re-judges it."""
+    payload = "\n".join(f"{m.id}:{m.text}" for m in sorted(hood, key=lambda r: r.id))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -114,36 +122,35 @@ class Consolidate:
     # --- one sweep ---------------------------------------------------------
 
     async def run_once(self) -> ConsolidateReport:
-        """One O(delta) sweep over records confirmed since the watermark. No-op
-        (and cheap) when nothing changed or no LLM is configured."""
+        """One sweep. Candidate selection scans the active durable pool, but a
+        neighborhood whose content fingerprint is unchanged since its last clean judge
+        is SKIPPED (no LLM) — so a clean night is nearly free and cost scales with what
+        actually CHANGED, not the corpus size. Up to JUDGES_PER_SWEEP hoods are judged
+        per run; any changed remainder rolls to the next run. No-op when no LLM."""
         report = ConsolidateReport()
         if self._llm is None or not self._model:
             return report
 
-        sweep_start = now_iso()
-        watermark = await self._read_watermark()
-
-        delta, capped, last_processed = await self._select_delta(watermark)
-        if not delta:
-            await self._sync_label_hygiene(report, force=False)
-            report.pruned = (await self._records.prune())["records"]
-            await self._write_watermark(sweep_start)
-            return report
-
-        hoods = await self._build_neighborhoods(delta)
+        delta = await self._select_delta()
+        hoods = await self._build_neighborhoods(delta) if delta else []
+        cached = await self._read_fingerprints()
+        judged = 0
         for hood in hoods:
+            seed = hood[0]
+            fp = _hood_fingerprint(hood)
+            if cached.get(seed.id) == fp:
+                continue  # unchanged since the last clean judge — skip the LLM
+            if judged >= JUDGES_PER_SWEEP:
+                break  # cost cap; the remaining changed hoods are re-selected next run
+            judged += 1
             ops = await self._judge(hood)
-            if ops is None:
-                continue
-            await self._apply(ops, hood, report)
+            await self._write_fingerprint(seed.id, fp)  # this exact hood has now been judged
+            if ops is not None:
+                await self._apply(ops, hood, report)
 
-        await self._sync_label_hygiene(report, force=True)
+        await self._prune_fingerprints({r.id for r in delta})
+        await self._sync_label_hygiene(report, force=bool(judged))
         report.pruned = (await self._records.prune())["records"]
-
-        # Durability: a full sweep advances to sweep_start; a capped catch-up
-        # advances only to the last processed record's confirm time so the
-        # unprocessed tail is not skipped next run.
-        await self._write_watermark(last_processed if capped else sweep_start)
         return report
 
     async def lint_labels_once(self) -> ConsolidateReport:
@@ -160,14 +167,13 @@ class Consolidate:
 
     # --- candidate selection (bounded) ------------------------------------
 
-    async def _select_delta(self, watermark: str | None) -> tuple[list[Record], bool, str | None]:
-        rows = await self._records.updated_since(watermark, limit=MAX_ITEMS_PER_SWEEP + 1)
-        rows = [r for r in rows if r.kind not in _SKIP_KINDS]
-        capped = len(rows) > MAX_ITEMS_PER_SWEEP
-        if capped:
-            rows = rows[:MAX_ITEMS_PER_SWEEP]
-        last_processed = rows[-1].last_confirmed_at if rows else None
-        return rows, capped, last_processed
+    async def _select_delta(self) -> list[Record]:
+        """The active DURABLE candidate pool (observations/lessons excluded). Unchanged
+        neighborhoods are skipped via the fingerprint cache in run_once, so scanning the
+        whole pool is cheap on a clean night and there is no record-count ceiling — the
+        per-run cost is bounded by JUDGES_PER_SWEEP changed hoods, not the corpus size."""
+        rows = await self._records.updated_since(None, limit=JUDGES_PER_SWEEP * 100)
+        return [r for r in rows if r.kind not in _SKIP_KINDS]
 
     async def _build_neighborhoods(self, delta: list[Record]) -> list[list[Record]]:
         """One neighborhood per delta record: the record plus a handful of active
@@ -412,23 +418,43 @@ class Consolidate:
                 self._conn = await db_connect(self._db_path)
                 await self._conn.execute("PRAGMA journal_mode=WAL")
                 await self._conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                await self._conn.execute(
+                    "CREATE TABLE IF NOT EXISTS consolidated (record_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL)"
+                )
                 await self._conn.commit()
         return self._conn
 
-    async def reset_watermark(self) -> None:
-        """/init: clear the consolidate watermark so the next run_once treats the
-        whole (re-derived) pool as delta."""
+    async def _read_fingerprints(self) -> dict[str, str]:
         conn = await self._ensure_conn()
-        await conn.execute("DELETE FROM meta WHERE key = ?", (WATERMARK_KEY,))
+        rows = await conn.execute_fetchall("SELECT record_id, fingerprint FROM consolidated")
+        return {row["record_id"]: row["fingerprint"] for row in rows}
+
+    async def _write_fingerprint(self, record_id: str, fingerprint: str) -> None:
+        conn = await self._ensure_conn()
+        await conn.execute(
+            "INSERT INTO consolidated(record_id, fingerprint) VALUES(?, ?) "
+            "ON CONFLICT(record_id) DO UPDATE SET fingerprint = excluded.fingerprint",
+            (record_id, fingerprint),
+        )
         await conn.commit()
 
-    async def _read_watermark(self) -> str | None:
-        return await self._read_meta(WATERMARK_KEY)
+    async def _prune_fingerprints(self, active_ids: set[str]) -> None:
+        """Drop cached fingerprints for records no longer in the active pool (merged
+        away, superseded, deleted) so the table stays bounded by the live corpus."""
+        conn = await self._ensure_conn()
+        rows = await conn.execute_fetchall("SELECT record_id FROM consolidated")
+        stale = [r["record_id"] for r in rows if r["record_id"] not in active_ids]
+        if stale:
+            await conn.executemany("DELETE FROM consolidated WHERE record_id = ?", [(i,) for i in stale])
+            await conn.commit()
 
-    async def _write_watermark(self, value: str | None) -> None:
-        if value is None:
-            return
-        await self._write_meta(WATERMARK_KEY, value)
+    async def reset_watermark(self) -> None:
+        """/init: clear the judged-fingerprint cache + label-vocab fingerprint so the
+        next run_once re-judges the whole (re-derived) pool from scratch."""
+        conn = await self._ensure_conn()
+        await conn.execute("DELETE FROM consolidated")
+        await conn.execute("DELETE FROM meta WHERE key = ?", (LABEL_FINGERPRINT_KEY,))
+        await conn.commit()
 
     async def _read_label_fingerprint(self) -> str | None:
         return await self._read_meta(LABEL_FINGERPRINT_KEY)

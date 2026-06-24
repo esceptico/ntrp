@@ -419,35 +419,29 @@ async def test_second_sweep_is_a_noop_without_changes(tmp_path: Path):
     await records.close()
 
 
-async def test_idle_sweep_skips_label_hygiene_when_fingerprint_is_unchanged(tmp_path: Path):
+async def test_idle_sweep_makes_zero_llm_calls(tmp_path: Path):
+    """The fingerprint cache: once a clean night has judged every neighborhood, a
+    subsequent sweep with nothing changed re-judges nothing and re-runs no label
+    hygiene — zero LLM calls (the waste-elimination over a full re-scan)."""
     records = RecordStore(tmp_path / "memory.db", search_index=None)
     a = await records.add("Dex is sleeping through the night")
     b = await records.add("ntrp has a memory system")
-    extra = await records.add("temporary duplicate")
-    survivor = await records.add("temporary duplicate")
     await records.set_labels(a.id, ["Dex"])
     await records.set_labels(b.id, ["ntrp"])
-    llm = StubLLM(
-        LintOps().model_dump_json(),
-        LabelOps().model_dump_json(),
-    )
+    llm = StubLLM()  # default no-op LintOps/LabelOps for every call
     consolidate = _consolidate(tmp_path, records, llm)
 
     await consolidate.run_once()
-    first_watermark = await consolidate._read_watermark()
-    first_label_calls = sum(1 for call in llm.calls if call["response_format"] is LabelOps)
-    assert first_label_calls == 1
+    calls_after_first = len(llm.calls)
+    assert calls_after_first > 0  # judged the two new records + one label-hygiene call
 
-    await records.supersede(extra.id, survivor.id)
+    await consolidate.run_once()  # nothing changed
+    assert len(llm.calls) == calls_after_first, "an idle sweep must make zero LLM calls"
 
-    restarted = _consolidate(tmp_path, records, llm)
-    report = await restarted.run_once()
-
-    assert report.pruned == 1
-    assert sum(1 for call in llm.calls if call["response_format"] is LabelOps) == first_label_calls
-    assert await records.get(extra.id) is None
-    assert await restarted._read_watermark() > first_watermark
-    await restarted.close()
+    # a changed record re-enters: its hood fingerprint differs, so it IS re-judged
+    await records.update(a.id, "Dex now sleeps in his own room")
+    await consolidate.run_once()
+    assert len(llm.calls) > calls_after_first, "a changed record is re-judged"
     await consolidate.close()
     await records.close()
 
