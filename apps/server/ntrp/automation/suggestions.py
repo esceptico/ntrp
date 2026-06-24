@@ -9,6 +9,7 @@ from ntrp.automation.prompts import AUTOMATION_SUGGESTER_SYSTEM
 from ntrp.automation.triggers import Trigger, build_trigger
 from ntrp.constants import MAX_AUTOMATION_SUGGESTIONS
 from ntrp.logging import get_logger
+from ntrp.memory.models import Kind
 
 _logger = get_logger(__name__)
 
@@ -152,7 +153,12 @@ class AutomationSuggester:
 
     async def _memory_records(self) -> str:
         try:
-            records = await self.records.list(limit=_MAX_MEMORY_RECORDS)
+            # Durable kinds only — low-trust observations (90d integration noise) must not
+            # flood the small window (mirrors the dreamer's kind-restrict). Keeps the
+            # "durable user facts" label honest.
+            records = await self.records.list(
+                limit=_MAX_MEMORY_RECORDS, kinds=[Kind.FACT, Kind.DIRECTIVE, Kind.LESSON]
+            )
         except Exception as e:
             _logger.debug("gather memory records failed: %s", e)
             return ""

@@ -61,7 +61,7 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_SYNTHESIZE_ID,
         name="Memory Synthesis",
-        description="Nightly file-native synthesis: rewrite the prose summary of me.md, entity/project pages, and active-work.md from the canonical timeline atoms, with inline (record:id) provenance. Stale-gated so only changed pages re-synthesize.",
+        description="Nightly file-native synthesis: rewrite the prose summary of me.md, topic pages (topics/<slug>.md), active-work.md, integration source overviews (observations/<source>.md), and daily logs (daily/<date>.md) from the canonical timeline atoms, with inline (record:id) provenance. Stale-gated so only changed pages re-synthesize.",
         triggers=[
             TimeTrigger(at=MEMORY_SYNTHESIZE_AT, days="daily"),
         ],
@@ -81,7 +81,7 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_RETENTION_ID,
         name="Memory Retention",
-        description="Nightly deterministic retention: supersede source lines older than 180 days and fact/changelog lines older than 730 days; pinned records and directives are exempt.",
+        description="Nightly deterministic retention: supersede integration observations older than 90 days, source lines older than 180 days, and fact/changelog lines older than 730 days; dreamer-authored insights age at the 180-day transient TTL. Pinned records, directives, and lessons are exempt.",
         triggers=[
             TimeTrigger(at=MEMORY_RETENTION_AT, days="daily"),
         ],
@@ -91,7 +91,7 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_INTEGRATION_SYNC_ID,
         name="Integration Sync",
-        description="Incrementally pull new calendar, gmail, and slack activity since the last run into memory. Runs just before the nightly maintenance pass so the fresh items get consolidated and synthesized the same night.",
+        description="Incrementally pull new calendar, gmail, and slack activity since the last run into memory. Runs just before the nightly maintenance pass so the fresh items get synthesized and dreamed-over the same night.",
         triggers=[
             TimeTrigger(at=INTEGRATION_SYNC_AT, days="daily"),
         ],

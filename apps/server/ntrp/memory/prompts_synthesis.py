@@ -1,6 +1,6 @@
 """LLM synthesis prompts for memory pages.
 
-Three prose-page synthesizers that replace the bullet-dump projection. Each
+Five prose-page synthesizers that replace the bullet-dump projection. Each
 receives a list of atomic RECORDS (id, text, kind, labels, pinned,
 last_confirmed_at) and synthesizes a grounded markdown page FROM them.
 
@@ -13,9 +13,11 @@ given, and may assert ONLY what those records support.
   - PROFILE_SYSTEM     -> me.md
   - DOSSIER_SYSTEM     -> topics/<subject>.md  (one page per subject)
   - ACTIVE_WORK_SYSTEM -> active-work.md
+  - OVERVIEW_SYSTEM    -> observations/<source>.md  (integration source overview)
+  - DAILY_SYSTEM       -> daily/<date>.md  (per-day activity log)
 
-Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog.
-Scopes are visibility metadata, not shown to the model.
+Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog |
+observation | lesson. Scopes are visibility metadata, not shown to the model.
 """
 
 from __future__ import annotations
