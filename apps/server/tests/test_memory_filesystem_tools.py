@@ -55,12 +55,17 @@ def _execution(store=None):
     )
 
 
-async def _export(store: RecordStore, artifacts_dir: Path):
-    await store.add("the user prefers oolong tea", kind="fact")
-    await store.add("remember to keep projection docs concise", kind="directive")
-    artifacts = await memory_tools.ArtifactMemoryStore(artifacts_dir).export_from_records(store)
-    assert artifacts
-    return artifacts
+async def _seed(artifacts_dir: Path):
+    """Write a few real markdown pages the live read tools resolve against (the old
+    record->projection export is gone; pages ARE canonical)."""
+    a = memory_tools.ArtifactMemoryStore(artifacts_dir)
+    a.ensure_dirs()
+    a._write("me.md", "Profile", "topic", "global", None, "# Profile\n\nThe user prefers oolong tea.\n", 1)
+    a._write("directives.md", "Directives", "directive", "global", None,
+             "# Directives\n\n- keep projection docs concise\n", 1)
+    a._write("topics/dex.md", "Dex", "topic", "entity", "dex",
+             "# Dex\n\nDex is the user's project; see [[Profile]].\n", 1)
+    return list(artifacts_dir.rglob("*.md"))
 
 
 def _symlink_or_skip(link: Path, target: Path) -> None:
@@ -95,46 +100,46 @@ async def test_memory_filesystem_tools_registered_and_permission_gated():
 
 
 async def test_memory_tree_read_and_search_use_artifact_store_safety(store: RecordStore, artifacts_dir: Path):
-    await _export(store, artifacts_dir)
+    await _seed(artifacts_dir)
     execution = _execution(store)
 
     tree = await memory_tree(execution, MemoryTreeInput(depth=3))
     assert not tree.is_error
-    assert "README.md" in tree.content
+    assert "me.md" in tree.content
     assert tree.data["artifacts"]
 
-    read = await memory_read(execution, MemoryReadInput(path="README.md", offset=1, limit=5))
+    read = await memory_read(execution, MemoryReadInput(path="me.md", offset=1, limit=5))
     assert not read.is_error
-    assert "memory" in read.content.lower()
-    assert read.data["path"] == "README.md"
+    assert "oolong" in read.content.lower()
+    assert read.data["path"] == "me.md"
 
-    search = await memory_search(execution, MemorySearchInput(query="projection", limit=10))
+    search = await memory_search(execution, MemorySearchInput(query="concise", limit=10))
     assert not search.is_error
     assert search.data["matches"]
 
 
 async def test_memory_read_resolves_titles_directories_and_wikilinks(store: RecordStore, artifacts_dir: Path):
-    await _export(store, artifacts_dir)
+    await _seed(artifacts_dir)
     execution = _execution(store)
 
-    by_title = await memory_read(execution, MemoryReadInput(path="Context README", offset=1, limit=3))
+    by_title = await memory_read(execution, MemoryReadInput(path="Dex", offset=1, limit=3))
     assert not by_title.is_error
-    assert by_title.data["path"] == "context/README.md"
+    assert by_title.data["path"] == "topics/dex.md"
 
-    by_directory = await memory_read(execution, MemoryReadInput(path="context", offset=1, limit=3))
-    assert not by_directory.is_error
-    assert by_directory.data["path"] == "context/index.md"
+    by_stem = await memory_read(execution, MemoryReadInput(path="dex", offset=1, limit=3))
+    assert not by_stem.is_error
+    assert by_stem.data["path"] == "topics/dex.md"
 
-    by_wikilink = await memory_read(execution, MemoryReadInput(path="[[Memory artifacts]]", offset=1, limit=3))
+    by_wikilink = await memory_read(execution, MemoryReadInput(path="[[Profile]]", offset=1, limit=3))
     assert not by_wikilink.is_error
-    assert by_wikilink.data["path"] == "README.md"
+    assert by_wikilink.data["path"] == "me.md"
 
     artifact_store = memory_tools.ArtifactMemoryStore(artifacts_dir)
     artifact_store._write("entities/dex.md", "Dex", "topic", "entity", "dex", "# Dex\n\nEntity page.\n", 1)
     artifact_store._write("projects/dex.md", "Dex", "topic", "project", "dex", "# Dex\n\nProject page.\n", 1)
     duplicate_title = await memory_read(execution, MemoryReadInput(path="Dex", offset=1, limit=3))
     assert not duplicate_title.is_error
-    assert duplicate_title.data["path"] == "entities/dex.md"
+    assert duplicate_title.data["path"] == "topics/dex.md"  # unified topics/ wins over legacy
 
     artifact_store._write("entities/foo_bar.md", "Foo_bar", "topic", "entity", "foo_bar", "# Foo_bar\n\nEntity page.\n", 1)
     artifact_store._write("projects/foo_bar.md", "Foo_bar", "topic", "project", "foo_bar", "# Foo_bar\n\nProject page.\n", 1)
@@ -149,9 +154,9 @@ async def test_memory_read_resolves_titles_directories_and_wikilinks(store: Reco
     assert dotted_title.data["path"] == "entities/a.b.md"
 
 
-@pytest.mark.parametrize("bad_path", ["/tmp/README.md", "../README.md", ".secret/file.md", "README.txt"])
+@pytest.mark.parametrize("bad_path", ["/tmp/me.md", "../me.md", ".secret/file.md", "README.txt"])
 async def test_memory_read_search_patch_reject_bad_paths(store: RecordStore, artifacts_dir: Path, bad_path: str):
-    await _export(store, artifacts_dir)
+    await _seed(artifacts_dir)
     execution = _execution(store)
 
     assert (await memory_read(execution, MemoryReadInput(path=bad_path))).is_error
@@ -160,51 +165,51 @@ async def test_memory_read_search_patch_reject_bad_paths(store: RecordStore, art
 
 
 async def test_memory_tools_reject_symlink_and_fifo(store: RecordStore, artifacts_dir: Path):
-    await _export(store, artifacts_dir)
+    await _seed(artifacts_dir)
     outside = artifacts_dir.parent / "outside.md"
     outside.write_text("outside", encoding="utf-8")
-    readme = artifacts_dir / "README.md"
+    readme = artifacts_dir / "me.md"
     readme.unlink()
     _symlink_or_skip(readme, outside)
     execution = _execution(store)
 
-    assert (await memory_read(execution, MemoryReadInput(path="README.md"))).is_error
-    assert (await memory_search(execution, MemorySearchInput(query="outside", path="README.md"))).is_error
-    assert (await memory_patch(execution, MemoryPatchInput(path="README.md", old_text="outside", new_text="inside", force_generated=True))).is_error
+    assert (await memory_read(execution, MemoryReadInput(path="me.md"))).is_error
+    assert (await memory_search(execution, MemorySearchInput(query="outside", path="me.md"))).is_error
+    assert (await memory_patch(execution, MemoryPatchInput(path="me.md", old_text="outside", new_text="inside", force_generated=True))).is_error
 
     readme.unlink()
     _fifo_or_skip(readme)
-    assert (await memory_read(execution, MemoryReadInput(path="README.md"))).is_error
+    assert (await memory_read(execution, MemoryReadInput(path="me.md"))).is_error
 
 
 async def test_memory_patch_refuses_generated_without_force_and_force_patch_audits(store: RecordStore, artifacts_dir: Path):
-    await _export(store, artifacts_dir)
+    await _seed(artifacts_dir)
     execution = _execution(store)
     store_obj = memory_tools.ArtifactMemoryStore(artifacts_dir)
-    old = store_obj.read_artifact("README.md").content.splitlines()[0]
+    old = store_obj.read_artifact("me.md").content.splitlines()[0]
 
-    refused = await memory_patch(execution, MemoryPatchInput(path="README.md", old_text=old, new_text="# Patched memory", force_generated=False))
+    refused = await memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=False))
     assert refused.is_error
     assert "Refusing to edit generated" in refused.content
 
-    approval = await approve_memory_patch(execution, MemoryPatchInput(path="README.md", old_text=old, new_text="# Patched memory", force_generated=True))
+    approval = await approve_memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=True))
     assert approval is not None
-    assert approval.description == "Force edit generated memory artifact README.md"
+    assert approval.description == "Force edit generated memory artifact me.md"
     assert "-" in (approval.diff or "") and "+" in (approval.diff or "")
 
-    patched = await memory_patch(execution, MemoryPatchInput(path="README.md", old_text=old, new_text="# Patched memory", force_generated=True))
+    patched = await memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=True))
     assert not patched.is_error
-    assert store_obj.read_artifact("README.md").content.startswith("# Patched memory")
+    assert store_obj.read_artifact("me.md").content.startswith("# Patched memory")
     changelog = "\n".join(p.read_text(encoding="utf-8") for p in (artifacts_dir / "changelog").glob("**/*.md"))
     assert "memory filesystem patched" not in changelog  # maintenance edits aren't logged as changelog noise
 
 
 async def test_memory_patch_requires_unique_old_text(store: RecordStore, artifacts_dir: Path):
-    await _export(store, artifacts_dir)
-    path = artifacts_dir / "README.md"
+    await _seed(artifacts_dir)
+    path = artifacts_dir / "me.md"
     path.write_text("# A\nrepeat\nrepeat\n", encoding="utf-8")
 
-    result = await memory_patch(_execution(store), MemoryPatchInput(path="README.md", old_text="repeat", new_text="once", force_generated=True))
+    result = await memory_patch(_execution(store), MemoryPatchInput(path="me.md", old_text="repeat", new_text="once", force_generated=True))
 
     assert result.is_error
     assert result.preview == "Ambiguous"
