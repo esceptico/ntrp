@@ -68,6 +68,23 @@ async def _complete(llm, model, system, user, effort) -> str | None:
     return content.strip() if content and content.strip() else None
 
 
+def _prune_dead_cites(prose: str, live_ids: set[str]) -> str:
+    """Remove (record:..) refs that no longer resolve to a live record, keeping the live
+    ones in a multi-id group. Used when a page can't re-synthesize but its prose has gone
+    stale-cited, so the file never carries dangling provenance."""
+    def repl(m: re.Match) -> str:
+        ids = ps._CITE_ID_RE.findall(m.group(0))
+        live = [i for i in ids if i.lower() in live_ids]
+        if not live:
+            return ""
+        if len(live) == len(ids):
+            return m.group(0)
+        return "(" + ", ".join(f"record:{i}" for i in live) + ")"
+
+    out = ps._CITATION_GROUP_RE.sub(repl, prose)
+    return re.sub(r" +([.,;])", r"\1", out)  # tidy a space left before punctuation
+
+
 def _pre(system: str, conventions: str) -> str:
     """Prepend the shared operating manual as a static cacheable block ahead of the
     tuned task system prompt (additive — the task prompt is never altered)."""
@@ -348,6 +365,16 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         else:
             prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort, conventions)
         if prose is None:
+            # Couldn't re-synthesize (e.g. a frozen daily log whose records consolidated
+            # away), but if its existing prose has dead cites, strip them so provenance
+            # doesn't rot on disk — keep the prose, drop the broken (record:..) refs.
+            if dangling and page.prose:
+                cleaned = _prune_dead_cites(page.prose, live_ids)
+                if cleaned != page.prose:
+                    page.prose = cleaned
+                    page.frontmatter["prose_cites"] = len(ps.cited_ids(cleaned))
+                    store._persist(path)
+                    done.append(path.stem)
             continue
         # Strip wikilinks to subjects that have no page (parked sub-threshold entities)
         # so the vault has no dangling [[X]] links in Obsidian — every pass, not just profile.
