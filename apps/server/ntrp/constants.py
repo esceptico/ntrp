@@ -176,6 +176,10 @@ MEMORY_DREAM_AT = "04:00"
 # Nightly file-native SYNTHESIS: rewrite each page's prose zone from its atoms.
 BUILTIN_MEMORY_SYNTHESIZE_ID = "builtin-memory-synthesize"
 MEMORY_SYNTHESIZE_AT = "03:30"
+# Synthesis also fires after this many completed conversation runs (so topic prose
+# stays current, not 24h stale), throttled by the cooldown. Stale-gated => cheap.
+MEMORY_SYNTHESIZE_EVERY_N_RUNS = 25
+MEMORY_SYNTHESIZE_COOLDOWN_MINUTES = 30
 # Deterministic nightly RETENTION (forgetting): TTL-by-kind + salience floor.
 BUILTIN_MEMORY_RETENTION_ID = "builtin-memory-retention"
 MEMORY_RETENTION_AT = "03:45"

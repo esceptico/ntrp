@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import TimeTrigger, Trigger
+from ntrp.automation.triggers import CountTrigger, TimeTrigger, Trigger
 from ntrp.constants import (
     AUTOMATION_SUGGESTER_DAILY_AT,
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
@@ -18,6 +18,8 @@ from ntrp.constants import (
     MEMORY_DREAM_AT,
     MEMORY_RETENTION_AT,
     MEMORY_SYNTHESIZE_AT,
+    MEMORY_SYNTHESIZE_COOLDOWN_MINUTES,
+    MEMORY_SYNTHESIZE_EVERY_N_RUNS,
 )
 from ntrp.logging import get_logger
 
@@ -60,12 +62,14 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_SYNTHESIZE_ID,
         name="Memory Synthesis",
-        description="Nightly file-native synthesis: rewrite the prose summary of me.md, topic pages (topics/<slug>.md), active-work.md, integration source overviews (observations/<source>.md), and daily logs (daily/<date>.md) from the canonical timeline atoms, with inline (record:id) provenance. Stale-gated so only changed pages re-synthesize.",
+        description="File-native synthesis: tag untagged records with their subject, then rewrite the prose summary of me.md, topic pages (topics/<slug>.md), active-work.md, integration source overviews (observations/<source>.md), and daily logs (daily/<date>.md) from the canonical timeline atoms, with inline (record:id) provenance. Stale-gated so only changed pages re-synthesize. Runs nightly AND after a burst of conversation so topic pages stay current, not 24h stale.",
         triggers=[
             TimeTrigger(at=MEMORY_SYNTHESIZE_AT, days="daily"),
+            CountTrigger(every_n=MEMORY_SYNTHESIZE_EVERY_N_RUNS),
         ],
         handler="memory_synthesize",
         auto_approve=True,
+        cooldown_minutes=MEMORY_SYNTHESIZE_COOLDOWN_MINUTES,
     ),
     BuiltinSpec(
         task_id=BUILTIN_MEMORY_DREAM_ID,
