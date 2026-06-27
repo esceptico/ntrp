@@ -115,6 +115,25 @@ async def test_empty_ops_skip_writes_but_advance_watermark(tmp_path: Path):
     await records.close()
 
 
+async def test_no_new_turns_does_not_enter_curate_llm_span(tmp_path: Path, monkeypatch):
+    llm = StubLLM(_ops_json([{"op": "ADD", "text": "should not be reached"}]))
+    sessions = StubSessions({"s1": [_turn(0, "user", "already curated")]})
+    curator, records = _make_curator(tmp_path, llm, sessions)
+    await curator._write_watermark("s1", 0)
+
+    async def fail_complete(*_args, **_kwargs):
+        raise AssertionError("_complete should only run when there are new turns")
+
+    monkeypatch.setattr(curator, "_complete", fail_complete)
+
+    changed = await curator.curate_session("s1")
+
+    assert changed is False
+    assert len(llm.calls) == 0
+    await curator.stop()
+    await records.close()
+
+
 async def test_watermark_filters_already_seen_seqs(tmp_path: Path):
     llm = StubLLM(
         _ops_json([{"op": "ADD", "text": "captured fact"}]),

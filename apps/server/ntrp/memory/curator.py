@@ -257,7 +257,6 @@ class Curator:
                 _logger.warning("score_pending failed", exc_info=True)
         return scheduled
 
-    @observed_trace("memory.curate", tags="memory")
     async def curate_session(self, session_id: str) -> bool:
         """1. Read watermark (max seq already curated for this session).
         2. Load new transcript turns (seq > watermark) via the sessions store.
@@ -528,6 +527,7 @@ class Curator:
             except Exception:
                 _logger.warning("curation sweep failed", exc_info=True)
 
+    @observed_trace("memory.curate", tags="memory")
     async def _complete(self, lines: list[str], header: str, *, bulk: bool = False) -> list[dict] | None:
         """ONE LLM call emitting the record-ops. Pre-searches the flat record pool
         for the candidate set so the model picks from REAL ids only, and carries
