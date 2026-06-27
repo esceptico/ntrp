@@ -16,6 +16,7 @@ import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
+import { ChatRail } from "./ChatRail";
 import { ScrollBlurTop } from "./ScrollBlur";
 import { ICON } from "../lib/icons";
 
@@ -177,8 +178,13 @@ export function Messages() {
     [order, roles, metaFlags, visibleOrder],
   );
 
+  const turnIds = useMemo(
+    () => segments.flatMap((seg) => (seg.userId ? [seg.userId] : [])),
+    [segments],
+  );
+
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 @container">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -197,6 +203,7 @@ export function Messages() {
           <CompactionIndicator />
         </div>
       </div>
+      {sessionReady && <ChatRail turnIds={turnIds} scrollRef={scrollRef} />}
       <ScrollBlurTop scrollerRef={scrollRef} />
       <AnimatePresence>
         {!isNearBottom && order.length > 0 && (
