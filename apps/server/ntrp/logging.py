@@ -40,6 +40,23 @@ def get_logger(name: str | None = None):
     return structlog.get_logger(name or "ntrp")
 
 
+def route_stdlib_logger(name: str, level: int = logging.INFO) -> None:
+    """Funnel a third-party stdlib logger (judgeval, opentelemetry) into ntrp's
+    stderr/structlog stream. Clears the library's own handlers — judgeval attaches
+    a stdout handler at import that would otherwise double-print — and stops
+    propagation, so its records render once in the same format as the rest of the
+    server. Must be called after the library is imported (its handler exists by then)."""
+    log = logging.getLogger(name)
+    log.handlers.clear()
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(processor=renderer, foreign_pre_chain=processors[:-1])
+    )
+    log.addHandler(handler)
+    log.setLevel(level)
+    log.propagate = False
+
+
 formatter = {
     "()": structlog.stdlib.ProcessorFormatter,
     "processor": renderer,
