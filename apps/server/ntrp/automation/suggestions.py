@@ -10,6 +10,7 @@ from ntrp.automation.triggers import Trigger, build_trigger
 from ntrp.constants import MAX_AUTOMATION_SUGGESTIONS
 from ntrp.logging import get_logger
 from ntrp.memory.models import Kind
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -66,6 +67,7 @@ class AutomationSuggester:
         self.cheap_llm = cheap_llm
         self.model = model
 
+    @observed_trace("automation.suggestions", tags="automation")
     async def run(self) -> str:
         context = await self._gather()
         response = await self.cheap_llm.completion(
@@ -75,7 +77,6 @@ class AutomationSuggester:
             ],
             model=self.model,
             response_format=SuggestionSet,
-            langfuse_name="automation.suggest",
         )
         drafts = self._parse(response).suggestions
 

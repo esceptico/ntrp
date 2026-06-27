@@ -34,7 +34,7 @@ from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.profile import resident_profile
 from ntrp.notifiers.service import NotifierService
-from ntrp.observability import get_langfuse_tracer
+from ntrp.observability import activate_tracing, observed_trace
 from ntrp.server.bus import BusRegistry, SessionBus, prime_bus_cursor_from_store
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
@@ -383,18 +383,6 @@ def _retain_user_content(messages: list[dict]) -> list[dict]:
 
 def _is_meta_client_id(client_id: str | None) -> bool:
     return bool(client_id and client_id.startswith(("loop:", "bg:", "goal:")))
-
-
-def _trace_name(session_state: SessionState) -> str:
-    return f"chat:{session_state.name or session_state.session_id}"
-
-
-def _trace_input(run: RunState) -> dict:
-    user_messages = [msg for msg in run.messages if msg.get("role") == Role.USER]
-    return {
-        "run_id": run.run_id,
-        "latest_user_message": user_messages[-1].get("content") if user_messages else None,
-    }
 
 
 # Below this many chars of user input there is nothing worth a scoped recall
@@ -935,6 +923,7 @@ async def _submit_chat_message_locked(
         if client_id:
             run_registry.register_otid(session_id, client_id, ctx.run.run_id)
         return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id, "status": "cancelled"}
+    activate_tracing(ctx.session_state.session_id, tags="chat")
     task = asyncio.create_task(run_chat(ctx, bus, buses))
     ctx.run.task = task
     _install_cancel_fallback(ctx.run, bus, run_registry, task)
@@ -989,6 +978,7 @@ async def _record_completed_run(ctx: ChatContext, *, last_seq: int | None) -> No
         curator.schedule_curation(state.session_id)
 
 
+@observed_trace("chat.backgrounded", tags="chat")
 async def _drain_backgrounded(
     gen,
     agent: Agent,
@@ -998,6 +988,7 @@ async def _drain_backgrounded(
     bus: SessionBus,
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
+    activate_tracing(ctx.session_state.session_id, tags="chat")
     read_only = set()
     for t in ctx.tools:
         name = t["function"]["name"]
@@ -1253,10 +1244,12 @@ def make_child_io_factory(
     return _child_io_factory
 
 
+@observed_trace("chat", tags="chat")
 async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
     session_state = ctx.session_state
+    activate_tracing(session_state.session_id, tags="chat")
     agent: Agent | None = None
     tracker = UsageTracker()
     result: str | None = None
@@ -1481,27 +1474,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
         await _record_run_status(ctx.session_service, run.run_id, RunStatus.RUNNING.value)
         await _update_run_client_idempotency(ctx.session_service, run, RunStatus.RUNNING.value)
 
-        tracer = get_langfuse_tracer()
-        with tracer.trace(
-            name=_trace_name(session_state),
-            session_id=session_state.session_id,
-            input=_trace_input(run),
-            tags=["chat", "meta"] if run.is_meta_run else ["chat"],
-            metadata={
-                "session_id": session_state.session_id,
-                "session_name": session_state.name,
-                "run_id": run.run_id,
-                "project_id": session_state.project_id,
-                "parent_session_id": session_state.parent_session_id,
-                "session_type": session_state.session_type,
-                "model": ctx.config.model,
-                "is_meta_run": run.is_meta_run,
-                "loop_task_id": run.loop_task_id,
-            },
-        ) as trace_span:
-            result, bg_gen = await _run_agent_with_context_retry()
-            if trace_span is not None:
-                trace_span.update(output=result)
+        result, bg_gen = await _run_agent_with_context_retry()
 
         if bg_gen is not None:
             io.emit = None

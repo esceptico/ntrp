@@ -20,6 +20,7 @@ from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient
 from ntrp.llm.models import get_model
 from ntrp.llm.utils import blocks_to_text, parse_args
+from ntrp.observability.judgment import trace_client
 
 _FINISH_REASONS: dict[str, FinishReason] = {
     "end_turn": FinishReason.STOP,
@@ -45,7 +46,7 @@ _ADAPTIVE_THINKING_MODELS = (
 
 class AnthropicClient(CompletionClient):
     def __init__(self, api_key: str | None = None, timeout: float = 60.0):
-        self._client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout)
+        self._client = trace_client(anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout))
 
     def _prepare(
         self,

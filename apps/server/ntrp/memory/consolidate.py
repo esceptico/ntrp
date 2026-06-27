@@ -39,6 +39,7 @@ from ntrp.memory.prompts_consolidate import (
     RetypeOp,
 )
 from ntrp.memory.records import RecordStore
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -124,6 +125,7 @@ class Consolidate:
 
     # --- one sweep ---------------------------------------------------------
 
+    @observed_trace("memory.consolidate", tags="memory")
     async def run_once(self) -> ConsolidateReport:
         """One sweep. Candidate selection scans the active durable pool, but a
         neighborhood whose content fingerprint is unchanged since its last clean judge
@@ -159,6 +161,7 @@ class Consolidate:
         report.pruned = (await self._records.prune())["records"]
         return report
 
+    @observed_trace("memory.labels", tags="memory")
     async def lint_labels_once(self) -> ConsolidateReport:
         """Standalone vocabulary pass: classify/rename labels (one LLM call) +
         prune, WITHOUT the per-neighborhood merge sweep. Run on startup so a fresh
@@ -228,7 +231,6 @@ class Consolidate:
                 model=self._model,
                 reasoning_effort=self._reasoning_effort,
                 response_format=LintOps,
-                langfuse_name="memory.consolidate_records",
             )
         except Exception:
             _logger.warning("consolidate judgment failed for neighborhood", exc_info=True)
@@ -389,7 +391,6 @@ class Consolidate:
                 model=self._model,
                 reasoning_effort=self._reasoning_effort,
                 response_format=LabelOps,
-                langfuse_name="memory.consolidate_labels",
             )
         except Exception:
             _logger.warning("label hygiene judgment failed", exc_info=True)

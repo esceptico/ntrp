@@ -16,6 +16,7 @@ from ntrp.context.prompts import MERGE_SUMMARY_PROMPT_TEMPLATE, SUMMARIZE_PROMPT
 from ntrp.llm.models import get_model
 from ntrp.llm.router import create_completion_client
 from ntrp.llm.utils import blocks_to_text
+from ntrp.observability import observed_trace
 
 _COMPACTION_MAX_THREADS = 2
 _COMPACTION_SLOTS = threading.BoundedSemaphore(_COMPACTION_MAX_THREADS)
@@ -224,6 +225,7 @@ async def compact_summarize(
     return content.strip()
 
 
+@observed_trace("compaction", tags="compaction")
 async def _complete_compaction_request(model: str, request: dict) -> CompletionResponse:
     loop = asyncio.get_running_loop()
     if not _COMPACTION_SLOTS.acquire(blocking=False):
@@ -244,10 +246,7 @@ async def _complete_compaction_request(model: str, request: dict) -> CompletionR
     async def complete() -> CompletionResponse:
         client = create_completion_client(model)
         try:
-            return await client.completion(
-                **request,
-                langfuse_name="context.compaction",
-            )
+            return await client.completion(**request)
         finally:
             await client.close()
 

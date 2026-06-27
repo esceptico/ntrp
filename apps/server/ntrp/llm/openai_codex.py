@@ -17,6 +17,7 @@ from ntrp.llm.openai_responses import (
     prepare_responses_request,
     stream_responses_completion,
 )
+from ntrp.observability.judgment import trace_client
 
 _MODEL_PREFIX = "openai-codex/"
 _DEFAULT_INSTRUCTIONS = "Follow the user's request exactly and return the requested output."
@@ -102,12 +103,12 @@ class OpenAICodexClient(CompletionClient):
         }
         if tokens.account_id:
             headers["ChatGPT-Account-Id"] = tokens.account_id
-        return openai.AsyncOpenAI(
+        return trace_client(openai.AsyncOpenAI(
             api_key=tokens.access,
             base_url=CODEX_BASE_URL,
             timeout=self._timeout,
             default_headers=headers,
-        )
+        ))
 
     def _prepare(
         self,

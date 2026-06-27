@@ -14,6 +14,7 @@ import re
 
 from ntrp.logging import get_logger
 from ntrp.memory.models import Kind, SourceRef, now_iso
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -85,6 +86,7 @@ async def _build_catalog(store) -> list:
     return durable + observations
 
 
+@observed_trace("memory.dream", tags="memory")
 async def run_dream(
     store, llm, model: str, *, reasoning_effort: str | None = None,
     conventions: str | None = None, learnings: str | None = None,
@@ -106,7 +108,7 @@ async def run_dream(
 
     questions = await _ask(
         llm, model, reasoning_effort, _with_preamble(_QUESTIONS_SYSTEM, conventions, None),
-        f"MEMORY CATALOG:\n{catalog}", "memory.dream.questions",
+        f"MEMORY CATALOG:\n{catalog}",
     )
     qs = [q.strip("-• ").strip() for q in (questions or "").splitlines() if q.strip()][:3]
     if not qs:
@@ -122,7 +124,7 @@ async def run_dream(
 
     raw = await _ask(
         llm, model, reasoning_effort, _with_preamble(_INSIGHTS_SYSTEM, conventions, learnings),
-        f"QUESTIONS:\n" + "\n".join(qs) + f"\n\nEVIDENCE:\n{evidence}", "memory.dream.insights",
+        f"QUESTIONS:\n" + "\n".join(qs) + f"\n\nEVIDENCE:\n{evidence}",
     )
     insight_lines = [ln.strip("-• ").strip() for ln in (raw or "").splitlines() if ln.strip()]
 
@@ -176,13 +178,12 @@ async def run_dream(
     return (msg, learnings_out)
 
 
-async def _ask(llm, model, effort, system: str, user: str, name: str) -> str | None:
+async def _ask(llm, model, effort, system: str, user: str) -> str | None:
     try:
         resp = await llm.completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             model=model,
             reasoning_effort=effort,
-            langfuse_name=name,
         )
     except Exception:
         _logger.warning("dream LLM call failed", exc_info=True)

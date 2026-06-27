@@ -20,6 +20,7 @@ from ntrp.memory import prompts_synthesis as ps
 from ntrp.memory.file_store import _slug, load_conventions
 from ntrp.memory.models import Record, now_iso
 from ntrp.memory.project_names import resolve_project_title
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -59,7 +60,6 @@ async def _complete(llm, model, system, user, effort) -> str | None:
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             model=model,
             reasoning_effort=effort,
-            langfuse_name="memory.synthesize",
         )
     except Exception:
         _logger.warning("memory synthesis LLM call failed", exc_info=True)
@@ -317,6 +317,7 @@ async def _synth_daily(store, path, labels, llm, model, effort, conventions: str
 # -- driver --------------------------------------------------------------------
 
 
+@observed_trace("memory.synthesis", tags="memory")
 async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None = None) -> str:
     if llm is None or not model:
         return "synthesis skipped: no memory model configured"
@@ -405,7 +406,7 @@ if __name__ == "__main__":
             self.mode = "echo"
             self.calls = 0
 
-        async def completion(self, *, messages, model, reasoning_effort=None, langfuse_name=None):
+        async def completion(self, *, messages, model, reasoning_effort=None):
             self.calls += 1
             user = messages[-1]["content"]
             if self.mode == "insufficient":

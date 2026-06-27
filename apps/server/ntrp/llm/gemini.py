@@ -20,6 +20,7 @@ from ntrp.agent import (
 from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.utils import blocks_to_text, parse_args
+from ntrp.observability.judgment import trace_client
 
 _THINKING_LEVELS = {
     "minimal": types.ThinkingLevel.MINIMAL,
@@ -32,7 +33,7 @@ _SUPPORTED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"
 
 class GeminiClient(CompletionClient, EmbeddingClient):
     def __init__(self, api_key: str | None = None):
-        self._client = genai.Client(api_key=api_key)
+        self._client = trace_client(genai.Client(api_key=api_key))
 
     async def _completion(
         self,

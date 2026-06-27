@@ -13,6 +13,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.logging import UVICORN_LOG_CONFIG
+from ntrp.observability import observed_trace
 from ntrp.server.runtime import Runtime
 from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
 from ntrp.tools.core.context import IOBridge
@@ -224,6 +225,7 @@ def mcp_command(transport: str, host: str | None, port: int | None):
     server.run(transport=transport)
 
 
+@observed_trace("cli", tags="cli")
 async def _run_headless(prompt: str):
     runtime = Runtime()
     await runtime.connect()

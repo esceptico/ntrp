@@ -16,7 +16,7 @@ from ntrp.mcp.manager import MCPManager
 from ntrp.monitor.slack import SlackMonitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
-from ntrp.observability import get_langfuse_tracer
+from ntrp.observability import init_tracing, shutdown_tracing
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.runtime.automation import AutomationRuntime
 from ntrp.server.runtime.config import RuntimeConfig
@@ -183,6 +183,7 @@ class Runtime:
         if self._connected:
             return
 
+        init_tracing()
         llm_init(self.config)
         self.stores = await Stores.connect(self.config)
         await self.knowledge.connect(self.stores)
@@ -259,7 +260,7 @@ class Runtime:
         if self.stores:
             await self.stores.close()
         await llm_close()
-        get_langfuse_tracer().shutdown()
+        shutdown_tracing()
 
     # --- Queries ---
 

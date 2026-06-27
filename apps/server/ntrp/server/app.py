@@ -15,7 +15,7 @@ from ntrp.core.tool_result_files import prune_offload_store
 from ntrp.logging import get_logger
 from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
-from ntrp.server.middleware import AuthMiddleware
+from ntrp.server.middleware import AuthMiddleware, TracingMiddleware
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
 from ntrp.server.routers.context import router as context_router
@@ -253,6 +253,7 @@ app.add_middleware(
 
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(TracingMiddleware)
 
 
 app.include_router(gmail_router)

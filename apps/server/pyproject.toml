@@ -34,7 +34,7 @@ dependencies = [
     "coolname>=4.1.0",
     "trafilatura>=2.0.0",
     "segno>=1.6.0",
-    "langfuse>=3.0.0",
+    "judgeval",
 ]
 
 [project.urls]

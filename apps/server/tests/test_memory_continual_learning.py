@@ -66,7 +66,7 @@ class _DreamLLM:
     def __init__(self, a: str, b: str):
         self._a, self._b, self.n, self.systems = a, b, 0, []
 
-    async def completion(self, *, messages, model, reasoning_effort=None, langfuse_name=None):
+    async def completion(self, *, messages, model, reasoning_effort=None):
         self.n += 1
         self.systems.append(messages[0]["content"])
         if self.n == 1:

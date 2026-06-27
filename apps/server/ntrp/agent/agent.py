@@ -4,6 +4,8 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass
 from uuid import uuid4
 
+from judgeval import Tracer
+
 from ntrp.agent.hooks import AgentHooks
 from ntrp.agent.llm.client import LLMClient
 from ntrp.agent.llm.parsing import normalize_assistant_message, parse_tool_calls
@@ -37,7 +39,6 @@ from ntrp.agent.types.llm import (
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
-from ntrp.observability import get_langfuse_tracer
 
 AgentEvent = (
     TextStarted
@@ -93,7 +94,6 @@ class Agent:
         clock: Callable[[], float] = time.monotonic,
         started_at: float | None = None,
         budget: RunBudget | None = None,
-        tracer: object | None = None,
     ):
         if max_cost is not None and cost_calculator is None and cost_getter is None:
             raise ValueError("max_cost requires cost_calculator or cost_getter")
@@ -119,8 +119,7 @@ class Agent:
         self._started_at = started_at
         self._budget = budget or RunBudget()
         self._executor = executor
-        self._tracer = tracer if tracer is not None else get_langfuse_tracer()
-        self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id, tracer=self._tracer)
+        self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
         self._last_text_id: str | None = None
         self._last_streamed_tool_input_ids: set[str] = set()
@@ -248,6 +247,7 @@ class Agent:
             if self.hooks.on_finish:
                 await self.hooks.on_finish(result_text, step, messages)
 
+    @Tracer.observe(span_type="agent", span_name="agent.run", record_input=False)
     async def run(self, messages: list[dict]) -> Result:
         result = self._result("", StopReason.END_TURN, 0)
         async for event in self.stream(messages):

@@ -28,7 +28,7 @@ class DreamLLM:
         self._fact_id = fact_id
         self.n = 0
 
-    async def completion(self, *, messages, model, reasoning_effort=None, langfuse_name=None):
+    async def completion(self, *, messages, model, reasoning_effort=None):
         self.n += 1
         if self.n == 1:
             content = "What connects the user's work and their email and calendar activity?"

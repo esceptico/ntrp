@@ -47,6 +47,7 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import get_model
 from ntrp.logging import get_logger
+from ntrp.observability import observed_trace
 from ntrp.tools.core.base import Tool
 from ntrp.tools.core.context import ChildIOParams, IOBridge, RunContext, ToolContext
 from ntrp.tools.core.types import ToolAction
@@ -183,6 +184,7 @@ def _clamp_for_salvage(msg: dict) -> dict:
     return msg
 
 
+@observed_trace("agent.salvage", tags="agent")
 async def _salvage_summary(model: str, child_messages: list[dict], error: str, task: str) -> str:
     """Ask the model to summarize what it found before erroring. Returns
     "" if even this attempt fails (caller falls back to deterministic)."""
@@ -205,7 +207,6 @@ async def _salvage_summary(model: str, child_messages: list[dict], error: str, t
             messages=salvage_messages,
             temperature=0.2,
             max_tokens=_SALVAGE_MAX_TOKENS,
-            langfuse_name="subagent.salvage_summary",
         )
         return (response.choices[0].message.content or "").strip()
     except Exception as e:
@@ -306,6 +307,7 @@ def create_spawn_fn(
     started_at: float | None = None,
     budget: RunBudget | None = None,
 ):
+    @observed_trace("agent.spawn", tags="agent")
     async def spawn_child(
         calling_ctx: ToolContext,
         task: str,

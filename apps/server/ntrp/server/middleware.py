@@ -1,8 +1,26 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ntrp.observability.judgment import activate_tracing
 from ntrp.server.runtime import Runtime
 from ntrp.settings import verify_api_key
+
+
+class TracingMiddleware:
+    """Pure ASGI middleware — re-asserts judgeval's active tracer per request.
+
+    judgeval's active tracer lives in a ContextVar set during the lifespan task,
+    which request tasks don't inherit; without this, @Tracer.observe spans no-op in
+    request handlers (and tasks they spawn, e.g. run_chat). Pure ASGI so it doesn't
+    buffer streaming responses."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            activate_tracing()
+        await self.app(scope, receive, send)
 
 
 def _extract_bearer_token(request: Request) -> str:

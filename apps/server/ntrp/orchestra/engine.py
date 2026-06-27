@@ -8,6 +8,7 @@ from ntrp.core.agent_types import resolve_agent_type
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.logging import get_logger
+from ntrp.observability import observed_trace
 from ntrp.orchestra.schema import model_from_schema
 
 _logger = get_logger(__name__)
@@ -200,6 +201,7 @@ class Orchestra:
         # a dict schema returns a dict.
         return result if out_model is schema else result.model_dump()
 
+    @observed_trace("workflow.format", tags="workflow")
     async def _format_structured(
         self,
         task: str,
@@ -241,8 +243,6 @@ class Orchestra:
                     {"role": "user", "content": user},
                 ],
                 response_format=out_model,
-                langfuse_name="workflow.format_output",
-                langfuse_metadata={"schema": out_model.__name__},
             )
         except Exception as exc:
             raise WorkflowStructuredFormatError("workflow formatter failed") from exc
@@ -268,6 +268,7 @@ class Orchestra:
             tasks = [tg.create_task(_safe(lambda it=it, i=i: chain(it, i))) for i, it in enumerate(items)]
         return [task.result() for task in tasks]
 
+    @observed_trace("workflow.agent", tags="workflow")
     async def _spawn(
         self,
         task: str,

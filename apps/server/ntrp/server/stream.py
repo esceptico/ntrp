@@ -12,6 +12,7 @@ from ntrp.events.sse import (
     agent_events_to_sse,
 )
 from ntrp.server.state import RunStatus
+from ntrp.observability import activate_tracing, observed_trace
 
 if TYPE_CHECKING:
     from ntrp.agent import Agent
@@ -19,9 +20,11 @@ if TYPE_CHECKING:
     from ntrp.services.chat import ChatContext
 
 
+@observed_trace("chat.agent", tags="chat")
 async def run_agent_loop(
     ctx: "ChatContext", agent: "Agent", bus: "SessionBus"
 ) -> tuple[str | None, AsyncGenerator | None]:
+    activate_tracing(getattr(ctx.run, "session_id", None), tags="chat")
     messages = ctx.run.messages
 
     result = ""

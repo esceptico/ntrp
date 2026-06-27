@@ -120,32 +120,6 @@ class FakeExecutor:
         )
 
 
-class FakeObservation:
-    def __init__(self, calls: list[dict], *, name: str, as_type: str, **kwargs):
-        self.calls = calls
-        self.name = name
-        self.as_type = as_type
-        self.kwargs = kwargs
-
-    def __enter__(self):
-        self.calls.append({"event": "start", "name": self.name, "as_type": self.as_type, **self.kwargs})
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self.calls.append({"event": "end", "name": self.name, "error": str(exc) if exc else None})
-
-    def update(self, **kwargs):
-        self.calls.append({"event": "update", "name": self.name, **kwargs})
-
-
-class FakeTracer:
-    def __init__(self):
-        self.calls: list[dict] = []
-
-    def observation(self, *, name: str, as_type: str = "span", **kwargs):
-        return FakeObservation(self.calls, name=name, as_type=as_type, **kwargs)
-
-
 def _msgs(user: str = "hi") -> list[dict]:
     return [{"role": "system", "content": "sys"}, {"role": "user", "content": user}]
 
@@ -783,27 +757,6 @@ async def test_output_tokens_accumulate_into_shared_budget_across_agents():
         agent = _make_agent(llm, FakeExecutor({}), budget=budget)
         await agent.run(_msgs())
     assert budget.output_tokens == 80
-
-
-@pytest.mark.asyncio
-async def test_tool_runner_traces_tool_span():
-    tracer = FakeTracer()
-    agent = _make_agent(
-        FakeLLM([_response(tool_calls=[_tc("c1", "t", {"x": 1})]), _response(text="done")]),
-        FakeExecutor({"t": ToolResult(content="result", preview="result")}),
-        tracer=tracer,
-    )
-
-    await agent.run(_msgs())
-
-    assert {"event": "start", "name": "tool.t", "as_type": "span", "input": {"x": 1}} in tracer.calls
-    assert any(
-        call["event"] == "update"
-        and call["name"] == "tool.t"
-        and call["output"] == "result"
-        and call["metadata"]["tool_id"] == "c1"
-        for call in tracer.calls
-    )
 
 
 # ============================================================

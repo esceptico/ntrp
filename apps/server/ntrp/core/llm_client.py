@@ -40,16 +40,12 @@ class NtrpLLMClient:
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_key: str | None = None,
-        langfuse_name: str | None = None,
-        langfuse_metadata: dict | None = None,
     ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         client = get_completion_client(model)
         reasoning_effort = self._supported_reasoning_effort(model, reasoning_effort)
         kwargs = {}
         if prompt_cache_key is not None:
             kwargs["prompt_cache_key"] = prompt_cache_key
-        kwargs["langfuse_name"] = langfuse_name or "agent.response"
-        kwargs["langfuse_metadata"] = {"tool_count": len(tools), **(langfuse_metadata or {})}
         async for item in client.stream_completion(
             model=model,
             messages=messages,
@@ -67,8 +63,6 @@ class NtrpLLMClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         response_format: type[BaseModel] | None = None,
-        langfuse_name: str | None = None,
-        langfuse_metadata: dict | None = None,
     ) -> CompletionResponse:
         client = get_completion_client(model)
         kwargs: dict = {"model": model, "messages": messages}
@@ -78,10 +72,6 @@ class NtrpLLMClient:
             kwargs["max_tokens"] = max_tokens
         if response_format is not None:
             kwargs["response_format"] = response_format
-        if langfuse_name is not None:
-            kwargs["langfuse_name"] = langfuse_name
-        if langfuse_metadata is not None:
-            kwargs["langfuse_metadata"] = langfuse_metadata
         return await client.completion(**kwargs)
 
 

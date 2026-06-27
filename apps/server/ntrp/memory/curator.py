@@ -27,6 +27,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import Kind, Record, SourceRef
 from ntrp.memory.records import RecordStore
 from ntrp.memory.scopes import apply_scope_to_source, scope_for_write
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -256,6 +257,7 @@ class Curator:
                 _logger.warning("score_pending failed", exc_info=True)
         return scheduled
 
+    @observed_trace("memory.curate", tags="memory")
     async def curate_session(self, session_id: str) -> bool:
         """1. Read watermark (max seq already curated for this session).
         2. Load new transcript turns (seq > watermark) via the sessions store.
@@ -305,6 +307,7 @@ class Curator:
         await self._write_watermark(session_id, max_seq)
         return bool(ops)
 
+    @observed_trace("memory.curate.full", tags="memory")
     async def curate_session_fully(self, session_id: str, *, max_calls: int | None = None, bulk: bool = False) -> dict:
         """Full re-derivation of ONE session: loop curate_session-style batches,
         draining ALL transcript turns rather than the single 40-turn batch the
@@ -385,6 +388,7 @@ class Curator:
             _logger.info("observations: dropped suspected injection", source=source_kind, dropped=dropped)
         return {"admitted": admitted, "calls": 0, "capped": False}
 
+    @observed_trace("memory.labels", tags="memory")
     async def backfill_entity_labels(self, *, limit: int = 80) -> int:
         """Tag active fact/source records that carry NO entity label with the single
         NAMED subject they're about, so recurring people/orgs/products accumulate into
@@ -412,7 +416,6 @@ class Curator:
         try:
             resp = await self._llm.completion(
                 messages=messages, model=self._model, reasoning_effort=self._reasoning_effort,
-                langfuse_name="memory.entity_backfill",
             )
         except Exception:
             _logger.warning("entity backfill LLM call failed", exc_info=True)
@@ -572,7 +575,6 @@ class Curator:
                 messages=messages,
                 model=self._model,
                 reasoning_effort=self._reasoning_effort,
-                langfuse_name="memory.curate",
             )
         except Exception:
             _logger.warning("curator LLM call failed", exc_info=True)

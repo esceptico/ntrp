@@ -3,6 +3,8 @@ import hashlib
 import json
 from typing import Any
 
+from judgeval import Tracer
+
 from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger, access_key, format_arguments
@@ -48,6 +50,11 @@ class NtrpToolExecutor:
         self._meta_cache: dict[str, ToolMeta | None] = {}
 
     async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
+        with Tracer.span(f"tool.{name}"):
+            Tracer.set_tool_span()
+            return await self._execute(name, args, tool_call_id)
+
+    async def _execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
         tool = self._executor.registry.get(name)
         if not tool:
             return ToolResult(

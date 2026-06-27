@@ -11,6 +11,7 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallResultEvent, ToolCallStartEvent, agent_event_to_sse
 from ntrp.memory.profile import resident_profile
+from ntrp.observability import activate_tracing, observed_trace
 from ntrp.server.bus import SessionBus
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ApprovalControls
@@ -115,23 +116,32 @@ async def _publish_completed(
         await deps.enqueue_run_completed(event)
 
 
+@observed_trace("automation", tags="automation")
+async def _run_agent(agent: Agent, messages: list[dict], session_id: str, source_id: str) -> Result:
+    activate_tracing(session_id, tags=["automation", source_id])
+    return await agent.run(messages)
+
+
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     agent, messages, run_id, session_id = await _prepare(deps, request)
+    activate_tracing(session_id, tags=["automation", request.source_id])
 
-    agent_result = await agent.run(messages)
+    agent_result = await _run_agent(agent, messages, session_id, request.source_id)
     await _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
 
     return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)
 
 
-async def run_agent_streaming(
-    deps: OperatorDeps,
-    request: RunRequest,
+@observed_trace("automation", tags="automation")
+async def _consume_agent_stream(
+    agent: Agent,
+    messages: list[dict],
     bus: SessionBus,
     task_id: str,
-) -> RunResult:
-    agent, messages, run_id, session_id = await _prepare(deps, request)
-
+    session_id: str,
+    source_id: str,
+) -> tuple[str | None, Usage]:
+    activate_tracing(session_id, tags=["automation", source_id])
     result_text: str | None = None
     usage = Usage()
     gen = agent.stream(messages)
@@ -151,6 +161,19 @@ async def run_agent_streaming(
                     await bus.emit(AutomationProgressEvent(task_id=task_id, status=status))
     except asyncio.CancelledError:
         pass
+    return result_text, usage
+
+
+async def run_agent_streaming(
+    deps: OperatorDeps,
+    request: RunRequest,
+    bus: SessionBus,
+    task_id: str,
+) -> RunResult:
+    agent, messages, run_id, session_id = await _prepare(deps, request)
+    activate_tracing(session_id, tags=["automation", request.source_id])
+
+    result_text, usage = await _consume_agent_stream(agent, messages, bus, task_id, session_id, request.source_id)
 
     await _publish_completed(deps, run_id, session_id, messages, usage, result_text)
 

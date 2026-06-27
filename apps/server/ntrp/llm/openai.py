@@ -21,6 +21,7 @@ from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.models import Provider, get_model
 from ntrp.llm.openai_responses import complete_responses_completion, parse_responses_response, prepare_responses_request
 from ntrp.llm.utils import blocks_to_text
+from ntrp.observability.judgment import trace_client
 
 # Keys we attach for ntrp internals that must be stripped before an API call.
 _INTERNAL_MESSAGE_KEYS = frozenset({"client_id", "created_at", "message_id", "compaction", "data"})
@@ -43,7 +44,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         timeout: float = 60.0,
         native_openai: bool = True,
     ):
-        self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self._client = trace_client(openai.AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout))
         self._native_openai = native_openai
 
     def _prepare(

@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ntrp.agent import CompletionResponse, Role
 from ntrp.core.llm_client import llm_client
 from ntrp.logging import get_logger
+from ntrp.observability import observed_trace
 
 _logger = get_logger(__name__)
 
@@ -79,8 +80,6 @@ async def _generate_name(
             temperature=0,
             max_tokens=80,
             response_format=NameOutput,
-            langfuse_name="session.name.generate",
-            langfuse_metadata={"subject": log_subject},
         )
         return _response_name(response)
     except Exception as exc:
@@ -88,6 +87,7 @@ async def _generate_name(
         return fallback
 
 
+@observed_trace("session.name", tags="session")
 async def generate_conversation_name(model: str, text: str, *, has_images: bool = False) -> str:
     fallback = "New Conversation"
     if not text.strip() and not has_images:
@@ -103,6 +103,7 @@ async def generate_conversation_name(model: str, text: str, *, has_images: bool 
     )
 
 
+@observed_trace("agent.name", tags="agent")
 async def generate_agent_name(model: str, task: str) -> str:
     if not task.strip():
         return "Agent"

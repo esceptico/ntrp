@@ -11,6 +11,7 @@ import math
 from datetime import UTC, datetime
 
 from ntrp.memory.models import Kind
+from ntrp.observability import observed_trace
 
 _HEURISTIC: dict[str, int] = {
     Kind.DIRECTIVE: 7,
@@ -36,6 +37,7 @@ def heuristic_score(kind: str, pinned: bool) -> int:
     return base
 
 
+@observed_trace("memory.score", tags="memory")
 async def score_importance(
     text: str, kind: str, pinned: bool, llm, model: str, reasoning_effort: str | None = None
 ) -> int:
@@ -49,7 +51,6 @@ async def score_importance(
             ],
             model=model,
             reasoning_effort=reasoning_effort,
-            langfuse_name="memory.score_importance",
         )
         raw = (resp.choices[0].message.content or "").strip() if resp.choices else ""
         return max(1, min(10, int(raw.split()[0])))

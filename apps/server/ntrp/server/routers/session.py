@@ -10,6 +10,7 @@ from ntrp.core.llm_client import llm_client
 from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS, compact_tool_result_text
 from ntrp.core.tool_result_data import persistable_tool_result_data
 from ntrp.events.sse import GoalClearedEvent, GoalUpdatedEvent
+from ntrp.observability import observed_trace
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.deps import get_bus_registry, require_run_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
@@ -521,6 +522,7 @@ async def set_session_goal(
 
 
 @router.post("/sessions/{session_id}/goal/propose", response_model=GoalProposalResponse)
+@observed_trace("session.goal", tags="session")
 async def propose_session_goal(
     session_id: str,
     svc: SessionService = Depends(require_session_service),
@@ -540,8 +542,6 @@ async def propose_session_goal(
         ],
         temperature=0,
         max_tokens=120,
-        langfuse_name="goal.propose",
-        langfuse_metadata={"session_id": session_id},
     )
     content = response.choices[0].message.content if response.choices else ""
     objective = _clean_goal_proposal(content or "")
