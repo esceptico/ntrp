@@ -22,7 +22,7 @@ import {
   Sun,
   Zap,
 } from "lucide-react";
-import { useStore } from "../../store";
+import { useStore } from "@/store";
 import {
   archiveSession,
   branchAtMessage,
@@ -34,12 +34,12 @@ import {
   stopRun,
   switchSession,
   toggleAuto,
-} from "../../actions";
-import { compactSessionApi } from "../../api";
-import { formatRelativePast } from "../../lib/format";
-import { lastAssistantId } from "./filter";
-import { buildProviderView, buildThemeView } from "./views";
-import type { CommandEntry } from "./types";
+} from "@/actions";
+import { compactSessionApi } from "@/api";
+import { formatRelativePast } from "@/lib/format";
+import { lastAssistantId } from "@/components/commandPalette/filter";
+import { buildProviderView, buildThemeView } from "@/components/commandPalette/views";
+import type { CommandEntry } from "@/components/commandPalette/types";
 
 export function useEntries(): CommandEntry[] {
   const sessions = useStore((s) => s.sessions);

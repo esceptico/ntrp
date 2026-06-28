@@ -2,9 +2,9 @@ import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, Bot, ChevronDown, Square, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type ActivityItem, type ActivityLabel } from "../../store";
-import { activityItemStatus, isAgent, isHtmlWidget, isWorkflow } from "../../lib/agent";
-import { cancelSubagent, switchSession } from "../../actions";
+import { useStore, type ActivityItem, type ActivityLabel } from "@/store";
+import { activityItemStatus, isAgent, isHtmlWidget, isWorkflow } from "@/lib/agent";
+import { cancelSubagent, switchSession } from "@/actions";
 import {
   MOTION,
   EASE_DECELERATE,
@@ -13,16 +13,16 @@ import {
   RISE_IN,
   RISE_SETTLED,
   DISSOLVE_OUT,
-} from "../../lib/tokens/motion";
-import { RollingToken } from "./RollingToken";
-import { ICON } from "../../lib/icons";
-import { StatusDot } from "../StatusDot";
-import { Tooltip } from "../ui/Tooltip";
-import { agentRunFromActivityItem, isActiveAgentStatus } from "../../lib/agentRun";
-import { useWorkflows } from "../../hooks/useWorkflows";
-import { ExpandableWorkflowCard } from "../workflow/WorkflowDetail";
-import { HtmlWidgetCard } from "../widget/HtmlWidgetCard";
-import type { Workflow, WorkflowStatus } from "../../store/workflow-domain";
+} from "@/lib/tokens/motion";
+import { RollingToken } from "@/components/trace/RollingToken";
+import { ICON } from "@/lib/icons";
+import { StatusDot } from "@/components/StatusDot";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
+import { useWorkflows } from "@/hooks/useWorkflows";
+import { ExpandableWorkflowCard } from "@/components/workflow/WorkflowDetail";
+import { HtmlWidgetCard } from "@/components/widget/HtmlWidgetCard";
+import type { Workflow, WorkflowStatus } from "@/store/workflow-domain";
 
 export type { ActivityItem };
 

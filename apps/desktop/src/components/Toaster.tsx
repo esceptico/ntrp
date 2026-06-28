@@ -1,17 +1,17 @@
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Slash, X } from "lucide-react";
-import { useStore } from "../store";
-import { switchSession } from "../actions";
+import { useStore } from "@/store";
+import { switchSession } from "@/actions";
 import {
   EASE_DECELERATE,
   MOTION,
   SPRING_LAYOUT,
   SPRING_TAP,
   originFromEvent,
-} from "../lib/tokens/motion";
-import { ICON } from "../lib/icons";
-import type { Toast } from "../lib/taskToast";
+} from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import type { Toast } from "@/lib/taskToast";
 
 const DISMISS_MS = 5000;
 const STATUS_ICON = { completed: Check, failed: X, cancelled: Slash } as const;

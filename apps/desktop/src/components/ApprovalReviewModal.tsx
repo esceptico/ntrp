@@ -2,19 +2,19 @@ import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
-import { useStore } from "../store";
-import { respondToApproval } from "../actions";
+import { useStore } from "@/store";
+import { respondToApproval } from "@/actions";
 import {
   modalOriginTransform,
   ENTRY_PANEL,
   EASE_DECELERATE,
   MOTION,
   POSE_MODAL,
-} from "../lib/tokens/motion";
-import { useEscapeKey, useFocusTrap } from "../lib/hooks";
-import { IconButton } from "./IconButton";
-import { ICON } from "../lib/icons";
-import { ScrollFadeTop } from "./ScrollBlur";
+} from "@/lib/tokens/motion";
+import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
+import { IconButton } from "@/components/IconButton";
+import { ICON } from "@/lib/icons";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
 
 const DIFF_LINE = "block px-2 min-w-max";
 const DIFF_ADD = "bg-[rgba(79,138,58,0.10)] text-[#2e6620] dark:bg-[rgba(135,154,57,0.16)] dark:text-[#afc463]";

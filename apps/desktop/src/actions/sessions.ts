@@ -15,10 +15,10 @@ import {
   updateProjectApi,
   type Project,
   type SessionListItem,
-} from "../api";
-import { getState } from "../store";
-import { fetchGoal } from "./goals";
-import { loadHistory, type LoadHistoryOptions } from "./history";
+} from "@/api";
+import { getState } from "@/store";
+import { fetchGoal } from "@/actions/goals";
+import { loadHistory, type LoadHistoryOptions } from "@/actions/history";
 
 export async function switchSession(sessionId: string, historyOptions: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();

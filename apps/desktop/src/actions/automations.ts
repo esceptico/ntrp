@@ -10,8 +10,8 @@ import {
   updateAutomationApi,
   type CreateAutomationPayload,
   type UpdateAutomationPayload,
-} from "../api";
-import { getState } from "../store";
+} from "@/api";
+import { getState } from "@/store";
 
 export async function fetchAutomations(): Promise<void> {
   const s = getState();

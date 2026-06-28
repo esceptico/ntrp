@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { EASE_OUT, MOTION } from "../lib/tokens/motion";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 
 interface BlurSwapProps {
   /** Identity of the current content. A change triggers the crossfade. */

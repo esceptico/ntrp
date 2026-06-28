@@ -1,7 +1,7 @@
-import { apiWithConfig } from "../api";
-import { getState, type ServerLoop } from "../store";
-import { enqueueMessage, sendMessage } from "./messages";
-import { appendError, appendStatus, truncatePrompt } from "./_shared";
+import { apiWithConfig } from "@/api";
+import { getState, type ServerLoop } from "@/store";
+import { enqueueMessage, sendMessage } from "@/actions/messages";
+import { appendError, appendStatus, truncatePrompt } from "@/actions/_shared";
 
 export async function stopLoop(taskId: string): Promise<void> {
   const s = getState();

@@ -7,9 +7,9 @@ import {
   patchServerConfig,
   saveConfig,
   validateConnection,
-} from "../api";
-import { getState } from "../store";
-import { refresh } from "./bootstrap";
+} from "@/api";
+import { getState } from "@/store";
+import { refresh } from "@/actions/bootstrap";
 
 export async function fetchServerConfig(): Promise<void> {
   const s = getState();

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { NumberField } from "./Field";
-import { updateServerConfig, fetchServerConfig } from "../../actions";
-import type { ServerConfig } from "../../api";
-import { useStore } from "../../store";
-import { useMutationState } from "../../lib/hooks";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { SaveStatus } from "./SaveStatus";
-import { SectionHeader } from "../SectionHeader";
+import { NumberField } from "@/components/settings/Field";
+import { updateServerConfig, fetchServerConfig } from "@/actions";
+import type { ServerConfig } from "@/api";
+import { useStore } from "@/store";
+import { useMutationState } from "@/lib/hooks";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { SaveStatus } from "@/components/settings/SaveStatus";
+import { SectionHeader } from "@/components/SectionHeader";
 
 // Coalesce per-keystroke edits so typing "16" saves once (16), not 1 then 16.
 const SAVE_DEBOUNCE_MS = 500;

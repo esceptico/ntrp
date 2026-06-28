@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Search } from "lucide-react";
-import { ICON } from "../../lib/icons";
-import { useListNav } from "../../lib/hooks";
-import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
-import { Breadcrumbs } from "./Breadcrumbs";
-import { Row } from "./Row";
-import { filterEntries, groupBySection } from "./filter";
-import { useEntries } from "./useEntries";
-import { SECTION_LABEL, type CommandEntry, type Crumb } from "./types";
-import { ScrollFadeTop } from "../ScrollBlur";
-import { SLIDE_PAGE_VARIANTS } from "../ui/TabPanels";
+import { ICON } from "@/lib/icons";
+import { useListNav } from "@/lib/hooks";
+import { EASE_EMPHASIZED, MOTION } from "@/lib/tokens/motion";
+import { Breadcrumbs } from "@/components/commandPalette/Breadcrumbs";
+import { Row } from "@/components/commandPalette/Row";
+import { filterEntries, groupBySection } from "@/components/commandPalette/filter";
+import { useEntries } from "@/components/commandPalette/useEntries";
+import { SECTION_LABEL, type CommandEntry, type Crumb } from "@/components/commandPalette/types";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
+import { SLIDE_PAGE_VARIANTS } from "@/components/ui/TabPanels";
 
 const LIST_ID = "command-palette-listbox";
 const optionId = (entryId: string) => `${LIST_ID}-opt-${entryId}`;

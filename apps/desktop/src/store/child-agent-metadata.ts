@@ -1,4 +1,4 @@
-import type { ActivityItem, ChildAgentRef } from "./types";
+import type { ActivityItem, ChildAgentRef } from "@/store/types";
 
 export type ToolResultData = {
   usage?: ActivityItem["usage"];

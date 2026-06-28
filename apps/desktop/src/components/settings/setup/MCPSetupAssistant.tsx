@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import type { MCPServerConfigPayload, MCPTransport, SetupStatus } from "../../../api";
-import { addMCPServerApi, getSetupStatusApi, startMCPOAuthApi } from "../../../api";
-import { useStore } from "../../../store";
-import { parseKeyValueLines, parseMCPServerImport, splitLines } from "../../../lib/setupAssistant";
-import { SettingsInlineError } from "../SettingsNotice";
+import type { MCPServerConfigPayload, MCPTransport, SetupStatus } from "@/api";
+import { addMCPServerApi, getSetupStatusApi, startMCPOAuthApi } from "@/api";
+import { useStore } from "@/store";
+import { parseKeyValueLines, parseMCPServerImport, splitLines } from "@/lib/setupAssistant";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
 
 export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);

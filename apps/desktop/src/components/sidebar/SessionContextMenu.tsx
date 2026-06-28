@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, FolderInput, Pencil, Pin, PinOff, Sparkles } from "lucide-react";
-import type { Project } from "../../api";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
+import type { Project } from "@/api";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
 
 export interface ContextMenuState {
   sessionId: string;

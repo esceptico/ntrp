@@ -2,21 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Database, FileText, Folder, FolderOpen, Pin, Search, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
-import type { AppConfig } from "../../api";
-import { IconButton } from "../IconButton";
-import { Markdown } from "../Markdown";
-import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "../wikilink";
-import { ICON } from "../../lib/icons";
-import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "../../lib/tokens/motion";
-import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
-import { TabPanels } from "../ui/TabPanels";
+import type { AppConfig } from "@/api";
+import { IconButton } from "@/components/IconButton";
+import { Markdown } from "@/components/Markdown";
+import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "@/components/wikilink";
+import { ICON } from "@/lib/icons";
+import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
+import { TabPanels } from "@/components/ui/TabPanels";
 import {
   listMemoryArtifacts,
   readMemoryArtifact,
   rebuildMemoryArtifacts,
   type MemoryArtifact,
-} from "../../api/memoryArtifacts";
-import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } from "../../api/memoryItems";
+} from "@/api/memoryArtifacts";
+import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } from "@/api/memoryItems";
 import {
   DetailPlaceholder,
   DetailShell,
@@ -30,7 +30,7 @@ import {
   Pill,
   Properties,
   relativeTime,
-} from "./shared";
+} from "@/components/memory/shared";
 
 const RECORD_PAGE_SIZE = 100;
 

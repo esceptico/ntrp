@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 
 type SaveState = "idle" | "saving" | "saved";
 

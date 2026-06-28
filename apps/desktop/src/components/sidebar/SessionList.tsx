@@ -2,20 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Inbox, MoreHorizontal, Pin, Plus, Settings } from "lucide-react";
 import clsx from "clsx";
-import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "../../lib/tokens/motion";
-import { useStore } from "../../store";
-import { compactSessionApi } from "../../api";
-import type { SessionListItem } from "../../api";
-import { archiveSession, createSession, loadHistory, moveSessionToProject } from "../../actions";
-import { ICON } from "../../lib/icons";
-import { useTimeTicker } from "../../lib/hooks";
-import { ScrollFadeTop } from "../ScrollBlur";
-import { groupSessions, primarySidebarSessions } from "../../lib/projects";
-import { SessionRow } from "./SessionRow";
-import { SessionContextMenu, type ContextMenuState } from "./SessionContextMenu";
-import { ProjectSettingsModal } from "./ProjectSettingsModal";
-import { SidebarFilters } from "./SidebarFilters";
-import { RowAction } from "./RowAction";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
+import { useStore } from "@/store";
+import { compactSessionApi } from "@/api";
+import type { SessionListItem } from "@/api";
+import { archiveSession, createSession, loadHistory, moveSessionToProject } from "@/actions";
+import { ICON } from "@/lib/icons";
+import { useTimeTicker } from "@/lib/hooks";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
+import { groupSessions, primarySidebarSessions } from "@/lib/projects";
+import { SessionRow } from "@/components/sidebar/SessionRow";
+import { SessionContextMenu, type ContextMenuState } from "@/components/sidebar/SessionContextMenu";
+import { ProjectSettingsModal } from "@/components/sidebar/ProjectSettingsModal";
+import { SidebarFilters } from "@/components/sidebar/SidebarFilters";
+import { RowAction } from "@/components/sidebar/RowAction";
 
 // Rows shown per group before the "…" toggle reveals the rest. Keeps each
 // group scannable; full list is one click away. New project / search /

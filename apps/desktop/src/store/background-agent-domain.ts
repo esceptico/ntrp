@@ -1,6 +1,6 @@
-import type { BackgroundAgent, BackgroundAgentStatus } from "./types";
+import type { BackgroundAgent, BackgroundAgentStatus } from "@/store/types";
 
-export type { BackgroundAgent } from "./types";
+export type { BackgroundAgent } from "@/store/types";
 
 export type BackgroundAgentRefreshStatus =
   | "idle"

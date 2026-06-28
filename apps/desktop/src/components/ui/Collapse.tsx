@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, MOTION } from "@/lib/tokens/motion";
 
 interface CollapseProps {
   open: boolean;

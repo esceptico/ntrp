@@ -14,11 +14,11 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { motion } from "motion/react";
-import { DURATION_POPOVER, EASE_DECELERATE } from "../lib/tokens/motion";
-import { useStore } from "../store";
-import { ICON } from "../lib/icons";
-import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
-import { PickerRow } from "./PickerRow";
+import { DURATION_POPOVER, EASE_DECELERATE } from "@/lib/tokens/motion";
+import { useStore } from "@/store";
+import { ICON } from "@/lib/icons";
+import { filterCommands, useCommandList, type CommandEntry } from "@/lib/commands";
+import { PickerRow } from "@/components/PickerRow";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   help: HelpCircle,

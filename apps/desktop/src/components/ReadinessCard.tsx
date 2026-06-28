@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Badge } from "./Badge";
+import { Badge } from "@/components/Badge";
 
 interface ReadinessCardProps {
   tone: "ok" | "warn";

@@ -1,4 +1,4 @@
-import type { Prefs } from "./types";
+import type { Prefs } from "@/store/types";
 
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 380;

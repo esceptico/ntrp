@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } fro
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "../../lib/tokens/motion";
+import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "@/lib/tokens/motion";
 
 /** 120ms hover bridge — one value across the composer-toolbar popovers
  *  (BudgetDial, GoalStrip, LoopStatus) so the gap-crossing grace feels

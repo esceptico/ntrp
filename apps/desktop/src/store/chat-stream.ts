@@ -1,6 +1,6 @@
-import { type AppConfig, type ServerEvent } from "../api";
-import { getState, setState, type QueuedMessage } from "./index";
-import type { ConnectionPhase } from "./domains";
+import { type AppConfig, type ServerEvent } from "@/api";
+import { getState, setState, type QueuedMessage } from "@/store/index";
+import type { ConnectionPhase } from "@/store/domains";
 import {
   applyChatEventToTranscript,
   createInitialTranscriptProjectionState,
@@ -8,13 +8,13 @@ import {
   transientProjectionReplayFloor,
   type TranscriptProjectionEffect,
   type TranscriptProjectionState,
-} from "./transcript-projection";
-import { reduceRunThinking } from "./run-lifecycle";
-import { backgroundAgentKey, type BackgroundAgentUpsert } from "./background-agent-domain";
-import type { WorkflowTaskEventKind } from "./workflow-domain";
-import type { BackgroundAgentStatus } from "./types";
+} from "@/store/transcript-projection";
+import { reduceRunThinking } from "@/store/run-lifecycle";
+import { backgroundAgentKey, type BackgroundAgentUpsert } from "@/store/background-agent-domain";
+import type { WorkflowTaskEventKind } from "@/store/workflow-domain";
+import type { BackgroundAgentStatus } from "@/store/types";
 
-export { runCancelledEffect } from "./transcript-projection";
+export { runCancelledEffect } from "@/store/transcript-projection";
 
 type ServerEventEffect =
   | { type: "replay_gap"; sessionId: string }

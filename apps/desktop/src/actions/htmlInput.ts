@@ -1,6 +1,6 @@
-import { submitToolResult } from "../api";
-import { getState } from "../store";
-import type { HtmlWidgetResolution } from "../lib/htmlWidget";
+import { submitToolResult } from "@/api";
+import { getState } from "@/store";
+import type { HtmlWidgetResolution } from "@/lib/htmlWidget";
 
 /** Resolve a blocked render_html input call. Returns false when the POST
  *  failed (card should unfreeze). */

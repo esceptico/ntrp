@@ -1,4 +1,4 @@
-import { getState } from "../store";
+import { getState } from "@/store";
 
 export function truncatePrompt(prompt: string, max = 80): string {
   const single = prompt.replace(/\s+/g, " ").trim();

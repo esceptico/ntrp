@@ -13,32 +13,32 @@ import {
   startOpenAICodexOAuthApi,
   type ModelProvider,
   type OpenAICodexOAuthStatus,
-} from "../../api";
-import { fetchServerConfig } from "../../actions";
-import { useStore } from "../../store";
-import { ReadinessCard } from "../ReadinessCard";
-import { SectionHeader } from "../SectionHeader";
+} from "@/api";
+import { fetchServerConfig } from "@/actions";
+import { useStore } from "@/store";
+import { ReadinessCard } from "@/components/ReadinessCard";
+import { SectionHeader } from "@/components/SectionHeader";
 import {
   providerActionLabel,
   providerConnectionPill,
   providerModelCountLabel,
   providerReadinessSummary,
-} from "../../lib/providerConnection";
+} from "@/lib/providerConnection";
 import {
   canSaveCustomModelDraft,
   defaultCustomModelDraft,
   type CustomModelDraft,
-} from "../../lib/customModelDraft";
+} from "@/lib/customModelDraft";
 import {
   settingsErrorMessage,
   settingsErrorTitle,
   shouldShowLoadedSettingsContent,
-} from "../../lib/settingsLoadState";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
-import { BlurSwap } from "../BlurSwap";
-import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
+} from "@/lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 

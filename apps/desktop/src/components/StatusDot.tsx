@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { statusDotClass, type AgentRunStatus } from "../lib/agentRun";
+import { statusDotClass, type AgentRunStatus } from "@/lib/agentRun";
 
 // Outcome is encoded by hue (green/red/grey/accent), so the dot needs a
 // non-color cue: it carries an accessible name (and native title) per status.

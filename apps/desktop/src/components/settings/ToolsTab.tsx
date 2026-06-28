@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchServerConfig, updateServerConfig } from "../../actions";
-import { listToolsApi, type ToolMetadata, type ToolOverrideDecision } from "../../api";
-import { useStore } from "../../store";
-import { useMutationState } from "../../lib/hooks";
-import { settingsErrorMessage } from "../../lib/settingsLoadState";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { SaveStatus } from "./SaveStatus";
-import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
+import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { listToolsApi, type ToolMetadata, type ToolOverrideDecision } from "@/api";
+import { useStore } from "@/store";
+import { useMutationState } from "@/lib/hooks";
+import { settingsErrorMessage } from "@/lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { SaveStatus } from "@/components/settings/SaveStatus";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },

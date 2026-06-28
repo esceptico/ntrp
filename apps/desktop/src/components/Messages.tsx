@@ -4,21 +4,21 @@ import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "../store";
-import { messagesScroll } from "../lib/messagesScroll";
-import { visibleMessageIds } from "../lib/messageVisibility";
-import { messageSegments } from "../lib/messageSegments";
-import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
-import { loadNewerHistory, loadOlderHistory } from "../actions";
-import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "../lib/tokens/motion";
-import { BlurSwap } from "./BlurSwap";
-import { EmptyState } from "./EmptyState";
-import { Message } from "./Message";
-import { CompactionIndicator } from "./CompactionIndicator";
-import { TurnGroup } from "./TurnGroup";
-import { ChatRail } from "./ChatRail";
-import { ScrollBlurTop } from "./ScrollBlur";
-import { ICON } from "../lib/icons";
+import { useStore } from "@/store";
+import { messagesScroll } from "@/lib/messagesScroll";
+import { visibleMessageIds } from "@/lib/messageVisibility";
+import { messageSegments } from "@/lib/messageSegments";
+import { firstMessageIdInSourceFocus } from "@/lib/messageSourceFocus";
+import { loadNewerHistory, loadOlderHistory } from "@/actions";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
+import { BlurSwap } from "@/components/BlurSwap";
+import { EmptyState } from "@/components/EmptyState";
+import { Message } from "@/components/Message";
+import { CompactionIndicator } from "@/components/CompactionIndicator";
+import { TurnGroup } from "@/components/TurnGroup";
+import { ChatRail } from "@/components/ChatRail";
+import { ScrollBlurTop } from "@/components/ScrollBlur";
+import { ICON } from "@/lib/icons";
 
 // Streaming smooth-scroll spring, tuned for "river of text" feel — low
 // stiffness + high damping so scroll trails the latest content gently

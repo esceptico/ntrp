@@ -1,7 +1,7 @@
-import { apiWithConfig, type SessionGoal } from "../api";
-import { getState } from "../store";
-import { appendError, appendStatus } from "./_shared";
-import { enqueueMessage, sendMessage } from "./messages";
+import { apiWithConfig, type SessionGoal } from "@/api";
+import { getState } from "@/store";
+import { appendError, appendStatus } from "@/actions/_shared";
+import { enqueueMessage, sendMessage } from "@/actions/messages";
 
 export async function fetchGoal(sessionId: string): Promise<void> {
   const s = getState();

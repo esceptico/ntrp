@@ -1,11 +1,11 @@
 import { Loader2, X } from "lucide-react";
 import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { cancelQueuedMessage } from "../actions";
-import { useStore, type QueuedMessage } from "../store";
-import { ICON } from "../lib/icons";
-import { EASE_EMPHASIZED, EASE_HOVER, EASE_OUT, DURATION_PANEL, DURATION_POPOVER, MOTION, ROW_EXIT } from "../lib/tokens/motion";
-import { BlurSwap } from "./BlurSwap";
+import { cancelQueuedMessage } from "@/actions";
+import { useStore, type QueuedMessage } from "@/store";
+import { ICON } from "@/lib/icons";
+import { EASE_EMPHASIZED, EASE_HOVER, EASE_OUT, DURATION_PANEL, DURATION_POPOVER, MOTION, ROW_EXIT } from "@/lib/tokens/motion";
+import { BlurSwap } from "@/components/BlurSwap";
 
 const CARD_TRANSITION = { duration: DURATION_PANEL, ease: EASE_EMPHASIZED };
 const ROW_TRANSITION = { duration: DURATION_POPOVER, ease: EASE_EMPHASIZED };

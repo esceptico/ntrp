@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { useStore } from "../store";
-import { selectWorkflowsForSession, type Workflow } from "../store/workflow-domain";
+import { useStore } from "@/store";
+import { selectWorkflowsForSession, type Workflow } from "@/store/workflow-domain";
 
 /** Workflows belonging to a session, derived from the workflow domain.
  *  Selecting `rows` (a stable reference between unrelated updates) and

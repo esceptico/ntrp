@@ -1,5 +1,5 @@
-import type { Role } from "../store";
-import { isHiddenTurnBoundary } from "./messageVisibility";
+import type { Role } from "@/store";
+import { isHiddenTurnBoundary } from "@/lib/messageVisibility";
 
 export type MessageSegment = { userId: string | null; childIds: string[] };
 

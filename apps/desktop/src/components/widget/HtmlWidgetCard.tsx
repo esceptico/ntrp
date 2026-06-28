@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { activityItemStatus } from "../../lib/agent";
-import { resolutionFromResult, type HtmlWidgetResolution } from "../../lib/htmlWidget";
-import { respondToHtmlInput } from "../../actions";
-import { Badge, type BadgeTone } from "../Badge";
-import { BlurSwap } from "../BlurSwap";
-import type { ActivityItem } from "../../store";
-import { buildSrcdoc, snapshotThemeVars, WIDGET_SANDBOX } from "./srcdoc";
+import { activityItemStatus } from "@/lib/agent";
+import { resolutionFromResult, type HtmlWidgetResolution } from "@/lib/htmlWidget";
+import { respondToHtmlInput } from "@/actions";
+import { Badge, type BadgeTone } from "@/components/Badge";
+import { BlurSwap } from "@/components/BlurSwap";
+import type { ActivityItem } from "@/store";
+import { buildSrcdoc, snapshotThemeVars, WIDGET_SANDBOX } from "@/components/widget/srcdoc";
 
 const INITIAL_HEIGHT = 160;
 const MIN_HEIGHT = 56;

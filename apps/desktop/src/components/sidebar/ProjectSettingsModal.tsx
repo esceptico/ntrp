@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen } from "lucide-react";
-import type { Project } from "../../api";
-import { archiveProject, saveProject } from "../../actions";
-import { selectDirectory } from "../../lib/directoryPicker";
-import { ICON } from "../../lib/icons";
-import { PageModal } from "../PageModal";
-import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
+import type { Project } from "@/api";
+import { archiveProject, saveProject } from "@/actions";
+import { selectDirectory } from "@/lib/directoryPicker";
+import { ICON } from "@/lib/icons";
+import { PageModal } from "@/components/PageModal";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 interface ProjectSettingsModalProps {
   project: Project | null;

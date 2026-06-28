@@ -3,7 +3,7 @@ import type {
   QueuedMessage,
   QueuedMessageStatus,
   State,
-} from "./types";
+} from "@/store/types";
 
 type RunLifecyclePatch = Partial<
   Pick<

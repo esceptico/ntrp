@@ -1,7 +1,7 @@
-import type { AppConfig } from "../../api";
-import { useStore } from "../../store";
-import { DetailPlaceholder } from "./shared";
-import { ArtifactMemoryView } from "./ArtifactMemoryView";
+import type { AppConfig } from "@/api";
+import { useStore } from "@/store";
+import { DetailPlaceholder } from "@/components/memory/shared";
+import { ArtifactMemoryView } from "@/components/memory/ArtifactMemoryView";
 
 /** Hosts the directory-first artifact-backed memory browser. */
 export function MemoryPane() {

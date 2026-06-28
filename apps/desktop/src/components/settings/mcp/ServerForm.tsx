@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { useStore } from "../../../store";
+import { useStore } from "@/store";
 import {
   type MCPServer,
   type MCPServerConfigPayload,
@@ -9,19 +9,19 @@ import {
   removeMCPServerApi,
   startMCPOAuthApi,
   updateMCPServerApi,
-} from "../../../api";
-import { useMutationState } from "../../../lib/hooks";
-import { SettingsInlineError } from "../SettingsNotice";
-import { SaveStatus } from "../SaveStatus";
-import { ICON } from "../../../lib/icons";
-import { ConfirmDeleteButton } from "../../ui/ConfirmDeleteButton";
-import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
-import { LabeledField } from "../Field";
-import { type KeyVal } from "./editors";
-import { buildMCPServerPayload, type MCPAuthMode } from "./payload";
-import { HttpFields, StdioFields } from "./transportFields";
-import { OAuthStatus } from "./OAuthStatus";
-import { ToolsSection } from "./ToolsSection";
+} from "@/api";
+import { useMutationState } from "@/lib/hooks";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { SaveStatus } from "@/components/settings/SaveStatus";
+import { ICON } from "@/lib/icons";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
+import { LabeledField } from "@/components/settings/Field";
+import { type KeyVal } from "@/components/settings/mcp/editors";
+import { buildMCPServerPayload, type MCPAuthMode } from "@/components/settings/mcp/payload";
+import { HttpFields, StdioFields } from "@/components/settings/mcp/transportFields";
+import { OAuthStatus } from "@/components/settings/mcp/OAuthStatus";
+import { ToolsSection } from "@/components/settings/mcp/ToolsSection";
 
 export function ServerForm({
   mode,

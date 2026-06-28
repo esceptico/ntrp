@@ -1,4 +1,4 @@
-import type { BackgroundAgentStatus } from "./types";
+import type { BackgroundAgentStatus } from "@/store/types";
 
 export type WorkflowStatus = "running" | "completed" | "failed" | "cancelled";
 

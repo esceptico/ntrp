@@ -2,17 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Repeat2, X } from "lucide-react";
-import { useStore, type ServerLoop } from "../../store";
-import { refreshLoops, stopLoop } from "../../actions";
-import { useEscapeKey, useFocusTrap } from "../../lib/hooks";
-import { ICON } from "../../lib/icons";
-import { EASE_DECELERATE, EASE_OUT, ENTRY_PANEL, MOTION, POSE_MODAL } from "../../lib/tokens/motion";
-import { formatLoopCountdown } from "../../lib/loops";
-import { Chip } from "../Chip";
-import { IconButton } from "../IconButton";
-import { Markdown } from "../Markdown";
-import { RollingToken } from "../trace/RollingToken";
-import { HoverPopover } from "../ui/HoverPopover";
+import { useStore, type ServerLoop } from "@/store";
+import { refreshLoops, stopLoop } from "@/actions";
+import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { EASE_DECELERATE, EASE_OUT, ENTRY_PANEL, MOTION, POSE_MODAL } from "@/lib/tokens/motion";
+import { formatLoopCountdown } from "@/lib/loops";
+import { Chip } from "@/components/Chip";
+import { IconButton } from "@/components/IconButton";
+import { Markdown } from "@/components/Markdown";
+import { RollingToken } from "@/components/trace/RollingToken";
+import { HoverPopover } from "@/components/ui/HoverPopover";
 
 /** Per-character odometer aligned to the RIGHT so the unit suffix
  *  ("s"/"m"/"h"/"d") sits at a stable slot and only digits that

@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import { useStore } from "../../store";
-import { RollingToken } from "../trace/RollingToken";
-import { HoverPopover } from "../ui/HoverPopover";
+import { useStore } from "@/store";
+import { RollingToken } from "@/components/trace/RollingToken";
+import { HoverPopover } from "@/components/ui/HoverPopover";
 
 /** Compact "two scales on one ring" budget meter. Outer arc = token
  *  pressure (parent context only — subagent internals don't count, per

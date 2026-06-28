@@ -1,11 +1,11 @@
-import { apiWithConfig, compactSessionApi, listPrimarySessionsApi, type SessionListItem } from "../api";
-import { getState } from "../store";
-import { forgetEventSeqForSession } from "../store/chat-stream";
-import { loadHistory } from "./history";
-import { enqueueMessage, sendMessage } from "./messages";
-import { switchSession } from "./sessions";
-import { clearGoal, proposeGoal, setGoal, updateGoal } from "./goals";
-import { appendError, appendStatus, formatCost, formatTokens } from "./_shared";
+import { apiWithConfig, compactSessionApi, listPrimarySessionsApi, type SessionListItem } from "@/api";
+import { getState } from "@/store";
+import { forgetEventSeqForSession } from "@/store/chat-stream";
+import { loadHistory } from "@/actions/history";
+import { enqueueMessage, sendMessage } from "@/actions/messages";
+import { switchSession } from "@/actions/sessions";
+import { clearGoal, proposeGoal, setGoal, updateGoal } from "@/actions/goals";
+import { appendError, appendStatus, formatCost, formatTokens } from "@/actions/_shared";
 
 export interface BuiltinCommand {
   name: string;

@@ -1,11 +1,11 @@
 import { CheckCircle2, Pause, Play, Target, Trash2 } from "lucide-react";
-import { clearGoal, updateGoal } from "../actions";
-import { useStore } from "../store";
-import { ICON } from "../lib/icons";
-import { BlurSwap } from "./BlurSwap";
-import { Chip } from "./Chip";
-import { IconButton } from "./IconButton";
-import { HoverPopover } from "./ui/HoverPopover";
+import { clearGoal, updateGoal } from "@/actions";
+import { useStore } from "@/store";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { Chip } from "@/components/Chip";
+import { IconButton } from "@/components/IconButton";
+import { HoverPopover } from "@/components/ui/HoverPopover";
 
 export function GoalStatusBar() {
   const sessionId = useStore((s) => s.currentSessionId);

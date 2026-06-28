@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
-import { ICON } from "../../../lib/icons";
-import { IconButton } from "../../IconButton";
+import { ICON } from "@/lib/icons";
+import { IconButton } from "@/components/IconButton";
 
 export function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (

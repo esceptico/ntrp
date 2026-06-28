@@ -1,9 +1,9 @@
 import type { ButtonHTMLAttributes, ComponentType, Ref, ReactNode } from "react";
 import { AlertCircle, Calendar, Inbox, List, Loader2, Search, Text, X } from "lucide-react";
 import clsx from "clsx";
-import { ICON } from "../../lib/icons";
-import { ScrollFadeTop } from "../ScrollBlur";
-import { Badge, type BadgeTone } from "../Badge";
+import { ICON } from "@/lib/icons";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
+import { Badge, type BadgeTone } from "@/components/Badge";
 
 // ─── Display helpers ──────────────────────────────────────────────────
 

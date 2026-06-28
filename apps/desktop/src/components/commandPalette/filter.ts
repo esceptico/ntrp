@@ -1,4 +1,4 @@
-import { SECTION_ORDER, type CommandEntry } from "./types";
+import { SECTION_ORDER, type CommandEntry } from "@/components/commandPalette/types";
 
 export function prettyProvider(provider: string): string {
   if (!provider) return "Unknown";

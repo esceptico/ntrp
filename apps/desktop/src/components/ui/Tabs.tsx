@@ -1,7 +1,7 @@
 import { createContext, useContext, useId, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
-import { SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { SPRING_LAYOUT } from "@/lib/tokens/motion";
 
 type Variant = "underline" | "pill";
 type Orientation = "horizontal" | "vertical";

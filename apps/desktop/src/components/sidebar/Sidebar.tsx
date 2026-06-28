@@ -1,12 +1,12 @@
 import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
-import { originFromEvent } from "../../lib/tokens/motion";
-import { useStore } from "../../store";
-import { createSession, fetchAutomations } from "../../actions";
-import { ICON } from "../../lib/icons";
-import { useVisibilityPoll } from "../../lib/hooks";
-import { NavRow } from "./NavRow";
-import { SessionList } from "./SessionList";
-import { ThemeToggle } from "../ThemeToggle";
+import { originFromEvent } from "@/lib/tokens/motion";
+import { useStore } from "@/store";
+import { createSession, fetchAutomations } from "@/actions";
+import { ICON } from "@/lib/icons";
+import { useVisibilityPoll } from "@/lib/hooks";
+import { NavRow } from "@/components/sidebar/NavRow";
+import { SessionList } from "@/components/sidebar/SessionList";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);

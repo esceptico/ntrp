@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Camera, Check, ChevronDown, Plus, Sparkles } from "lucide-react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import clsx from "clsx";
-import { Tooltip } from "./ui/Tooltip";
-import { ICON } from "../lib/icons";
-import { useThemeEffect } from "../lib/theme";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "../lib/tokens/motion";
-import { apiWithConfig, loadInitialConfig, type SessionListItem } from "../api";
-import type { ImageBlock } from "../store";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { ICON } from "@/lib/icons";
+import { useThemeEffect } from "@/lib/theme";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { apiWithConfig, loadInitialConfig, type SessionListItem } from "@/api";
+import type { ImageBlock } from "@/store";
 
 /** Spotlight-style floating composer rendered in the quick-capture
  *  window (separate Electron BrowserWindow loaded with the

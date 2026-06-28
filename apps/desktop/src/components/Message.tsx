@@ -14,15 +14,15 @@ import {
   Terminal,
 } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type UiMessage } from "../store";
-import { messageInSourceFocus } from "../lib/messageSourceFocus";
-import { ActivityHeader, ActivityTail, ActivityTrace, liftWorkflows } from "./trace/ActivityTrace";
-import { useWorkflows } from "../hooks/useWorkflows";
-import { CopyGlyph } from "./CopyGlyph";
-import type { SkillDescriptor, TodoStatus } from "../api";
-import { activityTraceStats } from "../lib/agent";
-import { branchAtMessage, viewSkill } from "../actions";
-import { Markdown } from "./Markdown";
+import { useStore, type UiMessage } from "@/store";
+import { messageInSourceFocus } from "@/lib/messageSourceFocus";
+import { ActivityHeader, ActivityTail, ActivityTrace, liftWorkflows } from "@/components/trace/ActivityTrace";
+import { useWorkflows } from "@/hooks/useWorkflows";
+import { CopyGlyph } from "@/components/CopyGlyph";
+import type { SkillDescriptor, TodoStatus } from "@/api";
+import { activityTraceStats } from "@/lib/agent";
+import { branchAtMessage, viewSkill } from "@/actions";
+import { Markdown } from "@/components/Markdown";
 import {
   MOTION,
   EASE_DECELERATE,
@@ -30,12 +30,12 @@ import {
   RISE_IN,
   RISE_SETTLED,
   DISSOLVE_OUT,
-} from "../lib/tokens/motion";
-import { BlurSwap } from "./BlurSwap";
-import { ICON } from "../lib/icons";
-import { IconButton } from "./IconButton";
-import { useTimeoutFlag } from "../lib/hooks";
-import { useSmoothStreamedContent } from "../lib/useSmoothStream";
+} from "@/lib/tokens/motion";
+import { BlurSwap } from "@/components/BlurSwap";
+import { ICON } from "@/lib/icons";
+import { IconButton } from "@/components/IconButton";
+import { useTimeoutFlag } from "@/lib/hooks";
+import { useSmoothStreamedContent } from "@/lib/useSmoothStream";
 
 // Background tint only — the previous inset 1px ring stacked
 // visually badly when several adjacent messages were focused at once,

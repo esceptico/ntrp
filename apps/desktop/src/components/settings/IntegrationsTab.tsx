@@ -18,28 +18,28 @@ import {
   removeGmailAccountApi,
   type GmailAccount,
   type ServiceConnection,
-} from "../../api";
-import { fetchServerConfig, updateServerConfig } from "../../actions";
-import { useStore } from "../../store";
-import { ReadinessCard } from "../ReadinessCard";
-import { SectionHeader } from "../SectionHeader";
+} from "@/api";
+import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { useStore } from "@/store";
+import { ReadinessCard } from "@/components/ReadinessCard";
+import { SectionHeader } from "@/components/SectionHeader";
 import {
   googleConnectionSummary,
   type GoogleConnectionSummary,
   serviceActionLabel,
   serviceConnectionPill,
-} from "../../lib/integrationConnection";
+} from "@/lib/integrationConnection";
 import {
   settingsErrorMessage,
   settingsErrorTitle,
   shouldShowLoadedSettingsContent,
-} from "../../lib/settingsLoadState";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
-import { BlurSwap } from "../BlurSwap";
-import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
-import { SetupAssistant, type SetupAssistantKind } from "./setup/SetupAssistant";
+} from "@/lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
+import { SetupAssistant, type SetupAssistantKind } from "@/components/settings/setup/SetupAssistant";
 
 export function IntegrationsTab() {
   const config = useStore((s) => s.config);

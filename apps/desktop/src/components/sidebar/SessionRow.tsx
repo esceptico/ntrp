@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { renameSession, switchSession } from "../../actions";
-import { ICON } from "../../lib/icons";
-import { formatRelativePast } from "../../lib/format";
-import { SessionStateIcon } from "./SessionStateIcon";
-import { ConfirmDeleteButton } from "../ui/ConfirmDeleteButton";
+import { renameSession, switchSession } from "@/actions";
+import { ICON } from "@/lib/icons";
+import { formatRelativePast } from "@/lib/format";
+import { SessionStateIcon } from "@/components/sidebar/SessionStateIcon";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 export function SessionRow({
   sessionId,

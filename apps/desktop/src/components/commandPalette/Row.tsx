@@ -1,8 +1,8 @@
 import { ChevronRight } from "lucide-react";
 import clsx from "clsx";
-import { ICON } from "../../lib/icons";
-import { PickerRow } from "../PickerRow";
-import type { CommandEntry } from "./types";
+import { ICON } from "@/lib/icons";
+import { PickerRow } from "@/components/PickerRow";
+import type { CommandEntry } from "@/components/commandPalette/types";
 
 export function Row({
   entry,

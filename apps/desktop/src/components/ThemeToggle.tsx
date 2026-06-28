@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { useStore } from "../store";
-import { Tooltip } from "./ui/Tooltip";
+import { useStore } from "@/store";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Resolved light/dark, tracking the OS when the pref is "system". */
 function useIsDark(): boolean {

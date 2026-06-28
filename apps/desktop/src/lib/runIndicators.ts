@@ -1,4 +1,4 @@
-import type { UiMessage } from "../store/types";
+import type { UiMessage } from "@/store/types";
 
 type IndicatorMessage = Pick<UiMessage, "role" | "isMeta">;
 

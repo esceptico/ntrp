@@ -1,17 +1,17 @@
 import clsx from "clsx";
 import { ChevronRight, Square, Workflow as WorkflowIcon } from "lucide-react";
-import { ICON } from "../../lib/icons";
-import { useTimeTicker } from "../../lib/hooks";
-import { formatDuration } from "../../lib/agentRun";
-import { stopRun } from "../../actions";
+import { ICON } from "@/lib/icons";
+import { useTimeTicker } from "@/lib/hooks";
+import { formatDuration } from "@/lib/agentRun";
+import { stopRun } from "@/actions";
 import {
   isActiveWorkflow,
   type Workflow,
   type WorkflowAgent,
   type WorkflowPhaseStatus,
-} from "../../store/workflow-domain";
-import { Badge, type BadgeTone } from "../Badge";
-import { BlurSwap } from "../BlurSwap";
+} from "@/store/workflow-domain";
+import { Badge, type BadgeTone } from "@/components/Badge";
+import { BlurSwap } from "@/components/BlurSwap";
 
 // Shared workflow presentation. Both the activity-trace chip and the sidebar hub
 // render WorkflowProgressCard; the overlay (WorkflowPanel) reuses the helpers, so

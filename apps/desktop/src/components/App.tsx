@@ -1,23 +1,23 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
-import { MOTION, EASE_EMPHASIZED, EASE_OUT, DURATION_RIGHT_PANEL_HIDE } from "../lib/tokens/motion";
-import { IS_DESKTOP_MAC } from "../lib/platform";
-import { Sidebar } from "./sidebar/Sidebar";
-import { Chat } from "./Chat";
-import { CommandPalette } from "./commandPalette/CommandPalette";
-import { MarkdownViewer } from "./MarkdownViewer";
-import { ApprovalReviewModal } from "./ApprovalReviewModal";
-import { SidebarResizeHandle } from "./SidebarResizeHandle";
-import { AgentRightSidebar } from "./AgentRightSidebar";
-import { ErrorBoundary } from "./ErrorBoundary";
-import { Toaster } from "./Toaster";
-import { useStore } from "../store";
-import { useEvents } from "../hooks/useEvents";
-import { useActiveRuns } from "../hooks/useActiveRuns";
-import { useAutomationEvents } from "../hooks/useAutomationEvents";
-import { useTaskResultToasts } from "../hooks/useTaskResultToasts";
-import { useThemeEffect } from "../lib/theme";
-import { bootstrap, createSession, sendMessage, switchSession } from "../actions";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT, DURATION_RIGHT_PANEL_HIDE } from "@/lib/tokens/motion";
+import { IS_DESKTOP_MAC } from "@/lib/platform";
+import { Sidebar } from "@/components/sidebar/Sidebar";
+import { Chat } from "@/components/Chat";
+import { CommandPalette } from "@/components/commandPalette/CommandPalette";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
+import { ApprovalReviewModal } from "@/components/ApprovalReviewModal";
+import { SidebarResizeHandle } from "@/components/SidebarResizeHandle";
+import { AgentRightSidebar } from "@/components/AgentRightSidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Toaster } from "@/components/Toaster";
+import { useStore } from "@/store";
+import { useEvents } from "@/hooks/useEvents";
+import { useActiveRuns } from "@/hooks/useActiveRuns";
+import { useAutomationEvents } from "@/hooks/useAutomationEvents";
+import { useTaskResultToasts } from "@/hooks/useTaskResultToasts";
+import { useThemeEffect } from "@/lib/theme";
+import { bootstrap, createSession, sendMessage, switchSession } from "@/actions";
 
 // The five "open from chrome" modals only mount when the user actually
 // opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/
@@ -25,16 +25,16 @@ import { bootstrap, createSession, sendMessage, switchSession } from "../actions
 // — modals are conditional anyway, no spinner needed for the brief
 // chunk-fetch in an Electron renderer.
 const SettingsModal = lazy(() =>
-  import("./SettingsModal").then((m) => ({ default: m.SettingsModal })),
+  import("@/components/SettingsModal").then((m) => ({ default: m.SettingsModal })),
 );
 const AutomationsModal = lazy(() =>
-  import("./AutomationsModal").then((m) => ({ default: m.AutomationsModal })),
+  import("@/components/AutomationsModal").then((m) => ({ default: m.AutomationsModal })),
 );
 const MemoryModal = lazy(() =>
-  import("./MemoryModal").then((m) => ({ default: m.MemoryModal })),
+  import("@/components/MemoryModal").then((m) => ({ default: m.MemoryModal })),
 );
 const ToolViewer = lazy(() =>
-  import("./ToolViewer").then((m) => ({ default: m.ToolViewer })),
+  import("@/components/ToolViewer").then((m) => ({ default: m.ToolViewer })),
 );
 
 // Short leftward drift on hide — gives the fade/blur a direction without

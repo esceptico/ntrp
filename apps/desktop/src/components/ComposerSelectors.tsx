@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../store";
-import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "../actions";
-import type { ModelGroup } from "../api";
-import { ICON } from "../lib/icons";
-import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../lib/tokens/motion";
+import { useStore } from "@/store";
+import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "@/actions";
+import type { ModelGroup } from "@/api";
+import { ICON } from "@/lib/icons";
+import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",

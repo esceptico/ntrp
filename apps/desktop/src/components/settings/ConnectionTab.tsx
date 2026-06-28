@@ -1,7 +1,7 @@
-import { Field } from "./Field";
-import type { AppConfig } from "../../api";
-import { BlurSwap } from "../BlurSwap";
-import { SettingsInlineError } from "./SettingsNotice";
+import { Field } from "@/components/settings/Field";
+import type { AppConfig } from "@/api";
+import { BlurSwap } from "@/components/BlurSwap";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
 
 export function ConnectionTab({
   formRef,

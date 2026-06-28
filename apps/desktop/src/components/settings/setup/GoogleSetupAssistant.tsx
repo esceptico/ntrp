@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { GooglePreflightResponse, GoogleServiceChoice, SetupStatus } from "../../../api";
-import { addGmailAccountApi, getSetupStatusApi, preflightGoogleSetupApi, saveGoogleCredentialsApi } from "../../../api";
-import { fetchServerConfig, updateServerConfig } from "../../../actions";
-import { useStore } from "../../../store";
-import { GOOGLE_SERVICE_OPTIONS, googleChoiceLabel } from "../../../lib/setupAssistant";
-import { SettingsInlineError } from "../SettingsNotice";
+import type { GooglePreflightResponse, GoogleServiceChoice, SetupStatus } from "@/api";
+import { addGmailAccountApi, getSetupStatusApi, preflightGoogleSetupApi, saveGoogleCredentialsApi } from "@/api";
+import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { useStore } from "@/store";
+import { GOOGLE_SERVICE_OPTIONS, googleChoiceLabel } from "@/lib/setupAssistant";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
 
 export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);

@@ -11,17 +11,17 @@ import {
   Square,
   type LucideIcon,
 } from "lucide-react";
-import { ICON } from "../../lib/icons";
-import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import {
   isActiveAgentStatus,
   statusDotClass,
   type AgentRunStatus,
   type AgentRunView,
-} from "../../lib/agentRun";
-import { BlurSwap } from "../BlurSwap";
-import { StatusDot } from "../StatusDot";
-import { Collapse } from "../ui/Collapse";
+} from "@/lib/agentRun";
+import { BlurSwap } from "@/components/BlurSwap";
+import { StatusDot } from "@/components/StatusDot";
+import { Collapse } from "@/components/ui/Collapse";
 
 // <AgentRunRow> — the dense borderless row for the right-sidebar agents hub.
 // The activity trace renders its own coherent agent row (trace/ActivityTrace),

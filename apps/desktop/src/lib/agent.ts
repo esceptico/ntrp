@@ -1,4 +1,4 @@
-import type { ActivityItem } from "../store";
+import type { ActivityItem } from "@/store";
 
 export const SEMANTIC_KIND_AGENT = "agent" as const;
 export const SEMANTIC_KIND_WORKFLOW = "workflow" as const;

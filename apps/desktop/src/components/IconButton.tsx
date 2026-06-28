@@ -1,6 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
-import { Tooltip } from "./ui/Tooltip";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 type IconButtonSize = "xs" | "sm" | "md" | "lg";
 type IconButtonTone = "muted" | "faint";

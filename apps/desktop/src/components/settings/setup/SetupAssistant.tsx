@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
-import { ICON } from "../../../lib/icons";
-import { GoogleSetupAssistant } from "./GoogleSetupAssistant";
-import { SlackSetupAssistant } from "./SlackSetupAssistant";
-import { MCPSetupAssistant } from "./MCPSetupAssistant";
+import { ICON } from "@/lib/icons";
+import { GoogleSetupAssistant } from "@/components/settings/setup/GoogleSetupAssistant";
+import { SlackSetupAssistant } from "@/components/settings/setup/SlackSetupAssistant";
+import { MCPSetupAssistant } from "@/components/settings/setup/MCPSetupAssistant";
 
 export type SetupAssistantKind = "google" | "slack" | "mcp";
 

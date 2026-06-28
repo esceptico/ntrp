@@ -1,5 +1,5 @@
-import { type HistoryMessage, type ServerEvent } from "../api";
-import { SEMANTIC_KIND_AGENT } from "../lib/agent";
+import { type HistoryMessage, type ServerEvent } from "@/api";
+import { SEMANTIC_KIND_AGENT } from "@/lib/agent";
 
 // Keep any non-"tool" semantic kind ("agent", "workflow") on the activity item;
 // only plain tools collapse to undefined. The trace branches on this to render
@@ -12,11 +12,11 @@ function workflowIdFromData(data: unknown): string | undefined {
   const wid = (data as { workflow_id?: unknown } | null | undefined)?.workflow_id;
   return typeof wid === "string" ? wid : undefined;
 }
-import { htmlWidgetFromHistory } from "../lib/htmlWidget";
-import { isActivityContinuationMessage } from "../lib/messageVisibility";
-import { childAgentFromToolResultData, type ToolResultData } from "./child-agent-metadata";
-import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "./index";
-import type { ChildAgentRef } from "./types";
+import { htmlWidgetFromHistory } from "@/lib/htmlWidget";
+import { isActivityContinuationMessage } from "@/lib/messageVisibility";
+import { childAgentFromToolResultData, type ToolResultData } from "@/store/child-agent-metadata";
+import { getState, setState, type ActivityItem, type QueuedMessage, type TodoListState, type UiMessage } from "@/store/index";
+import type { ChildAgentRef } from "@/store/types";
 import {
   reduceActiveActivityBackgrounded,
   reduceBackgroundedRunObserved,
@@ -25,7 +25,7 @@ import {
   reduceRunFailed,
   reduceRunOutputObserved,
   reduceRunStarted,
-} from "./run-lifecycle";
+} from "@/store/run-lifecycle";
 
 export type TranscriptProjectionEffect =
   | { type: "resend_queued_messages"; messages: QueuedMessage[] };

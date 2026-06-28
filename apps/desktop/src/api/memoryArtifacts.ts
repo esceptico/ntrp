@@ -1,7 +1,7 @@
-import type { AppConfig } from "../api";
-import { apiWithConfig } from "../api";
-import { queryString } from "./memoryItems";
-import type { MemoryKind } from "./memoryItems";
+import type { AppConfig } from "@/api";
+import { apiWithConfig } from "@/api";
+import { queryString } from "@/api/memoryItems";
+import type { MemoryKind } from "@/api/memoryItems";
 
 export type MemoryArtifactKind = MemoryKind | "changelog" | "topic";
 

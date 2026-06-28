@@ -1,8 +1,8 @@
-import type { ActivityItem, BackgroundAgent } from "../store";
-import type { Automation, AutomationTrigger, BackgroundTaskSummary } from "../api";
-import type { BackgroundAgentSnapshot } from "../store/background-agent-domain";
-import { isChannelAutomation } from "./automationFilters";
-import { activityItemStatus, extractTask, friendlyAgentLabel } from "./agent";
+import type { ActivityItem, BackgroundAgent } from "@/store";
+import type { Automation, AutomationTrigger, BackgroundTaskSummary } from "@/api";
+import type { BackgroundAgentSnapshot } from "@/store/background-agent-domain";
+import { isChannelAutomation } from "@/lib/automationFilters";
+import { activityItemStatus, extractTask, friendlyAgentLabel } from "@/lib/agent";
 
 /** Map a durable child-agent record (roster fetch) into the sidebar's snapshot
  *  shape. Shared by the roster poll and the reconnect resync so both produce an

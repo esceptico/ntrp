@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -5,6 +6,10 @@ import preload from "vite-plugin-preload";
 
 export default defineConfig({
   root: "src",
+  resolve: {
+    // `@/` → apps/desktop/src (bulletproof-react absolute-import convention).
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   // Relative asset paths. Electron loads the packaged index.html via the
   // `file://` protocol, where the default absolute base (`/assets/...`)
   // resolves to the filesystem root instead of the app bundle —

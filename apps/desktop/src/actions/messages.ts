@@ -3,17 +3,17 @@ import {
   cancelQueuedMessageApi,
   cancelRun,
   cancelSubagentApi,
-} from "../api";
-import { getState, setState, type ActivityItem, type ImageBlock } from "../store";
-import { messagesScroll } from "../lib/messagesScroll";
+} from "@/api";
+import { getState, setState, type ActivityItem, type ImageBlock } from "@/store";
+import { messagesScroll } from "@/lib/messagesScroll";
 import {
   reduceRunCompleted,
   reduceRunFailed,
   reduceRunStarted,
   reduceRunStopCleared,
   reduceRunStopRequested,
-} from "../store/run-lifecycle";
-import { clearCachedStoppingRun } from "../store/session-cache";
+} from "@/store/run-lifecycle";
+import { clearCachedStoppingRun } from "@/store/session-cache";
 
 interface SendMessageOptions {
   meta?: boolean;

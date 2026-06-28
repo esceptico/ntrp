@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useStore, type ThemeChoice } from "../store";
+import { useStore, type ThemeChoice } from "@/store";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 

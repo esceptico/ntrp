@@ -1,12 +1,12 @@
 import { Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../../../store";
-import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "../../../api";
-import { useMutationState } from "../../../lib/hooks";
-import { ICON } from "../../../lib/icons";
-import { BlurSwap } from "../../BlurSwap";
-import { IconButton } from "../../IconButton";
-import { SwitchControl } from "../../SwitchControl";
+import { useStore } from "@/store";
+import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "@/api";
+import { useMutationState } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { IconButton } from "@/components/IconButton";
+import { SwitchControl } from "@/components/SwitchControl";
 
 export function ServerRow({
   server,

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { SetupStatus, SlackVerifyResponse } from "../../../api";
-import { connectServiceApi, getSetupStatusApi, verifySlackTokenApi } from "../../../api";
-import { useStore } from "../../../store";
-import { slackTokenPrefixValid, type SlackSetupServiceId } from "../../../lib/setupAssistant";
-import { SettingsInlineError } from "../SettingsNotice";
+import type { SetupStatus, SlackVerifyResponse } from "@/api";
+import { connectServiceApi, getSetupStatusApi, verifySlackTokenApi } from "@/api";
+import { useStore } from "@/store";
+import { slackTokenPrefixValid, type SlackSetupServiceId } from "@/lib/setupAssistant";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
 
 export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);

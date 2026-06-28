@@ -11,8 +11,8 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "../../lib/tokens/motion";
-import { calculateTooltipPlacement, type TooltipPlacement, type TooltipSide } from "./tooltipPlacement";
+import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "@/lib/tokens/motion";
+import { calculateTooltipPlacement, type TooltipPlacement, type TooltipSide } from "@/components/ui/tooltipPlacement";
 
 const GAP = 6;
 /** Min distance the tooltip should keep from the viewport edge before flipping

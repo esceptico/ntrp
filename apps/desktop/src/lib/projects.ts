@@ -1,5 +1,5 @@
-import type { Project, SessionListItem } from "../api";
-import type { SidebarGroupBy } from "../store/types";
+import type { Project, SessionListItem } from "@/api";
+import type { SidebarGroupBy } from "@/store/types";
 
 export interface ProjectSessionGroup {
   /** Stable key for React + per-group collapse/expand state. */

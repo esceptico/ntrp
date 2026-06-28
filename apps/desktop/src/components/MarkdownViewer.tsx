@@ -1,10 +1,10 @@
 import { ExternalLink } from "lucide-react";
-import { useStore } from "../store";
-import { Markdown } from "./Markdown";
-import { PageModal } from "./PageModal";
-import { IconButton } from "./IconButton";
-import { ICON } from "../lib/icons";
-import { ScrollFadeTop } from "./ScrollBlur";
+import { useStore } from "@/store";
+import { Markdown } from "@/components/Markdown";
+import { PageModal } from "@/components/PageModal";
+import { IconButton } from "@/components/IconButton";
+import { ICON } from "@/lib/icons";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
 
 /** Generic markdown viewer modal. State lives in the store as `viewingMarkdown`
  *  so any code can pop the viewer with a `setViewingMarkdown({title, content, ...})`

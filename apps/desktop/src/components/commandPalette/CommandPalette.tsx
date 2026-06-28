@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
-import { useStore } from "../../store";
-import { useFocusTrap } from "../../lib/hooks";
-import { SPRING_POPOVER } from "../../lib/tokens/motion";
-import { PaletteBody } from "./PaletteBody";
-import type { Crumb } from "./types";
+import { useStore } from "@/store";
+import { useFocusTrap } from "@/lib/hooks";
+import { SPRING_POPOVER } from "@/lib/tokens/motion";
+import { PaletteBody } from "@/components/commandPalette/PaletteBody";
+import type { Crumb } from "@/components/commandPalette/types";
 
 export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);

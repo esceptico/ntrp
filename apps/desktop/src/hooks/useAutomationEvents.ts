@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useStore } from "../store";
-import { fetchAutomations, fetchAutomationSuggestions, refreshLoops } from "../actions";
-import { type AppConfig, type SessionListItem } from "../api";
-import { createStallWatchdog } from "../lib/streamWatchdog";
-import { openSseStream } from "../lib/sseTransport";
-import { automationToast } from "../lib/taskToast";
+import { useStore } from "@/store";
+import { fetchAutomations, fetchAutomationSuggestions, refreshLoops } from "@/actions";
+import { type AppConfig, type SessionListItem } from "@/api";
+import { createStallWatchdog } from "@/lib/streamWatchdog";
+import { openSseStream } from "@/lib/sseTransport";
+import { automationToast } from "@/lib/taskToast";
 
 // The automation stream keepalives every 5s; treat ~3x silence as stalled.
 const AUTOMATION_STALL_MS = 15_000;

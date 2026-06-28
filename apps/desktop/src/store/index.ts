@@ -1,23 +1,23 @@
 import { create } from "zustand";
-import { DEFAULT_CONFIG } from "../api";
-import { isActivityContinuationMessage } from "../lib/messageVisibility";
-import { isLiveRunStatus } from "../lib/runStatus";
-import type { State, Actions, UiMessage } from "./types";
-import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from "./prefs";
+import { DEFAULT_CONFIG } from "@/api";
+import { isActivityContinuationMessage } from "@/lib/messageVisibility";
+import { isLiveRunStatus } from "@/lib/runStatus";
+import type { State, Actions, UiMessage } from "@/store/types";
+import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from "@/store/prefs";
 import {
   blankSessionView,
   initialUsage,
   normalizeActivityGroups,
   normalizeCachedSessionState,
   snapshotSession,
-} from "./session-cache";
+} from "@/store/session-cache";
 import {
   createInitialSessionViewState,
   reduceCachePreviewRestored,
   reduceHistoryLoadSucceeded,
   reduceHistoryPageLoading,
   reduceSessionSelected,
-} from "./session-view";
+} from "@/store/session-view";
 import {
   createAutomationStreamDomainState,
   reduceAutomationFinished,
@@ -29,7 +29,7 @@ import {
   reduceAutomationStreamStale,
   type AutomationStreamDomainState,
   type AutomationStreamPhase,
-} from "./automation-domain";
+} from "@/store/automation-domain";
 import {
   createBackgroundAgentsDomainState,
   reduceBackgroundAgentUpsert,
@@ -38,7 +38,7 @@ import {
   reduceBackgroundAgentsRefreshStarted,
   type BackgroundAgentsDomainState,
   type BackgroundAgentRefreshStatus,
-} from "./background-agent-domain";
+} from "@/store/background-agent-domain";
 import {
   appendDismissedWorkflow,
   createWorkflowsDomainState,
@@ -48,7 +48,7 @@ import {
   reduceWorkflowTokenUsage,
   workflowKey,
   type WorkflowsDomainState,
-} from "./workflow-domain";
+} from "@/store/workflow-domain";
 import {
   reduceApprovalRequested,
   reduceApprovalResolved,
@@ -62,9 +62,9 @@ import {
   reduceRunCompleted,
   reduceRunStarted,
   reduceRunStatus,
-} from "./run-lifecycle";
+} from "@/store/run-lifecycle";
 
-// Re-export types so existing `import { X } from "../store"` keeps working.
+// Re-export types so existing `import { X } from "@/store"` keeps working.
 export type {
   ActivityItem,
   ActivityLabel,
@@ -91,7 +91,7 @@ export type {
   TodoListState,
   TurnMeta,
   UiMessage,
-} from "./types";
+} from "@/store/types";
 export type {
   AutomationStreamPhase,
   BackgroundAgentRefreshStatus,
@@ -99,8 +99,8 @@ export type {
   AutomationStreamDomainState,
   WorkflowsDomainState,
 };
-export type { Workflow, WorkflowAgent, WorkflowPhase } from "./workflow-domain";
-export { selectWorkflowsForSession } from "./workflow-domain";
+export type { Workflow, WorkflowAgent, WorkflowPhase } from "@/store/workflow-domain";
+export { selectWorkflowsForSession } from "@/store/workflow-domain";
 export {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   RIGHT_PANEL_DEFAULT_WIDTH,
@@ -112,10 +112,10 @@ export {
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_SNAP_POINTS,
   SIDEBAR_SNAP_THRESHOLD_PX,
-} from "./prefs";
+} from "@/store/prefs";
 
 
-function activeRunsFromSessions(sessions: import("../api").SessionListItem[]) {
+function activeRunsFromSessions(sessions: import("@/api").SessionListItem[]) {
   return sessions
     .filter((session) => session.active_run_id && isLiveRunStatus(session.run_status))
     .map((session) => ({

@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../../store";
-import { EASE_OUT, MOTION, ROW_EXIT, SPRING_LAYOUT } from "../../lib/tokens/motion";
+import { useStore } from "@/store";
+import { EASE_OUT, MOTION, ROW_EXIT, SPRING_LAYOUT } from "@/lib/tokens/motion";
 import {
   fetchArchivedSessions,
   permanentlyDeleteSession,
   restoreArchivedSession,
-} from "../../actions";
-import type { ArchivedSession } from "../../api";
-import { useMutationState } from "../../lib/hooks";
-import { formatRelativePast } from "../../lib/format";
-import { ICON } from "../../lib/icons";
-import { Skeleton } from "../ui/Skeleton";
+} from "@/actions";
+import type { ArchivedSession } from "@/api";
+import { useMutationState } from "@/lib/hooks";
+import { formatRelativePast } from "@/lib/format";
+import { ICON } from "@/lib/icons";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export function ArchiveTab() {
   const archived = useStore((s) => s.archivedSessions);

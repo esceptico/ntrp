@@ -1,5 +1,5 @@
 import { Briefcase, FileSearch, GitPullRequest, Inbox, Mail, type LucideIcon } from "lucide-react";
-import type { CreateAutomationPayload } from "../../api";
+import type { CreateAutomationPayload } from "@/api";
 
 /** Starter automations the user can pick to bootstrap a new automation
  *  without having to think up the prompt + schedule from scratch.

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
-import { BUILTIN_COMMANDS } from "../actions/builtins";
-import { useStore } from "../store";
+import { BUILTIN_COMMANDS } from "@/actions/builtins";
+import { useStore } from "@/store";
 
 export interface CommandEntry {
   name: string;

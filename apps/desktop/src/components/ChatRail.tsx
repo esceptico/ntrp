@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "../store";
+import { useStore } from "@/store";
 
 // Codex-style conversation minimap: one line-tick per turn, anchored to the
 // left edge of the chat. The tick expands on hover/active (inspired by

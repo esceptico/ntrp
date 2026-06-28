@@ -2,21 +2,21 @@
 // to know which file an action lives in. Implementations are organized by
 // feature in sibling files.
 
-export { truncatePrompt } from "./_shared";
-export { refreshChildAgents } from "./childAgents";
+export { truncatePrompt } from "@/actions/_shared";
+export { refreshChildAgents } from "@/actions/childAgents";
 export {
   historyMessagesToUi,
   loadHistory,
   loadNewerHistory,
   loadOlderHistory,
-} from "./history";
-export { bootstrap, refresh } from "./bootstrap";
+} from "@/actions/history";
+export { bootstrap, refresh } from "@/actions/bootstrap";
 export {
   fetchServerConfig,
   saveAndReconnect,
   updateServerConfig,
-} from "./server";
-export { fetchSkills, viewSkill } from "./skills";
+} from "@/actions/server";
+export { fetchSkills, viewSkill } from "@/actions/skills";
 export {
   archiveProject,
   archiveSession,
@@ -33,23 +33,23 @@ export {
   saveProject,
   switchSession,
   updateSessionModelAction,
-} from "./sessions";
+} from "@/actions/sessions";
 export {
   cancelSubagent,
   cancelQueuedMessage,
   enqueueMessage,
   sendMessage,
   stopRun,
-} from "./messages";
-export { respondToAllApprovals, respondToApproval } from "./approvals";
-export { respondToHtmlInput } from "./htmlInput";
+} from "@/actions/messages";
+export { respondToAllApprovals, respondToApproval } from "@/actions/approvals";
+export { respondToHtmlInput } from "@/actions/htmlInput";
 export {
   BUILTIN_COMMANDS,
   isBuiltin,
   runBuiltinCommand,
   type BuiltinCommand,
-} from "./builtins";
-export { refreshLoops, stopLoop, toggleAuto } from "./loops";
+} from "@/actions/builtins";
+export { refreshLoops, stopLoop, toggleAuto } from "@/actions/loops";
 export {
   acceptGoalProposal,
   cancelGoalProposal,
@@ -59,7 +59,7 @@ export {
   proposeGoal,
   setGoal,
   updateGoal,
-} from "./goals";
+} from "@/actions/goals";
 export {
   createAutomation,
   deleteAutomation,
@@ -70,4 +70,4 @@ export {
   runAutomation,
   toggleAutomation,
   updateAutomation,
-} from "./automations";
+} from "@/actions/automations";

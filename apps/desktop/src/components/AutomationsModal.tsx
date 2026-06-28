@@ -29,8 +29,8 @@ import {
   EASE_DECELERATE,
   EASE_OUT,
   MOTION,
-} from "../lib/tokens/motion";
-import { useStore } from "../store";
+} from "@/lib/tokens/motion";
+import { useStore } from "@/store";
 import {
   deleteAutomation,
   dismissSuggestion,
@@ -39,28 +39,28 @@ import {
   runAutomation,
   switchSession,
   toggleAutomation,
-} from "../actions";
+} from "@/actions";
 import {
   listAutomationRunsApi,
   suggestionToPayload,
   type Automation,
   type AutomationRun,
   type AutomationSuggestion,
-} from "../api";
-import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
-import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
-import { agentRunFromAutomation, formatRelative, formatTrigger } from "../lib/agentRun";
-import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
-import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
-import { AgentRunContent, type AgentRunAction } from "./agents/AgentRunRow";
-import { Badge } from "./Badge";
-import { PageModal } from "./PageModal";
-import { ICON } from "../lib/icons";
-import { ScrollFadeTop } from "./ScrollBlur";
-import { Tab as TabItem, Tabs } from "./ui/Tabs";
-import { TabPanels, useTabDirection } from "./ui/TabPanels";
-import { Tooltip } from "./ui/Tooltip";
-import { ShowMore } from "./ui/ShowMore";
+} from "@/api";
+import { isChannelAutomation, splitAutomationsForTabs } from "@/lib/automationFilters";
+import { automationTrustLabel, automationTrustTone } from "@/lib/automationTrust";
+import { agentRunFromAutomation, formatRelative, formatTrigger } from "@/lib/agentRun";
+import { AutomationEditor, type EditorSeed } from "@/components/automations/AutomationEditor";
+import { templatesByCategory, type AutomationTemplate } from "@/components/automations/templates";
+import { AgentRunContent, type AgentRunAction } from "@/components/agents/AgentRunRow";
+import { Badge } from "@/components/Badge";
+import { PageModal } from "@/components/PageModal";
+import { ICON } from "@/lib/icons";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
+import { Tab as TabItem, Tabs } from "@/components/ui/Tabs";
+import { TabPanels, useTabDirection } from "@/components/ui/TabPanels";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { ShowMore } from "@/components/ui/ShowMore";
 
 type Tab = "active" | "system" | "templates";
 

@@ -3,10 +3,10 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, SlidersHorizontal } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../../store";
-import type { SidebarGroupBy } from "../../store/types";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
+import { useStore } from "@/store";
+import type { SidebarGroupBy } from "@/store/types";
+import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
 
 const GROUP_OPTIONS: { value: SidebarGroupBy; label: string }[] = [
   { value: "project", label: "Project" },

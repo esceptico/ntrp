@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { NumberField, PercentField } from "./Field";
-import { updateServerConfig, fetchServerConfig } from "../../actions";
-import type { ServerConfig, ServerConfigPatch } from "../../api";
-import { useStore } from "../../store";
-import { SaveButton } from "../ui/SaveButton";
-import { Skeleton } from "../ui/Skeleton";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { NumberField, PercentField } from "@/components/settings/Field";
+import { updateServerConfig, fetchServerConfig } from "@/actions";
+import type { ServerConfig, ServerConfigPatch } from "@/api";
+import { useStore } from "@/store";
+import { SaveButton } from "@/components/ui/SaveButton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
 
 type Draft = Pick<
   ServerConfig,

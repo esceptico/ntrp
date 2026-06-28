@@ -1,14 +1,14 @@
-import { apiWithConfig, checkHealth, listPrimarySessionsApi, listProjectsApi, loadInitialConfig } from "../api";
-import { getState } from "../store";
-import { isAgentSessionId, parentSessionIdOf } from "../lib/agentRun";
-import { fetchAutomations } from "./automations";
-import { refreshChildAgents } from "./childAgents";
-import { fetchGoal } from "./goals";
-import { loadHistory } from "./history";
-import { refreshLoops } from "./loops";
-import { refreshSessions } from "./sessions";
-import { fetchSkills } from "./skills";
-import { fetchServerConfig } from "./server";
+import { apiWithConfig, checkHealth, listPrimarySessionsApi, listProjectsApi, loadInitialConfig } from "@/api";
+import { getState } from "@/store";
+import { isAgentSessionId, parentSessionIdOf } from "@/lib/agentRun";
+import { fetchAutomations } from "@/actions/automations";
+import { refreshChildAgents } from "@/actions/childAgents";
+import { fetchGoal } from "@/actions/goals";
+import { loadHistory } from "@/actions/history";
+import { refreshLoops } from "@/actions/loops";
+import { refreshSessions } from "@/actions/sessions";
+import { fetchSkills } from "@/actions/skills";
+import { fetchServerConfig } from "@/actions/server";
 
 const RESYNC_DEBOUNCE_MS = 800;
 // Don't resync more than once per window: under reconnect churn (a busy server

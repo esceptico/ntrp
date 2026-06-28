@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { apiWithConfig } from "../api";
-import { useStore } from "../store";
-import { refreshCachedActiveSessionHistories } from "../actions/history";
+import { apiWithConfig } from "@/api";
+import { useStore } from "@/store";
+import { refreshCachedActiveSessionHistories } from "@/actions/history";
 
 const POLL_INTERVAL_MS = 2000;
 

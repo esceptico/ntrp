@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AddBtn, RemoveBtn } from "./atoms";
+import { AddBtn, RemoveBtn } from "@/components/settings/mcp/atoms";
 
 export interface KeyVal {
   key: string;

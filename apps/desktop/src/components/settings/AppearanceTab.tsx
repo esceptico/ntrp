@@ -8,13 +8,13 @@ import {
   type ThemeChoice,
   type ThinkingAnimation,
   type ThinkingIntensity,
-} from "../../store";
-import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
-import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
-import { BlurSwap } from "../BlurSwap";
-import { IconButton } from "../IconButton";
-import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
+} from "@/store";
+import { eventToAccelerator, formatAccelerator } from "@/lib/accelerator";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { IconButton } from "@/components/IconButton";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },

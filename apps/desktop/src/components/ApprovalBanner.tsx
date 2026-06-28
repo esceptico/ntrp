@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { CornerDownLeft, MessageSquareText } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useStore, type ApprovalState } from "../store";
-import { respondToAllApprovals, respondToApproval } from "../actions";
-import { ICON } from "../lib/icons";
-import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "../lib/tokens/motion";
-import { Collapse } from "./ui/Collapse";
+import { useStore, type ApprovalState } from "@/store";
+import { respondToAllApprovals, respondToApproval } from "@/actions";
+import { ICON } from "@/lib/icons";
+import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "@/lib/tokens/motion";
+import { Collapse } from "@/components/ui/Collapse";
 
 // Cap visible stack to 2 cards. The front card already shows "1 of N" when
 // there are more pending, so a third sliver doesn't add information — it

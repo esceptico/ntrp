@@ -1,4 +1,4 @@
-import type { Role } from "../store/types";
+import type { Role } from "@/store/types";
 
 type MessageVisibilityInput = {
   role: Role | null;

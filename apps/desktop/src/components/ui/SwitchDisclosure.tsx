@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react";
-import { SwitchControl } from "../SwitchControl";
-import { Collapse } from "./Collapse";
+import { SwitchControl } from "@/components/SwitchControl";
+import { Collapse } from "@/components/ui/Collapse";
 
 interface SwitchDisclosureProps {
   checked: boolean;

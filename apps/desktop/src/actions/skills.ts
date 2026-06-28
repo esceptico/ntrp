@@ -1,5 +1,5 @@
-import { fetchSkillContent, listSkills } from "../api";
-import { getState } from "../store";
+import { fetchSkillContent, listSkills } from "@/api";
+import { getState } from "@/store";
 
 export async function fetchSkills(): Promise<void> {
   const s = getState();

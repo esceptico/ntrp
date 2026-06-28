@@ -3,11 +3,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "../store";
-import { Message } from "./Message";
-import { turnLayout } from "../lib/turnLayout";
-import { turnHeaderLabel } from "../lib/turnHeader";
-import { turnHasActiveChildAgent } from "../lib/turnActiveAgents";
+import { useStore } from "@/store";
+import { Message } from "@/components/Message";
+import { turnLayout } from "@/lib/turnLayout";
+import { turnHeaderLabel } from "@/lib/turnHeader";
+import { turnHasActiveChildAgent } from "@/lib/turnActiveAgents";
 import {
   MOTION,
   EASE_DECELERATE,
@@ -16,9 +16,9 @@ import {
   RISE_IN,
   RISE_SETTLED,
   DISSOLVE_OUT,
-} from "../lib/tokens/motion";
-import { Collapse } from "./ui/Collapse";
-import { ICON } from "../lib/icons";
+} from "@/lib/tokens/motion";
+import { Collapse } from "@/components/ui/Collapse";
+import { ICON } from "@/lib/icons";
 
 export function TurnGroup({
   userId,

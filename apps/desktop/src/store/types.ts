@@ -10,20 +10,20 @@ import type {
   SessionListItem,
   SkillDescriptor,
   TodoListItem,
-} from "../api";
-import type { TransportDiagnosticsSnapshot } from "../lib/transportDiagnostics";
-import type { MessageSourceFocus } from "../lib/messageSourceFocus";
-import type { Toast } from "../lib/taskToast";
-import type { AutomationStreamDomainState } from "./automation-domain";
-import type { BackgroundAgentsDomainState } from "./background-agent-domain";
+} from "@/api";
+import type { TransportDiagnosticsSnapshot } from "@/lib/transportDiagnostics";
+import type { MessageSourceFocus } from "@/lib/messageSourceFocus";
+import type { Toast } from "@/lib/taskToast";
+import type { AutomationStreamDomainState } from "@/store/automation-domain";
+import type { BackgroundAgentsDomainState } from "@/store/background-agent-domain";
 import type {
   WorkflowsDomainState,
   WorkflowStartedInput,
   WorkflowTokenUsageInput,
-} from "./workflow-domain";
-import type { SessionViewState } from "./session-view";
+} from "@/store/workflow-domain";
+import type { SessionViewState } from "@/store/session-view";
 
-export type { SessionViewState } from "./session-view";
+export type { SessionViewState } from "@/store/session-view";
 
 export type SettingsTabId =
   | "connection"
@@ -428,11 +428,11 @@ export interface Actions {
     options?: { clearApprovals?: boolean; markBackgrounded?: boolean },
   ) => void;
   setCurrentSession: (sessionId: string | null) => void;
-  setHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
-  prependHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
+  setHistory: (messages: UiMessage[], page?: import("@/api").HistoryPage) => void;
+  prependHistory: (messages: UiMessage[], page?: import("@/api").HistoryPage) => void;
   appendHistoryPage: (
     messages: UiMessage[],
-    page?: import("../api").HistoryPage,
+    page?: import("@/api").HistoryPage,
     activeActivityId?: string | null,
   ) => void;
   setHistoryLoading: (direction: "before" | "after", loading: boolean) => void;

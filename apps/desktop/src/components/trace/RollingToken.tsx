@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { MOTION, EASE_EMPHASIZED } from "../../lib/tokens/motion";
+import { MOTION, EASE_EMPHASIZED } from "@/lib/tokens/motion";
 
 const EASE = EASE_EMPHASIZED;
 

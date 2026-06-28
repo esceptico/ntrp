@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { BlurSwap } from "./BlurSwap";
+import { BlurSwap } from "@/components/BlurSwap";
 
 /**
  * The Copy → Check glyph swap shared by every copy button in the app

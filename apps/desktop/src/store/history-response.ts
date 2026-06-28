@@ -2,28 +2,28 @@ import type {
   HistoryMessage,
   HistoryPage,
   SessionRuntimeSnapshot,
-} from "../api";
-import { isForegroundRunStatus } from "../lib/runStatus";
+} from "@/api";
+import { isForegroundRunStatus } from "@/lib/runStatus";
 import {
   newestHistoryActivityId,
   rebuildTranscriptFromHistory,
-} from "./transcript-projection";
+} from "@/store/transcript-projection";
 import {
   blankSessionView,
   initialUsage,
   normalizeActivityGroups,
-} from "./session-cache";
+} from "@/store/session-cache";
 import {
   createInitialSessionViewState,
   reduceHistoryLoadSucceeded,
-} from "./session-view";
+} from "@/store/session-view";
 import type {
   ActivityItem,
   ApprovalState,
   CachedSessionState,
   QueuedMessage,
   UiMessage,
-} from "./types";
+} from "@/store/types";
 
 export interface HistoryResponse {
   messages: HistoryMessage[];

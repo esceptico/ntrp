@@ -1,8 +1,8 @@
 import { Bot, Layers, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
-import { updateServerConfig } from "../../actions";
-import type { ThemeChoice } from "../../store";
-import { prettyProvider, stripProviderPrefix } from "./filter";
-import type { CommandView } from "./types";
+import { updateServerConfig } from "@/actions";
+import type { ThemeChoice } from "@/store";
+import { prettyProvider, stripProviderPrefix } from "@/components/commandPalette/filter";
+import type { CommandView } from "@/components/commandPalette/types";
 
 /** Provider-level view: one row per provider, drills into model list. */
 export function buildProviderView(

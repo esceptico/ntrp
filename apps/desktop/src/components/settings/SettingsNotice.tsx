@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { RISE_IN, RISE_SETTLED, MOTION, EASE_OUT } from "../../lib/tokens/motion";
+import { RISE_IN, RISE_SETTLED, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 
 export function SettingsConnectionHint({
   title = "Connect the desktop to ntrp first",

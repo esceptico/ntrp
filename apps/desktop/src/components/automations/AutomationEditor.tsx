@@ -13,14 +13,14 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { createAutomation, updateAutomation } from "../../actions";
-import { useFocusTrap } from "../../lib/hooks";
+import { createAutomation, updateAutomation } from "@/actions";
+import { useFocusTrap } from "@/lib/hooks";
 import type {
   Automation,
   AutomationTrigger,
   CreateAutomationPayload,
   UpdateAutomationPayload,
-} from "../../api";
+} from "@/api";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
@@ -30,13 +30,13 @@ import {
   RISE_IN,
   RISE_SETTLED,
   DISSOLVE_OUT,
-} from "../../lib/tokens/motion";
-import { ICON } from "../../lib/icons";
-import { IconButton } from "../IconButton";
-import { SegmentedControl, SegmentedControlItem } from "../SegmentedControl";
-import { Chip } from "../Chip";
-import { SwitchDisclosure } from "../ui/SwitchDisclosure";
-import { BlurSwap } from "../BlurSwap";
+} from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { IconButton } from "@/components/IconButton";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
+import { Chip } from "@/components/Chip";
+import { SwitchDisclosure } from "@/components/ui/SwitchDisclosure";
+import { BlurSwap } from "@/components/BlurSwap";
 
 export type EditorSeed =
   | { kind: "create"; preset?: CreateAutomationPayload }

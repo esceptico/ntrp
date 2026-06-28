@@ -1,4 +1,4 @@
-import type { TodoListItem, TodoStatus } from "../api";
+import type { TodoListItem, TodoStatus } from "@/api";
 
 // Pure helpers for the editable todo list. Persistence is server-side (see
 // get/set/clearTodoOverrideApi) so the agent sees manual edits on its next run.

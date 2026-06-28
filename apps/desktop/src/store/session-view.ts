@@ -1,5 +1,5 @@
-import type { HistoryPage } from "../api";
-import type { HistoryPhase } from "./domains";
+import type { HistoryPage } from "@/api";
+import type { HistoryPhase } from "@/store/domains";
 
 export interface SessionViewState {
   currentSessionId: string | null;

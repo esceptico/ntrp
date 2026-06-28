@@ -1,4 +1,4 @@
-import type { Automation } from "../api";
+import type { Automation } from "@/api";
 
 export type AutomationTrustTone = "neutral" | "accent" | "bad";
 

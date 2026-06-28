@@ -5,7 +5,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_SNAP_POINTS,
   SIDEBAR_SNAP_THRESHOLD_PX,
-} from "../store";
+} from "@/store";
 
 /** Magnetic drag-to-resize handle on the sidebar's right edge. The
  *  visible affordance is a 4px column of `cursor: ew-resize`; while

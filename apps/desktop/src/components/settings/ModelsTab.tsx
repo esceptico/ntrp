@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useStore } from "../../store";
-import { updateServerConfig, fetchServerConfig } from "../../actions";
-import type { ModelGroup } from "../../api";
-import { ModelReasoningPicker } from "../ComposerSelectors";
-import { useTimeoutFlag } from "../../lib/hooks";
-import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
-import { SaveStatus } from "./SaveStatus";
+import { useStore } from "@/store";
+import { updateServerConfig, fetchServerConfig } from "@/actions";
+import type { ModelGroup } from "@/api";
+import { ModelReasoningPicker } from "@/components/ComposerSelectors";
+import { useTimeoutFlag } from "@/lib/hooks";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { SaveStatus } from "@/components/settings/SaveStatus";
 
 type ModelKind = "research_model" | "workflow_model" | "memory_model";
 

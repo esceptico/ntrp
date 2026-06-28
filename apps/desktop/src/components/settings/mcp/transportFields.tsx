@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { LabeledField } from "../Field";
-import { KeyValueEditor, ListEditor, type KeyVal } from "./editors";
-import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
-import type { MCPAuthMode } from "./payload";
+import { LabeledField } from "@/components/settings/Field";
+import { KeyValueEditor, ListEditor, type KeyVal } from "@/components/settings/mcp/editors";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
+import type { MCPAuthMode } from "@/components/settings/mcp/payload";
 
 export function StdioFields({
   command,

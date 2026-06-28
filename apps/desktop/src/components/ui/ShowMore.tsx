@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
-import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, MOTION } from "@/lib/tokens/motion";
 
 interface ShowMoreProps {
   children: ReactNode;

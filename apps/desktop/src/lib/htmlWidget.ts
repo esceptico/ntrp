@@ -1,4 +1,4 @@
-import type { ActivityItem } from "../store";
+import type { ActivityItem } from "@/store";
 
 export interface HtmlWidgetResolution {
   action: "accept" | "decline" | "cancel";

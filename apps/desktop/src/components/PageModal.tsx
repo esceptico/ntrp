@@ -8,10 +8,10 @@ import {
   EXIT_FAST,
   MOTION,
   POSE_MODAL,
-} from "../lib/tokens/motion";
-import { useEscapeKey, useFocusTrap } from "../lib/hooks";
-import { IconButton } from "./IconButton";
-import { ICON } from "../lib/icons";
+} from "@/lib/tokens/motion";
+import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
+import { IconButton } from "@/components/IconButton";
+import { ICON } from "@/lib/icons";
 
 const BACKDROP_DURATION = MOTION.trace;
 

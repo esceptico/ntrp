@@ -5,17 +5,17 @@ import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { CopyGlyph } from "./CopyGlyph";
+import { CopyGlyph } from "@/components/CopyGlyph";
 import clsx from "clsx";
 import bash from "highlight.js/lib/languages/bash";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
 import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
-import { Mermaid } from "./Mermaid";
-import { ICON } from "../lib/icons";
-import { useTimeoutFlag } from "../lib/hooks";
-import { remarkWikiLink, WikiLinkContext } from "./wikilink";
+import { Mermaid } from "@/components/Mermaid";
+import { ICON } from "@/lib/icons";
+import { useTimeoutFlag } from "@/lib/hooks";
+import { remarkWikiLink, WikiLinkContext } from "@/components/wikilink";
 
 const HL_LANGUAGES = {
   json,

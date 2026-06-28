@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Loader2 } from "lucide-react";
 import clsx from "clsx";
-import { ICON } from "../../lib/icons";
-import { EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { ICON } from "@/lib/icons";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 
 /** Transient save confirmation for fire-on-change settings controls.
  *  Fed by `useMutationState` ({ busy, saved }): renders nothing at rest,

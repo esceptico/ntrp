@@ -1,8 +1,8 @@
 import { motion } from "motion/react";
 import { Sparkles } from "lucide-react";
-import { useStore } from "../store";
-import { EASE_DECELERATE, MOTION, RISE_IN, RISE_SETTLED } from "../lib/tokens/motion";
-import { ICON } from "../lib/icons";
+import { useStore } from "@/store";
+import { EASE_DECELERATE, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
 
 export function EmptyState() {
   const connected = useStore((s) => s.connected);

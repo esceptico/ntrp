@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useStore } from "../../../store";
-import { type MCPServer, listMCPServersApi } from "../../../api";
-import { RISE_IN, RISE_SETTLED, DISSOLVE_OUT, MOTION, EASE_EMPHASIZED } from "../../../lib/tokens/motion";
-import { TabPanels } from "../../ui/TabPanels";
-import { ServerForm } from "./ServerForm";
-import { ServerList } from "./ServerList";
-import { SetupAssistant } from "../setup/SetupAssistant";
+import { useStore } from "@/store";
+import { type MCPServer, listMCPServersApi } from "@/api";
+import { RISE_IN, RISE_SETTLED, DISSOLVE_OUT, MOTION, EASE_EMPHASIZED } from "@/lib/tokens/motion";
+import { TabPanels } from "@/components/ui/TabPanels";
+import { ServerForm } from "@/components/settings/mcp/ServerForm";
+import { ServerList } from "@/components/settings/mcp/ServerList";
+import { SetupAssistant } from "@/components/settings/setup/SetupAssistant";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 

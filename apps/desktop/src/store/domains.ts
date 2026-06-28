@@ -1,11 +1,11 @@
 import {
   createAutomationStreamDomainState,
   type AutomationStreamDomainState,
-} from "./automation-domain";
+} from "@/store/automation-domain";
 import {
   createBackgroundAgentsDomainState,
   type BackgroundAgentsDomainState,
-} from "./background-agent-domain";
+} from "@/store/background-agent-domain";
 
 export type HistoryPhase =
   | "idle"

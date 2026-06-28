@@ -8,7 +8,7 @@ import {
   type Ref,
 } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { SPRING_LAYOUT } from "../lib/tokens/motion";
+import { SPRING_LAYOUT } from "@/lib/tokens/motion";
 
 type Size = "sm" | "md" | "lg";
 

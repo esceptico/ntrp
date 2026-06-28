@@ -1,6 +1,6 @@
-import { SEMANTIC_KIND_AGENT } from "./agent";
-import type { BackgroundAgent, UiMessage } from "../store";
-import { isActiveBackgroundAgent } from "../store/background-agent-domain";
+import { SEMANTIC_KIND_AGENT } from "@/lib/agent";
+import type { BackgroundAgent, UiMessage } from "@/store";
+import { isActiveBackgroundAgent } from "@/store/background-agent-domain";
 
 interface TurnActiveChildAgentInput {
   childIds: readonly string[];

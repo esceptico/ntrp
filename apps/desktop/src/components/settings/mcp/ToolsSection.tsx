@@ -1,13 +1,13 @@
 import { useMemo } from "react";
-import { useStore } from "../../../store";
-import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "../../../api";
-import { fetchServerConfig, updateServerConfig } from "../../../actions";
-import { useMutationState } from "../../../lib/hooks";
-import { SettingsInlineError } from "../SettingsNotice";
-import { SaveStatus } from "../SaveStatus";
-import { SegmentedControl, SegmentedControlItem } from "../../SegmentedControl";
-import { SwitchControl } from "../../SwitchControl";
-import { SectionHeader } from "../../SectionHeader";
+import { useStore } from "@/store";
+import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "@/api";
+import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { useMutationState } from "@/lib/hooks";
+import { SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { SaveStatus } from "@/components/settings/SaveStatus";
+import { SegmentedControl, SegmentedControlItem } from "@/components/SegmentedControl";
+import { SwitchControl } from "@/components/SwitchControl";
+import { SectionHeader } from "@/components/SectionHeader";
 
 const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },

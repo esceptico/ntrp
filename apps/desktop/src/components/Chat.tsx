@@ -1,16 +1,16 @@
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import clsx from "clsx";
 import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useStore } from "../store";
-import { switchSession } from "../actions";
-import { Messages } from "./Messages";
-import { Composer } from "./Composer";
-import { ApprovalBanner } from "./ApprovalBanner";
-import { IconButton } from "./IconButton";
-import { BlurSwap } from "./BlurSwap";
-import { ICON } from "../lib/icons";
-import { DURATION_RIGHT_PANEL_HIDE, MOTION } from "../lib/tokens/motion";
-import { useHasTrafficLights } from "../lib/platform";
+import { useStore } from "@/store";
+import { switchSession } from "@/actions";
+import { Messages } from "@/components/Messages";
+import { Composer } from "@/components/Composer";
+import { ApprovalBanner } from "@/components/ApprovalBanner";
+import { IconButton } from "@/components/IconButton";
+import { BlurSwap } from "@/components/BlurSwap";
+import { ICON } from "@/lib/icons";
+import { DURATION_RIGHT_PANEL_HIDE, MOTION } from "@/lib/tokens/motion";
+import { useHasTrafficLights } from "@/lib/platform";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);

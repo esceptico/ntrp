@@ -23,9 +23,9 @@ import {
   type Automation,
   type TodoListItem,
   type TodoStatus,
-} from "../api";
-import { nextTodoStatus, todoSignature } from "../lib/todoOverride";
-import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
+} from "@/api";
+import { nextTodoStatus, todoSignature } from "@/lib/todoOverride";
+import { isInternalAutomation, isIterationLoop } from "@/lib/automationFilters";
 import {
   DURATION_RIGHT_PANEL_HIDE,
   EASE_EMPHASIZED,
@@ -36,8 +36,8 @@ import {
   RISE_SETTLED,
   ROW_EXIT,
   SPRING_ROW_ENTRY,
-} from "../lib/tokens/motion";
-import { ICON } from "../lib/icons";
+} from "@/lib/tokens/motion";
+import { ICON } from "@/lib/icons";
 import {
   getState,
   RIGHT_PANEL_DEFAULT_WIDTH,
@@ -49,7 +49,7 @@ import {
   type BackgroundAgent,
   type TodoListState,
   type UiMessage,
-} from "../store";
+} from "@/store";
 import {
   agentRunFromAutomation,
   agentRunFromBackgroundAgent,
@@ -57,19 +57,19 @@ import {
   isAgentSessionId,
   parentSessionIdOf,
   resultSnippet,
-} from "../lib/agentRun";
-import { createSession, refreshChildAgents, sendMessage, switchSession } from "../actions";
-import { useWorkflows } from "../hooks/useWorkflows";
-import { isActiveWorkflow, workflowKey } from "../store/workflow-domain";
-import { ExpandableWorkflowCard } from "./workflow/WorkflowDetail";
-import { ScrollFadeTop } from "./ScrollBlur";
-import { BlurSwap } from "./BlurSwap";
-import { StatusDot } from "./StatusDot";
-import { AgentRunRow } from "./agents/AgentRunRow";
-import { Collapse } from "./ui/Collapse";
-import { Tooltip } from "./ui/Tooltip";
-export { isActiveBackgroundAgent } from "../store/background-agent-domain";
-export { StatusDot } from "./StatusDot";
+} from "@/lib/agentRun";
+import { createSession, refreshChildAgents, sendMessage, switchSession } from "@/actions";
+import { useWorkflows } from "@/hooks/useWorkflows";
+import { isActiveWorkflow, workflowKey } from "@/store/workflow-domain";
+import { ExpandableWorkflowCard } from "@/components/workflow/WorkflowDetail";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
+import { BlurSwap } from "@/components/BlurSwap";
+import { StatusDot } from "@/components/StatusDot";
+import { AgentRunRow } from "@/components/agents/AgentRunRow";
+import { Collapse } from "@/components/ui/Collapse";
+import { Tooltip } from "@/components/ui/Tooltip";
+export { isActiveBackgroundAgent } from "@/store/background-agent-domain";
+export { StatusDot } from "@/components/StatusDot";
 
 export function latestTodoListFromMessages(
   order: string[],

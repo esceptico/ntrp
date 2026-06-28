@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { EASE_EMPHASIZED, MOTION } from "../../lib/tokens/motion";
+import { EASE_EMPHASIZED, MOTION } from "@/lib/tokens/motion";
 
 // Directional content swap: the new panel enters from the side you're moving
 // toward, the old one leaves the opposite way. Small offset — restraint over

@@ -1,11 +1,11 @@
 import { Plus } from "lucide-react";
-import { type MCPServer } from "../../../api";
-import { settingsErrorMessage } from "../../../lib/settingsLoadState";
-import { SettingsConnectionHint, SettingsInlineError } from "../SettingsNotice";
-import { ICON } from "../../../lib/icons";
-import { SectionHeader } from "../../SectionHeader";
-import { Empty } from "./atoms";
-import { ServerRow } from "./ServerRow";
+import { type MCPServer } from "@/api";
+import { settingsErrorMessage } from "@/lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "@/components/settings/SettingsNotice";
+import { ICON } from "@/lib/icons";
+import { SectionHeader } from "@/components/SectionHeader";
+import { Empty } from "@/components/settings/mcp/atoms";
+import { ServerRow } from "@/components/settings/mcp/ServerRow";
 
 export function ServerList({
   servers,

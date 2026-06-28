@@ -1,6 +1,6 @@
-import { useStore } from "../store";
-import { MemoryPane } from "./memory/MemoryPane";
-import { PageModal } from "./PageModal";
+import { useStore } from "@/store";
+import { MemoryPane } from "@/components/memory/MemoryPane";
+import { PageModal } from "@/components/PageModal";
 
 /** Directory-first generated memory artifact browser. */
 export function MemoryModal() {

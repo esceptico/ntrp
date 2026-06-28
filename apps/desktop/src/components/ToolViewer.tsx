@@ -4,25 +4,25 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
-import { useStore, type ActivityItem } from "../store";
-import { getChildAgentResultApi, type ChildAgentResult } from "../api";
-import { highlight } from "../highlight";
-import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
-import { humanizeAgentType } from "../lib/agentRun";
-import { Markdown } from "./Markdown";
-import { BlurSwap } from "./BlurSwap";
-import { CopyGlyph } from "./CopyGlyph";
-import { IconButton } from "./IconButton";
-import { ScrollFadeTop } from "./ScrollBlur";
+import { useStore, type ActivityItem } from "@/store";
+import { getChildAgentResultApi, type ChildAgentResult } from "@/api";
+import { highlight } from "@/highlight";
+import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "@/lib/agent";
+import { humanizeAgentType } from "@/lib/agentRun";
+import { Markdown } from "@/components/Markdown";
+import { BlurSwap } from "@/components/BlurSwap";
+import { CopyGlyph } from "@/components/CopyGlyph";
+import { IconButton } from "@/components/IconButton";
+import { ScrollFadeTop } from "@/components/ScrollBlur";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
   MOTION,
   POSE_MODAL,
-} from "../lib/tokens/motion";
-import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
-import { ICON } from "../lib/icons";
-import { cancelSubagent } from "../actions";
+} from "@/lib/tokens/motion";
+import { useEscapeKey, useTimeoutFlag } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { cancelSubagent } from "@/actions";
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
  *  `lang` field is set to "json" when we successfully reformatted, so the

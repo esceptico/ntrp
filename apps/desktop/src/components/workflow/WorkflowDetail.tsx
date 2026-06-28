@@ -2,17 +2,17 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ChevronDown, Code2 } from "lucide-react";
-import { ICON } from "../../lib/icons";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../../lib/tokens/motion";
-import { useTimeTicker, useTimeoutFlag } from "../../lib/hooks";
-import { formatDuration } from "../../lib/agentRun";
-import { switchSession } from "../../actions";
-import { useStore } from "../../store";
-import { highlight } from "../../highlight";
-import { BlurSwap } from "../BlurSwap";
-import { CopyGlyph } from "../CopyGlyph";
-import { isActiveWorkflow, type Workflow, type WorkflowAgent, type WorkflowPhase } from "../../store/workflow-domain";
-import { formatTokens, PhaseSparkline, pipClass, WorkflowProgressCard } from "./WorkflowProgress";
+import { ICON } from "@/lib/icons";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { useTimeTicker, useTimeoutFlag } from "@/lib/hooks";
+import { formatDuration } from "@/lib/agentRun";
+import { switchSession } from "@/actions";
+import { useStore } from "@/store";
+import { highlight } from "@/highlight";
+import { BlurSwap } from "@/components/BlurSwap";
+import { CopyGlyph } from "@/components/CopyGlyph";
+import { isActiveWorkflow, type Workflow, type WorkflowAgent, type WorkflowPhase } from "@/store/workflow-domain";
+import { formatTokens, PhaseSparkline, pipClass, WorkflowProgressCard } from "@/components/workflow/WorkflowProgress";
 
 // A workflow card that expands IN PLACE to reveal its phases → agents — used in
 // both the chat trace and the sidebar hub, each with its own local expand state.

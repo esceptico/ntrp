@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type ImageBlock } from "../store";
+import { useStore, type ImageBlock } from "@/store";
 import {
   acceptGoalProposal,
   cancelGoalProposal,
@@ -15,21 +15,21 @@ import {
   stopRun,
   toggleAuto,
   viewSkill,
-} from "../actions";
-import { QueueCard } from "./QueueCard";
-import { GoalStatusBar } from "./GoalStrip";
-import { CommandPicker } from "./CommandPicker";
-import { Chip } from "./Chip";
-import { BlurSwap } from "./BlurSwap";
-import { ModelReasoningChip } from "./ComposerSelectors";
-import { LoopStatusBar } from "./composer/LoopStatus";
-import { BudgetDial } from "./composer/BudgetDial";
-import { Tooltip } from "./ui/Tooltip";
-import { useListNav, useTimeoutFlag } from "../lib/hooks";
-import { ICON } from "../lib/icons";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "../lib/tokens/motion";
-import { awaitingFirstRunOutput } from "../lib/runIndicators";
-import { filterCommands, useCommandList, type CommandEntry } from "../lib/commands";
+} from "@/actions";
+import { QueueCard } from "@/components/QueueCard";
+import { GoalStatusBar } from "@/components/GoalStrip";
+import { CommandPicker } from "@/components/CommandPicker";
+import { Chip } from "@/components/Chip";
+import { BlurSwap } from "@/components/BlurSwap";
+import { ModelReasoningChip } from "@/components/ComposerSelectors";
+import { LoopStatusBar } from "@/components/composer/LoopStatus";
+import { BudgetDial } from "@/components/composer/BudgetDial";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { useListNav, useTimeoutFlag } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { awaitingFirstRunOutput } from "@/lib/runIndicators";
+import { filterCommands, useCommandList, type CommandEntry } from "@/lib/commands";
 
 // Composer sub-sections (editing banner, image strip, skill pill, goal
 // proposal) rise into focus on mount and dissolve out faster on unmount;

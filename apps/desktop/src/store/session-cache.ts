@@ -1,6 +1,6 @@
-import type { CachedSessionState, SessionUsage, State, UiMessage } from "./types";
-import { createInitialSessionViewState } from "./session-view";
-import { isActivityContinuationMessage } from "../lib/messageVisibility";
+import type { CachedSessionState, SessionUsage, State, UiMessage } from "@/store/types";
+import { createInitialSessionViewState } from "@/store/session-view";
+import { isActivityContinuationMessage } from "@/lib/messageVisibility";
 
 export const initialUsage: SessionUsage = {
   lastPrompt: 0,

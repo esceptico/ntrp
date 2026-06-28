@@ -1,4 +1,4 @@
-import { Tooltip } from "../ui/Tooltip";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function RowAction({
   icon,

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
-import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
+import { getMermaid, invalidateMermaidTheme } from "@/lib/mermaidTheme";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
@@ -11,12 +11,12 @@ import {
   POSE_MODAL,
   RISE_IN,
   RISE_SETTLED,
-} from "../lib/tokens/motion";
-import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
-import { ICON } from "../lib/icons";
-import { BlurSwap } from "./BlurSwap";
-import { CopyGlyph } from "./CopyGlyph";
-import { IconButton } from "./IconButton";
+} from "@/lib/tokens/motion";
+import { useEscapeKey, useTimeoutFlag } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { BlurSwap } from "@/components/BlurSwap";
+import { CopyGlyph } from "@/components/CopyGlyph";
+import { IconButton } from "@/components/IconButton";
 
 const RENDER_DEBOUNCE_MS = 400;
 const MIN_ZOOM = 0.1;
