@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Tab, Tabs } from "../src/components/ui/Tabs.tsx";
-import { SLIDE_PAGE_VARIANTS } from "../src/components/ui/TabPanels.tsx";
+import { Tab, Tabs } from "@/components/ui/Tabs";
+import { SLIDE_PAGE_VARIANTS } from "@/components/ui/TabPanels";
 
 test("renders a button per tab and marks the active one", () => {
   const html = renderToStaticMarkup(

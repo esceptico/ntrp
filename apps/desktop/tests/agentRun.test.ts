@@ -10,9 +10,9 @@ import {
   resolveAutomationStatus,
   resultSnippet,
   statusDotClass,
-} from "../src/lib/agentRun.ts";
-import type { Automation } from "../src/api.ts";
-import type { ActivityItem, BackgroundAgent } from "../src/store/types.ts";
+} from "@/lib/agentRun";
+import type { Automation } from "@/api";
+import type { ActivityItem, BackgroundAgent } from "@/store/types";
 
 function automation(overrides: Partial<Automation> = {}): Automation {
   return {

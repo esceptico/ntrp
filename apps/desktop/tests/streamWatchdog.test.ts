@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createStallWatchdog } from "../src/lib/streamWatchdog.ts";
+import { createStallWatchdog } from "@/lib/streamWatchdog";
 
 function harness(stallMs: number, checkMs: number) {
   let nowMs = 0;

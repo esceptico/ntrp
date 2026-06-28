@@ -3,7 +3,7 @@ import {
   googleChoiceLabel,
   parseMCPServerImport,
   slackTokenPrefixValid,
-} from "../src/lib/setupAssistant.js";
+} from "@/lib/setupAssistant";
 
 test("labels Google setup service choices", () => {
   expect(googleChoiceLabel("email")).toBe("Email only");

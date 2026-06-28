@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { runStatusSnapshots } from "../src/hooks/useActiveRuns.ts";
+import { runStatusSnapshots } from "@/hooks/useActiveRuns";
 
 test("active run polling preserves backgrounded runs for lifecycle reduction", () => {
   expect(

@@ -2,8 +2,8 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import type { AutomationSuggestion, CreateAutomationPayload } from "../src/api.ts";
-import { suggestionToPayload } from "../src/api.ts";
+import type { AutomationSuggestion, CreateAutomationPayload } from "@/api";
+import { suggestionToPayload } from "@/api";
 
 // Capture what the editor hands to the create action. The component imports
 // `createAutomation` from `../../actions`, which resolves to the same module
@@ -11,7 +11,7 @@ import { suggestionToPayload } from "../src/api.ts";
 let created: CreateAutomationPayload[] = [];
 let updated: { taskId: string; patch: unknown }[] = [];
 
-mock.module("../src/actions/index.ts", () => ({
+mock.module("@/actions/index", () => ({
   createAutomation: async (payload: CreateAutomationPayload) => {
     created.push(payload);
   },
@@ -23,7 +23,7 @@ mock.module("../src/actions/index.ts", () => ({
 // Imported after the mock is registered so the component picks up the stub,
 // and so the module-local helpers are available for focused unit tests.
 const { AutomationEditor, formFromPreset, buildPayload } = await import(
-  "../src/components/automations/AutomationEditor.tsx"
+  "@/components/automations/AutomationEditor"
 );
 
 beforeEach(() => {

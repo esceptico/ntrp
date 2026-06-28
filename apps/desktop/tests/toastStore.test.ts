@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
-import { getState, setState } from "../src/store/index.ts";
-import type { Toast } from "../src/lib/taskToast.ts";
+import { getState, setState } from "@/store/index";
+import type { Toast } from "@/lib/taskToast";
 
 const toast = (id: string): Toast => ({
   id,

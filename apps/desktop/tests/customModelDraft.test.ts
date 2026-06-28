@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { canSaveCustomModelDraft, defaultCustomModelDraft } from "../src/lib/customModelDraft.js";
+import { canSaveCustomModelDraft, defaultCustomModelDraft } from "@/lib/customModelDraft";
 
 test("requires a model id, base URL, and positive limits before saving", () => {
   expect(canSaveCustomModelDraft(defaultCustomModelDraft())).toBe(false);

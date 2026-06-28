@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Automation } from "../src/api";
-import { splitAutomationsForTabs } from "../src/lib/automationFilters.js";
+import type { Automation } from "@/api";
+import { splitAutomationsForTabs } from "@/lib/automationFilters";
 
 function automation(patch: Partial<Automation>): Automation {
   return {

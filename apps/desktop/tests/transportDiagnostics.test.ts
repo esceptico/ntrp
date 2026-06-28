@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatTransportDiagnostics } from "../src/lib/transportDiagnostics.ts";
+import { formatTransportDiagnostics } from "@/lib/transportDiagnostics";
 
 test("formats transport diagnostics for the chat header surface", () => {
   const formatted = formatTransportDiagnostics({

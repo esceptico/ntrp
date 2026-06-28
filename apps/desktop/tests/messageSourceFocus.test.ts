@@ -4,7 +4,7 @@ import {
   messageInSourceFocus,
   resolveMessageSourceFocus,
   type MessageSourceFocus,
-} from "../src/lib/messageSourceFocus.js";
+} from "@/lib/messageSourceFocus";
 
 const focus: MessageSourceFocus = {
   sessionId: "session-1",

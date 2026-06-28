@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   CompactionIndicator,
   CompactionIndicatorContent,
-} from "../src/components/CompactionIndicator.tsx";
-import { setState } from "../src/store/index.ts";
+} from "@/components/CompactionIndicator";
+import { setState } from "@/store/index";
 
 test("compaction indicator does not render a finished compaction toast", () => {
   setState({ compacting: false });

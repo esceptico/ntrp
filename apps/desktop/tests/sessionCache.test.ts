@@ -1,11 +1,11 @@
 import { beforeEach, expect, test } from "bun:test";
-import { refresh } from "../src/actions/bootstrap.ts";
-import { loadHistory } from "../src/actions/history.ts";
-import { switchSession } from "../src/actions/sessions.ts";
-import { getState, setState, useStore } from "../src/store/index.ts";
-import type { UiMessage } from "../src/store/index.ts";
-import { createInitialSessionViewState } from "../src/store/session-view.ts";
-import { snapshotSession } from "../src/store/session-cache.ts";
+import { refresh } from "@/actions/bootstrap";
+import { loadHistory } from "@/actions/history";
+import { switchSession } from "@/actions/sessions";
+import { getState, setState, useStore } from "@/store/index";
+import type { UiMessage } from "@/store/index";
+import { createInitialSessionViewState } from "@/store/session-view";
+import { snapshotSession } from "@/store/session-cache";
 
 function blank() {
   setState({

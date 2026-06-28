@@ -9,7 +9,7 @@ import {
   reduceWorkflowTokenUsage,
   selectWorkflowsForSession,
   workflowKey,
-} from "../src/store/workflow-domain.ts";
+} from "@/store/workflow-domain";
 
 const SESSION = "session-1";
 const WORKFLOW = "wf-1";

@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
-import { enqueueMessage, stopRun } from "../src/actions/messages.ts";
-import { getState, setState } from "../src/store/index.ts";
+import { enqueueMessage, stopRun } from "@/actions/messages";
+import { getState, setState } from "@/store/index";
 
 type CapturedRequest = { path: string; method: string; body?: string };
 

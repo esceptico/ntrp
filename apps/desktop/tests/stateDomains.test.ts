@@ -3,7 +3,7 @@ import {
   createDomainState,
   reduceDomainState,
   type RunPhase,
-} from "../src/store/domains.ts";
+} from "@/store/domains";
 import {
   createAutomationStreamDomainState,
   reduceAutomationFinished,
@@ -12,7 +12,7 @@ import {
   reduceAutomationStreamConnecting,
   reduceAutomationStreamFailed,
   reduceAutomationStreamStale,
-} from "../src/store/automation-domain.ts";
+} from "@/store/automation-domain";
 import {
   createBackgroundAgentsDomainState,
   reduceBackgroundAgentOpenItems,
@@ -20,7 +20,7 @@ import {
   reduceBackgroundAgentsForSession,
   reduceBackgroundAgentsRefreshFailed,
   reduceBackgroundAgentsRefreshStarted,
-} from "../src/store/background-agent-domain.ts";
+} from "@/store/background-agent-domain";
 
 test("cached-preview cannot enable SSE rendering", () => {
   const state = reduceDomainState(createDomainState(), {

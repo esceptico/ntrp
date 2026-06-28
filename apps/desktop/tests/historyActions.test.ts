@@ -4,15 +4,15 @@ import {
   cachedHistoryRefreshSessionIds,
   loadHistory,
   refreshCachedActiveSessionHistories,
-} from "../src/actions/history.ts";
-import { getState, setState } from "../src/store/index.ts";
+} from "@/actions/history";
+import { getState, setState } from "@/store/index";
 import {
   handleIncomingServerEvent,
   handleServerEvent,
   lastEventSeqForSession,
   resetEventSeqStateForTest,
   resetStreamStateForTest,
-} from "../src/hooks/useEvents.ts";
+} from "@/hooks/useEvents";
 
 beforeEach(() => {
   resetStreamStateForTest();

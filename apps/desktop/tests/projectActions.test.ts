@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { archiveProject } from "../src/actions/sessions.ts";
-import type { Project, SessionListItem } from "../src/api.ts";
-import { getState, setState } from "../src/store/index.ts";
+import { archiveProject } from "@/actions/sessions";
+import type { Project, SessionListItem } from "@/api";
+import { getState, setState } from "@/store/index";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 

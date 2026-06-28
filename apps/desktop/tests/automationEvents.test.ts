@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   automationEventsUrl,
   reduceAutomationStreamCursor,
-} from "../src/hooks/useAutomationEvents";
+} from "@/hooks/useAutomationEvents";
 
 describe("automation event stream helpers", () => {
   test("automationEventsUrl resumes from the last seen seq", () => {

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { respondToHtmlInput } from "../src/actions/htmlInput.ts";
-import { getState, setState } from "../src/store/index.ts";
+import { respondToHtmlInput } from "@/actions/htmlInput";
+import { getState, setState } from "@/store/index";
 
 const originalWindow = globalThis.window;
 

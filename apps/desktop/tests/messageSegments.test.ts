@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { messageSegments } from "../src/lib/messageSegments.js";
+import { messageSegments } from "@/lib/messageSegments";
 
 test("hidden meta user messages split visible turns without rendering", () => {
   expect(messageSegments({

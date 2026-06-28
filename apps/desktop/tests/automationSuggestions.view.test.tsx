@@ -3,8 +3,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { SuggestionCard, SuggestionsSection } from "../src/components/AutomationsModal.tsx";
-import type { AutomationSuggestion } from "../src/api.ts";
+import { SuggestionCard, SuggestionsSection } from "@/components/AutomationsModal";
+import type { AutomationSuggestion } from "@/api";
 
 function suggestion(overrides: Partial<AutomationSuggestion> = {}): AutomationSuggestion {
   return {

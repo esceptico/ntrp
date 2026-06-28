@@ -4,8 +4,8 @@ import {
   reconnectDelayMs,
   runDesktopEventStreamLoop,
   transportDiagnosticsForSession,
-} from "../src/hooks/useEvents.ts";
-import type { AppConfig, ServerEvent } from "../src/api.ts";
+} from "@/hooks/useEvents";
+import type { AppConfig, ServerEvent } from "@/api";
 
 test("reconnectDelayMs uses capped exponential backoff with bounded jitter", () => {
   expect(reconnectDelayMs(0, { baseMs: 500, random: () => 0.5 })).toBe(500);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { calculateTooltipPlacement } from "../src/components/ui/tooltipPlacement";
+import { calculateTooltipPlacement } from "@/components/ui/tooltipPlacement";
 
 test("top tooltip near the right edge clamps inside the viewport", () => {
   const placement = calculateTooltipPlacement({

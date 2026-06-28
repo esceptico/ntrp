@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { historyMessagesToUi } from "../src/actions/history.ts";
-import type { HistoryMessage } from "../src/api.js";
-import { turnLayout } from "../src/lib/turnLayout.js";
+import { historyMessagesToUi } from "@/actions/history";
+import type { HistoryMessage } from "@/api";
+import { turnLayout } from "@/lib/turnLayout";
 
 test("keeps one loaded activity group across reasoning-only history messages", () => {
   const messages: HistoryMessage[] = [

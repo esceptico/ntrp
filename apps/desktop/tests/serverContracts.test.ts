@@ -7,7 +7,7 @@ import {
   preflightGoogleSetupApi,
   saveGoogleCredentialsApi,
   verifySlackTokenApi,
-} from "../src/api.js";
+} from "@/api";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 

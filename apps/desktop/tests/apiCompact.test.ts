@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { apiWithConfig, archiveProjectApi, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "../src/api.ts";
-import { runBuiltinCommand } from "../src/actions/builtins.ts";
-import { getState, setState } from "../src/store/index.ts";
-import { searchMemory } from "../src/api/memoryItems.ts";
+import { apiWithConfig, archiveProjectApi, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "@/api";
+import { runBuiltinCommand } from "@/actions/builtins";
+import { getState, setState } from "@/store/index";
+import { searchMemory } from "@/api/memoryItems";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 const originalFetch = globalThis.fetch;

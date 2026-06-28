@@ -4,10 +4,10 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { ClaimBlock } from "../src/components/memory/ClaimBlock.tsx";
-import { LensEvidenceSearch } from "../src/components/memory/LensEvidenceSearch.tsx";
-import { GroupedProfiles, LensHeader } from "../src/components/memory/LensesView.tsx";
-import type { Lens, ProjectedGroup } from "../src/api/memoryItems.ts";
+import { ClaimBlock } from "@/components/memory/ClaimBlock";
+import { LensEvidenceSearch } from "@/components/memory/LensEvidenceSearch";
+import { GroupedProfiles, LensHeader } from "@/components/memory/LensesView";
+import type { Lens, ProjectedGroup } from "@/api/memoryItems";
 
 const lens: Lens = {
   id: "records",

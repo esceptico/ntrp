@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createAnimationFrameBatcher } from "../src/lib/eventBatch.ts";
+import { createAnimationFrameBatcher } from "@/lib/eventBatch";
 
 function manualScheduler() {
   let pending: (() => void) | null = null;

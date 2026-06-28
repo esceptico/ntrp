@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
-import { selectDirectory } from "../src/lib/directoryPicker.ts";
+import { selectDirectory } from "@/lib/directoryPicker";
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, "window");

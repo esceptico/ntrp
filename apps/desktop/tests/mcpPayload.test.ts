@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildMCPServerPayload } from "../src/components/settings/mcp/payload";
+import { buildMCPServerPayload } from "@/components/settings/mcp/payload";
 
 test("builds auto HTTP MCP payload from URL only", () => {
   expect(

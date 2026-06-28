@@ -9,18 +9,18 @@ import {
   resetEventSeqStateForTest,
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
-} from "../src/hooks/useEvents.ts";
-import { cancelSubagent, loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
+} from "@/hooks/useEvents";
+import { cancelSubagent, loadHistory, sendMessage, stopRun } from "@/actions/index";
 import {
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
   RIGHT_PANEL_BODY_WIDTH,
-} from "../src/components/AgentRightSidebar.tsx";
-import { childAgentTaskToBackgroundSnapshot } from "../src/lib/agentRun.ts";
-import { visibleMessageIds } from "../src/lib/messageVisibility.ts";
-import { getState, setState } from "../src/store/index.ts";
-import { createBackgroundAgentsDomainState } from "../src/store/background-agent-domain.ts";
-import type { HistoryMessage } from "../src/api.ts";
+} from "@/components/AgentRightSidebar";
+import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
+import { visibleMessageIds } from "@/lib/messageVisibility";
+import { getState, setState } from "@/store/index";
+import { createBackgroundAgentsDomainState } from "@/store/background-agent-domain";
+import type { HistoryMessage } from "@/api";
 
 beforeEach(() => {
   resetStreamStateForTest();

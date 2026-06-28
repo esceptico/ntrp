@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { loadInitialConfig, saveConfig, STORAGE_KEY } from "../src/api.js";
+import { loadInitialConfig, saveConfig, STORAGE_KEY } from "@/api";
 
 class MemoryStorage {
   private values = new Map<string, string>();

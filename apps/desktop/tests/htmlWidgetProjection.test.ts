@@ -4,12 +4,12 @@ import {
   resetEventSeqStateForTest,
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
-} from "../src/hooks/useEvents.js";
-import { historyMessagesToUi } from "../src/actions/history.ts";
-import { resolutionFromResult } from "../src/lib/htmlWidget.ts";
-import { activityItemStatus } from "../src/lib/agent.ts";
-import { getState, setState, type ActivityItem } from "../src/store/index.js";
-import type { HistoryMessage } from "../src/api.js";
+} from "@/hooks/useEvents";
+import { historyMessagesToUi } from "@/actions/history";
+import { resolutionFromResult } from "@/lib/htmlWidget";
+import { activityItemStatus } from "@/lib/agent";
+import { getState, setState, type ActivityItem } from "@/store/index";
+import type { HistoryMessage } from "@/api";
 
 const WIDGET_ARGS = JSON.stringify({
   html: "<form>pick</form>",

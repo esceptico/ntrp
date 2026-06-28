@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifySseOpen, sseReconnectDelayMs } from "../src/lib/sseTransport";
+import { classifySseOpen, sseReconnectDelayMs } from "@/lib/sseTransport";
 
 describe("sseReconnectDelayMs", () => {
   const fixed = { jitterRatio: 0, random: () => 0.5 };

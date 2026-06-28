@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { visibleMessageIds } from "../src/lib/messageVisibility.js";
+import { visibleMessageIds } from "@/lib/messageVisibility";
 
 test("hides reasoning without hiding tool activity", () => {
   expect(visibleMessageIds({
