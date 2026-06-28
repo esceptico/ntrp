@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Box, ImagePlus, ShieldOff, ShieldCheck, Square, X } from "lucide-react";
-import clsx from "clsx";
+import { Box } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { selectSentUserMessages, useStore } from "@/stores";
 import { viewSkill } from "@/actions/skills";
@@ -10,19 +9,14 @@ import { respondToAllApprovals } from "@/actions/approvals";
 import { isBuiltin, runBuiltinCommand } from "@/actions/builtins";
 import { toggleAuto } from "@/actions/loops";
 import { QueueCard } from "@/features/chat/components/QueueCard";
-import { GoalStatusBar } from "@/features/chat/components/GoalStrip";
 import { CommandPicker } from "@/features/chat/components/CommandPicker";
 import { GoalProposalCard } from "@/features/chat/components/GoalProposalCard";
-import { Chip } from "@/components/ui/Chip";
-import { Button } from "@/components/ui/Button";
-import { BlurSwap } from "@/components/ui/BlurSwap";
-import { ModelReasoningChip } from "@/components/ui/ComposerSelectors";
-import { LoopStatusBar } from "@/features/chat/components/LoopStatus";
-import { BudgetDial } from "@/features/chat/components/BudgetDial";
-import { IconButton } from "@/components/ui/IconButton";
+import { ComposerEditingBanner } from "@/features/chat/components/ComposerEditingBanner";
+import { ComposerImageStrip } from "@/features/chat/components/ComposerImageStrip";
+import { ComposerToolbar } from "@/features/chat/components/ComposerToolbar";
 import { useListNav, useTimeoutFlag } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
-import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { awaitingFirstRunOutput } from "@/features/chat/lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "@/features/chat/lib/commands";
 import { SECTION_ENTER, SECTION_EXIT } from "@/features/chat/lib/composerMotion";
@@ -297,57 +291,11 @@ export function Composer() {
         className="composer-card surface-panel surface-radius-md relative flex flex-col"
       >
         <AnimatePresence initial={false}>
-          {editingId && (
-            <motion.div
-              key="editing-banner"
-              initial={RISE_IN}
-              animate={RISE_SETTLED}
-              exit={SECTION_EXIT}
-              transition={SECTION_ENTER}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]"
-            >
-              <span>Editing previous message — pressing send will replace it.</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                leadingIcon={X}
-                onClick={cancelEdit}
-                className="ml-auto"
-                title="Cancel edit"
-              >
-                cancel
-              </Button>
-            </motion.div>
-          )}
+          {editingId && <ComposerEditingBanner key="editing-banner" onCancel={cancelEdit} />}
         </AnimatePresence>
         <AnimatePresence initial={false}>
           {pendingImages.length > 0 && (
-            <motion.div
-              key="pending-images"
-              initial={RISE_IN}
-              animate={RISE_SETTLED}
-              exit={SECTION_EXIT}
-              transition={SECTION_ENTER}
-              className="flex flex-wrap gap-2 px-3 pt-2"
-            >
-              {pendingImages.map((img, i) => (
-                <div key={i} className="relative">
-                  <img
-                    src={`data:${img.media_type};base64,${img.data}`}
-                    alt=""
-                    className="h-14 w-14 rounded-md object-cover border border-line-soft"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removePendingImage(i)}
-                    aria-label="Remove image"
-                    className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
-                  >
-                    <X size={ICON.XS} strokeWidth={2.4} />
-                  </button>
-                </div>
-              ))}
-            </motion.div>
+            <ComposerImageStrip key="pending-images" images={pendingImages} onRemove={removePendingImage} />
           )}
         </AnimatePresence>
         <input
@@ -489,69 +437,15 @@ export function Composer() {
             className="min-h-[44px] max-h-[220px] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-muted"
           />
         </div>
-        <div className="composer-toolbar flex items-center gap-1.5 px-2 pt-1.5 pb-2">
-          <IconButton
-            shape="circle"
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach image"
-            title="Attach image"
-          >
-            <ImagePlus size={ICON.LG} strokeWidth={2} />
-          </IconButton>
-          <Chip
-            size="sm"
-            active={skipApprovals}
-            tone="accent"
-            leading={
-              <BlurSwap swapKey={skipApprovals ? "auto" : "approve"}>
-                {skipApprovals ? <ShieldOff size={ICON.SM} strokeWidth={2} /> : <ShieldCheck size={ICON.SM} strokeWidth={2} />}
-              </BlurSwap>
-            }
-            onClick={() => void toggleAuto(!skipApprovals)}
-            title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
-            aria-label={skipApprovals ? "Auto-approve enabled — click to require approval" : "Click to enable auto-approve"}
-          >
-            <span className="composer-chip-label">{skipApprovals ? "Auto" : "Approve"}</span>
-          </Chip>
-          <LoopStatusBar />
-          <GoalStatusBar />
-          <span className="flex-1" />
-          <BudgetDial />
-          <ModelReasoningChip />
-          {/* One persistent button so the glyph genuinely swaps (rotate+fade)
-              between send and stop instead of the button remounting. */}
-          <button
-            type={running ? "button" : "submit"}
-            onClick={running ? () => void stopRun() : undefined}
-            disabled={!running && disabled}
-            data-send={running ? undefined : "true"}
-            aria-label={running ? "Stop" : "Send"}
-            title={running ? "Stop (Esc)" : undefined}
-            // active:scale handles mouse press; sendPressing covers keyboard
-            // Enter (form-submit doesn't fire :active). Both look identical.
-            className={clsx(
-              "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,scale] duration-fast ease-out active:scale-[0.92]",
-              sendPressing && "scale-[0.92]",
-            )}
-          >
-            <AnimatePresence initial={false}>
-              <motion.span
-                key={running ? "stop" : "send"}
-                className="col-start-1 row-start-1 grid place-items-center"
-                initial={{ opacity: 0, rotate: -18, scale: 0.92, filter: "blur(4px)" }}
-                animate={{ opacity: 1, rotate: 0, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, rotate: 18, scale: 0.92, filter: "blur(4px)" }}
-                transition={{ duration: MOTION.palette, ease: EASE_OUT }}
-              >
-                {running ? (
-                  <Square size={ICON.SM} strokeWidth={0} fill="currentColor" />
-                ) : (
-                  <ArrowUp size={ICON.LG} strokeWidth={2.4} />
-                )}
-              </motion.span>
-            </AnimatePresence>
-          </button>
-        </div>
+        <ComposerToolbar
+          onAttach={() => fileInputRef.current?.click()}
+          skipApprovals={skipApprovals}
+          onToggleAuto={() => void toggleAuto(!skipApprovals)}
+          running={running}
+          sendDisabled={disabled}
+          sendPressing={sendPressing}
+          onStop={() => void stopRun()}
+        />
       </form>
       </div>
     </div>
