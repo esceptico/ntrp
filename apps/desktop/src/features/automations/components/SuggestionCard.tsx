@@ -59,7 +59,7 @@ export function SuggestionCard({
       </div>
       <Tooltip label="Dismiss">
         <IconButton
-          size="md"
+          size="sm"
           tone="faint"
           aria-label="Dismiss suggestion"
           onClick={(e) => {

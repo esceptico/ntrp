@@ -19,17 +19,25 @@ export function Field({
   help?: string;
   type?: "text" | "password";
 }) {
+  const helpId = help ? `field-${label.replace(/\s+/g, "-").toLowerCase()}-help` : undefined;
   return (
-    <Input
-      label={label}
-      help={help}
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      spellCheck={false}
-      autoComplete="off"
-    />
+    <div className="grid gap-1.5">
+      <Input
+        label={label}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoComplete="off"
+        aria-describedby={helpId}
+      />
+      {help && (
+        <span id={helpId} className="text-xs leading-[1.4] text-faint">
+          {help}
+        </span>
+      )}
+    </div>
   );
 }
 

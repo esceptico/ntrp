@@ -221,7 +221,7 @@ export function ScheduleChip({
                         onChange={(e) => onChange({ ...schedule, channel: e.target.value })}
                         placeholder="feel-good-inc, eng-bugs"
                         spellCheck={false}
-                        className={`${schedFieldCls} pl-7`}
+                        className={`${schedFieldCls} !pl-7`}
                       />
                     </div>
                   </ScheduleField>
@@ -237,7 +237,7 @@ export function ScheduleChip({
                         onChange={(e) => onChange({ ...schedule, fromUser: e.target.value })}
                         placeholder="username"
                         spellCheck={false}
-                        className={`${schedFieldCls} pl-7`}
+                        className={`${schedFieldCls} !pl-7`}
                       />
                     </div>
                   </ScheduleField>

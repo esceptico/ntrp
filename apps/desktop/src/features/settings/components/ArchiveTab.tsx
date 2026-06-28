@@ -10,7 +10,6 @@ import { useMutationState } from "@/lib/hooks";
 import { formatRelativePast } from "@/lib/format";
 import { ICON } from "@/lib/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
 
 export function ArchiveTab() {
@@ -174,17 +173,27 @@ function RowAction({
   busy?: boolean;
   danger?: boolean;
 }) {
+  // Bespoke (not Button): a dense list-row action whose destructive form is
+  // neutral-at-rest / red-on-hover (the app's destructive convention, cf.
+  // ConfirmDeleteButton) — Button's `danger` variant is red-at-rest, which
+  // doesn't fit. Kept hand-rolled at h-6/text-xs density.
   return (
-    <Button
-      variant={danger ? "danger" : "ghost"}
-      size="sm"
+    <button
+      type="button"
       onClick={onClick}
       disabled={busy}
-      className={clsx(busy && "cursor-wait")}
+      className={clsx(
+        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]",
+        busy
+          ? "text-faint cursor-wait"
+          : danger
+            ? "text-ink-soft hover:bg-bad-soft hover:text-bad"
+            : "text-ink-soft hover:bg-surface-soft hover:text-ink",
+      )}
     >
       {icon}
       {label}
-    </Button>
+    </button>
   );
 }
 

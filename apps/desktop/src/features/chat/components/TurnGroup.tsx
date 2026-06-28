@@ -148,7 +148,7 @@ export function TurnGroup({
             onManualResize?.();
             setExpanded((v) => !v);
           }}
-          className="self-start h-auto px-1.5 -mx-1.5 py-0.5 text-base font-normal leading-[1.45] hover:text-ink-soft hover:bg-surface-soft/40 select-none"
+          className="self-start h-auto px-1.5! -mx-1.5 py-0.5 text-base! font-normal leading-[1.45] hover:text-ink-soft hover:bg-surface-soft/40 select-none"
         >
           <span>{headerLabel}</span>
           <ChevronDown
