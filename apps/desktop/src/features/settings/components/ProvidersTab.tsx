@@ -28,6 +28,7 @@ import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tok
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
@@ -444,7 +445,7 @@ function ProviderRow({
             transition={{ duration: MOTION.row, ease: EASE_OUT }}
             className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 bg-surface-soft/35"
           >
-            <input
+            <Input
               type="password"
               value={apiKey}
               onChange={(event) => onKeyChange(event.target.value)}
@@ -453,7 +454,6 @@ function ProviderRow({
               autoFocus
               spellCheck={false}
               autoComplete="off"
-              className="input-field"
             />
             <Button onClick={onConnect} disabled={!apiKey.trim() || pending}>
               {pending && <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />}
@@ -565,49 +565,44 @@ function CustomModelsPanel({
 
       <div className="grid gap-2">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
-          <input
+          <Input
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
             placeholder="model id"
             aria-label="Model ID"
             spellCheck={false}
-            className="input-field"
           />
-          <input
+          <Input
             value={draft.base_url}
             onChange={(event) => onDraftChange({ base_url: event.target.value })}
             placeholder="base URL"
             aria-label="Base URL"
             spellCheck={false}
             autoComplete="off"
-            className="input-field"
           />
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
-          <input
+          <Input
             type="number"
             min={1}
             value={draft.context_window}
             onChange={(event) => onDraftChange({ context_window: Number(event.target.value) })}
             aria-label="Context window"
-            className="input-field"
           />
-          <input
+          <Input
             type="number"
             min={1}
             value={draft.max_output_tokens}
             onChange={(event) => onDraftChange({ max_output_tokens: Number(event.target.value) })}
             aria-label="Max output tokens"
-            className="input-field"
           />
-          <input
+          <Input
             type="password"
             value={draft.api_key}
             onChange={(event) => onDraftChange({ api_key: event.target.value })}
             placeholder="API key (optional)"
             spellCheck={false}
             autoComplete="off"
-            className="input-field"
           />
           <Button onClick={onCreate} disabled={!canSaveCustomModelDraft(draft) || creating}>
             <BlurSwap swapKey={creating ? "loading" : "add"} blur={3}>

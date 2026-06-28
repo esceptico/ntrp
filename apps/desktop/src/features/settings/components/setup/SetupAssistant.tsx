@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { ICON } from "@/lib/icons";
+import { IconButton } from "@/components/ui/IconButton";
 import { GoogleSetupAssistant } from "@/features/settings/components/setup/GoogleSetupAssistant";
 import { SlackSetupAssistant } from "@/features/settings/components/setup/SlackSetupAssistant";
 import { MCPSetupAssistant } from "@/features/settings/components/setup/MCPSetupAssistant";
@@ -23,14 +24,9 @@ export function SetupAssistant({
           <h3 className="m-0 text-lg font-semibold tracking-[-0.012em] text-ink">{title}</h3>
           <p className="m-0 mt-1 text-sm text-muted">Step-by-step setup using the server-owned integration APIs.</p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-grid place-items-center w-8 h-8 rounded-md border border-line bg-surface text-muted hover:text-ink hover:border-line-strong transition-[color,border-color,scale] duration-check ease-out active:scale-[0.97]"
-          aria-label="Close setup assistant"
-        >
+        <IconButton size="lg" onClick={onClose} aria-label="Close setup assistant">
           <X size={ICON.SM} strokeWidth={2} />
-        </button>
+        </IconButton>
       </div>
       {kind === "google" ? (
         <GoogleSetupAssistant onDone={onDone} />

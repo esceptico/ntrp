@@ -18,6 +18,7 @@ import {
   DISSOLVE_OUT,
 } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { Button } from "@/components/ui/Button";
 import { ICON } from "@/lib/icons";
 
 export function TurnGroup({
@@ -141,13 +142,13 @@ export function TurnGroup({
   const workBlock = hasWork ? (
     <div className="flex flex-col">
       <Collapse open={isDone}>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={() => {
             onManualResize?.();
             setExpanded((v) => !v);
           }}
-          className="self-start inline-flex items-center gap-1.5 px-1.5 -mx-1.5 rounded-md text-base leading-[1.45] text-muted hover:text-ink-soft hover:bg-surface-soft/40 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97] select-none"
+          className="self-start h-auto px-1.5 -mx-1.5 py-0.5 text-base font-normal leading-[1.45] hover:text-ink-soft hover:bg-surface-soft/40 select-none"
         >
           <span>{headerLabel}</span>
           <ChevronDown
@@ -155,7 +156,7 @@ export function TurnGroup({
             strokeWidth={2}
             className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
           />
-        </button>
+        </Button>
       </Collapse>
 
       {/* No height tween here — the interim subtree is the heaviest in the

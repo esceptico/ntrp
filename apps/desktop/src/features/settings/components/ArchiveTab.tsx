@@ -10,6 +10,7 @@ import { useMutationState } from "@/lib/hooks";
 import { formatRelativePast } from "@/lib/format";
 import { ICON } from "@/lib/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 
 export function ArchiveTab() {
   const archived = useStore((s) => s.archivedSessions);
@@ -164,22 +165,16 @@ function RowAction({
   danger?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant={danger ? "danger" : "ghost"}
+      size="sm"
       onClick={onClick}
       disabled={busy}
-      className={clsx(
-        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]",
-        busy
-          ? "text-faint cursor-wait"
-          : danger
-            ? "text-ink-soft hover:bg-bad-soft hover:text-bad"
-            : "text-ink-soft hover:bg-surface-soft hover:text-ink",
-      )}
+      className={clsx(busy && "cursor-wait")}
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
 

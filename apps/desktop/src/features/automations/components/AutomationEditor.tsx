@@ -713,8 +713,7 @@ function ScheduleChip({
 
 // ─── Atoms ──────────────────────────────────────────────────────────
 
-const schedFieldCls =
-  "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
+const schedFieldCls = "input-field w-full tabular-nums";
 
 // All trigger-kind panels share one grid cell ([grid-area:1/1]) so the popover
 // is always as tall as the tallest panel — switching kinds can't change its

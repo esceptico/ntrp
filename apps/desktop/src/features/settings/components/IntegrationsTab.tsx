@@ -30,6 +30,7 @@ import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tok
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { SetupAssistant, type SetupAssistantKind } from "@/features/settings/components/setup/SetupAssistant";
 
@@ -518,7 +519,7 @@ function ServiceRow({
             transition={{ duration: MOTION.row, ease: EASE_OUT }}
             className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 bg-surface-soft/35"
           >
-            <input
+            <Input
               type="password"
               value={serviceKey}
               onChange={(event) => onKeyChange(event.target.value)}
@@ -527,7 +528,6 @@ function ServiceRow({
               autoFocus
               spellCheck={false}
               autoComplete="off"
-              className="input-field"
             />
             <Button onClick={onConnect} disabled={!serviceKey.trim() || pending}>
               {pending && <RefreshCw size={ICON.SM} strokeWidth={2} className="animate-spin" />}

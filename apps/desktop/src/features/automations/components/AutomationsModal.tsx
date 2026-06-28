@@ -45,6 +45,7 @@ import { Badge } from "@/components/ui/Badge";
 import { PageModal } from "@/components/ui/PageModal";
 import { ICON } from "@/lib/icons";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { Tab as TabItem, Tabs } from "@/components/ui/Tabs";
 import { TabPanels, useTabDirection } from "@/components/ui/TabPanels";
@@ -387,17 +388,18 @@ export function SuggestionCard({
         </Badge>
       </div>
       <Tooltip label="Dismiss">
-        <button
-          type="button"
+        <IconButton
+          size="md"
+          tone="faint"
           aria-label="Dismiss suggestion"
           onClick={(e) => {
             e.stopPropagation();
             onDismiss(suggestion.id);
           }}
-          className="absolute top-2.5 right-2.5 z-[1] grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface-soft hover:text-ink group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+          className="absolute top-2.5 right-2.5 z-[1] opacity-0 transition-[opacity,background-color,color,transform,scale] group-hover/suggestion:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
         >
           <X size={ICON.XS} strokeWidth={2} />
-        </button>
+        </IconButton>
       </Tooltip>
     </motion.div>
   );
