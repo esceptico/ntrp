@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "motion/react";
 import {
   Circle,
   FileText,
@@ -9,12 +8,6 @@ import {
   Trash2,
 } from "lucide-react";
 import clsx from "clsx";
-import {
-  SPRING_LAYOUT,
-  ROW_EXIT,
-  EASE_OUT,
-  MOTION,
-} from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
 import { switchSession } from "@/actions/sessions";
 import { deleteAutomation, runAutomation, toggleAutomation } from "@/actions/automations";
@@ -28,6 +21,7 @@ import { AgentRunContent, type AgentRunAction } from "@/components/ui/AgentRunRo
 import { Badge } from "@/components/ui/Badge";
 import { ICON } from "@/lib/icons";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { SurfaceCard } from "@/components/ui/SurfaceCard";
 
 /** The enable/pause toggle that occupies the leading glyph footprint — the
  *  ONE always-visible control on an automation card (the agent Bot glyph's
@@ -194,30 +188,13 @@ export function AutomationCard({
     : `Open ${automation.name || "automation"} channel`;
 
   return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-      transition={SPRING_LAYOUT}
-      className={clsx(
-        "group/run surface-panel surface-radius-sm relative grid content-start gap-1.5 p-3.5 overflow-hidden focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]",
-        interactive && "transition-[scale] duration-check ease-out has-[>button:active]:scale-[0.99]",
-      )}
+    <SurfaceCard
+      as="article"
+      interactive={interactive}
+      onClick={open}
+      ariaLabel={openLabel}
+      className="group/run grid content-start gap-1.5 p-3.5 overflow-hidden"
     >
-      {/* Stretched, accessible click target: a real <button> over the whole card
-          (keyboard + screen-reader friendly), painted BELOW the toggle and the
-          hover-actions — which are positioned above it (z-[1] / absolute) so each
-          stays independently clickable. Replaces the old article[role="button"]
-          that illegally nested interactive buttons inside a button. */}
-      {interactive && (
-        <button
-          type="button"
-          aria-label={openLabel}
-          onClick={open}
-          className="absolute inset-0 cursor-pointer rounded-[inherit] focus:outline-none"
-        />
-      )}
       <AgentRunContent
         run={run}
         actions={actions}
@@ -236,6 +213,6 @@ export function AutomationCard({
       <p className="relative z-[1] self-start pl-[24px] m-0 min-w-0 max-w-full text-sm text-muted leading-[1.5] line-clamp-2 [overflow-wrap:anywhere]">
         {automation.description || "No description."}
       </p>
-    </motion.article>
+    </SurfaceCard>
   );
 }
