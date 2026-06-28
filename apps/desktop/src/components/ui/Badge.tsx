@@ -2,12 +2,19 @@ import type { CSSProperties, ReactNode, Ref } from "react";
 import clsx from "clsx";
 
 export type BadgeTone = "neutral" | "accent" | "ok" | "warn" | "bad";
+export type BadgeVariant = "filled" | "outline" | "ghost";
 
 interface BadgeProps {
   children: ReactNode;
   tone?: BadgeTone;
   size?: "sm" | "md";
   shape?: "pill" | "rounded";
+  /** Surface treatment. `filled` (default) = tone fill. `outline` =
+   *  transparent bg + tone border only. `ghost` = tone text only, no chrome.
+   *  When unset, the legacy `outline` boolean still adds a border on top of
+   *  the fill (back-compat — distinct from `variant="outline"`). */
+  variant?: BadgeVariant;
+  /** @deprecated Border on top of the fill. Prefer `variant`. */
   outline?: boolean;
   leading?: ReactNode;
   className?: string;
@@ -22,6 +29,15 @@ const toneFill: Record<BadgeTone, string> = {
   ok: "bg-ok-soft text-ok",
   warn: "bg-warn-soft text-warn",
   bad: "bg-bad-soft text-bad",
+};
+
+// Outline variant: tone-tinted text on a tone border, no fill.
+const toneText: Record<BadgeTone, string> = {
+  neutral: "text-muted",
+  accent: "text-accent-strong",
+  ok: "text-ok",
+  warn: "text-warn",
+  bad: "text-bad",
 };
 
 const toneBorder: Record<BadgeTone, string> = {
@@ -42,6 +58,7 @@ export function Badge({
   tone = "neutral",
   size = "sm",
   shape = "pill",
+  variant,
   outline = false,
   leading,
   className,
@@ -49,6 +66,14 @@ export function Badge({
   title,
   ref,
 }: BadgeProps) {
+  // `variant` wins when given; otherwise fall back to the legacy `outline`
+  // boolean (filled + border) so existing callers render identically.
+  const surface =
+    variant === "outline"
+      ? ["border", toneBorder[tone], toneText[tone]]
+      : variant === "ghost"
+        ? toneText[tone]
+        : [toneFill[tone], outline && ["border", toneBorder[tone]]];
   return (
     <span
       ref={ref}
@@ -58,8 +83,7 @@ export function Badge({
         "inline-flex max-w-full shrink-0 justify-self-start items-center gap-1 font-medium tracking-[0.005em] whitespace-nowrap",
         shape === "pill" ? "rounded-full" : "rounded-md",
         sizeClass[size],
-        toneFill[tone],
-        outline && ["border", toneBorder[tone]],
+        surface,
         className,
       )}
     >
