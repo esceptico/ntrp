@@ -123,7 +123,7 @@ test("running agent row renders a stop control", () => {
   expect(html).toContain("Stop subagent");
   expect(html).toContain("group-hover/agent:opacity-0");
   expect(html).toContain("group-hover/agent:opacity-100");
-  expect(html).toContain("group-hover/stop:opacity-100");
+  expect(html).toContain("focus-visible:opacity-100");
 });
 
 test("generic ongoing agent row waits for lifecycle ownership before stop control", () => {
