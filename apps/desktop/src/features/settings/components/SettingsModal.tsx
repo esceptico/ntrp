@@ -48,6 +48,7 @@ export function SettingsModal() {
   const open = useStore((s) => s.settingsOpen);
   const requestedTab = useStore((s) => s.settingsTab);
   const closeSettings = useStore((s) => s.closeSettings);
+  const origin = useStore((s) => s.modalOrigin);
   const saving = useStore((s) => s.connectionSaving);
   const draft = useStore((s) => s.connectionDraft);
   const error = useStore((s) => s.connectionError);
@@ -86,6 +87,7 @@ export function SettingsModal() {
     <PageModal
       open={open}
       onClose={close}
+      origin={origin}
       size="w-[min(1000px,calc(100vw-32px))] h-[min(740px,calc(100vh-32px))] sm:w-[min(1000px,calc(100vw-64px))] sm:h-[min(740px,calc(100vh-64px))]"
       grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       disableEscape={saving}

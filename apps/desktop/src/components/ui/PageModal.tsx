@@ -8,6 +8,7 @@ import {
   EXIT_FAST,
   MOTION,
   POSE_MODAL,
+  modalOriginTransform,
 } from "@/lib/tokens/motion";
 import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
 import { IconButton } from "@/components/ui/IconButton";
@@ -50,6 +51,12 @@ export interface PageModalProps {
   /** Accessible name for the dialog. Defaults to the header title when it's a
    *  string; pass explicitly for modals with a custom (headerless) layout. */
   ariaLabel?: string;
+  /** Viewport-space point the modal should "grow from" (the trigger button's
+   *  center, via {@link originFromEvent} → store `modalOrigin`). When set, the
+   *  panel animates in/out from that origin; when null it uses the neutral
+   *  POSE_MODAL rise. PageModal snapshots it at open time so the exit still
+   *  knows the origin after the store has cleared it. */
+  origin?: { x: number; y: number } | null;
 }
 
 const DEFAULT_SIZE =
@@ -70,10 +77,18 @@ export function PageModal({
   grid = DEFAULT_GRID,
   disableEscape,
   ariaLabel,
+  origin = null,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
+
+  // Snapshot the origin at open time — exit needs the point the modal grew
+  // from even after the store has cleared `modalOrigin`.
+  const originRef = useRef<{ x: number; y: number } | null>(null);
+  if (open && originRef.current === null && origin) originRef.current = origin;
+  if (!open && originRef.current !== null) originRef.current = null;
+  const originDelta = modalOriginTransform(originRef.current);
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -99,13 +114,17 @@ export function PageModal({
             aria-label={dialogLabel}
             tabIndex={-1}
             className={`surface-panel surface-radius-lg ${size} grid ${grid} overflow-hidden focus:outline-none`}
-            initial={POSE_MODAL}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{
-              opacity: 0,
-              scale: 0.98,
-              transition: EXIT_FAST,
-            }}
+            initial={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
+                : POSE_MODAL
+            }
+            animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+            exit={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
+                : { opacity: 0, scale: 0.98, transition: EXIT_FAST }
+            }
             transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}
           >

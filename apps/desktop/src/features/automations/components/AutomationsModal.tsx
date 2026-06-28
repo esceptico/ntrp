@@ -65,6 +65,7 @@ const TAB_ORDER: Tab[] = ["active", "system", "templates"];
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
   const close = useStore((s) => s.closeAutomations);
+  const origin = useStore((s) => s.modalOrigin);
   const automations = useStore((s) => s.automations);
   const [editor, setEditor] = useState<EditorSeed | null>(null);
   const [tab, setTab] = useState<Tab>("active");
@@ -99,6 +100,7 @@ export function AutomationsModal() {
       <PageModal
         open={open}
         onClose={close}
+        origin={origin}
         disableEscape={!!editor}
         header={{
           title: "Automations",
