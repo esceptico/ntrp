@@ -73,7 +73,7 @@ export function NumberField({
             const n = Number(e.target.value);
             if (Number.isFinite(n)) onChange(n);
           }}
-          className="w-[88px] h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          className="w-[88px] h-8 px-2 border border-line rounded-md bg-transparent text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
         />
       </div>
     </div>
@@ -118,7 +118,7 @@ export function PercentField({
             const clamped = Math.max(min, Math.min(max, n));
             onChange(clamped / 100);
           }}
-          className="w-[88px] h-8 pl-2 pr-6 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          className="w-[88px] h-8 pl-2 pr-6 border border-line rounded-md bg-transparent text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
         />
         <span className="pointer-events-none absolute inset-y-0 right-2 grid place-items-center text-xs text-faint">
           %

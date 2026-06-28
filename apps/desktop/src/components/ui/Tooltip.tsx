@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "../../lib/tokens/motion";
 import { calculateTooltipPlacement, type TooltipPlacement, type TooltipSide } from "./tooltipPlacement";
 
 const GAP = 6;
@@ -175,7 +175,7 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
               role="tooltip"
               initial={{ opacity: 0, scale: 0.96, [axis]: sign * 3 }}
               animate={{ opacity: 1, scale: 1, [axis]: 0 }}
-              exit={{ opacity: 0, scale: 0.96, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+              exit={{ opacity: 0, scale: 0.96, transition: EXIT_FAST }}
               transition={
                 instant ? { duration: 0 } : { duration: DURATION_POPOVER, ease: EASE_DECELERATE }
               }
@@ -184,7 +184,7 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
                 top: placement?.top ?? 0,
                 left: placement?.left ?? 0,
                 visibility: placement ? undefined : "hidden",
-                zIndex: 70,
+                zIndex: "var(--z-tooltip)",
                 transformOrigin: origin,
               }}
               className={clsx(

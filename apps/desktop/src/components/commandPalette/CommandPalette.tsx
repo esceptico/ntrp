@@ -56,7 +56,7 @@ export function CommandPalette() {
   // only animation is the SPRING_POPOVER height morph as page content changes.
   return createPortal(
     <div
-      className="modal-scrim absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8"
+      className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-start justify-center pt-[14vh] p-8"
       onClick={close}
     >
       <motion.div

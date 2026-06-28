@@ -34,7 +34,7 @@ export function QueueCard() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 12 }}
           transition={CARD_TRANSITION}
-          className="queue-card pointer-events-auto relative mx-4 -mb-3 rounded-t-[12px] rounded-b-[14px] border border-line border-b-0 bg-surface shadow-[var(--shadow-sm)]"
+          className="queue-card surface-floating pointer-events-auto relative mx-4 -mb-3 rounded-t-[12px] rounded-b-[14px] border border-line border-b-0"
         >
           <motion.div layout className="flex flex-col gap-1 px-3 pt-2 pb-5">
             <AnimatePresence initial={false} mode="popLayout">

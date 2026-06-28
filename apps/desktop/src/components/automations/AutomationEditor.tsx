@@ -337,7 +337,7 @@ export function AutomationEditor({
       {open && seed && (
         <motion.div
           key="automation-editor"
-          className="modal-scrim absolute inset-0 z-[60] grid place-items-center p-8"
+          className="modal-scrim absolute inset-0 z-[var(--z-modal-top)] grid place-items-center p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

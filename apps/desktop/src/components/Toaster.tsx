@@ -22,7 +22,7 @@ export function Toaster() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-3 right-3 z-50 flex w-[min(360px,calc(100vw-24px))] flex-col gap-2 pointer-events-none"
+      className="fixed top-3 right-3 z-[var(--z-toast)] flex w-[min(360px,calc(100vw-24px))] flex-col gap-2 pointer-events-none"
     >
       <AnimatePresence initial={false}>
         {toasts.map((toast) => (

@@ -121,7 +121,7 @@ export function ToolViewer() {
       {open && (
         <motion.div
           key="tool-viewer"
-          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-8"
+          className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-center p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

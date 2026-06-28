@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } fro
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "../../lib/tokens/motion";
+import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "../../lib/tokens/motion";
 
 /** 120ms hover bridge — one value across the composer-toolbar popovers
  *  (BudgetDial, GoalStrip, LoopStatus) so the gap-crossing grace feels
@@ -145,12 +145,12 @@ export function HoverPopover({
               onMouseLeave={scheduleHide}
               initial={{ opacity: 0, y: 4, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+              exit={{ opacity: 0, scale: 0.98, transition: EXIT_FAST }}
               transition={{ duration: DURATION_POPOVER, ease: EASE_DECELERATE }}
               style={{
                 position: "fixed",
                 ...coords,
-                zIndex: 60,
+                zIndex: "var(--z-popover)",
                 transformOrigin: `bottom ${anchor}`,
               }}
               className={clsx("surface-panel surface-popover", className)}

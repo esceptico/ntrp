@@ -4,7 +4,17 @@ const THEME_VARS = [
   "--color-ink", "--color-ink-soft", "--color-on-ink", "--color-muted", "--color-faint", "--color-whisper",
   "--color-accent", "--color-accent-soft", "--color-accent-strong",
   "--color-ok", "--color-ok-soft", "--color-warn", "--color-warn-soft", "--color-bad", "--color-bad-soft",
-  "--color-info", "--font-sans", "--font-mono", "--shadow-sm", "--shadow-md",
+  "--color-info", "--font-sans", "--font-mono", "--shadow-sm", "--shadow-md", "--shadow-pop",
+  "--color-surface-1", "--color-surface-2", "--color-surface-3", "--color-surface-4",
+  "--color-surface-5", "--color-surface-6", "--color-surface-7", "--color-surface-8",
+  "--shadow-1", "--shadow-2", "--shadow-3", "--shadow-4",
+  "--shadow-5", "--shadow-6", "--shadow-7", "--shadow-8",
+  // Leaf tokens the shadow chains reference via var(); getComputedStyle does not
+  // flatten nested var() on custom properties, so the iframe :root needs these too.
+  // Light chains use --shadow-color; dark chains use the --dm-* highlight/ring/drop set.
+  "--shadow-color",
+  "--dm-hi-base", "--dm-hi-mid", "--dm-hi-high", "--dm-hi-peak",
+  "--dm-ring-base", "--dm-ring-mid", "--dm-ring-high", "--dm-drop",
 ] as const;
 
 export const WIDGET_SANDBOX = "allow-scripts allow-forms"; // NEVER allow-same-origin

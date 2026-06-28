@@ -94,7 +94,7 @@ export function HtmlWidgetCard({ item }: { item: ActivityItem }) {
   const badge = widgetBadge(item, widget.mode, pending, resolution?.action ?? localAction);
 
   return (
-    <div className="rounded-lg border border-line bg-surface shadow-sm overflow-hidden">
+    <div className="surface-card overflow-hidden">
       <div className="px-3 py-2 border-b border-line-soft flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{widget.title}</span>
         {badge && (

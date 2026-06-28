@@ -678,7 +678,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={onPick}
-      className="surface-panel surface-radius-sm cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[scale] duration-check ease-out active:scale-[0.99]"
+      className="surface-panel surface-radius-sm focus-ring-accent cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 text-left transition-[scale] duration-check ease-out active:scale-[0.99]"
     >
       <Icon size={ICON.SM} strokeWidth={2} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">

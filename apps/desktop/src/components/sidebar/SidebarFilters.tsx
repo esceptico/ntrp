@@ -102,7 +102,7 @@ export function SidebarFilters() {
                 animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
                 exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
                 transition={SPRING_POPOVER}
-                className="surface-panel surface-popover fixed z-50 w-[200px] py-1.5"
+                className="surface-panel surface-popover fixed z-[var(--z-popover)] w-[200px] py-1.5"
                 style={{ left: pos.left, top: pos.top, transformOrigin: "top right" }}
               >
                 <SectionLabel>Group by</SectionLabel>

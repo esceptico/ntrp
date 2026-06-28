@@ -821,7 +821,7 @@ export function AgentRightSidebar() {
       {/* Fixed-position toggle — the single open/close control for the
           agent hub (mirror of `.sidebar-toggle`). Stays in viewport-fixed
           coords regardless of panel state; when open it floats over the
-          panel header's right edge (z-60 > panel z-40). The glyph swaps
+          panel header's right edge (z-panel-overlay 45 > panel z-40). The glyph swaps
           from dots (open me) to a right arrow (close → push the panel
           off-edge) so the control reads as a direct action. A running-
           status dot rides alongside when the panel is collapsed and work
@@ -883,7 +883,7 @@ export function AgentRightSidebar() {
             center sits at viewport y=25 — same eye-line as the fixed dots
             toggle and the macOS traffic-light center. (panel top-2 = 8px,
             label centered in h-[34px] → 8 + 17 = 25.) The dots toggle
-            (z-60, fixed right-14) floats over this header's right edge and
+            (z-panel-overlay 45, fixed right-14) floats over this header's right edge and
             is the single open/close control — no redundant in-panel X. */}
         <div className="drag-spacer flex items-center px-3 h-[34px] shrink-0">
           <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">

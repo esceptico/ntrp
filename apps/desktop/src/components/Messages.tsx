@@ -228,7 +228,7 @@ export function Messages() {
             aria-label={unreadCount > 0 ? `${unreadCount} new message${unreadCount === 1 ? "" : "s"} — jump to latest` : "Scroll to bottom"}
             style={{ bottom: "calc(var(--chat-bottom-h, 96px) + 12px)" }}
             className={clsx(
-              "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center justify-center h-8 overflow-hidden rounded-full border border-transparent shadow-md transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]",
+              "surface-floating absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center justify-center h-8 overflow-hidden rounded-full border border-transparent transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]",
               unreadCount > 0
                 ? "pl-2.5 pr-3 bg-ink text-on-ink hover:bg-ink-soft"
                 : "w-8 bg-surface text-muted hover:text-ink hover:bg-surface-soft",

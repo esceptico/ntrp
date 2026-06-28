@@ -64,7 +64,7 @@ export function SessionRow({
   if (renaming) {
     return (
       <div
-        className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]"
+        className="surface-card grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-ink"
         style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
       >
         <span aria-hidden />

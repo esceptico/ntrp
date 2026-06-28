@@ -91,7 +91,7 @@ export function SettingsModal() {
       disableEscape={saving}
       ariaLabel="Settings"
     >
-        <aside className="sidebar surface-panel settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
+        <aside className="sidebar settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
           <div className="drag-spacer shrink-0 h-[22px]" />
           <Tabs
             value={active}

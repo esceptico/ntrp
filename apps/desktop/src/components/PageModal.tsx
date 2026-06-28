@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,
-  EASE_OUT,
+  EXIT_FAST,
   MOTION,
   POSE_MODAL,
 } from "../lib/tokens/motion";
@@ -59,7 +59,7 @@ const DEFAULT_GRID = "grid-rows-[auto_minmax(0,1fr)]";
 /** Standard portal+backdrop+panel modal shell used across Settings,
  *  Automations, Archive, Memory. Callers compose their own header / body
  *  inside `children`. Closes on backdrop click and Escape (unless
- *  `disableEscape` is set). Corner radius comes from .surface-radius-md —
+ *  `disableEscape` is set). Corner radius comes from .surface-radius-lg —
  *  callers cannot override (was the source of per-modal radius drift). */
 export function PageModal({
   open,
@@ -85,7 +85,7 @@ export function PageModal({
       {open && (
         <motion.div
           key="page-modal"
-          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-4 sm:p-8"
+          className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-center p-4 sm:p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -98,13 +98,13 @@ export function PageModal({
             aria-modal="true"
             aria-label={dialogLabel}
             tabIndex={-1}
-            className={`surface-panel surface-radius-md ${size} grid ${grid} overflow-hidden focus:outline-none`}
+            className={`surface-panel surface-radius-lg ${size} grid ${grid} overflow-hidden focus:outline-none`}
             initial={POSE_MODAL}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{
               opacity: 0,
               scale: 0.98,
-              transition: { duration: MOTION.fast, ease: EASE_OUT },
+              transition: EXIT_FAST,
             }}
             transition={ENTRY_PANEL}
             onClick={(e) => e.stopPropagation()}

@@ -117,7 +117,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
             {fullscreen && (
               <motion.div
                 key="mermaid-fullscreen"
-                className="modal-scrim absolute inset-0 z-50 p-6"
+                className="modal-scrim absolute inset-0 z-[var(--z-modal)] p-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -256,7 +256,7 @@ function PanelInner({
     <div
       className={clsx(
         "grid grid-rows-[auto_1fr] my-[0.6em] h-[480px] border border-line-soft rounded-xl bg-code-bg overflow-hidden",
-        fullscreen && "!m-0 !h-full !rounded-2xl !shadow-pop !bg-surface",
+        fullscreen && "surface-panel !m-0 !h-full !rounded-2xl !bg-surface",
       )}
     >
       <header className="flex items-center justify-between gap-2 py-1.5 pl-3 pr-2.5 border-b border-line-soft bg-surface">

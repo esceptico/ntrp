@@ -123,7 +123,7 @@ export function SessionContextMenu({
           animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
           exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
           transition={SPRING_POPOVER}
-          className="surface-panel surface-popover fixed z-50 w-[220px] py-1"
+          className="surface-panel surface-popover fixed z-[var(--z-popover)] w-[220px] py-1"
           style={{ left: pos.left, top: pos.top, transformOrigin: `${originY} ${originX}` }}
           onContextMenu={(e) => e.preventDefault()}
           role="menu"

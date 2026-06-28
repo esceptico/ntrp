@@ -68,6 +68,38 @@ export const MOTION = {
 
 export const DURATION_POPOVER = MOTION.palette;
 export const DURATION_PANEL = MOTION.panel;
+
+// ─── Exit tweens ─────────────────────────────────────────────
+// Enter = spring (the SPRING_* tokens, a little overshoot on the bigger
+// tiers). Exit = a plain tween — NO bounce, and one duration-tier quicker
+// than the entrance — so a dismissal reads crisp and final instead of
+// replaying the entrance in reverse. Bigger thing = slower (both ways).
+//
+//   animate={RISE_SETTLED}
+//   exit={{ ...DISSOLVE_OUT, transition: EXIT_FAST }}   // popover/overlay
+//   transition={SPRING_POPOVER}                          // enter
+//
+// JS-only: framer-motion exits have no CSS counterpart, so there is no
+// styles.css mirror to keep in sync (unlike the --duration-*/--ease-* the
+// MOTION map above mirrors). Reuse the EASE_OUT curve and a MOTION tier;
+// never hand-write an exit `{ duration }`.
+
+/** Exit for popovers, tooltips, menus, modal panels — a tier quicker than
+ *  their ~0.2s popover/panel entrance. */
+export const EXIT_FAST = { duration: MOTION.fast, ease: EASE_OUT } as const;
+/** Exit for list rows / sections — a tier quicker than their ~0.2s entrance,
+ *  but slower than EXIT_FAST so a bigger element still leaves slower. */
+export const EXIT_ROW = { duration: MOTION.row, ease: EASE_OUT } as const;
+
+/** Attach the matching exit tween to an exit POSE. Keeps the "no bounce, one
+ *  tier quicker" contract in one place:
+ *  `exit={withExit(DISSOLVE_OUT)}` ≡ `{ ...DISSOLVE_OUT, transition: EXIT_FAST }`. */
+export function withExit<T extends object>(
+  pose: T,
+  tween: typeof EXIT_FAST | typeof EXIT_ROW = EXIT_FAST,
+) {
+  return { ...pose, transition: tween };
+}
 /** Right sidebar hide: slower than a normal panel exit so the fade + blur
  *  dissolve reads while the panel drifts right and the chat reclaims the
  *  space on the SAME duration (kept in lockstep so the opaque card
