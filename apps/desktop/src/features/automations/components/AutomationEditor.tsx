@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { RotateCcw, TriangleAlert, X } from "lucide-react";
 import { createAutomation, updateAutomation } from "@/actions/automations";
 import type { UpdateAutomationPayload } from "@/api/types";
-import {
-  EASE_DECELERATE,
-  EASE_OUT,
-  MOTION,
-  RISE_IN,
-  RISE_SETTLED,
-  DISSOLVE_OUT,
-} from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { PageModal } from "@/components/ui/PageModal";
+import { Callout } from "@/components/ui/Callout";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SwitchDisclosure } from "@/components/ui/SwitchDisclosure";
@@ -141,52 +134,24 @@ export function AutomationEditor({
 
           <AnimatePresence initial={false}>
             {unsafeAutoApprove && (
-              <motion.div
-                key="unsafe"
-                role="alert"
-                initial={RISE_IN}
-                animate={RISE_SETTLED}
-                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                className="mx-5 mb-3 flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-warn-soft border border-warn/20"
-              >
-                <TriangleAlert size={ICON.SM} strokeWidth={2} className="mt-0.5 shrink-0 text-warn" />
-                <span className="text-sm text-warn leading-[1.4]">
-                  Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
-                  Anyone who can post to this channel can drive a full-tool, unattended run. Set a
-                  sender, or turn Auto-Approve off.
-                </span>
-              </motion.div>
+              <Callout key="unsafe" tone="warn" icon={TriangleAlert} className="mx-5 mb-3">
+                Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
+                Anyone who can post to this channel can drive a full-tool, unattended run. Set a
+                sender, or turn Auto-Approve off.
+              </Callout>
             )}
 
             {isMessage && (
-              <motion.div
-                key="message-info"
-                initial={RISE_IN}
-                animate={RISE_SETTLED}
-                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                className="mx-5 mb-3 px-3 py-2.5 rounded-[10px] bg-surface-soft border border-line-soft"
-              >
-                <span className="text-sm text-muted leading-[1.4]">
-                  To search a specific repo, move this automation's channel to the target project
-                  from the sidebar after it's created.
-                </span>
-              </motion.div>
+              <Callout key="message-info" tone="neutral" className="mx-5 mb-3">
+                To search a specific repo, move this automation's channel to the target project
+                from the sidebar after it's created.
+              </Callout>
             )}
 
             {error && (
-              <motion.div
-                key="save-error"
-                initial={RISE_IN}
-                animate={RISE_SETTLED}
-                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
-              >
-                <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
-                <span className="text-sm text-bad leading-[1.4]">{error}</span>
-              </motion.div>
+              <Callout key="save-error" tone="bad" title="Couldn't save" className="mx-5 mb-3">
+                {error}
+              </Callout>
             )}
           </AnimatePresence>
 

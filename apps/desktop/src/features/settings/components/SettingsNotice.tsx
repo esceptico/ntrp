@@ -1,5 +1,4 @@
-import { motion } from "motion/react";
-import { RISE_IN, RISE_SETTLED, MOTION, EASE_OUT } from "@/lib/tokens/motion";
+import { Callout } from "@/components/ui/Callout";
 
 export function SettingsConnectionHint({
   title = "Connect the desktop to ntrp first",
@@ -17,16 +16,5 @@ export function SettingsConnectionHint({
 }
 
 export function SettingsInlineError({ title, message }: { title: string; message: string }) {
-  return (
-    <motion.div
-      role="alert"
-      className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
-      initial={{ ...RISE_IN, y: -4 }}
-      animate={RISE_SETTLED}
-      transition={{ duration: MOTION.row, ease: EASE_OUT }}
-    >
-      <strong className="text-bad text-sm font-semibold">{title}</strong>
-      <span className="text-sm text-bad leading-[1.4]">{message}</span>
-    </motion.div>
-  );
+  return <Callout tone="bad" title={title}>{message}</Callout>;
 }
