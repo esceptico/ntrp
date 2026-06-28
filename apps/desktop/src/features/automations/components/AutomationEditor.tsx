@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
@@ -25,6 +25,7 @@ import {
   DISSOLVE_OUT,
 } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
+import { useReanchor } from "@/lib/hooks";
 import { PageModal } from "@/components/ui/PageModal";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -474,20 +475,12 @@ function ScheduleChip({
   // Opens above-left: bottom edge above the chip, left edges aligned.
   const [coords, setCoords] = useState<{ bottom: number; left: number } | null>(null);
 
-  useLayoutEffect(() => {
-    if (!open || !wrapRef.current) return;
-    const update = () => {
-      const r = wrapRef.current!.getBoundingClientRect();
-      setCoords({ bottom: window.innerHeight - r.top + 6, left: r.left });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
+  useReanchor(open, () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ bottom: window.innerHeight - r.top + 6, left: r.left });
+  });
 
   // The popover is portaled outside `wrapRef`, so accept clicks inside
   // either the trigger or the popover; anything else dismisses.

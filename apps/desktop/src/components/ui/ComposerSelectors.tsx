@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
@@ -8,6 +8,7 @@ import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refres
 import type { ModelGroup } from "@/api/types";
 import { ICON } from "@/lib/icons";
 import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
+import { useReanchor } from "@/lib/hooks";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -63,27 +64,16 @@ export function ModelReasoningPicker({
     right?: number;
   } | null>(null);
 
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const update = () => {
-      const r = triggerRef.current!.getBoundingClientRect();
-      if (placement === "above-right") {
-        setCoords({
-          bottom: window.innerHeight - r.top + 6,
-          right: window.innerWidth - r.right,
-        });
-      } else {
-        setCoords({ top: r.bottom + 6, left: r.left });
-      }
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open, placement]);
+  useReanchor(open, () => {
+    const t = triggerRef.current;
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    if (placement === "above-right") {
+      setCoords({ bottom: window.innerHeight - r.top + 6, right: window.innerWidth - r.right });
+    } else {
+      setCoords({ top: r.bottom + 6, left: r.left });
+    }
+  });
 
   // Outside-click closes the picker. The portaled popover lives outside
   // `wrapRef` so we have to check both the trigger and the popover refs;

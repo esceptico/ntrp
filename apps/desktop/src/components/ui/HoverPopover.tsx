@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "@/lib/tokens/motion";
+import { useReanchor } from "@/lib/hooks";
 
 /** 120ms hover bridge — one value across the composer-toolbar popovers
  *  (BudgetDial, GoalStrip, LoopStatus) so the gap-crossing grace feels
@@ -80,25 +81,17 @@ export function HoverPopover({
   // useLayoutEffect so coords are committed before the popover paints —
   // an open=true / coords-stale frame would render the popover at the
   // wrong corner of the viewport for one tick (visible flash).
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const update = () => {
-      const r = triggerRef.current!.getBoundingClientRect();
-      setCoords({
-        bottom: Math.max(8, window.innerHeight - r.top + 8),
-        ...(anchor === "left"
-          ? { left: Math.max(8, r.left) }
-          : { right: Math.max(8, window.innerWidth - r.right - 8) }),
-      });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open, anchor]);
+  useReanchor(open, () => {
+    const t = triggerRef.current;
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    setCoords({
+      bottom: Math.max(8, window.innerHeight - r.top + 8),
+      ...(anchor === "left"
+        ? { left: Math.max(8, r.left) }
+        : { right: Math.max(8, window.innerWidth - r.right - 8) }),
+    });
+  });
 
   useLayoutEffect(() => {
     if (!open || !dismissOnOutsideClick) return;

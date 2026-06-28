@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -107,6 +108,39 @@ export function useEscapeKey(onEscape: () => void, active = true): void {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+}
+
+/**
+ * Re-anchors a portaled overlay (popover, tooltip, picker) to its trigger.
+ * Runs `onReposition` immediately (via useLayoutEffect, so coords commit before
+ * paint — no wrong-corner flash) and again on window resize and scroll (capture
+ * phase, so nested scroll containers also fire) while `active`. Pass `observe`
+ * to also re-anchor when that element's own size changes (e.g. a tooltip whose
+ * label grew). Call sites keep only their placement math. The callback is read
+ * through a ref, so changing placement props doesn't re-bind the listeners.
+ */
+export function useReanchor(
+  active: boolean,
+  onReposition: () => void,
+  observe?: RefObject<Element | null>,
+): void {
+  const cb = useRef(onReposition);
+  cb.current = onReposition;
+  useLayoutEffect(() => {
+    if (!active) return;
+    const run = () => cb.current();
+    run();
+    window.addEventListener("resize", run);
+    window.addEventListener("scroll", run, true);
+    const ro = observe?.current ? new ResizeObserver(run) : null;
+    if (observe?.current) ro!.observe(observe.current);
+    return () => {
+      window.removeEventListener("resize", run);
+      window.removeEventListener("scroll", run, true);
+      ro?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 }
 

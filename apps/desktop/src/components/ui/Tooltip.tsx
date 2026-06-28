@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { DURATION_POPOVER, EASE_DECELERATE, EXIT_FAST } from "@/lib/tokens/motion";
 import { calculateTooltipPlacement, type TooltipPlacement, type TooltipSide } from "@/components/ui/tooltipPlacement";
+import { useReanchor } from "@/lib/hooks";
 
 const GAP = 6;
 /** Min distance the tooltip should keep from the viewport edge before flipping
@@ -97,34 +98,25 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const update = () => {
-      const trigger = triggerRef.current!.getBoundingClientRect();
+  useReanchor(
+    open,
+    () => {
+      const t = triggerRef.current;
       const tooltip = tipRef.current?.getBoundingClientRect();
-      if (!tooltip) return;
+      if (!t || !tooltip) return;
       setPlacement(
         calculateTooltipPlacement({
           preferredSide: side,
-          trigger,
+          trigger: t.getBoundingClientRect(),
           tooltip,
           viewport: { width: window.innerWidth, height: window.innerHeight },
           gap: GAP,
           safeMargin: SAFE_MARGIN,
         }),
       );
-    };
-    update();
-    const ro = tipRef.current ? new ResizeObserver(update) : null;
-    if (tipRef.current) ro?.observe(tipRef.current);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open, side, label]);
+    },
+    tipRef,
+  );
 
   const effSide = placement?.side ?? side;
   const axis = effSide === "left" || effSide === "right" ? "x" : "y";
