@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { AddBtn, RemoveBtn } from "@/features/settings/components/mcp/atoms";
+import { Input } from "@/components/ui/Input";
 
 export interface KeyVal {
   key: string;
@@ -42,17 +43,15 @@ export function ListEditor({
     <div className="grid gap-1.5">
       {values.map((v, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <input
+          <Input
+            size="sm"
             type="text"
             value={v}
             onChange={(e) => update(i, e.target.value)}
             placeholder={placeholder}
             aria-label={`${placeholder} ${i + 1}`}
             spellCheck={false}
-            className={clsx(
-              "flex-1 input-field input-field-sm",
-              mono && "font-mono",
-            )}
+            className={clsx("flex-1", mono && "font-mono")}
           />
           <RemoveBtn onClick={() => remove(i)} />
         </div>
@@ -86,23 +85,25 @@ export function KeyValueEditor({
     <div className="grid gap-1.5">
       {entries.map((e, i) => (
         <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
-          <input
+          <Input
+            size="sm"
             type="text"
             value={e.key}
             onChange={(ev) => update(i, { key: ev.target.value })}
             placeholder="Key"
             aria-label={`Key ${i + 1}`}
             spellCheck={false}
-            className="input-field input-field-sm font-mono"
+            className="font-mono"
           />
-          <input
+          <Input
+            size="sm"
             type="text"
             value={e.value}
             onChange={(ev) => update(i, { value: ev.target.value })}
             placeholder={valuePlaceholder}
             aria-label={`${valuePlaceholder} ${i + 1}`}
             spellCheck={false}
-            className="input-field input-field-sm font-mono"
+            className="font-mono"
           />
           <RemoveBtn onClick={() => remove(i)} />
         </div>
