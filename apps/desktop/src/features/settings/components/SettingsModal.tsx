@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Archive, Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import { useStore } from "@/stores";
 import type { SettingsTabId } from "@/stores/types";
-import { saveAndReconnect, fetchServerConfig } from "@/actions";
+import { saveAndReconnect, fetchServerConfig } from "@/actions/server";
 import { ConnectionTab } from "@/features/settings/components/ConnectionTab";
 import { ProvidersTab } from "@/features/settings/components/ProvidersTab";
 import { IntegrationsTab } from "@/features/settings/components/IntegrationsTab";

@@ -4,11 +4,7 @@ import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import { EASE_OUT, MOTION, ROW_EXIT, SPRING_LAYOUT } from "@/lib/tokens/motion";
-import {
-  fetchArchivedSessions,
-  permanentlyDeleteSession,
-  restoreArchivedSession,
-} from "@/actions";
+import { fetchArchivedSessions, permanentlyDeleteSession, restoreArchivedSession } from "@/actions/sessions";
 import type { ArchivedSession } from "@/api/sessions";
 import { useMutationState } from "@/lib/hooks";
 import { formatRelativePast } from "@/lib/format";

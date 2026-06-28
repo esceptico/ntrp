@@ -1,6 +1,6 @@
 import type { Automation } from "@/api/types";
 import { agentRunFromAutomation } from "@/lib/agentRun";
-import { switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
 import { useStore } from "@/stores";
 import { AgentRunRow } from "@/components/ui/AgentRunRow";
 

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Slash, X } from "lucide-react";
 import { useStore } from "@/stores";
-import { switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
 import {
   EASE_DECELERATE,
   MOTION,

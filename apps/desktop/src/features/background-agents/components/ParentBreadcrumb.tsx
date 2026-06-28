@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
 import { ICON } from "@/lib/icons";
 
 // Back-to-parent chip shown while viewing a child agent session — turns the

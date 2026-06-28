@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { fetchServerConfig, updateServerConfig } from "@/actions/server";
 import { listToolsApi } from "@/api/settings";
 import type { ToolMetadata, ToolOverrideDecision } from "@/api/types";
 import { useStore } from "@/stores";

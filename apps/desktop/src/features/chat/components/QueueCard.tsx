@@ -1,7 +1,7 @@
 import { Loader2, X } from "lucide-react";
 import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { cancelQueuedMessage } from "@/actions";
+import { cancelQueuedMessage } from "@/actions/messages";
 import { useStore, type QueuedMessage } from "@/stores";
 import { ICON } from "@/lib/icons";
 import { EASE_EMPHASIZED, EASE_HOVER, EASE_OUT, DURATION_PANEL, DURATION_POPOVER, MOTION, ROW_EXIT } from "@/lib/tokens/motion";

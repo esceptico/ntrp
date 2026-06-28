@@ -13,7 +13,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { createAutomation, updateAutomation } from "@/actions";
+import { createAutomation, updateAutomation } from "@/actions/automations";
 import type { Automation, AutomationTrigger, CreateAutomationPayload, UpdateAutomationPayload } from "@/api/types";
 import {
   EASE_DECELERATE,

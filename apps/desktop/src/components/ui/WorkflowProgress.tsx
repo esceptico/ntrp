@@ -3,7 +3,7 @@ import { ChevronRight, Square, Workflow as WorkflowIcon } from "lucide-react";
 import { ICON } from "@/lib/icons";
 import { useTimeTicker } from "@/lib/hooks";
 import { formatDuration } from "@/lib/agentRun";
-import { stopRun } from "@/actions";
+import { stopRun } from "@/actions/messages";
 import {
   isActiveWorkflow,
   type Workflow,

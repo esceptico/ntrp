@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { formatLoopCountdown } from "@/features/chat/lib/loops";
-import { truncatePrompt } from "@/actions/index";
+import { truncatePrompt } from "@/actions/_shared";
 
 test("formats loop countdown", () => {
   expect(formatLoopCountdown(1_060_000, 1_000_000)).toBe("60s");

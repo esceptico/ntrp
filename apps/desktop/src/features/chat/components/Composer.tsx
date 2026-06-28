@@ -3,19 +3,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "@/stores";
-import {
-  acceptGoalProposal,
-  cancelGoalProposal,
-  editGoalProposal,
-  enqueueMessage,
-  isBuiltin,
-  respondToAllApprovals,
-  runBuiltinCommand,
-  sendMessage,
-  stopRun,
-  toggleAuto,
-  viewSkill,
-} from "@/actions";
+import { viewSkill } from "@/actions/skills";
+import { enqueueMessage, sendMessage, stopRun } from "@/actions/messages";
+import { respondToAllApprovals } from "@/actions/approvals";
+import { isBuiltin, runBuiltinCommand } from "@/actions/builtins";
+import { toggleAuto } from "@/actions/loops";
+import { acceptGoalProposal, cancelGoalProposal, editGoalProposal } from "@/actions/goals";
 import { QueueCard } from "@/features/chat/components/QueueCard";
 import { GoalStatusBar } from "@/features/chat/components/GoalStrip";
 import { CommandPicker } from "@/features/chat/components/CommandPicker";

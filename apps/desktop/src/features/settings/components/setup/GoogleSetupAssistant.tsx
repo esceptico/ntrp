@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { GooglePreflightResponse, GoogleServiceChoice, SetupStatus } from "@/api/settings";
 import { addGmailAccountApi, getSetupStatusApi, preflightGoogleSetupApi, saveGoogleCredentialsApi } from "@/api/settings";
-import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { fetchServerConfig, updateServerConfig } from "@/actions/server";
 import { useStore } from "@/stores";
 import { GOOGLE_SERVICE_OPTIONS, googleChoiceLabel } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";

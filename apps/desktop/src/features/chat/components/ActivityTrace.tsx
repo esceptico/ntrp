@@ -4,7 +4,8 @@ import { ArrowUpRight, Bot, ChevronDown, Square, SquareTerminal } from "lucide-r
 import clsx from "clsx";
 import { useStore, type ActivityItem, type ActivityLabel } from "@/stores";
 import { activityItemStatus, isAgent, isHtmlWidget, isWorkflow } from "@/lib/agent";
-import { cancelSubagent, switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
+import { cancelSubagent } from "@/actions/messages";
 import {
   MOTION,
   EASE_DECELERATE,

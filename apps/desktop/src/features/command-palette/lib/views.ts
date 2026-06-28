@@ -1,5 +1,5 @@
 import { Bot, Layers, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
-import { updateServerConfig } from "@/actions";
+import { updateServerConfig } from "@/actions/server";
 import type { ThemeChoice } from "@/stores";
 import { prettyProvider, stripProviderPrefix } from "@/features/command-palette/lib/filter";
 import type { CommandView } from "@/features/command-palette/types";

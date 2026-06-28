@@ -1,5 +1,5 @@
 import { CheckCircle2, Pause, Play, Target, Trash2 } from "lucide-react";
-import { clearGoal, updateGoal } from "@/actions";
+import { clearGoal, updateGoal } from "@/actions/goals";
 import { useStore } from "@/stores";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";

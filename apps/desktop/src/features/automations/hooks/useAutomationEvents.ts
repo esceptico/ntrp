@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/stores";
-import { fetchAutomations, fetchAutomationSuggestions, refreshLoops } from "@/actions";
+import { refreshLoops } from "@/actions/loops";
+import { fetchAutomations, fetchAutomationSuggestions } from "@/actions/automations";
 import type { AppConfig } from "@/api/core";
 import type { SessionListItem } from "@/api/types";
 import { createStallWatchdog } from "@/lib/streamWatchdog";

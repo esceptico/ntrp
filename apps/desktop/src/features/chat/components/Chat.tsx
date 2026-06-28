@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import clsx from "clsx";
 import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useStore } from "@/stores";
-import { switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
 import { Messages } from "@/features/chat/components/Messages";
 import { Composer } from "@/features/chat/components/Composer";
 import { ApprovalBanner } from "@/features/chat/components/ApprovalBanner";

@@ -23,18 +23,11 @@ import {
   Zap,
 } from "lucide-react";
 import { useStore } from "@/stores";
-import {
-  archiveSession,
-  branchAtMessage,
-  createProject,
-  createSession,
-  loadHistory,
-  renameSession,
-  runBuiltinCommand,
-  stopRun,
-  switchSession,
-  toggleAuto,
-} from "@/actions";
+import { loadHistory } from "@/actions/history";
+import { archiveSession, branchAtMessage, createProject, createSession, renameSession, switchSession } from "@/actions/sessions";
+import { stopRun } from "@/actions/messages";
+import { runBuiltinCommand } from "@/actions/builtins";
+import { toggleAuto } from "@/actions/loops";
 import { compactSessionApi } from "@/api/core";
 import { formatRelativePast } from "@/lib/format";
 import { lastAssistantId } from "@/features/command-palette/lib/filter";

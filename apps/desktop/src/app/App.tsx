@@ -17,7 +17,9 @@ import { useActiveRuns } from "@/features/background-agents/hooks/useActiveRuns"
 import { useAutomationEvents } from "@/features/automations/hooks/useAutomationEvents";
 import { useTaskResultToasts } from "@/hooks/useTaskResultToasts";
 import { useThemeEffect } from "@/lib/theme";
-import { bootstrap, createSession, sendMessage, switchSession } from "@/actions";
+import { bootstrap } from "@/actions/bootstrap";
+import { createSession, switchSession } from "@/actions/sessions";
+import { sendMessage } from "@/actions/messages";
 
 // The five "open from chrome" modals only mount when the user actually
 // opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen } from "lucide-react";
 import type { Project } from "@/api/types";
-import { archiveProject, saveProject } from "@/actions";
+import { archiveProject, saveProject } from "@/actions/sessions";
 import { selectDirectory } from "@/features/sessions/lib/directoryPicker";
 import { PageModal } from "@/components/ui/PageModal";
 import { Button } from "@/components/ui/Button";

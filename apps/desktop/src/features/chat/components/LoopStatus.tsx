@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Repeat2, X } from "lucide-react";
 import { useStore, type ServerLoop } from "@/stores";
-import { refreshLoops, stopLoop } from "@/actions";
+import { refreshLoops, stopLoop } from "@/actions/loops";
 import { ICON } from "@/lib/icons";
 import { formatLoopCountdown } from "@/features/chat/lib/loops";
 import { Chip } from "@/components/ui/Chip";

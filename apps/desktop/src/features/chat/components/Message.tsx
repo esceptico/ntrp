@@ -21,7 +21,8 @@ import { useWorkflows } from "@/hooks/useWorkflows";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
 import type { SkillDescriptor, TodoStatus } from "@/api/types";
 import { activityTraceStats } from "@/lib/agent";
-import { branchAtMessage, viewSkill } from "@/actions";
+import { viewSkill } from "@/actions/skills";
+import { branchAtMessage } from "@/actions/sessions";
 import { Markdown } from "@/components/ui/Markdown";
 import {
   MOTION,

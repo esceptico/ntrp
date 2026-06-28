@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { refreshChildAgents } from "@/actions";
+import { refreshChildAgents } from "@/actions/childAgents";
 
 export function useChildAgentsPoll(sessionId: string | null): void {
   // Live BackgroundTaskEvents already keep the roster current for the session

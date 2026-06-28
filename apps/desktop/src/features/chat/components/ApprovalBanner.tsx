@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CornerDownLeft, MessageSquareText } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore, type ApprovalState } from "@/stores";
-import { respondToAllApprovals, respondToApproval } from "@/actions";
+import { respondToAllApprovals, respondToApproval } from "@/actions/approvals";
 import { ICON } from "@/lib/icons";
 import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";

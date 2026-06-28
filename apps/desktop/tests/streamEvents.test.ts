@@ -10,7 +10,8 @@ import {
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
 } from "@/hooks/useEvents";
-import { cancelSubagent, loadHistory, sendMessage, stopRun } from "@/actions/index";
+import { loadHistory } from "@/actions/history";
+import { cancelSubagent, sendMessage, stopRun } from "@/actions/messages";
 import {
   isActiveBackgroundAgent,
   latestTodoListFromMessages,

@@ -1,7 +1,8 @@
 import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
 import { originFromEvent } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
-import { createSession, fetchAutomations } from "@/actions";
+import { createSession } from "@/actions/sessions";
+import { fetchAutomations } from "@/actions/automations";
 import { ICON } from "@/lib/icons";
 import { useVisibilityPoll } from "@/lib/hooks";
 import { NavRow } from "@/features/sessions/components/NavRow";

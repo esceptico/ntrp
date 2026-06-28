@@ -1,6 +1,6 @@
 import { Check, X } from "lucide-react";
 import { useStore } from "@/stores";
-import { respondToApproval } from "@/actions";
+import { respondToApproval } from "@/actions/approvals";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
 import { PageModal } from "@/components/ui/PageModal";

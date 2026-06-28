@@ -9,7 +9,7 @@ import { messagesScroll } from "@/lib/messagesScroll";
 import { visibleMessageIds } from "@/lib/messageVisibility";
 import { messageSegments } from "@/features/chat/lib/messageSegments";
 import { firstMessageIdInSourceFocus } from "@/lib/messageSourceFocus";
-import { loadNewerHistory, loadOlderHistory } from "@/actions";
+import { loadNewerHistory, loadOlderHistory } from "@/actions/history";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { EmptyState } from "@/components/ui/EmptyState";

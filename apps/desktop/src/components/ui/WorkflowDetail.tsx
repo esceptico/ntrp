@@ -6,7 +6,7 @@ import { ICON } from "@/lib/icons";
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { useTimeTicker, useTimeoutFlag } from "@/lib/hooks";
 import { formatDuration } from "@/lib/agentRun";
-import { switchSession } from "@/actions";
+import { switchSession } from "@/actions/sessions";
 import { useStore } from "@/stores";
 import { highlight } from "@/lib/highlight";
 import { BlurSwap } from "@/components/ui/BlurSwap";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NumberField, PercentField } from "@/features/settings/components/Field";
-import { updateServerConfig, fetchServerConfig } from "@/actions";
+import { updateServerConfig, fetchServerConfig } from "@/actions/server";
 import type { ServerConfigPatch } from "@/api/settings";
 import type { ServerConfig } from "@/api/types";
 import { useStore } from "@/stores";

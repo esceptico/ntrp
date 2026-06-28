@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useStore } from "@/stores";
 import { type MCPServer, updateMCPToolsApi } from "@/api/settings";
 import type { ToolOverrideDecision } from "@/api/types";
-import { fetchServerConfig, updateServerConfig } from "@/actions";
+import { fetchServerConfig, updateServerConfig } from "@/actions/server";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";

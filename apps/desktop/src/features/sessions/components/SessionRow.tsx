@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { renameSession, switchSession } from "@/actions";
+import { renameSession, switchSession } from "@/actions/sessions";
 import { ICON } from "@/lib/icons";
 import { formatRelativePast } from "@/lib/format";
 import { SessionStateIcon } from "@/features/sessions/components/SessionStateIcon";

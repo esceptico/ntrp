@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { activityItemStatus } from "@/lib/agent";
 import { resolutionFromResult, type HtmlWidgetResolution } from "@/lib/htmlWidget";
-import { respondToHtmlInput } from "@/actions";
+import { respondToHtmlInput } from "@/actions/htmlInput";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BlurSwap } from "@/components/ui/BlurSwap";

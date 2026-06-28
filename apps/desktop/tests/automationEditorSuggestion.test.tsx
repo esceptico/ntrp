@@ -6,12 +6,12 @@ import type { AutomationSuggestion, CreateAutomationPayload } from "@/api/types"
 import { suggestionToPayload } from "@/api/automations";
 
 // Capture what the editor hands to the create action. The component imports
-// `createAutomation` from `../../actions`, which resolves to the same module
-// file we mock here, so the stub intercepts the real submit path.
+// `createAutomation` from `@/actions/automations`, which resolves to the same
+// module file we mock here, so the stub intercepts the real submit path.
 let created: CreateAutomationPayload[] = [];
 let updated: { taskId: string; patch: unknown }[] = [];
 
-mock.module("@/actions/index", () => ({
+mock.module("@/actions/automations", () => ({
   createAutomation: async (payload: CreateAutomationPayload) => {
     created.push(payload);
   },

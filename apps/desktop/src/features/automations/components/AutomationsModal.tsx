@@ -31,15 +31,8 @@ import {
   MOTION,
 } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
-import {
-  deleteAutomation,
-  dismissSuggestion,
-  fetchAutomations,
-  fetchAutomationSuggestions,
-  runAutomation,
-  switchSession,
-  toggleAutomation,
-} from "@/actions";
+import { switchSession } from "@/actions/sessions";
+import { deleteAutomation, dismissSuggestion, fetchAutomations, fetchAutomationSuggestions, runAutomation, toggleAutomation } from "@/actions/automations";
 import { listAutomationRunsApi, suggestionToPayload } from "@/api/automations";
 import type { Automation, AutomationRun, AutomationSuggestion } from "@/api/types";
 import { isChannelAutomation, splitAutomationsForTabs } from "@/lib/automationFilters";

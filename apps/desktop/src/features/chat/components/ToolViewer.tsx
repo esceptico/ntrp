@@ -17,7 +17,7 @@ import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { EASE_DECELERATE, MOTION } from "@/lib/tokens/motion";
 import { useTimeoutFlag } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
-import { cancelSubagent } from "@/actions";
+import { cancelSubagent } from "@/actions/messages";
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
  *  `lang` field is set to "json" when we successfully reformatted, so the

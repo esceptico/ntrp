@@ -2,7 +2,8 @@ import { useState } from "react";
 import { cancelChildAgentApi, getChildAgentResultApi } from "@/api/agents";
 import { pinToMemoryApi, sendToChildAgentApi } from "@/api/chat";
 import { agentRunFromBackgroundAgent, isActiveAgentStatus } from "@/lib/agentRun";
-import { createSession, sendMessage, switchSession } from "@/actions";
+import { createSession, switchSession } from "@/actions/sessions";
+import { sendMessage } from "@/actions/messages";
 import { getState, useStore, type BackgroundAgent } from "@/stores";
 import { AgentRunRow } from "@/components/ui/AgentRunRow";
 
