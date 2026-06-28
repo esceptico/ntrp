@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Box, ImagePlus, ShieldOff, ShieldCheck, Square, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "@/stores";
+import { useShallow } from "zustand/react/shallow";
+import { selectSentUserMessages, useStore } from "@/stores";
 import { viewSkill } from "@/actions/skills";
 import { enqueueMessage, sendMessage, stopRun } from "@/actions/messages";
 import { respondToAllApprovals } from "@/actions/approvals";
@@ -26,6 +27,7 @@ import { awaitingFirstRunOutput } from "@/features/chat/lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "@/features/chat/lib/commands";
 import { SECTION_ENTER, SECTION_EXIT } from "@/features/chat/lib/composerMotion";
 import { fileToImageBlock, pickerQuery, resize } from "@/features/chat/lib/composerHelpers";
+import { recallHistory } from "@/features/chat/lib/composerHistory";
 
 export function Composer() {
   const draft = useStore((s) => s.draft);
@@ -50,6 +52,14 @@ export function Composer() {
   const pendingGoalProposal = useStore((s) => s.pendingGoalProposal);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Readline-style recall over the session's sent messages. `historyIndex` is
+  // null when not browsing; `stashedDraft` keeps the in-progress text so
+  // ArrowDown past the newest entry restores it. Resetting historyIndex (on
+  // typing or send) re-stashes on the next ArrowUp.
+  const sentMessages = useStore(useShallow(selectSentUserMessages));
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const stashedDraftRef = useRef("");
 
   const query = useMemo(() => pickerQuery(draft), [draft]);
   const allCommands = useCommandList();
@@ -199,6 +209,7 @@ export function Composer() {
     const images = pendingImages;
     if (!text.trim() && !skill && images.length === 0) return;
 
+    setHistoryIndex(null);
     setDraft("");
     setSelectedSkill(null);
     clearPendingImages();
@@ -374,7 +385,12 @@ export function Composer() {
             id="message-input"
             aria-label="Message ntrp"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              // Real typing exits history mode (recall sets the draft
+              // programmatically, which doesn't fire onChange).
+              setHistoryIndex(null);
+              setDraft(e.target.value);
+            }}
             onKeyDown={(e) => {
               // Backspace on empty draft + attached skill → detach the skill.
               if (
@@ -412,6 +428,46 @@ export function Composer() {
                 ) {
                   pickerNav.onKeyDown(e);
                   return;
+                }
+              }
+              // Readline-style history. Picker nav takes precedence (handled
+              // above); here the picker is closed. Plain ArrowUp/ArrowDown
+              // only (no modifiers), and only when the caret sits on the
+              // first/last line so multi-line editing still works.
+              if (
+                !pickerOpen &&
+                (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+                !e.shiftKey &&
+                !e.altKey &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                inputRef.current
+              ) {
+                const el = inputRef.current;
+                const caretStart = el.selectionStart ?? 0;
+                const caretEnd = el.selectionEnd ?? caretStart;
+                const onFirstLine = !el.value.slice(0, caretStart).includes("\n");
+                const onLastLine = !el.value.slice(caretEnd).includes("\n");
+                const direction = e.key === "ArrowUp" ? "up" : "down";
+                const atEdge = direction === "up" ? onFirstLine : onLastLine;
+                const inHistory = historyIndex != null;
+                if (atEdge && (direction === "up" || inHistory)) {
+                  const result = recallHistory(
+                    { historyIndex, draft, stashedDraft: stashedDraftRef.current },
+                    direction,
+                    sentMessages,
+                  );
+                  if (result.value !== draft || result.historyIndex !== historyIndex) {
+                    e.preventDefault();
+                    stashedDraftRef.current = result.stashedDraft;
+                    setHistoryIndex(result.historyIndex);
+                    setDraft(result.value);
+                    requestAnimationFrame(() => {
+                      const node = inputRef.current;
+                      if (node) node.setSelectionRange(node.value.length, node.value.length);
+                    });
+                    return;
+                  }
                 }
               }
               if (e.key === "Enter" && !e.shiftKey) {

@@ -148,6 +148,23 @@ function activeActivityIdFromMessages(messages: UiMessage[]): string | null {
   return null;
 }
 
+/** Text of the user's sent messages in the current session, oldest → newest.
+ *  Drives the composer's readline-style history recall. Meta/system user
+ *  messages (loop ticks, etc.) are excluded — they were never typed. */
+export function selectSentUserMessages(state: {
+  order: string[];
+  messages: Map<string, UiMessage>;
+}): string[] {
+  const out: string[] = [];
+  for (const id of state.order) {
+    const message = state.messages.get(id);
+    if (!message || message.role !== "user" || message.isMeta) continue;
+    const text = message.content.trim();
+    if (text.length > 0) out.push(text);
+  }
+  return out;
+}
+
 export const useStore = create<State & Actions>((set) => ({
   config: { ...DEFAULT_CONFIG },
   projects: [],
