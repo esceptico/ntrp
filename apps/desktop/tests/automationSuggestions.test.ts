@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { suggestionToPayload, type AutomationSuggestion } from "@/api";
+import { suggestionToPayload } from "@/api/automations";
+import type { AutomationSuggestion } from "@/api/types";
 import { dismissSuggestion } from "@/actions/automations";
 import { getState, setState } from "@/stores/index";
 

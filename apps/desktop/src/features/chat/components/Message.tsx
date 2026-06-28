@@ -19,7 +19,7 @@ import { messageInSourceFocus } from "@/lib/messageSourceFocus";
 import { ActivityHeader, ActivityTail, ActivityTrace, liftWorkflows } from "@/features/chat/components/ActivityTrace";
 import { useWorkflows } from "@/hooks/useWorkflows";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
-import type { SkillDescriptor, TodoStatus } from "@/api";
+import type { SkillDescriptor, TodoStatus } from "@/api/types";
 import { activityTraceStats } from "@/lib/agent";
 import { branchAtMessage, viewSkill } from "@/actions";
 import { Markdown } from "@/components/ui/Markdown";

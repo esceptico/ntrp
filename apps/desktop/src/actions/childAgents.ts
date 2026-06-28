@@ -1,4 +1,4 @@
-import { listChildAgentsApi } from "@/api";
+import { listChildAgentsApi } from "@/api/agents";
 import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
 import { getState } from "@/stores";
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore } from "@/stores";
 import { updateServerConfig, fetchServerConfig } from "@/actions";
-import type { ModelGroup } from "@/api";
+import type { ModelGroup } from "@/api/types";
 import { ModelReasoningPicker } from "@/components/ui/ComposerSelectors";
 import { useTimeoutFlag } from "@/lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";

@@ -1,13 +1,5 @@
-import {
-  type AppConfig,
-  type ServerConfigPatch,
-  getServerConfig,
-  getServerModels,
-  loadInitialConfig,
-  patchServerConfig,
-  saveConfig,
-  validateConnection,
-} from "@/api";
+import { type AppConfig, loadInitialConfig, saveConfig, validateConnection } from "@/api/core";
+import { type ServerConfigPatch, getServerConfig, getServerModels, patchServerConfig } from "@/api/settings";
 import { getState } from "@/stores";
 import { refresh } from "@/actions/bootstrap";
 

@@ -1,4 +1,4 @@
-import type { GoogleServiceChoice, MCPServerConfigPayload, MCPTransport } from "@/api";
+import type { GoogleServiceChoice, MCPServerConfigPayload, MCPTransport } from "@/api/settings";
 
 export const GOOGLE_SERVICE_OPTIONS: Array<{ value: GoogleServiceChoice; label: string; detail: string }> = [
   { value: "email", label: "Email only", detail: "requests Gmail read/send scopes." },

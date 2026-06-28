@@ -1,4 +1,4 @@
-import type { MCPServerConfigPayload, MCPTransport } from "@/api";
+import type { MCPServerConfigPayload, MCPTransport } from "@/api/settings";
 import { type KeyVal, kvToRecord } from "@/features/settings/components/mcp/editors";
 
 export type MCPAuthMode = "auto" | "headers";

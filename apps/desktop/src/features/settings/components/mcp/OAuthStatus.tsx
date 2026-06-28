@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import type { MCPServer } from "@/api";
+import type { MCPServer } from "@/api/settings";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { LabeledField } from "@/features/settings/components/Field";

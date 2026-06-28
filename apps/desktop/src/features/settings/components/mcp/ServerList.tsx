@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { type MCPServer } from "@/api";
+import type { MCPServer } from "@/api/settings";
 import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { ICON } from "@/lib/icons";

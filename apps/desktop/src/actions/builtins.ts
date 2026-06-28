@@ -1,4 +1,6 @@
-import { apiWithConfig, compactSessionApi, listPrimarySessionsApi, type SessionListItem } from "@/api";
+import { apiWithConfig, compactSessionApi } from "@/api/core";
+import { listPrimarySessionsApi } from "@/api/sessions";
+import type { SessionListItem } from "@/api/types";
 import { getState } from "@/stores";
 import { forgetEventSeqForSession } from "@/stores/chat-stream";
 import { loadHistory } from "@/actions/history";

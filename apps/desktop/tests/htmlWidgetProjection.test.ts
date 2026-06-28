@@ -9,7 +9,7 @@ import { historyMessagesToUi } from "@/actions/history";
 import { resolutionFromResult } from "@/lib/htmlWidget";
 import { activityItemStatus } from "@/lib/agent";
 import { getState, setState, type ActivityItem } from "@/stores/index";
-import type { HistoryMessage } from "@/api";
+import type { HistoryMessage } from "@/api/chat";
 
 const WIDGET_ARGS = JSON.stringify({
   html: "<form>pick</form>",

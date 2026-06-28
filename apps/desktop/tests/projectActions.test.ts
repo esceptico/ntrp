@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
 import { archiveProject } from "@/actions/sessions";
-import type { Project, SessionListItem } from "@/api";
+import type { Project, SessionListItem } from "@/api/types";
 import { getState, setState } from "@/stores/index";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;

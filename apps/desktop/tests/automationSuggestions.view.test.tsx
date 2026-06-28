@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { SuggestionCard, SuggestionsSection } from "@/features/automations/components/AutomationsModal";
-import type { AutomationSuggestion } from "@/api";
+import type { AutomationSuggestion } from "@/api/types";
 
 function suggestion(overrides: Partial<AutomationSuggestion> = {}): AutomationSuggestion {
   return {

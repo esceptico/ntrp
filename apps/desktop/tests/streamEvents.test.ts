@@ -20,7 +20,7 @@ import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
 import { visibleMessageIds } from "@/lib/messageVisibility";
 import { getState, setState } from "@/stores/index";
 import { createBackgroundAgentsDomainState } from "@/stores/background-agent-domain";
-import type { HistoryMessage } from "@/api";
+import type { HistoryMessage } from "@/api/chat";
 
 beforeEach(() => {
   resetStreamStateForTest();

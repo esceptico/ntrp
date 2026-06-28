@@ -5,7 +5,7 @@ import { ArrowRight, Bot, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "@/stores";
-import { getChildAgentResultApi, type ChildAgentResult } from "@/api";
+import { getChildAgentResultApi, type ChildAgentResult } from "@/api/agents";
 import { highlight } from "@/lib/highlight";
 import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "@/lib/agent";
 import { humanizeAgentType } from "@/lib/agentRun";

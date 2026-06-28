@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { MCPServerConfigPayload, MCPTransport, SetupStatus } from "@/api";
-import { addMCPServerApi, getSetupStatusApi, startMCPOAuthApi } from "@/api";
+import type { MCPServerConfigPayload, MCPTransport, SetupStatus } from "@/api/settings";
+import { addMCPServerApi, getSetupStatusApi, startMCPOAuthApi } from "@/api/settings";
 import { useStore } from "@/stores";
 import { parseKeyValueLines, parseMCPServerImport, splitLines } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";

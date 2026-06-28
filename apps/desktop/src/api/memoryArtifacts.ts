@@ -1,5 +1,4 @@
-import type { AppConfig } from "@/api";
-import { apiWithConfig } from "@/api";
+import { apiWithConfig, type AppConfig } from "@/api/core";
 import { queryString } from "@/api/memoryItems";
 import type { MemoryKind } from "@/api/memoryItems";
 

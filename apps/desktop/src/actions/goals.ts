@@ -1,4 +1,5 @@
-import { apiWithConfig, type SessionGoal } from "@/api";
+import { apiWithConfig } from "@/api/core";
+import type { SessionGoal } from "@/api/types";
 import { getState } from "@/stores";
 import { appendError, appendStatus } from "@/actions/_shared";
 import { enqueueMessage, sendMessage } from "@/actions/messages";

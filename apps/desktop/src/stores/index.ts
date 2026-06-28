@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DEFAULT_CONFIG } from "@/api";
+import { DEFAULT_CONFIG } from "@/api/core";
 import { isActivityContinuationMessage } from "@/lib/messageVisibility";
 import { isLiveRunStatus } from "@/lib/runStatus";
 import type { State, Actions, UiMessage } from "@/stores/types";
@@ -115,7 +115,7 @@ export {
 } from "@/stores/prefs";
 
 
-function activeRunsFromSessions(sessions: import("@/api").SessionListItem[]) {
+function activeRunsFromSessions(sessions: import("@/api/types").SessionListItem[]) {
   return sessions
     .filter((session) => session.active_run_id && isLiveRunStatus(session.run_status))
     .map((session) => ({

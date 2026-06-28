@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchServerConfig, updateServerConfig } from "@/actions";
-import { listToolsApi, type ToolMetadata, type ToolOverrideDecision } from "@/api";
+import { listToolsApi } from "@/api/settings";
+import type { ToolMetadata, ToolOverrideDecision } from "@/api/types";
 import { useStore } from "@/stores";
 import { useMutationState } from "@/lib/hooks";
 import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState";

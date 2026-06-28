@@ -1,4 +1,4 @@
-import type { HistoryPage } from "@/api";
+import type { HistoryPage } from "@/api/chat";
 import type { HistoryPhase } from "@/stores/domains";
 
 export interface SessionViewState {

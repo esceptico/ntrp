@@ -11,7 +11,7 @@ import {
   resultSnippet,
   statusDotClass,
 } from "@/lib/agentRun";
-import type { Automation } from "@/api";
+import type { Automation } from "@/api/types";
 import type { ActivityItem, BackgroundAgent } from "@/stores/types";
 
 function automation(overrides: Partial<Automation> = {}): Automation {

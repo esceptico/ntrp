@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { getState, setState } from "@/stores/index";
-import type { SessionListItem } from "@/api";
+import type { SessionListItem } from "@/api/types";
 
 function row(id: string, name = id): SessionListItem {
   return {

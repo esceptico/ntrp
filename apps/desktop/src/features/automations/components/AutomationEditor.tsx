@@ -15,12 +15,7 @@ import {
 } from "lucide-react";
 import { createAutomation, updateAutomation } from "@/actions";
 import { useFocusTrap } from "@/lib/hooks";
-import type {
-  Automation,
-  AutomationTrigger,
-  CreateAutomationPayload,
-  UpdateAutomationPayload,
-} from "@/api";
+import type { Automation, AutomationTrigger, CreateAutomationPayload, UpdateAutomationPayload } from "@/api/types";
 import {
   ENTRY_PANEL,
   EASE_DECELERATE,

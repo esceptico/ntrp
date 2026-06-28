@@ -5,7 +5,7 @@ import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import { updateServerConfig, fetchServerConfig, updateSessionModelAction, refreshSessions } from "@/actions";
-import type { ModelGroup } from "@/api";
+import type { ModelGroup } from "@/api/types";
 import { ICON } from "@/lib/icons";
 import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
 

@@ -12,18 +12,9 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import {
-  cancelChildAgentApi,
-  clearTodoOverrideApi,
-  getChildAgentResultApi,
-  getTodoOverrideApi,
-  pinToMemoryApi,
-  sendToChildAgentApi,
-  setTodoOverrideApi,
-  type Automation,
-  type TodoListItem,
-  type TodoStatus,
-} from "@/api";
+import { cancelChildAgentApi, getChildAgentResultApi } from "@/api/agents";
+import { clearTodoOverrideApi, getTodoOverrideApi, pinToMemoryApi, sendToChildAgentApi, setTodoOverrideApi } from "@/api/chat";
+import type { Automation, TodoListItem, TodoStatus } from "@/api/types";
 import { nextTodoStatus, todoSignature } from "@/features/background-agents/lib/todoOverride";
 import { isInternalAutomation, isIterationLoop } from "@/lib/automationFilters";
 import {

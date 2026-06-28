@@ -4,8 +4,8 @@ import { ChevronDown, Inbox, MoreHorizontal, Pin, Plus, Settings } from "lucide-
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
-import { compactSessionApi } from "@/api";
-import type { SessionListItem } from "@/api";
+import { compactSessionApi } from "@/api/core";
+import type { SessionListItem } from "@/api/types";
 import { archiveSession, createSession, loadHistory, moveSessionToProject } from "@/actions";
 import { ICON } from "@/lib/icons";
 import { useTimeTicker } from "@/lib/hooks";

@@ -6,7 +6,8 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { ICON } from "@/lib/icons";
 import { useThemeEffect } from "@/lib/theme";
 import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
-import { apiWithConfig, loadInitialConfig, type SessionListItem } from "@/api";
+import { apiWithConfig, loadInitialConfig } from "@/api/core";
+import type { SessionListItem } from "@/api/types";
 import type { ImageBlock } from "@/stores";
 
 /** Spotlight-style floating composer rendered in the quick-capture

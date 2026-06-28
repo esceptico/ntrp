@@ -1,4 +1,5 @@
-import { type HistoryMessage, type ServerEvent } from "@/api";
+import type { HistoryMessage } from "@/api/chat";
+import type { ServerEvent } from "@/api/events";
 import { SEMANTIC_KIND_AGENT } from "@/lib/agent";
 
 // Keep any non-"tool" semantic kind ("agent", "workflow") on the activity item;

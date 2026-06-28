@@ -9,7 +9,7 @@ import {
   permanentlyDeleteSession,
   restoreArchivedSession,
 } from "@/actions";
-import type { ArchivedSession } from "@/api";
+import type { ArchivedSession } from "@/api/sessions";
 import { useMutationState } from "@/lib/hooks";
 import { formatRelativePast } from "@/lib/format";
 import { ICON } from "@/lib/icons";

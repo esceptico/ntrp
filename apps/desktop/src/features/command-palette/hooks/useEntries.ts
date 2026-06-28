@@ -35,7 +35,7 @@ import {
   switchSession,
   toggleAuto,
 } from "@/actions";
-import { compactSessionApi } from "@/api";
+import { compactSessionApi } from "@/api/core";
 import { formatRelativePast } from "@/lib/format";
 import { lastAssistantId } from "@/features/command-palette/lib/filter";
 import { buildProviderView, buildThemeView } from "@/features/command-palette/lib/views";

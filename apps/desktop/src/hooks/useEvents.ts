@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { type AppConfig, type ServerEvent } from "@/api";
+import type { AppConfig } from "@/api/core";
+import type { ServerEvent } from "@/api/events";
 import { reloadAllCollections } from "@/actions/bootstrap";
 import { loadHistory } from "@/actions/history";
 import { enqueueMessage } from "@/actions/messages";

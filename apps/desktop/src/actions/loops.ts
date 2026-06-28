@@ -1,4 +1,4 @@
-import { apiWithConfig } from "@/api";
+import { apiWithConfig } from "@/api/core";
 import { getState, type ServerLoop } from "@/stores";
 import { enqueueMessage, sendMessage } from "@/actions/messages";
 import { appendError, appendStatus, truncatePrompt } from "@/actions/_shared";

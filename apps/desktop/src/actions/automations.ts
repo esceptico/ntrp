@@ -1,16 +1,5 @@
-import {
-  createAutomationApi,
-  deleteAutomationApi,
-  dismissAutomationSuggestionApi,
-  listAutomationSuggestionsApi,
-  listAutomationsApi,
-  refreshAutomationSuggestionsApi,
-  runAutomationApi,
-  toggleAutomationApi,
-  updateAutomationApi,
-  type CreateAutomationPayload,
-  type UpdateAutomationPayload,
-} from "@/api";
+import { createAutomationApi, deleteAutomationApi, dismissAutomationSuggestionApi, listAutomationSuggestionsApi, listAutomationsApi, refreshAutomationSuggestionsApi, runAutomationApi, toggleAutomationApi, updateAutomationApi } from "@/api/automations";
+import type { CreateAutomationPayload, UpdateAutomationPayload } from "@/api/types";
 import { getState } from "@/stores";
 
 export async function fetchAutomations(): Promise<void> {

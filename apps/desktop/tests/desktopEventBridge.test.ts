@@ -5,7 +5,8 @@ import {
   runDesktopEventStreamLoop,
   transportDiagnosticsForSession,
 } from "@/hooks/useEvents";
-import type { AppConfig, ServerEvent } from "@/api";
+import type { AppConfig } from "@/api/core";
+import type { ServerEvent } from "@/api/events";
 
 test("reconnectDelayMs uses capped exponential backoff with bounded jitter", () => {
   expect(reconnectDelayMs(0, { baseMs: 500, random: () => 0.5 })).toBe(500);

@@ -1,4 +1,4 @@
-import type { Project, SessionListItem } from "@/api";
+import type { Project, SessionListItem } from "@/api/types";
 import type { SidebarGroupBy } from "@/stores/types";
 
 export interface ProjectSessionGroup {

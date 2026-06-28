@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Automation } from "@/api";
+import type { Automation } from "@/api/types";
 import { splitAutomationsForTabs } from "@/lib/automationFilters";
 
 function automation(patch: Partial<Automation>): Automation {

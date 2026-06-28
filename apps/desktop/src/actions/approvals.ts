@@ -1,4 +1,4 @@
-import { submitToolResult } from "@/api";
+import { submitToolResult } from "@/api/chat";
 import { getState } from "@/stores";
 
 export async function respondToApproval(

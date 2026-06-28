@@ -1,5 +1,5 @@
 import type { ActivityItem, BackgroundAgent } from "@/stores";
-import type { Automation, AutomationTrigger, BackgroundTaskSummary } from "@/api";
+import type { Automation, AutomationTrigger, BackgroundTaskSummary } from "@/api/types";
 import type { BackgroundAgentSnapshot } from "@/stores/background-agent-domain";
 import { isChannelAutomation } from "@/lib/automationFilters";
 import { activityItemStatus, extractTask, friendlyAgentLabel } from "@/lib/agent";

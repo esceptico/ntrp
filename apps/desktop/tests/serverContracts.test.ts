@@ -1,13 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  addGmailAccountApi,
-  getSetupStatusApi,
-  parseModelsResponse,
-  parseServerConfig,
-  preflightGoogleSetupApi,
-  saveGoogleCredentialsApi,
-  verifySlackTokenApi,
-} from "@/api";
+import { addGmailAccountApi, getSetupStatusApi, parseModelsResponse, parseServerConfig, preflightGoogleSetupApi, saveGoogleCredentialsApi, verifySlackTokenApi } from "@/api/settings";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 

@@ -1,4 +1,4 @@
-import { submitToolResult } from "@/api";
+import { submitToolResult } from "@/api/chat";
 import { getState } from "@/stores";
 import type { HtmlWidgetResolution } from "@/lib/htmlWidget";
 

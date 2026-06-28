@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "@/stores";
-import { type MCPServer, listMCPServersApi } from "@/api";
+import { type MCPServer, listMCPServersApi } from "@/api/settings";
 import { RISE_IN, RISE_SETTLED, DISSOLVE_OUT, MOTION, EASE_EMPHASIZED } from "@/lib/tokens/motion";
 import { TabPanels } from "@/components/ui/TabPanels";
 import { ServerForm } from "@/features/settings/components/mcp/ServerForm";

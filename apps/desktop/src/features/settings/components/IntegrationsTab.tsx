@@ -9,16 +9,7 @@ import {
   MessageCircle,
   RefreshCw,
 } from "lucide-react";
-import {
-  addGmailAccountApi,
-  connectServiceApi,
-  disconnectServiceApi,
-  listGmailAccountsApi,
-  listServicesApi,
-  removeGmailAccountApi,
-  type GmailAccount,
-  type ServiceConnection,
-} from "@/api";
+import { addGmailAccountApi, connectServiceApi, disconnectServiceApi, listGmailAccountsApi, listServicesApi, removeGmailAccountApi, type GmailAccount, type ServiceConnection } from "@/api/settings";
 import { fetchServerConfig, updateServerConfig } from "@/actions";
 import { useStore } from "@/stores";
 import { ReadinessCard } from "@/features/settings/components/ReadinessCard";

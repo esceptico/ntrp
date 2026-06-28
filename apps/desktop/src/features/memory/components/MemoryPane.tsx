@@ -1,4 +1,4 @@
-import type { AppConfig } from "@/api";
+import type { AppConfig } from "@/api/core";
 import { useStore } from "@/stores";
 import { DetailPlaceholder } from "@/features/memory/components/shared";
 import { ArtifactMemoryView } from "@/features/memory/components/ArtifactMemoryView";

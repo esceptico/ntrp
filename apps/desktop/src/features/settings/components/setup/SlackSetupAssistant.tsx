@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { SetupStatus, SlackVerifyResponse } from "@/api";
-import { connectServiceApi, getSetupStatusApi, verifySlackTokenApi } from "@/api";
+import type { SetupStatus, SlackVerifyResponse } from "@/api/settings";
+import { connectServiceApi, getSetupStatusApi, verifySlackTokenApi } from "@/api/settings";
 import { useStore } from "@/stores";
 import { slackTokenPrefixValid, type SlackSetupServiceId } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";

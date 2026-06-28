@@ -1,9 +1,6 @@
-import {
-  apiWithConfig,
-  type HistoryMessage,
-  type ServerEvent,
-  type SessionRuntimeSnapshot,
-} from "@/api";
+import type { HistoryMessage } from "@/api/chat";
+import { apiWithConfig } from "@/api/core";
+import type { ServerEvent, SessionRuntimeSnapshot } from "@/api/events";
 import { getState, setState } from "@/stores";
 import {
   clearReplayGapBlockForSession,

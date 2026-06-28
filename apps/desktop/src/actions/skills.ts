@@ -1,4 +1,4 @@
-import { fetchSkillContent, listSkills } from "@/api";
+import { fetchSkillContent, listSkills } from "@/api/skills";
 import { getState } from "@/stores";
 
 export async function fetchSkills(): Promise<void> {

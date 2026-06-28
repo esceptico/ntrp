@@ -1,7 +1,7 @@
 import { Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
-import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "@/api";
+import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "@/api/settings";
 import { useMutationState } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";

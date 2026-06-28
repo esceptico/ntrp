@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { loadInitialConfig, saveConfig, STORAGE_KEY } from "@/api";
+import { loadInitialConfig, saveConfig, STORAGE_KEY } from "@/api/core";
 
 class MemoryStorage {
   private values = new Map<string, string>();

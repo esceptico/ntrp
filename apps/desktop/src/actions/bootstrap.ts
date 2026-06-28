@@ -1,4 +1,5 @@
-import { apiWithConfig, checkHealth, listPrimarySessionsApi, listProjectsApi, loadInitialConfig } from "@/api";
+import { apiWithConfig, checkHealth, loadInitialConfig } from "@/api/core";
+import { listPrimarySessionsApi, listProjectsApi } from "@/api/sessions";
 import { getState } from "@/stores";
 import { isAgentSessionId, parentSessionIdOf } from "@/lib/agentRun";
 import { fetchAutomations } from "@/actions/automations";

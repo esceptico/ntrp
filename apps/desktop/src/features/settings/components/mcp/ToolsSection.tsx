@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/stores";
-import { type MCPServer, type ToolOverrideDecision, updateMCPToolsApi } from "@/api";
+import { type MCPServer, updateMCPToolsApi } from "@/api/settings";
+import type { ToolOverrideDecision } from "@/api/types";
 import { fetchServerConfig, updateServerConfig } from "@/actions";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";

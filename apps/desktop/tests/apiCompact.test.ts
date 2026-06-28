@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { apiWithConfig, archiveProjectApi, compactSessionApi, getChildAgentResultApi, listProjectsApi } from "@/api";
+import { getChildAgentResultApi } from "@/api/agents";
+import { apiWithConfig, compactSessionApi } from "@/api/core";
+import { archiveProjectApi, listProjectsApi } from "@/api/sessions";
 import { runBuiltinCommand } from "@/actions/builtins";
 import { getState, setState } from "@/stores/index";
 import { searchMemory } from "@/api/memoryItems";

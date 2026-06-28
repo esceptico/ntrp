@@ -1,8 +1,5 @@
-import type {
-  HistoryMessage,
-  HistoryPage,
-  SessionRuntimeSnapshot,
-} from "@/api";
+import type { HistoryMessage, HistoryPage } from "@/api/chat";
+import type { SessionRuntimeSnapshot } from "@/api/events";
 import { isForegroundRunStatus } from "@/lib/runStatus";
 import {
   newestHistoryActivityId,

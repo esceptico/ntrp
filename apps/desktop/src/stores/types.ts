@@ -1,16 +1,6 @@
-import type {
-  AppConfig,
-  ArchivedSession,
-  Automation,
-  AutomationSuggestion,
-  ModelsResponse,
-  Project,
-  ServerConfig,
-  SessionGoal,
-  SessionListItem,
-  SkillDescriptor,
-  TodoListItem,
-} from "@/api";
+import type { AppConfig } from "@/api/core";
+import type { ArchivedSession } from "@/api/sessions";
+import type { Automation, AutomationSuggestion, ModelsResponse, Project, ServerConfig, SessionGoal, SessionListItem, SkillDescriptor, TodoListItem } from "@/api/types";
 import type { TransportDiagnosticsSnapshot } from "@/lib/transportDiagnostics";
 import type { MessageSourceFocus } from "@/lib/messageSourceFocus";
 import type { Toast } from "@/lib/taskToast";
@@ -428,11 +418,11 @@ export interface Actions {
     options?: { clearApprovals?: boolean; markBackgrounded?: boolean },
   ) => void;
   setCurrentSession: (sessionId: string | null) => void;
-  setHistory: (messages: UiMessage[], page?: import("@/api").HistoryPage) => void;
-  prependHistory: (messages: UiMessage[], page?: import("@/api").HistoryPage) => void;
+  setHistory: (messages: UiMessage[], page?: import("@/api/chat").HistoryPage) => void;
+  prependHistory: (messages: UiMessage[], page?: import("@/api/chat").HistoryPage) => void;
   appendHistoryPage: (
     messages: UiMessage[],
-    page?: import("@/api").HistoryPage,
+    page?: import("@/api/chat").HistoryPage,
     activeActivityId?: string | null,
   ) => void;
   setHistoryLoading: (direction: "before" | "after", loading: boolean) => void;

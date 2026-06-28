@@ -1,21 +1,6 @@
-import {
-  apiWithConfig,
-  archiveProjectApi,
-  archiveSessionApi,
-  branchSessionApi,
-  createProjectApi,
-  listProjectsApi,
-  listArchivedSessionsApi,
-  listPrimarySessionsApi,
-  moveSessionToProjectApi,
-  permanentlyDeleteSessionApi,
-  renameSessionApi,
-  updateSessionModelApi,
-  restoreSessionApi,
-  updateProjectApi,
-  type Project,
-  type SessionListItem,
-} from "@/api";
+import { apiWithConfig } from "@/api/core";
+import { archiveProjectApi, archiveSessionApi, branchSessionApi, createProjectApi, listProjectsApi, listArchivedSessionsApi, listPrimarySessionsApi, moveSessionToProjectApi, permanentlyDeleteSessionApi, renameSessionApi, updateSessionModelApi, restoreSessionApi, updateProjectApi } from "@/api/sessions";
+import type { Project, SessionListItem } from "@/api/types";
 import { getState } from "@/stores";
 import { fetchGoal } from "@/actions/goals";
 import { loadHistory, type LoadHistoryOptions } from "@/actions/history";

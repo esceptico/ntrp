@@ -2,18 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCw } from "lucide-react";
-import {
-  createCustomModelApi,
-  connectModelProviderApi,
-  deleteCustomModelApi,
-  disconnectModelProviderApi,
-  getOpenAICodexOAuthStatusApi,
-  listModelProvidersApi,
-  type CustomModelSummary,
-  startOpenAICodexOAuthApi,
-  type ModelProvider,
-  type OpenAICodexOAuthStatus,
-} from "@/api";
+import { createCustomModelApi, connectModelProviderApi, deleteCustomModelApi, disconnectModelProviderApi, getOpenAICodexOAuthStatusApi, listModelProvidersApi, type CustomModelSummary, startOpenAICodexOAuthApi, type ModelProvider, type OpenAICodexOAuthStatus } from "@/api/settings";
 import { fetchServerConfig } from "@/actions";
 import { useStore } from "@/stores";
 import { ReadinessCard } from "@/features/settings/components/ReadinessCard";

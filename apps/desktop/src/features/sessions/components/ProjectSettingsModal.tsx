@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen } from "lucide-react";
-import type { Project } from "@/api";
+import type { Project } from "@/api/types";
 import { archiveProject, saveProject } from "@/actions";
 import { selectDirectory } from "@/features/sessions/lib/directoryPicker";
 import { PageModal } from "@/components/ui/PageModal";

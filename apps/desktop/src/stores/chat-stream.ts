@@ -1,4 +1,5 @@
-import { type AppConfig, type ServerEvent } from "@/api";
+import type { AppConfig } from "@/api/core";
+import type { ServerEvent } from "@/api/events";
 import { getState, setState, type QueuedMessage } from "@/stores/index";
 import type { ConnectionPhase } from "@/stores/domains";
 import {

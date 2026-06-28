@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { apiWithConfig } from "@/api";
+import { apiWithConfig } from "@/api/core";
 import { useStore } from "@/stores";
 import { refreshCachedActiveSessionHistories } from "@/actions/history";
 

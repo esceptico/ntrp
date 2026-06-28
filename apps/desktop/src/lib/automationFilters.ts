@@ -1,4 +1,4 @@
-import type { Automation } from "@/api";
+import type { Automation } from "@/api/types";
 
 export interface AutomationTabGroups {
   user: Automation[];

@@ -1,5 +1,5 @@
 import { Field } from "@/features/settings/components/Field";
-import type { AppConfig } from "@/api";
+import type { AppConfig } from "@/api/core";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";

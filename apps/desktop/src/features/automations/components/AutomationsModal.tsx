@@ -40,13 +40,8 @@ import {
   switchSession,
   toggleAutomation,
 } from "@/actions";
-import {
-  listAutomationRunsApi,
-  suggestionToPayload,
-  type Automation,
-  type AutomationRun,
-  type AutomationSuggestion,
-} from "@/api";
+import { listAutomationRunsApi, suggestionToPayload } from "@/api/automations";
+import type { Automation, AutomationRun, AutomationSuggestion } from "@/api/types";
 import { isChannelAutomation, splitAutomationsForTabs } from "@/lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "@/features/automations/lib/automationTrust";
 import { agentRunFromAutomation, formatRelative, formatTrigger } from "@/lib/agentRun";

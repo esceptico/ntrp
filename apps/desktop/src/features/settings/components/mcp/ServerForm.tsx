@@ -1,15 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useStore } from "@/stores";
-import {
-  type MCPServer,
-  type MCPServerConfigPayload,
-  type MCPTransport,
-  addMCPServerApi,
-  removeMCPServerApi,
-  startMCPOAuthApi,
-  updateMCPServerApi,
-} from "@/api";
+import { type MCPServer, type MCPServerConfigPayload, type MCPTransport, addMCPServerApi, removeMCPServerApi, startMCPOAuthApi, updateMCPServerApi } from "@/api/settings";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";

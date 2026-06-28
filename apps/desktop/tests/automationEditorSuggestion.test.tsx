@@ -2,8 +2,8 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import type { AutomationSuggestion, CreateAutomationPayload } from "@/api";
-import { suggestionToPayload } from "@/api";
+import type { AutomationSuggestion, CreateAutomationPayload } from "@/api/types";
+import { suggestionToPayload } from "@/api/automations";
 
 // Capture what the editor hands to the create action. The component imports
 // `createAutomation` from `../../actions`, which resolves to the same module

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Database, FileText, Folder, FolderOpen, Pin, Search, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
-import type { AppConfig } from "@/api";
+import type { AppConfig } from "@/api/core";
 import { IconButton } from "@/components/ui/IconButton";
 import { Markdown } from "@/components/ui/Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";

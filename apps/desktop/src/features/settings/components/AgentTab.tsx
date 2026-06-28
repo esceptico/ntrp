@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NumberField } from "@/features/settings/components/Field";
 import { updateServerConfig, fetchServerConfig } from "@/actions";
-import type { ServerConfig } from "@/api";
+import type { ServerConfig } from "@/api/types";
 import { useStore } from "@/stores";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";

@@ -1,4 +1,4 @@
-import type { RuntimeRunStatus } from "@/api";
+import type { RuntimeRunStatus } from "@/api/events";
 
 export function isForegroundRunStatus(status: RuntimeRunStatus | string | null | undefined): boolean {
   return status === "pending" || status === "running";

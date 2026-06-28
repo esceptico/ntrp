@@ -1,5 +1,4 @@
-import type { AppConfig } from "@/api";
-import { apiWithConfig } from "@/api";
+import { apiWithConfig, type AppConfig } from "@/api/core";
 
 // ── Scope ─────────────────────────────────────────────────────────────────
 export type ScopeKind = "global" | "project" | "session" | "integration" | "user";
