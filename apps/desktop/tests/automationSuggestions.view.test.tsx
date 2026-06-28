@@ -125,10 +125,25 @@ function setupDom() {
     window: globalThis.window,
     document: globalThis.document,
     act: testGlobal.IS_REACT_ACT_ENVIRONMENT,
+    resizeObserver: globalThis.ResizeObserver,
+    raf: globalThis.requestAnimationFrame,
+    caf: globalThis.cancelAnimationFrame,
   };
   testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
   globalThis.window = dom.window as unknown as Window & typeof globalThis;
   globalThis.document = dom.window.document;
+  // jsdom/bun lack these; ShowMore (overflow measure) + motion need them.
+  globalThis.ResizeObserver =
+    dom.window.ResizeObserver ??
+    (class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver);
+  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 0) as unknown as number) as typeof requestAnimationFrame;
+  globalThis.cancelAnimationFrame = ((handle: number) =>
+    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>)) as typeof cancelAnimationFrame;
 
   const rootEl = dom.window.document.getElementById("root");
   if (!rootEl) throw new Error("missing root");
@@ -138,6 +153,9 @@ function setupDom() {
     globalThis.document = prev.document;
     globalThis.window = prev.window;
     testGlobal.IS_REACT_ACT_ENVIRONMENT = prev.act;
+    globalThis.ResizeObserver = prev.resizeObserver;
+    globalThis.requestAnimationFrame = prev.raf;
+    globalThis.cancelAnimationFrame = prev.caf;
   };
   return { dom, rootEl, root, restore };
 }
