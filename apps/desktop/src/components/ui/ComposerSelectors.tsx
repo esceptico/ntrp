@@ -8,8 +8,8 @@ import { updateServerConfig, fetchServerConfig } from "@/actions/server";
 import { updateSessionModelAction, refreshSessions } from "@/actions/sessions";
 import type { ModelGroup } from "@/api/types";
 import { ICON } from "@/lib/icons";
-import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
-import { useReanchor } from "@/lib/hooks";
+import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, EXIT_FAST, MOTION, SPRING_LAYOUT } from "@/lib/tokens/motion";
+import { PROXIMITY_ITEM_ATTR, useProximityHover, useReanchor } from "@/lib/hooks";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -54,6 +54,13 @@ export function ModelReasoningPicker({
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  // Proximity hover for the model list: one traveling highlight eases toward
+  // the row nearest the cursor / keyboard-focused (Fluid Functionalism),
+  // adding the hover background `.app-row` deliberately omits while the row's
+  // own `data-active` tint+ring still marks the selected model. Measurement is
+  // scoped to the scroll container so offsetTop/scrollTop math lines up.
+  const listRef = useRef<HTMLDivElement>(null);
+  const prox = useProximityHover(listRef);
   // Anchor the portaled popover off the trigger's bounding rect.
   // `above-right` floats the popover above the chip with its right edge
   // aligned to the chip's right edge (default for the composer
@@ -175,7 +182,30 @@ export function ModelReasoningPicker({
               className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-sm text-ink outline-none placeholder:text-muted"
               autoFocus
             />
-            <div className="max-h-[260px] overflow-y-auto scroll-thin py-1">
+            <div
+              ref={listRef}
+              onMouseMove={prox.handlers.onMouseMove}
+              onMouseLeave={prox.handlers.onMouseLeave}
+              onFocus={prox.handlers.onFocus}
+              className="relative max-h-[260px] overflow-y-auto scroll-thin py-1"
+            >
+              {/* Traveling proximity highlight — one element easing toward the
+                  hovered/keyboard-focused row; pointer-events:none so it never
+                  steals clicks or hover from the rows beneath it. Sits behind
+                  the rows (which are z-[1]) so a selected row's tint+ring still
+                  reads on top. */}
+              <AnimatePresence>
+                {prox.activeRect && (
+                  <motion.div
+                    aria-hidden
+                    className="absolute inset-x-1 rounded-md bg-surface-soft pointer-events-none"
+                    initial={{ opacity: 0, top: prox.activeRect.top, height: prox.activeRect.height }}
+                    animate={{ opacity: 1, top: prox.activeRect.top, height: prox.activeRect.height }}
+                    exit={{ opacity: 0, transition: EXIT_FAST }}
+                    transition={{ ...SPRING_LAYOUT, opacity: { duration: MOTION.fast } }}
+                  />
+                )}
+              </AnimatePresence>
               {filteredGroups.length === 0 && (
                 <div className="px-3 py-2 text-sm text-muted italic">No matches.</div>
               )}
@@ -198,7 +228,8 @@ export function ModelReasoningPicker({
                           setQuery("");
                         }}
                         data-active={isCurrent ? "true" : undefined}
-                        className="app-row w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm font-mono text-ink-soft"
+                        {...{ [PROXIMITY_ITEM_ATTR]: "" }}
+                        className="app-row relative z-[1] w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm font-mono text-ink-soft"
                       >
                         <span className="grid place-items-center w-3 h-3 shrink-0">
                           {isCurrent && <Check size={ICON.SM} strokeWidth={2.4} className="text-accent" />}
