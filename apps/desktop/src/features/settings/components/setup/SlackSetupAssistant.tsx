@@ -5,6 +5,7 @@ import { useStore } from "@/stores";
 import { slackTokenPrefixValid, type SlackSetupServiceId } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -69,7 +70,7 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">2. Paste token</div>
-        <input className="input-field" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={serviceId === "slack_bot_token" ? "xoxb-..." : "xoxp-..."} />
+        <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={serviceId === "slack_bot_token" ? "xoxb-..." : "xoxp-..."} />
         {token.trim() && !prefixValid && <div className="text-xs text-warn">Token prefix does not match the selected type.</div>}
         <div className="flex flex-wrap gap-2 justify-end">
           <Button variant="secondary" size="md" disabled={!prefixValid || busy === "verify"} onClick={() => void verify()}>

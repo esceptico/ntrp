@@ -50,7 +50,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   if (!label && !help && !error) return field;
 
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-1.5">
       {label && (
         <label htmlFor={inputId} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">
           {label}

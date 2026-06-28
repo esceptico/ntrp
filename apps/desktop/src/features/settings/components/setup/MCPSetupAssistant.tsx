@@ -5,6 +5,7 @@ import { useStore } from "@/stores";
 import { parseKeyValueLines, parseMCPServerImport, splitLines } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -105,16 +106,16 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">2. Guided fields or JSON import</div>
         <p className="m-0 text-xs text-muted">Args, env, and headers accept one entry per line. Env/header lines use KEY=value.</p>
-        <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Server name" disabled={Boolean(jsonText.trim())} />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Server name" disabled={Boolean(jsonText.trim())} />
         {transport === "stdio" ? (
           <>
-            <input className="input-field" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="Command, e.g. npx" disabled={Boolean(jsonText.trim())} />
+            <Input value={command} onChange={(e) => setCommand(e.target.value)} placeholder="Command, e.g. npx" disabled={Boolean(jsonText.trim())} />
             <textarea className="input-field min-h-[72px]" value={argsText} onChange={(e) => setArgsText(e.target.value)} placeholder={"Args, one per line\n-y\n@modelcontextprotocol/server-filesystem"} disabled={Boolean(jsonText.trim())} />
             <textarea className="input-field min-h-[72px]" value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder={"Env, one KEY=value per line"} disabled={Boolean(jsonText.trim())} />
           </>
         ) : (
           <>
-            <input className="input-field" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/mcp" disabled={Boolean(jsonText.trim())} />
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/mcp" disabled={Boolean(jsonText.trim())} />
             <textarea className="input-field min-h-[72px]" value={headersText} onChange={(e) => setHeadersText(e.target.value)} placeholder={"Headers, one KEY=value per line\nAuthorization=Bearer ..."} disabled={Boolean(jsonText.trim())} />
           </>
         )}

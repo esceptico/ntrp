@@ -16,7 +16,7 @@ import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
-import { LabeledField } from "@/features/settings/components/Field";
+import { Input } from "@/components/ui/Input";
 import { type KeyVal } from "@/features/settings/components/mcp/editors";
 import { buildMCPServerPayload, type MCPAuthMode } from "@/features/settings/components/mcp/payload";
 import { HttpFields, StdioFields } from "@/features/settings/components/mcp/transportFields";
@@ -131,17 +131,16 @@ export function ServerForm({
       </h3>
 
       <div className="grid gap-3">
-        <LabeledField label="Name">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={mode === "edit"}
-            placeholder="MCP server name"
-            spellCheck={false}
-            className="w-full input-field input-field-sm disabled:bg-surface-soft disabled:text-muted"
-          />
-        </LabeledField>
+        <Input
+          label="Name"
+          size="sm"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={mode === "edit"}
+          placeholder="MCP server name"
+          spellCheck={false}
+          className="disabled:bg-surface-soft disabled:text-muted"
+        />
 
         {transportLocked ? (
           <div className="inline-flex items-center h-8 px-3 rounded-md bg-surface-soft border border-line-soft text-sm font-medium text-ink-soft self-start">

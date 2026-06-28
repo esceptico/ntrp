@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { LabeledField } from "@/features/settings/components/Field";
 import { KeyValueEditor, ListEditor, type KeyVal } from "@/features/settings/components/mcp/editors";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Input } from "@/components/ui/Input";
 import type { MCPAuthMode } from "@/features/settings/components/mcp/payload";
 
 export function StdioFields({
@@ -21,16 +22,15 @@ export function StdioFields({
 }) {
   return (
     <>
-      <LabeledField label="Command to launch">
-        <input
-          type="text"
-          value={command}
-          onChange={(e) => onCommand(e.target.value)}
-          placeholder="openai-dev-mcp serve-sqlite"
-          spellCheck={false}
-          className="w-full input-field input-field-sm font-mono"
-        />
-      </LabeledField>
+      <Input
+        label="Command to launch"
+        size="sm"
+        value={command}
+        onChange={(e) => onCommand(e.target.value)}
+        placeholder="openai-dev-mcp serve-sqlite"
+        spellCheck={false}
+        className="font-mono"
+      />
 
       <LabeledField label="Arguments">
         <ListEditor
@@ -70,16 +70,15 @@ export function HttpFields({
 }) {
   return (
     <>
-      <LabeledField label="URL">
-        <input
-          type="text"
-          value={url}
-          onChange={(e) => onUrl(e.target.value)}
-          placeholder="https://mcp.example.com/mcp"
-          spellCheck={false}
-          className="w-full input-field input-field-sm font-mono"
-        />
-      </LabeledField>
+      <Input
+        label="URL"
+        size="sm"
+        value={url}
+        onChange={(e) => onUrl(e.target.value)}
+        placeholder="https://mcp.example.com/mcp"
+        spellCheck={false}
+        className="font-mono"
+      />
 
       {oauthSection ?? (
         <>

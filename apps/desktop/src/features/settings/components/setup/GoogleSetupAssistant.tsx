@@ -6,6 +6,7 @@ import { useStore } from "@/stores";
 import { GOOGLE_SERVICE_OPTIONS, googleChoiceLabel } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -93,7 +94,7 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">2. Credentials</div>
         <p className="m-0 text-xs text-muted">Create a Google Cloud OAuth client of type Desktop app, download JSON, then paste it or provide a file path.</p>
-        <input className="input-field" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/me/Downloads/client_secret.json" disabled={Boolean(jsonText.trim())} />
+        <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/me/Downloads/client_secret.json" disabled={Boolean(jsonText.trim())} />
         <textarea className="input-field min-h-[100px]" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='{"installed":{"client_id":"..."}}' disabled={Boolean(path.trim())} />
         <div className="flex justify-end">
           <Button size="md" disabled={!credentialsValid || busy === "credentials"} onClick={() => void saveCredentials()}>
