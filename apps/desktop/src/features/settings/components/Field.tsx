@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
+import { Input } from "@/components/ui/Input";
 
+/** Labelled text/password input for settings forms. Thin convenience wrapper
+ *  over {@link Input} with the settings defaults (no spellcheck/autocomplete)
+ *  and a string-valued onChange. */
 export function Field({
   label,
   value,
@@ -16,21 +20,16 @@ export function Field({
   type?: "text" | "password";
 }) {
   return (
-    <div className="grid gap-1">
-      <label className="grid gap-1">
-        <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          spellCheck={false}
-          autoComplete="off"
-          className="input-field w-full"
-        />
-      </label>
-      {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
-    </div>
+    <Input
+      label={label}
+      help={help}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      spellCheck={false}
+      autoComplete="off"
+    />
   );
 }
 
