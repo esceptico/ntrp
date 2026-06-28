@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { JSDOM } from "jsdom";
 import { SuggestionCard, SuggestionsSection } from "@/features/automations/components/AutomationsModal";
 import type { AutomationSuggestion } from "@/api/types";
 
@@ -58,10 +57,10 @@ test("an event-trigger card formats the event schedule chip", () => {
   expect(html).toContain("on:approaching (15m)");
 });
 
-// ─── Interaction (JSDOM) ─────────────────────────────────────────────
+// ─── Interaction (global DOM) ────────────────────────────────────────
 
 test("clicking a card seeds the editor with the mapped payload", async () => {
-  const { dom, rootEl, root, restore } = setupDom();
+  const { rootEl, root, restore } = setupDom();
   try {
     let picked: AutomationSuggestion | null = null;
     await act(async () => {
@@ -72,7 +71,7 @@ test("clicking a card seeds the editor with the mapped payload", async () => {
     const trigger = rootEl.querySelector('[data-suggestion="s1"] button[aria-label^="Use suggestion"]');
     if (!trigger) throw new Error("missing suggestion open button");
     await act(async () => {
-      trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(picked).not.toBeNull();
@@ -85,7 +84,7 @@ test("clicking a card seeds the editor with the mapped payload", async () => {
 });
 
 test("the dismiss button fires onDismiss without triggering the card click", async () => {
-  const { dom, rootEl, root, restore } = setupDom();
+  const { rootEl, root, restore } = setupDom();
   try {
     let picked = 0;
     let dismissed: string | null = null;
@@ -104,7 +103,7 @@ test("the dismiss button fires onDismiss without triggering the card click", asy
     );
     if (!dismissButton) throw new Error("missing dismiss button");
     await act(async () => {
-      dismissButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      dismissButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(dismissed).toBe("s1");
@@ -119,43 +118,11 @@ test("the dismiss button fires onDismiss without triggering the card click", asy
 // ─── helpers ─────────────────────────────────────────────────────────
 
 function setupDom() {
-  const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: "http://localhost" });
-  const testGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
-  const prev = {
-    window: globalThis.window,
-    document: globalThis.document,
-    act: testGlobal.IS_REACT_ACT_ENVIRONMENT,
-    resizeObserver: globalThis.ResizeObserver,
-    raf: globalThis.requestAnimationFrame,
-    caf: globalThis.cancelAnimationFrame,
-  };
-  testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
-  globalThis.window = dom.window as unknown as Window & typeof globalThis;
-  globalThis.document = dom.window.document;
-  // jsdom/bun lack these; ShowMore (overflow measure) + motion need them.
-  globalThis.ResizeObserver =
-    dom.window.ResizeObserver ??
-    (class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver);
-  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 0) as unknown as number) as typeof requestAnimationFrame;
-  globalThis.cancelAnimationFrame = ((handle: number) =>
-    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>)) as typeof cancelAnimationFrame;
-
-  const rootEl = dom.window.document.getElementById("root");
-  if (!rootEl) throw new Error("missing root");
+  const rootEl = document.createElement("div");
+  document.body.append(rootEl);
   const root = createRoot(rootEl);
-
   const restore = () => {
-    globalThis.document = prev.document;
-    globalThis.window = prev.window;
-    testGlobal.IS_REACT_ACT_ENVIRONMENT = prev.act;
-    globalThis.ResizeObserver = prev.resizeObserver;
-    globalThis.requestAnimationFrame = prev.raf;
-    globalThis.cancelAnimationFrame = prev.caf;
+    rootEl.remove();
   };
-  return { dom, rootEl, root, restore };
+  return { rootEl, root, restore };
 }

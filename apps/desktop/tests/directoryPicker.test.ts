@@ -2,21 +2,23 @@ import { afterEach, expect, test } from "bun:test";
 
 import { selectDirectory } from "@/features/sessions/lib/directoryPicker";
 
+const originalWindow = globalThis.window;
+const setWindow = (value: unknown) => {
+  (globalThis as typeof globalThis & { window?: unknown }).window = value;
+};
+
 afterEach(() => {
-  Reflect.deleteProperty(globalThis, "window");
+  setWindow(originalWindow);
 });
 
 test("selectDirectory returns the native directory choice", async () => {
   const calls: unknown[] = [];
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
-      ntrpDesktop: {
-        dialog: {
-          selectDirectory: async (options: unknown) => {
-            calls.push(options);
-            return "/Users/me/src/ntrp";
-          },
+  setWindow({
+    ntrpDesktop: {
+      dialog: {
+        selectDirectory: async (options: unknown) => {
+          calls.push(options);
+          return "/Users/me/src/ntrp";
         },
       },
     },
@@ -27,19 +29,13 @@ test("selectDirectory returns the native directory choice", async () => {
 });
 
 test("selectDirectory returns null when the bridge is unavailable or cancelled", async () => {
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {},
-  });
+  setWindow({});
   await expect(selectDirectory()).resolves.toBeNull();
 
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
-      ntrpDesktop: {
-        dialog: {
-          selectDirectory: async () => null,
-        },
+  setWindow({
+    ntrpDesktop: {
+      dialog: {
+        selectDirectory: async () => null,
       },
     },
   });

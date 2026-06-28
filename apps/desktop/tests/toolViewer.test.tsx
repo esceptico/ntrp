@@ -1,20 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { JSDOM } from "jsdom";
 import { ToolViewer } from "@/features/chat/components/ToolViewer";
 import { setState } from "@/stores/index";
 import { createBackgroundAgentsDomainState } from "@/stores/background-agent-domain";
 import type { ActivityItem } from "@/stores/types";
 
-const originalWindow = globalThis.window;
-const originalDocument = globalThis.document;
-const originalAct = (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
-
 afterEach(() => {
-  globalThis.window = originalWindow;
-  globalThis.document = originalDocument;
-  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = originalAct;
+  delete (globalThis.window as unknown as { ntrpDesktop?: unknown }).ntrpDesktop;
 });
 
 test("agent inspector loads durable child-agent result by child run id", async () => {
@@ -230,21 +223,17 @@ test("agent inspector activity tree labels nested child agents with type and mod
 });
 
 function setupDom(): { appEl: HTMLElement; root: Root; restore: () => void } {
-  const dom = new JSDOM('<!doctype html><div id="root"></div><div id="app"></div>', { url: "http://localhost" });
-  globalThis.window = dom.window as unknown as Window & typeof globalThis;
-  globalThis.document = dom.window.document;
-  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-  const rootEl = dom.window.document.getElementById("root");
-  const appEl = dom.window.document.getElementById("app");
-  if (!rootEl || !appEl) throw new Error("missing root");
+  const rootEl = document.createElement("div");
+  rootEl.id = "root";
+  const appEl = document.createElement("div");
+  appEl.id = "app";
+  document.body.append(rootEl, appEl);
   return {
     appEl,
     root: createRoot(rootEl),
     restore: () => {
-      globalThis.window = originalWindow;
-      globalThis.document = originalDocument;
-      (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = originalAct;
+      rootEl.remove();
+      appEl.remove();
     },
   };
 }

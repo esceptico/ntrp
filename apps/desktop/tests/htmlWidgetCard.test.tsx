@@ -1,27 +1,7 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { JSDOM } from "jsdom";
 import { HtmlWidgetCard } from "@/features/chat/components/HtmlWidgetCard";
 import type { ActivityItem } from "@/stores/index";
-
-const originalWindow = globalThis.window;
-const originalDocument = globalThis.document;
-const originalGetComputedStyle = globalThis.getComputedStyle;
-
-beforeEach(() => {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost" });
-  globalThis.window = dom.window as unknown as Window & typeof globalThis;
-  globalThis.document = dom.window.document;
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(
-    dom.window,
-  ) as typeof globalThis.getComputedStyle;
-});
-
-afterEach(() => {
-  globalThis.window = originalWindow;
-  globalThis.document = originalDocument;
-  globalThis.getComputedStyle = originalGetComputedStyle;
-});
 
 function widgetItem(overrides: Partial<ActivityItem>): ActivityItem {
   return {

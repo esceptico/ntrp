@@ -17,22 +17,24 @@ class MemoryStorage {
   }
 }
 
+const originalWindow = globalThis.window;
+const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
 function installBrowserFallback() {
   const storage = new MemoryStorage();
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: storage,
   });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {},
-  });
+  // A browser window without the Electron bridge — exercises the localStorage path.
+  (globalThis as typeof globalThis & { window?: unknown }).window = {};
   return storage;
 }
 
 afterEach(() => {
-  Reflect.deleteProperty(globalThis, "localStorage");
-  Reflect.deleteProperty(globalThis, "window");
+  if (originalLocalStorage) Object.defineProperty(globalThis, "localStorage", originalLocalStorage);
+  else Reflect.deleteProperty(globalThis, "localStorage");
+  (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
 });
 
 test("persists browser fallback connection config", async () => {

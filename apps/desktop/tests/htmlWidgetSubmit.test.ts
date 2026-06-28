@@ -1,17 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { JSDOM } from "jsdom";
 import { respondToHtmlInput } from "@/actions/htmlInput";
 import { getState, setState } from "@/stores/index";
 
-const originalWindow = globalThis.window;
-
 afterEach(() => {
-  globalThis.window = originalWindow;
+  delete (globalThis.window as unknown as { ntrpDesktop?: unknown }).ntrpDesktop;
 });
 
 function stubApi(calls: { path: string; body: unknown }[], options: { fail?: boolean } = {}) {
-  globalThis.window = new JSDOM("", { url: "http://localhost" }).window as unknown as Window &
-    typeof globalThis;
   (globalThis.window as unknown as { ntrpDesktop: unknown }).ntrpDesktop = {
     api: {
       request: async (_cfg: unknown, req: { path: string; body?: string }) => {

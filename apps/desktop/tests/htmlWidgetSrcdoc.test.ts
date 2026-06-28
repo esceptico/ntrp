@@ -1,5 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
-import { JSDOM } from "jsdom";
+import { expect, test } from "bun:test";
 import {
   buildSrcdoc,
   snapshotThemeVars,
@@ -8,12 +7,6 @@ import {
   WIDGET_CSP_META,
   WIDGET_SANDBOX,
 } from "@/features/chat/lib/srcdoc";
-
-const originalGetComputedStyle = globalThis.getComputedStyle;
-
-afterEach(() => {
-  globalThis.getComputedStyle = originalGetComputedStyle;
-});
 
 test("buildSrcdoc assembles CSP, theme :root, bridge, and body", () => {
   const doc = buildSrcdoc("<p>x</p>", "--color-ink:#111");
@@ -61,18 +54,19 @@ test("bridge swallows anchor navigation out of the sandboxed frame", () => {
 });
 
 test("snapshotThemeVars emits set custom properties and skips empties", () => {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost" });
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(
-    dom.window,
-  ) as typeof globalThis.getComputedStyle;
-  const root = dom.window.document.documentElement;
-  root.style.setProperty("--color-ink", "#1a1a1a");
-  root.style.setProperty("--font-sans", "Inter, sans-serif");
+  const root = document.createElement("div");
+  document.body.append(root);
+  try {
+    root.style.setProperty("--color-ink", "#1a1a1a");
+    root.style.setProperty("--font-sans", "Inter, sans-serif");
 
-  const vars = snapshotThemeVars(root);
+    const vars = snapshotThemeVars(root);
 
-  expect(vars).toContain("--color-ink:#1a1a1a");
-  expect(vars).toContain("--font-sans:Inter, sans-serif");
-  expect(vars).not.toContain("--color-accent:");
-  expect(vars.split(";").every((decl) => !decl.endsWith(":"))).toBe(true);
+    expect(vars).toContain("--color-ink:#1a1a1a");
+    expect(vars).toContain("--font-sans:Inter, sans-serif");
+    expect(vars).not.toContain("--color-accent:");
+    expect(vars.split(";").every((decl) => !decl.endsWith(":"))).toBe(true);
+  } finally {
+    root.remove();
+  }
 });

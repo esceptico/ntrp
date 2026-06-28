@@ -25,6 +25,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.10.6",
     "@tailwindcss/vite": "^4.2.4",
     "@types/d3-force": "^3.0.10",
     "@types/react": "^19.2.14",

@@ -1,7 +1,6 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { JSDOM } from "jsdom";
 import type { AutomationSuggestion, CreateAutomationPayload } from "@/api/types";
 import { suggestionToPayload } from "@/api/automations";
 
@@ -75,7 +74,7 @@ test("a preset without a suggestion id yields no from_suggestion_id", () => {
 // ─── Integration: clicking Create submits the suggestion id ─────────────
 
 test("a create seeded from a suggestion preset submits with from_suggestion_id", async () => {
-  const { dom, root, restore } = setupDom();
+  const { appEl, root, restore } = setupDom();
   try {
     await act(async () => {
       root.render(
@@ -86,7 +85,7 @@ test("a create seeded from a suggestion preset submits with from_suggestion_id",
       );
     });
 
-    await clickCreate(dom);
+    await clickCreate(appEl);
 
     expect(created).toHaveLength(1);
     expect(created[0].from_suggestion_id).toBe("sugg-123");
@@ -98,7 +97,7 @@ test("a create seeded from a suggestion preset submits with from_suggestion_id",
 });
 
 test("a plain create (no preset) submits without from_suggestion_id", async () => {
-  const { dom, root, restore } = setupDom();
+  const { appEl, root, restore } = setupDom();
   try {
     // Seed via a preset that carries no suggestion id so the prompt is valid
     // (valid submit needs a non-empty prompt) but the id stays absent.
@@ -114,7 +113,7 @@ test("a plain create (no preset) submits without from_suggestion_id", async () =
       );
     });
 
-    await clickCreate(dom);
+    await clickCreate(appEl);
 
     expect(created).toHaveLength(1);
     expect(created[0].from_suggestion_id).toBeUndefined();
@@ -127,12 +126,11 @@ test("a plain create (no preset) submits without from_suggestion_id", async () =
 
 // ─── helpers ─────────────────────────────────────────────────────────
 
-async function clickCreate(dom: JSDOM) {
-  const doc = dom.window.document;
-  const create = [...doc.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Create");
+async function clickCreate(appEl: HTMLElement) {
+  const create = [...appEl.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Create");
   if (!create) throw new Error("missing Create button");
   await act(async () => {
-    create.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    create.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   // Let the async submit() microtasks settle so the stub records the payload.
   await act(async () => {
@@ -142,25 +140,12 @@ async function clickCreate(dom: JSDOM) {
 }
 
 function setupDom() {
-  const dom = new JSDOM('<!doctype html><div id="app"></div>', { url: "http://localhost" });
-  const testGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
-  const prev = {
-    window: globalThis.window,
-    document: globalThis.document,
-    act: testGlobal.IS_REACT_ACT_ENVIRONMENT,
-  };
-  testGlobal.IS_REACT_ACT_ENVIRONMENT = true;
-  globalThis.window = dom.window as unknown as Window & typeof globalThis;
-  globalThis.document = dom.window.document;
-
-  const appEl = dom.window.document.getElementById("app");
-  if (!appEl) throw new Error("missing #app");
+  const appEl = document.createElement("div");
+  appEl.id = "app";
+  document.body.append(appEl);
   const root: Root = createRoot(appEl);
-
   const restore = () => {
-    globalThis.document = prev.document;
-    globalThis.window = prev.window;
-    testGlobal.IS_REACT_ACT_ENVIRONMENT = prev.act;
+    appEl.remove();
   };
-  return { dom, doc: dom.window.document, appEl, root, restore };
+  return { appEl, root, restore };
 }
