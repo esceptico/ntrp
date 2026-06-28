@@ -107,9 +107,9 @@ export function ActivityTail({
               <HtmlWidgetCard item={entry.item} />
             </motion.div>
           ) : (
-            <div key={`rows:${i}`} className="relative overflow-hidden pl-3 mt-0.5">
+            <div key={`rows:${i}`} className="relative overflow-hidden pl-1 mt-0.5">
               <AnimatePresence mode="popLayout" initial={false}>
-                {buildRollingList(entry.items, max as number).map((item) => (
+                {buildRollingList(entry.items, max as number).map((item, idx, arr) => (
                   <motion.div
                     key={item.id}
                     data-activity-motion-row="true"
@@ -122,7 +122,12 @@ export function ActivityTail({
                     style={{ height: `${ROW_HEIGHT_EM}em` }}
                     className="flex items-center min-w-0"
                   >
-                    <ItemButton item={item} onOpen={setViewingTool} />
+                    <ItemButton
+                      item={item}
+                      onOpen={setViewingTool}
+                      first={idx === 0}
+                      last={idx === arr.length - 1}
+                    />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -160,7 +165,7 @@ export function ActivityTail({
         }
         const visible = buildStaticTree(entry.items);
         return (
-          <div key={`rows:${i}`} className="pl-3 mt-0.5">
+          <div key={`rows:${i}`} className="pl-1 mt-0.5">
             <AnimatePresence initial={false}>
               {!collapsed && (
                 <motion.div
@@ -178,13 +183,18 @@ export function ActivityTail({
                       : { duration: MOTION.panel, ease: EASE_DECELERATE }
                   }
                 >
-                  {visible.map((item) => (
+                  {visible.map((item, idx, arr) => (
                     <div
                       key={item.id}
                       style={{ height: `${ROW_HEIGHT_EM}em` }}
                       className="flex items-center min-w-0"
                     >
-                      <ItemButton item={item} onOpen={setViewingTool} />
+                      <ItemButton
+                        item={item}
+                        onOpen={setViewingTool}
+                        first={idx === 0}
+                        last={idx === arr.length - 1}
+                      />
                     </div>
                   ))}
                 </motion.div>

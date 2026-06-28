@@ -1456,6 +1456,31 @@ button.app-row:not(:disabled):active,
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
+/* ─── Thinking-step spine ──────────────────────────────────
+   The vertical timeline behind the activity trace. One spine
+   segment per row spans the full gutter height; the first/last
+   step trim it to the node centre (set inline) so the line never
+   dangles past the timeline ends — and each row stays
+   self-contained, so the live trace can mount/unmount rows with
+   no cross-row coordination. The opaque node sits on top and
+   covers the 1px line where they cross. */
+.thinking-spine {
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-line);
+}
+.thinking-node {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+}
+
 /* ─── Depth recession on intermediate work ─────────────────
    Tool lines and reasoning heads are scaffolding, not the
    answer. Soft them down by 22% so user/assistant prose reads

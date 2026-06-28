@@ -62,8 +62,12 @@ test("rolling activity renders orphaned child rows from restored tails", () => {
     />,
   );
 
+  // Raw target survives on the hover title; the visible label is the
+  // natural-language operation verb.
   expect(html).toContain('read_file(path=&quot;a&quot;)');
-  expect(html).toContain("↳");
+  expect(html).toContain("Read");
+  // The spine carries the timeline; nesting reads from indent, not a glyph.
+  expect(html).toContain("thinking-spine");
 });
 
 test("activity header shows active calls separately from total calls", () => {
