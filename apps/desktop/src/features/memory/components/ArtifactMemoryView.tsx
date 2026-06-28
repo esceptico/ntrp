@@ -16,20 +16,13 @@ import {
   type MemoryArtifact,
 } from "@/api/memoryArtifacts";
 import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } from "@/api/memoryItems";
-import {
-  DetailPlaceholder,
-  DetailShell,
-  Empty,
-  GhostBtn,
-  ListColumn,
-  ListError,
-  ListSkeleton,
-  MetaGrid,
-  PaneShell,
-  Pill,
-  Properties,
-  relativeTime,
-} from "@/features/memory/components/shared";
+import { DetailPlaceholder, Empty } from "@/components/ui/EmptyState";
+import { DetailShell } from "@/components/ui/DetailShell";
+import { ListColumn, ListError, ListSkeleton } from "@/components/ui/ListColumn";
+import { MetaGrid } from "@/components/ui/MetaGrid";
+import { PaneShell } from "@/components/ui/PaneShell";
+import { Pill } from "@/components/ui/Pill";
+import { GhostBtn, Properties, relativeTime } from "@/features/memory/components/shared";
 import {
   displayTitle,
   isRecordListPage,

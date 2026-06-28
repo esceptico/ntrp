@@ -12,7 +12,7 @@ import { firstMessageIdInSourceFocus } from "@/lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "@/actions/history";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
 import { BlurSwap } from "@/components/ui/BlurSwap";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { HomeHero } from "@/components/ui/HomeHero";
 import { Message } from "@/features/chat/components/Message";
 import { CompactionIndicator } from "@/features/chat/components/CompactionIndicator";
 import { TurnGroup } from "@/features/chat/components/TurnGroup";
@@ -194,7 +194,7 @@ export function Messages() {
           {!sessionReady
             ? null
             : visibleOrder.length === 0
-              ? <EmptyState />
+              ? <HomeHero />
               : segments.map((seg, index) =>
                   seg.userId
                     ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
