@@ -120,6 +120,60 @@ test("AnchoredPopover with proximity marks rows and suppresses MenuItem hover bg
   restore();
 });
 
+// Keyboard focus drives the highlight too: focusing a tracked row (as roving
+// Arrow/Home/End nav does) sets the active index and renders the traveling
+// highlight — without a render loop (the focus handler writes the same
+// primitive index the pointer uses; activeRect is never an effect dep).
+test("AnchoredPopover with proximity moves the highlight to a keyboard-focused row", async () => {
+  const { appEl, root, restore } = setupDom();
+  await act(async () => {
+    root.render(
+      <AnchoredPopover
+        open
+        onClose={() => {}}
+        anchor={{ x: 10, y: 10 }}
+        ariaLabel="Test"
+        variant="menu"
+        proximity
+      >
+        <MenuItem role="menuitem" tabIndex={-1} onClick={() => {}}>
+          One
+        </MenuItem>
+        <MenuItem role="menuitem" tabIndex={-1} onClick={() => {}}>
+          Two
+        </MenuItem>
+        <MenuItem role="menuitem" tabIndex={-1} onClick={() => {}}>
+          Three
+        </MenuItem>
+      </AnchoredPopover>,
+    );
+  });
+  // Flush the open-time effects (positioning + initial menuitem focus) and the
+  // proximity rAF measure. If the keyboard path looped, this throws.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  const items = appEl.querySelectorAll<HTMLElement>('[role="menuitem"]');
+  expect(items.length).toBe(3);
+
+  // Focus the second row (what ArrowDown would land on) and let state settle.
+  await act(async () => {
+    items[1].focus();
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 5));
+  });
+
+  // The traveling highlight is now present (a focused row activated it).
+  expect(appEl.querySelector("div[aria-hidden]")).not.toBeNull();
+  // Focus stayed where roving nav put it (no focus-restore regression).
+  expect(globalThis.document.activeElement).toBe(items[1]);
+
+  await act(async () => root.unmount());
+  restore();
+});
+
 // A bare MenuItem (no AnchoredPopover context) keeps default hover — the
 // context defaults to false so non-proximity call sites are unaffected.
 test("MenuItem outside a proximity popover keeps its hover background", async () => {

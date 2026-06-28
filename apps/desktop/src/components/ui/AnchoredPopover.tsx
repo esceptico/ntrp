@@ -206,6 +206,7 @@ export function AnchoredPopover({
           onContextMenu={isMenu ? (e) => e.preventDefault() : undefined}
           onMouseMove={proximity ? prox.handlers.onMouseMove : undefined}
           onMouseLeave={proximity ? prox.handlers.onMouseLeave : undefined}
+          onFocus={proximity ? prox.handlers.onFocus : undefined}
           role={isMenu ? "menu" : undefined}
           aria-label={ariaLabel}
           onKeyDown={isMenu ? onMenuKeyDown : undefined}
