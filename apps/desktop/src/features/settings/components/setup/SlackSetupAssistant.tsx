@@ -4,6 +4,7 @@ import { connectServiceApi, getSetupStatusApi, verifySlackTokenApi } from "@/api
 import { useStore } from "@/stores";
 import { slackTokenPrefixValid, type SlackSetupServiceId } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
+import { Button } from "@/components/ui/Button";
 
 export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -77,9 +78,9 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
           <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm disabled:opacity-[0.45]" disabled={!token.trim() || busy === "save"} onClick={() => void save()}>
             Save without verification
           </button>
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm disabled:opacity-[0.45]" disabled={!prefixValid || busy === "save"} onClick={() => void save()}>
+          <Button size="md" disabled={!prefixValid || busy === "save"} onClick={() => void save()}>
             {busy === "save" ? "Saving…" : "Save token"}
-          </button>
+          </Button>
         </div>
         {verifyResult && (
           <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted">
@@ -100,9 +101,9 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
           </div>
         )}
         {saved && (
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm justify-self-end" onClick={() => void onDone()}>
+          <Button size="md" className="justify-self-end" onClick={() => void onDone()}>
             Done
-          </button>
+          </Button>
         )}
       </section>
     </div>

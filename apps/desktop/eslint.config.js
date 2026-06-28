@@ -44,6 +44,10 @@ const crossFeatureZones = FEATURES.map((f) => ({
 
 export default tseslint.config({
   files: ["src/**/*.{ts,tsx}"],
+  // This config only enforces import boundaries; it doesn't run react-hooks
+  // rules, so don't flag the codebase's `eslint-disable react-hooks/*`
+  // directives as unused.
+  linterOptions: { reportUnusedDisableDirectives: "off" },
   // react-hooks registered only so existing `// eslint-disable react-hooks/*`
   // comments resolve; its rules are intentionally NOT enabled here.
   plugins: { import: importPlugin, "react-hooks": reactHooks },

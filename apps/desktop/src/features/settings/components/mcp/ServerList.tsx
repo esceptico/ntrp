@@ -4,6 +4,7 @@ import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState"
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { ICON } from "@/lib/icons";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { Button } from "@/components/ui/Button";
 import { Empty } from "@/features/settings/components/mcp/atoms";
 import { ServerRow } from "@/features/settings/components/mcp/ServerRow";
 
@@ -43,13 +44,9 @@ export function ServerList({
                 >
                   Run setup assistant
                 </button>
-                <button
-                  type="button"
-                  onClick={onAdd}
-                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-                >
+                <Button size="sm" onClick={onAdd}>
                   <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
-                </button>
+                </Button>
               </div>
             )
           }

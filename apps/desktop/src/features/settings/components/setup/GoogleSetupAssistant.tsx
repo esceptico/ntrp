@@ -5,6 +5,7 @@ import { fetchServerConfig, updateServerConfig } from "@/actions";
 import { useStore } from "@/stores";
 import { GOOGLE_SERVICE_OPTIONS, googleChoiceLabel } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
+import { Button } from "@/components/ui/Button";
 
 export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -95,9 +96,9 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
         <input className="input-field" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/me/Downloads/client_secret.json" disabled={Boolean(jsonText.trim())} />
         <textarea className="input-field min-h-[100px]" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='{"installed":{"client_id":"..."}}' disabled={Boolean(path.trim())} />
         <div className="flex justify-end">
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm disabled:opacity-[0.45]" disabled={!credentialsValid || busy === "credentials"} onClick={() => void saveCredentials()}>
+          <Button size="md" disabled={!credentialsValid || busy === "credentials"} onClick={() => void saveCredentials()}>
             {busy === "credentials" ? "Saving…" : "Save credentials"}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -119,9 +120,9 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">4. Connect</div>
         <p className="m-0 text-xs text-muted">ntrp opens a browser and waits for the local OAuth redirect.</p>
-        <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm justify-self-start disabled:opacity-[0.45]" disabled={busy === "connect"} onClick={() => void connect()}>
+        <Button size="md" className="justify-self-start" disabled={busy === "connect"} onClick={() => void connect()}>
           {busy === "connect" ? "Connecting…" : "Connect Google account"}
-        </button>
+        </Button>
       </section>
 
       <section className="grid gap-2">
@@ -137,9 +138,9 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
           </div>
         )}
         {connected && (
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm justify-self-end" onClick={() => void onDone()}>
+          <Button size="md" className="justify-self-end" onClick={() => void onDone()}>
             Done
-          </button>
+          </Button>
         )}
       </section>
     </div>

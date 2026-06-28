@@ -4,6 +4,7 @@ import { addMCPServerApi, getSetupStatusApi, startMCPOAuthApi } from "@/api";
 import { useStore } from "@/stores";
 import { parseKeyValueLines, parseMCPServerImport, splitLines } from "@/features/settings/lib/setupAssistant";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
+import { Button } from "@/components/ui/Button";
 
 export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -120,9 +121,9 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
         <textarea className="input-field min-h-[110px]" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='{"mcpServers":{"server":{"transport":"stdio","command":"npx"}}}' />
         {jsonText.trim() && <div className="text-xs text-muted">{imported ? `JSON import ready: ${imported.name}` : "JSON import will be validated on save."}</div>}
         <div className="flex justify-end">
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm disabled:opacity-[0.45]" disabled={busy === "save"} onClick={() => void save()}>
+          <Button size="md" disabled={busy === "save"} onClick={() => void save()}>
             {busy === "save" ? "Saving…" : "Save MCP server"}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -145,9 +146,9 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
           </div>
         )}
         {saved && (
-          <button type="button" className="h-8 px-3 rounded-md bg-ink text-on-ink text-sm justify-self-end" onClick={() => void onDone()}>
+          <Button size="md" className="justify-self-end" onClick={() => void onDone()}>
             Done
-          </button>
+          </Button>
         )}
       </section>
     </div>
