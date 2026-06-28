@@ -1,6 +1,7 @@
 import {
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -52,6 +53,10 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   const [open, setOpen] = useState(false);
   const [instant, setInstant] = useState(false);
   const [placement, setPlacement] = useState<TooltipPlacement | null>(null);
+  // Portal mounts client-side only — keeps the component SSR/renderToStaticMarkup
+  // safe (createPortal + document.body aren't touched until after mount).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const tipId = useId();
 
   const clear = () => {
@@ -158,38 +163,39 @@ export function Tooltip({ label, children, side = "top", className }: TooltipPro
   return (
     <>
       {trigger}
-      {createPortal(
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              ref={tipRef}
-              id={tipId}
-              role="tooltip"
-              initial={{ opacity: 0, scale: 0.96, [axis]: sign * 3 }}
-              animate={{ opacity: 1, scale: 1, [axis]: 0 }}
-              exit={{ opacity: 0, scale: 0.96, transition: EXIT_FAST }}
-              transition={
-                instant ? { duration: 0 } : { duration: DURATION_POPOVER, ease: EASE_DECELERATE }
-              }
-              style={{
-                position: "fixed",
-                top: placement?.top ?? 0,
-                left: placement?.left ?? 0,
-                visibility: placement ? undefined : "hidden",
-                zIndex: "var(--z-tooltip)",
-                transformOrigin: origin,
-              }}
-              className={clsx(
-                "surface-panel surface-popover pointer-events-none max-w-[min(18rem,80vw)] px-2 py-1 text-xs leading-snug text-ink",
-                className,
-              )}
-            >
-              {label}
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body,
-      )}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                ref={tipRef}
+                id={tipId}
+                role="tooltip"
+                initial={{ opacity: 0, scale: 0.96, [axis]: sign * 3 }}
+                animate={{ opacity: 1, scale: 1, [axis]: 0 }}
+                exit={{ opacity: 0, scale: 0.96, transition: EXIT_FAST }}
+                transition={
+                  instant ? { duration: 0 } : { duration: DURATION_POPOVER, ease: EASE_DECELERATE }
+                }
+                style={{
+                  position: "fixed",
+                  top: placement?.top ?? 0,
+                  left: placement?.left ?? 0,
+                  visibility: placement ? undefined : "hidden",
+                  zIndex: "var(--z-tooltip)",
+                  transformOrigin: origin,
+                }}
+                className={clsx(
+                  "surface-panel surface-popover pointer-events-none max-w-[min(18rem,80vw)] px-2 py-1 text-xs leading-snug text-ink",
+                  className,
+                )}
+              >
+                {label}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </>
   );
 }
