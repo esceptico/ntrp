@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileText, Pin, Search } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import clsx from "clsx";
+import { FileText, Search } from "lucide-react";
+import { useReducedMotion } from "motion/react";
 import type { AppConfig } from "@/api/core";
-import { IconButton } from "@/components/ui/IconButton";
-import { Markdown } from "@/components/ui/Markdown";
-import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";
-import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
+import { wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
-import { TabPanels } from "@/components/ui/TabPanels";
 import {
   listMemoryArtifacts,
   readMemoryArtifact,
@@ -16,23 +11,11 @@ import {
   type MemoryArtifact,
 } from "@/api/memoryArtifacts";
 import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } from "@/api/memoryItems";
-import { DetailPlaceholder, Empty } from "@/components/ui/EmptyState";
-import { DetailShell } from "@/components/ui/DetailShell";
-import { ListColumn, ListError, ListSkeleton } from "@/components/ui/ListColumn";
-import { MetaGrid } from "@/components/ui/MetaGrid";
+import { Empty } from "@/components/ui/EmptyState";
+import { ListError, ListSkeleton } from "@/components/ui/ListColumn";
 import { PaneShell } from "@/components/ui/PaneShell";
-import { Pill } from "@/components/ui/Pill";
-import { GhostBtn, Properties, relativeTime } from "@/features/memory/components/shared";
-import {
-  displayTitle,
-  isRecordListPage,
-  kindLabel,
-  scopeLabel,
-  searchMatches,
-  stripCites,
-  stripLeadingH1,
-} from "@/features/memory/lib/format";
-import { TimelineDisclosure } from "@/features/memory/components/MemoryTimelineDisclosure";
+import { GhostBtn } from "@/features/memory/components/shared";
+import { searchMatches } from "@/features/memory/lib/format";
 import { FlatRow, TreeRow, TreeSearch } from "@/features/memory/components/MemoryFileTree";
 import {
   buildArtifactTree,
@@ -41,7 +24,9 @@ import {
   flattenTreeFiles,
 } from "@/features/memory/lib/artifactTree";
 import { addAlias, isMissingArtifactError, preferredAlias } from "@/features/memory/lib/wikiResolution";
-import { CopyPath } from "@/features/memory/components/CopyPath";
+import { FileDetailPane } from "@/features/memory/components/FileDetailPane";
+import { RecordDetailPane } from "@/features/memory/components/RecordDetailPane";
+import { RecordListPane } from "@/features/memory/components/RecordListPane";
 
 const RECORD_PAGE_SIZE = 100;
 
@@ -383,242 +368,47 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   );
 
   // ─── Records list pane ──────────────────────────────────────────────
-  const recordKindToolbar = (
-    <select
-      value={recordKind}
-      onChange={(e) => setRecordKind(e.target.value as MemoryKind | "")}
-      aria-label="Filter by record kind"
-      className="h-7 rounded-[10px] bg-surface-soft px-2 text-sm text-ink-soft outline-none"
-    >
-      <option value="">All kinds</option>
-      <option value="fact">Facts</option>
-      <option value="directive">Rules</option>
-      <option value="source">Sources</option>
-    </select>
-  );
-
   const recordsList = (
-    <>
-      <TreeSearch value={query} onChange={setQuery} placeholder="Search raw DB facts/records…" />
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
-        {modeToggle}
-        {recordKindToolbar}
-      </div>
-      <ListColumn
-        toolbar={null}
-        items={records}
-        loading={recordsLoading}
-        skeleton
-        error={
-          recordsError ? (
-            <ListError
-              title="Couldn't load memory records"
-              message={recordsError}
-              onRetry={() => setRecordsRefreshKey((k) => k + 1)}
-            />
-          ) : undefined
-        }
-        empty={query.trim() ? "No records match your search" : "No memory records yet"}
-        emptyIcon={query.trim() ? Search : Database}
-        emptyAction={query.trim() ? <GhostBtn onClick={() => setQuery("")}>Clear search</GhostBtn> : undefined}
-        totalLabel={records.length ? `${records.length} records` : null}
-        wrapItems={(children) => <AnimatePresence initial={false}>{children}</AnimatePresence>}
-        renderItem={(record) => (
-          <motion.li
-            key={record.id}
-            layout={!reduce}
-            initial={reduce ? false : RISE_IN}
-            animate={RISE_SETTLED}
-            exit={reduce ? { opacity: 0 } : ROW_EXIT}
-            transition={SPRING_ROW_ENTRY}
-            className="group/row relative"
-          >
-            <button
-              type="button"
-              onClick={() => selectRecord(record.id)}
-              className={clsx(
-                "w-full rounded-[10px] p-2 pr-7 text-left transition-colors",
-                selectedRecordId === record.id ? "bg-surface-sunken" : "hover:bg-surface-soft",
-              )}
-            >
-              <div className="line-clamp-2 text-sm text-ink">{record.content}</div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-2xs text-muted">
-                <span className="font-medium">{kindLabel(record.kind)}</span>
-                {record.scope?.kind && record.scope.kind !== "global" && (
-                  <>
-                    <span className="text-faint">·</span>
-                    <span>{scopeLabel(record.scope)}</span>
-                  </>
-                )}
-                {record.pinned && (
-                  <>
-                    <span className="text-faint">·</span>
-                    <span>pinned</span>
-                  </>
-                )}
-                <span className="text-faint">·</span>
-                <span className="tabular-nums">{relativeTime(record.updated_at)}</span>
-              </div>
-            </button>
-            <IconButton
-              size="xs"
-              tone="faint"
-              disabled={pinningId === record.id}
-              title={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
-              aria-label={record.pinned ? "Unpin — drop from always-on Profile" : "Pin — always keep in context"}
-              aria-pressed={record.pinned}
-              onClick={() => togglePinned(record)}
-              className={clsx("absolute right-1 top-1 focus-visible:opacity-100", record.pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100")}
-            >
-              <Pin className="h-3.5 w-3.5" fill={record.pinned ? "currentColor" : "none"} strokeWidth={2} />
-            </IconButton>
-          </motion.li>
-        )}
-      />
-    </>
+    <RecordListPane
+      query={query}
+      onQueryChange={setQuery}
+      modeToggle={modeToggle}
+      recordKind={recordKind}
+      onRecordKindChange={setRecordKind}
+      records={records}
+      recordsLoading={recordsLoading}
+      recordsError={recordsError}
+      selectedRecordId={selectedRecordId}
+      pinningId={pinningId}
+      reduce={!!reduce}
+      onSelectRecord={selectRecord}
+      onTogglePinned={togglePinned}
+      onRetry={() => setRecordsRefreshKey((k) => k + 1)}
+    />
   );
 
   // ─── Files detail pane ──────────────────────────────────────────────
-  const filesDetail = !active ? (
-    loading ? (
-      <DetailPlaceholder>Loading…</DetailPlaceholder>
-    ) : (
-      <DetailPlaceholder icon={FileText} hint="Pick a note from the list to read it.">
-        Nothing selected
-      </DetailPlaceholder>
-    )
-  ) : (
-    <TabPanels
-      value={active.path}
+  const filesDetail = (
+    <FileDetailPane
+      active={active}
+      loading={loading}
       direction={filesDirection}
-      className="h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden"
-    >
-    <DetailShell
-      header={
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-medium tracking-tight text-ink truncate">{displayTitle(active)}</h1>
-            <div className="mt-1 font-mono text-xs text-muted break-all">{active.path}</div>
-          </div>
-          <CopyPath path={active.path} />
-        </div>
-      }
-      body={
-        <>
-          {active.readonly_reason && (
-            <div className="mb-4 rounded-[10px] bg-surface-soft px-3 py-2 text-sm text-muted">
-              {active.readonly_reason}
-            </div>
-          )}
-          {contentNotice && (
-            <div className="mb-4 rounded-[10px] bg-surface-soft px-3 py-2 text-sm text-muted">
-              {contentNotice}
-            </div>
-          )}
-          {contentError && !active.content ? (
-            <ListError
-              title="Couldn't load this note"
-              message={contentError}
-              onRetry={() => setContentRefreshKey((k) => k + 1)}
-            />
-          ) : contentLoading && !active.content ? (
-            <DetailPlaceholder>Loading artifact…</DetailPlaceholder>
-          ) : (
-            <WikiLinkContext.Provider value={wikiHandlers}>
-              <Properties frontmatter={active.frontmatter} />
-              <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
-              {/* Record-list pages (directives/lessons/references/insights) already render
-                  their records as the body — don't repeat them in the timeline disclosure. */}
-              {!isRecordListPage(active.path) && <TimelineDisclosure timeline={active.timeline} />}
-            </WikiLinkContext.Provider>
-          )}
-        </>
-      }
-      meta={
-        <MetaGrid
-          rows={[
-            // record count lives in the Timeline disclosure header — don't repeat it here
-            !!active.source && { label: "Source", value: active.source! },
-            !active.editable && { label: "Access", value: "read-only" },
-          ]}
-        />
-      }
-      actions={
-        active.labels.length > 0 ? (
-          <div className="mr-auto flex flex-wrap items-center gap-1">
-            {active.labels.map((label) => (
-              <Pill key={label} tone="neutral">
-                {label}
-              </Pill>
-            ))}
-          </div>
-        ) : null
-      }
+      contentNotice={contentNotice}
+      contentError={contentError}
+      contentLoading={contentLoading}
+      wikiHandlers={wikiHandlers}
+      onRetry={() => setContentRefreshKey((k) => k + 1)}
     />
-    </TabPanels>
   );
 
   // ─── Records detail pane ────────────────────────────────────────────
-  const recordsDetail = !selectedRecord ? (
-    <DetailPlaceholder icon={Database} hint="Pick a record from the list to inspect it.">
-      Nothing selected
-    </DetailPlaceholder>
-  ) : (
-    <TabPanels
-      value={selectedRecord.id}
+  const recordsDetail = (
+    <RecordDetailPane
+      record={selectedRecord}
       direction={recordsDirection}
-      className="h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden"
-    >
-    <DetailShell
-      header={
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-medium capitalize tracking-tight text-ink">{kindLabel(selectedRecord.kind)}</h1>
-            <div className="mt-1 font-mono text-xs text-muted break-all">{selectedRecord.id}</div>
-          </div>
-          <GhostBtn
-            onClick={() => togglePinned(selectedRecord)}
-            disabled={pinningId === selectedRecord.id}
-            title={selectedRecord.pinned ? "Drop from the always-on Profile block" : "Always keep this record in context"}
-          >
-            <Pin className="h-3.5 w-3.5" fill={selectedRecord.pinned ? "currentColor" : "none"} strokeWidth={2} />
-            {selectedRecord.pinned ? "Pinned" : "Pin"}
-          </GhostBtn>
-        </div>
-      }
-      body={
-        <div className="min-w-0 whitespace-pre-wrap break-words text-base leading-relaxed text-ink">
-          {selectedRecord.content}
-        </div>
-      }
-      meta={
-        <MetaGrid
-          rows={[
-            { label: "Kind", value: kindLabel(selectedRecord.kind) },
-            { label: "Scope", value: scopeLabel(selectedRecord.scope) },
-            { label: "Status", value: selectedRecord.status },
-            { label: "Updated", value: relativeTime(selectedRecord.updated_at) },
-            selectedRecord.source_refs.length > 0 && {
-              label: "Sources",
-              value: selectedRecord.source_refs.map((s) => `${s.kind}: ${s.ref}`).join("\n"),
-              mono: true,
-            },
-          ]}
-        />
-      }
-      actions={
-        selectedRecord.labels.length > 0 ? (
-          <div className="mr-auto flex flex-wrap items-center gap-1">
-            {selectedRecord.labels.map((label) => (
-              <Pill key={label} tone="neutral">
-                {label}
-              </Pill>
-            ))}
-          </div>
-        ) : null
-      }
+      pinningId={pinningId}
+      onTogglePinned={togglePinned}
     />
-    </TabPanels>
   );
 
   return (
