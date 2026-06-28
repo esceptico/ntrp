@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Database, FileText, Folder, FolderOpen, Pin, Search, X } from "lucide-react";
+import { Database, FileText, Pin, Search } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
 import type { AppConfig } from "@/api/core";
 import { IconButton } from "@/components/ui/IconButton";
 import { Markdown } from "@/components/ui/Markdown";
 import { WikiLinkContext, wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";
-import { ICON } from "@/lib/icons";
-import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
+import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { TabPanels } from "@/components/ui/TabPanels";
 import {
@@ -31,90 +30,26 @@ import {
   Properties,
   relativeTime,
 } from "@/features/memory/components/shared";
+import {
+  displayTitle,
+  isRecordListPage,
+  kindLabel,
+  scopeLabel,
+  searchMatches,
+  stripCites,
+  stripLeadingH1,
+} from "@/features/memory/components/lib/format";
+import { TimelineDisclosure } from "@/features/memory/components/MemoryTimelineDisclosure";
+import { FlatRow, TreeRow, TreeSearch, type TreeNode } from "@/features/memory/components/MemoryFileTree";
 
 const RECORD_PAGE_SIZE = 100;
 
 type MemoryViewMode = "files" | "records";
 
-type TreeNode = {
-  name: string;
-  path: string;
-  kind: "directory" | "file";
-  artifact?: MemoryArtifact;
-  children: TreeNode[];
-};
-
 // Folder sort + default-expand order, post topics/-unification (entities/ & projects/
 // are folded into topics/).
 const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"];
 const DEFAULT_EXPANDED_DIRS = new Set(["topics", "daily", "insights", "observations"]);
-
-// Pages whose body already IS their records (never prose-synthesized) — keep in sync
-// with the server's artifacts._is_record_list_page.
-const RECORD_LIST_PAGES = new Set(["directives.md", "lessons.md", "references.md"]);
-function isRecordListPage(path: string): boolean {
-  return RECORD_LIST_PAGES.has(path) || path.split("/")[0] === "insights";
-}
-
-function displayFileName(a: MemoryArtifact) {
-  const leaf = a.path.split("/").pop() ?? a.path;
-  return leaf.replace(/\.md$/, "");
-}
-
-function displayTitle(a: MemoryArtifact) {
-  return a.title || displayFileName(a);
-}
-
-// Strip inline (record:XXXXXXXX) provenance groups from synthesized prose for the
-// human view — they stay on disk. Mirrors the server's _CITATION_GROUP_RE so a lone
-// 8-hex token not wrapped in (record:…) is left alone.
-const _CITE_RE = /\s*\(record:[0-9a-fA-F]{8}(?:,\s*record:[0-9a-fA-F]{8})*\)/g;
-function stripCites(s: string): string {
-  return s.replace(_CITE_RE, "");
-}
-
-// The detail header already shows the page title, so a leading `# Title` H1 in the
-// body just double-prints it (index.md, health.md, topic pages). Drop it for the view.
-function stripLeadingH1(s: string): string {
-  return s.replace(/^\s*#\s+.*\r?\n+/, "");
-}
-
-function TimelineDisclosure({ timeline }: { timeline?: MemoryArtifact["timeline"] }) {
-  const records = (timeline ?? []).filter((l) => !l.superseded);
-  const supersededCount = (timeline ?? []).length - records.length;
-  if (records.length === 0) return null;
-  const label = records.length === 1 ? "record" : "records";
-  return (
-    <details className="mt-6 border-t border-line pt-3">
-      <summary className="cursor-pointer text-xs font-medium text-muted">Timeline · {records.length} {label}</summary>
-      <ol className="mt-2 space-y-1">
-        {records.map((l) => (
-          <li key={l.id} className="flex gap-2 text-xs">
-            <span className="shrink-0 font-mono tabular-nums text-muted">{l.date}</span>
-            <span className="min-w-0 break-words text-ink">{l.text}</span>
-            <span className="ml-auto shrink-0 text-muted">{l.src}</span>
-          </li>
-        ))}
-      </ol>
-      {supersededCount > 0 && <div className="mt-2 text-xs text-muted">+{supersededCount} superseded</div>}
-    </details>
-  );
-}
-
-function scopeLabel(scope: { kind: string; key: string | null }) {
-  return scope.key ? `${scope.kind}:${scope.key}` : scope.kind;
-}
-
-// Plain user-facing words for internal kind values.
-const _KIND_LABELS: Record<string, string> = {
-  directive: "rule",
-  observation: "observed",
-  lesson: "lesson",
-  changelog: "change",
-};
-function kindLabel(kind: string) {
-  return _KIND_LABELS[kind] ?? kind;
-}
 
 function directorySort(a: TreeNode, b: TreeNode) {
   if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
@@ -189,13 +124,6 @@ function flattenTreeFiles(nodes: TreeNode[]): string[] {
   return out;
 }
 
-function searchMatches(a: MemoryArtifact, q: string) {
-  return [a.path, a.title, a.kind, a.directory, ...a.labels, a.source ?? "", a.snippet ?? ""]
-    .join(" ")
-    .toLowerCase()
-    .includes(q);
-}
-
 function aliasKey(value: string) {
   return value.trim().toLowerCase();
 }
@@ -249,176 +177,6 @@ function CopyPath({ path }: { path: string }) {
     <GhostBtn onClick={() => void copy()}>
       {state === "copied" ? "Copied" : state === "unavailable" ? "Copy unavailable" : "Copy path"}
     </GhostBtn>
-  );
-}
-
-/** Full-bleed search header with a leading icon — the file-tree variant of
- *  SearchInput's chrome, sized to the 52px list header. */
-function TreeSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <div className="relative flex-none h-[52px] border-b border-line-soft">
-      <Search
-        size={ICON.XS}
-        strokeWidth={2}
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        spellCheck={false}
-        className="h-full w-full bg-transparent pl-10 pr-9 text-sm text-ink-soft placeholder:text-muted outline-none"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          aria-label="Clear search"
-          className="absolute right-2.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-faint hover:bg-surface-soft hover:text-ink"
-        >
-          <X size={ICON.XS} strokeWidth={2} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Tree rows ────────────────────────────────────────────────────────
-
-function TreeRow({
-  node,
-  depth,
-  expanded,
-  onToggle,
-  selectedPath,
-  onSelect,
-  reduce,
-}: {
-  node: TreeNode;
-  depth: number;
-  expanded: Set<string>;
-  onToggle: (path: string) => void;
-  selectedPath: string | null;
-  onSelect: (path: string) => void;
-  reduce: boolean;
-}) {
-  const indent = depth * 14;
-
-  if (node.kind === "directory") {
-    const open = expanded.has(node.path);
-    return (
-      <>
-        <button
-          type="button"
-          role="treeitem"
-          aria-expanded={open}
-          aria-level={depth + 1}
-          onClick={() => onToggle(node.path)}
-          title={node.name}
-          className="group mt-1 flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left transition-colors hover:bg-surface-soft"
-          style={{ marginLeft: indent }}
-        >
-          <ChevronRight
-            className={clsx("h-3 w-3 shrink-0 text-faint transition-transform duration-200", open && "rotate-90")}
-            strokeWidth={2.25}
-          />
-          {open ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-faint" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-faint" />}
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-soft group-hover:text-ink">{node.name}</span>
-          <span className="shrink-0 text-2xs tabular-nums text-muted">{countFiles(node)}</span>
-        </button>
-        {/* Snap layout — no height-tween over the recursive subtree. The
-            revealed block rises in as one unit (bounded on big folders);
-            initial={false} keeps the all-expanded mount from animating. */}
-        <AnimatePresence initial={false}>
-          {open && (
-            <motion.div
-              key="children"
-              initial={reduce ? false : RISE_IN}
-              animate={RISE_SETTLED}
-              exit={
-                reduce
-                  ? { opacity: 0, transition: { duration: 0 } }
-                  : { opacity: 0, filter: "blur(3px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }
-              }
-              transition={
-                reduce
-                  ? { duration: 0 }
-                  : { duration: MOTION.panel, ease: EASE_EMPHASIZED }
-              }
-              className="flex flex-col gap-px"
-            >
-              {node.children.map((child) => (
-                <TreeRow
-                  key={child.kind === "directory" ? `d:${child.path}` : `f:${child.path}`}
-                  node={child}
-                  depth={depth + 1}
-                  expanded={expanded}
-                  onToggle={onToggle}
-                  selectedPath={selectedPath}
-                  onSelect={onSelect}
-                  reduce={reduce}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </>
-    );
-  }
-
-  const a = node.artifact!;
-  const active = selectedPath === a.path;
-  return (
-    <button
-      type="button"
-      role="treeitem"
-      aria-level={depth + 1}
-      onClick={() => onSelect(a.path)}
-      title={`${displayTitle(a)} — ${a.path}`}
-      className={clsx(
-        "group flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left transition-colors",
-        active ? "bg-surface-sunken" : "hover:bg-surface-soft",
-      )}
-      style={{ marginLeft: indent }}
-    >
-      <span className="w-3 shrink-0" aria-hidden />
-      <FileText className={clsx("h-3.5 w-3.5 shrink-0", active ? "text-muted" : "text-faint")} />
-      <span
-        className={clsx(
-          "min-w-0 flex-1 truncate text-sm",
-          active ? "font-medium text-ink" : "text-ink-soft group-hover:text-ink",
-        )}
-      >
-        {displayFileName(a)}
-      </span>
-    </button>
-  );
-}
-
-function FlatRow({ a, active, onSelect }: { a: MemoryArtifact; active: boolean; onSelect: (path: string) => void }) {
-  const segments = a.path.split("/");
-  const leaf = segments[segments.length - 1].replace(/\.md$/, "");
-  const parent = segments.slice(0, -1).join(" / ");
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(a.path)}
-      title={a.path}
-      className={clsx(
-        "group flex min-w-0 items-start gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors",
-        active ? "bg-surface-sunken" : "hover:bg-surface-soft",
-      )}
-    >
-      <FileText className={clsx("mt-px h-3.5 w-3.5 shrink-0", active ? "text-muted" : "text-faint")} />
-      <span className="min-w-0 flex-1">
-        <span className={clsx("block truncate text-sm", active ? "font-medium text-ink" : "text-ink-soft group-hover:text-ink")}>
-          {leaf}
-        </span>
-        {parent && <span className="block truncate text-2xs text-muted">{parent}</span>}
-      </span>
-    </button>
   );
 }
 
@@ -748,6 +506,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
                 selectedPath={selectedMeta?.path ?? null}
                 onSelect={selectFile}
                 reduce={!!reduce}
+                countFiles={countFiles}
               />
             ))}
           </div>
