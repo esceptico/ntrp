@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes, ComponentType, Ref, ReactNode } from "react";
-import { AlertCircle, Calendar, Inbox, List, Loader2, Search, Text, X } from "lucide-react";
+import type { ButtonHTMLAttributes, ComponentType, ReactNode } from "react";
+import { AlertCircle, Calendar, Inbox, List, Text } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "@/lib/icons";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
@@ -420,57 +420,3 @@ export function DangerBtn({
   );
 }
 
-// ─── Toolbar ──────────────────────────────────────────────────────────
-
-export function SearchInput({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel = placeholder,
-  autoFocus = false,
-  busy = false,
-  inputRef,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  ariaLabel?: string;
-  autoFocus?: boolean;
-  busy?: boolean;
-  inputRef?: Ref<HTMLInputElement>;
-}) {
-  const Icon = busy ? Loader2 : Search;
-  return (
-    <div className="relative flex-1 min-w-0">
-      <Icon
-        size={ICON.XS}
-        strokeWidth={2}
-        className={clsx(
-          "absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none",
-          busy && "animate-spin",
-        )}
-      />
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        autoFocus={autoFocus}
-        spellCheck={false}
-        className="w-full h-7 pl-7 pr-7 rounded-[10px] bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-muted outline-none transition-[background-color,border-color]"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          aria-label="Clear search"
-          className="absolute right-1.5 top-1/2 grid size-4 -translate-y-1/2 place-items-center rounded text-faint hover:bg-surface-soft hover:text-ink"
-        >
-          <X size={ICON.XS} strokeWidth={2} />
-        </button>
-      )}
-    </div>
-  );
-}

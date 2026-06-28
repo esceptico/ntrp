@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArchiveRestore, Search, Trash2 } from "lucide-react";
+import { ArchiveRestore, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import { EASE_OUT, MOTION, ROW_EXIT, SPRING_LAYOUT } from "@/lib/tokens/motion";
@@ -11,6 +11,7 @@ import { formatRelativePast } from "@/lib/format";
 import { ICON } from "@/lib/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 export function ArchiveTab() {
   const archived = useStore((s) => s.archivedSessions);
@@ -37,7 +38,16 @@ export function ArchiveTab() {
             ? `${archivedCount} archived session${archivedCount === 1 ? "" : "s"}. Restore one to bring it back, or delete it for good.`
             : "Sessions you archive show up here."}
         </p>
-        {archivedCount > 0 && <SearchInput value={query} onChange={setQuery} />}
+        {archivedCount > 0 && (
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Filter…"
+            ariaLabel="Filter"
+            showClear
+            className="w-[200px] shrink-0"
+          />
+        )}
       </div>
 
       {filtered === null ? (
@@ -186,29 +196,3 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SearchInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="relative w-[200px] shrink-0">
-      <Search
-        size={ICON.XS}
-        strokeWidth={2}
-        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Filter…"
-        aria-label="Filter"
-        spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-surface-soft text-sm text-ink-soft placeholder:text-muted outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
-      />
-    </div>
-  );
-}

@@ -8,6 +8,7 @@ import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState"
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
@@ -98,13 +99,11 @@ export function ToolsTab() {
         </p>
         <div className="flex items-center gap-2.5">
           <SaveStatus busy={busy} saved={saved} />
-          <input
+          <SearchInput
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={setQuery}
             placeholder="Search tools"
-            aria-label="Search tools"
-            spellCheck={false}
-            className="w-[220px] h-8 px-2.5 rounded-md border border-line-soft bg-surface text-sm text-ink outline-none focus:border-line transition-colors"
+            className="w-[220px]"
           />
         </div>
       </div>
