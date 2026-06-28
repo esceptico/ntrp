@@ -50,6 +50,7 @@ export function SidebarFilters() {
         open={open}
         onClose={() => setOpen(false)}
         anchor={triggerRef}
+        proximity
         className="w-[200px] py-1.5"
       >
         <SectionLabel>Group by</SectionLabel>

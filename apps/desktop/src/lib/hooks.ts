@@ -244,6 +244,117 @@ export function useListNav(
 }
 
 
+export interface ProximityRect {
+  top: number;
+  height: number;
+}
+
+export interface ProximityHover {
+  /** Layout rect of the row nearest the cursor, or null when outside. */
+  activeRect: ProximityRect | null;
+  handlers: {
+    onMouseMove: (e: React.MouseEvent) => void;
+    onMouseLeave: () => void;
+  };
+}
+
+/** Rows opt into proximity tracking by carrying this attribute; the hook
+ *  discovers them in DOM order (no per-row registration bookkeeping). */
+export const PROXIMITY_ITEM_ATTR = "data-proximity-item";
+
+/**
+ * A single traveling highlight for a vertical menu list (Fluid Functionalism
+ * proximity-hover, adapted). On pointer move the hook finds the row nearest the
+ * cursor among `[data-proximity-item]` descendants of `containerRef` and
+ * returns its layout box (`activeRect`) so the consumer can ease one
+ * absolutely-positioned highlight toward it — instead of per-row `:hover`
+ * backgrounds.
+ *
+ * Rects use `offsetTop/offsetHeight` (layout values, immune to the popover's
+ * in-flight `scale` entrance); the cursor hit-test compensates for any
+ * cumulative ancestor `transform: scale` so the highlight tracks the cursor
+ * even mid-animation. Handler identities are stable across renders and only a
+ * primitive index drives state, so a consumer never gets a fresh object in an
+ * effect dep (no update-depth loop).
+ */
+export function useProximityHover(
+  containerRef: RefObject<HTMLElement | null>,
+): ProximityHover {
+  const rectsRef = useRef<ProximityRect[]>([]);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const moveRaf = useRef<number | null>(null);
+
+  const measure = useCallback((container: HTMLElement) => {
+    const rows = container.querySelectorAll<HTMLElement>(`[${PROXIMITY_ITEM_ATTR}]`);
+    const rects: ProximityRect[] = [];
+    rows.forEach((el, i) => {
+      rects[i] = { top: el.offsetTop, height: el.offsetHeight };
+    });
+    rectsRef.current = rects;
+    return rects;
+  }, []);
+
+  const onMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      const mouseY = e.clientY;
+      if (moveRaf.current !== null) cancelAnimationFrame(moveRaf.current);
+      moveRaf.current = requestAnimationFrame(() => {
+        moveRaf.current = null;
+        const container = containerRef.current;
+        if (!container) return;
+        // Remeasure each settle — cheap (≤ a handful of rows) and keeps the
+        // highlight correct after the list changes or the panel finishes
+        // scaling in, without an extra observer/effect.
+        const rects = measure(container);
+        const box = container.getBoundingClientRect();
+        // Map layout coords (offset*) into viewport space, accounting for an
+        // ancestor scale (the popover scales 0.97→1 on entrance) and scroll.
+        const layout = container.offsetHeight;
+        const scale = layout > 0 ? box.height / layout : 1;
+        const scroll = container.scrollTop;
+        const edge = box.top + container.clientTop * scale;
+
+        let containing: number | null = null;
+        let nearest: number | null = null;
+        let nearestDist = Infinity;
+        for (let i = 0; i < rects.length; i++) {
+          const r = rects[i];
+          if (!r) continue;
+          const start = edge + (r.top - scroll) * scale;
+          const size = r.height * scale;
+          if (mouseY >= start && mouseY <= start + size) containing = i;
+          const dist = Math.abs(mouseY - (start + size / 2));
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearest = i;
+          }
+        }
+        setActiveIndex(containing ?? nearest);
+      });
+    },
+    [containerRef, measure],
+  );
+
+  const onMouseLeave = useCallback(() => {
+    if (moveRaf.current !== null) {
+      cancelAnimationFrame(moveRaf.current);
+      moveRaf.current = null;
+    }
+    setActiveIndex(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (moveRaf.current !== null) cancelAnimationFrame(moveRaf.current);
+    },
+    [],
+  );
+
+  const activeRect = activeIndex !== null ? rectsRef.current[activeIndex] ?? null : null;
+
+  return { activeRect, handlers: { onMouseMove, onMouseLeave } };
+}
+
 /** Invokes `callback` once on mount, then on each `intervalMs` tick
  *  (skipped when the document is hidden), and again on every visibility
  *  transition back to "visible". The latest `callback` is captured in a

@@ -1,10 +1,24 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  createContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { EXIT_FAST, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { EXIT_FAST, MOTION, SPRING_LAYOUT, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { useProximityHover } from "@/lib/hooks";
 
 const MARGIN = 8;
+
+/** Set when an AnchoredPopover runs in `proximity` mode: a single traveling
+ *  highlight replaces per-row hover backgrounds. MenuItem reads this to drop
+ *  its own `hover:bg-*` (it would double-paint over the traveling highlight)
+ *  while keeping its text-colour hover. `null` = ordinary popover. */
+export const ProximityContext = createContext<boolean>(false);
 
 /** Cursor point (context menu) or a trigger element to anchor below (popover). */
 export type Anchor = { x: number; y: number } | DOMRect | RefObject<HTMLElement | null>;
@@ -24,6 +38,10 @@ interface AnchoredPopoverProps {
   /** Close when any ancestor scrolls (capture phase). Context menus pin to a
    *  cursor point, so a scroll invalidates them; trigger popovers reflow. */
   closeOnScroll?: boolean;
+  /** Opt-in proximity hover: a single highlight eases toward the row nearest
+   *  the cursor (Fluid Functionalism) instead of per-row `:hover` backgrounds.
+   *  Off by default — existing consumers are unchanged. */
+  proximity?: boolean;
   children: ReactNode;
 }
 
@@ -57,6 +75,7 @@ export function AnchoredPopover({
   variant = "popover",
   ariaLabel,
   closeOnScroll = false,
+  proximity = false,
   children,
 }: AnchoredPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -64,6 +83,10 @@ export function AnchoredPopover({
   const [pos, setPos] = useState({ left: 0, top: 0, transformOrigin: "top left", ready: false });
 
   const isMenu = variant === "menu";
+
+  // Proximity hover shares the panel's own ref as its measurement container.
+  const prox = useProximityHover(ref);
+  const proxRect = proximity ? prox.activeRect : null;
 
   // A point anchor can move while the popover stays open (right-clicking a
   // different row without closing first); re-measure when it does. Rect/ref
@@ -181,11 +204,30 @@ export function AnchoredPopover({
           className={clsx("surface-panel surface-popover fixed z-[var(--z-popover)]", className)}
           style={{ left: pos.left, top: pos.top, transformOrigin: pos.transformOrigin }}
           onContextMenu={isMenu ? (e) => e.preventDefault() : undefined}
+          onMouseMove={proximity ? prox.handlers.onMouseMove : undefined}
+          onMouseLeave={proximity ? prox.handlers.onMouseLeave : undefined}
           role={isMenu ? "menu" : undefined}
           aria-label={ariaLabel}
           onKeyDown={isMenu ? onMenuKeyDown : undefined}
         >
-          {children}
+          {/* Traveling proximity highlight — one element easing toward the row
+              nearest the cursor; pointer-events:none so it never steals clicks
+              or hover from the rows beneath it. */}
+          {proximity && (
+            <AnimatePresence>
+              {proxRect && (
+                <motion.div
+                  aria-hidden
+                  className="absolute inset-x-1 rounded-md bg-surface-soft pointer-events-none"
+                  initial={{ opacity: 0, top: proxRect.top, height: proxRect.height }}
+                  animate={{ opacity: 1, top: proxRect.top, height: proxRect.height }}
+                  exit={{ opacity: 0, transition: EXIT_FAST }}
+                  transition={{ ...SPRING_LAYOUT, opacity: { duration: MOTION.fast } }}
+                />
+              )}
+            </AnimatePresence>
+          )}
+          <ProximityContext.Provider value={proximity}>{children}</ProximityContext.Provider>
         </motion.div>
       )}
     </AnimatePresence>,
