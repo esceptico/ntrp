@@ -18,7 +18,7 @@ import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ModelReasoningChip } from "@/components/ui/ComposerSelectors";
 import { LoopStatusBar } from "@/features/chat/components/LoopStatus";
 import { BudgetDial } from "@/features/chat/components/BudgetDial";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { IconButton } from "@/components/ui/IconButton";
 import { useListNav, useTimeoutFlag } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
 import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
@@ -434,16 +434,14 @@ export function Composer() {
           />
         </div>
         <div className="composer-toolbar flex items-center gap-1.5 px-2 pt-1.5 pb-2">
-          <Tooltip label="Attach image">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach image"
-              className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
-            >
-              <ImagePlus size={ICON.LG} strokeWidth={2} />
-            </button>
-          </Tooltip>
+          <IconButton
+            shape="circle"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach image"
+            title="Attach image"
+          >
+            <ImagePlus size={ICON.LG} strokeWidth={2} />
+          </IconButton>
           <Chip
             size="sm"
             active={skipApprovals}

@@ -7,6 +7,7 @@ import { ICON } from "@/lib/icons";
 import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 
 // Cap visible stack to 2 cards. The front card already shows "1 of N" when
 // there are more pending, so a third sliver doesn't add information — it
@@ -385,22 +386,16 @@ function ApprovalCard({
             <span className="w-px h-5 bg-line-soft mx-0.5" aria-hidden />
           </>
         )}
-        <button
-          type="button"
+        <IconButton
           tabIndex={interactive ? 0 : -1}
           onClick={() => setDenyOpen((v) => !v)}
           aria-label="Deny with reason"
           aria-expanded={denyOpen}
           title="Deny with reason"
-          className={
-            "grid place-items-center w-7 h-7 rounded-md transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] " +
-            (denyOpen
-              ? "bg-surface text-ink"
-              : "text-muted hover:bg-surface hover:text-ink")
-          }
+          active={denyOpen}
         >
           <MessageSquareText size={ICON.SM} strokeWidth={2} />
-        </button>
+        </IconButton>
         <Button
           variant="secondary"
           size="sm"

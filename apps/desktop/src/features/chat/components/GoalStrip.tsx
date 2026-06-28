@@ -3,6 +3,7 @@ import { clearGoal, updateGoal } from "@/actions/goals";
 import { useStore } from "@/stores";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Badge } from "@/components/ui/Badge";
 import { Chip } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
 import { HoverPopover } from "@/components/ui/HoverPopover";
@@ -43,9 +44,9 @@ export function GoalStatusBar() {
         <div className="mb-2 flex items-center gap-2">
           <Target size={ICON.SM} strokeWidth={2} className="text-accent" />
           <span className="text-xs font-medium text-muted">Goal</span>
-          <span className="ml-auto rounded-md border border-line-soft px-1.5 py-0.5 text-2xs text-muted">
+          <Badge variant="outline" tone="neutral" shape="rounded" className="ml-auto">
             {goal.status.replace("_", " ")}
-          </span>
+          </Badge>
         </div>
         <div className="scroll-thin max-h-36 overflow-auto text-sm text-ink-soft whitespace-pre-wrap">
           {goal.objective}

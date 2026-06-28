@@ -3,6 +3,7 @@ import { CalendarDays, Mail } from "lucide-react";
 import { type GmailAccount } from "@/api/settings";
 import { type GoogleConnectionSummary } from "@/features/settings/lib/integrationConnection";
 import { ICON } from "@/lib/icons";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
@@ -29,10 +30,10 @@ export function GoogleCard({
   const pendingGoogle = pendingId === "google";
   const pendingAdd = pendingId === "gmail:add";
   const summaryTone = {
-    ready: "bg-ok-soft text-ok",
-    paused: "bg-warn-soft text-warn",
-    setup: "bg-surface-soft text-muted",
-  }[summary.tone];
+    ready: "ok",
+    paused: "warn",
+    setup: "neutral",
+  }[summary.tone] as BadgeTone;
 
   return (
     <section className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
@@ -41,9 +42,7 @@ export function GoogleCard({
           <div className="flex items-center gap-2 min-w-0">
             <GoogleIcon enabled={enabled} />
             <div className="text-base font-medium text-ink truncate">Google Workspace</div>
-            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-2xs font-medium", summaryTone)}>
-              {summary.label}
-            </span>
+            <Badge tone={summaryTone}>{summary.label}</Badge>
           </div>
           <div className="text-xs text-muted leading-[1.4]">
             Gmail and Calendar share the same Google account token.

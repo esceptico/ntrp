@@ -111,15 +111,16 @@ export function LoopStatusBar() {
             const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
             return (
               <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
-                <button
-                  type="button"
+                <IconButton
+                  size="xs"
+                  tone="faint"
                   onClick={() => void stopLoop(loop.task_id)}
                   title="Stop loop"
                   aria-label="Stop loop"
-                  className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-[color,background-color,scale] duration-check ease-out active:scale-[0.92]"
+                  className="mt-[2px] shrink-0"
                 >
                   <X size={ICON.SM} strokeWidth={2} />
-                </button>
+                </IconButton>
                 <button
                   type="button"
                   onClick={() => setOpenLoop(loop)}

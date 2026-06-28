@@ -4,6 +4,7 @@ import { acceptGoalProposal, cancelGoalProposal, editGoalProposal } from "@/acti
 import { ICON } from "@/lib/icons";
 import { RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { SECTION_ENTER, SECTION_EXIT } from "@/features/chat/lib/composerMotion";
+import { IconButton } from "@/components/ui/IconButton";
 
 export function GoalProposalCard({ objective }: { objective: string }) {
   return (
@@ -20,33 +21,34 @@ export function GoalProposalCard({ objective }: { objective: string }) {
           <div className="text-2xs font-medium text-muted">Proposed goal</div>
           <div className="max-h-10 overflow-hidden text-sm leading-5 text-ink-soft">{objective}</div>
         </div>
-        <button
-          type="button"
+        <IconButton
+          shape="circle"
+          tone="primary"
           onClick={() => void acceptGoalProposal()}
           title="Accept goal"
           aria-label="Accept goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-on-ink hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
+          className="shrink-0"
         >
           <Check size={ICON.SM} strokeWidth={2.4} />
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
+          shape="circle"
           onClick={editGoalProposal}
           title="Edit goal"
           aria-label="Edit goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
+          className="shrink-0"
         >
           <Pencil size={ICON.SM} strokeWidth={2} />
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
+          shape="circle"
           onClick={cancelGoalProposal}
           title="Cancel goal"
           aria-label="Cancel goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
+          className="shrink-0"
         >
           <X size={ICON.SM} strokeWidth={2} />
-        </button>
+        </IconButton>
       </div>
     </motion.div>
   );
