@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStore } from "@/stores";
 import { updateServerConfig, fetchServerConfig } from "@/actions";
 import type { ModelGroup } from "@/api";
-import { ModelReasoningPicker } from "@/features/chat/components/ComposerSelectors";
+import { ModelReasoningPicker } from "@/components/ui/ComposerSelectors";
 import { useTimeoutFlag } from "@/lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";

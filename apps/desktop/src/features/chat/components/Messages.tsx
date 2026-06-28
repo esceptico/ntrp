@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/stores";
-import { messagesScroll } from "@/features/chat/lib/messagesScroll";
+import { messagesScroll } from "@/lib/messagesScroll";
 import { visibleMessageIds } from "@/lib/messageVisibility";
 import { messageSegments } from "@/features/chat/lib/messageSegments";
 import { firstMessageIdInSourceFocus } from "@/lib/messageSourceFocus";

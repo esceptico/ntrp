@@ -52,7 +52,7 @@ import { automationTrustLabel, automationTrustTone } from "@/features/automation
 import { agentRunFromAutomation, formatRelative, formatTrigger } from "@/lib/agentRun";
 import { AutomationEditor, type EditorSeed } from "@/features/automations/components/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "@/features/automations/lib/templates";
-import { AgentRunContent, type AgentRunAction } from "@/features/background-agents/components/AgentRunRow";
+import { AgentRunContent, type AgentRunAction } from "@/components/ui/AgentRunRow";
 import { Badge } from "@/components/ui/Badge";
 import { PageModal } from "@/components/ui/PageModal";
 import { ICON } from "@/lib/icons";

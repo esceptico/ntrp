@@ -61,11 +61,11 @@ import {
 import { createSession, refreshChildAgents, sendMessage, switchSession } from "@/actions";
 import { useWorkflows } from "@/hooks/useWorkflows";
 import { isActiveWorkflow, workflowKey } from "@/stores/workflow-domain";
-import { ExpandableWorkflowCard } from "@/features/background-agents/components/WorkflowDetail";
+import { ExpandableWorkflowCard } from "@/components/ui/WorkflowDetail";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { StatusDot } from "@/components/ui/StatusDot";
-import { AgentRunRow } from "@/features/background-agents/components/AgentRunRow";
+import { AgentRunRow } from "@/components/ui/AgentRunRow";
 import { Collapse } from "@/components/ui/Collapse";
 import { Tooltip } from "@/components/ui/Tooltip";
 export { isActiveBackgroundAgent } from "@/stores/background-agent-domain";

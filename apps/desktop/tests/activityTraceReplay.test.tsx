@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ActivityHeader, ActivityTail, liftWorkflows, orderedTraceEntries } from "@/features/chat/components/ActivityTrace";
-import { WorkflowProgressCard } from "@/features/background-agents/components/WorkflowProgress";
+import { WorkflowProgressCard } from "@/components/ui/WorkflowProgress";
 import { activityTraceStats } from "@/lib/agent";
 import { turnHeaderLabel } from "@/features/chat/lib/turnHeader";
 import { setState } from "@/stores/index";

@@ -5,7 +5,7 @@ import {
   cancelSubagentApi,
 } from "@/api";
 import { getState, setState, type ActivityItem, type ImageBlock } from "@/stores";
-import { messagesScroll } from "@/features/chat/lib/messagesScroll";
+import { messagesScroll } from "@/lib/messagesScroll";
 import {
   reduceRunCompleted,
   reduceRunFailed,

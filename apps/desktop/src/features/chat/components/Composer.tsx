@@ -21,7 +21,7 @@ import { GoalStatusBar } from "@/features/chat/components/GoalStrip";
 import { CommandPicker } from "@/features/chat/components/CommandPicker";
 import { Chip } from "@/components/ui/Chip";
 import { BlurSwap } from "@/components/ui/BlurSwap";
-import { ModelReasoningChip } from "@/features/chat/components/ComposerSelectors";
+import { ModelReasoningChip } from "@/components/ui/ComposerSelectors";
 import { LoopStatusBar } from "@/features/chat/components/LoopStatus";
 import { BudgetDial } from "@/features/chat/components/BudgetDial";
 import { Tooltip } from "@/components/ui/Tooltip";

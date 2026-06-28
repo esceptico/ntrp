@@ -12,7 +12,7 @@ import { highlight } from "@/lib/highlight";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
 import { isActiveWorkflow, type Workflow, type WorkflowAgent, type WorkflowPhase } from "@/stores/workflow-domain";
-import { formatTokens, PhaseSparkline, pipClass, WorkflowProgressCard } from "@/features/background-agents/components/WorkflowProgress";
+import { formatTokens, PhaseSparkline, pipClass, WorkflowProgressCard } from "@/components/ui/WorkflowProgress";
 
 // A workflow card that expands IN PLACE to reveal its phases → agents — used in
 // both the chat trace and the sidebar hub, each with its own local expand state.

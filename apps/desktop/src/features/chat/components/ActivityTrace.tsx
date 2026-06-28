@@ -20,7 +20,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
 import { useWorkflows } from "@/hooks/useWorkflows";
-import { ExpandableWorkflowCard } from "@/features/background-agents/components/WorkflowDetail";
+import { ExpandableWorkflowCard } from "@/components/ui/WorkflowDetail";
 import { HtmlWidgetCard } from "@/features/chat/components/HtmlWidgetCard";
 import type { Workflow, WorkflowStatus } from "@/stores/workflow-domain";
 

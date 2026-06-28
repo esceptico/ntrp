@@ -1,7 +1,7 @@
 import { Bot, Radio } from "lucide-react";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
-import { StatusDot } from "@/features/background-agents/components/AgentRightSidebar";
+import { StatusDot } from "@/components/ui/StatusDot";
 
 type SessionIconState = "streaming" | "unread" | "channel" | "agent" | "idle";
 
