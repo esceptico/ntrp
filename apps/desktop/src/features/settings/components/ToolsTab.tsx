@@ -9,6 +9,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { DividedList } from "@/components/ui/DividedList";
 
 export function ToolsTab() {
   const config = useStore((s) => s.config);
@@ -110,7 +111,7 @@ export function ToolsTab() {
             <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-muted">
               {formatSource(source)} ({items.length})
             </h3>
-            <ul className="rounded-[10px] border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
+            <DividedList>
               {items.map((tool) => {
                 const current = overrides[tool.name] ?? baseDecision(tool);
                 return (
@@ -136,7 +137,7 @@ export function ToolsTab() {
                   </li>
                 );
               })}
-            </ul>
+            </DividedList>
           </section>
         ))}
       </div>

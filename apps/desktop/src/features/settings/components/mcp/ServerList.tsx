@@ -5,6 +5,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings
 import { ICON } from "@/lib/icons";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Button } from "@/components/ui/Button";
+import { DividedList } from "@/components/ui/DividedList";
 import { Empty } from "@/features/settings/components/mcp/atoms";
 import { ServerRow } from "@/features/settings/components/mcp/ServerRow";
 
@@ -61,11 +62,11 @@ export function ServerList({
         ) : servers.length === 0 ? (
           <Empty>No MCP servers yet.</Empty>
         ) : (
-          <ul className="min-w-0 overflow-hidden rounded-[10px] border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
+          <DividedList className="min-w-0 overflow-hidden">
             {servers.map((s) => (
               <ServerRow key={s.name} server={s} onEdit={() => onEdit(s.name)} onChanged={onChanged} />
             ))}
-          </ul>
+          </DividedList>
         )}
       </div>
     </div>

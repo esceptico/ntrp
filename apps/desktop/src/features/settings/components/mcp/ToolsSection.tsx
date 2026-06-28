@@ -8,6 +8,7 @@ import { SettingsInlineError } from "@/features/settings/components/SettingsNoti
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SwitchControl } from "@/components/ui/SwitchControl";
+import { DividedList } from "@/components/ui/DividedList";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
 export function ToolsSection({
@@ -59,7 +60,7 @@ export function ToolsSection({
         count={server.tools.length}
         action={<SaveStatus busy={busy} saved={saved} />}
       />
-      <ul className="rounded-md border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
+      <DividedList className="!rounded-md">
         {server.tools.map((t) => {
           const checked = enabledNames.has(t.name);
           return (
@@ -94,7 +95,7 @@ export function ToolsSection({
             </li>
           );
         })}
-      </ul>
+      </DividedList>
       {error && <SettingsInlineError title="Couldn't update tools" message={error} />}
     </div>
   );
