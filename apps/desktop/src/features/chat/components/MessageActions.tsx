@@ -1,0 +1,109 @@
+import { useState } from "react";
+import { GitBranch, Pencil } from "lucide-react";
+import clsx from "clsx";
+import { useStore } from "@/stores";
+import { CopyGlyph } from "@/components/ui/CopyGlyph";
+import { branchAtMessage } from "@/actions/sessions";
+import { ICON } from "@/lib/icons";
+import { IconButton } from "@/components/ui/IconButton";
+import { useTimeoutFlag } from "@/lib/hooks";
+
+function formatMessageTime(ms: number): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  if (sameDay) return time;
+  const month = d.toLocaleString(undefined, { month: "short" });
+  return `${month} ${d.getDate()} · ${time}`;
+}
+
+export function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
+  const [copied, flashCopied] = useTimeoutFlag(1200);
+  const [branching, setBranching] = useState(false);
+  const startedAt = useStore((s) => s.messages.get(id)?.turn?.startedAt);
+
+  async function copy() {
+    const message = useStore.getState().messages.get(id);
+    if (!message) return;
+    await window.ntrpDesktop?.clipboard?.writeText(message.content);
+    flashCopied();
+  }
+
+  function edit() {
+    const message = useStore.getState().messages.get(id);
+    if (!message) return;
+    useStore.getState().setEditingId(id);
+    useStore.getState().setDraft(message.content);
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLTextAreaElement>("#message-input");
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(message.content.length, message.content.length);
+    });
+  }
+
+  async function branch() {
+    if (branching) return;
+    setBranching(true);
+    try {
+      await branchAtMessage(id);
+    } finally {
+      setBranching(false);
+    }
+  }
+
+  const timeLabel = startedAt && startedAt > 0 ? formatMessageTime(startedAt) : null;
+
+  return (
+    <div
+      className={clsx(
+        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-row ease-out",
+        role === "user" && "justify-end",
+      )}
+    >
+      <IconButton
+        size="sm"
+        tone="faint"
+        onClick={copy}
+        title="Copy"
+        className={clsx(copied && "!text-ok hover:!text-ok")}
+      >
+        <CopyGlyph copied={copied} size={ICON.SM} />
+      </IconButton>
+      {role === "assistant" && (
+        <IconButton
+          size="sm"
+          tone="faint"
+          onClick={() => void branch()}
+          disabled={branching}
+          title="Branch from this message"
+        >
+          <GitBranch size={ICON.SM} strokeWidth={2} />
+        </IconButton>
+      )}
+      {role === "user" && (
+        <IconButton size="sm" tone="faint" onClick={edit} title="Edit and resend">
+          <Pencil size={ICON.SM} strokeWidth={2} />
+        </IconButton>
+      )}
+      {timeLabel && (
+        <span
+          className={clsx(
+            "text-xs text-faint tracking-[-0.005em] select-none",
+            role === "user" ? "order-first mr-0.5" : "ml-0.5",
+          )}
+        >
+          {timeLabel}
+        </span>
+      )}
+    </div>
+  );
+}
