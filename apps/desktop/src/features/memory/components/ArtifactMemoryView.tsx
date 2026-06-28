@@ -38,7 +38,7 @@ import {
   searchMatches,
   stripCites,
   stripLeadingH1,
-} from "@/features/memory/components/lib/format";
+} from "@/features/memory/lib/format";
 import { TimelineDisclosure } from "@/features/memory/components/MemoryTimelineDisclosure";
 import { FlatRow, TreeRow, TreeSearch, type TreeNode } from "@/features/memory/components/MemoryFileTree";
 

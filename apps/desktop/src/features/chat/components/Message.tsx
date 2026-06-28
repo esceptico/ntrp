@@ -36,7 +36,7 @@ import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ICON } from "@/lib/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTimeoutFlag } from "@/lib/hooks";
-import { useSmoothStreamedContent } from "@/features/chat/lib/useSmoothStream";
+import { useSmoothStreamedContent } from "@/features/chat/hooks/useSmoothStream";
 
 // Background tint only — the previous inset 1px ring stacked
 // visually badly when several adjacent messages were focused at once,

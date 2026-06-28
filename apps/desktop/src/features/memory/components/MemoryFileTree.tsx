@@ -4,7 +4,7 @@ import clsx from "clsx";
 import type { MemoryArtifact } from "@/api/memoryArtifacts";
 import { ICON } from "@/lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
-import { displayFileName, displayTitle } from "@/features/memory/components/lib/format";
+import { displayFileName, displayTitle } from "@/features/memory/lib/format";
 
 export type TreeNode = {
   name: string;
