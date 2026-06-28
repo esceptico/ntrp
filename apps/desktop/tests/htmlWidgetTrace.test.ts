@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { orderedTraceEntries } from "@/components/trace/ActivityTrace";
-import type { ActivityItem } from "@/store/index";
+import { orderedTraceEntries } from "@/features/chat/components/ActivityTrace";
+import type { ActivityItem } from "@/stores/index";
 
 function toolRow(id: string): ActivityItem {
   return { id, kind: "read_file", target: `read_file(${id})`, status: "executed" };

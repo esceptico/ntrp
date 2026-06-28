@@ -1,6 +1,6 @@
 import { apiWithConfig, compactSessionApi, listPrimarySessionsApi, type SessionListItem } from "@/api";
-import { getState } from "@/store";
-import { forgetEventSeqForSession } from "@/store/chat-stream";
+import { getState } from "@/stores";
+import { forgetEventSeqForSession } from "@/stores/chat-stream";
 import { loadHistory } from "@/actions/history";
 import { enqueueMessage, sendMessage } from "@/actions/messages";
 import { switchSession } from "@/actions/sessions";

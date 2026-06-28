@@ -4,27 +4,27 @@ import {
   type ServerEvent,
   type SessionRuntimeSnapshot,
 } from "@/api";
-import { getState, setState } from "@/store";
+import { getState, setState } from "@/stores";
 import {
   clearReplayGapBlockForSession,
   lastEventSeqForSession,
   rehydrateWorkflows,
   setEventCursorForSession,
-} from "@/store/chat-stream";
+} from "@/stores/chat-stream";
 import {
   isCurrentHistoryReplaceRequestVersion,
   nextHistoryReplaceRequestVersion,
   reduceHistoryLoadFailed,
   reduceHistoryLoadStarted,
-} from "@/store/session-view";
+} from "@/stores/session-view";
 import {
   reduceForegroundRunCleared,
   reduceRunCompleted,
   reduceRunStarted,
-} from "@/store/run-lifecycle";
+} from "@/stores/run-lifecycle";
 import {
   isTodoToolName,
-} from "@/store/transcript-projection";
+} from "@/stores/transcript-projection";
 import {
   cachedSessionFromHistory,
   historyMessagesToUi,
@@ -33,7 +33,7 @@ import {
   queuedMessagesFromRuntime,
   runtimeView,
   type HistoryResponse,
-} from "@/store/history-response";
+} from "@/stores/history-response";
 import { isForegroundRunStatus } from "@/lib/runStatus";
 import { refreshChildAgents } from "@/actions/childAgents";
 

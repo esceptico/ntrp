@@ -4,7 +4,7 @@ import {
   backgroundAgentToast,
   isTerminalStatus,
 } from "@/lib/taskToast";
-import type { BackgroundAgent } from "@/store/background-agent-domain";
+import type { BackgroundAgent } from "@/stores/background-agent-domain";
 
 const agent = (over: Partial<BackgroundAgent> = {}): BackgroundAgent => ({
   taskId: "t1",

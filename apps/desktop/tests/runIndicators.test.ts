@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { awaitingFirstRunOutput } from "@/lib/runIndicators";
+import { awaitingFirstRunOutput } from "@/features/chat/lib/runIndicators";
 
 test("thinking indicator waits only after a visible user turn", () => {
   expect(awaitingFirstRunOutput(false, [{ role: "user" }])).toBe(false);

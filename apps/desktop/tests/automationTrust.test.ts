@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Automation } from "@/api";
-import { automationTrustLabel, automationTrustTone } from "@/lib/automationTrust";
+import { automationTrustLabel, automationTrustTone } from "@/features/automations/lib/automationTrust";
 
 function automation(patch: Partial<Automation>): Automation {
   return {

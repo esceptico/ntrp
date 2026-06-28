@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { HtmlWidgetCard } from "@/components/widget/HtmlWidgetCard";
-import type { ActivityItem } from "@/store/index";
+import { HtmlWidgetCard } from "@/features/chat/components/HtmlWidgetCard";
+import type { ActivityItem } from "@/stores/index";
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;

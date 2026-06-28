@@ -6,7 +6,7 @@ import {
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
 } from "@/hooks/useEvents";
-import { getState, setState } from "@/store/index";
+import { getState, setState } from "@/stores/index";
 
 beforeEach(() => {
   resetStreamStateForTest();

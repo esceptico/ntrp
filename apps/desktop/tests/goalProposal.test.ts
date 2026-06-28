@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runBuiltinCommand } from "@/actions/builtins";
 import { acceptGoalProposal, cancelGoalProposal, editGoalProposal } from "@/actions/goals";
-import { getState, setState } from "@/store/index";
+import { getState, setState } from "@/stores/index";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 

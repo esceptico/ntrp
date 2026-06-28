@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import { ToolViewer } from "@/components/ToolViewer";
-import { setState } from "@/store/index";
-import { createBackgroundAgentsDomainState } from "@/store/background-agent-domain";
-import type { ActivityItem } from "@/store/types";
+import { ToolViewer } from "@/features/chat/components/ToolViewer";
+import { setState } from "@/stores/index";
+import { createBackgroundAgentsDomainState } from "@/stores/background-agent-domain";
+import type { ActivityItem } from "@/stores/types";
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;

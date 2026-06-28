@@ -12,7 +12,7 @@ import {
   statusDotClass,
 } from "@/lib/agentRun";
 import type { Automation } from "@/api";
-import type { ActivityItem, BackgroundAgent } from "@/store/types";
+import type { ActivityItem, BackgroundAgent } from "@/stores/types";
 
 function automation(overrides: Partial<Automation> = {}): Automation {
   return {

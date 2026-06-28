@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import { ScrollBlurTop } from "@/components/ScrollBlur";
+import { ScrollBlurTop } from "@/components/ui/ScrollBlur";
 
 test("top blur observes the message scroller without living inside its scroll flow", async () => {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: "http://localhost" });

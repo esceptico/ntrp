@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import { ApprovalBanner } from "@/components/ApprovalBanner";
+import { ApprovalBanner } from "@/features/chat/components/ApprovalBanner";
 import { respondToApproval } from "@/actions/approvals";
-import { setState } from "@/store/index";
+import { setState } from "@/stores/index";
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;

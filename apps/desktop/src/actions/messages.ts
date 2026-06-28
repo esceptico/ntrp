@@ -4,16 +4,16 @@ import {
   cancelRun,
   cancelSubagentApi,
 } from "@/api";
-import { getState, setState, type ActivityItem, type ImageBlock } from "@/store";
-import { messagesScroll } from "@/lib/messagesScroll";
+import { getState, setState, type ActivityItem, type ImageBlock } from "@/stores";
+import { messagesScroll } from "@/features/chat/lib/messagesScroll";
 import {
   reduceRunCompleted,
   reduceRunFailed,
   reduceRunStarted,
   reduceRunStopCleared,
   reduceRunStopRequested,
-} from "@/store/run-lifecycle";
-import { clearCachedStoppingRun } from "@/store/session-cache";
+} from "@/stores/run-lifecycle";
+import { clearCachedStoppingRun } from "@/stores/session-cache";
 
 interface SendMessageOptions {
   meta?: boolean;

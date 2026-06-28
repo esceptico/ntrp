@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { SuggestionCard, SuggestionsSection } from "@/components/AutomationsModal";
+import { SuggestionCard, SuggestionsSection } from "@/features/automations/components/AutomationsModal";
 import type { AutomationSuggestion } from "@/api";
 
 function suggestion(overrides: Partial<AutomationSuggestion> = {}): AutomationSuggestion {

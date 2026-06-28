@@ -1,5 +1,5 @@
 import { submitToolResult } from "@/api";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 import type { HtmlWidgetResolution } from "@/lib/htmlWidget";
 
 /** Resolve a blocked render_html input call. Returns false when the POST

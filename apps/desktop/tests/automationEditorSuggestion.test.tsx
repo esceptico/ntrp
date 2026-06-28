@@ -23,7 +23,7 @@ mock.module("@/actions/index", () => ({
 // Imported after the mock is registered so the component picks up the stub,
 // and so the module-local helpers are available for focused unit tests.
 const { AutomationEditor, formFromPreset, buildPayload } = await import(
-  "@/components/automations/AutomationEditor"
+  "@/features/automations/components/AutomationEditor"
 );
 
 beforeEach(() => {

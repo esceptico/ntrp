@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { TodoListItem } from "@/api";
-import { nextTodoStatus, todoSignature } from "@/lib/todoOverride";
+import { nextTodoStatus, todoSignature } from "@/features/background-agents/lib/todoOverride";
 
 const agent: TodoListItem[] = [
   { content: "a", status: "completed" },

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { projectHistoryResponse, type HistoryResponse } from "@/store/history-response";
-import type { UiMessage } from "@/store/types";
+import { projectHistoryResponse, type HistoryResponse } from "@/stores/history-response";
+import type { UiMessage } from "@/stores/types";
 
 test("active history merge keeps child agent metadata from durable result data", () => {
   const history: HistoryResponse = {

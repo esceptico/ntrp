@@ -1,0 +1,205 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown } from "lucide-react";
+import clsx from "clsx";
+import { useShallow } from "zustand/react/shallow";
+import { useStore } from "@/stores";
+import { Message } from "@/features/chat/components/Message";
+import { turnLayout } from "@/features/chat/lib/turnLayout";
+import { turnHeaderLabel } from "@/features/chat/lib/turnHeader";
+import { turnHasActiveChildAgent } from "@/features/chat/lib/turnActiveAgents";
+import {
+  MOTION,
+  EASE_DECELERATE,
+  EASE_OUT,
+  SPRING_ROW_ENTRY,
+  RISE_IN,
+  RISE_SETTLED,
+  DISSOLVE_OUT,
+} from "@/lib/tokens/motion";
+import { Collapse } from "@/components/ui/Collapse";
+import { ICON } from "@/lib/icons";
+
+export function TurnGroup({
+  userId,
+  childIds,
+  onManualResize,
+}: {
+  userId: string;
+  childIds: string[];
+  onManualResize?: () => void;
+}) {
+  const turn = useStore((s) => s.messages.get(userId)?.turn);
+  const motionDisabled = useStore((s) =>
+    Boolean(s.messages.get(userId)?.suppressEntryMotion || s.streamReplaying),
+  );
+
+  const childSummaryKeys = useStore(
+    useShallow((s) =>
+      childIds.map((id) => {
+        const message = s.messages.get(id);
+        return `${message?.role ?? ""}\t${message?.activity?.label ?? ""}`;
+      }),
+    ),
+  );
+  const childSummaries = useMemo(
+    () =>
+      childSummaryKeys.map((key) => {
+        const [role, activityLabel] = key.split("\t");
+        return {
+          role: role || null,
+          activityLabel: activityLabel || null,
+        };
+      }),
+    [childSummaryKeys],
+  );
+  const children = useMemo(
+    () => childIds.map((id, index) => ({ id, role: childSummaries[index]?.role ?? null })),
+    [childIds, childSummaries],
+  );
+
+  // Only group into a "Worked Xs" block when the turn actually invoked
+  // tools. A turn with just reasoning + a final reply has no work to
+  // collapse — render its children inline instead.
+  const hasTools = children.some((child) => child.role === "activity");
+
+  const hasActiveChildAgent = useStore((s) =>
+    turnHasActiveChildAgent({
+      childIds,
+      messages: s.messages,
+      backgroundAgents: s.backgroundAgents.rows,
+      sessionId: s.currentSessionId,
+    }),
+  );
+  const isDone = turn?.endedAt != null && !hasActiveChildAgent;
+  // Default historic turns to collapsed; default in-progress turns to expanded.
+  const [expanded, setExpanded] = useState(!isDone);
+
+  // Auto-collapse the moment the run finishes.
+  const wasDone = useRef(isDone);
+  useEffect(() => {
+    if (!wasDone.current && isDone) setExpanded(false);
+    wasDone.current = isDone;
+  }, [isDone]);
+
+  const layout = hasTools
+    ? turnLayout({ children, isDone })
+    : {
+        workIds: [],
+        afterWorkIds: childIds,
+        finalAssistantId: lastAssistantId(children),
+      };
+  const hasWork = layout.workIds.length > 0;
+  // Live runs have a real durationMs; historic ones don't (we don't persist
+  // turn timing). Show the time when we have it, plain "Worked" otherwise.
+  const wasStopped = childSummaries.some((child) => child.activityLabel === "Stopped");
+  const headerLabel = turnHeaderLabel(turn?.durationMs, wasStopped);
+
+  const showInterim = !isDone || expanded;
+  // Stagger sibling reveals per Rauno's Depth essay ("Stagger sibling
+  // fades — Synchronous fade hides quantity; stagger by ~30–60ms").
+  //
+  // Variant `animate` is gated on `showInterim` so the stagger plays
+  // when the parent's collapse opens (Path A: user clicks "Worked for
+  // Xs" on a finished turn), not silently under a height:0 mask on
+  // initial mount. For live turns `showInterim` is true from the start,
+  // so the initial paint also plays the stagger if multiple workIds
+  // mount in the same render.
+  //
+  // Streaming arrivals (workIds added one-by-one over time) don't get
+  // motion stagger — parent is already at "visible" so new children
+  // inherit the steady state directly. Hydrated/replayed turns disable
+  // this initial stagger; live rows keep their per-article entry motion.
+  const interimList = (
+    <motion.div
+      initial={motionDisabled ? false : "hidden"}
+      animate={showInterim ? "visible" : "hidden"}
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.045 } },
+      }}
+      className={clsx("flex flex-col gap-3.5", isDone && "pt-1.5")}
+    >
+      {layout.workIds.map((id) => (
+        <motion.div
+          key={id}
+          variants={
+            motionDisabled
+              ? undefined
+              : {
+                  hidden: { opacity: 0, y: 4 },
+                  visible: { opacity: 1, y: 0 },
+                }
+          }
+          transition={motionDisabled ? { duration: 0 } : SPRING_ROW_ENTRY}
+        >
+          <Message id={id} isFinal={false} />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+  const workBlock = hasWork ? (
+    <div className="flex flex-col">
+      <Collapse open={isDone}>
+        <button
+          type="button"
+          onClick={() => {
+            onManualResize?.();
+            setExpanded((v) => !v);
+          }}
+          className="self-start inline-flex items-center gap-1.5 px-1.5 -mx-1.5 rounded-md text-base leading-[1.45] text-muted hover:text-ink-soft hover:bg-surface-soft/40 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97] select-none"
+        >
+          <span>{headerLabel}</span>
+          <ChevronDown
+            size={ICON.XS}
+            strokeWidth={2}
+            className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
+          />
+        </button>
+      </Collapse>
+
+      {/* No height tween here — the interim subtree is the heaviest in the
+          app, so the layout snaps once at the presence boundary and only the
+          content rises/dissolves on GPU props. */}
+      {isDone ? (
+        <AnimatePresence initial={false}>
+          {showInterim && (
+            <motion.div
+              key="interim"
+              initial={RISE_IN}
+              animate={RISE_SETTLED}
+              exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+              transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+            >
+              <div className="h-px bg-line-soft mt-2" />
+              {interimList}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ) : (
+        interimList
+      )}
+    </div>
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-2.5" data-turn-id={userId}>
+      <Message id={userId} />
+
+      {isDone && workBlock}
+
+      {layout.afterWorkIds.map((id) => (
+        <Message key={id} id={id} isFinal={isDone && id === layout.finalAssistantId} />
+      ))}
+
+      {!isDone && workBlock}
+    </div>
+  );
+}
+
+function lastAssistantId(children: { id: string; role: string | null }[]): string | null {
+  for (let i = children.length - 1; i >= 0; i--) {
+    if (children[i].role === "assistant") return children[i].id;
+  }
+  return null;
+}

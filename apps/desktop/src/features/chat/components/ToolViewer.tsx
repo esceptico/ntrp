@@ -1,0 +1,603 @@
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Bot, Square, X } from "lucide-react";
+import clsx from "clsx";
+import { useShallow } from "zustand/react/shallow";
+import { useStore, type ActivityItem } from "@/stores";
+import { getChildAgentResultApi, type ChildAgentResult } from "@/api";
+import { highlight } from "@/lib/highlight";
+import { activityItemStatus, extractTask, friendlyAgentLabel, isAgent } from "@/lib/agent";
+import { humanizeAgentType } from "@/lib/agentRun";
+import { Markdown } from "@/components/ui/Markdown";
+import { BlurSwap } from "@/components/ui/BlurSwap";
+import { CopyGlyph } from "@/components/ui/CopyGlyph";
+import { IconButton } from "@/components/ui/IconButton";
+import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import {
+  ENTRY_PANEL,
+  EASE_DECELERATE,
+  MOTION,
+  POSE_MODAL,
+} from "@/lib/tokens/motion";
+import { useEscapeKey, useTimeoutFlag } from "@/lib/hooks";
+import { ICON } from "@/lib/icons";
+import { cancelSubagent } from "@/actions";
+
+/** Pretty-print JSON; fall back to the raw string when parse fails. The
+ *  `lang` field is set to "json" when we successfully reformatted, so the
+ *  viewer can syntax-highlight only when we actually have JSON. */
+function formatMaybeJson(raw: string | undefined): { body: string; lang: string } {
+  if (!raw) return { body: "", lang: "" };
+  const trimmed = raw.trim();
+  if (!trimmed) return { body: "", lang: "" };
+  try {
+    return { body: JSON.stringify(JSON.parse(trimmed), null, 2), lang: "json" };
+  } catch {
+    return { body: raw, lang: "" };
+  }
+}
+
+export function ToolViewer() {
+  const item = useStore((s) => s.viewingTool);
+  const close = useStore((s) => s.setViewingTool);
+
+  // Re-read the live item from the store so a streaming result patches in
+  // while the viewer is open. The selector returns a stable reference for
+  // the matching activity item — Zustand's default reference equality is
+  // fine here.
+  const live = useStore((s) => {
+    if (!item) return null;
+    for (const msg of s.messages.values()) {
+      if (!msg.activity) continue;
+      const found = msg.activity.items.find((it) => it.id === item.id);
+      if (found) return found;
+    }
+    return item;
+  });
+
+  // All activity items reachable from this tool through `parentToolId`. We
+  // need the full descendant set so the agent inspector can render a tree
+  // of nested tool calls; the regular tool inspector only shows direct
+  // children. Wrapped in useShallow so reference equality stays stable
+  // across unrelated store updates.
+  const descendants = useStore(
+    useShallow((s) => {
+      if (!item) return [] as ActivityItem[];
+      const childrenByParent = new Map<string, ActivityItem[]>();
+      for (const msg of s.messages.values()) {
+        if (!msg.activity) continue;
+        for (const it of msg.activity.items) {
+          if (!it.parentToolId) continue;
+          const arr = childrenByParent.get(it.parentToolId) ?? [];
+          arr.push(it);
+          childrenByParent.set(it.parentToolId, arr);
+        }
+      }
+      const out: ActivityItem[] = [];
+      const seen = new Set<string>();
+      const visit = (parentId: string) => {
+        const kids = childrenByParent.get(parentId);
+        if (!kids) return;
+        for (const k of kids) {
+          if (seen.has(k.id)) continue;
+          seen.add(k.id);
+          out.push(k);
+          visit(k.id);
+        }
+      };
+      visit(item.id);
+      return out;
+    }),
+  );
+
+  // Direct children only — what the regular tool inspector shows.
+  const directChildren = useMemo(
+    () => descendants.filter((it) => it.parentToolId === item?.id),
+    [descendants, item?.id],
+  );
+
+  const input = useMemo(() => formatMaybeJson(live?.args), [live?.args]);
+  const output = useMemo(() => formatMaybeJson(live?.result), [live?.result]);
+  const inputHtml = useMemo(
+    () => (input.lang ? highlight(input.body, input.lang) : ""),
+    [input.body, input.lang],
+  );
+  const outputHtml = useMemo(
+    () => (output.lang ? highlight(output.body, output.lang) : ""),
+    [output.body, output.lang],
+  );
+
+  useEscapeKey(() => close(null), !!item);
+
+  const root = document.querySelector("#app");
+  if (!root) return null;
+  const open = !!(item && live);
+  const canStopSubagent =
+    !!live && isAgent(live) && live.taskStatus === "running" && !!live.runId && !live.cancelRequested;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="tool-viewer"
+          className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-center p-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+          onClick={() => close(null)}
+        >
+          <motion.div
+            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+            initial={POSE_MODAL}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={POSE_MODAL}
+            transition={ENTRY_PANEL}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
+              <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                {live && isAgent(live) && (
+                  <span
+                    aria-hidden
+                    className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
+                  >
+                    <Bot size={ICON.XS} strokeWidth={2} />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
+                    {live && isAgent(live)
+                      ? live.displayName ?? friendlyAgentLabel(live.kind)
+                      : live?.kind}
+                  </div>
+                  {live && !isAgent(live) && live.target && live.target !== live.kind && (
+                    <div className="mt-0.5 text-xs text-faint font-mono truncate">
+                      {live.target}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {canStopSubagent && live && (
+                <IconButton
+                  onClick={() => {
+                    if (live.runId) void cancelSubagent(live.runId, live.id);
+                  }}
+                  aria-label="Stop subagent"
+                  title="Stop subagent"
+                  className="shrink-0"
+                >
+                  <Square size={ICON.SM} strokeWidth={2} />
+                </IconButton>
+              )}
+              <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
+                <X size={ICON.SM} strokeWidth={2} />
+              </IconButton>
+            </header>
+
+            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+              <ScrollFadeTop />
+              {live && isAgent(live) ? (
+                <AgentBody item={live} descendants={descendants} />
+              ) : (
+                <>
+                  <Section
+                    title="Input"
+                    body={input.body}
+                    html={inputHtml}
+                    placeholder="No input arguments."
+                  />
+                  <Section
+                    title="Output"
+                    body={output.body}
+                    html={outputHtml}
+                    placeholder={live && activityItemStatus(live) === "ongoing" ? "Waiting for result…" : "Empty result."}
+                  />
+                  {directChildren.length > 0 && <ChildRuns items={directChildren} />}
+                </>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    root,
+  );
+}
+
+function formatAgentUsage(tokens: number, cost: number | undefined): string {
+  const tk =
+    tokens < 1000
+      ? `${tokens}`
+      : tokens < 10000
+        ? `${(tokens / 1000).toFixed(1)}k`
+        : `${Math.round(tokens / 1000)}k`;
+  if (!cost) return `${tk} tokens`;
+  const ct = cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(3)}`;
+  return `${tk} tokens · ${ct}`;
+}
+
+function AgentBody({
+  item,
+  descendants,
+}: {
+  item: ActivityItem;
+  descendants: ActivityItem[];
+}) {
+  const config = useStore((s) => s.config);
+  const sessionId = useStore((s) => s.currentSessionId);
+  const task = useMemo(() => extractTask(item.args) ?? item.target, [item.args, item.target]);
+  const stats = useMemo(() => buildStats(descendants), [descendants]);
+  const running = activityItemStatus(item) === "ongoing";
+  const childRunId = item.childAgent?.childRunId;
+  const [childResult, setChildResult] = useState<ChildAgentResult | null>(null);
+  const [childResultError, setChildResultError] = useState<string | null>(null);
+  const [childResultLoading, setChildResultLoading] = useState(false);
+  const shouldFetchChildResult = item.childAgent?.wait === false && !!childRunId && !!sessionId;
+
+  useEffect(() => {
+    if (!shouldFetchChildResult || !childRunId || !sessionId) {
+      setChildResult(null);
+      setChildResultError(null);
+      setChildResultLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setChildResult(null);
+    setChildResultLoading(true);
+    setChildResultError(null);
+    void getChildAgentResultApi(config, sessionId, childRunId)
+      .then((result) => {
+        if (!cancelled) setChildResult(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setChildResultError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setChildResultLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [childRunId, config, sessionId, shouldFetchChildResult]);
+
+  const matchingChildResult = childResult?.child_run_id === childRunId ? childResult : null;
+  const durableResult = matchingChildResult?.result?.trim() ? matchingChildResult.result : "";
+  const localResult = item.childAgent && item.childAgent.wait === false ? "" : (item.result ?? "");
+  const result = durableResult || localResult;
+  const childRunning =
+    matchingChildResult?.status === "running" ||
+    matchingChildResult?.status === "activity" ||
+    matchingChildResult?.status === "cancel_requested";
+  const resultState = childResultError
+    ? "error"
+    : childResultLoading && result.trim().length === 0
+      ? "loading"
+      : running || childRunning
+        ? "working"
+        : result.trim().length === 0
+          ? "empty"
+          : "result";
+
+  return (
+    <>
+      <section className="grid gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+            Task
+          </h3>
+          {item.usage && item.usage.total > 0 && (
+            <span className="text-xs text-faint tabular-nums" title="Subagent's own LLM spend (already rolled into the parent's total cost)">
+              {formatAgentUsage(item.usage.total, item.cost)}
+            </span>
+          )}
+        </div>
+        <p className="m-0 text-base leading-relaxed text-ink whitespace-pre-wrap">
+          {task || "(no task provided)"}
+        </p>
+      </section>
+
+      <section className="grid gap-1.5">
+        <div className="flex items-center gap-2">
+          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+            Result
+          </h3>
+          {item.childAgent && (
+            <span className="text-xs text-faint" title={item.childAgent.childRunId}>
+              {humanizeAgentType(item.childAgent.agentType)} · {item.childAgent.wait ? "awaited" : "detached"}
+            </span>
+          )}
+          {result.length > 0 && (
+            <CopyButton getValue={() => result} />
+          )}
+        </div>
+        {/* Keyed by state so the arriving content gets a one-shot blur-in
+            instead of hard-cutting (e.g. "Working…" → result). */}
+        <motion.div
+          key={resultState}
+          initial={{ opacity: 0, filter: "blur(2px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)" }}
+          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+          className="min-w-0"
+        >
+          {resultState === "error" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-bad">
+              {childResultError}
+            </div>
+          ) : resultState === "loading" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Loading result…
+            </div>
+          ) : resultState === "working" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Working…
+            </div>
+          ) : resultState === "empty" ? (
+            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+              Empty result.
+            </div>
+          ) : (
+            <div className="rounded-[10px] border border-line-soft bg-bg-main px-3 py-2.5 max-h-[40vh] overflow-y-auto scroll-thin min-w-0">
+              <Markdown content={result} />
+            </div>
+          )}
+        </motion.div>
+      </section>
+
+      {descendants.length > 0 && (
+        <section className="grid gap-1.5 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+              Activity
+            </h3>
+            <span className="text-xs text-faint tabular-nums">
+              {stats.total} {stats.total === 1 ? "call" : "calls"}
+              {stats.agents > 0 && ` · ${stats.agents} sub-agent${stats.agents === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          <ActivityTree
+            descendants={descendants}
+            rootId={item.id}
+            rootDepth={item.depth ?? 0}
+          />
+        </section>
+      )}
+    </>
+  );
+}
+
+function ActivityTree({
+  descendants,
+  rootId,
+  rootDepth,
+}: {
+  descendants: ActivityItem[];
+  rootId: string;
+  rootDepth: number;
+}) {
+  const setViewing = useStore((s) => s.setViewingTool);
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, ActivityItem[]>();
+    for (const it of descendants) {
+      if (!it.parentToolId) continue;
+      const arr = map.get(it.parentToolId) ?? [];
+      arr.push(it);
+      map.set(it.parentToolId, arr);
+    }
+    return map;
+  }, [descendants]);
+
+  return (
+    <div className="rounded-[10px] border border-line-soft bg-surface overflow-hidden">
+      <ActivityTreeBranch
+        parentId={rootId}
+        baseDepth={rootDepth + 1}
+        childrenByParent={childrenByParent}
+        onPick={setViewing}
+      />
+    </div>
+  );
+}
+
+function ActivityTreeBranch({
+  parentId,
+  baseDepth,
+  childrenByParent,
+  onPick,
+}: {
+  parentId: string;
+  baseDepth: number;
+  childrenByParent: Map<string, ActivityItem[]>;
+  onPick: (item: ActivityItem) => void;
+}) {
+  const kids = childrenByParent.get(parentId);
+  if (!kids || kids.length === 0) return null;
+  return (
+    <ul className="m-0 p-0 list-none">
+      {kids.map((child) => (
+        <ActivityTreeNode
+          key={child.id}
+          item={child}
+          baseDepth={baseDepth}
+          childrenByParent={childrenByParent}
+          onPick={onPick}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ActivityTreeNode({
+  item,
+  baseDepth,
+  childrenByParent,
+  onPick,
+}: {
+  item: ActivityItem;
+  baseDepth: number;
+  childrenByParent: Map<string, ActivityItem[]>;
+  onPick: (item: ActivityItem) => void;
+}) {
+  const indent = ((item.depth ?? baseDepth) - baseDepth) * 16 + 12;
+  const agent = isAgent(item);
+  const label = agent ? item.displayName ?? friendlyAgentLabel(item.kind) : item.kind;
+  const detail = agent ? childAgentTreeDetail(item) : item.target;
+  const running = activityItemStatus(item) === "ongoing";
+  return (
+    <li className="m-0 p-0">
+      <button
+        type="button"
+        onClick={() => onPick(item)}
+        style={{ paddingLeft: indent }}
+        className="app-row flex items-center gap-2 w-full pr-3 py-1.5 text-left bg-transparent border-0 text-ink-soft min-w-0"
+      >
+        {agent ? (
+          <span
+            aria-hidden
+            className="grid place-items-center w-[16px] h-[16px] rounded-[4px] bg-accent-soft text-accent-strong shrink-0"
+          >
+            <Bot size={ICON.XS} strokeWidth={2} />
+          </span>
+        ) : (
+          <ArrowRight size={ICON.XS} strokeWidth={2} className="text-whisper shrink-0" />
+        )}
+        <span
+          className={clsx(
+            "text-sm shrink-0",
+            agent ? "font-medium text-ink-soft" : "font-mono text-ink-soft",
+          )}
+        >
+          {label}
+        </span>
+        {detail && (
+          <span
+            className={clsx(
+              "truncate min-w-0 flex-1 text-xs",
+              agent ? "text-faint" : "text-faint font-mono",
+            )}
+          >
+            {detail}
+          </span>
+        )}
+        {running && (
+          <span className="text-2xs uppercase tracking-[0.08em] text-faint shrink-0">
+            running
+          </span>
+        )}
+      </button>
+      <ActivityTreeBranch
+        parentId={item.id}
+        baseDepth={baseDepth}
+        childrenByParent={childrenByParent}
+        onPick={onPick}
+      />
+    </li>
+  );
+}
+
+function childAgentTreeDetail(item: ActivityItem): string | null {
+  if (!item.childAgent) return null;
+  const mode = item.childAgent.wait ? "awaited" : "detached";
+  return `${humanizeAgentType(item.childAgent.agentType)} · ${mode}`;
+}
+
+function buildStats(descendants: ActivityItem[]) {
+  let agents = 0;
+  for (const d of descendants) if (isAgent(d)) agents++;
+  return { total: descendants.length, agents };
+}
+
+function CopyButton({ getValue }: { getValue: () => string }) {
+  const [copied, flashCopied] = useTimeoutFlag(1200);
+  const onCopy = async () => {
+    if (await window.ntrpDesktop?.clipboard?.writeText(getValue())) {
+      flashCopied();
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      aria-label={copied ? "Copied" : "Copy"}
+      className={clsx(
+        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]",
+        copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
+      )}
+    >
+      <CopyGlyph copied={copied} size={ICON.XS} />
+      <BlurSwap swapKey={copied ? "copied" : "copy"} blur={2}>
+        {copied ? "Copied" : "Copy"}
+      </BlurSwap>
+    </button>
+  );
+}
+
+function ChildRuns({ items }: { items: ActivityItem[] }) {
+  const setViewing = useStore((s) => s.setViewingTool);
+  return (
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
+      <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+        Child runs
+      </h3>
+      <ul className="grid gap-px m-0 p-0 list-none rounded-[10px] border border-line-soft bg-surface overflow-hidden">
+        {items.map((child) => (
+          <li key={child.id} className="contents">
+            <button
+              type="button"
+              onClick={() => setViewing(child)}
+              className="app-row flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 text-ink-soft"
+            >
+              <ArrowRight size={ICON.XS} strokeWidth={2} className="self-center text-whisper shrink-0" />
+              <span className="text-sm font-medium text-ink-soft shrink-0">{child.kind}</span>
+              <span className="text-xs text-faint font-mono truncate min-w-0 flex-1">
+                {child.target}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Section({
+  title,
+  body,
+  html,
+  placeholder,
+}: {
+  title: string;
+  body: string;
+  html: string;
+  placeholder: string;
+}) {
+  const hasBody = body.trim().length > 0;
+
+  return (
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
+      <div className="flex items-center gap-2">
+        <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+          {title}
+        </h3>
+        {hasBody && <CopyButton getValue={() => body} />}
+      </div>
+      {hasBody ? (
+        html ? (
+          <pre
+            className="hljs m-0 p-3 rounded-[10px] bg-code-bg border border-line-soft text-[12.25px] leading-[1.55] text-ink-soft font-mono whitespace-pre-wrap break-all max-h-[40vh] min-w-0 max-w-full overflow-y-auto overflow-x-hidden scroll-thin"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ) : (
+          <pre className="m-0 p-3 rounded-[10px] bg-code-bg border border-line-soft text-[12.25px] leading-[1.55] text-ink-soft font-mono whitespace-pre-wrap break-all max-h-[40vh] min-w-0 max-w-full overflow-y-auto overflow-x-hidden scroll-thin">
+            {body}
+          </pre>
+        )
+      ) : (
+        <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
+          {placeholder}
+        </div>
+      )}
+    </section>
+  );
+}

@@ -1,5 +1,5 @@
 import { apiWithConfig } from "@/api";
-import { getState, type ServerLoop } from "@/store";
+import { getState, type ServerLoop } from "@/stores";
 import { enqueueMessage, sendMessage } from "@/actions/messages";
 import { appendError, appendStatus, truncatePrompt } from "@/actions/_shared";
 

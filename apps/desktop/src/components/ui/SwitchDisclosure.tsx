@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from "react";
-import { SwitchControl } from "@/components/SwitchControl";
+import { SwitchControl } from "@/components/ui/SwitchControl";
 import { Collapse } from "@/components/ui/Collapse";
 
 interface SwitchDisclosureProps {

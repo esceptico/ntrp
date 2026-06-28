@@ -1,5 +1,5 @@
 import { submitToolResult } from "@/api";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 
 export async function respondToApproval(
   toolId: string,

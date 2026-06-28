@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { suggestionToPayload, type AutomationSuggestion } from "@/api";
 import { dismissSuggestion } from "@/actions/automations";
-import { getState, setState } from "@/store/index";
+import { getState, setState } from "@/stores/index";
 
 const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
 

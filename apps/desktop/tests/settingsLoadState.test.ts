@@ -3,7 +3,7 @@ import {
   settingsErrorMessage,
   settingsErrorTitle,
   shouldShowLoadedSettingsContent,
-} from "@/lib/settingsLoadState";
+} from "@/features/settings/lib/settingsLoadState";
 
 test("distinguishes initial load failures from action failures", () => {
   expect(settingsErrorTitle("providers", false)).toBe("Couldn't load providers");

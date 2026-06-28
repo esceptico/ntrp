@@ -2,10 +2,10 @@ import { beforeEach, expect, test } from "bun:test";
 import { refresh } from "@/actions/bootstrap";
 import { loadHistory } from "@/actions/history";
 import { switchSession } from "@/actions/sessions";
-import { getState, setState, useStore } from "@/store/index";
-import type { UiMessage } from "@/store/index";
-import { createInitialSessionViewState } from "@/store/session-view";
-import { snapshotSession } from "@/store/session-cache";
+import { getState, setState, useStore } from "@/stores/index";
+import type { UiMessage } from "@/stores/index";
+import { createInitialSessionViewState } from "@/stores/session-view";
+import { snapshotSession } from "@/stores/session-cache";
 
 function blank() {
   setState({

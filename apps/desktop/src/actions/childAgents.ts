@@ -1,6 +1,6 @@
 import { listChildAgentsApi } from "@/api";
 import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 
 /** Fetch the durable child-agent roster for a session and write it into the
  *  store. Used by the sidebar poll AND the reconnect resync (reloadAllCollections)

@@ -5,7 +5,7 @@ import {
   loadHistory,
   refreshCachedActiveSessionHistories,
 } from "@/actions/history";
-import { getState, setState } from "@/store/index";
+import { getState, setState } from "@/stores/index";
 import {
   handleIncomingServerEvent,
   handleServerEvent,

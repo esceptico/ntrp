@@ -5,7 +5,7 @@ import {
   providerConnectionPill,
   providerModelCountLabel,
   providerReadinessSummary,
-} from "@/lib/providerConnection";
+} from "@/features/settings/lib/providerConnection";
 
 test("labels env-managed provider connections", () => {
   const provider = {

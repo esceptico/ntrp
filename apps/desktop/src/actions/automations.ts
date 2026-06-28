@@ -11,7 +11,7 @@ import {
   type CreateAutomationPayload,
   type UpdateAutomationPayload,
 } from "@/api";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 
 export async function fetchAutomations(): Promise<void> {
   const s = getState();

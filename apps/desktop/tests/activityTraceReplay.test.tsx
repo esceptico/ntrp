@@ -1,12 +1,12 @@
 import { beforeEach, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ActivityHeader, ActivityTail, liftWorkflows, orderedTraceEntries } from "@/components/trace/ActivityTrace";
-import { WorkflowProgressCard } from "@/components/workflow/WorkflowProgress";
+import { ActivityHeader, ActivityTail, liftWorkflows, orderedTraceEntries } from "@/features/chat/components/ActivityTrace";
+import { WorkflowProgressCard } from "@/features/background-agents/components/WorkflowProgress";
 import { activityTraceStats } from "@/lib/agent";
-import { turnHeaderLabel } from "@/lib/turnHeader";
-import { setState } from "@/store/index";
-import { type Workflow } from "@/store/workflow-domain";
+import { turnHeaderLabel } from "@/features/chat/lib/turnHeader";
+import { setState } from "@/stores/index";
+import { type Workflow } from "@/stores/workflow-domain";
 
 const items = [
   {

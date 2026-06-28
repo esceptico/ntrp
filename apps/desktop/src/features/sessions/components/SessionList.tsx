@@ -1,0 +1,322 @@
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown, Inbox, MoreHorizontal, Pin, Plus, Settings } from "lucide-react";
+import clsx from "clsx";
+import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
+import { useStore } from "@/stores";
+import { compactSessionApi } from "@/api";
+import type { SessionListItem } from "@/api";
+import { archiveSession, createSession, loadHistory, moveSessionToProject } from "@/actions";
+import { ICON } from "@/lib/icons";
+import { useTimeTicker } from "@/lib/hooks";
+import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import { groupSessions, primarySidebarSessions } from "@/features/sessions/lib/projects";
+import { SessionRow } from "@/features/sessions/components/SessionRow";
+import { SessionContextMenu, type ContextMenuState } from "@/features/sessions/components/SessionContextMenu";
+import { ProjectSettingsModal } from "@/features/sessions/components/ProjectSettingsModal";
+import { SidebarFilters } from "@/features/sessions/components/SidebarFilters";
+import { RowAction } from "@/features/sessions/components/RowAction";
+
+// Rows shown per group before the "…" toggle reveals the rest. Keeps each
+// group scannable; full list is one click away. New project / search /
+// archived live in ⌘K; filter & group-by live in the SidebarFilters popover.
+const MAX_VISIBLE = 4;
+
+export function SessionList() {
+  useTimeTicker();
+  const projects = useStore((s) => s.projects);
+  const sessions = useStore((s) => s.sessions);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
+  const backgroundedRunSessionIds = useStore((s) => s.backgroundedRunSessionIds);
+  const unreadDoneSessionIds = useStore((s) => s.unreadDoneSessionIds);
+  const connected = useStore((s) => s.connected);
+  const groupBy = useStore((s) => s.prefs.sidebarGroupBy);
+  const unreadOnly = useStore((s) => s.prefs.sidebarUnreadOnly);
+  const channelsOnly = useStore((s) => s.prefs.sidebarChannelsOnly);
+  const pinnedSessionIds = useStore((s) => s.prefs.pinnedSessionIds);
+  const setPref = useStore((s) => s.setPref);
+
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleSet = (set: Set<string>, key: string) => {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  };
+  const toggleGroup = (key: string) => setCollapsedGroups((prev) => toggleSet(prev, key));
+  const toggleExpanded = (key: string) => setExpandedGroups((prev) => toggleSet(prev, key));
+
+  const pinnedSet = useMemo(() => new Set(pinnedSessionIds), [pinnedSessionIds]);
+  const togglePin = (sessionId: string) => {
+    const current = useStore.getState().prefs.pinnedSessionIds;
+    const next = current.includes(sessionId)
+      ? current.filter((id) => id !== sessionId)
+      : [sessionId, ...current];
+    setPref("pinnedSessionIds", next);
+  };
+
+  const chatSessions = useMemo(() => primarySidebarSessions(sessions), [sessions]);
+  const activeSet = useMemo(
+    () => new Set([...activeRunSessionIds, ...backgroundedRunSessionIds]),
+    [activeRunSessionIds, backgroundedRunSessionIds],
+  );
+  const grouped = useMemo(
+    () =>
+      groupSessions(projects, chatSessions, {
+        groupBy,
+        unreadOnly,
+        channelsOnly,
+        pinned: pinnedSet,
+        unread: unreadDoneSessionIds,
+        active: activeSet,
+      }),
+    [projects, chatSessions, groupBy, unreadOnly, channelsOnly, pinnedSet, unreadDoneSessionIds, activeSet],
+  );
+  const editingProject = projects.find((project) => project.project_id === editingProjectId) ?? null;
+
+  // Drop "expanded" state for groups that no longer overflow, so a group that
+  // shrinks below the cap and later grows back doesn't silently auto-expand.
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      if (prev.size === 0) return prev;
+      const overflowing = new Set(
+        grouped.filter((g) => g.sessions.length > MAX_VISIBLE).map((g) => g.key),
+      );
+      const next = new Set([...prev].filter((k) => overflowing.has(k)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [grouped]);
+
+  const closeMenu = () => setMenu(null);
+
+  const renderRow = (session: SessionListItem) => (
+    <div key={session.session_id} role="listitem">
+    <SessionRow
+      sessionId={session.session_id}
+      name={session.name ?? null}
+      lastActivity={session.last_activity}
+      active={session.session_id === currentSessionId}
+      streaming={
+        activeRunSessionIds.has(session.session_id) ||
+        backgroundedRunSessionIds.has(session.session_id)
+      }
+      unread={unreadDoneSessionIds.has(session.session_id)}
+      isChannel={session.session_type === "channel"}
+      isAgent={false}
+      depth={0}
+      renaming={renamingId === session.session_id}
+      onStartRename={() => setRenamingId(session.session_id)}
+      onCancelRename={() => setRenamingId(null)}
+      onMenu={(pos) => setMenu({ sessionId: session.session_id, x: pos.x, y: pos.y })}
+      onArchive={async () => {
+        try {
+          await archiveSession(session.session_id);
+        } catch {
+          useStore.getState().pushToast({
+            id: `archive-fail:${session.session_id}`,
+            title: "Couldn’t archive session",
+            status: "failed",
+            target: { kind: "session", sessionId: session.session_id },
+          });
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
+      }}
+    />
+    </div>
+  );
+
+  const hasFilter = unreadOnly || channelsOnly;
+
+  return (
+    <div className="group/sessions flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-end px-2.5 pt-2 pb-1">
+        <SidebarFilters />
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
+        <ScrollFadeTop />
+        {grouped.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+            className="grid place-items-center gap-2.5 mt-10 px-3 text-center"
+          >
+            <span
+              aria-hidden
+              className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
+            >
+              <Inbox size={ICON.MD} strokeWidth={2} />
+            </span>
+            <p className="m-0 text-sm text-muted leading-snug">
+              {!connected
+                ? "Connect to load sessions."
+                : hasFilter
+                  ? "No sessions match this filter."
+                  : "No sessions yet."}
+            </p>
+          </motion.div>
+        ) : (
+          grouped.map((group, groupIndex) => {
+            const isCollapsed = collapsedGroups.has(group.key);
+            const isExpanded = expandedGroups.has(group.key);
+            const overflow = group.sessions.length - MAX_VISIBLE;
+            const head = group.sessions.slice(0, MAX_VISIBLE);
+            const rest = group.sessions.slice(MAX_VISIBLE);
+            return (
+              <div key={group.key} className={clsx(groupIndex > 0 && "mt-2")}>
+                <div className="group/prow flex items-center gap-1 pr-[18px]">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.key)}
+                    aria-expanded={!isCollapsed}
+                    className="flex-1 flex items-center gap-1 min-w-0 pl-[18px] pt-1.5 pb-0.5 text-base font-medium text-muted hover:text-ink transition-colors cursor-pointer select-none"
+                  >
+                    {group.pinned && (
+                      <Pin size={ICON.XS} strokeWidth={2} className="shrink-0 -ml-[2px] mr-0.5 text-faint" />
+                    )}
+                    <span className="min-w-0 truncate">{group.label}</span>
+                    <ChevronDown
+                      size={ICON.XS}
+                      strokeWidth={2.2}
+                      className={clsx(
+                        "shrink-0 text-faint opacity-0 group-hover/prow:opacity-100 transition-[opacity,transform] duration-row",
+                        isCollapsed && "-rotate-90",
+                      )}
+                    />
+                  </button>
+                  {group.project && (
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/prow:opacity-100 focus-within:opacity-100 transition-opacity duration-row">
+                      <RowAction
+                        icon={<Settings size={ICON.SM} strokeWidth={2} />}
+                        label={`Project settings — ${group.project.name}`}
+                        onClick={() => setEditingProjectId(group.project?.project_id ?? null)}
+                      />
+                      <RowAction
+                        icon={<Plus size={ICON.SM} strokeWidth={2} />}
+                        label={`New session in ${group.label}`}
+                        onClick={() => void createSession(group.project?.project_id ?? null)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      key="rows"
+                      initial={{ opacity: 0, y: -4, filter: "blur(2px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                      transition={{ duration: MOTION.row, ease: EASE_OUT }}
+                    >
+                      <div role="list" aria-label={group.label} className="px-2.5 flex flex-col gap-0">
+                        {head.map(renderRow)}
+                        <AnimatePresence initial={false}>
+                          {isExpanded && rest.length > 0 && (
+                            <motion.div
+                              key="more"
+                              initial={{ opacity: 0, y: -4, filter: "blur(2px)" }}
+                              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                              exit={{ opacity: 0, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
+                              transition={{ duration: MOTION.row, ease: EASE_OUT }}
+                            >
+                              {rest.map(renderRow)}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        {overflow > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(group.key)}
+                            aria-expanded={isExpanded}
+                            aria-label={isExpanded ? "Show fewer sessions" : `Show ${overflow} more sessions`}
+                            className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-faint hover:text-ink transition-colors cursor-pointer"
+                          >
+                            {/* Empty icon column keeps the dots in the title column,
+                                aligned directly under the session names above. */}
+                            <span aria-hidden />
+                            <MoreHorizontal
+                              size={ICON.LG}
+                              strokeWidth={2}
+                              className={clsx("shrink-0 transition-opacity duration-row", isExpanded && "opacity-60")}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <SessionContextMenu
+        state={menu}
+        onClose={closeMenu}
+        isPinned={menu ? pinnedSet.has(menu.sessionId) : false}
+        onTogglePin={() => {
+          if (!menu) return;
+          togglePin(menu.sessionId);
+          closeMenu();
+        }}
+        onRename={() => {
+          if (!menu) return;
+          setRenamingId(menu.sessionId);
+          closeMenu();
+        }}
+        onCompact={async () => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          const cfg = useStore.getState().config;
+          try {
+            const result = await compactSessionApi(cfg, sessionId);
+            if (result.status === "compacted" && useStore.getState().currentSessionId === sessionId) {
+              await loadHistory(sessionId);
+            }
+          } catch {
+            /* ignore */
+          }
+        }}
+        onArchive={async () => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          try {
+            await archiveSession(sessionId);
+          } catch {
+            useStore.getState().pushToast({
+              id: `archive-fail:${sessionId}`,
+              title: "Couldn’t archive session",
+              status: "failed",
+              target: { kind: "session", sessionId },
+            });
+          }
+        }}
+        onMoveProject={async (projectId) => {
+          if (!menu) return;
+          const sessionId = menu.sessionId;
+          closeMenu();
+          try {
+            await moveSessionToProject(sessionId, projectId);
+          } catch {
+            /* ignore */
+          }
+        }}
+        projects={projects}
+      />
+      <ProjectSettingsModal project={editingProject} onClose={() => setEditingProjectId(null)} />
+    </div>
+  );
+}

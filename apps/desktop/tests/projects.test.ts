@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { groupSessions, primarySidebarSessions, type GroupOptions } from "@/lib/projects";
+import { groupSessions, primarySidebarSessions, type GroupOptions } from "@/features/sessions/lib/projects";
 import type { Project, SessionListItem } from "@/api";
 
 const projects: Project[] = [

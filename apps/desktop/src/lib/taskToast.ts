@@ -1,4 +1,4 @@
-import type { BackgroundAgent } from "@/store/background-agent-domain";
+import type { BackgroundAgent } from "@/stores/background-agent-domain";
 
 export type ToastStatus = "completed" | "failed" | "cancelled";
 

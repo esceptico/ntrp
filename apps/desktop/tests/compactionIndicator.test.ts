@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   CompactionIndicator,
   CompactionIndicatorContent,
-} from "@/components/CompactionIndicator";
-import { setState } from "@/store/index";
+} from "@/features/chat/components/CompactionIndicator";
+import { setState } from "@/stores/index";
 
 test("compaction indicator does not render a finished compaction toast", () => {
   setState({ compacting: false });

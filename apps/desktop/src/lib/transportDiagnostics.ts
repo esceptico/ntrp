@@ -1,4 +1,4 @@
-import type { ConnectionPhase } from "@/store/domains";
+import type { ConnectionPhase } from "@/stores/domains";
 
 export interface TransportDiagnosticsSnapshot {
   connectionPhase: ConnectionPhase;

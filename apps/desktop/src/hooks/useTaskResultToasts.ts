@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useStore } from "@/store";
+import { useStore } from "@/stores";
 import { backgroundAgentToast, isTerminalStatus } from "@/lib/taskToast";
 
 /** Watches background agents for terminal transitions and raises a toast the

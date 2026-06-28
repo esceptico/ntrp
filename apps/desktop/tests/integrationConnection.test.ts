@@ -5,7 +5,7 @@ import {
   serviceConnectionLabel,
   serviceConnectionPill,
   serviceActionLabel,
-} from "@/lib/integrationConnection";
+} from "@/features/settings/lib/integrationConnection";
 
 test("summarizes Google accounts without exposing token filenames", () => {
   const accounts = [

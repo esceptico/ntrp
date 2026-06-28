@@ -8,7 +8,7 @@ import {
   saveConfig,
   validateConnection,
 } from "@/api";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 import { refresh } from "@/actions/bootstrap";
 
 export async function fetchServerConfig(): Promise<void> {

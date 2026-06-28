@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { turnHasActiveChildAgent } from "@/lib/turnActiveAgents";
-import type { BackgroundAgent, UiMessage } from "@/store/types";
+import { turnHasActiveChildAgent } from "@/features/chat/lib/turnActiveAgents";
+import type { BackgroundAgent, UiMessage } from "@/stores/types";
 
 test("finished parent turn stays live while a referenced child agent is active", () => {
   expect(

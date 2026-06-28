@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { turnLayout } from "@/lib/turnLayout";
+import { turnLayout } from "@/features/chat/lib/turnLayout";
 
 test("keeps active turns in stream order instead of hoisting streaming assistant text", () => {
   const layout = turnLayout({

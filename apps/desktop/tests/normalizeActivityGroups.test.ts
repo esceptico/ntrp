@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { normalizeActivityGroups } from "@/store/session-cache";
-import type { ActivityItem, UiMessage } from "@/store/types";
+import { normalizeActivityGroups } from "@/stores/session-cache";
+import type { ActivityItem, UiMessage } from "@/stores/types";
 
 function activityItem(id: string): ActivityItem {
   return { id, kind: "bash", target: id, status: "executed" };

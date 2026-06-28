@@ -8,7 +8,7 @@ import {
 import { historyMessagesToUi } from "@/actions/history";
 import { resolutionFromResult } from "@/lib/htmlWidget";
 import { activityItemStatus } from "@/lib/agent";
-import { getState, setState, type ActivityItem } from "@/store/index";
+import { getState, setState, type ActivityItem } from "@/stores/index";
 import type { HistoryMessage } from "@/api";
 
 const WIDGET_ARGS = JSON.stringify({

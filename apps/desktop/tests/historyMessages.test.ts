@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { historyMessagesToUi } from "@/actions/history";
 import type { HistoryMessage } from "@/api";
-import { turnLayout } from "@/lib/turnLayout";
+import { turnLayout } from "@/features/chat/lib/turnLayout";
 
 test("keeps one loaded activity group across reasoning-only history messages", () => {
   const messages: HistoryMessage[] = [

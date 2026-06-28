@@ -16,7 +16,7 @@ import {
   type Project,
   type SessionListItem,
 } from "@/api";
-import { getState } from "@/store";
+import { getState } from "@/stores";
 import { fetchGoal } from "@/actions/goals";
 import { loadHistory, type LoadHistoryOptions } from "@/actions/history";
 

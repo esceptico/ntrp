@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 test("memory modal uses the directory-first artifact browser instead of pane tabs", () => {
-  const modal = readFileSync(new URL("../src/components/MemoryModal.tsx", import.meta.url), "utf8");
-  const pane = readFileSync(new URL("../src/components/memory/MemoryPane.tsx", import.meta.url), "utf8");
+  const modal = readFileSync(new URL("../src/features/memory/components/MemoryModal.tsx", import.meta.url), "utf8");
+  const pane = readFileSync(new URL("../src/features/memory/components/MemoryPane.tsx", import.meta.url), "utf8");
 
   expect(modal).toContain("<MemoryPane />");
   expect(modal).not.toContain("MEMORY_TABS");
@@ -14,7 +14,7 @@ test("memory modal uses the directory-first artifact browser instead of pane tab
 });
 
 test("artifact memory browser reflects filesystem v3 tree contracts", () => {
-  const view = readFileSync(new URL("../src/components/memory/ArtifactMemoryView.tsx", import.meta.url), "utf8");
+  const view = readFileSync(new URL("../src/features/memory/components/ArtifactMemoryView.tsx", import.meta.url), "utf8");
   const api = readFileSync(new URL("../src/api/memoryArtifacts.ts", import.meta.url), "utf8");
   const items = readFileSync(new URL("../src/api/memoryItems.ts", import.meta.url), "utf8");
 

@@ -6,7 +6,7 @@ import { enqueueMessage } from "@/actions/messages";
 import { createSseFrameParser } from "@/../electron/sse-frame-parser.js";
 import { createAnimationFrameBatcher } from "@/lib/eventBatch";
 import { createStallWatchdog } from "@/lib/streamWatchdog";
-import { setState, useStore } from "@/store";
+import { setState, useStore } from "@/stores";
 
 // The server keepalives every 5s; treat ~3x silence as a stalled stream.
 const STREAM_STALL_MS = 15_000;
@@ -20,7 +20,7 @@ import {
   markStreamDisconnected,
   markStreamReconnecting,
   recordTransportEventForDiagnostics,
-} from "@/store/chat-stream";
+} from "@/stores/chat-stream";
 
 export {
   clearReplayGapBlockForSession,
@@ -36,7 +36,7 @@ export {
   resetStreamStateForTest,
   setEventCursorForSession,
   transportDiagnosticsForSession,
-} from "@/store/chat-stream";
+} from "@/stores/chat-stream";
 
 function headersFor(config: AppConfig): HeadersInit {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};

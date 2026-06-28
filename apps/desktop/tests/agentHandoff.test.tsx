@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import { AgentRunRow } from "@/components/agents/AgentRunRow";
+import { AgentRunRow } from "@/features/background-agents/components/AgentRunRow";
 import type { AgentRunStatus, AgentRunView } from "@/lib/agentRun";
 
 const originalWindow = globalThis.window;

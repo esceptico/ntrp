@@ -1,0 +1,169 @@
+import type { BackgroundAgent, BackgroundAgentStatus } from "@/stores/types";
+
+export type { BackgroundAgent } from "@/stores/types";
+
+export type BackgroundAgentRefreshStatus =
+  | "idle"
+  | "refreshing"
+  | "ready"
+  | "failed";
+
+export interface BackgroundAgentsDomainState {
+  rows: Record<string, BackgroundAgent>;
+  openItemIds: Set<string>;
+  refreshStatus: BackgroundAgentRefreshStatus;
+  refreshError: string | null;
+}
+
+export interface BackgroundAgentSnapshot {
+  taskId: string;
+  childSessionId?: string;
+  command: string;
+  status?: BackgroundAgentStatus | string | null;
+  detail?: string;
+  resultRef?: string;
+  parentToolCallId?: string;
+  agentType?: string;
+  wait?: boolean;
+}
+
+export type BackgroundAgentUpsert = Omit<BackgroundAgent, "createdAt"> & {
+  createdAt?: number;
+};
+
+export function createBackgroundAgentsDomainState(): BackgroundAgentsDomainState {
+  return {
+    rows: {},
+    openItemIds: new Set(),
+    refreshStatus: "idle",
+    refreshError: null,
+  };
+}
+
+export function backgroundAgentKey(sessionId: string, taskId: string): string {
+  return `${sessionId}:${taskId}`;
+}
+
+export function isActiveBackgroundAgent(agent: Pick<BackgroundAgent, "status">): boolean {
+  return agent.status === "running" || agent.status === "cancel_requested";
+}
+
+export function reduceBackgroundAgentsRefreshStarted(
+  state: BackgroundAgentsDomainState,
+): BackgroundAgentsDomainState {
+  return { ...state, refreshStatus: "refreshing", refreshError: null };
+}
+
+export function reduceBackgroundAgentsRefreshFailed(
+  state: BackgroundAgentsDomainState,
+  error: string,
+): BackgroundAgentsDomainState {
+  return { ...state, refreshStatus: "failed", refreshError: error };
+}
+
+export function reduceBackgroundAgentsForSession(
+  state: BackgroundAgentsDomainState,
+  sessionId: string,
+  agents: BackgroundAgentSnapshot[],
+  now = Date.now(),
+): BackgroundAgentsDomainState {
+  let rows = state.rows;
+  let rowsChanged = false;
+  for (const agent of agents) {
+    const key = backgroundAgentKey(sessionId, agent.taskId);
+    const prev = rows[key];
+    const next: BackgroundAgent = {
+      taskId: agent.taskId,
+      sessionId,
+      childSessionId: agent.childSessionId ?? prev?.childSessionId,
+      command: agent.command,
+      status: normalizeBackgroundAgentStatus(agent.status ?? prev?.status),
+      detail: agent.detail ?? prev?.detail,
+      resultRef: agent.resultRef ?? prev?.resultRef,
+      parentToolCallId: agent.parentToolCallId ?? prev?.parentToolCallId,
+      agentType: agent.agentType ?? prev?.agentType,
+      wait: agent.wait ?? prev?.wait,
+      createdAt: prev?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    if (prev && isEquivalentBackgroundAgent(prev, next)) {
+      continue;
+    }
+
+    if (!rowsChanged) {
+      rows = { ...state.rows };
+      rowsChanged = true;
+    }
+    rows[key] = next;
+  }
+
+  if (!rowsChanged) {
+    if (state.refreshStatus === "ready" && state.refreshError === null) {
+      return state;
+    }
+    return { ...state, refreshStatus: "ready", refreshError: null };
+  }
+
+  return { ...state, rows, refreshStatus: "ready", refreshError: null };
+}
+
+export function reduceBackgroundAgentUpsert(
+  state: BackgroundAgentsDomainState,
+  agent: BackgroundAgentUpsert,
+  now = Date.now(),
+): BackgroundAgentsDomainState {
+  const key = backgroundAgentKey(agent.sessionId, agent.taskId);
+  const prev = state.rows[key];
+  return {
+    ...state,
+    rows: {
+      ...state.rows,
+      [key]: {
+        ...prev,
+        ...agent,
+        status: normalizeBackgroundAgentStatus(agent.status),
+        createdAt: agent.createdAt ?? prev?.createdAt ?? now,
+        updatedAt: agent.updatedAt ?? now,
+      },
+    },
+  };
+}
+
+export function reduceBackgroundAgentOpenItems(
+  state: BackgroundAgentsDomainState,
+  openItemIds: Set<string>,
+): BackgroundAgentsDomainState {
+  return { ...state, openItemIds: new Set(openItemIds) };
+}
+
+function isEquivalentBackgroundAgent(
+  prev: BackgroundAgent,
+  next: BackgroundAgent,
+): boolean {
+  return (
+    prev.taskId === next.taskId &&
+    prev.sessionId === next.sessionId &&
+    prev.childSessionId === next.childSessionId &&
+    prev.command === next.command &&
+    prev.status === next.status &&
+    prev.detail === next.detail &&
+    prev.resultRef === next.resultRef &&
+    prev.parentToolCallId === next.parentToolCallId &&
+    prev.agentType === next.agentType &&
+    prev.wait === next.wait &&
+    prev.createdAt === next.createdAt
+  );
+}
+
+function normalizeBackgroundAgentStatus(
+  status: BackgroundAgentStatus | string | null | undefined,
+): BackgroundAgentStatus {
+  return status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "interrupted" ||
+    status === "cancel_requested"
+    ? status
+    : "running";
+}

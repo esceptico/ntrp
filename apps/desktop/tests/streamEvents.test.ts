@@ -15,11 +15,11 @@ import {
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
   RIGHT_PANEL_BODY_WIDTH,
-} from "@/components/AgentRightSidebar";
+} from "@/features/background-agents/components/AgentRightSidebar";
 import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
 import { visibleMessageIds } from "@/lib/messageVisibility";
-import { getState, setState } from "@/store/index";
-import { createBackgroundAgentsDomainState } from "@/store/background-agent-domain";
+import { getState, setState } from "@/stores/index";
+import { createBackgroundAgentsDomainState } from "@/stores/background-agent-domain";
 import type { HistoryMessage } from "@/api";
 
 beforeEach(() => {

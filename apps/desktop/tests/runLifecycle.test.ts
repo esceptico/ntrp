@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import type { State } from "@/store/index";
+import type { State } from "@/stores/index";
 import {
   reduceApprovalRequested,
   reduceRunCompleted,
   reduceRunFailed,
   reduceRunStarted,
   reduceRunStatus,
-} from "@/store/run-lifecycle";
+} from "@/stores/run-lifecycle";
 
 function lifecycleState(overrides: Partial<State> = {}): State {
   return {

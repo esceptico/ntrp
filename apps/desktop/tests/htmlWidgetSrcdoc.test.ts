@@ -7,7 +7,7 @@ import {
   WIDGET_BRIDGE_SCRIPT,
   WIDGET_CSP_META,
   WIDGET_SANDBOX,
-} from "@/components/widget/srcdoc";
+} from "@/features/chat/lib/srcdoc";
 
 const originalGetComputedStyle = globalThis.getComputedStyle;
 

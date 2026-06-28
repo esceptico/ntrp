@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatLoopCountdown } from "@/lib/loops";
+import { formatLoopCountdown } from "@/features/chat/lib/loops";
 import { truncatePrompt } from "@/actions/index";
 
 test("formats loop countdown", () => {

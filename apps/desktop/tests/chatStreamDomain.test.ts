@@ -11,8 +11,8 @@ import {
   reduceStreamDisconnected,
   reduceStreamReconnecting,
   runCancelledEffect,
-} from "@/store/chat-stream";
-import { setState } from "@/store/index";
+} from "@/stores/chat-stream";
+import { setState } from "@/stores/index";
 
 test("stale event seq is ignored", () => {
   let state = createInitialChatStreamState();
