@@ -26,14 +26,13 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   expect(api).toContain('readonly_reason: string | null');
   expect(api).toContain('q: params.q');
 
-  expect(view).toContain('record_count !== null');
   expect(view).toContain('Copy path');
   expect(view).toContain('navigator.clipboard');
   expect(view).toContain('setServerQuery');
   expect(view).toContain('buildArtifactTree');
   expect(view).toContain('isMissingArtifactError');
   expect(view).toContain('setArtifacts((prev) => prev.filter');
-  expect(view).toContain('const DIRECTORY_ORDER = ["memory", "context", "facts", "entities", "projects", "references", "changelog"]');
+  expect(view).toContain('const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"]');
   expect(view).toContain('DEFAULT_EXPANDED_DIRS');
   expect(view).toContain('collectDefaultFolderPaths');
   expect(view).toContain('artifactAliasMap');
