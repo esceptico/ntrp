@@ -48,6 +48,10 @@ export interface PageModalProps {
    *  modal owns the Escape key (e.g., automation editor inside the
    *  Automations modal). */
   disableEscape?: boolean;
+  /** Render on the higher z-modal-top layer instead of z-modal, so this
+   *  modal stacks above another already-open modal (e.g. the automation
+   *  editor over the Automations modal). */
+  elevated?: boolean;
   /** Accessible name for the dialog. Defaults to the header title when it's a
    *  string; pass explicitly for modals with a custom (headerless) layout. */
   ariaLabel?: string;
@@ -78,6 +82,7 @@ export function PageModal({
   disableEscape,
   ariaLabel,
   origin = null,
+  elevated = false,
 }: PageModalProps) {
   useEscapeKey(onClose, open && !disableEscape);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -100,7 +105,9 @@ export function PageModal({
       {open && (
         <motion.div
           key="page-modal"
-          className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-center p-4 sm:p-8"
+          className={`modal-scrim absolute inset-0 grid place-items-center p-4 sm:p-8 ${
+            elevated ? "z-[var(--z-modal-top)]" : "z-[var(--z-modal)]"
+          }`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -122,7 +129,13 @@ export function PageModal({
             animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
             exit={
               originDelta
-                ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
+                ? {
+                    opacity: 0,
+                    scale: 0.94,
+                    x: originDelta.x * 0.6,
+                    y: originDelta.y * 0.6,
+                    transition: EXIT_FAST,
+                  }
                 : { opacity: 0, scale: 0.98, transition: EXIT_FAST }
             }
             transition={ENTRY_PANEL}

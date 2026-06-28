@@ -14,10 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { createAutomation, updateAutomation } from "@/actions";
-import { useFocusTrap } from "@/lib/hooks";
 import type { Automation, AutomationTrigger, CreateAutomationPayload, UpdateAutomationPayload } from "@/api/types";
 import {
-  ENTRY_PANEL,
   EASE_DECELERATE,
   EASE_OUT,
   SPRING_POPOVER,
@@ -27,6 +25,7 @@ import {
   DISSOLVE_OUT,
 } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
+import { PageModal } from "@/components/ui/PageModal";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
@@ -266,8 +265,6 @@ export function AutomationEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = !!seed;
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, open);
 
   // (Re)hydrate the form whenever a new seed arrives.
   useEffect(() => {
@@ -278,11 +275,11 @@ export function AutomationEditor({
     setError(null);
   }, [seed]);
 
+  // Escape is handled by PageModal; this only adds the Cmd/Ctrl+Enter submit.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submit();
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submit();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -325,157 +322,138 @@ export function AutomationEditor({
     else setForm(emptyForm());
   };
 
-  const root = document.querySelector("#app");
-  if (!root) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {open && seed && (
-        <motion.div
-          key="automation-editor"
-          className="modal-scrim absolute inset-0 z-[var(--z-modal-top)] grid place-items-center p-8"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-          onClick={onClose}
-        >
-          <motion.div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Automation editor"
-            tabIndex={-1}
-            className="auto-editor surface-panel surface-radius-md w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-            transition={ENTRY_PANEL}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
-              <input
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Untitled automation"
-                spellCheck={false}
-                autoFocus={seed.kind === "create" && !seed.preset}
-                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-muted"
-              />
-              <div className="flex items-center gap-0.5 text-faint">
-                <IconButton tone="faint" onClick={reset} title="Reset" aria-label="Reset">
-                  <RotateCcw size={ICON.MD} strokeWidth={2} />
-                </IconButton>
-                <IconButton tone="faint" onClick={onClose} title="Close" aria-label="Close">
-                  <X size={ICON.MD} strokeWidth={2} />
-                </IconButton>
-              </div>
-            </header>
-
-            <div className="px-5 pb-2 grid grid-rows-[minmax(0,1fr)] min-h-0">
-              <textarea
-                value={form.prompt}
-                onChange={(e) => setForm((p) => ({ ...p, prompt: e.target.value }))}
-                placeholder="What should the agent do when this automation fires?"
-                spellCheck={false}
-                rows={6}
-                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-muted"
-              />
+  return (
+    <PageModal
+      open={open}
+      onClose={onClose}
+      elevated
+      size="w-[min(640px,calc(100vw-80px))] max-h-[calc(100vh-80px)]"
+      grid="grid-rows-[auto_minmax(0,1fr)_auto]"
+      ariaLabel="Automation editor"
+    >
+      {seed && (
+        <>
+          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
+            <input
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="Untitled automation"
+              spellCheck={false}
+              autoFocus={seed.kind === "create" && !seed.preset}
+              className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-muted"
+            />
+            <div className="flex items-center gap-0.5 text-faint">
+              <IconButton tone="faint" onClick={reset} title="Reset" aria-label="Reset">
+                <RotateCcw size={ICON.MD} strokeWidth={2} />
+              </IconButton>
+              <IconButton tone="faint" onClick={onClose} title="Close" aria-label="Close">
+                <X size={ICON.MD} strokeWidth={2} />
+              </IconButton>
             </div>
+          </header>
 
-            <AnimatePresence initial={false}>
-              {unsafeAutoApprove && (
-                <motion.div
-                  key="unsafe"
-                  role="alert"
-                  initial={RISE_IN}
-                  animate={RISE_SETTLED}
-                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                  className="mx-5 mb-3 flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-warn-soft border border-warn/20"
-                >
-                  <TriangleAlert size={ICON.SM} strokeWidth={2} className="mt-0.5 shrink-0 text-warn" />
-                  <span className="text-sm text-warn leading-[1.4]">
-                    Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
-                    Anyone who can post to this channel can drive a full-tool, unattended run. Set a
-                    sender, or turn Auto-Approve off.
-                  </span>
-                </motion.div>
-              )}
+          <div className="px-5 pb-2 grid grid-rows-[minmax(0,1fr)] min-h-0">
+            <textarea
+              value={form.prompt}
+              onChange={(e) => setForm((p) => ({ ...p, prompt: e.target.value }))}
+              placeholder="What should the agent do when this automation fires?"
+              spellCheck={false}
+              rows={6}
+              className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-muted"
+            />
+          </div>
 
-              {isMessage && (
-                <motion.div
-                  key="message-info"
-                  initial={RISE_IN}
-                  animate={RISE_SETTLED}
-                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                  className="mx-5 mb-3 px-3 py-2.5 rounded-[10px] bg-surface-soft border border-line-soft"
-                >
-                  <span className="text-sm text-muted leading-[1.4]">
-                    To search a specific repo, move this automation's channel to the target project
-                    from the sidebar after it's created.
-                  </span>
-                </motion.div>
-              )}
+          <AnimatePresence initial={false}>
+            {unsafeAutoApprove && (
+              <motion.div
+                key="unsafe"
+                role="alert"
+                initial={RISE_IN}
+                animate={RISE_SETTLED}
+                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                className="mx-5 mb-3 flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-warn-soft border border-warn/20"
+              >
+                <TriangleAlert size={ICON.SM} strokeWidth={2} className="mt-0.5 shrink-0 text-warn" />
+                <span className="text-sm text-warn leading-[1.4]">
+                  Auto-Approve is on with no <strong className="font-semibold">From user</strong> gate.
+                  Anyone who can post to this channel can drive a full-tool, unattended run. Set a
+                  sender, or turn Auto-Approve off.
+                </span>
+              </motion.div>
+            )}
 
-              {error && (
-                <motion.div
-                  key="save-error"
-                  initial={RISE_IN}
-                  animate={RISE_SETTLED}
-                  exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-                  transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-                  className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
-                >
-                  <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
-                  <span className="text-sm text-bad leading-[1.4]">{error}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {isMessage && (
+              <motion.div
+                key="message-info"
+                initial={RISE_IN}
+                animate={RISE_SETTLED}
+                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                className="mx-5 mb-3 px-3 py-2.5 rounded-[10px] bg-surface-soft border border-line-soft"
+              >
+                <span className="text-sm text-muted leading-[1.4]">
+                  To search a specific repo, move this automation's channel to the target project
+                  from the sidebar after it's created.
+                </span>
+              </motion.div>
+            )}
 
-            <footer className="flex items-center justify-between gap-2 px-3 py-2.5 bg-surface-soft/40">
-              <div className="flex items-center gap-2">
-                <ScheduleChip
-                  schedule={form.schedule}
-                  onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
-                />
-                <SwitchDisclosure
-                  checked={form.auto_approve}
-                  onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
-                  label="Auto-Approve"
-                  aria-label="Auto-Approve"
-                >
-                  <p className="m-0 text-xs text-faint leading-[1.4]">
-                    Runs execute without asking for approval first.
-                  </p>
-                </SwitchDisclosure>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="quiet"
-                  onClick={onClose}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void submit()}
-                  disabled={!valid || saving}
-                  className="min-w-[72px]"
-                >
-                  <BlurSwap swapKey={saving ? "saving" : seed.kind} blur={2}>
-                    {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
-                  </BlurSwap>
-                </Button>
-              </div>
-            </footer>
-          </motion.div>
-        </motion.div>
+            {error && (
+              <motion.div
+                key="save-error"
+                initial={RISE_IN}
+                animate={RISE_SETTLED}
+                exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
+                transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
+                className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15"
+              >
+                <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
+                <span className="text-sm text-bad leading-[1.4]">{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <footer className="flex items-center justify-between gap-2 px-3 py-2.5 bg-surface-soft/40">
+            <div className="flex items-center gap-2">
+              <ScheduleChip
+                schedule={form.schedule}
+                onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
+              />
+              <SwitchDisclosure
+                checked={form.auto_approve}
+                onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
+                label="Auto-Approve"
+                aria-label="Auto-Approve"
+              >
+                <p className="m-0 text-xs text-faint leading-[1.4]">
+                  Runs execute without asking for approval first.
+                </p>
+              </SwitchDisclosure>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="quiet"
+                onClick={onClose}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void submit()}
+                disabled={!valid || saving}
+                className="min-w-[72px]"
+              >
+                <BlurSwap swapKey={saving ? "saving" : seed.kind} blur={2}>
+                  {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
+                </BlurSwap>
+              </Button>
+            </div>
+          </footer>
+        </>
       )}
-    </AnimatePresence>,
-    root,
+    </PageModal>
   );
 }
 
