@@ -8,16 +8,9 @@ import { Message } from "@/features/chat/components/Message";
 import { turnLayout } from "@/features/chat/lib/turnLayout";
 import { turnHeaderLabel } from "@/features/chat/lib/turnHeader";
 import { turnHasActiveChildAgent } from "@/features/chat/lib/turnActiveAgents";
-import {
-  MOTION,
-  EASE_DECELERATE,
-  EASE_OUT,
-  SPRING_ROW_ENTRY,
-  RISE_IN,
-  RISE_SETTLED,
-  DISSOLVE_OUT,
-} from "@/lib/tokens/motion";
+import { SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { Reveal } from "@/components/ui/Reveal";
 import { Button } from "@/components/ui/Button";
 import { ICON } from "@/lib/icons";
 
@@ -165,16 +158,10 @@ export function TurnGroup({
       {isDone ? (
         <AnimatePresence initial={false}>
           {showInterim && (
-            <motion.div
-              key="interim"
-              initial={RISE_IN}
-              animate={RISE_SETTLED}
-              exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-              transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-            >
+            <Reveal key="interim">
               <div className="h-px bg-line-soft mt-2" />
               {interimList}
-            </motion.div>
+            </Reveal>
           )}
         </AnimatePresence>
       ) : (

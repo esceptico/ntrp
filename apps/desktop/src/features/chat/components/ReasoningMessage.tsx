@@ -1,17 +1,10 @@
 import { memo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { Brain, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import { Markdown } from "@/components/ui/Markdown";
-import {
-  MOTION,
-  EASE_DECELERATE,
-  EASE_OUT,
-  RISE_IN,
-  RISE_SETTLED,
-  DISSOLVE_OUT,
-} from "@/lib/tokens/motion";
+import { Reveal } from "@/components/ui/Reveal";
 import { ICON } from "@/lib/icons";
 import { useSmoothStreamedContent } from "@/features/chat/hooks/useSmoothStream";
 import {
@@ -64,19 +57,12 @@ export const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: str
           rises/dissolves on GPU props. */}
       <AnimatePresence initial={false}>
         {expanded && (
-          <motion.div
-            key="body"
-            initial={RISE_IN}
-            animate={RISE_SETTLED}
-            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
-            transition={{ duration: MOTION.panel, ease: EASE_DECELERATE }}
-            className="min-w-0"
-          >
+          <Reveal key="body" className="min-w-0">
             <Markdown
               content={smoothContent}
               className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words"
             />
-          </motion.div>
+          </Reveal>
         )}
       </AnimatePresence>
     </article>
