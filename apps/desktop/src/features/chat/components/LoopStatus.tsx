@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
 import { Repeat2, X } from "lucide-react";
 import { useStore, type ServerLoop } from "@/stores";
 import { refreshLoops, stopLoop } from "@/actions";
-import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
-import { EASE_DECELERATE, EASE_OUT, ENTRY_PANEL, MOTION, POSE_MODAL } from "@/lib/tokens/motion";
 import { formatLoopCountdown } from "@/features/chat/lib/loops";
 import { Chip } from "@/components/ui/Chip";
+import { PageModal } from "@/components/ui/PageModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { Markdown } from "@/components/ui/Markdown";
 import { RollingToken } from "@/components/ui/RollingToken";
@@ -150,61 +147,37 @@ export function LoopStatusBar() {
 }
 
 function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: () => void }) {
-  useEscapeKey(onClose, !!loop);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, !!loop);
-
-  const root = document.querySelector("#app");
-  if (!root) return null;
-
-  return createPortal(
-    <AnimatePresence>
+  return (
+    <PageModal
+      open={!!loop}
+      onClose={onClose}
+      size="w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))]"
+      grid="grid-rows-[auto_minmax(0,1fr)_auto]"
+      ariaLabel="Loop detail"
+    >
       {loop && (
-        <motion.div
-          key="loop-detail"
-          className="modal-scrim fixed inset-0 z-[var(--z-modal)] grid place-items-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-          onClick={onClose}
-        >
-          <motion.div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Loop detail"
-            tabIndex={-1}
-            className="surface-panel surface-radius-md w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] focus:outline-none"
-            initial={POSE_MODAL}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-            transition={ENTRY_PANEL}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
-              <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
-              <div className="text-sm font-medium text-ink">Loop</div>
-              <div className="ml-auto text-xs text-muted">
-                Every {loop.every} · next in {formatLoopCountdown(loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY)}
-              </div>
-              <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
-                <X size={ICON.SM} strokeWidth={2} />
-              </IconButton>
-            </div>
-            <div className="scroll-thin overflow-y-auto px-4 py-3">
-              <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
-            </div>
-            <div className="px-4 py-2 border-t border-line text-xs text-muted flex flex-wrap gap-x-3 gap-y-1">
-              {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
-              {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
-              {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
-              <span className="ml-auto font-mono text-2xs">{loop.task_id}</span>
-            </div>
-          </motion.div>
-        </motion.div>
+        <>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
+          <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
+          <div className="text-sm font-medium text-ink">Loop</div>
+          <div className="ml-auto text-xs text-muted">
+            Every {loop.every} · next in {formatLoopCountdown(loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY)}
+          </div>
+          <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
+            <X size={ICON.SM} strokeWidth={2} />
+          </IconButton>
+        </div>
+        <div className="scroll-thin overflow-y-auto px-4 py-3">
+          <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
+        </div>
+        <div className="px-4 py-2 border-t border-line text-xs text-muted flex flex-wrap gap-x-3 gap-y-1">
+          {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
+          {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
+          {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
+          <span className="ml-auto font-mono text-2xs">{loop.task_id}</span>
+        </div>
+        </>
       )}
-    </AnimatePresence>,
-    root,
+    </PageModal>
   );
 }

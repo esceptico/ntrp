@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { ArrowRight, Bot, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
@@ -13,14 +12,10 @@ import { Markdown } from "@/components/ui/Markdown";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
 import { IconButton } from "@/components/ui/IconButton";
+import { PageModal } from "@/components/ui/PageModal";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
-import {
-  ENTRY_PANEL,
-  EASE_DECELERATE,
-  MOTION,
-  POSE_MODAL,
-} from "@/lib/tokens/motion";
-import { useEscapeKey, useTimeoutFlag } from "@/lib/hooks";
+import { EASE_DECELERATE, MOTION } from "@/lib/tokens/motion";
+import { useTimeoutFlag } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
 import { cancelSubagent } from "@/actions";
 
@@ -108,101 +103,80 @@ export function ToolViewer() {
     [output.body, output.lang],
   );
 
-  useEscapeKey(() => close(null), !!item);
-
-  const root = document.querySelector("#app");
-  if (!root) return null;
   const open = !!(item && live);
   const canStopSubagent =
     !!live && isAgent(live) && live.taskStatus === "running" && !!live.runId && !live.cancelRequested;
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="tool-viewer"
-          className="modal-scrim absolute inset-0 z-[var(--z-modal)] grid place-items-center p-8"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-          onClick={() => close(null)}
-        >
-          <motion.div
-            className="surface-panel surface-radius-md w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
-            initial={POSE_MODAL}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={POSE_MODAL}
-            transition={ENTRY_PANEL}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
-              <div className="min-w-0 flex-1 flex items-center gap-2.5">
-                {live && isAgent(live) && (
-                  <span
-                    aria-hidden
-                    className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
-                  >
-                    <Bot size={ICON.XS} strokeWidth={2} />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
-                    {live && isAgent(live)
-                      ? live.displayName ?? friendlyAgentLabel(live.kind)
-                      : live?.kind}
-                  </div>
-                  {live && !isAgent(live) && live.target && live.target !== live.kind && (
-                    <div className="mt-0.5 text-xs text-faint font-mono truncate">
-                      {live.target}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {canStopSubagent && live && (
-                <IconButton
-                  onClick={() => {
-                    if (live.runId) void cancelSubagent(live.runId, live.id);
-                  }}
-                  aria-label="Stop subagent"
-                  title="Stop subagent"
-                  className="shrink-0"
-                >
-                  <Square size={ICON.SM} strokeWidth={2} />
-                </IconButton>
-              )}
-              <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
-                <X size={ICON.SM} strokeWidth={2} />
-              </IconButton>
-            </header>
-
-            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
-              <ScrollFadeTop />
-              {live && isAgent(live) ? (
-                <AgentBody item={live} descendants={descendants} />
-              ) : (
-                <>
-                  <Section
-                    title="Input"
-                    body={input.body}
-                    html={inputHtml}
-                    placeholder="No input arguments."
-                  />
-                  <Section
-                    title="Output"
-                    body={output.body}
-                    html={outputHtml}
-                    placeholder={live && activityItemStatus(live) === "ongoing" ? "Waiting for result…" : "Empty result."}
-                  />
-                  {directChildren.length > 0 && <ChildRuns items={directChildren} />}
-                </>
-              )}
+  return (
+    <PageModal
+      open={open}
+      onClose={() => close(null)}
+      size="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)]"
+      ariaLabel="Tool details"
+    >
+      <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
+        <div className="min-w-0 flex-1 flex items-center gap-2.5">
+          {live && isAgent(live) && (
+            <span
+              aria-hidden
+              className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
+            >
+              <Bot size={ICON.XS} strokeWidth={2} />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
+              {live && isAgent(live)
+                ? live.displayName ?? friendlyAgentLabel(live.kind)
+                : live?.kind}
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    root,
+            {live && !isAgent(live) && live.target && live.target !== live.kind && (
+              <div className="mt-0.5 text-xs text-faint font-mono truncate">
+                {live.target}
+              </div>
+            )}
+          </div>
+        </div>
+        {canStopSubagent && live && (
+          <IconButton
+            onClick={() => {
+              if (live.runId) void cancelSubagent(live.runId, live.id);
+            }}
+            aria-label="Stop subagent"
+            title="Stop subagent"
+            className="shrink-0"
+          >
+            <Square size={ICON.SM} strokeWidth={2} />
+          </IconButton>
+        )}
+        <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
+          <X size={ICON.SM} strokeWidth={2} />
+        </IconButton>
+      </header>
+
+      <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+        <ScrollFadeTop />
+        {live && isAgent(live) ? (
+          <AgentBody item={live} descendants={descendants} />
+        ) : (
+          <>
+            <Section
+              title="Input"
+              body={input.body}
+              html={inputHtml}
+              placeholder="No input arguments."
+            />
+            <Section
+              title="Output"
+              body={output.body}
+              html={outputHtml}
+              placeholder={live && activityItemStatus(live) === "ongoing" ? "Waiting for result…" : "Empty result."}
+            />
+            {directChildren.length > 0 && <ChildRuns items={directChildren} />}
+          </>
+        )}
+      </div>
+    </PageModal>
   );
 }
 
