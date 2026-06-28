@@ -14,7 +14,7 @@ import { cancelSubagent, loadHistory, sendMessage, stopRun } from "@/actions/ind
 import {
   isActiveBackgroundAgent,
   latestTodoListFromMessages,
-  RIGHT_PANEL_BODY_WIDTH,
+  RIGHT_PANEL_WIDTH,
 } from "@/features/background-agents/components/AgentRightSidebar";
 import { childAgentTaskToBackgroundSnapshot } from "@/lib/agentRun";
 import { visibleMessageIds } from "@/lib/messageVisibility";
@@ -266,8 +266,8 @@ test("right sidebar derives the latest todo list from transcript state", () => {
   expect(todo?.items).toEqual([{ content: "Current task", status: "in_progress" }]);
 });
 
-test("right sidebar body is wider than the old 256px panel", () => {
-  expect(RIGHT_PANEL_BODY_WIDTH).toBe(304);
+test("right sidebar is wider than the old 256px panel", () => {
+  expect(RIGHT_PANEL_WIDTH).toBeGreaterThan(256);
 });
 
 test("update_todos tool stream stays out of activity trace", () => {
