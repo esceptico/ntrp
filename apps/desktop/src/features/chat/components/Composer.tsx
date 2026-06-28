@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Box, Check, ImagePlus, Pencil, ShieldOff, ShieldCheck, Square, Target, X } from "lucide-react";
+import { ArrowUp, Box, ImagePlus, ShieldOff, ShieldCheck, Square, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type ImageBlock } from "@/stores";
+import { useStore } from "@/stores";
 import { viewSkill } from "@/actions/skills";
 import { enqueueMessage, sendMessage, stopRun } from "@/actions/messages";
 import { respondToAllApprovals } from "@/actions/approvals";
 import { isBuiltin, runBuiltinCommand } from "@/actions/builtins";
 import { toggleAuto } from "@/actions/loops";
-import { acceptGoalProposal, cancelGoalProposal, editGoalProposal } from "@/actions/goals";
 import { QueueCard } from "@/features/chat/components/QueueCard";
 import { GoalStatusBar } from "@/features/chat/components/GoalStrip";
 import { CommandPicker } from "@/features/chat/components/CommandPicker";
+import { GoalProposalCard } from "@/features/chat/components/GoalProposalCard";
 import { Chip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
 import { BlurSwap } from "@/components/ui/BlurSwap";
@@ -21,50 +21,11 @@ import { BudgetDial } from "@/features/chat/components/BudgetDial";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useListNav, useTimeoutFlag } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { awaitingFirstRunOutput } from "@/features/chat/lib/runIndicators";
 import { filterCommands, useCommandList, type CommandEntry } from "@/features/chat/lib/commands";
-
-// Composer sub-sections (editing banner, image strip, skill pill, goal
-// proposal) rise into focus on mount and dissolve out faster on unmount;
-// the composer's height snaps at the AnimatePresence boundary.
-const SECTION_ENTER = { duration: MOTION.row, ease: EASE_OUT };
-const SECTION_EXIT = { ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } };
-
-/** Read a single File and return its bytes as base64 + media type. */
-function fileToImageBlock(file: File): Promise<ImageBlock> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("Read failed"));
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Unexpected reader result"));
-        return;
-      }
-      // result is "data:<media_type>;base64,<data>"
-      const [meta, data] = result.split(",", 2);
-      const m = meta.match(/^data:([^;]+);base64$/);
-      resolve({ media_type: m?.[1] ?? file.type ?? "application/octet-stream", data: data ?? "" });
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/** Returns the slash-prefix at the start of `text` if it currently looks like
- *  a command being composed (no space between the slash and the cursor). */
-function pickerQuery(text: string): string | null {
-  if (!text.startsWith("/")) return null;
-  // Picker stays open while the user is typing the command name (no space yet).
-  const head = text.slice(1);
-  if (head.includes(" ") || head.includes("\n")) return null;
-  return head;
-}
-
-function resize(input: HTMLTextAreaElement) {
-  input.style.height = "0px";
-  input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
-}
+import { SECTION_ENTER, SECTION_EXIT } from "@/features/chat/lib/composerMotion";
+import { fileToImageBlock, pickerQuery, resize } from "@/features/chat/lib/composerHelpers";
 
 export function Composer() {
   const draft = useStore((s) => s.draft);
@@ -540,52 +501,5 @@ export function Composer() {
       </form>
       </div>
     </div>
-  );
-}
-
-function GoalProposalCard({ objective }: { objective: string }) {
-  return (
-    <motion.div
-      initial={RISE_IN}
-      animate={RISE_SETTLED}
-      exit={SECTION_EXIT}
-      transition={SECTION_ENTER}
-      className="max-w-[760px] mx-auto mb-2"
-    >
-      <div className="surface-panel surface-radius-md flex items-start gap-2 px-3 py-2">
-        <Target size={ICON.MD} strokeWidth={2} className="mt-0.5 shrink-0 text-accent" />
-        <div className="min-w-0 flex-1">
-          <div className="text-2xs font-medium text-muted">Proposed goal</div>
-          <div className="max-h-10 overflow-hidden text-sm leading-5 text-ink-soft">{objective}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void acceptGoalProposal()}
-          title="Accept goal"
-          aria-label="Accept goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-on-ink hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
-        >
-          <Check size={ICON.SM} strokeWidth={2.4} />
-        </button>
-        <button
-          type="button"
-          onClick={editGoalProposal}
-          title="Edit goal"
-          aria-label="Edit goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
-        >
-          <Pencil size={ICON.SM} strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          onClick={cancelGoalProposal}
-          title="Cancel goal"
-          aria-label="Cancel goal"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.94]"
-        >
-          <X size={ICON.SM} strokeWidth={2} />
-        </button>
-      </div>
-    </motion.div>
   );
 }
