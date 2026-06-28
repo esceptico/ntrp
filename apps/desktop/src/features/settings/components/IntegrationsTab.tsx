@@ -38,6 +38,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { SetupAssistant, type SetupAssistantKind } from "@/features/settings/components/setup/SetupAssistant";
 
@@ -179,15 +180,10 @@ export function IntegrationsTab() {
           Connect the data and action providers ntrp can use as tools. Model providers stay in
           Providers; MCP servers stay in MCP.
         </p>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-        >
+        <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -305,38 +301,23 @@ function GoogleCard({
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onAssistant}
-            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          <Button variant="secondary" onClick={onAssistant}>
             Run setup assistant
-          </button>
-          <button
-            type="button"
-            onClick={() => void onAdd()}
-            disabled={pendingAdd}
-            className="h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-          >
+          </Button>
+          <Button variant="secondary" onClick={() => void onAdd()} disabled={pendingAdd}>
             <BlurSwap swapKey={pendingAdd ? "connecting" : "add"} blur={2}>
               {pendingAdd ? "Connecting…" : "Add account"}
             </BlurSwap>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={enabled ? "secondary" : "primary"}
             onClick={() => void onToggle(!enabled)}
             disabled={pendingGoogle}
-            className={clsx(
-              "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
-              enabled
-                ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
-                : "bg-ink text-on-ink hover:opacity-90",
-            )}
           >
             <BlurSwap swapKey={pendingGoogle ? "saving" : enabled ? "disable" : "enable"} blur={2}>
               {pendingGoogle ? "Saving…" : enabled ? "Disable" : "Enable"}
             </BlurSwap>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -411,13 +392,9 @@ function ServiceCard({
         <div className="mt-1 text-xs text-muted leading-[1.4]">
           Token-backed Slack tools. OAuth MCP servers stay in the MCP tab.
         </div>
-        <button
-          type="button"
-          onClick={onAssistant}
-          className="mt-2 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
-        >
+        <Button variant="secondary" onClick={onAssistant} className="mt-2">
           Run setup assistant
-        </button>
+        </Button>
       </div>
 
       {connectedServices.length + setupServices.length === 0 ? (
@@ -527,21 +504,15 @@ function ServiceRow({
               {actionLabel}
             </span>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant={service.connected ? "secondary" : "primary"}
               onClick={service.connected ? onDisconnect : onEdit}
               disabled={pending}
-              className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
-                service.connected
-                  ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
-                  : "bg-ink text-on-ink hover:opacity-90",
-              )}
             >
               <BlurSwap swapKey={actionLabel} blur={2}>
                 {actionLabel}
               </BlurSwap>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -567,22 +538,13 @@ function ServiceRow({
               autoComplete="off"
               className="input-field"
             />
-            <button
-              type="button"
-              onClick={onConnect}
-              disabled={!serviceKey.trim() || pending}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            <Button onClick={onConnect} disabled={!serviceKey.trim() || pending}>
               {pending && <RefreshCw size={ICON.SM} strokeWidth={2} className="animate-spin" />}
               Connect
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-[color,border-color,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            </Button>
+            <Button variant="secondary" onClick={onCancel}>
               Cancel
-            </button>
+            </Button>
           </motion.div>
         )}
       </AnimatePresence>

@@ -20,6 +20,7 @@ import { QueueCard } from "@/features/chat/components/QueueCard";
 import { GoalStatusBar } from "@/features/chat/components/GoalStrip";
 import { CommandPicker } from "@/features/chat/components/CommandPicker";
 import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ModelReasoningChip } from "@/components/ui/ComposerSelectors";
 import { LoopStatusBar } from "@/features/chat/components/LoopStatus";
@@ -341,15 +342,16 @@ export function Composer() {
               className="flex items-center gap-2 px-3 py-1.5 text-xs text-accent-strong bg-accent-soft/40 rounded-t-[14px]"
             >
               <span>Editing previous message — pressing send will replace it.</span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={X}
                 onClick={cancelEdit}
-                className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
+                className="ml-auto"
                 title="Cancel edit"
               >
-                <X size={ICON.SM} strokeWidth={2} />
                 cancel
-              </button>
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>

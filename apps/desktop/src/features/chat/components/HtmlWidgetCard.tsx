@@ -4,6 +4,7 @@ import { activityItemStatus } from "@/lib/agent";
 import { resolutionFromResult, type HtmlWidgetResolution } from "@/lib/htmlWidget";
 import { respondToHtmlInput } from "@/actions";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import type { ActivityItem } from "@/stores";
 import { buildSrcdoc, snapshotThemeVars, WIDGET_SANDBOX } from "@/features/chat/lib/srcdoc";
@@ -103,13 +104,14 @@ export function HtmlWidgetCard({ item }: { item: ActivityItem }) {
           </BlurSwap>
         )}
         {pending && (
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             onClick={() => resolve("decline", {})}
-            className="shrink-0 bg-transparent border-0 p-0 m-0 cursor-pointer text-xs text-muted hover:text-bad"
+            className="shrink-0"
           >
             Decline
-          </button>
+          </Button>
         )}
       </div>
       <div className={clsx(frozen && "pointer-events-none opacity-60")}>

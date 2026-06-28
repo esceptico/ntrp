@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { ICON } from "@/lib/icons";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 
 // ─── Display helpers ──────────────────────────────────────────────────
 
@@ -147,13 +148,9 @@ export function ListError({
         <div className="text-sm font-semibold text-bad">{title}</div>
         <div className="mt-0.5 text-sm leading-[1.4] text-bad">{message}</div>
         {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-2 inline-flex h-7 items-center rounded-[10px] px-2.5 text-sm font-medium text-bad transition-colors hover:bg-bad/10"
-          >
+          <Button variant="danger" size="sm" onClick={onRetry} className="mt-2">
             Retry
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -384,14 +381,9 @@ export function PrimaryBtn({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center h-7 px-3 rounded-[10px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
-    >
+    <Button variant="primary" size="sm" onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -406,15 +398,9 @@ export function GhostBtn({
   disabled?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "onClick" | "disabled" | "className">) {
   return (
-    <button
-      {...buttonProps}
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[10px] text-sm text-ink-soft hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-    >
+    <Button {...buttonProps} variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -428,14 +414,9 @@ export function DangerBtn({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[10px] text-sm text-ink-soft hover:bg-bad-soft hover:text-bad transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-    >
+    <Button variant="danger" size="sm" onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }
 

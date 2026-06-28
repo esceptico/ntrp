@@ -13,7 +13,7 @@ import {
 import { useMutationState } from "@/lib/hooks";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
-import { ICON } from "@/lib/icons";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { LabeledField } from "@/features/settings/components/Field";
@@ -113,13 +113,9 @@ export function ServerForm({
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-sm text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
-        >
-          <ArrowLeft size={ICON.SM} strokeWidth={2} /> Back
-        </button>
+        <Button variant="quiet" size="sm" onClick={onClose} leadingIcon={ArrowLeft}>
+          Back
+        </Button>
         {mode === "edit" && server && (
           <ConfirmDeleteButton
             label="Uninstall"
@@ -203,14 +199,9 @@ export function ServerForm({
 
       <div className="flex items-center justify-end gap-3 pt-1">
         <SaveStatus busy={busy} saved={saved} />
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={!valid || busy}
-          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed"
-        >
+        <Button variant="primary" size="md" onClick={() => void save()} disabled={!valid || busy}>
           Save
-        </button>
+        </Button>
       </div>
     </div>
   );

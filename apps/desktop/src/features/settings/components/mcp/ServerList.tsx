@@ -37,13 +37,9 @@ export function ServerList({
           action={
             !loadError && (
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onAssistant}
-                  className="inline-flex items-center h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97]"
-                >
+                <Button variant="secondary" size="sm" onClick={onAssistant}>
                   Run setup assistant
-                </button>
+                </Button>
                 <Button size="sm" onClick={onAdd}>
                   <Plus size={ICON.XS} strokeWidth={2.2} /> Add server
                 </Button>

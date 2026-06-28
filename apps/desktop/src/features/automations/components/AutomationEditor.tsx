@@ -32,6 +32,7 @@ import {
   DISSOLVE_OUT,
 } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
+import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { Chip } from "@/components/ui/Chip";
@@ -456,24 +457,23 @@ export function AutomationEditor({
                 </SwitchDisclosure>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
+                <Button
+                  variant="quiet"
                   onClick={onClose}
                   disabled={saving}
-                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-sm font-medium text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
                   onClick={() => void submit()}
                   disabled={!valid || saving}
-                  className="inline-flex items-center justify-center gap-1.5 h-8 min-w-[72px] px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-[0.45] disabled:cursor-not-allowed transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
+                  className="min-w-[72px]"
                 >
                   <BlurSwap swapKey={saving ? "saving" : seed.kind} blur={2}>
                     {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
                   </BlurSwap>
-                </button>
+                </Button>
               </div>
             </footer>
           </motion.div>

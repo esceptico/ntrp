@@ -13,6 +13,7 @@ import {
 } from "@/lib/tokens/motion";
 import { useEscapeKey, useFocusTrap } from "@/lib/hooks";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
 import { ICON } from "@/lib/icons";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 
@@ -134,22 +135,21 @@ export function ApprovalReviewModal() {
 
             <footer className="flex items-center gap-2 px-5 py-3 bg-surface-soft/40">
               <span className="text-xs text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                leadingIcon={X}
                 onClick={() => void respondToApproval(approval.toolId, false)}
-                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-sm font-medium hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
+                className="ml-auto"
               >
-                <X size={ICON.XS} strokeWidth={2} />
                 Reject
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
+                leadingIcon={Check}
                 onClick={() => void respondToApproval(approval.toolId, true)}
-                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
               >
-                <Check size={ICON.XS} strokeWidth={2.4} />
                 Approve
-              </button>
+              </Button>
             </footer>
           </motion.div>
         </motion.div>

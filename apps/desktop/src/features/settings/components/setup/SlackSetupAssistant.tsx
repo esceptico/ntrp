@@ -72,12 +72,12 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
         <input className="input-field" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={serviceId === "slack_bot_token" ? "xoxb-..." : "xoxp-..."} />
         {token.trim() && !prefixValid && <div className="text-xs text-warn">Token prefix does not match the selected type.</div>}
         <div className="flex flex-wrap gap-2 justify-end">
-          <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm disabled:opacity-[0.45]" disabled={!prefixValid || busy === "verify"} onClick={() => void verify()}>
+          <Button variant="secondary" size="md" disabled={!prefixValid || busy === "verify"} onClick={() => void verify()}>
             {busy === "verify" ? "Verifying…" : "Verify token"}
-          </button>
-          <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm disabled:opacity-[0.45]" disabled={!token.trim() || busy === "save"} onClick={() => void save()}>
+          </Button>
+          <Button variant="secondary" size="md" disabled={!token.trim() || busy === "save"} onClick={() => void save()}>
             Save without verification
-          </button>
+          </Button>
           <Button size="md" disabled={!prefixValid || busy === "save"} onClick={() => void save()}>
             {busy === "save" ? "Saving…" : "Save token"}
           </Button>
@@ -91,9 +91,9 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">3. Provider status</div>
-        <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm justify-self-start" disabled={busy === "refresh"} onClick={() => void refresh()}>
+        <Button variant="secondary" size="md" className="justify-self-start" disabled={busy === "refresh"} onClick={() => void refresh()}>
           {busy === "refresh" ? "Refreshing…" : "Refresh Slack status"}
-        </button>
+        </Button>
         {status && (
           <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
             <div>Services: {status.slack.services.map((service) => `${service.name}: ${service.connected ? "token saved" : "not saved"}`).join(" · ") || "none"}</div>

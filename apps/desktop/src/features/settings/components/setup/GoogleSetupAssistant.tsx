@@ -105,9 +105,9 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">3. Preflight</div>
         <p className="m-0 text-xs text-muted">This repo has no IMAP/app-password Gmail path today, so ntrp uses Google OAuth.</p>
-        <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm justify-self-start" disabled={busy === "preflight"} onClick={() => void checkPreflight()}>
+        <Button variant="secondary" size="md" className="justify-self-start" disabled={busy === "preflight"} onClick={() => void checkPreflight()}>
           {busy === "preflight" ? "Checking…" : `Preflight ${googleChoiceLabel(serviceChoice)}`}
-        </button>
+        </Button>
         {preflight && (
           <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
             <div>Credentials: {preflight.credentials.path} · {preflight.credentials.valid ? "valid" : "not ready"}</div>
@@ -127,9 +127,9 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">5. Verify</div>
-        <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm justify-self-start" disabled={busy === "verify"} onClick={() => void verify()}>
+        <Button variant="secondary" size="md" className="justify-self-start" disabled={busy === "verify"} onClick={() => void verify()}>
           {busy === "verify" ? "Refreshing…" : "Refresh setup status"}
-        </button>
+        </Button>
         {status && (
           <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
             {status.google.provider_statuses.map((provider) => <div key={provider.id}>{provider.label}: {provider.status} ({provider.tool_count} tools){provider.detail ? ` · ${provider.detail}` : ""}</div>)}

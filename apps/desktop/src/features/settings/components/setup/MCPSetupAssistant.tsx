@@ -129,9 +129,9 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">3. Verify backend status</div>
-        <button type="button" className="h-8 px-3 rounded-md border border-line bg-surface text-sm justify-self-start" disabled={busy === "refresh"} onClick={() => void refresh()}>
+        <Button variant="secondary" size="md" className="justify-self-start" disabled={busy === "refresh"} onClick={() => void refresh()}>
           {busy === "refresh" ? "Refreshing…" : "Refresh MCP status"}
-        </button>
+        </Button>
         {status && (
           <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
             {status.mcp.servers.map((server) => (

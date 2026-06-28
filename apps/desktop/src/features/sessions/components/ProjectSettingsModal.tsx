@@ -3,8 +3,8 @@ import { FolderOpen } from "lucide-react";
 import type { Project } from "@/api";
 import { archiveProject, saveProject } from "@/actions";
 import { selectDirectory } from "@/features/sessions/lib/directoryPicker";
-import { ICON } from "@/lib/icons";
 import { PageModal } from "@/components/ui/PageModal";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 interface ProjectSettingsModalProps {
@@ -110,15 +110,14 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
                 className="min-w-0 flex-1 px-3 py-2 rounded-md bg-surface-soft border border-line-soft text-sm font-mono text-ink outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow] duration-row ease-out"
                 spellCheck={false}
               />
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 disabled={busy || pickingCwd}
                 onClick={pickCwd}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-line-soft text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
+                leadingIcon={FolderOpen}
               >
-                <FolderOpen size={ICON.SM} strokeWidth={2} />
                 Choose
-              </button>
+              </Button>
             </div>
           </label>
           <label className="block">
@@ -139,21 +138,12 @@ export function ProjectSettingsModal({ project, onClose }: ProjectSettingsModalP
             onConfirm={() => void archive()}
           />
           <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-md text-sm text-ink-soft hover:text-ink hover:bg-surface-soft transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            <Button variant="ghost" disabled={busy} onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!canSave}
-              className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-on-ink hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            </Button>
+            <Button variant="primary" type="submit" disabled={!canSave}>
               Save
-            </button>
+            </Button>
           </div>
         </footer>
       </form>

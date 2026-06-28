@@ -38,6 +38,7 @@ import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
@@ -280,15 +281,10 @@ export function ProvidersTab() {
         <p className="m-0 text-sm text-muted leading-[1.45] max-w-[520px]">
           Connect model providers here. Server connection and tool integrations stay separate.
         </p>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-[border-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
-        >
+        <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -436,21 +432,15 @@ function ProviderRow({
               {isCustom ? "Configured separately" : actionLabel}
             </span>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant={provider.connected ? "secondary" : "primary"}
               onClick={primaryAction}
               disabled={pending}
-              className={clsx(
-                "h-8 px-3 rounded-md text-sm font-medium transition-[background-color,border-color,color,opacity,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]",
-                provider.connected
-                  ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
-                  : "bg-ink text-on-ink hover:opacity-90",
-              )}
             >
               <BlurSwap swapKey={actionLabel} blur={2}>
                 {actionLabel}
               </BlurSwap>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -476,22 +466,13 @@ function ProviderRow({
               autoComplete="off"
               className="input-field"
             />
-            <button
-              type="button"
-              onClick={onConnect}
-              disabled={!apiKey.trim() || pending}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            <Button onClick={onConnect} disabled={!apiKey.trim() || pending}>
               {pending && <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />}
               Connect
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="h-9 px-3 rounded-[9px] border border-line bg-surface text-sm text-muted hover:text-ink hover:border-line-strong transition-[color,border-color,scale] duration-check ease-out active:scale-[0.97]"
-            >
+            </Button>
+            <Button variant="secondary" onClick={onCancel}>
               Cancel
-            </button>
+            </Button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -639,12 +620,7 @@ function CustomModelsPanel({
             autoComplete="off"
             className="input-field"
           />
-          <button
-            type="button"
-            onClick={onCreate}
-            disabled={!canSaveCustomModelDraft(draft) || creating}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-[0.45] transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          <Button onClick={onCreate} disabled={!canSaveCustomModelDraft(draft) || creating}>
             <BlurSwap swapKey={creating ? "loading" : "add"} blur={3}>
               {creating ? (
                 <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
@@ -653,7 +629,7 @@ function CustomModelsPanel({
               )}
             </BlurSwap>
             Add
-          </button>
+          </Button>
         </div>
       </div>
     </div>

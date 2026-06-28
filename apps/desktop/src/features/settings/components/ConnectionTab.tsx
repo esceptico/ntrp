@@ -1,6 +1,7 @@
 import { Field } from "@/features/settings/components/Field";
 import type { AppConfig } from "@/api";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Button } from "@/components/ui/Button";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 
 export function ConnectionTab({
@@ -44,15 +45,11 @@ export function ConnectionTab({
       {error && <SettingsInlineError title="Could not connect" message={error} />}
 
       <div className="flex justify-end pt-1">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-        >
+        <Button type="submit" disabled={saving}>
           <BlurSwap swapKey={saving ? "checking" : "save"} blur={2}>
             {saving ? "Checking…" : "Save & reconnect"}
           </BlurSwap>
-        </button>
+        </Button>
       </div>
     </form>
   );

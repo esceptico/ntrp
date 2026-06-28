@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import type { MCPServer } from "@/api";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Button } from "@/components/ui/Button";
 import { LabeledField } from "@/features/settings/components/Field";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -35,16 +36,16 @@ export function OAuthStatus({
             <span aria-hidden className={clsx("w-1.5 h-1.5 rounded-full shrink-0", dot)} />
             <span className="text-sm font-medium text-ink">OAuth · {status}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onReauthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
             <BlurSwap swapKey={busy ? "busy" : server.connected ? "reauth" : "signin"} blur={2}>
               {busy ? "…" : server.connected ? "Re-authenticate" : "Sign in"}
             </BlurSwap>
-          </button>
+          </Button>
         </div>
         {(server.client_name || server.client_id || server.scope) && (
           <div className="grid gap-0.5 text-xs">

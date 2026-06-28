@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface Props {
   children: ReactNode;
@@ -55,20 +56,12 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
           {error.message}
         </pre>
         <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onReset}
-            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          <Button variant="primary" size="sm" onClick={onReset}>
             Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-sm font-medium text-muted hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>
             Reload window
-          </button>
+          </Button>
         </div>
       </div>
     </div>

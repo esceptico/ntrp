@@ -5,6 +5,7 @@ import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "@/api";
 import { useMutationState } from "@/lib/hooks";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
+import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SwitchControl } from "@/components/ui/SwitchControl";
 
@@ -70,16 +71,16 @@ export function ServerRow({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {needsAuth && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onAuthenticate}
             disabled={busy}
-            className="h-7 px-2 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45]"
           >
             <BlurSwap swapKey={busy ? "busy" : server.error ? "reauth" : "signin"} blur={2}>
               {busy ? "…" : server.error ? "Re-authenticate" : "Sign in"}
             </BlurSwap>
-          </button>
+          </Button>
         )}
         <IconButton onClick={onEdit} aria-label="Configure">
           <SettingsIcon size={ICON.MD} strokeWidth={2} />

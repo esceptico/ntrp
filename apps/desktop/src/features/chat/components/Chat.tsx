@@ -7,6 +7,7 @@ import { Messages } from "@/features/chat/components/Messages";
 import { Composer } from "@/features/chat/components/Composer";
 import { ApprovalBanner } from "@/features/chat/components/ApprovalBanner";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ICON } from "@/lib/icons";
 import { DURATION_RIGHT_PANEL_HIDE, MOTION } from "@/lib/tokens/motion";
@@ -67,11 +68,12 @@ function ChatHeader() {
       >
         {isAgent && parentId && (
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => void switchSession(parentId)}
               title={`Back to ${parentName}`}
-              className="group/back shrink-0 inline-flex items-center gap-1 h-[26px] max-w-[180px] rounded-md px-1.5 -ml-0.5 text-sm text-muted hover:text-ink hover:bg-surface-soft transition-colors"
+              className="group/back shrink-0 max-w-[180px] -ml-0.5"
             >
               <ArrowLeft
                 size={ICON.SM}
@@ -79,7 +81,7 @@ function ChatHeader() {
                 className="shrink-0 text-faint transition-colors group-hover/back:text-ink"
               />
               <span className="truncate">{parentName}</span>
-            </button>
+            </Button>
             <span className="shrink-0 text-faint select-none" aria-hidden>
               /
             </span>

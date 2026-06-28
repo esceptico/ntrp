@@ -6,6 +6,7 @@ import { respondToAllApprovals, respondToApproval } from "@/actions";
 import { ICON } from "@/lib/icons";
 import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { Button } from "@/components/ui/Button";
 
 // Cap visible stack to 2 cards. The front card already shows "1 of N" when
 // there are more pending, so a third sliver doesn't add information — it
@@ -345,46 +346,42 @@ function ApprovalCard({
             placeholder="Why? — sent to the agent as guidance"
             className="flex-1 min-w-0 h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-faint focus:outline-none focus:border-line-strong transition-colors duration-check"
           />
-          <button
-            type="button"
-            onClick={submitDeny}
-            className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          <Button variant="secondary" size="sm" onClick={submitDeny}>
             Deny
-          </button>
+          </Button>
         </div>
       </Collapse>
 
       <footer className="flex flex-wrap items-center gap-2 px-3 py-2 bg-surface-soft/35">
         {hasReviewable && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             tabIndex={interactive ? 0 : -1}
             onClick={(e) => setReviewing(toolId, originFromEvent(e.currentTarget))}
-            className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
           >
             Review
-          </button>
+          </Button>
         )}
         <span className="ml-auto" />
         {showBulk && (
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("reject", () => respondToAllApprovals(false))}
-              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.97]"
             >
               Reject all
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               tabIndex={interactive ? 0 : -1}
               onClick={() => onDismissWith("approve", () => respondToAllApprovals(true))}
-              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
             >
               Approve all
-            </button>
+            </Button>
             <span className="w-px h-5 bg-line-soft mx-0.5" aria-hidden />
           </>
         )}
@@ -404,27 +401,27 @@ function ApprovalCard({
         >
           <MessageSquareText size={ICON.SM} strokeWidth={2} />
         </button>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("reject", () => respondToApproval(toolId, false))}
-          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
         >
           Reject
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
           tabIndex={interactive ? 0 : -1}
           onClick={() => onDismissWith("approve", () => respondToApproval(toolId, true))}
           title="Approve (⌘↩)"
-          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
         >
           Approve
           <span className="inline-flex items-center gap-0.5 opacity-70 text-2xs font-mono leading-none">
             ⌘
             <CornerDownLeft size={ICON.XS} strokeWidth={2.2} />
           </span>
-        </button>
+        </Button>
       </footer>
     </div>
   );
