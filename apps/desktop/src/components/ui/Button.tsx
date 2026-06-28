@@ -19,7 +19,7 @@ import { type LucideIcon } from "lucide-react";
  *   ghost     — text-only, tints on hover (low-emphasis / inline action)
  *   danger    — destructive text, bad-tinted hover
  */
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "quiet" | "danger";
 type ButtonSize = "sm" | "md";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -49,7 +49,10 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-ink text-on-ink hover:opacity-90",
   secondary:
     "border border-line-soft text-ink-soft hover:bg-surface-soft hover:border-line-strong",
+  // ghost: text-only with a subtle hover fill (toolbar/menu actions).
   ghost: "text-muted hover:text-ink hover:bg-surface-soft",
+  // quiet: text-only, NO hover fill (inline text actions — colour shift only).
+  quiet: "text-muted hover:text-ink",
   danger: "text-bad hover:bg-bad-soft",
 };
 
@@ -57,6 +60,7 @@ const ACTIVE: Record<ButtonVariant, string> = {
   primary: "opacity-90",
   secondary: "bg-surface-soft border-line-strong",
   ghost: "text-ink bg-surface-soft",
+  quiet: "text-ink",
   danger: "bg-bad-soft",
 };
 

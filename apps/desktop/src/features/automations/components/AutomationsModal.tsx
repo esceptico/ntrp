@@ -204,20 +204,12 @@ function ActiveList({
           Start from a template, or write a prompt and a schedule from scratch.
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <button
-            type="button"
-            onClick={onPickTemplate}
-            className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft text-sm font-medium text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-[background-color,border-color,color,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          <Button variant="secondary" size="md" onClick={onPickTemplate}>
             Browse templates
-          </button>
-          <button
-            type="button"
-            onClick={onCreate}
-            className="inline-flex items-center h-8 px-3 rounded-md text-sm font-medium text-muted hover:text-ink transition-[color,scale] duration-check ease-out active:scale-[0.97]"
-          >
+          </Button>
+          <Button variant="quiet" size="md" onClick={onCreate}>
             Start from scratch
-          </button>
+          </Button>
         </div>
       </div>
     );
