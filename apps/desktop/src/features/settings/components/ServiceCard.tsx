@@ -1,17 +1,15 @@
-import { type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { CheckCircle2, KeyRound, MessageCircle, RefreshCw } from "lucide-react";
 import { type ServiceConnection } from "@/api/settings";
-import { SectionHeader } from "@/components/ui/SectionHeader";
 import {
   serviceActionLabel,
   serviceConnectionPill,
 } from "@/features/settings/lib/integrationConnection";
-import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { SecretConnectEditor } from "@/features/settings/components/SecretConnectEditor";
+import { SettingsGroupSection } from "@/features/settings/components/SettingsGroupSection";
 
 export function ServiceCard({
   connectedServices,
@@ -57,7 +55,11 @@ export function ServiceCard({
         <div className="px-3.5 py-3 text-sm text-muted">No token-backed services are registered.</div>
       ) : (
         <div className="grid gap-3 px-3.5 py-3">
-          <ServiceSection title="Ready" empty="No Slack tokens connected.">
+          <SettingsGroupSection
+            title="Ready"
+            empty="No Slack tokens connected."
+            emptyClassName="rounded-[9px] border border-line-soft bg-surface-soft/45"
+          >
             {connectedServices.map((service) => (
               <ServiceRow
                 key={service.id}
@@ -72,8 +74,12 @@ export function ServiceCard({
                 onDisconnect={() => void onDisconnect(service)}
               />
             ))}
-          </ServiceSection>
-          <ServiceSection title="Set up" empty="All Slack token services are connected.">
+          </SettingsGroupSection>
+          <SettingsGroupSection
+            title="Set up"
+            empty="All Slack token services are connected."
+            emptyClassName="rounded-[9px] border border-line-soft bg-surface-soft/45"
+          >
             {setupServices.map((service) => (
               <ServiceRow
                 key={service.id}
@@ -88,31 +94,7 @@ export function ServiceCard({
                 onDisconnect={() => void onDisconnect(service)}
               />
             ))}
-          </ServiceSection>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ServiceSection({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: ReactNode;
-}) {
-  const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
-  return (
-    <section className="grid gap-2">
-      <SectionHeader label={title} />
-      {childCount > 0 ? (
-        <div className="grid gap-2">{children}</div>
-      ) : (
-        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-sm text-muted">
-          {empty}
+          </SettingsGroupSection>
         </div>
       )}
     </section>
@@ -175,32 +157,17 @@ function ServiceRow({
 
       <AnimatePresence initial={false}>
         {editing && !service.connected && (
-          <motion.div
-            key="token-editor"
-            initial={{ ...RISE_IN, y: -4 }}
-            animate={RISE_SETTLED}
-            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-            transition={{ duration: MOTION.row, ease: EASE_OUT }}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 bg-surface-soft/35"
-          >
-            <Input
-              type="password"
-              value={serviceKey}
-              onChange={(event) => onKeyChange(event.target.value)}
-              placeholder="Token"
-              aria-label="Token"
-              autoFocus
-              spellCheck={false}
-              autoComplete="off"
-            />
-            <Button onClick={onConnect} disabled={!serviceKey.trim() || pending}>
-              {pending && <RefreshCw size={ICON.SM} strokeWidth={2} className="animate-spin" />}
-              Connect
-            </Button>
-            <Button variant="secondary" onClick={onCancel}>
-              Cancel
-            </Button>
-          </motion.div>
+          <SecretConnectEditor
+            motionKey="token-editor"
+            value={serviceKey}
+            label="Token"
+            pending={pending}
+            paddingX="px-3"
+            spinner={<RefreshCw size={ICON.SM} strokeWidth={2} className="animate-spin" />}
+            onChange={onKeyChange}
+            onConnect={onConnect}
+            onCancel={onCancel}
+          />
         )}
       </AnimatePresence>
     </div>

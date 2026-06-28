@@ -7,14 +7,8 @@ import { useMutationState } from "@/lib/hooks";
 import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SearchInput } from "@/components/ui/SearchInput";
-
-const DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
-  { value: "approve", label: "Approve" },
-  { value: "ask", label: "Ask" },
-  { value: "deny", label: "Deny" },
-];
 
 export function ToolsTab() {
   const config = useStore((s) => s.config);
@@ -135,17 +129,10 @@ export function ToolsTab() {
                         </div>
                       )}
                     </div>
-                    <SegmentedControl
-                      size="sm"
+                    <ToolPolicySelect
                       value={current}
-                      onChange={(v) => setOverride(tool, v as ToolOverrideDecision)}
-                    >
-                      {DECISIONS.map((d) => (
-                        <SegmentedControlItem key={d.value} value={d.value}>
-                          {d.label}
-                        </SegmentedControlItem>
-                      ))}
-                    </SegmentedControl>
+                      onChange={(decision) => setOverride(tool, decision)}
+                    />
                   </li>
                 );
               })}

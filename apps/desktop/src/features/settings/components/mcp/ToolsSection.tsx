@@ -6,15 +6,9 @@ import { fetchServerConfig, updateServerConfig } from "@/actions/server";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SwitchControl } from "@/components/ui/SwitchControl";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-
-const TOOL_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
-  { value: "approve", label: "Approve" },
-  { value: "ask", label: "Ask" },
-  { value: "deny", label: "Deny" },
-];
 
 export function ToolsSection({
   server,
@@ -93,17 +87,10 @@ export function ToolsSection({
                   </div>
                 )}
               </div>
-              <SegmentedControl
-                size="sm"
+              <ToolPolicySelect
                 value={overrides[t.full_name] ?? baseDecision(t)}
-                onChange={(v) => setToolDecision(t, v as ToolOverrideDecision)}
-              >
-                {TOOL_DECISIONS.map((d) => (
-                  <SegmentedControlItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SegmentedControlItem>
-                ))}
-              </SegmentedControl>
+                onChange={(decision) => setToolDecision(t, decision)}
+              />
             </li>
           );
         })}

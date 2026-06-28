@@ -6,7 +6,7 @@ import { createCustomModelApi, connectModelProviderApi, deleteCustomModelApi, di
 import { fetchServerConfig } from "@/actions/server";
 import { useStore } from "@/stores";
 import { ReadinessCard } from "@/features/settings/components/ReadinessCard";
-import { ProviderSection } from "@/features/settings/components/ProviderSection";
+import { SettingsGroupSection } from "@/features/settings/components/SettingsGroupSection";
 import { ProviderRow } from "@/features/settings/components/ProviderRow";
 import { CustomModelsPanel } from "@/features/settings/components/CustomModelsPanel";
 import { providerReadinessSummary } from "@/features/settings/lib/providerConnection";
@@ -268,20 +268,22 @@ export function ProvidersTab() {
               detail={readiness.detail}
               footnote={`${readiness.connectedProviderCount} connected · ${readiness.availableModelCount} available models`}
             />
-            <ProviderSection
+            <SettingsGroupSection
               title="Ready providers"
               detail={`${connectedProviders.length} connected`}
               empty="No model providers are connected yet."
+              headerClassName="px-0.5"
             >
               {connectedProviders.map(renderProvider)}
-            </ProviderSection>
-            <ProviderSection
+            </SettingsGroupSection>
+            <SettingsGroupSection
               title="Set up more"
               detail={`${setupProviders.length} available`}
               empty="All configured providers are ready."
+              headerClassName="px-0.5"
             >
               {setupProviders.map(renderProvider)}
-            </ProviderSection>
+            </SettingsGroupSection>
           </>
         )}
       </div>

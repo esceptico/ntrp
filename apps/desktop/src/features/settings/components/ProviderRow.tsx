@@ -11,7 +11,7 @@ import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tok
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { SecretConnectEditor } from "@/features/settings/components/SecretConnectEditor";
 
 function providerDescription(id: string): string {
   switch (id) {
@@ -124,32 +124,16 @@ export function ProviderRow({
 
       <AnimatePresence initial={false}>
         {editing && !provider.connected && !isOauth && !isCustom && (
-          <motion.div
-            key="key-editor"
-            initial={{ ...RISE_IN, y: -4 }}
-            animate={RISE_SETTLED}
-            exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-            transition={{ duration: MOTION.row, ease: EASE_OUT }}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 bg-surface-soft/35"
-          >
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(event) => onKeyChange(event.target.value)}
-              placeholder="API key"
-              aria-label="API key"
-              autoFocus
-              spellCheck={false}
-              autoComplete="off"
-            />
-            <Button onClick={onConnect} disabled={!apiKey.trim() || pending}>
-              {pending && <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />}
-              Connect
-            </Button>
-            <Button variant="secondary" onClick={onCancel}>
-              Cancel
-            </Button>
-          </motion.div>
+          <SecretConnectEditor
+            motionKey="key-editor"
+            value={apiKey}
+            label="API key"
+            pending={pending}
+            spinner={<Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />}
+            onChange={onKeyChange}
+            onConnect={onConnect}
+            onCancel={onCancel}
+          />
         )}
       </AnimatePresence>
 
