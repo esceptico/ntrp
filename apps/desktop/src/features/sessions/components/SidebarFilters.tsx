@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { useRef, useState } from "react";
 import { Check, SlidersHorizontal } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import type { SidebarGroupBy } from "@/stores/types";
-import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { MenuItem } from "@/components/ui/MenuItem";
+import { AnchoredPopover } from "@/components/ui/AnchoredPopover";
 
 const GROUP_OPTIONS: { value: SidebarGroupBy; label: string }[] = [
   { value: "project", label: "Project" },
@@ -24,55 +22,10 @@ export function SidebarFilters() {
 
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: 0, top: 0, ready: false });
 
   // Non-default view = surfaced on the trigger so the user knows a filter
   // is hiding sessions even when the popover is closed.
   const active = groupBy !== "project" || unreadOnly || channelsOnly;
-
-  useEffect(() => {
-    if (!open) {
-      setPos((p) => (p.ready ? { ...p, ready: false } : p));
-      return;
-    }
-    const trigger = triggerRef.current;
-    const el = popRef.current;
-    if (!trigger || !el) return;
-    const tr = trigger.getBoundingClientRect();
-    // offsetWidth/offsetHeight: layout box, unaffected by the in-flight
-    // entrance transform (getBoundingClientRect would read the scaled size).
-    const width = el.offsetWidth;
-    const height = el.offsetHeight;
-    const margin = 8;
-    const left = Math.max(
-      margin,
-      Math.min(tr.right - width, window.innerWidth - width - margin),
-    );
-    const top = Math.max(margin, Math.min(tr.bottom + 4, window.innerHeight - height - margin));
-    setPos({ left, top, ready: true });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (popRef.current && !popRef.current.contains(t) && triggerRef.current && !triggerRef.current.contains(t)) {
-        setOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const root = document.querySelector("#app");
 
   return (
     <>
@@ -93,42 +46,31 @@ export function SidebarFilters() {
       >
         <SlidersHorizontal size={ICON.SM} strokeWidth={2} />
       </button>
-      {root &&
-        createPortal(
-          <AnimatePresence>
-            {open && (
-              <motion.div
-                ref={popRef}
-                initial={{ opacity: 0, scale: 0.97, y: -4 }}
-                animate={pos.ready ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
-                exit={{ opacity: 0, scale: 0.97, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-                transition={SPRING_POPOVER}
-                className="surface-panel surface-popover fixed z-[var(--z-popover)] w-[200px] py-1.5"
-                style={{ left: pos.left, top: pos.top, transformOrigin: "top right" }}
-              >
-                <SectionLabel>Group by</SectionLabel>
-                {GROUP_OPTIONS.map((opt) => (
-                  <PopRow
-                    key={opt.value}
-                    selected={groupBy === opt.value}
-                    onClick={() => setPref("sidebarGroupBy", opt.value)}
-                  >
-                    {opt.label}
-                  </PopRow>
-                ))}
-                <div className="my-1 h-px bg-line-soft" />
-                <SectionLabel>Filter</SectionLabel>
-                <PopRow selected={unreadOnly} onClick={() => setPref("sidebarUnreadOnly", !unreadOnly)}>
-                  Unread only
-                </PopRow>
-                <PopRow selected={channelsOnly} onClick={() => setPref("sidebarChannelsOnly", !channelsOnly)}>
-                  Channels only
-                </PopRow>
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          root,
-        )}
+      <AnchoredPopover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchor={triggerRef}
+        className="w-[200px] py-1.5"
+      >
+        <SectionLabel>Group by</SectionLabel>
+        {GROUP_OPTIONS.map((opt) => (
+          <PopRow
+            key={opt.value}
+            selected={groupBy === opt.value}
+            onClick={() => setPref("sidebarGroupBy", opt.value)}
+          >
+            {opt.label}
+          </PopRow>
+        ))}
+        <div className="my-1 h-px bg-line-soft" />
+        <SectionLabel>Filter</SectionLabel>
+        <PopRow selected={unreadOnly} onClick={() => setPref("sidebarUnreadOnly", !unreadOnly)}>
+          Unread only
+        </PopRow>
+        <PopRow selected={channelsOnly} onClick={() => setPref("sidebarChannelsOnly", !channelsOnly)}>
+          Channels only
+        </PopRow>
+      </AnchoredPopover>
     </>
   );
 }
