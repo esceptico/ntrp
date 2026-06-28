@@ -6,6 +6,7 @@ import { parseKeyValueLines, parseMCPServerImport, splitLines } from "@/features
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -110,16 +111,16 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
         {transport === "stdio" ? (
           <>
             <Input value={command} onChange={(e) => setCommand(e.target.value)} placeholder="Command, e.g. npx" disabled={Boolean(jsonText.trim())} />
-            <textarea className="input-field min-h-[72px]" value={argsText} onChange={(e) => setArgsText(e.target.value)} placeholder={"Args, one per line\n-y\n@modelcontextprotocol/server-filesystem"} disabled={Boolean(jsonText.trim())} />
-            <textarea className="input-field min-h-[72px]" value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder={"Env, one KEY=value per line"} disabled={Boolean(jsonText.trim())} />
+            <Textarea className="min-h-[72px]" value={argsText} onChange={(e) => setArgsText(e.target.value)} placeholder={"Args, one per line\n-y\n@modelcontextprotocol/server-filesystem"} disabled={Boolean(jsonText.trim())} />
+            <Textarea className="min-h-[72px]" value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder={"Env, one KEY=value per line"} disabled={Boolean(jsonText.trim())} />
           </>
         ) : (
           <>
             <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/mcp" disabled={Boolean(jsonText.trim())} />
-            <textarea className="input-field min-h-[72px]" value={headersText} onChange={(e) => setHeadersText(e.target.value)} placeholder={"Headers, one KEY=value per line\nAuthorization=Bearer ..."} disabled={Boolean(jsonText.trim())} />
+            <Textarea className="min-h-[72px]" value={headersText} onChange={(e) => setHeadersText(e.target.value)} placeholder={"Headers, one KEY=value per line\nAuthorization=Bearer ..."} disabled={Boolean(jsonText.trim())} />
           </>
         )}
-        <textarea className="input-field min-h-[110px]" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='{"mcpServers":{"server":{"transport":"stdio","command":"npx"}}}' />
+        <Textarea className="min-h-[110px]" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='{"mcpServers":{"server":{"transport":"stdio","command":"npx"}}}' />
         {jsonText.trim() && <div className="text-xs text-muted">{imported ? `JSON import ready: ${imported.name}` : "JSON import will be validated on save."}</div>}
         <div className="flex justify-end">
           <Button size="md" disabled={busy === "save"} onClick={() => void save()}>
