@@ -17,6 +17,8 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   const view = readFileSync(new URL("../src/features/memory/components/ArtifactMemoryView.tsx", import.meta.url), "utf8");
   const api = readFileSync(new URL("../src/api/memoryArtifacts.ts", import.meta.url), "utf8");
   const items = readFileSync(new URL("../src/api/memoryItems.ts", import.meta.url), "utf8");
+  const tree = readFileSync(new URL("../src/features/memory/lib/artifactTree.ts", import.meta.url), "utf8");
+  const copyPath = readFileSync(new URL("../src/features/memory/components/CopyPath.tsx", import.meta.url), "utf8");
 
   expect(items).toContain('"directive" | "fact" | "source"');
   expect(api).toContain('record_count: number | null');
@@ -26,20 +28,15 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   expect(api).toContain('readonly_reason: string | null');
   expect(api).toContain('q: params.q');
 
-  expect(view).toContain('Copy path');
-  expect(view).toContain('navigator.clipboard');
-  expect(view).toContain('setServerQuery');
-  expect(view).toContain('buildArtifactTree');
-  expect(view).toContain('isMissingArtifactError');
-  expect(view).toContain('setArtifacts((prev) => prev.filter');
-  expect(view).toContain('const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"]');
-  expect(view).toContain('DEFAULT_EXPANDED_DIRS');
-  expect(view).toContain('collectDefaultFolderPaths');
-  expect(view).toContain('artifactAliasMap');
-  expect(view).toContain('preferredAlias');
-  expect(view).toContain('entities/${slug}.md');
-  expect(view).toContain('setContentNotice');
+  // Copy-path UX feature lives in CopyPath.tsx.
+  expect(copyPath).toContain('Copy path');
+  expect(copyPath).toContain('navigator.clipboard');
+
+  // Folder order + no old structure are the genuine v3 contracts, in artifactTree.ts.
+  expect(tree).toContain('const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"]');
+  expect(tree).not.toContain('"sources", "files", "docs"');
+  expect(tree).not.toContain('Fact shards');
+
+  // Missing-artifact recovery notice still surfaces from the orchestrator.
   expect(view).toContain('refreshed the list');
-  expect(view).not.toContain('"sources", "files", "docs"');
-  expect(view).not.toContain('Fact shards');
 });

@@ -5,14 +5,7 @@ import type { MemoryArtifact } from "@/api/memoryArtifacts";
 import { ICON } from "@/lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { displayFileName, displayTitle } from "@/features/memory/lib/format";
-
-export type TreeNode = {
-  name: string;
-  path: string;
-  kind: "directory" | "file";
-  artifact?: MemoryArtifact;
-  children: TreeNode[];
-};
+import type { TreeNode } from "@/features/memory/lib/artifactTree";
 
 /** Full-bleed search header with a leading icon — the file-tree variant of
  *  SearchInput's chrome, sized to the 52px list header. */

@@ -40,145 +40,19 @@ import {
   stripLeadingH1,
 } from "@/features/memory/lib/format";
 import { TimelineDisclosure } from "@/features/memory/components/MemoryTimelineDisclosure";
-import { FlatRow, TreeRow, TreeSearch, type TreeNode } from "@/features/memory/components/MemoryFileTree";
+import { FlatRow, TreeRow, TreeSearch } from "@/features/memory/components/MemoryFileTree";
+import {
+  buildArtifactTree,
+  collectDefaultFolderPaths,
+  countFiles,
+  flattenTreeFiles,
+} from "@/features/memory/lib/artifactTree";
+import { addAlias, isMissingArtifactError, preferredAlias } from "@/features/memory/lib/wikiResolution";
+import { CopyPath } from "@/features/memory/components/CopyPath";
 
 const RECORD_PAGE_SIZE = 100;
 
 type MemoryViewMode = "files" | "records";
-
-// Folder sort + default-expand order, post topics/-unification (entities/ & projects/
-// are folded into topics/).
-const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"];
-const DEFAULT_EXPANDED_DIRS = new Set(["topics", "daily", "insights", "observations"]);
-
-function directorySort(a: TreeNode, b: TreeNode) {
-  if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
-  const ai = DIRECTORY_ORDER.indexOf(a.name);
-  const bi = DIRECTORY_ORDER.indexOf(b.name);
-  return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.name.localeCompare(b.name);
-}
-
-function addNode(parent: TreeNode, parts: string[], artifact: MemoryArtifact, pathPrefix = "") {
-  const [part, ...rest] = parts;
-  if (!part) return;
-  const nodePath = pathPrefix ? `${pathPrefix}/${part}` : part;
-  if (rest.length === 0) {
-    parent.children.push({ name: part, path: artifact.path, kind: "file", artifact, children: [] });
-    return;
-  }
-  let child = parent.children.find((n) => n.kind === "directory" && n.name === part);
-  if (!child) {
-    child = { name: part, path: nodePath, kind: "directory", children: [] };
-    parent.children.push(child);
-  }
-  addNode(child, rest, artifact, nodePath);
-}
-
-function buildArtifactTree(artifacts: MemoryArtifact[]) {
-  const root: TreeNode = { name: "root", path: "", kind: "directory", children: [] };
-  for (const artifact of artifacts) {
-    // Root files (me.md, index.md, …) live AT the vault root — render them at the top
-    // level alongside the real folders (daily/, topics/, …), not under a fake "memory" dir.
-    addNode(root, artifact.path.split("/"), artifact);
-  }
-  const sortRec = (node: TreeNode) => {
-    node.children.sort(directorySort);
-    node.children.forEach(sortRec);
-  };
-  sortRec(root);
-  return root.children;
-}
-
-function collectDefaultFolderPaths(nodes: TreeNode[]): string[] {
-  const out: string[] = [];
-  const walk = (ns: TreeNode[]) => {
-    for (const n of ns) {
-      if (n.kind === "directory") {
-        if (DEFAULT_EXPANDED_DIRS.has(n.path)) out.push(n.path);
-        walk(n.children);
-      }
-    }
-  };
-  walk(nodes);
-  return out;
-}
-
-function countFiles(node: TreeNode): number {
-  if (node.kind === "file") return 1;
-  return node.children.reduce((sum, child) => sum + countFiles(child), 0);
-}
-
-/** File-leaf paths in the order the tree renders them (depth-first, already
- *  directory-sorted). Drives the detail-pane slide direction so it matches the
- *  visible list position — selecting a note further down slides in from the
- *  right, further up from the left. */
-function flattenTreeFiles(nodes: TreeNode[]): string[] {
-  const out: string[] = [];
-  const walk = (ns: TreeNode[]) => {
-    for (const n of ns) {
-      if (n.kind === "file") out.push(n.path);
-      else walk(n.children);
-    }
-  };
-  walk(nodes);
-  return out;
-}
-
-function aliasKey(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function addAlias(map: Map<string, Set<string>>, key: string, path: string) {
-  const exact = aliasKey(key);
-  if (!exact) return;
-  const paths = map.get(exact) ?? new Set<string>();
-  paths.add(path);
-  map.set(exact, paths);
-}
-
-function preferredAlias(map: Map<string, Set<string>>, key: string): string | null {
-  const paths = map.get(aliasKey(key));
-  if (!paths) return null;
-  if (paths.size === 1) return [...paths][0];
-  const slug = wikiSlug(key);
-  for (const candidate of [`topics/${slug}.md`, `entities/${slug}.md`, `projects/${slug}.md`, `context/integrations/${slug}.md`]) {
-    if (paths.has(candidate)) return candidate;
-  }
-  return null;
-}
-
-function isMissingArtifactError(error: unknown) {
-  return error instanceof Error && error.message.toLowerCase().includes("memory artifact not found");
-}
-
-// ─── Detail header bits ───────────────────────────────────────────────
-
-function CopyPath({ path }: { path: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "unavailable">("idle");
-
-  const copy = async () => {
-    let ok = false;
-    try {
-      // Electron's native clipboard (main process) — unlike navigator.clipboard
-      // it doesn't fail when the document isn't focused.
-      ok = (await window.ntrpDesktop?.clipboard?.writeText(path)) ?? false;
-      if (!ok && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(path);
-        ok = true;
-      }
-    } catch {
-      ok = false;
-    }
-    setState(ok ? "copied" : "unavailable");
-    window.setTimeout(() => setState("idle"), 1200);
-  };
-
-  return (
-    <GhostBtn onClick={() => void copy()}>
-      {state === "copied" ? "Copied" : state === "unavailable" ? "Copy unavailable" : "Copy path"}
-    </GhostBtn>
-  );
-}
 
 // ─── Main view ────────────────────────────────────────────────────────
 
