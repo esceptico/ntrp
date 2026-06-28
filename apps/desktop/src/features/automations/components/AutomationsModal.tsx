@@ -56,6 +56,7 @@ import { AgentRunContent, type AgentRunAction } from "@/components/ui/AgentRunRo
 import { Badge } from "@/components/ui/Badge";
 import { PageModal } from "@/components/ui/PageModal";
 import { ICON } from "@/lib/icons";
+import { Button } from "@/components/ui/Button";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { Tab as TabItem, Tabs } from "@/components/ui/Tabs";
 import { TabPanels, useTabDirection } from "@/components/ui/TabPanels";
@@ -107,14 +108,9 @@ export function AutomationsModal() {
         header={{
           title: "Automations",
           actions: (
-            <button
-              type="button"
-              onClick={() => setEditor({ kind: "create" })}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
-            >
-              <Plus size={ICON.XS} strokeWidth={2.2} />
+            <Button size="sm" leadingIcon={Plus} onClick={() => setEditor({ kind: "create" })}>
               New
-            </button>
+            </Button>
           ),
         }}
       >
