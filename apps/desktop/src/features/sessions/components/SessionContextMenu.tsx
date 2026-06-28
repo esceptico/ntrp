@@ -5,6 +5,7 @@ import { Archive, FolderInput, Pencil, Pin, PinOff, Sparkles } from "lucide-reac
 import type { Project } from "@/api/types";
 import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
+import { MenuItem } from "@/components/ui/MenuItem";
 
 export interface ContextMenuState {
   sessionId: string;
@@ -165,15 +166,8 @@ function ContextItem({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      role="menuitem"
-      tabIndex={-1}
-      onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink focus-visible:bg-surface-soft/60 focus-visible:text-ink transition-[background-color,color,scale] duration-check ease-out active:scale-[0.98]"
-    >
-      <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
-      <span className="truncate">{label}</span>
-    </button>
+    <MenuItem role="menuitem" tabIndex={-1} onClick={onClick} leading={<span className="text-faint">{icon}</span>}>
+      {label}
+    </MenuItem>
   );
 }

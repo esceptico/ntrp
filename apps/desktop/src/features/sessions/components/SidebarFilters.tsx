@@ -7,6 +7,7 @@ import { useStore } from "@/stores";
 import type { SidebarGroupBy } from "@/stores/types";
 import { EASE_OUT, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
+import { MenuItem } from "@/components/ui/MenuItem";
 
 const GROUP_OPTIONS: { value: SidebarGroupBy; label: string }[] = [
   { value: "project", label: "Project" },
@@ -150,15 +151,12 @@ function PopRow({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <MenuItem
+      dense
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
+      leading={selected && <Check size={ICON.XS} strokeWidth={2.5} className="text-accent" />}
     >
-      <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-accent">
-        {selected && <Check size={ICON.XS} strokeWidth={2.5} />}
-      </span>
-      <span className="truncate">{children}</span>
-    </button>
+      {children}
+    </MenuItem>
   );
 }
