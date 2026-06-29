@@ -2,42 +2,42 @@ import clsx from "clsx";
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * One step in a vertical "thinking" timeline: a left gutter carrying a node
- * (status dot / glyph) threaded by a continuous spine, and the step content to
- * its right. Built from spans so it stays valid inside a `<button>` (the tool
- * row is one click target).
+ * One step in a vertical "thinking" timeline (after Fluid Functionalism's
+ * thinking-steps): a left gutter with a semantic `node` (icon / dot) at the
+ * top, threaded downward by a connector line, and the step content to its
+ * right. Built from spans so it stays valid inside a `<button>`.
  *
- * The spine is drawn per-row (full gutter height) and trimmed to the node
- * centre on the first/last step so it never dangles past the timeline ends —
- * which also means it survives the live trace's row mount/unmount without any
- * cross-row coordination. The opaque node covers the 1px line where they meet.
+ * The connector is drawn BELOW the node and hidden on the last step — so it
+ * meets the next step's node with no dangling end and needs no cross-row
+ * coordination (survives the live trace's row mount/unmount). `align="center"`
+ * is the compact single-line live tail; `align="start"` is the rich,
+ * multi-line settled view (label + description + chips).
  */
 export function ThinkingStep({
   node,
-  first = false,
   last = false,
+  align = "start",
   className,
   style,
   children,
 }: {
   node: ReactNode;
-  first?: boolean;
   last?: boolean;
+  align?: "start" | "center";
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
 }) {
   return (
-    <span className={clsx("flex h-full min-w-0 items-center gap-2", className)} style={style}>
-      <span className="relative h-full w-[18px] shrink-0">
-        <span
-          aria-hidden
-          className="thinking-spine"
-          style={{ top: first ? "50%" : 0, bottom: last ? "50%" : 0 }}
-        />
-        <span className="thinking-node">{node}</span>
+    <span
+      className={clsx("flex w-full gap-2.5", align === "center" ? "items-center" : "items-start", className)}
+      style={style}
+    >
+      <span className="flex flex-col items-center shrink-0 self-stretch w-4">
+        <span className="grid place-items-center pt-px text-muted">{node}</span>
+        {!last && <span aria-hidden className="flex-1 w-px mt-1 bg-line" />}
       </span>
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+      <span className="min-w-0 flex-1">{children}</span>
     </span>
   );
 }

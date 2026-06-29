@@ -1,19 +1,23 @@
 import { expect, test } from "bun:test";
-import { operationLabel } from "@/features/chat/lib/operationLabel";
+import { operationLabel, stepSources } from "@/features/chat/lib/operationLabel";
 import type { ActivityItem } from "@/stores";
 
 function item(over: Partial<ActivityItem>): ActivityItem {
   return { id: "x", kind: "tool", target: "", ...over } as ActivityItem;
 }
 
-test("maps common tool kinds to natural-language verbs", () => {
-  expect(operationLabel(item({ kind: "read_file" })).verb).toBe("Read");
-  expect(operationLabel(item({ kind: "bash" })).verb).toBe("Ran");
-  expect(operationLabel(item({ kind: "grep" })).verb).toBe("Searched code");
-  expect(operationLabel(item({ kind: "glob" })).verb).toBe("Listed files");
-  expect(operationLabel(item({ kind: "web_search" })).verb).toBe("Searched the web");
-  expect(operationLabel(item({ kind: "web_fetch" })).verb).toBe("Fetched");
-  expect(operationLabel(item({ kind: "str_replace_editor" })).verb).toBe("Edited");
+test("maps common tool kinds to natural-language verbs + icons", () => {
+  expect(operationLabel(item({ kind: "read_file" }))).toMatchObject({ verb: "Read", iconKey: "file" });
+  expect(operationLabel(item({ kind: "bash" }))).toMatchObject({ verb: "Ran", iconKey: "terminal" });
+  expect(operationLabel(item({ kind: "grep" }))).toMatchObject({ verb: "Searched code", iconKey: "search" });
+  expect(operationLabel(item({ kind: "glob" }))).toMatchObject({ verb: "Listed files", iconKey: "folder" });
+  expect(operationLabel(item({ kind: "web_search" }))).toMatchObject({ verb: "Searched the web", iconKey: "search" });
+  expect(operationLabel(item({ kind: "web_fetch" }))).toMatchObject({ verb: "Fetched", iconKey: "globe" });
+  expect(operationLabel(item({ kind: "str_replace_editor" }))).toMatchObject({ verb: "Edited", iconKey: "edit" });
+});
+
+test("unknown kinds get no icon (fall back to a timeline dot)", () => {
+  expect(operationLabel(item({ kind: "custom_thing" })).iconKey).toBeNull();
 });
 
 test("file-search kinds win over the generic web-search rule", () => {
@@ -51,6 +55,18 @@ test("unknown kinds fall back to a title-cased displayName/kind", () => {
   expect(operationLabel(item({ kind: "custom_thing", displayName: "Sync vault" })).verb).toBe(
     "Sync vault",
   );
+});
+
+test("stepSources extracts deduped hostnames from url/urls args", () => {
+  expect(stepSources(item({ kind: "web_fetch", args: '{"url":"https://www.github.com/willccbb/verifiers"}' }))).toEqual([
+    "github.com",
+  ]);
+  expect(stepSources(item({ kind: "fetch", args: '{"urls":["https://a.com/x","http://a.com/y","https://b.io"]}' }))).toEqual([
+    "a.com",
+    "b.io",
+  ]);
+  expect(stepSources(item({ kind: "read", args: '{"path":"a.ts"}' }))).toEqual([]);
+  expect(stepSources(item({ kind: "web_fetch" }))).toEqual([]);
 });
 
 test("truncates long details", () => {

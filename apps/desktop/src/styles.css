@@ -1456,29 +1456,25 @@ button.app-row:not(:disabled):active,
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
-/* ─── Thinking-step spine ──────────────────────────────────
-   The vertical timeline behind the activity trace. One spine
-   segment per row spans the full gutter height; the first/last
-   step trim it to the node centre (set inline) so the line never
-   dangles past the timeline ends — and each row stays
-   self-contained, so the live trace can mount/unmount rows with
-   no cross-row coordination. The opaque node sits on top and
-   covers the 1px line where they cross. */
-.thinking-spine {
-  position: absolute;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  background: var(--color-line);
-}
-.thinking-node {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  transform: translate(-50%, -50%);
+/* ─── Thinking-step active shimmer ─────────────────────────
+   The running step's LABEL shimmers (FF thinking-steps), not the
+   whole row — so the gutter icon / description / chips keep their
+   colour. Same shine stripe as the tool-line, scoped to one span.
+   Base layer = the label's resting colour (--color-ink) so when the
+   animation stops the text reads at its final colour with no
+   flicker. */
+.step-shimmer {
+  --shine-width: 80px;
+  color: transparent;
+  background-image:
+    linear-gradient(to right, transparent, var(--color-ink) 50%, transparent),
+    linear-gradient(var(--color-ink), var(--color-ink));
+  background-size: var(--shine-width) 100%, 100% 100%;
+  background-position: calc(-100% - var(--shine-width)) 0, 0 0;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shineText 2.2s linear infinite;
 }
 
 /* ─── Depth recession on intermediate work ─────────────────

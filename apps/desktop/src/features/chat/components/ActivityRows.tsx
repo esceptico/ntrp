@@ -1,91 +1,139 @@
-import { ArrowUpRight, Bot, Square } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bot,
+  Brain,
+  FileText,
+  FilePlus2,
+  FolderOpen,
+  Globe,
+  ListChecks,
+  type LucideIcon,
+  PenLine,
+  Search,
+  Square,
+  Terminal,
+} from "lucide-react";
 import clsx from "clsx";
 import type { ActivityItem } from "@/stores";
 import { activityItemStatus, isAgent } from "@/lib/agent";
 import { switchSession } from "@/actions/sessions";
 import { cancelSubagent } from "@/actions/messages";
 import { ICON } from "@/lib/icons";
+import { Badge } from "@/components/ui/Badge";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ThinkingStep } from "@/components/ui/ThinkingStep";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { operationLabel } from "@/features/chat/lib/operationLabel";
+import { operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
 import { MAX_NEST_DEPTH, NEST_PX } from "@/features/chat/lib/trace";
 
 type RowProps = {
   item: ActivityItem;
   onOpen: (item: ActivityItem) => void;
-  first?: boolean;
   last?: boolean;
+  /** Live rolling tail: single-line, no description/chips, height-stable. */
+  compact?: boolean;
 };
 
-export function ItemButton({ item, onOpen, first, last }: RowProps) {
+const ICON_BY_KEY: Record<Exclude<StepIconKey, null>, LucideIcon> = {
+  search: Search,
+  globe: Globe,
+  folder: FolderOpen,
+  file: FileText,
+  edit: PenLine,
+  "file-plus": FilePlus2,
+  terminal: Terminal,
+  brain: Brain,
+  list: ListChecks,
+};
+
+// Semantic step glyph: a lucide icon for known operations, else a plain
+// timeline dot. Colour comes from the gutter (text-muted) via currentColor;
+// errors tint red. Lives in the gutter, OUTSIDE the label, so the running
+// label-shimmer never masks it.
+function StepGlyph({ iconKey, errored }: { iconKey: StepIconKey; errored: boolean }) {
+  if (!iconKey) {
+    return <span className={clsx("block h-1.5 w-1.5 rounded-full", errored ? "bg-bad" : "bg-faint")} />;
+  }
+  const Icon = ICON_BY_KEY[iconKey];
+  return <Icon size={14} strokeWidth={1.5} className={errored ? "text-bad" : undefined} />;
+}
+
+export function ItemButton({ item, onOpen, last, compact }: RowProps) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
   if (isAgent(item)) {
-    return <AgentRow item={item} depth={depth} onOpen={onOpen} first={first} last={last} />;
+    return <AgentRow item={item} depth={depth} onOpen={onOpen} last={last} />;
   }
   const running = activityItemStatus(item) === "ongoing";
   const errored = !!item.error;
-  const { verb, detail } = operationLabel(item);
+  const { verb, detail, iconKey } = operationLabel(item);
+  const sources = compact ? [] : stepSources(item);
+
+  const label = (
+    <span
+      className={clsx(
+        "truncate font-medium",
+        errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
+      )}
+    >
+      {verb}
+      {running && "…"}
+    </span>
+  );
+
   return (
     <ThinkingStep
-      first={first}
+      node={<StepGlyph iconKey={iconKey} errored={errored} />}
       last={last}
-      node={<ToolDot running={running} errored={errored} />}
+      align={compact ? "center" : "start"}
+      className={clsx("rounded-lg transition-colors hover:bg-surface-soft/60", compact ? "px-1.5 py-0.5" : "px-1.5 py-1")}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
     >
       <button
         type="button"
         onClick={() => onOpen(item)}
         title={`${item.target || item.kind} — click to inspect`}
-        data-state={running && !errored ? "running" : undefined}
-        // No transition-colors here: when a tool finishes, the shine
-        // animation stops and `color: transparent` would otherwise fade
-        // to `text-faint` over 150ms — during which the gradient is
-        // already gone, leaving the text briefly invisible. The hover
-        // color snap is unnoticeable in exchange for no flicker.
-        className={clsx(
-          "tool-line flex items-baseline gap-1.5 truncate text-left bg-transparent border-0 p-0 m-0 cursor-pointer",
-          errored
-            ? "text-bad hover:text-bad"
-            : running
-              ? "text-ink-soft"
-              : "text-faint hover:text-ink-soft",
-        )}
+        className="flex w-full min-w-0 flex-col gap-1 border-0 bg-transparent p-0 text-left cursor-pointer"
       >
-        <span className="truncate font-medium">{verb}</span>
-        {detail && <span className="truncate font-mono text-faint">{detail}</span>}
+        {compact ? (
+          <span className="flex items-baseline gap-1.5 truncate">
+            {label}
+            {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
+          </span>
+        ) : (
+          <>
+            {label}
+            {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
+          </>
+        )}
       </button>
+      {sources.length > 0 && (
+        <span className="mt-1 flex flex-wrap gap-1.5">
+          {sources.map((s) => (
+            <Badge key={s} tone="neutral" size="sm" shape="pill">
+              {s}
+            </Badge>
+          ))}
+        </span>
+      )}
     </ThinkingStep>
   );
 }
 
-// Spine node for an ordinary tool step: a status dot threaded by the timeline.
-// Lives outside the `.tool-line` button so the running-shine rule (which forces
-// `background: inherit` on every descendant) can't erase the dot's colour.
-function ToolDot({ running, errored }: { running: boolean; errored: boolean }) {
-  if (running) return <StatusDot tone="accent" pulse />;
-  if (errored) return <StatusDot tone="bad" />;
-  return <StatusDot tone="neutral" />;
-}
-
 // One row treatment for every agent in the trace — session-backed sub-agents
-// (clickable → open the child session) and inline tool-group agents alike. It's
-// a visual peer of the tool rows: same height + rhythm, a Bot glyph (accent
-// while running, muted when settled) carrying a stop-on-hover as the spine node,
-// the name, a faint inline progress/result line, and status via the small
-// StatusDot — no card chrome, so the stack reads as one coherent timeline.
+// (clickable → open the child session) and inline tool-group agents alike. A Bot
+// glyph (accent while running, muted when settled) is the timeline node and
+// carries a stop-on-hover; the name + a faint inline progress/result line + the
+// StatusDot read as one coherent step.
 function AgentRow({
   item,
   depth,
   onOpen,
-  first,
   last,
 }: {
   item: ActivityItem;
   depth: number;
   onOpen: (item: ActivityItem) => void;
-  first?: boolean;
   last?: boolean;
 }) {
   const run = agentRunFromActivityItem(item);
@@ -96,16 +144,16 @@ function AgentRow({
   const terminalBad = run.status === "failed" || run.status === "cancelled";
   return (
     <ThinkingStep
-      first={first}
       last={last}
-      className="group/agent"
+      align="center"
+      className="group/agent rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       node={
-        <span className="relative grid h-[18px] w-[18px] place-items-center">
+        <span className="relative grid h-4 w-4 place-items-center">
           <span
             aria-hidden
             className={clsx(
-              "grid h-[18px] w-[18px] place-items-center rounded-md transition-opacity duration-row ease-out",
+              "grid h-4 w-4 place-items-center rounded-md transition-opacity duration-row ease-out",
               running ? "bg-accent-soft text-accent-strong" : "bg-surface-soft text-faint",
               canStop && "group-hover/agent:opacity-0",
             )}
@@ -130,6 +178,7 @@ function AgentRow({
         </span>
       }
     >
+      <span className="flex min-w-0 items-center gap-2">
       <button
         type="button"
         onClick={() => {
@@ -141,12 +190,12 @@ function AgentRow({
         }}
         title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
         data-child-session-id={childSessionId}
-        className="flex items-center gap-2 min-w-0 flex-1 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
+        className="flex items-center gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
       >
         <span
           className={clsx(
             "shrink truncate font-medium max-w-[18rem] group-hover/agent:text-ink transition-colors duration-row ease-out",
-            running ? "text-ink-soft" : terminalBad ? "text-bad" : "text-faint",
+            running ? "step-shimmer" : terminalBad ? "text-bad" : "text-ink",
           )}
         >
           {run.name}
@@ -172,6 +221,7 @@ function AgentRow({
       {item.usage && activityItemStatus(item) === "executed" && !detail && (
         <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
       )}
+      </span>
     </ThinkingStep>
   );
 }

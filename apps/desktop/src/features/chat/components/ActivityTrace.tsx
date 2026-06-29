@@ -14,7 +14,6 @@ import { useWorkflows } from "@/hooks/useWorkflows";
 import { ExpandableWorkflowCard } from "@/components/ui/WorkflowDetail";
 import { HtmlWidgetCard } from "@/features/chat/components/HtmlWidgetCard";
 import {
-  ROW_HEIGHT_EM,
   buildRollingList,
   buildStaticTree,
   orderedTraceEntries,
@@ -119,14 +118,13 @@ export function ActivityTail({
                     animate={{ opacity: 1, y: 0 }}
                     exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
                     transition={suppressMotion ? { duration: 0 } : SPRING_TRACE_ROW}
-                    style={{ height: `${ROW_HEIGHT_EM}em` }}
                     className="flex items-center min-w-0"
                   >
                     <ItemButton
                       item={item}
                       onOpen={setViewingTool}
-                      first={idx === 0}
                       last={idx === arr.length - 1}
+                      compact
                     />
                   </motion.div>
                 ))}
@@ -184,15 +182,10 @@ export function ActivityTail({
                   }
                 >
                   {visible.map((item, idx, arr) => (
-                    <div
-                      key={item.id}
-                      style={{ height: `${ROW_HEIGHT_EM}em` }}
-                      className="flex items-center min-w-0"
-                    >
+                    <div key={item.id} className="flex min-w-0">
                       <ItemButton
                         item={item}
                         onOpen={setViewingTool}
-                        first={idx === 0}
                         last={idx === arr.length - 1}
                       />
                     </div>

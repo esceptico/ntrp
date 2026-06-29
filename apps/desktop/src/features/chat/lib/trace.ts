@@ -122,7 +122,6 @@ function workflowNameFromItem(item: ActivityItem): string | undefined {
   return undefined;
 }
 
-export const ROW_HEIGHT_EM = 1.4;
 export const NEST_PX = 16;
 export const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
 
