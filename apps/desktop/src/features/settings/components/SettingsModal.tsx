@@ -98,9 +98,8 @@ export function SettingsModal() {
           <Tabs
             value={active}
             onChange={(v) => setActive(v as TabId)}
-            variant="pill"
+            variant="plain"
             orientation="vertical"
-            indicatorClassName="bg-[color-mix(in_oklab,var(--color-ink)_4%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-ink)_10%,transparent)]"
             className="gap-px px-2.5 pt-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom"
           >
             {TABS.map((tab) => {
@@ -109,7 +108,7 @@ export function SettingsModal() {
                 <TabItem
                   key={tab.id}
                   value={tab.id}
-                  className="grid w-full grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2 py-1 rounded-lg text-base font-medium text-left tracking-[-0.005em] text-ink-soft transition-colors hover:text-ink data-[active=true]:text-ink"
+                  className="grid w-full grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2 py-1 rounded-lg text-base font-medium text-left tracking-[-0.005em] text-ink-soft transition-colors hover:text-ink data-[active=true]:text-ink hover:bg-[color-mix(in_oklab,var(--color-ink)_3%,transparent)] data-[active=true]:bg-[color-mix(in_oklab,var(--color-ink)_4%,transparent)] data-[active=true]:shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-ink)_10%,transparent)]"
                 >
                   <span className="grid h-4 w-4 shrink-0 place-items-center">
                     <Icon size={ICON.LG} strokeWidth={2} />

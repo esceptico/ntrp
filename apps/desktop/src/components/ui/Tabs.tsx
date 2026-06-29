@@ -3,7 +3,9 @@ import { motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
 import { SPRING_LAYOUT } from "@/lib/tokens/motion";
 
-type Variant = "underline" | "pill";
+// "plain" = no animated indicator; the active state is the item's own static
+// tint (matches the app's tint-only vertical menus, no out-of-place slide).
+type Variant = "underline" | "pill" | "plain";
 type Orientation = "horizontal" | "vertical";
 
 interface TabsContextValue {

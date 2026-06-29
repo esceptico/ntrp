@@ -983,6 +983,8 @@ button.app-row:not(:disabled):active,
     0 4px 12px rgba(20, 24, 28, 0.06);
   --gt-fg: rgba(20, 20, 30, 0.92);
   --gt-fg-muted: rgba(20, 20, 30, 0.55);
+  /* Fluid hover ghost — faint, springs between segments behind the pill. */
+  --gt-hover-bg: rgba(20, 24, 28, 0.06);
 }
 :root.dark .segmented-control {
   --gt-track-bg: rgba(255, 255, 255, 0.08);
@@ -997,6 +999,7 @@ button.app-row:not(:disabled):active,
     0 2px 8px rgba(0, 0, 0, 0.35);
   --gt-fg: rgba(255, 255, 255, 0.95);
   --gt-fg-muted: rgba(255, 255, 255, 0.55);
+  --gt-hover-bg: rgba(255, 255, 255, 0.07);
 }
 /* SwitchControl — boolean on/off switch sibling to SegmentedControl.
    Variables resolved per color scheme; consumed via inline styles in
@@ -1559,8 +1562,14 @@ main[data-has-approval="false"] .scroll-messages {
 /* ─── Dark theme (Geist) ────────────────────────────────────
    Applied when the <html> element has class `dark`. */
 :root.dark {
-    --color-bg: #0a0a0a;
-    --color-bg-main: #0a0a0a;
+    /* Page base sits one ladder step BELOW surface-1 (#171717), not at pure
+       black. #0a0a0a was a shadcn-style void that the chat reading pane and
+       every transparent well fell through to; #0f0f0f keeps the page-vs-panel
+       elevation step (panels lift off the canvas) while killing the "hard to
+       look at" pure darkness. FF itself rests the canvas AT surface-1; we keep
+       a step because our panels are surface-1, not surface-2. */
+    --color-bg: #0f0f0f;
+    --color-bg-main: #0f0f0f;
     --color-surface: #1a1a1a;
     /* Highlight tint — must read as a distinct step above the base surface so
        hover states, chips, and nested cards are visible on dark panels.

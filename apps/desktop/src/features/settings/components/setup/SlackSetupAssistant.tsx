@@ -6,6 +6,7 @@ import { slackTokenPrefixValid, type SlackSetupServiceId } from "@/features/sett
 import { SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 
 export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -56,16 +57,18 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">1. Choose token type</div>
         <p className="m-0 text-xs text-muted">Current setup is token paste; Slack OAuth install is not available until app/client config exists. User tokens start xoxp-, bot tokens start xoxb-.</p>
-        <div className="flex flex-wrap gap-2">
+        <RadioGroup
+          aria-label="Token type"
+          value={serviceId}
+          onChange={(v) => setServiceId(v as SlackSetupServiceId)}
+        >
           {[
             ["slack_user_token", "User token (xoxp-)"] as const,
             ["slack_bot_token", "Bot token (xoxb-)"] as const,
-          ].map(([id, label]) => (
-            <label key={id} className="rounded-md border border-line-soft bg-surface-soft/35 px-3 py-2 text-sm">
-              <input type="radio" name="slack-service-choice" className="mr-2" checked={serviceId === id} onChange={() => setServiceId(id)} />{label}
-            </label>
+          ].map(([id, label], i) => (
+            <RadioGroupItem key={id} index={i} value={id} label={label} />
           ))}
-        </div>
+        </RadioGroup>
       </section>
 
       <section className="grid gap-2">

@@ -8,6 +8,7 @@ import { SettingsInlineError } from "@/features/settings/components/SettingsNoti
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 
 export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -74,22 +75,21 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
 
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">1. Choose service</div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {GOOGLE_SERVICE_OPTIONS.map((option) => (
-            <label key={option.value} className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-sm">
-              <input
-                type="radio"
-                name="google-service-choice"
-                value={option.value}
-                checked={serviceChoice === option.value}
-                onChange={() => setServiceChoice(option.value)}
-                className="mr-2"
-              />
-              <span className="font-medium text-ink-soft">{option.label}</span>
-              <span className="block pl-5 text-xs text-muted">{option.detail}</span>
-            </label>
+        <RadioGroup
+          aria-label="Google service"
+          value={serviceChoice}
+          onChange={(v) => setServiceChoice(v as GoogleServiceChoice)}
+        >
+          {GOOGLE_SERVICE_OPTIONS.map((option, i) => (
+            <RadioGroupItem
+              key={option.value}
+              index={i}
+              value={option.value}
+              label={option.label}
+              description={option.detail}
+            />
           ))}
-        </div>
+        </RadioGroup>
       </section>
 
       <section className="grid gap-2">

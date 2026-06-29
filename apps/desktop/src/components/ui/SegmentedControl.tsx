@@ -1,14 +1,21 @@
 import {
+  Children,
+  cloneElement,
   createContext,
+  isValidElement,
+  useCallback,
   useContext,
   useId,
+  useRef,
   type CSSProperties,
   type KeyboardEvent,
+  type ReactElement,
   type ReactNode,
   type Ref,
 } from "react";
-import { motion, useReducedMotion } from "motion/react";
-import { SPRING_LAYOUT } from "@/lib/tokens/motion";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { SPRING_LAYOUT, SPRING_TAP, MOTION } from "@/lib/tokens/motion";
+import { useProximityHover, useRegisterProximityItem } from "@/hooks/useProximityHover";
 
 type Size = "sm" | "md" | "lg";
 
@@ -27,6 +34,7 @@ interface SegmentedContextValue {
   size: Size;
   layoutId: string;
   reduced: boolean;
+  registerItem: (index: number, el: HTMLElement | null) => void;
 }
 
 const SegmentedContext = createContext<SegmentedContextValue | null>(null);
@@ -51,6 +59,11 @@ interface SegmentedControlProps {
  *
  * Arrow-key navigation reads the rendered `[role="tab"]` buttons from the DOM, so
  * items can be any direct children (including a `.map(...)`).
+ *
+ * A faint hover ghost (FF "fluid hover") springs between segments under the
+ * pointer, sitting behind the selected pill. It's additive: items self-register
+ * their measured rect via a `__index` the provider injects with `Children.map`,
+ * so consumers don't change. Skipped under reduced-motion.
  */
 export function SegmentedControl({
   value,
@@ -64,6 +77,20 @@ export function SegmentedControl({
   const sz = SIZES[size];
   const layoutId = useId();
   const reduced = !!useReducedMotion();
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const { activeIndex, itemRects, handlers, registerItem } = useProximityHover(containerRef, {
+    axis: "x",
+  });
+
+  const setRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      containerRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) (ref as { current: HTMLDivElement | null }).current = node;
+    },
+    [ref],
+  );
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
@@ -100,18 +127,59 @@ export function SegmentedControl({
     boxShadow: "var(--gt-track-shadow)",
   };
 
-  const ctx: SegmentedContextValue = { value, onChange, size, layoutId, reduced };
+  const ctx: SegmentedContextValue = { value, onChange, size, layoutId, reduced, registerItem };
+  const hoverRect = activeIndex != null ? itemRects[activeIndex] : null;
 
   return (
     <div
-      ref={ref}
+      ref={setRefs}
       role="tablist"
       aria-label={label}
       className={["segmented-control", className].filter(Boolean).join(" ")}
       style={trackStyle}
       onKeyDown={onKeyDown}
+      onMouseMove={handlers.onMouseMove}
+      onMouseEnter={handlers.onMouseEnter}
+      onMouseLeave={handlers.onMouseLeave}
     >
-      <SegmentedContext.Provider value={ctx}>{children}</SegmentedContext.Provider>
+      <SegmentedContext.Provider value={ctx}>
+        <AnimatePresence>
+          {!reduced && hoverRect && (
+            <motion.span
+              key="segmented-hover"
+              aria-hidden
+              initial={{
+                opacity: 0,
+                left: hoverRect.left,
+                top: hoverRect.top,
+                width: hoverRect.width,
+                height: hoverRect.height,
+              }}
+              animate={{
+                opacity: 1,
+                left: hoverRect.left,
+                top: hoverRect.top,
+                width: hoverRect.width,
+                height: hoverRect.height,
+              }}
+              exit={{ opacity: 0, transition: { duration: MOTION.fast } }}
+              transition={{ ...SPRING_TAP, opacity: { duration: MOTION.fast } }}
+              style={{
+                position: "absolute",
+                zIndex: 0,
+                borderRadius: 999,
+                background: "var(--gt-hover-bg)",
+                pointerEvents: "none",
+              }}
+            />
+          )}
+        </AnimatePresence>
+        {Children.map(children, (child, i) =>
+          isValidElement(child)
+            ? cloneElement(child as ReactElement<{ __index?: number }>, { __index: i })
+            : child,
+        )}
+      </SegmentedContext.Provider>
     </div>
   );
 }
@@ -122,6 +190,9 @@ interface SegmentedControlItemProps {
   children?: ReactNode;
   id?: string;
   "aria-label"?: string;
+  /** Injected by SegmentedControl via Children.map — the segment's DOM index,
+   *  used to register its measured rect for the proximity hover. */
+  __index?: number;
 }
 
 export function SegmentedControlItem({
@@ -129,14 +200,18 @@ export function SegmentedControlItem({
   children,
   id,
   "aria-label": ariaLabel,
+  __index = 0,
 }: SegmentedControlItemProps) {
   const ctx = useContext(SegmentedContext);
   if (!ctx) throw new Error("SegmentedControlItem must be used within SegmentedControl");
   const sz = SIZES[ctx.size];
   const active = ctx.value === value;
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  useRegisterProximityItem(ctx.registerItem, __index, btnRef);
 
   return (
     <button
+      ref={btnRef}
       id={id}
       type="button"
       role="tab"

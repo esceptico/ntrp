@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Input } from "@/components/ui/Input";
+import { Slider } from "@/components/ui/Slider";
 
 /** Labelled text/password input for settings forms. Thin convenience wrapper
  *  over {@link Input} with the settings defaults (no spellcheck/autocomplete)
@@ -108,29 +109,19 @@ export function PercentField({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
+        <span id={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
-      <div className="relative">
-        <input
-          id={id}
-          type="number"
-          value={percent}
-          min={min}
-          max={max}
-          step="any"
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (!Number.isFinite(n)) return;
-            const clamped = Math.max(min, Math.min(max, n));
-            onChange(clamped / 100);
-          }}
-          className="w-[88px] h-8 pl-2 pr-6 border border-line rounded-md bg-transparent text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
-        />
-        <span className="pointer-events-none absolute inset-y-0 right-2 grid place-items-center text-xs text-faint">
-          %
-        </span>
-      </div>
+      <Slider
+        className="w-52"
+        aria-labelledby={id}
+        value={percent}
+        min={min}
+        max={max}
+        step={1}
+        onChange={(n) => onChange(n / 100)}
+        formatValue={(n) => `${n}%`}
+      />
     </div>
   );
 }

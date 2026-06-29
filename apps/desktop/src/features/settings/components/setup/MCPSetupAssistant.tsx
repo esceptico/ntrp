@@ -7,6 +7,7 @@ import { SettingsInlineError } from "@/features/settings/components/SettingsNoti
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 
 export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | void }) {
   const config = useStore((s) => s.config);
@@ -90,18 +91,18 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
       {error && <SettingsInlineError title="MCP setup error" message={error} />}
       <section className="grid gap-2">
         <div className="text-sm font-medium text-ink">1. Choose transport</div>
-        <div className="flex flex-wrap gap-2">
+        <RadioGroup
+          aria-label="MCP transport"
+          value={transport}
+          onChange={(v) => setTransport(v as MCPTransport)}
+        >
           {[
             ["stdio", "STDIO", "Run a local command and connect over stdin/stdout."],
             ["http", "HTTP", "Connect to a streamable HTTP MCP endpoint."],
-          ].map(([id, label, detail]) => (
-            <label key={id} className="rounded-md border border-line-soft bg-surface-soft/35 px-3 py-2 text-sm">
-              <input type="radio" name="mcp-transport-choice" className="mr-2" checked={transport === id} onChange={() => setTransport(id as MCPTransport)} />
-              <span className="font-medium text-ink-soft">{label}</span>
-              <span className="block pl-5 text-xs text-muted">{detail}</span>
-            </label>
+          ].map(([id, label, detail], i) => (
+            <RadioGroupItem key={id} index={i} value={id} label={label} description={detail} />
           ))}
-        </div>
+        </RadioGroup>
       </section>
 
       <section className="grid gap-2">
