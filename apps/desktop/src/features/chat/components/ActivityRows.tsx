@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowUpRight,
   Bell,
@@ -38,12 +38,15 @@ import { ThinkingStep } from "@/components/ui/ThinkingStep";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { callTitle, groupSummary, operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
+import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import { MAX_NEST_DEPTH, NEST_PX } from "@/features/chat/lib/trace";
 
 type RowProps = {
   item: ActivityItem;
   onOpen: (item: ActivityItem) => void;
   last?: boolean;
+  /** Suppress mount entrance motion (stream replay / history reload). */
+  motionDisabled?: boolean;
 };
 
 const ICON_BY_KEY: Record<StepIconKey, LucideIcon> = {
@@ -77,7 +80,7 @@ function StepGlyph({ iconKey, errored }: { iconKey: StepIconKey; errored: boolea
   return <Icon size={14} strokeWidth={1.5} className={errored ? "text-bad" : undefined} />;
 }
 
-export function ItemButton({ item, onOpen, last }: RowProps) {
+export function ItemButton({ item, onOpen, last, motionDisabled }: RowProps) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
   if (isAgent(item)) {
     return <AgentRow item={item} depth={depth} onOpen={onOpen} last={last} />;
@@ -113,13 +116,20 @@ export function ItemButton({ item, onOpen, last }: RowProps) {
       </button>
       {sources.length > 0 && (
         <span className="mt-1.5 flex flex-wrap gap-1.5">
-          {sources.map((s) => (
-            // Theme-agnostic translucent-ink fill: a clearly-visible pill on
-            // both the white page and the near-black dark bg (the default
-            // neutral Badge fill collapses into the dark background).
-            <Badge key={s} tone="neutral" size="md" shape="pill" className="!bg-ink/[0.08] !text-muted">
-              {s}
-            </Badge>
+          {sources.map((s, i) => (
+            // FF source pop-in: each chip scales + unblurs in, lightly
+            // staggered. Theme-agnostic translucent-ink fill so the pill is
+            // visible on both the white page and the near-black dark bg.
+            <motion.span
+              key={s}
+              initial={motionDisabled ? false : { opacity: 0, scale: 0.85, filter: "blur(3px)" }}
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+              transition={{ duration: MOTION.row, ease: EASE_OUT, delay: motionDisabled ? 0 : 0.05 * i }}
+            >
+              <Badge tone="neutral" size="md" shape="pill" className="!bg-ink/[0.08] !text-muted">
+                {s}
+              </Badge>
+            </motion.span>
           ))}
         </span>
       )}
@@ -177,20 +187,23 @@ export function ToolGroupRow({
       <AnimatePresence initial={false}>
         {open && (
           <Reveal key="children" className="mt-1 flex flex-col gap-0.5">
-            {items.map((it) => {
+            {items.map((it, i) => {
               // Prefer the model's per-call title ("Read about.html"); else the
-              // arg detail (the path/query).
+              // arg detail (the path/query). Each line cascades in (FF feel).
               const text = callTitle(it) ?? operationLabel(it).detail ?? it.target ?? it.kind;
               return (
-                <button
+                <motion.button
                   key={it.id}
                   type="button"
+                  initial={{ opacity: 0, y: 3, filter: "blur(2px)" }}
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  transition={{ duration: MOTION.row, ease: EASE_OUT, delay: 0.03 * i }}
                   onClick={() => onOpen(it)}
                   title={`${it.target || it.kind} — click to inspect`}
                   className="truncate border-0 bg-transparent p-0 text-left text-[13px] leading-snug text-muted hover:text-ink-soft cursor-pointer"
                 >
                   {text}
-                </button>
+                </motion.button>
               );
             })}
           </Reveal>

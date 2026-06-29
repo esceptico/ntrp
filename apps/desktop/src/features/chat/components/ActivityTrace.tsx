@@ -125,6 +125,7 @@ export function ActivityTail({
                       item={item}
                       onOpen={setViewingTool}
                       last={idx === arr.length - 1}
+                      motionDisabled={suppressMotion}
                     />
                   </motion.div>
                 ))}
@@ -194,6 +195,7 @@ export function ActivityTail({
                           item={row.item}
                           onOpen={setViewingTool}
                           last={idx === rows.length - 1}
+                          motionDisabled={suppressMotion}
                         />
                       )}
                     </div>
