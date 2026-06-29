@@ -91,7 +91,7 @@ export function ItemButton({ item, onOpen, last }: RowProps) {
     <ThinkingStep
       node={<StepGlyph iconKey={iconKey} errored={errored} />}
       last={last}
-      className="rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
+      className="rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
     >
       <button
@@ -102,7 +102,7 @@ export function ItemButton({ item, onOpen, last }: RowProps) {
       >
         <span
           className={clsx(
-            "truncate font-medium",
+            "truncate font-medium leading-tight",
             errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
           )}
         >
@@ -114,7 +114,10 @@ export function ItemButton({ item, onOpen, last }: RowProps) {
       {sources.length > 0 && (
         <span className="mt-1.5 flex flex-wrap gap-1.5">
           {sources.map((s) => (
-            <Badge key={s} tone="neutral" size="sm" shape="pill">
+            // Theme-agnostic translucent-ink fill: a clearly-visible pill on
+            // both the white page and the near-black dark bg (the default
+            // neutral Badge fill collapses into the dark background).
+            <Badge key={s} tone="neutral" size="md" shape="pill" className="!bg-ink/[0.08] !text-muted">
               {s}
             </Badge>
           ))}
@@ -146,7 +149,7 @@ export function ToolGroupRow({
     <ThinkingStep
       node={<StepGlyph iconKey={iconKey} errored={errored} />}
       last={last}
-      className="rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
+      className="rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
     >
       <button
@@ -157,7 +160,7 @@ export function ToolGroupRow({
       >
         <span
           className={clsx(
-            "truncate font-medium",
+            "truncate font-medium leading-tight",
             errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
           )}
         >
@@ -222,7 +225,7 @@ function AgentRow({
   return (
     <ThinkingStep
       last={last}
-      className="group/agent rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
+      className="group/agent rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       node={
         <span className="relative grid h-4 w-4 place-items-center">
@@ -273,7 +276,7 @@ function AgentRow({
         >
           <span
             className={clsx(
-              "truncate font-medium group-hover/agent:text-ink transition-colors duration-row ease-out",
+              "truncate font-medium leading-tight group-hover/agent:text-ink transition-colors duration-row ease-out",
               running ? "step-shimmer" : terminalBad ? "text-bad" : "text-ink",
             )}
           >
