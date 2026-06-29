@@ -1,17 +1,29 @@
+import { useState } from "react";
+import { AnimatePresence } from "motion/react";
 import {
   ArrowUpRight,
+  Bell,
   Bot,
   Brain,
+  CalendarDays,
+  ChevronDown,
+  Clock,
+  Dot,
   FileText,
   FilePlus2,
   FolderOpen,
   Globe,
+  History,
+  Image,
   ListChecks,
   type LucideIcon,
+  Mail,
+  MessageSquare,
   PenLine,
   Search,
   Square,
   Terminal,
+  Wrench,
 } from "lucide-react";
 import clsx from "clsx";
 import type { ActivityItem } from "@/stores";
@@ -20,10 +32,11 @@ import { switchSession } from "@/actions/sessions";
 import { cancelSubagent } from "@/actions/messages";
 import { ICON } from "@/lib/icons";
 import { Badge } from "@/components/ui/Badge";
+import { Reveal } from "@/components/ui/Reveal";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ThinkingStep } from "@/components/ui/ThinkingStep";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
+import { groupSummary, operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
 import { MAX_NEST_DEPTH, NEST_PX } from "@/features/chat/lib/trace";
 
@@ -33,7 +46,7 @@ type RowProps = {
   last?: boolean;
 };
 
-const ICON_BY_KEY: Record<Exclude<StepIconKey, null>, LucideIcon> = {
+const ICON_BY_KEY: Record<StepIconKey, LucideIcon> = {
   search: Search,
   globe: Globe,
   folder: FolderOpen,
@@ -43,16 +56,23 @@ const ICON_BY_KEY: Record<Exclude<StepIconKey, null>, LucideIcon> = {
   terminal: Terminal,
   brain: Brain,
   list: ListChecks,
+  mail: Mail,
+  slack: MessageSquare,
+  calendar: CalendarDays,
+  clock: Clock,
+  bell: Bell,
+  image: Image,
+  wrench: Wrench,
+  history: History,
+  dot: Dot,
 };
 
-// Semantic step glyph: a lucide icon for known operations, else a plain
-// timeline dot. Colour comes from the gutter (text-muted) via currentColor;
-// errors tint red. Lives in the gutter, OUTSIDE the label, so the running
+// Semantic step glyph: a category lucide icon (every tool resolves to one — the
+// `dot` fallback is itself a lucide glyph so it shares the icons' 14px metrics
+// and never looks mis-sized). Colour comes from the gutter (text-muted) via
+// currentColor; errors tint red. Lives OUTSIDE the label so the running
 // label-shimmer never masks it.
 function StepGlyph({ iconKey, errored }: { iconKey: StepIconKey; errored: boolean }) {
-  if (!iconKey) {
-    return <span className={clsx("block h-1.5 w-1.5 rounded-full", errored ? "bg-bad" : "bg-faint")} />;
-  }
   const Icon = ICON_BY_KEY[iconKey];
   return <Icon size={14} strokeWidth={1.5} className={errored ? "text-bad" : undefined} />;
 }
@@ -100,6 +120,77 @@ export function ItemButton({ item, onOpen, last }: RowProps) {
           ))}
         </span>
       )}
+    </ThinkingStep>
+  );
+}
+
+// A collapsed run of consecutive same-kind calls (FF "Explored 4 pages"): one
+// summary step ("Read 8 files") with a chevron that reveals the individual
+// calls as muted, inspectable detail lines. Snap-reveal (not a height tween) —
+// row lists must not grid-rows animate.
+export function ToolGroupRow({
+  items,
+  onOpen,
+  last,
+}: {
+  items: ActivityItem[];
+  onOpen: (item: ActivityItem) => void;
+  last?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const { verb, iconKey } = groupSummary(items);
+  const running = items.some((it) => activityItemStatus(it) === "ongoing");
+  const errored = items.some((it) => !!it.error);
+  const depth = Math.min(items[0].depth ?? 0, MAX_NEST_DEPTH);
+  return (
+    <ThinkingStep
+      node={<StepGlyph iconKey={iconKey} errored={errored} />}
+      last={last}
+      className="rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
+      style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 text-left cursor-pointer"
+      >
+        <span
+          className={clsx(
+            "truncate font-medium",
+            errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
+          )}
+        >
+          {verb}
+          {running && "…"}
+        </span>
+        <ChevronDown
+          size={ICON.XS}
+          strokeWidth={2}
+          className={clsx("shrink-0 text-faint transition-transform duration-trace ease-out", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <Reveal key="children" className="mt-1 flex flex-col gap-0.5">
+            {items.map((it) => {
+              const d = operationLabel(it).detail;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => onOpen(it)}
+                  title={`${it.target || it.kind} — click to inspect`}
+                  className="truncate border-0 bg-transparent p-0 text-left text-[13px] leading-snug text-muted hover:text-ink-soft cursor-pointer"
+                >
+                  {d || it.target || it.kind}
+                </button>
+              );
+            })}
+          </Reveal>
+        )}
+      </AnimatePresence>
     </ThinkingStep>
   );
 }

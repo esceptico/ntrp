@@ -1,66 +1,139 @@
 import type { ActivityItem } from "@/stores";
 
-/** Semantic icon key for a step — mapped to a lucide glyph in the trace row.
- *  `null` falls back to a plain timeline dot (unknown tools). */
+/** Semantic icon key for a step — mapped to a lucide glyph in the trace row. */
 export type StepIconKey =
   | "search"
   | "globe"
-  | "folder"
   | "file"
   | "edit"
   | "file-plus"
+  | "folder"
   | "terminal"
   | "brain"
   | "list"
-  | null;
+  | "mail"
+  | "slack"
+  | "calendar"
+  | "clock"
+  | "bell"
+  | "image"
+  | "wrench"
+  | "history"
+  | "dot";
 
 export interface OperationLabel {
-  /** Natural-language operation, e.g. "Read", "Searched the web". */
+  /** Natural-language, corpus-specific operation, e.g. "Searched email". */
   verb: string;
   /** The object of the operation (a path / query / command), or null. */
   detail: string | null;
-  /** Semantic icon for the step. */
+  /** Category icon for the step. */
   iconKey: StepIconKey;
+  /** Singular unit for grouping summaries ("file" → "Read 4 files"), or null. */
+  noun: string | null;
 }
 
-// ponytail: heuristic kind→(verb, icon) map. The real "operation header" (a
-// per-step natural-language label + icon) belongs to the server, which would
-// supersede this. Until then this turns the raw tool name into a readable
-// operation label and falls back to the tool's own displayName/kind + a plain
-// dot when the kind isn't known. Order matters: more specific first.
-//
-// Matched against a separator-normalized kind ("read_file" → "read file") so
-// `\b` guards behave for both snake_case and short ambiguous tokens — without
-// the normalize, `\bread\b` would miss "read_file" (`_` is a word char) and a
-// bare `read`/`cat`/`view` would wrongly claim "preview"/"category".
-const RULES: ReadonlyArray<readonly [RegExp, string, StepIconKey]> = [
-  [/\bweb ?search\b|\bsearch ?web\b|\b(exa|ddg|google|brave|tavily)\b/, "Searched the web", "search"],
-  [/\bweb ?fetch\b|\bfetch\b|\bcurl\b|\bhttp\b|\bbrowse\b|\bscrape\b|\bopen ?url\b|\burl\b/, "Fetched", "globe"],
-  [/\bgrep\b|\bripgrep\b|\brg\b|\bsearch ?(code|files?|repo|symbols?)\b/, "Searched code", "search"],
-  [/\bglob\b|\bfind\b|\blist ?(dir|files?)\b|\bls\b/, "Listed files", "folder"],
-  [/\bread\b|\bcat\b|\bview\b|\bopen ?file\b|\bget ?file\b/, "Read", "file"],
-  [/\bstr ?replace\b|\bapply ?patch\b|\bpatch\b|\bedit\b|\bupdate ?file\b|\bmodify\b/, "Edited", "edit"],
-  [/\bwrite\b|\bcreate ?file\b|\bsave ?file\b/, "Wrote", "file-plus"],
-  [/\bbash\b|\bshell\b|\bexec\b|\brun ?(command|shell)\b|\bterminal\b|\bcmd\b/, "Ran", "terminal"],
-  [/\bmemory\b|\brecall\b|\bremember\b|\bfact\b|observ/, "Memory", "brain"],
-  [/\bsearch\b/, "Searched", "search"],
-  [/\btodo\b|\bplan\b/, "Updated plan", "list"],
-  [/\bthink\b|\breason\b/, "Thought", "brain"],
+interface ToolMeta {
+  verb: string;
+  icon: StepIconKey;
+  noun?: string;
+}
+
+// Curated registry for the tools a user actually sees, keyed by the exact tool
+// name the server sends (apps/server/ntrp/integrations). Labels name the CORPUS
+// so "Searched email" / "Searched Slack" / "Searched the web" are unambiguous.
+// `noun` drives the grouped summary ("Read 4 files"). The long tail falls back
+// to a category icon (PREFIX_ICON) + the server display_name, humanized.
+const TOOL_META: Record<string, ToolMeta> = {
+  // System / files
+  read_file: { verb: "Read", icon: "file", noun: "file" },
+  write_file: { verb: "Wrote", icon: "file-plus", noun: "file" },
+  edit_file: { verb: "Edited", icon: "edit", noun: "file" },
+  list_files: { verb: "Listed files", icon: "folder" },
+  find_files: { verb: "Found files", icon: "search" },
+  search_text: { verb: "Searched code", icon: "search", noun: "match" },
+  bash: { verb: "Ran", icon: "terminal", noun: "command" },
+  current_time: { verb: "Checked the time", icon: "clock" },
+  render_html: { verb: "Rendered a view", icon: "image" },
+  load_tools: { verb: "Loaded tools", icon: "wrench" },
+  notify: { verb: "Notified you", icon: "bell" },
+  update_todos: { verb: "Updated the plan", icon: "list" },
+
+  // Web
+  web_search: { verb: "Searched the web", icon: "globe", noun: "search" },
+  web_fetch: { verb: "Fetched a page", icon: "globe", noun: "page" },
+
+  // Gmail
+  emails: { verb: "Searched email", icon: "mail", noun: "email" },
+  read_email: { verb: "Read an email", icon: "mail", noun: "email" },
+  send_email: { verb: "Sent an email", icon: "mail" },
+
+  // Slack
+  slack_search: { verb: "Searched Slack", icon: "slack", noun: "message" },
+  slack_channel: { verb: "Read a Slack channel", icon: "slack" },
+  slack_channels: { verb: "Listed Slack channels", icon: "slack" },
+  slack_dm: { verb: "Read a Slack DM", icon: "slack" },
+  slack_dms: { verb: "Listed Slack DMs", icon: "slack" },
+  slack_thread: { verb: "Read a Slack thread", icon: "slack" },
+  slack_user: { verb: "Looked up a Slack user", icon: "slack" },
+  slack_users: { verb: "Searched Slack users", icon: "slack" },
+  slack_file: { verb: "Fetched a Slack file", icon: "image" },
+  slack_post_message: { verb: "Posted to Slack", icon: "slack" },
+  slack_post_blocks: { verb: "Posted to Slack", icon: "slack" },
+
+  // Calendar
+  calendar: { verb: "Checked the calendar", icon: "calendar", noun: "event" },
+  create_calendar_event: { verb: "Created an event", icon: "calendar" },
+  edit_calendar_event: { verb: "Edited an event", icon: "calendar" },
+  delete_calendar_event: { verb: "Deleted an event", icon: "calendar" },
+
+  // Memory
+  memory_search: { verb: "Searched memory", icon: "brain", noun: "record" },
+  recall: { verb: "Recalled memory", icon: "brain" },
+  remember: { verb: "Saved to memory", icon: "brain" },
+  forget: { verb: "Forgot a memory", icon: "brain" },
+  memory_read: { verb: "Read memory", icon: "brain" },
+  memory_patch: { verb: "Updated memory", icon: "brain" },
+  memory_tree: { verb: "Viewed the memory tree", icon: "brain" },
+  memory_rebuild: { verb: "Rebuilt memory", icon: "brain" },
+
+  // Sessions
+  search_transcripts: { verb: "Searched transcripts", icon: "history", noun: "transcript" },
+  read_session: { verb: "Read a session", icon: "history" },
+  list_recent_sessions: { verb: "Listed sessions", icon: "history" },
+};
+
+// Category by tool-name shape, for the long tail not in TOOL_META.
+const PREFIX_ICON: ReadonlyArray<readonly [RegExp, StepIconKey]> = [
+  [/^slack_/, "slack"],
+  [/calendar|event/, "calendar"],
+  [/^memory_|^recall$|^remember$|^forget$/, "brain"],
+  [/^web_/, "globe"],
+  [/^research/, "brain"],
+  [/email/, "mail"],
+  [/session|transcript/, "history"],
+  [/automation|loop|wakeup|schedule|cron/, "clock"],
+  [/skill/, "wrench"],
+  [/notif/, "bell"],
+  [/todo|goal|directive/, "list"],
 ];
 
-// Args keys that name the object of the call, in priority order.
+// Last-resort verb heuristic (user/MCP tools with no useful display_name).
+const VERB_RULES: ReadonlyArray<readonly [RegExp, string, StepIconKey]> = [
+  [/\bsearch\b|\bgrep\b|\bfind\b/, "Searched", "search"],
+  [/\bfetch\b|\bcurl\b|\bhttp\b|\bget\b/, "Fetched", "globe"],
+  [/\bread\b|\bcat\b|\bview\b/, "Read", "file"],
+  [/\bwrite\b|\bcreate\b|\bsave\b/, "Wrote", "file-plus"],
+  [/\bedit\b|\breplace\b|\bpatch\b|\bupdate\b/, "Edited", "edit"],
+  [/\blist\b|\bls\b/, "Listed", "folder"],
+  [/\brun\b|\bexec\b|\bbash\b/, "Ran", "terminal"],
+];
+
 const DETAIL_KEYS = [
   "path", "file_path", "filename", "file", "query", "q", "command", "cmd",
-  "url", "pattern", "name", "prompt", "task", "title",
+  "url", "pattern", "name", "prompt", "task", "title", "channel", "id",
 ] as const;
 
 const MAX_DETAIL = 64;
-
-function titleCase(s: string): string {
-  const cleaned = s.replace(/[_-]+/g, " ").trim();
-  if (!cleaned) return s;
-  return cleaned[0].toUpperCase() + cleaned.slice(1);
-}
 
 function truncate(s: string): string {
   const t = s.trim().replace(/\s+/g, " ");
@@ -86,16 +159,53 @@ function detailFromArgs(obj: Record<string, unknown> | null): string | null {
   return null;
 }
 
-/** Map a tool activity item to a natural-language operation label + icon.
- *  Agents carry their own friendly name and task, so they keep their bespoke
- *  row and never reach this. */
+// "SlackDMs" → "Slack DMs", "ListAutomations" → "List automations" (camelCase
+// split + separator clean; acronym runs preserved, first letter capitalized).
+function humanize(s: string | undefined): string | null {
+  if (!s) return null;
+  const spaced = s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!spaced) return null;
+  return spaced[0].toUpperCase() + spaced.slice(1);
+}
+
+/** Map a tool activity item to a corpus-specific label + category icon.
+ *  Agents carry their own friendly name and never reach this. */
 export function operationLabel(item: ActivityItem): OperationLabel {
-  // Normalize separators to spaces so `\b` word-boundaries match cleanly.
-  const kind = (item.kind ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const matched = RULES.find(([re]) => re.test(kind));
-  const verb = matched ? matched[1] : titleCase(item.displayName || item.kind || "Tool");
-  const iconKey = matched ? matched[2] : null;
-  return { verb, detail: detailFromArgs(parseArgs(item.args)), iconKey };
+  const name = (item.kind ?? "").toLowerCase();
+  const detail = detailFromArgs(parseArgs(item.args));
+
+  const meta = TOOL_META[name];
+  if (meta) return { verb: meta.verb, detail, iconKey: meta.icon, noun: meta.noun ?? null };
+
+  const prefixIcon = PREFIX_ICON.find(([re]) => re.test(name))?.[1];
+  const norm = name.replace(/[^a-z0-9]+/g, " ").trim();
+  const heuristic = VERB_RULES.find(([re]) => re.test(norm));
+
+  // Prefer the server display_name (humanized) as the label — it names the
+  // corpus the backend authored. Fall back to a heuristic verb, then the kind.
+  const verb = humanize(item.displayName) ?? heuristic?.[1] ?? humanize(item.kind) ?? "Tool";
+  const iconKey = prefixIcon ?? heuristic?.[2] ?? "dot";
+  return { verb, detail, iconKey, noun: null };
+}
+
+function plural(noun: string, n: number): string {
+  if (n === 1) return noun;
+  return /(s|x|ch|sh)$/.test(noun) ? `${noun}es` : `${noun}s`;
+}
+
+/** Summary label + icon for a collapsed run of same-kind calls, e.g.
+ *  "Read 8 files" / "Searched the web · 3". */
+export function groupSummary(items: ActivityItem[]): { verb: string; iconKey: StepIconKey } {
+  const { verb, iconKey, noun } = operationLabel(items[0]);
+  const n = items.length;
+  if (noun) {
+    const action = verb.split(" ")[0]; // "Read" / "Searched" / "Fetched"
+    return { verb: `${action} ${n} ${plural(noun, n)}`, iconKey };
+  }
+  return { verb: `${verb} · ${n}`, iconKey };
 }
 
 function hostname(raw: string): string | null {
@@ -104,15 +214,13 @@ function hostname(raw: string): string | null {
   try {
     return new URL(s).hostname.replace(/^www\./, "");
   } catch {
-    // Bare "github.com/x" or "example.com" — take the leading authority.
     const m = s.match(/^(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,})(?:[/:?#]|$)/i);
     return m ? m[1].replace(/^www\./, "") : null;
   }
 }
 
-/** Source chips for a step — domains the call touched. Honest: only what we
- *  can read from args (a `url`/`urls`). Result-derived sources need the server
- *  to surface them. Empty for most tools. */
+/** Source chips for a step — domains the call touched, read honestly from a
+ *  `url`/`urls` arg. Empty for most tools. */
 export function stepSources(item: ActivityItem): string[] {
   const obj = parseArgs(item.args);
   if (!obj) return [];

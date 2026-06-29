@@ -16,9 +16,10 @@ import { HtmlWidgetCard } from "@/features/chat/components/HtmlWidgetCard";
 import {
   buildRollingList,
   buildStaticTree,
+  groupConsecutiveCalls,
   orderedTraceEntries,
 } from "@/features/chat/lib/trace";
-import { ItemButton } from "@/features/chat/components/ActivityRows";
+import { ItemButton, ToolGroupRow } from "@/features/chat/components/ActivityRows";
 
 export type { ActivityItem };
 export type { TraceEntry } from "@/features/chat/lib/trace";
@@ -160,7 +161,7 @@ export function ActivityTail({
             </div>
           );
         }
-        const visible = buildStaticTree(entry.items);
+        const rows = groupConsecutiveCalls(buildStaticTree(entry.items));
         return (
           <div key={`rows:${i}`} className="pl-1 mt-0.5">
             <AnimatePresence initial={false}>
@@ -180,13 +181,21 @@ export function ActivityTail({
                       : { duration: MOTION.panel, ease: EASE_DECELERATE }
                   }
                 >
-                  {visible.map((item, idx, arr) => (
-                    <div key={item.id} className="min-w-0">
-                      <ItemButton
-                        item={item}
-                        onOpen={setViewingTool}
-                        last={idx === arr.length - 1}
-                      />
+                  {rows.map((row, idx) => (
+                    <div key={row.type === "group" ? `g:${row.key}` : row.item.id} className="min-w-0">
+                      {row.type === "group" ? (
+                        <ToolGroupRow
+                          items={row.items}
+                          onOpen={setViewingTool}
+                          last={idx === rows.length - 1}
+                        />
+                      ) : (
+                        <ItemButton
+                          item={row.item}
+                          onOpen={setViewingTool}
+                          last={idx === rows.length - 1}
+                        />
+                      )}
                     </div>
                   ))}
                 </motion.div>

@@ -230,3 +230,48 @@ function rollingLevel(items: ActivityItem[], max: number): ActivityItem[] {
 export function isSessionBackedAgent(item: ActivityItem): boolean {
   return isAgent(item) && !!item.childAgent?.childSessionId;
 }
+
+// ─── Consecutive-call grouping (FF "Explored N pages") ─────────────
+// A run of adjacent same-kind leaf tool calls collapses into one summary
+// row with a disclosure, so a turn that read 8 files reads as "Read 8 files"
+// instead of eight rows. Agents/workflows/html-widgets never group (each is
+// its own artifact). Same depth is required so a parent never folds in with
+// its siblings (a child is always depth+1, i.e. between them in the flat list).
+
+export type TraceRow =
+  | { type: "item"; item: ActivityItem }
+  | { type: "group"; key: string; items: ActivityItem[] };
+
+export const GROUP_MIN = 3;
+
+function groupableTool(it: ActivityItem): boolean {
+  return !isAgent(it) && !isWorkflow(it) && !isHtmlWidget(it);
+}
+
+export function groupConsecutiveCalls(items: ActivityItem[], minRun = GROUP_MIN): TraceRow[] {
+  const rows: TraceRow[] = [];
+  let i = 0;
+  while (i < items.length) {
+    const it = items[i];
+    if (groupableTool(it)) {
+      const depth = it.depth ?? 0;
+      let j = i + 1;
+      while (
+        j < items.length &&
+        items[j].kind === it.kind &&
+        (items[j].depth ?? 0) === depth &&
+        groupableTool(items[j])
+      ) {
+        j++;
+      }
+      if (j - i >= minRun) {
+        rows.push({ type: "group", key: it.id, items: items.slice(i, j) });
+        i = j;
+        continue;
+      }
+    }
+    rows.push({ type: "item", item: it });
+    i++;
+  }
+  return rows;
+}

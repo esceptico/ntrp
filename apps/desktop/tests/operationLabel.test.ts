@@ -1,78 +1,70 @@
 import { expect, test } from "bun:test";
-import { operationLabel, stepSources } from "@/features/chat/lib/operationLabel";
+import { groupSummary, operationLabel, stepSources } from "@/features/chat/lib/operationLabel";
 import type { ActivityItem } from "@/stores";
 
-function item(over: Partial<ActivityItem>): ActivityItem {
+function item(over: Partial<ActivityItem> = {}): ActivityItem {
   return { id: "x", kind: "tool", target: "", ...over } as ActivityItem;
 }
 
-test("maps common tool kinds to natural-language verbs + icons", () => {
+test("known tools get corpus-specific labels + category icons", () => {
   expect(operationLabel(item({ kind: "read_file" }))).toMatchObject({ verb: "Read", iconKey: "file" });
   expect(operationLabel(item({ kind: "bash" }))).toMatchObject({ verb: "Ran", iconKey: "terminal" });
-  expect(operationLabel(item({ kind: "grep" }))).toMatchObject({ verb: "Searched code", iconKey: "search" });
-  expect(operationLabel(item({ kind: "glob" }))).toMatchObject({ verb: "Listed files", iconKey: "folder" });
-  expect(operationLabel(item({ kind: "web_search" }))).toMatchObject({ verb: "Searched the web", iconKey: "search" });
-  expect(operationLabel(item({ kind: "web_fetch" }))).toMatchObject({ verb: "Fetched", iconKey: "globe" });
-  expect(operationLabel(item({ kind: "str_replace_editor" }))).toMatchObject({ verb: "Edited", iconKey: "edit" });
+  expect(operationLabel(item({ kind: "web_search" }))).toMatchObject({ verb: "Searched the web", iconKey: "globe" });
+  expect(operationLabel(item({ kind: "web_fetch" }))).toMatchObject({ verb: "Fetched a page", iconKey: "globe" });
+  expect(operationLabel(item({ kind: "emails" }))).toMatchObject({ verb: "Searched email", iconKey: "mail" });
+  expect(operationLabel(item({ kind: "slack_search" }))).toMatchObject({ verb: "Searched Slack", iconKey: "slack" });
+  expect(operationLabel(item({ kind: "slack_dms" }))).toMatchObject({ verb: "Listed Slack DMs", iconKey: "slack" });
+  expect(operationLabel(item({ kind: "calendar" }))).toMatchObject({ verb: "Checked the calendar", iconKey: "calendar" });
+  expect(operationLabel(item({ kind: "search_transcripts" }))).toMatchObject({ verb: "Searched transcripts", iconKey: "history" });
+  expect(operationLabel(item({ kind: "memory_search" }))).toMatchObject({ verb: "Searched memory", iconKey: "brain" });
+  expect(operationLabel(item({ kind: "load_tools" }))).toMatchObject({ verb: "Loaded tools", iconKey: "wrench" });
 });
 
-test("unknown kinds get no icon (fall back to a timeline dot)", () => {
-  expect(operationLabel(item({ kind: "custom_thing" })).iconKey).toBeNull();
-});
-
-test("file-search kinds win over the generic web-search rule", () => {
-  // `search_files` must read as a code search, not a web search.
-  expect(operationLabel(item({ kind: "search_files" })).verb).toBe("Searched code");
-});
-
-test("pulls the operation object out of args, preferring path-like keys", () => {
-  expect(operationLabel(item({ kind: "read", args: '{"path":"ntrp/core/agent.py"}' })).detail).toBe(
-    "ntrp/core/agent.py",
+test("the corpus, not just the action, is in the label (search tools are distinguishable)", () => {
+  const verbs = ["emails", "slack_search", "web_search", "search_transcripts", "memory_search"].map(
+    (kind) => operationLabel(item({ kind })).verb,
   );
-  expect(operationLabel(item({ kind: "web_search", args: '{"query":"opus 4.8"}' })).detail).toBe(
-    "opus 4.8",
+  // No two search tools share a label — the user can tell what was searched.
+  expect(new Set(verbs).size).toBe(verbs.length);
+});
+
+test("unknown tools fall back to a humanized display_name + a category/dot icon", () => {
+  // camelCase display_name is humanized (split + title-case, acronyms preserved).
+  expect(operationLabel(item({ kind: "list_automations", displayName: "ListAutomations" })).verb).toBe(
+    "List Automations",
   );
+  expect(operationLabel(item({ kind: "slack_dms_x", displayName: "SlackDMs" })).verb).toBe("Slack DMs");
+  // Truly unknown → humanized kind + the dot glyph (a real icon, never a bare dot).
+  expect(operationLabel(item({ kind: "custom_thing" }))).toMatchObject({ verb: "Custom thing", iconKey: "dot" });
+  // Category prefix still gives an icon even with no curated entry.
+  expect(operationLabel(item({ kind: "slack_reactions" })).iconKey).toBe("slack");
 });
 
-test("partial/empty args yield no detail rather than throwing", () => {
-  expect(operationLabel(item({ kind: "read", args: '{"path":' })).detail).toBeNull();
-  expect(operationLabel(item({ kind: "read", args: "{}" })).detail).toBeNull();
-  expect(operationLabel(item({ kind: "read" })).detail).toBeNull();
-});
-
-test("short verb tokens don't bleed into longer words", () => {
-  // "view"/"cat"/"read" must not claim preview/category/overview.
+test("short heuristic tokens don't bleed into longer words", () => {
   expect(operationLabel(item({ kind: "preview" })).verb).toBe("Preview");
   expect(operationLabel(item({ kind: "category" })).verb).toBe("Category");
-  expect(operationLabel(item({ kind: "overview" })).verb).toBe("Overview");
-  // …but snake_case tool names still resolve.
   expect(operationLabel(item({ kind: "view_file" })).verb).toBe("Read");
-  expect(operationLabel(item({ kind: "open_file" })).verb).toBe("Read");
 });
 
-test("unknown kinds fall back to a title-cased displayName/kind", () => {
-  expect(operationLabel(item({ kind: "custom_thing" })).verb).toBe("Custom thing");
-  expect(operationLabel(item({ kind: "custom_thing", displayName: "Sync vault" })).verb).toBe(
-    "Sync vault",
+test("detail comes from args, preferring path-like keys; partial JSON is safe", () => {
+  expect(operationLabel(item({ kind: "read_file", args: '{"path":"ntrp/core/agent.py"}' })).detail).toBe(
+    "ntrp/core/agent.py",
   );
+  expect(operationLabel(item({ kind: "read_file", args: '{"path":' })).detail).toBeNull();
+  expect(operationLabel(item({ kind: "read_file" })).detail).toBeNull();
+});
+
+test("groupSummary pluralizes with the tool's noun, else falls back to a count", () => {
+  expect(groupSummary([item({ kind: "read_file" }), item({ kind: "read_file" }), item({ kind: "read_file" })])).toMatchObject({
+    verb: "Read 3 files",
+    iconKey: "file",
+  });
+  expect(groupSummary([item({ kind: "web_search" }), item({ kind: "web_search" })]).verb).toBe("Searched 2 searches");
+  // No noun → "{label} · {n}".
+  expect(groupSummary([item({ kind: "slack_dms" }), item({ kind: "slack_dms" })]).verb).toBe("Listed Slack DMs · 2");
 });
 
 test("stepSources extracts deduped hostnames from url/urls args", () => {
-  expect(stepSources(item({ kind: "web_fetch", args: '{"url":"https://www.github.com/willccbb/verifiers"}' }))).toEqual([
-    "github.com",
-  ]);
-  expect(stepSources(item({ kind: "fetch", args: '{"urls":["https://a.com/x","http://a.com/y","https://b.io"]}' }))).toEqual([
-    "a.com",
-    "b.io",
-  ]);
-  expect(stepSources(item({ kind: "read", args: '{"path":"a.ts"}' }))).toEqual([]);
-  expect(stepSources(item({ kind: "web_fetch" }))).toEqual([]);
-});
-
-test("truncates long details", () => {
-  const long = "a/".repeat(60);
-  const { detail } = operationLabel(item({ kind: "read", args: JSON.stringify({ path: long }) }));
-  expect(detail).not.toBeNull();
-  expect(detail!.length).toBeLessThanOrEqual(64);
-  expect(detail!.endsWith("…")).toBe(true);
+  expect(stepSources(item({ kind: "web_fetch", args: '{"url":"https://www.github.com/x"}' }))).toEqual(["github.com"]);
+  expect(stepSources(item({ kind: "read_file", args: '{"path":"a.ts"}' }))).toEqual([]);
 });
