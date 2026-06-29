@@ -64,6 +64,23 @@ test("groupSummary pluralizes with the tool's noun, else falls back to a count",
   expect(groupSummary([item({ kind: "slack_dms" }), item({ kind: "slack_dms" })]).verb).toBe("Listed Slack DMs · 2");
 });
 
+test("backend rendering hints (icon/noun) win over the client registry; label stays frontend", () => {
+  // Backend says this tool's icon is mail even though the client wouldn't know it.
+  const r = operationLabel(item({ kind: "acme_inbox", displayName: "AcmeInbox", icon: "mail", noun: "thread" }));
+  expect(r.iconKey).toBe("mail");
+  expect(r.noun).toBe("thread");
+  expect(r.verb).toBe("Acme Inbox"); // label still composed on the client
+  // An unknown/invalid backend icon is ignored (falls back), never rendered raw.
+  expect(operationLabel(item({ kind: "frobnicate", icon: "not-a-real-icon" })).iconKey).toBe("dot");
+});
+
+test("without backend hints, the client registry still drives icon + noun (history reload)", () => {
+  expect(operationLabel(item({ kind: "read_file" }))).toMatchObject({ iconKey: "file", noun: "file" });
+  expect(groupSummary([item({ kind: "web_fetch", icon: "globe", noun: "page" }), item({ kind: "web_fetch" })]).verb).toBe(
+    "Fetched 2 pages",
+  );
+});
+
 test("stepSources extracts deduped hostnames from url/urls args", () => {
   expect(stepSources(item({ kind: "web_fetch", args: '{"url":"https://www.github.com/x"}' }))).toEqual(["github.com"]);
   expect(stepSources(item({ kind: "read_file", args: '{"path":"a.ts"}' }))).toEqual([]);

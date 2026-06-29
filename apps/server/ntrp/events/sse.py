@@ -259,6 +259,10 @@ class ToolCallStartEvent(SSEEvent):
     depth: int = 0
     parent_id: str | None = None
     kind: str = "tool"
+    # Additive UI rendering hints (see ToolMeta / tool_presentation).
+    icon: str | None = None
+    noun: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -730,6 +734,9 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                     depth=event.depth,
                     parent_id=event.parent_id,
                     kind=event.kind,
+                    icon=event.icon,
+                    noun=event.noun,
+                    source=event.source,
                 ),
             )
         case ToolInputDelta():
@@ -761,6 +768,9 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                     depth=event.depth,
                     parent_id=event.parent_id,
                     kind=event.kind,
+                    icon=event.icon,
+                    noun=event.noun,
+                    source=event.source,
                 ),
                 ToolCallArgsEvent(
                     tool_call_id=event.tool_id,

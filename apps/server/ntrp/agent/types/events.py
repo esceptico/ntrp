@@ -61,6 +61,9 @@ class ToolInputStarted(AgentEventBase):
     name: str
     display_name: str
     kind: str = "tool"
+    icon: str | None = None
+    noun: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,6 +84,9 @@ class ToolStarted(AgentEventBase):
     args: dict
     display_name: str
     kind: str = "tool"
+    icon: str | None = None
+    noun: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

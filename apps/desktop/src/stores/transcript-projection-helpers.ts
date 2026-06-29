@@ -248,6 +248,9 @@ export function activityItemFromPending(id: string, pending: PendingToolCall): A
     status: "ongoing",
     depth: pending.depth || undefined,
     parentToolId: pending.parentId ?? undefined,
+    icon: pending.icon,
+    noun: pending.noun,
+    source: pending.source,
   };
 }
 

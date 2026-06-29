@@ -17,6 +17,9 @@ class _ResolvedCall:
     call: PendingToolCall
     display_name: str
     kind: str = "tool"
+    icon: str | None = None
+    noun: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,9 @@ class ToolRunner:
             call=call,
             display_name=meta.display_name if meta else call.name,
             kind=meta.kind if meta else "tool",
+            icon=meta.icon if meta else None,
+            noun=meta.noun if meta else None,
+            source=meta.source if meta else None,
         )
 
     async def _run_one(self, rc: _ResolvedCall) -> tuple[ToolResult, int]:
@@ -68,6 +74,9 @@ class ToolRunner:
             parent_id=self._parent_id,
             display_name=rc.display_name,
             kind=rc.kind,
+            icon=rc.icon,
+            noun=rc.noun,
+            source=rc.source,
         )
 
     def _completed(self, rc: _ResolvedCall, result: ToolResult, duration_ms: int) -> ToolCompleted:

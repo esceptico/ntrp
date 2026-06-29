@@ -467,6 +467,9 @@ class Agent:
                             name=str(name),
                             display_name=meta.display_name if meta else str(name),
                             kind=meta.kind if meta else "tool",
+                            icon=meta.icon if meta else None,
+                            noun=meta.noun if meta else None,
+                            source=meta.source if meta else None,
                         )
                         if args := str(state["args"]):
                             yield ToolInputDelta(

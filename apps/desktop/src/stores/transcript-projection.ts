@@ -295,6 +295,9 @@ export function applyChatEventToTranscript(
         parentId: event.parent_id ?? null,
         semanticKind: event.kind ?? "tool",
         startSeq: typeof event.seq === "number" ? event.seq : undefined,
+        icon: event.icon ?? undefined,
+        noun: event.noun ?? undefined,
+        source: event.source ?? undefined,
       };
       const pendingToolCalls = new Map(context.state.pendingToolCalls);
       pendingToolCalls.set(event.tool_call_id, pending);

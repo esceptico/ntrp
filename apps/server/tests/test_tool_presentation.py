@@ -1,0 +1,46 @@
+import json
+
+from ntrp.agent.types.tool_presentation import tool_presentation
+from ntrp.events.sse import ToolCallStartEvent
+
+
+def test_known_tools_map_to_icon_and_noun():
+    assert tool_presentation("read_file", "_system") == ("file", "file")
+    assert tool_presentation("emails", "gmail") == ("mail", "email")
+    assert tool_presentation("web_search", "web") == ("globe", "search")
+    assert tool_presentation("calendar", "calendar") == ("calendar", "event")
+    assert tool_presentation("search_transcripts", "_sessions") == ("history", "transcript")
+
+
+def test_unlisted_tools_fall_back_to_source_icon_then_none():
+    # Not in _BY_NAME, but the source gives a category icon.
+    assert tool_presentation("slack_reactions", "slack") == ("slack", None)
+    assert tool_presentation("some_gmail_tool", "gmail") == ("mail", None)
+    # Uncategorized → no icon (client renders a neutral dot).
+    assert tool_presentation("frobnicate", "user") == (None, None)
+    assert tool_presentation("frobnicate", None) == (None, None)
+
+
+def test_tool_call_start_event_carries_hints_on_the_wire():
+    # The hints must survive asdict() serialization so the desktop app receives
+    # them in the TOOL_CALL_START payload.
+    event = ToolCallStartEvent(
+        tool_call_id="t1",
+        tool_call_name="emails",
+        display_name="Emails",
+        icon="mail",
+        noun="email",
+        source="gmail",
+    )
+    data = json.loads(event.to_sse()["data"])
+    assert data["icon"] == "mail"
+    assert data["noun"] == "email"
+    assert data["source"] == "gmail"
+
+
+def test_hints_default_to_none_when_absent():
+    event = ToolCallStartEvent(tool_call_id="t1", tool_call_name="frobnicate")
+    data = json.loads(event.to_sse()["data"])
+    assert data["icon"] is None
+    assert data["noun"] is None
+    assert data["source"] is None

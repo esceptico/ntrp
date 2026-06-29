@@ -74,8 +74,8 @@ def test_session_created_nests_session_under_bus_session_id():
 def test_desktop_event_unions_cover_backend_event_types():
     repo_root = Path(__file__).resolve().parents[3]
     desktop_sources = [
-        repo_root / "apps/desktop/src/api.ts",
-        repo_root / "apps/desktop/src/hooks/useAutomationEvents.ts",
+        repo_root / "apps/desktop/src/api/events.ts",
+        repo_root / "apps/desktop/src/features/automations/hooks/useAutomationEvents.ts",
     ]
     desktop_literals = set()
     for source in desktop_sources:

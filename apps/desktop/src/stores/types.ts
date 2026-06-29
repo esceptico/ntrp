@@ -160,6 +160,13 @@ export interface ActivityItem {
    *  surface for agents. */
   semanticKind?: string;
   displayName?: string;
+  // Additive UI rendering hints from the backend (tool_presentation): a
+  // semantic icon key, a grouping noun, and the integration source/category.
+  // Absent on history reload / uncategorized tools — the trace falls back to
+  // its client-side heuristic.
+  icon?: string;
+  noun?: string;
+  source?: string;
   target: string;
   args?: string;
   result?: string;

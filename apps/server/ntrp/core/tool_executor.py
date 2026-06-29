@@ -7,6 +7,7 @@ from judgeval import Tracer
 
 from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
+from ntrp.agent.types.tool_presentation import tool_presentation
 from ntrp.agent.ledger import SharedLedger, access_key, format_arguments
 from ntrp.constants import (
     DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
@@ -216,15 +217,19 @@ class NtrpToolExecutor:
     def get_meta(self, name: str) -> ToolMeta | None:
         if name not in self._meta_cache:
             tool = self._executor.registry.get(name)
-            self._meta_cache[name] = (
-                ToolMeta(
+            if tool:
+                source = self._executor.registry.get_source(name)
+                icon, noun = tool_presentation(name, source)
+                self._meta_cache[name] = ToolMeta(
                     name=name,
                     display_name=tool.display_name or name,
                     kind=tool.kind,
+                    icon=icon,
+                    noun=noun,
+                    source=source,
                 )
-                if tool
-                else None
-            )
+            else:
+                self._meta_cache[name] = None
         return self._meta_cache[name]
 
     def _maybe_offload(self, result: ToolResult, tool_call_id: str) -> ToolResult:

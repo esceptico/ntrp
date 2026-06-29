@@ -12,6 +12,9 @@ export interface PendingToolCall {
   parentId: string | null;
   semanticKind: string;
   startSeq?: number;
+  icon?: string;
+  noun?: string;
+  source?: string;
 }
 
 export interface TranscriptProjectionState {

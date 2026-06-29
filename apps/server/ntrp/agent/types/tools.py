@@ -25,3 +25,9 @@ class ToolMeta:
     name: str
     display_name: str
     kind: str = "tool"
+    # Additive UI rendering hints — semantic, library-agnostic. The desktop app
+    # maps `icon` to a glyph and pluralizes grouped runs with `noun`; `source`
+    # is the integration category. All optional; absent for uncategorized tools.
+    icon: str | None = None
+    noun: str | None = None
+    source: str | None = None

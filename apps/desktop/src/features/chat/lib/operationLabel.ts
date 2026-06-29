@@ -171,24 +171,39 @@ function humanize(s: string | undefined): string | null {
   return spaced[0].toUpperCase() + spaced.slice(1);
 }
 
+const ICON_KEYS: ReadonlySet<string> = new Set([
+  "search", "globe", "file", "edit", "file-plus", "folder", "terminal", "brain",
+  "list", "mail", "slack", "calendar", "clock", "bell", "image", "wrench", "history", "dot",
+]);
+
+function asIconKey(s: string | undefined): StepIconKey | null {
+  return s && ICON_KEYS.has(s) ? (s as StepIconKey) : null;
+}
+
 /** Map a tool activity item to a corpus-specific label + category icon.
- *  Agents carry their own friendly name and never reach this. */
+ *  Agents carry their own friendly name and never reach this.
+ *
+ *  The icon + grouping noun prefer the backend's rendering hints
+ *  (tool_presentation, on the live event); the client registry below is the
+ *  fallback for history reload and uncategorized user/MCP tools. The label
+ *  (verb) is always frontend-composed — verb phrasing stays a UI concern. */
 export function operationLabel(item: ActivityItem): OperationLabel {
   const name = (item.kind ?? "").toLowerCase();
   const detail = detailFromArgs(parseArgs(item.args));
-
   const meta = TOOL_META[name];
-  if (meta) return { verb: meta.verb, detail, iconKey: meta.icon, noun: meta.noun ?? null };
-
-  const prefixIcon = PREFIX_ICON.find(([re]) => re.test(name))?.[1];
   const norm = name.replace(/[^a-z0-9]+/g, " ").trim();
   const heuristic = VERB_RULES.find(([re]) => re.test(norm));
 
-  // Prefer the server display_name (humanized) as the label — it names the
-  // corpus the backend authored. Fall back to a heuristic verb, then the kind.
-  const verb = humanize(item.displayName) ?? heuristic?.[1] ?? humanize(item.kind) ?? "Tool";
-  const iconKey = prefixIcon ?? heuristic?.[2] ?? "dot";
-  return { verb, detail, iconKey, noun: null };
+  const verb = meta?.verb ?? humanize(item.displayName) ?? heuristic?.[1] ?? humanize(item.kind) ?? "Tool";
+  const iconKey =
+    asIconKey(item.icon) ??
+    meta?.icon ??
+    PREFIX_ICON.find(([re]) => re.test(name))?.[1] ??
+    heuristic?.[2] ??
+    "dot";
+  const noun = item.noun ?? meta?.noun ?? null;
+
+  return { verb, detail, iconKey, noun };
 }
 
 function plural(noun: string, n: number): string {
