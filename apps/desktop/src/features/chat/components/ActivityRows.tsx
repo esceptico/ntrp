@@ -31,8 +31,6 @@ type RowProps = {
   item: ActivityItem;
   onOpen: (item: ActivityItem) => void;
   last?: boolean;
-  /** Live rolling tail: single-line, no description/chips, height-stable. */
-  compact?: boolean;
 };
 
 const ICON_BY_KEY: Record<Exclude<StepIconKey, null>, LucideIcon> = {
@@ -59,7 +57,7 @@ function StepGlyph({ iconKey, errored }: { iconKey: StepIconKey; errored: boolea
   return <Icon size={14} strokeWidth={1.5} className={errored ? "text-bad" : undefined} />;
 }
 
-export function ItemButton({ item, onOpen, last, compact }: RowProps) {
+export function ItemButton({ item, onOpen, last }: RowProps) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
   if (isAgent(item)) {
     return <AgentRow item={item} depth={depth} onOpen={onOpen} last={last} />;
@@ -67,26 +65,13 @@ export function ItemButton({ item, onOpen, last, compact }: RowProps) {
   const running = activityItemStatus(item) === "ongoing";
   const errored = !!item.error;
   const { verb, detail, iconKey } = operationLabel(item);
-  const sources = compact ? [] : stepSources(item);
-
-  const label = (
-    <span
-      className={clsx(
-        "truncate font-medium",
-        errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
-      )}
-    >
-      {verb}
-      {running && "…"}
-    </span>
-  );
+  const sources = stepSources(item);
 
   return (
     <ThinkingStep
       node={<StepGlyph iconKey={iconKey} errored={errored} />}
       last={last}
-      align={compact ? "center" : "start"}
-      className={clsx("rounded-lg transition-colors hover:bg-surface-soft/60", compact ? "px-1.5 py-0.5" : "px-1.5 py-1")}
+      className="rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
     >
       <button
@@ -95,20 +80,19 @@ export function ItemButton({ item, onOpen, last, compact }: RowProps) {
         title={`${item.target || item.kind} — click to inspect`}
         className="flex w-full min-w-0 flex-col gap-1 border-0 bg-transparent p-0 text-left cursor-pointer"
       >
-        {compact ? (
-          <span className="flex items-baseline gap-1.5 truncate">
-            {label}
-            {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
-          </span>
-        ) : (
-          <>
-            {label}
-            {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
-          </>
-        )}
+        <span
+          className={clsx(
+            "truncate font-medium",
+            errored ? "text-bad" : running ? "step-shimmer" : "text-ink",
+          )}
+        >
+          {verb}
+          {running && "…"}
+        </span>
+        {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
       </button>
       {sources.length > 0 && (
-        <span className="mt-1 flex flex-wrap gap-1.5">
+        <span className="mt-1.5 flex flex-wrap gap-1.5">
           {sources.map((s) => (
             <Badge key={s} tone="neutral" size="sm" shape="pill">
               {s}
@@ -145,8 +129,7 @@ function AgentRow({
   return (
     <ThinkingStep
       last={last}
-      align="center"
-      className="group/agent rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-soft/60"
+      className="group/agent rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-soft/60"
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       node={
         <span className="relative grid h-4 w-4 place-items-center">
@@ -178,48 +161,53 @@ function AgentRow({
         </span>
       }
     >
+      {/* Content column: name line + progress line, gap-1 to match tool rows. */}
+      <span className="flex min-w-0 flex-col gap-1">
+      {/* Name line: peer of a tool's label, with status/elapsed/cost trailing. */}
       <span className="flex min-w-0 items-center gap-2">
-      <button
-        type="button"
-        onClick={() => {
-          if (childSessionId) {
-            void switchSession(childSessionId);
-            return;
-          }
-          onOpen(item);
-        }}
-        title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
-        data-child-session-id={childSessionId}
-        className="flex items-center gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
-      >
-        <span
-          className={clsx(
-            "shrink truncate font-medium max-w-[18rem] group-hover/agent:text-ink transition-colors duration-row ease-out",
-            running ? "step-shimmer" : terminalBad ? "text-bad" : "text-ink",
-          )}
+        <button
+          type="button"
+          onClick={() => {
+            if (childSessionId) {
+              void switchSession(childSessionId);
+              return;
+            }
+            onOpen(item);
+          }}
+          title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
+          data-child-session-id={childSessionId}
+          className="flex min-w-0 items-center gap-1.5 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
         >
-          {run.name}
-        </span>
-        {detail && (
-          <span className={clsx("min-w-0 flex-1 truncate text-muted", running && "italic")}>
-            {detail}
+          <span
+            className={clsx(
+              "truncate font-medium group-hover/agent:text-ink transition-colors duration-row ease-out",
+              running ? "step-shimmer" : terminalBad ? "text-bad" : "text-ink",
+            )}
+          >
+            {run.name}
           </span>
+          {childSessionId && (
+            <ArrowUpRight
+              size={ICON.XS}
+              strokeWidth={2}
+              className="shrink-0 text-faint opacity-0 transition-opacity duration-row ease-out group-hover/agent:opacity-100"
+              aria-hidden
+            />
+          )}
+        </button>
+        <StatusDot status={run.status} pulse={running} />
+        {run.elapsedLabel && (
+          <span className="shrink-0 text-2xs tabular-nums text-faint">{run.elapsedLabel}</span>
         )}
-      </button>
-      <StatusDot status={run.status} pulse={running} />
-      {run.elapsedLabel && (
-        <span className="shrink-0 text-2xs tabular-nums text-faint">{run.elapsedLabel}</span>
-      )}
-      {childSessionId && (
-        <ArrowUpRight
-          size={ICON.XS}
-          strokeWidth={2}
-          className="shrink-0 text-faint opacity-0 transition-opacity duration-row ease-out group-hover/agent:opacity-100"
-          aria-hidden
-        />
-      )}
-      {item.usage && activityItemStatus(item) === "executed" && !detail && (
-        <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
+        {item.usage && activityItemStatus(item) === "executed" && !detail && (
+          <AgentUsageSuffix tokens={item.usage.total} cost={item.cost} />
+        )}
+      </span>
+      {/* Progress / result line: the agent's "description". */}
+      {detail && (
+        <span className={clsx("min-w-0 truncate text-[13px] text-muted leading-snug", running && "italic")}>
+          {detail}
+        </span>
       )}
       </span>
     </ThinkingStep>

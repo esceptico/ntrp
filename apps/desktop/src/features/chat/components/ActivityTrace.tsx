@@ -118,13 +118,12 @@ export function ActivityTail({
                     animate={{ opacity: 1, y: 0 }}
                     exit={suppressMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
                     transition={suppressMotion ? { duration: 0 } : SPRING_TRACE_ROW}
-                    className="flex items-center min-w-0"
+                    className="min-w-0"
                   >
                     <ItemButton
                       item={item}
                       onOpen={setViewingTool}
                       last={idx === arr.length - 1}
-                      compact
                     />
                   </motion.div>
                 ))}
@@ -182,7 +181,7 @@ export function ActivityTail({
                   }
                 >
                   {visible.map((item, idx, arr) => (
-                    <div key={item.id} className="flex min-w-0">
+                    <div key={item.id} className="min-w-0">
                       <ItemButton
                         item={item}
                         onOpen={setViewingTool}
