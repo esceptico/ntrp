@@ -9,10 +9,15 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { EXIT_FAST, MOTION, SPRING_LAYOUT, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { EXIT_FAST, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
 import { useProximityHover } from "@/lib/hooks";
 
 const MARGIN = 8;
+
+// Vertical gap (px) above which the proximity highlight cross-fades instead of
+// sliding — distinguishes adjacent rows (touching) from rows split by a section
+// label/divider.
+const SECTION_GAP = 14;
 
 /** Set when an AnchoredPopover runs in `proximity` mode: a single traveling
  *  highlight replaces per-row hover backgrounds. MenuItem reads this to drop
@@ -87,6 +92,24 @@ export function AnchoredPopover({
   // Proximity hover shares the panel's own ref as its measurement container.
   const prox = useProximityHover(ref);
   const proxRect = proximity ? prox.activeRect : null;
+
+  // The highlight slides between adjacent rows, but CROSS-FADES when it jumps a
+  // gap (e.g. between two menu sections split by a label/divider) so it never
+  // slides over the header/divider in between. Bumping the AnimatePresence key
+  // on a big jump makes the old strip fade out in place while the new one fades
+  // in at the target — instead of one element travelling through the gap.
+  const segmentRef = useRef(0);
+  const prevRectRef = useRef<{ top: number; height: number } | null>(null);
+  if (proxRect) {
+    const prev = prevRectRef.current;
+    if (prev) {
+      const [lo, hi] = prev.top <= proxRect.top ? [prev, proxRect] : [proxRect, prev];
+      if (hi.top - (lo.top + lo.height) > SECTION_GAP) segmentRef.current += 1;
+    }
+    prevRectRef.current = proxRect;
+  } else {
+    prevRectRef.current = null;
+  }
 
   // A point anchor can move while the popover stays open (right-clicking a
   // different row without closing first); re-measure when it does. Rect/ref
@@ -218,12 +241,13 @@ export function AnchoredPopover({
             <AnimatePresence>
               {proxRect && (
                 <motion.div
+                  key={segmentRef.current}
                   aria-hidden
-                  className="absolute inset-x-1 rounded-md bg-surface-soft pointer-events-none"
+                  className="absolute inset-x-1 rounded-md bg-ink/[0.08] pointer-events-none"
                   initial={{ opacity: 0, top: proxRect.top, height: proxRect.height }}
                   animate={{ opacity: 1, top: proxRect.top, height: proxRect.height }}
                   exit={{ opacity: 0, transition: EXIT_FAST }}
-                  transition={{ ...SPRING_LAYOUT, opacity: { duration: MOTION.fast } }}
+                  transition={{ ...SPRING_POPOVER, opacity: { duration: MOTION.fast } }}
                 />
               )}
             </AnimatePresence>
