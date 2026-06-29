@@ -159,7 +159,8 @@ def test_deferred_loader_schema_formats_for_claude():
 
     assert request_model == "claude-sonnet-4-6"
     assert request["tools"][0]["name"] == "load_tools"
-    assert request["tools"][0]["input_schema"]["properties"].keys() == {"group", "names"}
+    # `title` is the injected UI action-title hint, present on every tool schema.
+    assert request["tools"][0]["input_schema"]["properties"].keys() == {"title", "group", "names"}
     assert request["tool_choice"] == {"type": "auto"}
 
 
@@ -168,4 +169,4 @@ def test_deferred_loader_schema_formats_for_gemini():
     declaration = tools[0].function_declarations[0]
 
     assert declaration.name == "load_tools"
-    assert set(declaration.parameters.properties) == {"group", "names"}
+    assert set(declaration.parameters.properties) == {"title", "group", "names"}

@@ -130,7 +130,7 @@ const VERB_RULES: ReadonlyArray<readonly [RegExp, string, StepIconKey]> = [
 
 const DETAIL_KEYS = [
   "path", "file_path", "filename", "file", "query", "q", "command", "cmd",
-  "url", "pattern", "name", "prompt", "task", "title", "channel", "id",
+  "url", "pattern", "name", "prompt", "task", "channel", "id",
 ] as const;
 
 const MAX_DETAIL = 64;
@@ -180,20 +180,22 @@ function asIconKey(s: string | undefined): StepIconKey | null {
   return s && ICON_KEYS.has(s) ? (s as StepIconKey) : null;
 }
 
-/** Map a tool activity item to a corpus-specific label + category icon.
- *  Agents carry their own friendly name and never reach this.
- *
- *  The icon + grouping noun prefer the backend's rendering hints
- *  (tool_presentation, on the live event); the client registry below is the
- *  fallback for history reload and uncategorized user/MCP tools. The label
- *  (verb) is always frontend-composed — verb phrasing stays a UI concern. */
-export function operationLabel(item: ActivityItem): OperationLabel {
+/** The model's optional per-call action title (e.g. "Searching for profiles"),
+ *  emitted as a `title` pseudo-arg. The backend strips it before the tool runs;
+ *  here it rides in the streamed args. Null when absent → caller falls back. */
+export function callTitle(item: ActivityItem): string | null {
+  const t = parseArgs(item.args)?.title;
+  return typeof t === "string" && t.trim() ? truncate(t) : null;
+}
+
+/** Stable per-KIND label — meta/heuristic only, no per-call title, no args.
+ *  Used as the fallback verb and for grouped summaries (which must stay
+ *  consistent across a run of differently-titled calls). */
+function kindLabel(item: ActivityItem): { verb: string; iconKey: StepIconKey; noun: string | null } {
   const name = (item.kind ?? "").toLowerCase();
-  const detail = detailFromArgs(parseArgs(item.args));
   const meta = TOOL_META[name];
   const norm = name.replace(/[^a-z0-9]+/g, " ").trim();
   const heuristic = VERB_RULES.find(([re]) => re.test(norm));
-
   const verb = meta?.verb ?? humanize(item.displayName) ?? heuristic?.[1] ?? humanize(item.kind) ?? "Tool";
   const iconKey =
     asIconKey(item.icon) ??
@@ -202,8 +204,21 @@ export function operationLabel(item: ActivityItem): OperationLabel {
     heuristic?.[2] ??
     "dot";
   const noun = item.noun ?? meta?.noun ?? null;
+  return { verb, iconKey, noun };
+}
 
-  return { verb, detail, iconKey, noun };
+/** Map a tool activity item to its label + category icon. Agents carry their
+ *  own friendly name and never reach this.
+ *
+ *  Label priority: the MODEL's action title (richest, e.g. "Searching for
+ *  profiles") → the curated/heuristic kind verb. Icon + grouping noun prefer
+ *  the backend's rendering hints (tool_presentation); the client registry is
+ *  the fallback for history reload / uncategorized tools. */
+export function operationLabel(item: ActivityItem): OperationLabel {
+  const args = parseArgs(item.args);
+  const base = kindLabel(item);
+  const title = callTitle(item);
+  return { verb: title ?? base.verb, detail: detailFromArgs(args), iconKey: base.iconKey, noun: base.noun };
 }
 
 function plural(noun: string, n: number): string {
@@ -212,9 +227,10 @@ function plural(noun: string, n: number): string {
 }
 
 /** Summary label + icon for a collapsed run of same-kind calls, e.g.
- *  "Read 8 files" / "Searched the web · 3". */
+ *  "Read 8 files" / "Searched the web · 3". Uses the stable per-kind label
+ *  (not the per-call model titles, which differ across the run). */
 export function groupSummary(items: ActivityItem[]): { verb: string; iconKey: StepIconKey } {
-  const { verb, iconKey, noun } = operationLabel(items[0]);
+  const { verb, iconKey, noun } = kindLabel(items[0]);
   const n = items.length;
   if (noun) {
     const action = verb.split(" ")[0]; // "Read" / "Searched" / "Fetched"

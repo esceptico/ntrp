@@ -81,6 +81,24 @@ test("without backend hints, the client registry still drives icon + noun (histo
   );
 });
 
+test("the model's `title` pseudo-arg wins as the single-row label, and isn't shown as detail", () => {
+  const r = operationLabel(
+    item({ kind: "emails", args: '{"title":"Searching for the invoice","query":"acme invoice"}' }),
+  );
+  expect(r.verb).toBe("Searching for the invoice"); // model title beats "Searched email"
+  expect(r.detail).toBe("acme invoice"); // title excluded from detail; query shown
+});
+
+test("group summaries stay stable per-kind, ignoring per-call model titles", () => {
+  const rows = [
+    item({ kind: "read_file", args: '{"title":"Reading the spec","path":"a.ts"}' }),
+    item({ kind: "read_file", args: '{"title":"Reading the impl","path":"b.ts"}' }),
+    item({ kind: "read_file", args: '{"title":"Reading the test","path":"c.ts"}' }),
+  ];
+  // The header is the stable kind summary, not any one call's title.
+  expect(groupSummary(rows).verb).toBe("Read 3 files");
+});
+
 test("stepSources extracts deduped hostnames from url/urls args", () => {
   expect(stepSources(item({ kind: "web_fetch", args: '{"url":"https://www.github.com/x"}' }))).toEqual(["github.com"]);
   expect(stepSources(item({ kind: "read_file", args: '{"path":"a.ts"}' }))).toEqual([]);

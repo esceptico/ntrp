@@ -36,7 +36,7 @@ import { Reveal } from "@/components/ui/Reveal";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ThinkingStep } from "@/components/ui/ThinkingStep";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { groupSummary, operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
+import { callTitle, groupSummary, operationLabel, stepSources, type StepIconKey } from "@/features/chat/lib/operationLabel";
 import { agentRunFromActivityItem, isActiveAgentStatus } from "@/lib/agentRun";
 import { MAX_NEST_DEPTH, NEST_PX } from "@/features/chat/lib/trace";
 
@@ -175,7 +175,9 @@ export function ToolGroupRow({
         {open && (
           <Reveal key="children" className="mt-1 flex flex-col gap-0.5">
             {items.map((it) => {
-              const d = operationLabel(it).detail;
+              // Prefer the model's per-call title ("Read about.html"); else the
+              // arg detail (the path/query).
+              const text = callTitle(it) ?? operationLabel(it).detail ?? it.target ?? it.kind;
               return (
                 <button
                   key={it.id}
@@ -184,7 +186,7 @@ export function ToolGroupRow({
                   title={`${it.target || it.kind} — click to inspect`}
                   className="truncate border-0 bg-transparent p-0 text-left text-[13px] leading-snug text-muted hover:text-ink-soft cursor-pointer"
                 >
-                  {d || it.target || it.kind}
+                  {text}
                 </button>
               );
             })}

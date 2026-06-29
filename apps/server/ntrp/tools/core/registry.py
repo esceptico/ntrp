@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import RESERVED_ARG_KEYS, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.middleware import DEFAULT_TOOL_MIDDLEWARE, ToolCall, ToolMiddleware
 from ntrp.tools.core.types import ApprovalMode, ToolAction, ToolOverrideDecision, ToolPolicy
@@ -53,7 +53,10 @@ class ToolRegistry:
                 is_error=True,
             )
         tool = self._tools[name]
-        call = ToolCall(name=name, tool=self._effective_tool(name, tool), execution=execution, arguments=dict(arguments))
+        # Strip UI-only pseudo-args (the model's action title) so tools — incl.
+        # extra="forbid" input models — never receive them.
+        cleaned = {k: v for k, v in arguments.items() if k not in RESERVED_ARG_KEYS}
+        call = ToolCall(name=name, tool=self._effective_tool(name, tool), execution=execution, arguments=cleaned)
         return await self._dispatch(call)
 
     async def _dispatch(self, call: ToolCall) -> ToolResult:

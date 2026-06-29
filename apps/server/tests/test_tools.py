@@ -450,18 +450,14 @@ async def test_function_tool_execute_without_args():
     result = await registry.execute("current_time", _make_execution("current_time"), {})
 
     assert result == ToolResult(content="now", preview="now")
-    assert registry.get("current_time").to_dict("current_time") == {
-        "type": "function",
-        "function": {
-            "name": "current_time",
-            "description": "Get the current time.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    }
+    schema = registry.get("current_time").to_dict("current_time")["function"]
+    assert schema["name"] == "current_time"
+    assert schema["description"] == "Get the current time."
+    # The optional UI action-title hint is injected into every tool's schema;
+    # this no-arg tool therefore exposes just `title`. It is stripped before
+    # execute(), so the tool itself never receives it.
+    assert set(schema["parameters"]["properties"]) == {"title"}
+    assert schema["parameters"]["required"] == []
 
 
 class EchoInput(BaseModel):

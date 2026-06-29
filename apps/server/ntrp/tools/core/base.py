@@ -30,7 +30,23 @@ def _inline_refs(schema: dict) -> dict:
     return _resolve(schema)
 
 
-__all__ = ["Tool", "ToolResult", "ApprovalInfo"]
+__all__ = ["Tool", "ToolResult", "ApprovalInfo", "TITLE_ARG", "RESERVED_ARG_KEYS"]
+
+# The model emits a short UI action title as a pseudo-arg on every tool call
+# (the letta / Claude-Code "inline field" pattern — free, same completion). It
+# is stripped from the args before execute() so tools never see it; it only
+# feeds the desktop trace's per-step label.
+TITLE_ARG = "title"
+RESERVED_ARG_KEYS = frozenset({TITLE_ARG})
+_TITLE_PROP = {
+    "type": "string",
+    "description": (
+        "Short UI action title — a 3-6 word present-continuous phrase naming what "
+        'this call does for the user (e.g. "Searching email for the invoice", '
+        '"Reading the design doc", "Checking your calendar"). A display label only, '
+        "not part of the tool's work; optional."
+    ),
+}
 
 
 class Tool(ABC):
@@ -50,14 +66,21 @@ class Tool(ABC):
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult: ...
 
     def to_dict(self, name: str) -> dict:
-        schema: dict = {"name": name, "description": self.description}
+        properties: dict = {}
+        required: list = []
         if self.input_model is not None:
             json_schema = _inline_refs(self.input_model.model_json_schema())
-            schema["parameters"] = {
-                "type": "object",
-                "properties": json_schema.get("properties", {}),
-                "required": json_schema.get("required", []),
-            }
+            properties = dict(json_schema.get("properties", {}))
+            required = list(json_schema.get("required", []))
+        # Inject the optional action-title hint first so it streams early. It is
+        # stripped before execute() (see registry.execute), so the title never
+        # reaches the tool — it only labels the call in the UI.
+        properties = {TITLE_ARG: _TITLE_PROP, **properties}
+        schema: dict = {
+            "name": name,
+            "description": self.description,
+            "parameters": {"type": "object", "properties": properties, "required": required},
+        }
         return {
             "type": "function",
             "function": schema,
