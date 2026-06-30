@@ -94,12 +94,14 @@ export function SettingsModal() {
       ariaLabel="Settings"
     >
         <aside className="sidebar settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
-          {/* Mirror the nav row's horizontal structure (Tabs px-2.5 → item
-              px-2 → 16px icon col → gap-2) so the title aligns with the nav
-              LABELS. pt-2 = the content header's pt-4 minus the card's m-2, so
-              "Settings" also aligns VERTICALLY with the section header. */}
-          <div className="shrink-0 px-2.5 pt-2 pb-2 select-none">
-            <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2">
+          {/* Title shares the nav rows' icon-column template (.settings-nav-row)
+              so its label aligns HORIZONTALLY with the row labels by
+              construction. Its top offset derives from the shared modal header
+              pad (--modal-header-pt) minus the card's m-2, so "Settings" tracks
+              the content header VERTICALLY — both move together if the header pad
+              changes. px-2.5 matches the Tabs container's px-2.5. */}
+          <div className="shrink-0 px-2.5 pt-[calc(var(--modal-header-pt)_-_0.5rem)] pb-2 select-none">
+            <div className="settings-nav-row">
               <span aria-hidden />
               <span className="text-lg font-semibold tracking-[-0.012em] text-ink">Settings</span>
             </div>
@@ -117,7 +119,7 @@ export function SettingsModal() {
                 <TabItem
                   key={tab.id}
                   value={tab.id}
-                  className="grid w-full grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2 py-1 rounded-lg text-base font-medium text-left tracking-[-0.005em] text-ink-soft transition-colors hover:text-ink data-[active=true]:text-ink hover:bg-[color-mix(in_oklab,var(--color-ink)_3%,transparent)] data-[active=true]:bg-[color-mix(in_oklab,var(--color-ink)_4%,transparent)] data-[active=true]:shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-ink)_10%,transparent)]"
+                  className="settings-nav-row w-full py-1 rounded-lg text-base font-medium text-left tracking-[-0.005em] text-ink-soft transition-colors hover:text-ink data-[active=true]:text-ink hover:bg-[color-mix(in_oklab,var(--color-ink)_3%,transparent)] data-[active=true]:bg-[color-mix(in_oklab,var(--color-ink)_4%,transparent)] data-[active=true]:shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-ink)_10%,transparent)]"
                 >
                   <span className="grid h-4 w-4 shrink-0 place-items-center">
                     <Icon size={ICON.LG} strokeWidth={2} />
@@ -130,7 +132,7 @@ export function SettingsModal() {
         </aside>
 
         <div className="relative min-h-0 min-w-0">
-          <header className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-5 pt-4 pb-3">
+          <header className="modal-header absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2">
             <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
               <BlurSwap swapKey={active} className="justify-items-start">
                 {TABS.find((t) => t.id === active)?.label}
@@ -141,7 +143,7 @@ export function SettingsModal() {
             </IconButton>
           </header>
 
-          <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-[56px] pb-4">
+          <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-[var(--modal-header-h)] pb-4">
             <ScrollFadeTop />
             <TabPanels value={active} direction={direction} className="pt-1">
               {active === "connection" && (

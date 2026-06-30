@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LabeledField } from "@/features/settings/components/Field";
+import { LabeledField } from "@/components/ui/LabeledField";
 import { KeyValueEditor, ListEditor, type KeyVal } from "@/features/settings/components/mcp/editors";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { Input } from "@/components/ui/Input";

@@ -10,6 +10,7 @@ import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { DividedList } from "@/components/ui/DividedList";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 export function ToolsTab() {
   const config = useStore((s) => s.config);
@@ -108,9 +109,7 @@ export function ToolsTab() {
       <div className="grid gap-3">
         {groups.map(([source, items]) => (
           <section key={source} className="grid gap-2">
-            <h3 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-muted">
-              {formatSource(source)} ({items.length})
-            </h3>
+            <SectionHeader label={formatSource(source)} count={items.length} />
             <DividedList>
               {items.map((tool) => {
                 const current = overrides[tool.name] ?? baseDecision(tool);

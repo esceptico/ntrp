@@ -95,7 +95,7 @@ export function ToolViewer() {
       size="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)]"
       ariaLabel="Tool details"
     >
-      <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
+      <header className="modal-header flex items-start justify-between gap-3.5 min-w-0">
         <div className="min-w-0 flex-1 flex items-center gap-2.5">
           {live && isAgent(live) && (
             <span

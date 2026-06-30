@@ -102,7 +102,7 @@ export function AutomationEditor({
     >
       {seed && (
         <>
-          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
+          <header className="modal-header flex items-center justify-between gap-2">
             <input
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}

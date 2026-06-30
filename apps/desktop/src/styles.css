@@ -498,6 +498,33 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow: var(--shadow-2);
 }
 
+/* Modal header geometry — THE single source. `.modal-header` is the only place
+   a modal title bar's padding lives, so every modal (PageModal's standard header
+   + the hand-rolled Settings / Automation / Approval / ToolViewer headers) is
+   identical by construction. --modal-header-pt is the same top pad expressed as a
+   variable so the Settings sidebar title (top = pt − card m-2) and the content
+   scroll inset (--modal-header-h) derive from it — change the pad once and the
+   header, the title, and the inset all move together. None can drift. */
+:root {
+  --modal-header-pt: 18px;
+  --modal-header-h: calc(var(--modal-header-pt) + 40px);
+}
+.modal-header {
+  /* top | inline (= px-5) | bottom (= pb-3) */
+  padding: var(--modal-header-pt) 1.25rem 0.75rem;
+}
+
+/* One icon-column template for every settings nav element — the tab rows
+   AND the sidebar title share it, so the title's label sits in the same
+   column as the row labels regardless of icon size / gap / padding. */
+.settings-nav-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.5rem;
+}
+
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
 

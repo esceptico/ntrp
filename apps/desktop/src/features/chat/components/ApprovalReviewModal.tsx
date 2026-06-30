@@ -43,7 +43,7 @@ export function ApprovalReviewModal() {
     >
       {approval && (
         <>
-          <header className="flex items-center gap-2 px-5 pt-4 pb-3 min-w-0">
+          <header className="modal-header flex items-center gap-2 min-w-0">
             <span className="font-mono text-base font-medium text-ink truncate">
               {approval.toolName}
             </span>

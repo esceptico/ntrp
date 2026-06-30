@@ -5,7 +5,10 @@ import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { NumberField } from "@/features/settings/components/Field";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
+
+const MAX_CONTEXT_WINDOW = 2_000_000;
 
 function customModels(provider: ModelProvider): CustomModelSummary[] {
   return provider.models.filter((model): model is CustomModelSummary => typeof model !== "string");
@@ -80,21 +83,25 @@ export function CustomModelsPanel({
             autoComplete="off"
           />
         </div>
+        <NumberField
+          label="Context window"
+          suffix="tokens"
+          value={draft.context_window}
+          min={1}
+          max={MAX_CONTEXT_WINDOW}
+          step={1024}
+          onChange={(n) => onDraftChange({ context_window: n })}
+        />
+        <NumberField
+          label="Max output tokens"
+          suffix="tokens"
+          value={draft.max_output_tokens}
+          min={1}
+          max={draft.context_window}
+          step={256}
+          onChange={(n) => onDraftChange({ max_output_tokens: n })}
+        />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
-          <Input
-            type="number"
-            min={1}
-            value={draft.context_window}
-            onChange={(event) => onDraftChange({ context_window: Number(event.target.value) })}
-            aria-label="Context window"
-          />
-          <Input
-            type="number"
-            min={1}
-            value={draft.max_output_tokens}
-            onChange={(event) => onDraftChange({ max_output_tokens: Number(event.target.value) })}
-            aria-label="Max output tokens"
-          />
           <Input
             type="password"
             value={draft.api_key}

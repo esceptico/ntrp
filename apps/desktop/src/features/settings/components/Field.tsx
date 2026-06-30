@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { Slider } from "@/components/ui/Slider";
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 /** Editable numeric value: type a precise number (committed on blur / Enter,
- *  clamped to [min,max]) or use the native steppers. Pairs with a Slider for
- *  coarse drag — the Slider alone isn't enough to set an exact value. */
+ *  clamped to [min,max]) or step it with Arrow keys. The native spinner is
+ *  hidden. Pairs with a Slider for coarse drag — the Slider alone isn't enough
+ *  to set an exact value. */
 function NumberInput({
   id,
   value,
@@ -161,23 +162,6 @@ export function PercentField({
         <Slider className="w-44" aria-label={label} value={percent} min={min} max={max} step={step} onChange={setPercent} />
         <NumberInput id={id} value={percent} onChange={setPercent} min={min} max={max} step={step} suffix="%" ariaLabel={label} />
       </div>
-    </div>
-  );
-}
-
-/** Wraps a caller-provided control with a label. Use when the control
- *  isn't a plain text input (a select, a toggle group, a custom editor). */
-export function LabeledField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div role="group" aria-label={label} className="grid gap-1.5">
-      <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
-      {children}
     </div>
   );
 }

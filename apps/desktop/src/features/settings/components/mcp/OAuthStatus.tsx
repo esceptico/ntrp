@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { MCPServer } from "@/api/settings";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
-import { LabeledField } from "@/features/settings/components/Field";
+import { LabeledField } from "@/components/ui/LabeledField";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
