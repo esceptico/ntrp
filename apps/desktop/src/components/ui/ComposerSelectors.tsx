@@ -8,8 +8,9 @@ import { updateServerConfig, fetchServerConfig } from "@/actions/server";
 import { updateSessionModelAction, refreshSessions } from "@/actions/sessions";
 import type { ModelGroup } from "@/api/types";
 import { ICON } from "@/lib/icons";
-import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, EXIT_FAST, MOTION, SPRING_LAYOUT } from "@/lib/tokens/motion";
+import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import { PROXIMITY_ITEM_ATTR, useProximityHover, useReanchor } from "@/lib/hooks";
+import { ProximityHighlight } from "@/components/ui/ProximityHighlight";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -189,23 +190,10 @@ export function ModelReasoningPicker({
               onFocus={prox.handlers.onFocus}
               className="relative max-h-[260px] overflow-y-auto scroll-thin py-1"
             >
-              {/* Traveling proximity highlight — one element easing toward the
-                  hovered/keyboard-focused row; pointer-events:none so it never
-                  steals clicks or hover from the rows beneath it. Sits behind
-                  the rows (which are z-[1]) so a selected row's tint+ring still
-                  reads on top. */}
-              <AnimatePresence>
-                {prox.activeRect && (
-                  <motion.div
-                    aria-hidden
-                    className="absolute inset-x-1 rounded-md bg-surface-soft pointer-events-none"
-                    initial={{ opacity: 0, top: prox.activeRect.top, height: prox.activeRect.height }}
-                    animate={{ opacity: 1, top: prox.activeRect.top, height: prox.activeRect.height }}
-                    exit={{ opacity: 0, transition: EXIT_FAST }}
-                    transition={{ ...SPRING_LAYOUT, opacity: { duration: MOTION.fast } }}
-                  />
-                )}
-              </AnimatePresence>
+              {/* Traveling proximity highlight — the single shared definition
+                  (ProximityHighlight). Sits behind the rows (z-[1]) so a selected
+                  row's tint+ring still reads on top. */}
+              <ProximityHighlight rect={prox.activeRect} />
               {filteredGroups.length === 0 && (
                 <div className="px-3 py-2 text-sm text-muted italic">No matches.</div>
               )}

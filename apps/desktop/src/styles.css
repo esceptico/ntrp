@@ -1007,7 +1007,10 @@ button.app-row:not(:disabled):active,
 .switch-control {
   /* Light values: ink-derived alphas, same reason as .segmented-control —
      white-on-light vanished on flat panels. */
-  --gs-on: #34c759; /* macOS system green — the platform switch color */
+  /* ON state uses the app accent (not a macOS-platform green) so the switch
+     shares the single-accent language of Slider/Radio/Checkbox/focus rings.
+     Theme-aware via var(--color-accent), so no dark override is needed. */
+  --gs-on: var(--color-accent);
   --gs-track-bg: rgba(20, 24, 28, 0.08);
   --gs-track-border: rgba(20, 24, 28, 0.06);
   --gs-track-shadow: inset 0 0 0 0.5px rgba(20, 24, 28, 0.10);
@@ -1063,7 +1066,7 @@ button.app-row:not(:disabled):active,
   outline: none;
   box-shadow:
     var(--gs-track-shadow),
-    0 0 0 3px color-mix(in oklab, var(--gs-on) 30%, transparent);
+    0 0 0 3px var(--color-accent-soft);
 }
 :root.dark .switch-control {
   --gs-track-bg: rgba(255, 255, 255, 0.10);
@@ -1076,7 +1079,7 @@ button.app-row:not(:disabled):active,
     0 0 0 0.5px rgba(0, 0, 0, 0.25);
 }
 :root.dark .switch-control.switch-control-on {
-  --gs-on: #30d158; /* macOS dark-mode green */
+  /* inherits --gs-on: var(--color-accent) from .switch-control */
   --gs-track-bg: var(--gs-on);
   --gs-track-border: color-mix(in oklab, var(--gs-on) 80%, #000);
   --gs-track-shadow: inset 0 0 0 0.5px color-mix(in oklab, var(--gs-on) 55%, #000);
