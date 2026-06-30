@@ -95,6 +95,9 @@ export function SettingsModal() {
     >
         <aside className="sidebar settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
           <div className="drag-spacer shrink-0 h-[22px]" />
+          <div className="shrink-0 px-[18px] pt-1 pb-2 text-lg font-semibold tracking-[-0.012em] text-ink select-none">
+            Settings
+          </div>
           <Tabs
             value={active}
             onChange={(v) => setActive(v as TabId)}

@@ -96,10 +96,11 @@ export function ScheduleChip({
                 position: "fixed",
                 bottom: coords.bottom,
                 left: coords.left,
-                // Sits at the popover tier inside #app (not body/z-70) so a
-                // nested Select's listbox — same tier, opened later — composes
-                // ABOVE it instead of being occluded.
-                zIndex: "var(--z-popover)",
+                // Inside #app, ABOVE the automations modal (--z-modal 50) but
+                // BELOW the popover tier (--z-popover 60), so a nested Select's
+                // listbox (--z-popover) layers ABOVE this by z-index — robustly,
+                // not relying on portal DOM order.
+                zIndex: "var(--z-modal-top)",
                 transformOrigin: "bottom left",
               }}
               className="surface-panel surface-popover w-[340px] grid gap-3 p-3"
