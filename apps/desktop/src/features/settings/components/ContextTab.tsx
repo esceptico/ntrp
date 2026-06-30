@@ -105,6 +105,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
         value={draft.max_messages}
         min={10}
         max={1000}
+        step={10}
         onChange={(n) => update({ max_messages: n })}
       />
 
@@ -124,6 +125,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
         value={draft.summary_max_tokens}
         min={256}
         max={8000}
+        step={64}
         onChange={(n) => update({ summary_max_tokens: n })}
       />
 
@@ -134,6 +136,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
         value={draft.consolidation_interval}
         min={1}
         max={500}
+        step={5}
         onChange={(n) => update({ consolidation_interval: n })}
       />
 

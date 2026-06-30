@@ -1,6 +1,60 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/Input";
 import { Slider } from "@/components/ui/Slider";
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+/** Editable numeric value: type a precise number (committed on blur / Enter,
+ *  clamped to [min,max]) or use the native steppers. Pairs with a Slider for
+ *  coarse drag — the Slider alone isn't enough to set an exact value. */
+function NumberInput({
+  id,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  suffix,
+  ariaLabel,
+}: {
+  id?: string;
+  value: number;
+  onChange: (n: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  ariaLabel?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const n = Number(draft);
+    if (Number.isFinite(n) && draft.trim() !== "") onChange(clamp(n, min, max));
+    setDraft(null);
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        aria-label={ariaLabel}
+        value={draft ?? String(value)}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className="w-[64px] h-7 rounded-md border border-line bg-transparent px-2 text-sm tabular-nums text-right text-ink outline-none transition-[border-color,box-shadow] hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <span className="w-14 text-xs text-faint">{suffix}</span>
+    </div>
+  );
+}
 
 /** Labelled text/password input for settings forms. Thin convenience wrapper
  *  over {@link Input} with the settings defaults (no spellcheck/autocomplete)
@@ -65,19 +119,13 @@ export function NumberField({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <span id={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
+        <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
-      <Slider
-        className="w-52"
-        aria-labelledby={id}
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={onChange}
-        formatValue={(n) => (suffix ? `${n} ${suffix}` : `${n}`)}
-      />
+      <div className="flex items-center gap-3 justify-self-end">
+        <Slider className="w-44" aria-label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+        <NumberInput id={id} value={value} onChange={onChange} min={min} max={max} step={step} suffix={suffix} ariaLabel={label} />
+      </div>
     </div>
   );
 }
@@ -90,6 +138,7 @@ export function PercentField({
   help,
   min = 0,
   max = 100,
+  step = 1,
 }: {
   label: string;
   value: number;
@@ -97,25 +146,21 @@ export function PercentField({
   help?: string;
   min?: number;
   max?: number;
+  step?: number;
 }) {
   const percent = Math.round(value * 100);
   const id = `pctfield-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const setPercent = (n: number) => onChange(n / 100);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <span id={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
+        <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
-      <Slider
-        className="w-52"
-        aria-labelledby={id}
-        value={percent}
-        min={min}
-        max={max}
-        step={1}
-        onChange={(n) => onChange(n / 100)}
-        formatValue={(n) => `${n}%`}
-      />
+      <div className="flex items-center gap-3 justify-self-end">
+        <Slider className="w-44" aria-label={label} value={percent} min={min} max={max} step={step} onChange={setPercent} />
+        <NumberInput id={id} value={percent} onChange={setPercent} min={min} max={max} step={step} suffix="%" ariaLabel={label} />
+      </div>
     </div>
   );
 }
