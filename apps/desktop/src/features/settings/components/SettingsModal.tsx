@@ -94,11 +94,11 @@ export function SettingsModal() {
       ariaLabel="Settings"
     >
         <aside className="sidebar settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
-          <div className="drag-spacer shrink-0 h-[22px]" />
           {/* Mirror the nav row's horizontal structure (Tabs px-2.5 → item
               px-2 → 16px icon col → gap-2) so the title aligns with the nav
-              LABELS, not floating between the icons and the text. */}
-          <div className="shrink-0 px-2.5 pt-1 pb-2 select-none">
+              LABELS. pt-2 = the content header's pt-4 minus the card's m-2, so
+              "Settings" also aligns VERTICALLY with the section header. */}
+          <div className="shrink-0 px-2.5 pt-2 pb-2 select-none">
             <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 px-2">
               <span aria-hidden />
               <span className="text-lg font-semibold tracking-[-0.012em] text-ink">Settings</span>
