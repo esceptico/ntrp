@@ -15,6 +15,7 @@ import { ICON } from "@/lib/icons";
 import { useReanchor } from "@/lib/hooks";
 import { Chip } from "@/components/ui/Chip";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Select } from "@/components/ui/Select";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import type { EventType, Schedule, ScheduleKind } from "@/features/automations/lib/schedule";
 import { scheduleLabel } from "@/features/automations/lib/schedule";
@@ -95,7 +96,10 @@ export function ScheduleChip({
                 position: "fixed",
                 bottom: coords.bottom,
                 left: coords.left,
-                zIndex: 70,
+                // Sits at the popover tier inside #app (not body/z-70) so a
+                // nested Select's listbox — same tier, opened later — composes
+                // ABOVE it instead of being occluded.
+                zIndex: "var(--z-popover)",
                 transformOrigin: "bottom left",
               }}
               className="surface-panel surface-popover w-[340px] grid gap-3 p-3"
@@ -182,15 +186,17 @@ export function ScheduleChip({
                   className={fieldStackCls(schedule.kind === "event")}
                 >
                   <ScheduleField label="Event">
-                    <select
+                    <Select
                       value={schedule.event}
-                      onChange={(e) => onChange({ ...schedule, event: e.target.value as EventType })}
-                      className={schedFieldCls}
-                    >
-                      <option value="starts">starts</option>
-                      <option value="ends">ends</option>
-                      <option value="approaching">approaching</option>
-                    </select>
+                      onChange={(v) => onChange({ ...schedule, event: v as EventType })}
+                      options={[
+                        { value: "starts", label: "starts" },
+                        { value: "ends", label: "ends" },
+                        { value: "approaching", label: "approaching" },
+                      ]}
+                      aria-label="Event"
+                      className="w-full"
+                    />
                   </ScheduleField>
                   {schedule.event === "approaching" && (
                     <ScheduleField label="Lead time" hint="minutes before the event">
@@ -266,7 +272,7 @@ export function ScheduleChip({
           </motion.div>
           )}
         </AnimatePresence>,
-        document.body,
+        document.querySelector("#app") ?? document.body,
       )}
     </div>
   );
