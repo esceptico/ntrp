@@ -35,6 +35,35 @@ function useRadioGroupContext() {
 const SELECTED_FILL = "color-mix(in oklab, var(--color-ink) 7%, transparent)";
 const HOVER_FILL = "color-mix(in oklab, var(--color-ink) 4%, transparent)";
 
+/**
+ * Roving keyboard for any `[role="radio"]` group: Arrow/Home/End move focus AND
+ * auto-select via each radio's `data-value`. The single definition — used by
+ * RadioGroup and by bespoke radio layouts that can't adopt the row-list shell
+ * (e.g. the thinking-animation preview-card grid in AppearanceTab) so the
+ * behaviour is never re-implemented at a call site.
+ */
+export function radioGroupKeyDown(
+  e: KeyboardEvent<HTMLElement>,
+  value: string,
+  onChange: (v: string) => void,
+) {
+  if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+  const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+  if (items.length === 0) return;
+  e.preventDefault();
+  const current = items.indexOf(e.target as HTMLElement);
+  const idx = current === -1 ? 0 : current;
+  let next = idx;
+  if (["ArrowDown", "ArrowRight"].includes(e.key)) next = (idx + 1) % items.length;
+  else if (["ArrowUp", "ArrowLeft"].includes(e.key)) next = (idx - 1 + items.length) % items.length;
+  else if (e.key === "Home") next = 0;
+  else if (e.key === "End") next = items.length - 1;
+  const target = items[next];
+  target.focus();
+  const v = target.getAttribute("data-value");
+  if (v && v !== value) onChange(v);
+}
+
 interface RadioGroupProps {
   value: string;
   onChange: (value: string) => void;
@@ -85,26 +114,7 @@ export function RadioGroup({
   const focusRect = focusedIndex !== null ? itemRects[focusedIndex] : null;
   const isHoveringOther = activeIndex !== null && activeIndex !== selectedIndex;
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key))
-      return;
-    const items = Array.from(
-      e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
-    );
-    if (items.length === 0) return;
-    e.preventDefault();
-    const current = items.indexOf(e.target as HTMLElement);
-    const idx = current === -1 ? 0 : current;
-    let next = idx;
-    if (["ArrowDown", "ArrowRight"].includes(e.key)) next = (idx + 1) % items.length;
-    else if (["ArrowUp", "ArrowLeft"].includes(e.key)) next = (idx - 1 + items.length) % items.length;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = items.length - 1;
-    const target = items[next];
-    target.focus();
-    const v = target.getAttribute("data-value");
-    if (v && v !== value) onChange(v);
-  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => radioGroupKeyDown(e, value, onChange);
 
   const ctx: RadioGroupContextValue = {
     value,

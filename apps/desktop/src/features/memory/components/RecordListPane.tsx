@@ -3,6 +3,7 @@ import { Database, Pin, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
+import { Select } from "@/components/ui/Select";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
 import { ListColumn, ListError } from "@/components/ui/ListColumn";
 import { GhostBtn, relativeTime } from "@/features/memory/components/shared";
@@ -46,17 +47,17 @@ export function RecordListPane({
       <TreeSearch value={query} onChange={onQueryChange} placeholder="Search raw DB facts/records…" />
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
         {modeToggle}
-        <select
+        <Select
           value={recordKind}
-          onChange={(e) => onRecordKindChange(e.target.value as MemoryKind | "")}
+          onChange={(v) => onRecordKindChange(v as MemoryKind | "")}
+          options={[
+            { value: "", label: "All kinds" },
+            { value: "fact", label: "Facts" },
+            { value: "directive", label: "Rules" },
+            { value: "source", label: "Sources" },
+          ]}
           aria-label="Filter by record kind"
-          className="h-7 rounded-[10px] bg-surface-soft px-2 text-sm text-ink-soft outline-none"
-        >
-          <option value="">All kinds</option>
-          <option value="fact">Facts</option>
-          <option value="directive">Rules</option>
-          <option value="source">Sources</option>
-        </select>
+        />
       </div>
       <ListColumn
         toolbar={null}

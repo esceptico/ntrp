@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { Check, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "@/stores";
 import type { SidebarGroupBy } from "@/stores/types";
 import { ICON } from "@/lib/icons";
-import { MenuItem } from "@/components/ui/MenuItem";
 import { AnchoredPopover } from "@/components/ui/AnchoredPopover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SwitchControl } from "@/components/ui/SwitchControl";
 
 const GROUP_OPTIONS: { value: SidebarGroupBy; label: string }[] = [
   { value: "project", label: "Project" },
@@ -50,27 +51,33 @@ export function SidebarFilters() {
         open={open}
         onClose={() => setOpen(false)}
         anchor={triggerRef}
-        proximity
         className="w-[200px] py-1.5"
       >
         <SectionLabel>Group by</SectionLabel>
-        {GROUP_OPTIONS.map((opt) => (
-          <PopRow
-            key={opt.value}
-            selected={groupBy === opt.value}
-            onClick={() => setPref("sidebarGroupBy", opt.value)}
-          >
-            {opt.label}
-          </PopRow>
-        ))}
+        <RadioGroup
+          value={groupBy}
+          onChange={(v) => setPref("sidebarGroupBy", v as SidebarGroupBy)}
+          aria-label="Group sessions by"
+          className="px-1"
+        >
+          {GROUP_OPTIONS.map((opt, i) => (
+            <RadioGroupItem key={opt.value} index={i} value={opt.value} label={opt.label} />
+          ))}
+        </RadioGroup>
         <div className="my-1 h-px bg-line-soft" />
         <SectionLabel>Filter</SectionLabel>
-        <PopRow selected={unreadOnly} onClick={() => setPref("sidebarUnreadOnly", !unreadOnly)}>
-          Unread only
-        </PopRow>
-        <PopRow selected={channelsOnly} onClick={() => setPref("sidebarChannelsOnly", !channelsOnly)}>
-          Channels only
-        </PopRow>
+        <div className="px-2.5 py-0.5">
+          <FilterSwitch
+            label="Unread only"
+            checked={unreadOnly}
+            onChange={(next) => setPref("sidebarUnreadOnly", next)}
+          />
+          <FilterSwitch
+            label="Channels only"
+            checked={channelsOnly}
+            onChange={(next) => setPref("sidebarChannelsOnly", next)}
+          />
+        </div>
       </AnchoredPopover>
     </>
   );
@@ -84,22 +91,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PopRow({
-  children,
-  selected,
-  onClick,
+function FilterSwitch({
+  label,
+  checked,
+  onChange,
 }: {
-  children: React.ReactNode;
-  selected: boolean;
-  onClick: () => void;
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
 }) {
   return (
-    <MenuItem
-      dense
-      onClick={onClick}
-      leading={selected && <Check size={ICON.XS} strokeWidth={2.5} className="text-accent" />}
-    >
-      {children}
-    </MenuItem>
+    <div className="flex items-center justify-between gap-3 py-1 text-sm text-ink select-none">
+      <span>{label}</span>
+      <SwitchControl size="sm" checked={checked} onChange={onChange} aria-label={label} />
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
+import { SwitchControl } from "@/components/ui/SwitchControl";
 
 export function GoogleCard({
   enabled,
@@ -61,15 +62,12 @@ export function GoogleCard({
               {pendingAdd ? "Connecting…" : "Add account"}
             </BlurSwap>
           </Button>
-          <Button
-            variant={enabled ? "secondary" : "primary"}
-            onClick={() => void onToggle(!enabled)}
+          <SwitchControl
+            checked={enabled}
+            onChange={(next) => void onToggle(next)}
             disabled={pendingGoogle}
-          >
-            <BlurSwap swapKey={pendingGoogle ? "saving" : enabled ? "disable" : "enable"} blur={2}>
-              {pendingGoogle ? "Saving…" : enabled ? "Disable" : "Enable"}
-            </BlurSwap>
-          </Button>
+            aria-label="Enable Google Workspace"
+          />
         </div>
       </div>
 

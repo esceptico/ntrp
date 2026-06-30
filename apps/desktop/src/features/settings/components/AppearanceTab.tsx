@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ArrowUp, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
@@ -14,6 +20,7 @@ import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { IconButton } from "@/components/ui/IconButton";
+import { radioGroupKeyDown } from "@/components/ui/RadioGroup";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
@@ -40,6 +47,12 @@ export function AppearanceTab() {
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const setPref = useStore((s) => s.setPref);
+
+  // The variant cards are a bespoke preview-card grid (RadioGroup's row-list +
+  // radio dot don't fit), but the roving keyboard is the SHARED radioGroupKeyDown
+  // — not re-implemented here. The cards carry role="radio" + data-value.
+  const onVariantKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) =>
+    radioGroupKeyDown(e, thinking, (v) => setPref("thinkingAnimation", v as ThinkingAnimation));
 
   return (
     <div className="grid gap-6">
@@ -90,7 +103,12 @@ export function AppearanceTab() {
             </SegmentedControl>
           }
         />
-        <div className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2">
+        <div
+          role="radiogroup"
+          aria-label="Thinking animation"
+          onKeyDown={onVariantKeyDown}
+          className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2"
+        >
           {VARIANTS.map((v) => (
             <VariantCard
               key={v.id}
@@ -270,6 +288,11 @@ function VariantCard({
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={variant.label}
+      data-value={variant.id}
+      tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
