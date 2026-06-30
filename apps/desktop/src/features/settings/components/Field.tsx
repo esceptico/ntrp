@@ -48,6 +48,7 @@ export function NumberField({
   onChange,
   min,
   max,
+  step = 1,
   help,
   suffix,
 }: {
@@ -56,6 +57,7 @@ export function NumberField({
   onChange: (next: number) => void;
   min: number;
   max: number;
+  step?: number;
   help?: string;
   suffix?: string;
 }) {
@@ -63,27 +65,19 @@ export function NumberField({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <div className="flex items-baseline gap-1.5">
-          <label htmlFor={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</label>
-          {suffix && <span className="text-xs text-faint">{suffix}</span>}
-        </div>
+        <span id={id} className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
         {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
-      <div className="flex items-center gap-2">
-        <input
-          id={id}
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          step="any"
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onChange(n);
-          }}
-          className="w-[88px] h-8 px-2 border border-line rounded-md bg-transparent text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
-        />
-      </div>
+      <Slider
+        className="w-52"
+        aria-labelledby={id}
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={onChange}
+        formatValue={(n) => (suffix ? `${n} ${suffix}` : `${n}`)}
+      />
     </div>
   );
 }
