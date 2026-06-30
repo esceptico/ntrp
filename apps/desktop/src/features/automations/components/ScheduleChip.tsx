@@ -16,6 +16,18 @@ import { useReanchor } from "@/lib/hooks";
 import { Chip } from "@/components/ui/Chip";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
+import { RangeSlider } from "@/components/ui/Slider";
+
+const DAY_MIN = 24 * 60;
+/** "HH:MM" → minutes since midnight, or null when empty (no bound). */
+const hhmmToMin = (s: string): number | null => {
+  if (!s) return null;
+  const [h, m] = s.split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
+/** minutes → "HH:MM" (DAY_MIN renders as 24:00 but is stored as "" = no bound). */
+const minToHhmm = (n: number): string =>
+  `${String(Math.floor(n / 60) % 24).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import type { EventType, Schedule, ScheduleKind } from "@/features/automations/lib/schedule";
 import { scheduleLabel } from "@/features/automations/lib/schedule";
@@ -162,24 +174,24 @@ export function ScheduleChip({
                       className={schedFieldCls}
                     />
                   </ScheduleField>
-                  <div className="grid grid-cols-2 gap-2">
-                    <ScheduleField label="Start">
-                      <input
-                        type="time"
-                        value={schedule.start}
-                        onChange={(e) => onChange({ ...schedule, start: e.target.value })}
-                        className={schedFieldCls}
-                      />
-                    </ScheduleField>
-                    <ScheduleField label="End">
-                      <input
-                        type="time"
-                        value={schedule.end}
-                        onChange={(e) => onChange({ ...schedule, end: e.target.value })}
-                        className={schedFieldCls}
-                      />
-                    </ScheduleField>
-                  </div>
+                  <ScheduleField label="Active window" hint="optional — only run within these hours">
+                    <RangeSlider
+                      aria-label="Active window"
+                      min={0}
+                      max={DAY_MIN}
+                      step={15}
+                      value={[hhmmToMin(schedule.start) ?? 0, hhmmToMin(schedule.end) ?? DAY_MIN]}
+                      onChange={([lo, hi]) =>
+                        onChange({
+                          ...schedule,
+                          start: lo <= 0 ? "" : minToHhmm(lo),
+                          end: hi >= DAY_MIN ? "" : minToHhmm(hi),
+                        })
+                      }
+                      formatValue={(n) => (n >= DAY_MIN ? "24:00" : minToHhmm(n))}
+                      className="pt-1"
+                    />
+                  </ScheduleField>
                 </div>
 
                 <div

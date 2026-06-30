@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Slider, valueFromPosition } from "@/components/ui/Slider";
+import { Slider, RangeSlider, valueFromPosition, orderRange } from "@/components/ui/Slider";
 
 function mount(node: React.ReactNode): { el: HTMLElement; root: Root; restore: () => void } {
   const el = document.createElement("div");
@@ -130,4 +130,39 @@ test("Home/End jump to min/max, PageUp/PageDown take larger steps", async () => 
     fireKey(thumb, "PageUp"),
   );
   expect(next).toBe(60); // pageStep defaults to step * 10
+});
+
+// ── RangeSlider ordering (two thumbs can't cross) ───────────────────────────
+
+test("orderRange keeps the two ends ordered and clamped", () => {
+  // moving the LOW thumb can't pass the high thumb
+  expect(orderRange(0, 80, [20, 60], 0, 100)).toEqual([60, 60]);
+  expect(orderRange(0, 40, [20, 60], 0, 100)).toEqual([40, 60]);
+  // moving the HIGH thumb can't drop below the low thumb
+  expect(orderRange(1, 10, [20, 60], 0, 100)).toEqual([20, 20]);
+  expect(orderRange(1, 90, [20, 60], 0, 100)).toEqual([20, 90]);
+  // both clamp to [min,max]
+  expect(orderRange(0, -5, [20, 60], 0, 100)).toEqual([0, 60]);
+  expect(orderRange(1, 999, [20, 60], 0, 100)).toEqual([20, 100]);
+});
+
+test("RangeSlider renders two slider thumbs; arrow keys move each, bounded by the other", () => {
+  const { el, root, restore } = mount(null);
+  let val: [number, number] = [120, 600];
+  const onChange = (v: [number, number]) => { val = v; };
+  const render = () =>
+    act(() => root.render(<RangeSlider value={val} onChange={onChange} min={0} max={1440} step={15} aria-label="Window" />));
+  render();
+  const thumbs = el.querySelectorAll<HTMLElement>('[role="slider"]');
+  expect(thumbs.length).toBe(2);
+  expect(thumbs[0].getAttribute("aria-valuenow")).toBe("120");
+  expect(thumbs[1].getAttribute("aria-valuenow")).toBe("600");
+  // low thumb +step
+  fireKey(thumbs[0], "ArrowRight");
+  expect(val).toEqual([135, 600]);
+  // low thumb can't pass high: jump to End clamps to the high thumb
+  render();
+  fireKey(el.querySelectorAll<HTMLElement>('[role="slider"]')[0], "End");
+  expect(val).toEqual([600, 600]);
+  restore();
 });

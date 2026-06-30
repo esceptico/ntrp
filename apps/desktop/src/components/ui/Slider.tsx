@@ -249,4 +249,165 @@ export function Slider({
   );
 }
 
+// ─── Range (two-thumb) ──────────────────────────────────────────────────────
+
+interface RangeSliderProps {
+  /** [low, high] — kept ordered (low ≤ high) by the component. */
+  value: [number, number];
+  onChange: (value: [number, number]) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+  /** Formats each end for the readout, e.g. minutes → "HH:MM". */
+  formatValue?: (value: number) => string;
+  className?: string;
+  "aria-label"?: string;
+  ref?: Ref<HTMLDivElement>;
+}
+
+/** Clamp `value` to [low, high], keeping the two ends ordered. */
+export function orderRange(
+  thumb: 0 | 1,
+  next: number,
+  [low, high]: [number, number],
+  min: number,
+  max: number,
+): [number, number] {
+  const v = clamp(next, min, max);
+  return thumb === 0 ? [Math.min(v, high), high] : [low, Math.max(v, low)];
+}
+
+/**
+ * Two-thumb range slider — same track/thumb/`valueFromPosition` as {@link Slider},
+ * with the fill drawn BETWEEN the thumbs. Pointer grabs the nearer thumb; each
+ * thumb is its own `role="slider"` (Arrow/Page/Home/End), bounded by the other so
+ * they can't cross. Position is controlled (no per-move React-free hot path —
+ * a settings range slider isn't dragged continuously like a primary control).
+ */
+export function RangeSlider({
+  value,
+  onChange,
+  min = 0,
+  max = 100,
+  step = 1,
+  disabled = false,
+  formatValue,
+  className,
+  "aria-label": ariaLabel,
+  ref,
+}: RangeSliderProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<0 | 1 | null>(null);
+  const [low, high] = value;
+  const pct = (v: number) => (max > min ? clamp((v - min) / (max - min), 0, 1) * 100 : 0);
+
+  const move = (thumb: 0 | 1, next: number) => {
+    const ordered = orderRange(thumb, next, value, min, max);
+    if (ordered[0] !== low || ordered[1] !== high) onChange(ordered);
+  };
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (disabled || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    e.preventDefault();
+    const v = valueFromPosition(e.clientX, rect, min, max, step);
+    // Grab the nearer thumb; tie goes to the one the pointer is past.
+    const thumb: 0 | 1 = Math.abs(v - low) < Math.abs(v - high) || v < low ? 0 : 1;
+    dragging.current = thumb;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    move(thumb, v);
+  };
+
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (dragging.current === null) return;
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (rect) move(dragging.current, valueFromPosition(e.clientX, rect, min, max, step));
+  };
+
+  const endDrag = () => {
+    dragging.current = null;
+  };
+
+  const onThumbKey = (thumb: 0 | 1) => (e: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const cur = thumb === 0 ? low : high;
+    const big = step * 10;
+    let next: number | null = null;
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowUp": next = cur + step; break;
+      case "ArrowLeft":
+      case "ArrowDown": next = cur - step; break;
+      case "PageUp": next = cur + big; break;
+      case "PageDown": next = cur - big; break;
+      case "Home": next = min; break;
+      case "End": next = max; break;
+      default: return;
+    }
+    e.preventDefault();
+    move(thumb, next);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className={clsx("flex items-center gap-3 select-none", disabled && "opacity-50", className)}
+    >
+      <div
+        ref={trackRef}
+        className="relative h-5 flex-1 cursor-ew-resize touch-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
+        <div
+          className="absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-full bg-surface-soft"
+          style={{ height: TRACK_HEIGHT, boxShadow: "inset 0 0 0 1px var(--color-line)" }}
+        >
+          {/* Fill BETWEEN the thumbs. */}
+          <div
+            className="absolute inset-y-0 rounded-full bg-accent"
+            style={{ left: `${pct(low)}%`, right: `${100 - pct(high)}%` }}
+          />
+        </div>
+        {([low, high] as const).map((v, i) => {
+          const thumb = i as 0 | 1;
+          return (
+            <div
+              key={thumb}
+              role="slider"
+              tabIndex={disabled ? -1 : 0}
+              aria-orientation="horizontal"
+              aria-valuemin={thumb === 0 ? min : low}
+              aria-valuemax={thumb === 0 ? high : max}
+              aria-valuenow={v}
+              aria-valuetext={formatValue ? formatValue(v) : undefined}
+              aria-label={ariaLabel ? `${ariaLabel} ${thumb === 0 ? "start" : "end"}` : undefined}
+              aria-disabled={disabled || undefined}
+              onKeyDown={onThumbKey(thumb)}
+              className="absolute top-1/2 rounded-full bg-surface-1 shadow-[0_1px_3px_rgba(0,0,0,0.18)] outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              style={{
+                left: `${pct(v)}%`,
+                width: THUMB_REST,
+                height: THUMB_REST,
+                transform: "translate(-50%,-50%)",
+                border: "1px solid var(--color-line-strong)",
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {formatValue && (
+        <span className="whitespace-nowrap text-[13px] tabular-nums text-ink-soft">
+          {formatValue(low)}–{formatValue(high)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default Slider;
