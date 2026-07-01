@@ -10,6 +10,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallResultEvent, ToolCallStartEvent, agent_event_to_sse
+from ntrp.llm.models import supports_native_deferred_tools
 from ntrp.memory.profile import resident_profile
 from ntrp.observability import activate_tracing, observed_trace
 from ntrp.server.bus import SessionBus
@@ -63,9 +64,10 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     if request.model:
         agent_config = replace(deps.config, model=request.model)
 
+    native_deferred_tools = supports_native_deferred_tools(agent_config.model)
     deferred_tools_context = (
         build_deferred_tools_prompt_for_schemas(executor.registry, frozenset(executor.tool_services), tools)
-        if agent_config.deferred_tools
+        if agent_config.deferred_tools and not native_deferred_tools
         else None
     )
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
@@ -77,6 +79,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         directives=load_directives(),
         notifiers=deps.notifiers or None,
         deferred_tools_context=deferred_tools_context,
+        native_deferred_tools=native_deferred_tools,
     )
     system_prompt += request.prompt_suffix
 

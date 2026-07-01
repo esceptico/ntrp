@@ -3,11 +3,12 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from ntrp.agent.types.llm import ToolCallStreamDelta
+from ntrp.agent.types.llm import ProviderToolCall, ToolCallStreamDelta
 from ntrp.llm.openai import OpenAIClient
 from ntrp.llm.openai_responses import (
     buffered_stream_responses_completion,
     complete_responses_completion,
+    parse_responses_response,
     stream_responses_completion,
 )
 
@@ -128,6 +129,81 @@ def test_responses_request_formats_image_blocks_as_input_images():
         {"type": "input_text", "text": "inspect"},
         {"type": "input_image", "detail": "auto", "image_url": "data:image/jpeg;base64,/9j/4A=="},
     ]
+
+
+def test_responses_request_uses_native_deferred_tool_search():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[{"role": "user", "content": "search slack"}],
+        model="gpt-5.5",
+        tools=[
+            {"type": "function", "function": {"name": "load_tools", "parameters": {"type": "object"}}},
+            {"type": "function", "function": {"name": "echo", "parameters": {"type": "object"}}},
+        ],
+        deferred_tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "slack_search",
+                    "description": "Search Slack",
+                    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+                },
+            }
+        ],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    assert {"type": "tool_search"} in request["tools"]
+    deferred = next(tool for tool in request["tools"] if tool.get("name") == "slack_search")
+    assert deferred["defer_loading"] is True
+
+
+def test_responses_deferred_tool_search_preserves_prompt_cache_key():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[{"role": "user", "content": "search slack"}],
+        model="gpt-5.5",
+        tools=[{"type": "function", "function": {"name": "echo", "parameters": {"type": "object"}}}],
+        deferred_tools=[
+            {"type": "function", "function": {"name": "slack_search", "parameters": {"type": "object"}}}
+        ],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+        prompt_cache_key="session-1",
+    )
+
+    assert request["prompt_cache_key"] == "session-1"
+    assert {"type": "tool_search"} in request["tools"]
+
+
+def test_responses_request_skips_native_deferred_tool_search_for_unsupported_model():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[{"role": "user", "content": "search slack"}],
+        model="gpt-5.2",
+        tools=[{"type": "function", "function": {"name": "load_tools", "parameters": {"type": "object"}}}],
+        deferred_tools=[
+            {"type": "function", "function": {"name": "slack_search", "parameters": {"type": "object"}}}
+        ],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    assert {"type": "tool_search"} not in request["tools"]
+    assert all(tool.get("name") != "slack_search" for tool in request["tools"])
 
 
 class _FakeItem:
@@ -516,6 +592,56 @@ class _ToolResponse:
     ]
 
 
+def test_responses_parser_preserves_provider_tool_search_call():
+    response = SimpleNamespace(
+        status="completed",
+        usage=_Usage(),
+        output=[
+            _FakeItem(
+                {
+                    "type": "tool_search_call",
+                    "id": "tsc_1",
+                    "query": "slack",
+                    "results": [{"name": "slack_search"}],
+                }
+            )
+        ],
+    )
+
+    parsed = parse_responses_response(response, "gpt-5.5")
+    provider_calls = parsed.choices[0].message.provider_tool_calls
+
+    assert provider_calls is not None
+    assert provider_calls[0].id == "tsc_1"
+    assert provider_calls[0].name == "tool_search"
+    assert provider_calls[0].arguments == '{"query": "slack"}'
+    assert provider_calls[0].result == '[{"name": "slack_search"}]'
+
+
+def test_responses_parser_infers_tool_search_matches_from_function_calls():
+    response = SimpleNamespace(
+        status="completed",
+        usage=_Usage(),
+        output=[
+            _FakeItem({"type": "tool_search_call", "id": "tsc_1", "status": "completed"}),
+            _FakeItem(
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "slack_search",
+                    "arguments": '{"query":"after:2026-06-28"}',
+                }
+            ),
+        ],
+    )
+
+    parsed = parse_responses_response(response, "gpt-5.5")
+    provider_call = parsed.choices[0].message.provider_tool_calls[0]
+
+    assert provider_call.arguments == '{"tools": ["slack_search"]}'
+    assert provider_call.result == "Matched tools: slack_search"
+
+
 class _ToolResponses:
     async def create(self, **kwargs):
         return _Stream(
@@ -570,3 +696,63 @@ async def test_responses_stream_emits_tool_call_deltas_before_final_response():
         ToolCallStreamDelta(index=0, tool_id="call_1", name="Search", done=True),
     ]
     assert events[-1].choices[0].message.tool_calls[0].function.arguments == '{"q":"hi"}'
+
+
+class _ToolSearchThenFunctionResponses:
+    async def create(self, **kwargs):
+        response = SimpleNamespace(
+            status="completed",
+            usage=_Usage(),
+            output=[
+                _FakeItem({"type": "tool_search_call", "id": "tsc_1", "status": "completed"}),
+                _FakeItem(
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "Search",
+                        "arguments": '{"q":"hi"}',
+                    }
+                ),
+            ],
+        )
+        return _Stream(
+            [
+                _Event(
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": 0,
+                        "item": {"type": "tool_search_call", "id": "tsc_1", "status": "in_progress"},
+                    }
+                ),
+                _Event(
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": 1,
+                        "item": {"type": "function_call", "call_id": "call_1", "name": "Search", "arguments": ""},
+                    }
+                ),
+                _Event({"type": "response.completed"}, response=response),
+            ]
+        )
+
+
+class _ToolSearchThenFunctionOpenAI:
+    def __init__(self):
+        self.responses = _ToolSearchThenFunctionResponses()
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_emits_tool_search_before_loaded_tool_call():
+    events = [
+        item
+        async for item in stream_responses_completion(
+            _ToolSearchThenFunctionOpenAI(),
+            {"model": "gpt-5.5", "input": "search"},
+            model="gpt-5.5",
+        )
+    ]
+
+    assert isinstance(events[0], ProviderToolCall)
+    assert events[0].id == "tsc_1"
+    assert isinstance(events[1], ToolCallStreamDelta)
+    assert events[1].tool_id == "call_1"

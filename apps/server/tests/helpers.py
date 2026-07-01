@@ -101,10 +101,19 @@ class MockLLMClient:
         return self._client.calls
 
     async def stream(
-        self, messages: list[dict], model: str, tools: list[dict], tool_choice=None, reasoning_effort: str | None = None
+        self,
+        messages: list[dict],
+        model: str,
+        tools: list[dict],
+        tool_choice=None,
+        reasoning_effort: str | None = None,
+        deferred_tools: list[dict] | None = None,
     ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+        kwargs = {"reasoning_effort": reasoning_effort}
+        if deferred_tools:
+            kwargs["deferred_tools"] = deferred_tools
         async for item in self._client.stream_completion(
-            model=model, messages=messages, tools=tools, tool_choice="auto", reasoning_effort=reasoning_effort
+            model=model, messages=messages, tools=tools, tool_choice="auto", **kwargs
         ):
             yield item
 

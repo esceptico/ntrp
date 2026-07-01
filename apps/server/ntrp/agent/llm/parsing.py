@@ -27,6 +27,19 @@ def normalize_assistant_message(message: Message) -> dict:
         sanitized["reasoning_content"] = message.reasoning_content
     if message.reasoning_encrypted_content:
         sanitized["reasoning_encrypted_content"] = message.reasoning_encrypted_content
+    if message.anthropic_content:
+        sanitized["anthropic_content"] = message.anthropic_content
+    if provider_tool_calls := getattr(message, "provider_tool_calls", None):
+        sanitized["provider_tool_calls"] = [
+            {
+                "id": call.id,
+                "name": call.name,
+                "arguments": call.arguments,
+                "result": call.result,
+                "done": call.done,
+            }
+            for call in provider_tool_calls
+        ]
     return sanitized
 
 

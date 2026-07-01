@@ -10,6 +10,7 @@ from ntrp.agent import (
     FinishReason,
     FunctionCall,
     Message,
+    ProviderToolCall,
     ReasoningContentDelta,
     Role,
     ToolCall,
@@ -58,6 +59,7 @@ class AnthropicClient(CompletionClient):
         max_tokens: int | None,
         reasoning_effort: str | None,
         response_format: type[BaseModel] | None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> tuple[str, dict]:
         if max_tokens is None:
@@ -65,15 +67,14 @@ class AnthropicClient(CompletionClient):
 
         system, api_messages = self._split_system(messages)
         api_messages = self._convert_messages(api_messages)
-        api_tools = self._convert_tools(tools) if tools else None
+        api_tools = self._convert_tools(tools, deferred_tools) if tools or deferred_tools else None
         api_tool_choice = self._resolve_tool_choice(api_tools, tool_choice, response_format)
 
         if response_format is not None:
             api_tools = api_tools or []
             api_tools.append(self._make_schema_tool(response_format))
 
-        if api_tools:
-            api_tools[-1]["cache_control"] = {"type": "ephemeral"}
+        self._inject_cache_control_last_tool(api_tools)
         self._inject_cache_control_last_message(api_messages)
 
         request = self._build_request(
@@ -99,6 +100,7 @@ class AnthropicClient(CompletionClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> CompletionResponse:
         model, request = self._prepare(
@@ -110,6 +112,7 @@ class AnthropicClient(CompletionClient):
             max_tokens,
             reasoning_effort,
             response_format,
+            deferred_tools,
             **kwargs,
         )
         async with self._client.messages.stream(**request) as stream:
@@ -126,8 +129,9 @@ class AnthropicClient(CompletionClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
         model, request = self._prepare(
             messages,
             model,
@@ -137,17 +141,44 @@ class AnthropicClient(CompletionClient):
             max_tokens,
             reasoning_effort,
             response_format,
+            deferred_tools,
             **kwargs,
         )
         async with self._client.messages.stream(**request) as stream:
+            provider_blocks: dict[int, dict] = {}
             async for event in stream:
-                if event.type != "content_block_delta":
+                if event.type == "content_block_start":
+                    block = self._block_to_dict(event.content_block)
+                    provider_blocks[event.index] = block
+                    if block.get("type") == "server_tool_use" and block.get("name") == "tool_search_tool_bm25":
+                        yield ProviderToolCall(
+                            id=str(block.get("id") or f"tool_search_{event.index}"),
+                            name="tool_search",
+                            arguments=json.dumps(block.get("input") or {}),
+                            done=False,
+                        )
                     continue
-                delta = event.delta
-                if delta.type == "text_delta":
-                    yield delta.text
-                elif delta.type == "thinking_delta":
-                    yield ReasoningContentDelta(delta.thinking)
+                if event.type == "content_block_delta":
+                    block = provider_blocks.get(event.index)
+                    if block and (delta := self._block_to_dict(event.delta)).get("type") == "input_json_delta":
+                        block["input"] = str(block.get("input") or "") + str(delta.get("partial_json") or "")
+                    delta = event.delta
+                    if delta.type == "text_delta":
+                        yield delta.text
+                    elif delta.type == "thinking_delta":
+                        yield ReasoningContentDelta(delta.thinking)
+                    continue
+                if event.type == "content_block_stop":
+                    block = provider_blocks.get(event.index)
+                    if block and block.get("type") == "tool_search_tool_result":
+                        yield ProviderToolCall(
+                            id=str(block.get("tool_use_id") or f"tool_search_{event.index}"),
+                            name="tool_search",
+                            arguments=json.dumps({"tools": _tool_reference_names(block.get("content"))}),
+                            result=_tool_search_result_text(block.get("content")),
+                            done=True,
+                        )
+                    continue
             response = await stream.get_final_message()
         yield self._parse_response(response, model, response_format)
 
@@ -267,6 +298,9 @@ class AnthropicClient(CompletionClient):
         return result
 
     def _convert_assistant(self, msg: dict) -> dict:
+        if content := msg.get("anthropic_content"):
+            return {"role": Role.ASSISTANT, "content": content}
+
         content_blocks: list[dict] = []
         if text := msg["content"]:
             content_blocks.append({"type": "text", "text": text})
@@ -298,15 +332,27 @@ class AnthropicClient(CompletionClient):
                 return
         result.append({"role": Role.USER, "content": [block]})
 
-    def _convert_tools(self, tools: list[dict]) -> list[dict]:
-        return [
+    def _convert_tools(self, tools: list[dict] | None, deferred_tools: list[dict] | None = None) -> list[dict]:
+        result = [
             {
                 "name": (fn := tool.get("function", tool))["name"],
                 "description": fn.get("description", ""),
                 "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
             }
-            for tool in tools
+            for tool in (tools or [])
         ]
+        if deferred_tools:
+            result.insert(0, {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"})
+            result.extend(
+                {
+                    "name": (fn := tool.get("function", tool))["name"],
+                    "description": fn.get("description", ""),
+                    "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+                    "defer_loading": True,
+                }
+                for tool in deferred_tools
+            )
+        return result
 
     def _make_schema_tool(self, model_class: type[BaseModel]) -> dict:
         return {
@@ -330,10 +376,19 @@ class AnthropicClient(CompletionClient):
                     target["cache_control"] = {"type": "ephemeral"}
                     break
 
+    def _inject_cache_control_last_tool(self, tools: list[dict] | None) -> None:
+        if not tools:
+            return
+        for tool in reversed(tools):
+            if not tool.get("defer_loading"):
+                tool["cache_control"] = {"type": "ephemeral"}
+                return
+
     # --- Response parsing ---
 
     def _parse_response(self, response, model: str, response_format: type[BaseModel] | None) -> CompletionResponse:
-        content, tool_calls, reasoning = self._parse_content_blocks(response.content, response_format)
+        content, tool_calls, reasoning, anthropic_content = self._parse_content_blocks(response.content, response_format)
+        provider_tool_calls = self._parse_provider_tool_calls(anthropic_content)
         usage = self._parse_usage(response.usage)
 
         message = Message(
@@ -341,6 +396,8 @@ class AnthropicClient(CompletionClient):
             content=content,
             tool_calls=tool_calls or None,
             reasoning_content=reasoning,
+            anthropic_content=anthropic_content,
+            provider_tool_calls=provider_tool_calls,
         )
 
         return CompletionResponse(
@@ -358,12 +415,14 @@ class AnthropicClient(CompletionClient):
         self,
         blocks,
         response_format: type[BaseModel] | None,
-    ) -> tuple[str | None, list[ToolCall], str | None]:
+    ) -> tuple[str | None, list[ToolCall], str | None, list[dict] | None]:
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
         reasoning = None
+        anthropic_content: list[dict] = []
 
         for block in blocks:
+            anthropic_content.append(self._block_to_dict(block))
             if block.type == "text":
                 text_parts.append(block.text)
             elif block.type == "tool_use":
@@ -384,7 +443,39 @@ class AnthropicClient(CompletionClient):
                 reasoning = block.thinking
 
         content = "\n".join(text_parts) if text_parts else None
-        return content, tool_calls, reasoning
+        return content, tool_calls, reasoning, anthropic_content or None
+
+    def _parse_provider_tool_calls(self, blocks: list[dict] | None) -> list[ProviderToolCall] | None:
+        if not blocks:
+            return None
+        starts = {
+            block.get("id"): block
+            for block in blocks
+            if block.get("type") == "server_tool_use" and block.get("name") == "tool_search_tool_bm25"
+        }
+        calls = []
+        for block in blocks:
+            if block.get("type") != "tool_search_tool_result":
+                continue
+            tool_use_id = block.get("tool_use_id")
+            start = starts.get(tool_use_id)
+            if not start:
+                continue
+            calls.append(
+                ProviderToolCall(
+                    id=str(tool_use_id),
+                    name="tool_search",
+                    arguments=json.dumps({"tools": _tool_reference_names(block.get("content"))}),
+                    result=_tool_search_result_text(block.get("content")),
+                )
+            )
+        return calls or None
+
+    def _block_to_dict(self, block) -> dict:
+        if hasattr(block, "model_dump"):
+            return block.model_dump(exclude_none=True)
+        return dict(block)
+
 
     def _parse_usage(self, usage) -> Usage:
         return Usage(
@@ -393,3 +484,19 @@ class AnthropicClient(CompletionClient):
             cache_read_tokens=usage.cache_read_input_tokens or 0,
             cache_write_tokens=usage.cache_creation_input_tokens or 0,
         )
+
+
+def _tool_reference_names(content) -> list[str]:
+    if not isinstance(content, dict):
+        return []
+    refs = content.get("tool_references")
+    if not isinstance(refs, list):
+        return []
+    return [name for ref in refs if isinstance(ref, dict) and isinstance(name := ref.get("tool_name"), str)]
+
+
+def _tool_search_result_text(content) -> str:
+    names = _tool_reference_names(content)
+    if names:
+        return f"Matched tools: {', '.join(names)}"
+    return json.dumps(content or {}, default=str)

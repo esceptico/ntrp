@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel
 
-from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta, ToolCallStreamDelta
+from ntrp.agent.types.llm import CompletionResponse, ProviderToolCall, ReasoningContentDelta, ToolCallStreamDelta
 from ntrp.llm.retry import with_retry
 
 
@@ -19,6 +19,7 @@ class CompletionClient(ABC):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> CompletionResponse: ...
 
@@ -35,8 +36,9 @@ class CompletionClient(ABC):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
         """Yield text deltas, then the final CompletionResponse.
 
         Default: non-streaming fallback.
@@ -50,6 +52,7 @@ class CompletionClient(ABC):
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             response_format=response_format,
+            deferred_tools=deferred_tools,
             **kwargs,
         )
         text = response.choices[0].message.content if response.choices else None
@@ -57,7 +60,9 @@ class CompletionClient(ABC):
             yield text
         yield response
 
-    async def stream_completion(self, **kwargs) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+    async def stream_completion(
+        self, **kwargs
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
         async for item in self._stream_completion(**kwargs):
             yield item
 

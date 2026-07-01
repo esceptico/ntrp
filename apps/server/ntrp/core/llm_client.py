@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from ntrp.agent import (
     CompletionResponse,
+    ProviderToolCall,
     ReasoningContentDelta,
     SpecificTool,
     ToolCallStreamDelta,
@@ -40,12 +41,15 @@ class NtrpLLMClient:
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_key: str | None = None,
-    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+        deferred_tools: list[dict] | None = None,
+    ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
         client = get_completion_client(model)
         reasoning_effort = self._supported_reasoning_effort(model, reasoning_effort)
         kwargs = {}
         if prompt_cache_key is not None:
             kwargs["prompt_cache_key"] = prompt_cache_key
+        if deferred_tools:
+            kwargs["deferred_tools"] = deferred_tools
         async for item in client.stream_completion(
             model=model,
             messages=messages,

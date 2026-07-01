@@ -11,6 +11,7 @@ class ModelRequest:
     messages: list[dict]
     model: str
     tools: list[dict]
+    deferred_tools: list[dict]
     tool_choice: ToolChoice
     reasoning_effort: str | None
     previous_response: CompletionResponse | None

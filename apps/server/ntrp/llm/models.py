@@ -365,6 +365,20 @@ def get_model(model_id: str) -> Model:
     return _models[model_id]
 
 
+def supports_native_deferred_tools(model_id: str) -> bool:
+    try:
+        model = get_model(model_id)
+    except ValueError:
+        return False
+    if model.provider == Provider.ANTHROPIC:
+        return True
+    if model.provider == Provider.OPENAI:
+        return model.id.startswith(("gpt-5.4", "gpt-5.5"))
+    if model.provider == Provider.OPENAI_CODEX:
+        return model.id.removeprefix("openai-codex/").startswith(("gpt-5.4", "gpt-5.5"))
+    return False
+
+
 def get_embedding_model(model_id: str) -> EmbeddingModel:
     if model_id not in _embedding_models:
         raise ValueError(f"Unknown embedding model: {model_id}. Available: {', '.join(_embedding_models)}")

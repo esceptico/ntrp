@@ -12,6 +12,7 @@ from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
+from ntrp.llm.models import supports_native_deferred_tools
 from ntrp.logging import UVICORN_LOG_CONFIG
 from ntrp.observability import observed_trace
 from ntrp.server.runtime import Runtime
@@ -233,17 +234,19 @@ async def _run_headless(prompt: str):
     try:
         config = AgentConfig.from_config(runtime.config)
         tools = runtime.executor.get_tools()
+        native_deferred_tools = supports_native_deferred_tools(config.model)
         deferred_tools_context = (
             build_deferred_tools_prompt_for_schemas(
                 runtime.executor.registry, frozenset(runtime.executor.tool_services), tools
             )
-            if config.deferred_tools
+            if config.deferred_tools and not native_deferred_tools
             else None
         )
         system_prompt = build_system_prompt(
             source_details={},
             memory_context=None,
             deferred_tools_context=deferred_tools_context,
+            native_deferred_tools=native_deferred_tools,
         )
 
         run_id = generate_slug(2)

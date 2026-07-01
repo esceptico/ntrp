@@ -231,11 +231,31 @@ async def _emit_goal_event(
 
 
 def _history_tool_calls(msg: dict, tool_meta_for: Callable[[str], tuple[str, str | None]]) -> list[dict]:
+    tool_calls = []
+    raw_provider_calls = msg.get("provider_tool_calls") or []
+    if isinstance(raw_provider_calls, list):
+        for tc in raw_provider_calls:
+            if not isinstance(tc, dict):
+                continue
+            call_id = tc.get("id")
+            name = tc.get("name")
+            if not isinstance(call_id, str) or not isinstance(name, str):
+                continue
+            arguments = tc.get("arguments", "{}")
+            result = tc.get("result", "")
+            tool_calls.append(
+                {
+                    "id": call_id,
+                    "name": name,
+                    "arguments": arguments if isinstance(arguments, str) else "{}",
+                    "kind": "tool",
+                    "display_name": "Search Tools" if name == "tool_search" else name,
+                    "result": result if isinstance(result, str) else "",
+                }
+            )
     raw_tool_calls = msg.get("tool_calls") or []
     if not isinstance(raw_tool_calls, list):
-        return []
-
-    tool_calls = []
+        raw_tool_calls = []
     for tc in raw_tool_calls:
         if not isinstance(tc, dict):
             continue

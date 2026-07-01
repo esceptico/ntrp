@@ -297,6 +297,37 @@ test("preserves persisted switch-back order when assistant text is between tool 
   expect(layout.afterWorkIds).toEqual(["progress-assistant", "progress-assistant-activity"]);
 });
 
+test("projects provider tool calls with embedded result", () => {
+  const items = historyMessagesToUi(
+    [
+      { role: "user", content: "search tools", id: "user-1" },
+      {
+        role: "assistant",
+        content: "",
+        id: "assistant-1",
+        tool_calls: [
+          {
+            id: "tsc_1",
+            name: "tool_search",
+            display_name: "Search Tools",
+            arguments: '{"tools":["slack_search"]}',
+            result: "Matched tools: slack_search",
+          },
+        ],
+      },
+    ],
+    null,
+  );
+
+  const activity = items.find((item) => item.role === "activity");
+  expect(activity?.activity?.items[0]).toMatchObject({
+    id: "tsc_1",
+    kind: "tool_search",
+    target: 'Search Tools(tools=["slack_search"])',
+    result: "Matched tools: slack_search",
+  });
+});
+
 test("reopens newest trailing history activity for active runs", () => {
   const messages: HistoryMessage[] = [
     { role: "user", content: "keep checking", id: "user-1" },

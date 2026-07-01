@@ -18,13 +18,15 @@ from ntrp.agent import (
 )
 from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
-from ntrp.llm.models import Provider, get_model
+from ntrp.llm.models import Provider, get_model, supports_native_deferred_tools
 from ntrp.llm.openai_responses import complete_responses_completion, parse_responses_response, prepare_responses_request
 from ntrp.llm.utils import blocks_to_text
 from ntrp.observability.judgment import trace_client
 
 # Keys we attach for ntrp internals that must be stripped before an API call.
-_INTERNAL_MESSAGE_KEYS = frozenset({"client_id", "created_at", "message_id", "compaction", "data"})
+_INTERNAL_MESSAGE_KEYS = frozenset(
+    {"client_id", "created_at", "message_id", "compaction", "data", "anthropic_content", "provider_tool_calls"}
+)
 
 
 def _map_finish_reason(reason: str | None) -> FinishReason:
@@ -100,8 +102,16 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             return True
         return not get_model(model).reasoning_efforts
 
-    def _uses_responses_api(self, tools: list[dict] | None, reasoning_effort: str | None) -> bool:
-        return self._native_openai and bool(tools) and reasoning_effort is not None
+    def _uses_responses_api(
+        self,
+        model: str,
+        tools: list[dict] | None,
+        reasoning_effort: str | None,
+        deferred_tools: list[dict] | None = None,
+    ) -> bool:
+        return self._native_openai and bool(tools) and (
+            reasoning_effort is not None or (bool(deferred_tools) and supports_native_deferred_tools(model))
+        )
 
     def _prepare_responses(
         self,
@@ -113,12 +123,14 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         max_tokens: int | None,
         reasoning_effort: str | None,
         response_format: type[BaseModel] | None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> dict:
         return prepare_responses_request(
             messages=messages,
             model=model,
             tools=tools,
+            deferred_tools=deferred_tools if supports_native_deferred_tools(model) else None,
             tool_choice=tool_choice,
             temperature=temperature if self._supports_temperature(model) else None,
             max_tokens=max_tokens,
@@ -154,9 +166,10 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> CompletionResponse:
-        if self._uses_responses_api(tools, reasoning_effort):
+        if self._uses_responses_api(model, tools, reasoning_effort, deferred_tools):
             request = self._prepare_responses(
                 messages,
                 model,
@@ -166,6 +179,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                 max_tokens,
                 reasoning_effort,
                 response_format,
+                deferred_tools=deferred_tools,
                 **kwargs,
             )
             response = await self._client.responses.create(**request)
@@ -195,9 +209,10 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
-        if self._uses_responses_api(tools, reasoning_effort):
+        if self._uses_responses_api(model, tools, reasoning_effort, deferred_tools):
             request = self._prepare_responses(
                 messages,
                 model,
@@ -207,6 +222,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                 max_tokens,
                 reasoning_effort,
                 response_format,
+                deferred_tools=deferred_tools,
                 **kwargs,
             )
             async for item in complete_responses_completion(self._client, request, model=model):

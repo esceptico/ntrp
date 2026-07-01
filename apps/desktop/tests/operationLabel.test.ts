@@ -18,6 +18,7 @@ test("known tools get corpus-specific labels + category icons", () => {
   expect(operationLabel(item({ kind: "search_transcripts" }))).toMatchObject({ verb: "Searched transcripts", iconKey: "history" });
   expect(operationLabel(item({ kind: "memory_search" }))).toMatchObject({ verb: "Searched memory", iconKey: "brain" });
   expect(operationLabel(item({ kind: "load_tools" }))).toMatchObject({ verb: "Loaded tools", iconKey: "wrench" });
+  expect(operationLabel(item({ kind: "tool_search" }))).toMatchObject({ verb: "Searched tools", iconKey: "search" });
 });
 
 test("the corpus, not just the action, is in the label (search tools are distinguishable)", () => {
@@ -52,6 +53,9 @@ test("detail comes from args, preferring path-like keys; partial JSON is safe", 
   );
   expect(operationLabel(item({ kind: "read_file", args: '{"path":' })).detail).toBeNull();
   expect(operationLabel(item({ kind: "read_file" })).detail).toBeNull();
+  expect(operationLabel(item({ kind: "tool_search", args: '{"tools":["slack_search","emails"]}' })).detail).toBe(
+    "slack_search, emails",
+  );
 });
 
 test("groupSummary pluralizes with the tool's noun, else falls back to a count", () => {

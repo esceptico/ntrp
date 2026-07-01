@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -134,6 +135,7 @@ def _request(registry: ToolRegistry) -> ModelRequest:
         messages=[],
         model="test",
         tools=registry.get_schemas(),
+        deferred_tools=[],
         tool_choice=ToolChoiceMode.AUTO,
         reasoning_effort=None,
         previous_response=None,
@@ -315,6 +317,7 @@ async def test_model_context_budget_keeps_recent_full_stubs_old():
             messages=messages,
             model=req.model,
             tools=req.tools,
+            deferred_tools=req.deferred_tools,
             tool_choice=req.tool_choice,
             reasoning_effort=req.reasoning_effort,
             previous_response=req.previous_response,
@@ -368,6 +371,22 @@ async def test_deferred_middleware_hides_then_reveals_loaded_tools():
 
 
 @pytest.mark.asyncio
+async def test_deferred_middleware_uses_native_loading_for_supported_models():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    middleware = DeferredToolsModelRequestMiddleware(registry=registry, run=run, get_services=dict)
+
+    prepared = await middleware(replace(_request(registry), model="gpt-5.5"), _identity)
+    names = {t["function"]["name"] for t in prepared.tools}
+    deferred_names = {t["function"]["name"] for t in prepared.deferred_tools}
+
+    assert "load_tools" not in names
+    assert "echo" in names
+    assert "slack_search" not in names
+    assert "slack_search" in deferred_names
+
+
+@pytest.mark.asyncio
 async def test_agent_load_tools_reveals_slack_on_next_model_step():
     registry = _registry()
     run = RunContext(run_id="run", deferred_tools_enabled=True)
@@ -409,6 +428,44 @@ async def test_agent_load_tools_reveals_slack_on_next_model_step():
     assert "slack_search" not in first_tools
     assert "load_tools" in second_tools
     assert "slack_search" in second_tools
+
+
+@pytest.mark.asyncio
+async def test_agent_accepts_provider_loaded_deferred_tool_call():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    executor = _Executor(registry)
+    llm = MockCompletionClient(
+        [
+            make_tool_response("slack_search", {"query": "hello"}, call_id="call_slack"),
+            make_text_response("done"),
+        ]
+    )
+    agent = Agent(
+        tools=registry.get_schemas(),
+        client=MockLLMClient(llm),
+        executor=NtrpToolExecutor(executor, ctx),
+        model="test-model",
+        model_request_middlewares=(
+            DeferredToolsModelRequestMiddleware(
+                registry=registry,
+                run=run,
+                get_services=lambda: ctx.services,
+            ),
+        ),
+    )
+
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}])
+
+    assert result.text == "done"
+    assert "slack_search" in run.loaded_tools
+    assert any(msg.get("role") == "tool" and msg.get("content") == "searched: hello" for msg in llm.calls[1]["messages"])
 
 
 @pytest.mark.asyncio
@@ -483,13 +540,15 @@ async def test_create_agent_compaction_refreshes_deferred_schema():
     )
     messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}]
 
-    _, tools, _, _ = await agent._prepare(0, messages)
+    _, tools, _, _, deferred_tools = await agent._prepare(0, messages)
 
     names = {t["function"]["name"] for t in tools}
+    deferred_names = {t["function"]["name"] for t in deferred_tools}
     assert messages == [{"role": "system", "content": "compacted"}]
     assert loaded == set()
     assert "load_tools" in names
     assert "slack_search" not in names
+    assert "slack_search" in deferred_names
 
 
 def test_create_agent_wires_child_io_factory_onto_run_context():
@@ -920,6 +979,7 @@ async def test_spawned_agent_extra_tools_are_child_only(monkeypatch):
             messages=[],
             model="test",
             tools=captured["tools"],
+            deferred_tools=[],
             tool_choice=ToolChoiceMode.AUTO,
             reasoning_effort=None,
             previous_response=None,
@@ -999,6 +1059,7 @@ async def test_spawned_agent_clamps_tool_tail_after_compaction(monkeypatch):
             messages=[{"role": "tool", "tool_call_id": "call-input", "content": huge_result}],
             model="test",
             tools=registry.get_schemas(),
+            deferred_tools=[],
             tool_choice=ToolChoiceMode.AUTO,
             reasoning_effort=None,
             previous_response=None,

@@ -6,6 +6,7 @@ export interface HistoryToolCall {
   name: string;
   arguments: string;
   display_name?: string;
+  result?: string;
   /** Semantic kind ("tool" | "agent") for the row renderer. Server fills
    *  this from the tool registry at history-read time. */
   kind?: string;

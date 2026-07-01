@@ -15,6 +15,7 @@ from ntrp.agent import (
     CompletionResponse,
     FunctionCall,
     Message,
+    ProviderToolCall,
     Result,
     Role,
     RunBudget,
@@ -43,12 +44,21 @@ from ntrp.agent import (
 
 
 def _response(
-    text: str | None = None, tool_calls: list[ToolCall] | None = None, usage: Usage | None = None
+    text: str | None = None,
+    tool_calls: list[ToolCall] | None = None,
+    usage: Usage | None = None,
+    provider_tool_calls: list[ProviderToolCall] | None = None,
 ) -> CompletionResponse:
     return CompletionResponse(
         choices=[
             Choice(
-                message=Message(role=Role.ASSISTANT, content=text, tool_calls=tool_calls, reasoning_content=None),
+                message=Message(
+                    role=Role.ASSISTANT,
+                    content=text,
+                    tool_calls=tool_calls,
+                    reasoning_content=None,
+                    provider_tool_calls=provider_tool_calls,
+                ),
                 finish_reason=None,
             )
         ],
@@ -206,6 +216,78 @@ async def test_simple_text_response_returns_result():
     assert result.text == "hello"
     assert result.stop_reason == StopReason.END_TURN
     assert result.steps == 0
+
+
+@pytest.mark.asyncio
+async def test_provider_tool_call_renders_without_executor_dispatch():
+    llm = FakeLLM(
+        [
+            _response(
+                provider_tool_calls=[
+                    ProviderToolCall(
+                        id="tsc_1",
+                        name="tool_search",
+                        arguments='{"query":"slack"}',
+                        result='[{"name":"slack_search"}]',
+                    )
+                ],
+                text="done",
+            )
+        ]
+    )
+    executor = FakeExecutor({})
+    agent = _make_agent(llm, executor)
+
+    events = [e async for e in agent.stream(_msgs())]
+    started = next(e for e in events if e.__class__.__name__ == "ToolStarted")
+    completed = next(e for e in events if isinstance(e, ToolCompleted))
+
+    assert started.tool_id == "tsc_1"
+    assert started.name == "tool_search"
+    assert started.display_name == "Search Tools"
+    assert completed.result == '[{"name":"slack_search"}]'
+    assert executor.call_log == []
+
+
+@pytest.mark.asyncio
+async def test_streamed_provider_tool_call_keeps_trace_order_before_loaded_tool():
+    class StreamingProviderToolLLM:
+        def __init__(self):
+            self.call_count = 0
+
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None) -> AsyncGenerator:
+            self.call_count += 1
+            if self.call_count > 1:
+                yield _response(text="done")
+                return
+            yield ProviderToolCall(id="tsc_1", name="tool_search", arguments="{}", done=False)
+            yield ToolCallStreamDelta(index=0, tool_id="call_1", name="test")
+            yield ToolCallStreamDelta(index=0, arguments_delta='{"x":1}')
+            yield ToolCallStreamDelta(index=0, tool_id="call_1", name="test", done=True)
+            yield _response(
+                provider_tool_calls=[
+                    ProviderToolCall(
+                        id="tsc_1",
+                        name="tool_search",
+                        arguments='{"tools":["test"]}',
+                        result="Matched tools: test",
+                    )
+                ],
+                tool_calls=[_tc("call_1", "test", {"x": 1})],
+            )
+
+        async def complete(self, model, messages, **kwargs):
+            raise AssertionError("complete should not be called")
+
+    executor = FakeExecutor({"test": ToolResult(content="ok", preview="ok")})
+    agent = _make_agent(StreamingProviderToolLLM(), executor)
+
+    events = [e async for e in agent.stream(_msgs())]
+    started_names = [e.name for e in events if e.__class__.__name__ in {"ToolStarted", "ToolInputStarted"}]
+    completed = [e for e in events if isinstance(e, ToolCompleted)]
+
+    assert started_names[:2] == ["tool_search", "test"]
+    assert [e for e in completed if e.tool_id == "tsc_1"][-1].result == "Matched tools: test"
 
 
 @pytest.mark.asyncio

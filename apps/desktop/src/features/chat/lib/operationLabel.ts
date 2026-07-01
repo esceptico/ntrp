@@ -55,6 +55,7 @@ const TOOL_META: Record<string, ToolMeta> = {
   current_time: { verb: "Checked the time", icon: "clock" },
   render_html: { verb: "Rendered a view", icon: "image" },
   load_tools: { verb: "Loaded tools", icon: "wrench" },
+  tool_search: { verb: "Searched tools", icon: "search", noun: "tool" },
   notify: { verb: "Notified you", icon: "bell" },
   update_todos: { verb: "Updated the plan", icon: "list" },
 
@@ -130,7 +131,7 @@ const VERB_RULES: ReadonlyArray<readonly [RegExp, string, StepIconKey]> = [
 
 const DETAIL_KEYS = [
   "path", "file_path", "filename", "file", "query", "q", "command", "cmd",
-  "url", "pattern", "name", "prompt", "task", "channel", "id",
+  "url", "pattern", "name", "tools", "prompt", "task", "channel", "id",
 ] as const;
 
 const MAX_DETAIL = 64;
@@ -155,6 +156,7 @@ function detailFromArgs(obj: Record<string, unknown> | null): string | null {
   for (const key of DETAIL_KEYS) {
     const v = obj[key];
     if (typeof v === "string" && v.trim()) return truncate(v);
+    if (Array.isArray(v) && v.every((item) => typeof item === "string")) return truncate(v.join(", "));
   }
   return null;
 }

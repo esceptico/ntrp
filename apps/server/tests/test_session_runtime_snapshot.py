@@ -11,7 +11,7 @@ from ntrp.context.store import SessionStore
 from ntrp.core.model_context_budget import HISTORY_TOOL_RESULT_PREVIEW_CHARS
 from ntrp.events.sse import ThinkingEvent
 from ntrp.server.bus import BusRegistry
-from ntrp.server.routers.session import get_session_history, list_sessions
+from ntrp.server.routers.session import _history_tool_calls, get_session_history, list_sessions
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.session import SessionService
 
@@ -29,6 +29,30 @@ async def session_service(tmp_path: Path):
 
 def _state(session_id: str) -> SessionState:
     return SessionState(session_id=session_id, started_at=datetime.now(UTC), name="runtime test")
+
+
+def test_history_tool_calls_orders_provider_search_before_loaded_tools():
+    msg = {
+        "provider_tool_calls": [
+            {
+                "id": "tsc_1",
+                "name": "tool_search",
+                "arguments": '{"tools":["slack_search"]}',
+                "result": "Matched tools: slack_search",
+            }
+        ],
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "function": {"name": "slack_search", "arguments": '{"query":"after:2026-06-28"}'},
+            }
+        ],
+    }
+
+    calls = _history_tool_calls(msg, lambda name: ("tool", None))
+
+    assert [call["name"] for call in calls] == ["tool_search", "slack_search"]
+    assert calls[0]["result"] == "Matched tools: slack_search"
 
 
 @pytest.mark.asyncio

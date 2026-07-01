@@ -74,6 +74,28 @@ Writing: remember() one self-contained item per call — kind 'fact'/'source' fo
 Do not remember more just to make context richer — only direct evidence or reusable lessons/procedures."""
 
 
+def _base_system_prompt(*, native_deferred_tools: bool) -> str:
+    if not native_deferred_tools:
+        return BASE_SYSTEM_PROMPT
+    replacements = {
+        '**Tool loading** — Some integration/action tools are deferred. Use `load_tools` proactively when the user needs email, calendar, Slack, automation, notification, directives, file write/edit, MCP-backed capabilities, or controls for an existing background task. Loading tools does not execute them; it only makes deferred tools callable on the next model step. Do not ask the user whether to load tools. Never use filesystem/time/no-op tool calls to discover or unlock deferred tools; call `load_tools(group="slack")` directly for Slack.': "**Tool loading** — Some integration/action tools are deferred. Use native tool search proactively by tool name when the user's request needs email, calendar, Slack, automation, notification, directives, file write/edit, MCP-backed capabilities, or controls for an existing background task. Loading tools does not execute them; it only makes deferred tools callable on the next model step. Do not ask the user whether to load tools. Never use filesystem/time/no-op tool calls to discover or unlock deferred tools.",
+        "**Data** — web_search/web_fetch are always available for external web info. Email, calendar, Slack, automation, and MCP tools may be deferred; load the relevant group first, then search/list/read before acting.": "**Data** — web_search/web_fetch are always available for external web info. Email, calendar, Slack, automation, and MCP tools may be deferred; use native tool search by name first, then search/list/read before acting.",
+        "**Files** — list_files/find_files/search_text/read_file are always available for local file inspection. write_file/edit_file are deferred; load the files group only when an exact file change is needed. File changes require approval.": "**Files** — list_files/find_files/search_text/read_file are always available for local file inspection. write_file/edit_file are deferred; use native tool search by name only when an exact file change is needed. File changes require approval.",
+        "**Read** — read_file and web_fetch are always available. Deferred read tools like read_email/slack_thread become callable after loading their group.": "**Read** — read_file and web_fetch are always available. Deferred read tools like read_email/slack_thread become callable after native tool search loads them.",
+        "**Actions** — write/action tools such as send_email, create/edit/delete calendar events, file edits, automation changes, and mutating MCP tools require approval after loading.": "**Actions** — write/action tools such as send_email, create/edit/delete calendar events, file edits, automation changes, and mutating MCP tools require approval after native tool search loads them.",
+        "**Utility** — research (spawn an awaited research agent), background (spawn a detached research agent), bash (shell/system commands), current_time (current date/time), load_tools (load deferred tool groups/names).": "**Utility** — research (spawn an awaited research agent), background (spawn a detached research agent), bash (shell/system commands), current_time (current date/time).",
+        "**Background tasks** — background(task) is always available and spawns a detached read-only agent that runs while the main chat continues. Load the background group only to cancel/list/read existing background tasks. Do NOT poll list_background_tasks in a loop. Check once if needed, then continue with other work or respond to the user while waiting.": "**Background tasks** — background(task) is always available and spawns a detached read-only agent that runs while the main chat continues. Use native tool search by name only to cancel/list/read existing background tasks. Do NOT poll list_background_tasks in a loop. Check once if needed, then continue with other work or respond to the user while waiting.",
+        "**Notifications** — notify is deferred. Load the notifications group only when the user explicitly asks to be notified or a background/automation flow needs to alert them.": "**Notifications** — notify is deferred. Use native tool search for notify only when the user explicitly asks to be notified or a background/automation flow needs to alert them.",
+        "**Directives** — set_directives is deferred. Load the directives group when the user tells you how to behave, what to do or avoid, or asks you to change your style/tone. Read current directives first, then write the full updated version.": "**Directives** — set_directives is deferred. Use native tool search for set_directives when the user tells you how to behave, what to do or avoid, or asks you to change your style/tone. Read current directives first, then write the full updated version.",
+        "**Automations** — automation tools are deferred. Load the automations group when the user asks to create/list/update/delete/run scheduled or event-triggered tasks.": "**Automations** — automation tools are deferred. Use native tool search by name when the user asks to create/list/update/delete/run scheduled or event-triggered tasks.",
+        "web_search = external web info; email/calendar/Slack are deferred data sources, so load the relevant group before using them.": "web_search = external web info; email/calendar/Slack are deferred data sources, so use native tool search by name before using them.",
+    }
+    prompt = BASE_SYSTEM_PROMPT
+    for old, new in replacements.items():
+        prompt = prompt.replace(old, new)
+    return prompt
+
+
 _RESEARCH_BASE = """You are a research agent with access to all read-only tools: emails, calendar, web search, memory recall, and local file listing/search/reading.
 
 SEARCH: Use simple natural language queries — never boolean operators, AND/OR, or quoted phrases.
@@ -295,6 +317,7 @@ def build_system_blocks(
     project_context: object | None = None,
     todo_override: dict | None = None,
     use_cache_control: bool = False,
+    native_deferred_tools: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
 
@@ -306,7 +329,7 @@ def build_system_blocks(
     date = now.strftime("%A, %B %d, %Y")
 
     static = STATIC_BLOCK.render(
-        base_prompt=BASE_SYSTEM_PROMPT,
+        base_prompt=_base_system_prompt(native_deferred_tools=native_deferred_tools),
         directives=directives,
         sources=source_details,
         skills_xml=skills_context,
@@ -356,6 +379,7 @@ def build_system_prompt(
     deferred_tools_context: str | None = None,
     goal_context: dict | None = None,
     project_context: object | None = None,
+    native_deferred_tools: bool = False,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
     blocks = build_system_blocks(
@@ -367,5 +391,6 @@ def build_system_prompt(
         deferred_tools_context=deferred_tools_context,
         goal_context=goal_context,
         project_context=project_context,
+        native_deferred_tools=native_deferred_tools,
     )
     return "\n\n".join(b["text"] for b in blocks)

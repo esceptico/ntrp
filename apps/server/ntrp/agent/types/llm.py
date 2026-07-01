@@ -20,12 +20,23 @@ class FinishReason(StrEnum):
 
 
 @dataclass(frozen=True)
+class ProviderToolCall:
+    id: str
+    name: str
+    arguments: str = "{}"
+    result: str = ""
+    done: bool = True
+
+
+@dataclass(frozen=True)
 class Message:
     role: Role
     content: str | None
     tool_calls: list[ToolCall] | None
     reasoning_content: str | None
     reasoning_encrypted_content: str | None = None
+    anthropic_content: list[dict] | None = None
+    provider_tool_calls: list[ProviderToolCall] | None = None
 
 
 @dataclass(frozen=True)

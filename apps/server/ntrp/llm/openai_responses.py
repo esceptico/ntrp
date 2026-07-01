@@ -1,5 +1,8 @@
 from collections.abc import AsyncGenerator
+from contextlib import contextmanager
+import json
 from typing import Any
+import warnings
 
 import httpx
 import openai
@@ -11,6 +14,7 @@ from ntrp.agent import (
     FinishReason,
     FunctionCall,
     Message,
+    ProviderToolCall,
     ReasoningContentDelta,
     Role,
     ToolCall,
@@ -21,6 +25,18 @@ from ntrp.core.content import render_context
 from ntrp.llm.utils import blocks_to_text
 
 REASONING_INCLUDE = ["reasoning.encrypted_content"]
+
+
+@contextmanager
+def _suppress_pydantic_serializer_warnings():
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Pydantic serializer warnings:*", category=UserWarning)
+        yield
+
+
+def _model_dump(obj, *, exclude_none: bool = True) -> dict[str, Any]:
+    with _suppress_pydantic_serializer_warnings():
+        return obj.model_dump(exclude_none=exclude_none)
 
 
 class OpenAIResponseStreamError(RuntimeError):
@@ -43,6 +59,7 @@ def prepare_responses_request(
     reasoning_effort: str | None,
     response_format: type[BaseModel] | None,
     allow_sampling_options: bool,
+    deferred_tools: list[dict] | None = None,
     include_reasoning: bool = True,
     store: bool | None = False,
     **kwargs,
@@ -58,8 +75,12 @@ def prepare_responses_request(
         request["store"] = store
     if instructions:
         request["instructions"] = instructions
-    if tools:
-        request["tools"] = [_convert_tool(tool) for tool in tools]
+    api_tools = [_convert_tool(tool) for tool in (tools or [])]
+    if deferred_tools:
+        api_tools.extend(_convert_tool(tool, defer_loading=True) for tool in deferred_tools)
+        api_tools.append({"type": "tool_search"})
+    if api_tools:
+        request["tools"] = api_tools
         request["tool_choice"] = _convert_tool_choice(tool_choice)
     if allow_sampling_options:
         if temperature is not None:
@@ -89,8 +110,9 @@ async def complete_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
-    response = await client.responses.create(**request)
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
+    with _suppress_pydantic_serializer_warnings():
+        response = await client.responses.create(**request)
     parsed = parse_responses_response(response, model)
     for item in _completion_response_items(parsed):
         yield item
@@ -101,7 +123,7 @@ async def buffered_stream_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
     request = {**request, "stream": True}
     attempts = 2
 
@@ -121,10 +143,11 @@ async def stream_responses_completion(
     request: dict[str, Any],
     *,
     model: str,
-) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
+) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall | CompletionResponse]:
     request = {**request, "stream": True}
     try:
-        stream = await client.responses.create(**request)
+        with _suppress_pydantic_serializer_warnings():
+            stream = await client.responses.create(**request)
     except (httpx.RemoteProtocolError, openai.APIConnectionError) as exc:
         raise RuntimeError("OpenAI response stream disconnected before completion") from exc
     collector = _ResponsesStreamCollector()
@@ -161,7 +184,8 @@ async def _collect_streamed_responses_completion(
     *,
     model: str,
 ) -> CompletionResponse:
-    stream = await client.responses.create(**request)
+    with _suppress_pydantic_serializer_warnings():
+        stream = await client.responses.create(**request)
     collector = _ResponsesStreamCollector()
 
     async for event in stream:
@@ -180,8 +204,8 @@ class _ResponsesStreamCollector:
         self.final_response = None
         self.done = False
 
-    def consume(self, event, *, emit_deltas: bool) -> list[str | ReasoningContentDelta | ToolCallStreamDelta]:
-        data = event.model_dump(exclude_none=True)
+    def consume(self, event, *, emit_deltas: bool) -> list[str | ReasoningContentDelta | ToolCallStreamDelta | ProviderToolCall]:
+        data = _model_dump(event)
         event_type = data.get("type")
 
         if event_type == "response.output_text.delta":
@@ -204,6 +228,8 @@ class _ResponsesStreamCollector:
                         arguments_delta=item.get("arguments") or None,
                     )
                 ]
+            if isinstance(item, dict) and item.get("type") == "tool_search_call":
+                return [_parse_tool_search_call(item, done=False)]
             return []
 
         if event_type == "response.function_call_arguments.delta":
@@ -233,6 +259,8 @@ class _ResponsesStreamCollector:
                             done=True,
                         )
                     ]
+                if item.get("type") == "tool_search_call":
+                    return [_parse_tool_search_call(item, done=True)]
             return []
 
         if event_type in ("response.failed", "response.incomplete"):
@@ -320,6 +348,7 @@ def _with_streamed_fallbacks(
             tool_calls=msg.tool_calls,
             reasoning_content=reasoning_content,
             reasoning_encrypted_content=msg.reasoning_encrypted_content,
+            provider_tool_calls=msg.provider_tool_calls,
         ),
         finish_reason=parsed.choices[0].finish_reason,
     )
@@ -335,9 +364,10 @@ def parse_responses_response(
     reasoning_parts: list[str] = []
     reasoning_encrypted_content = None
     tool_calls: list[ToolCall] = []
+    provider_tool_calls: list[ProviderToolCall] = []
 
     for item in output_items if output_items is not None else response.output:
-        data = item if isinstance(item, dict) else item.model_dump(exclude_none=True)
+        data = item if isinstance(item, dict) else _model_dump(item)
         item_type = data.get("type")
         if item_type == "message":
             for part in data.get("content", []):
@@ -368,6 +398,13 @@ def parse_responses_response(
                     function=FunctionCall(name=data["name"], arguments=data.get("arguments", "{}")),
                 )
             )
+            continue
+
+        if item_type == "tool_search_call":
+            provider_tool_calls.append(_parse_tool_search_call(data))
+
+    if provider_tool_calls:
+        provider_tool_calls = _with_tool_search_matches(provider_tool_calls, tool_calls)
 
     message = Message(
         role=Role.ASSISTANT,
@@ -375,12 +412,54 @@ def parse_responses_response(
         tool_calls=tool_calls or None,
         reasoning_content="".join(reasoning_parts) or None,
         reasoning_encrypted_content=reasoning_encrypted_content,
+        provider_tool_calls=provider_tool_calls or None,
     )
     return CompletionResponse(
         choices=[Choice(message=message, finish_reason=_finish_reason(response, tool_calls))],
         usage=_usage(response),
         model=model,
     )
+
+
+def _parse_tool_search_call(data: dict[str, Any], *, done: bool = True) -> ProviderToolCall:
+    call_id = data.get("id") or data.get("call_id") or data.get("item_id") or "tool_search"
+    query = data.get("query") or data.get("queries") or data.get("input") or {}
+    result = data.get("results") or data.get("output") or data.get("tools") or data.get("status") or ""
+    if result == "completed":
+        result = ""
+    return ProviderToolCall(
+        id=str(call_id),
+        name="tool_search",
+        arguments=json.dumps({"query": query}, default=str),
+        result=_provider_tool_result_text(result),
+        done=done,
+    )
+
+
+def _with_tool_search_matches(calls: list[ProviderToolCall], tool_calls: list[ToolCall]) -> list[ProviderToolCall]:
+    names = [tc.function.name for tc in tool_calls]
+    if not names:
+        return calls
+    result = f"Matched tools: {', '.join(names)}"
+    arguments = json.dumps({"tools": names})
+    return [
+        ProviderToolCall(
+            id=call.id,
+            name=call.name,
+            arguments=arguments if call.arguments in ('{"query": {}}', '{"query": ""}') else call.arguments,
+            result=call.result or result,
+            done=True,
+        )
+        for call in calls
+    ]
+
+
+def _provider_tool_result_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, default=str)
 
 
 def _convert_messages(messages: list[dict]) -> tuple[str | None, list[dict[str, Any]]]:
@@ -462,15 +541,18 @@ def _convert_assistant_message(msg: dict) -> list[dict[str, Any]]:
     return items
 
 
-def _convert_tool(tool: dict) -> dict[str, Any]:
+def _convert_tool(tool: dict, *, defer_loading: bool = False) -> dict[str, Any]:
     fn = tool.get("function", tool)
-    return {
+    result = {
         "type": "function",
         "name": fn["name"],
         "description": fn.get("description", ""),
         "parameters": fn.get("parameters", {"type": "object", "properties": {}}),
         "strict": False,
     }
+    if defer_loading:
+        result["defer_loading"] = True
+    return result
 
 
 def _convert_tool_choice(tool_choice: str | dict | None) -> str | dict[str, str]:

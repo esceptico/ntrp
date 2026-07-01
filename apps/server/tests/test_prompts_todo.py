@@ -27,3 +27,11 @@ def test_build_system_blocks_omits_todo_block_when_no_override():
     assert "TODO LIST (edited by the user)" not in _text(
         build_system_blocks(source_details={}, todo_override={"items": []})
     )
+
+
+def test_build_system_blocks_native_deferred_prompt_omits_group_loader():
+    text = _text(build_system_blocks(source_details={}, native_deferred_tools=True))
+
+    assert "native tool search" in text
+    assert "load_tools" not in text
+    assert "load the relevant group" not in text

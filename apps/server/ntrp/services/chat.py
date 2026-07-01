@@ -30,7 +30,7 @@ from ntrp.events.sse import (
     ThinkingEvent,
     TokenUsageEvent,
 )
-from ntrp.llm.models import Provider, get_model
+from ntrp.llm.models import Provider, get_model, supports_native_deferred_tools
 from ntrp.logging import get_logger
 from ntrp.memory.profile import resident_profile
 from ntrp.notifiers.service import NotifierService
@@ -411,9 +411,10 @@ async def _prepare_messages(
     directives = load_directives()
 
     notifiers = deps.notifier_service.list_summary() if deps.notifier_service else None
+    native_deferred_tools = supports_native_deferred_tools(deps.chat_model)
     deferred_tools_context = (
         build_deferred_tools_prompt_for_schemas(deps.executor.registry, frozenset(deps.executor.tool_services), tools)
-        if deps.agent_config.deferred_tools
+        if deps.agent_config.deferred_tools and not native_deferred_tools
         else None
     )
     system_blocks = build_system_blocks(
@@ -427,6 +428,7 @@ async def _prepare_messages(
         project_context=project_context,
         todo_override=todo_override,
         use_cache_control=_is_anthropic(deps.chat_model),
+        native_deferred_tools=native_deferred_tools,
     )
 
     messages = _retain_user_content(messages)

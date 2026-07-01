@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from ntrp.agent.types.events import (
 from ntrp.agent.types.llm import (
     CompletionResponse,
     FinishReason,
+    ProviderToolCall,
     ReasoningContentDelta,
     Role,
     ToolCallStreamDelta,
@@ -56,6 +58,11 @@ AgentEvent = (
     | ToolInputEnded
     | Result
 )
+
+
+def _tool_name(tool: dict) -> str | None:
+    name = tool.get("function", tool).get("name")
+    return name if isinstance(name, str) else None
 
 
 @dataclass
@@ -147,7 +154,9 @@ class Agent:
                     return
 
                 budget_reminder = self._budget_pressure_reminder()
-                step_model, step_tools, step_tool_choice, step_reasoning_effort = await self._prepare(step, messages)
+                step_model, step_tools, step_tool_choice, step_reasoning_effort, step_deferred_tools = (
+                    await self._prepare(step, messages)
+                )
 
                 if reason := self._budget_stop_reason(started_at):
                     yield self._result(result_text, reason, step, messages)
@@ -159,6 +168,7 @@ class Agent:
                     step_tools,
                     step_tool_choice,
                     step_reasoning_effort,
+                    step_deferred_tools,
                     budget_reminder=budget_reminder,
                 ):
                     yield event
@@ -199,6 +209,14 @@ class Agent:
                     )
 
                 calls = parse_tool_calls(response_message.tool_calls)
+                if step_deferred_tools and hasattr(self._executor, "mark_provider_loaded_tools"):
+                    self._executor.mark_provider_loaded_tools(
+                        {
+                            call.name
+                            for call in calls
+                            if any(_tool_name(tool) == call.name for tool in step_deferred_tools)
+                        }
+                    )
                 if self._would_exceed_tool_budget(len(calls)):
                     self._append_budget_denials(messages, response_message.tool_calls, StopReason.MAX_TOOL_CALLS)
                     yield self._result(result_text, StopReason.MAX_TOOL_CALLS, step, messages)
@@ -220,6 +238,7 @@ class Agent:
                                 [],
                                 ToolChoiceMode.NONE,
                                 step_reasoning_effort,
+                                [],
                                 budget_reminder=(
                                     "Output-token budget exhausted. Return the final answer now from the tool results "
                                     "already present. No new tool calls, no apology, no process recap. If incomplete, "
@@ -332,13 +351,16 @@ class Agent:
         if pending:
             messages.extend(pending)
 
-    async def _prepare(self, step: int, messages: list[dict]) -> tuple[str, list[dict], ToolChoice, str | None]:
+    async def _prepare(
+        self, step: int, messages: list[dict]
+    ) -> tuple[str, list[dict], ToolChoice, str | None, list[dict]]:
         prepared = await apply_model_request_middlewares(
             ModelRequest(
                 step=step,
                 messages=messages,
                 model=self.model,
                 tools=self.tools,
+                deferred_tools=[],
                 tool_choice=self.tool_choice,
                 reasoning_effort=self.reasoning_effort,
                 previous_response=self._last_response,
@@ -350,7 +372,7 @@ class Agent:
             messages.clear()
             messages.extend(prepared.messages)
 
-        return prepared.model, prepared.tools, prepared.tool_choice, prepared.reasoning_effort
+        return prepared.model, prepared.tools, prepared.tool_choice, prepared.reasoning_effort, prepared.deferred_tools
 
     async def _call_llm(
         self,
@@ -359,6 +381,7 @@ class Agent:
         tools: list[dict],
         tool_choice: ToolChoice,
         reasoning_effort: str | None,
+        deferred_tools: list[dict] | None = None,
         *,
         budget_reminder: str | None = None,
     ) -> AsyncGenerator[AgentEvent]:
@@ -377,6 +400,7 @@ class Agent:
             reasoning_parts: list[str] = []
             streamed_tool_inputs: dict[int, dict[str, object]] = {}
             streamed_tool_input_ids: set[str] = set()
+            streamed_provider_tool_ids: set[str] = set()
 
             def close_text(content: str | None = None) -> TextEnded | None:
                 nonlocal text_ended
@@ -409,6 +433,8 @@ class Agent:
             request_messages = (
                 [*messages, {"role": Role.SYSTEM, "content": budget_reminder}] if budget_reminder else messages
             )
+            if deferred_tools:
+                kwargs["deferred_tools"] = deferred_tools
             async for item in self.client.stream(request_messages, model, tools, **kwargs):
                 if isinstance(item, str):
                     if not text_started:
@@ -493,6 +519,21 @@ class Agent:
                             parent_id=self.parent_id,
                             tool_id=str(tool_id),
                         )
+                elif isinstance(item, ProviderToolCall):
+                    if not item.done and item.id in streamed_provider_tool_ids:
+                        continue
+                    if not item.done:
+                        if event := close_text():
+                            yield event
+                        streamed_provider_tool_ids.add(item.id)
+                        yield self._provider_tool_started(item)
+                    else:
+                        if item.id not in streamed_provider_tool_ids:
+                            if event := close_text():
+                                yield event
+                            streamed_provider_tool_ids.add(item.id)
+                            yield self._provider_tool_started(item)
+                        yield self._provider_tool_completed(item)
                 elif isinstance(item, CompletionResponse):
                     response = item
         except asyncio.CancelledError:
@@ -531,6 +572,17 @@ class Agent:
             yield ReasoningEnded(depth=self.current_depth, parent_id=self.parent_id, message_id=reasoning_id)
         elif reasoning := response.choices[0].message.reasoning_content:
             yield ReasoningBlock(depth=self.current_depth, parent_id=self.parent_id, content=reasoning)
+        if response.choices[0].message.provider_tool_calls:
+            if event := close_text(response.choices[0].message.content or ""):
+                yield event
+        for call in response.choices[0].message.provider_tool_calls or []:
+            events = (
+                (self._provider_tool_completed(call),)
+                if call.id in streamed_provider_tool_ids
+                else self._provider_tool_events(call)
+            )
+            for event in events:
+                yield event
         assistant_msg = normalize_assistant_message(response.choices[0].message)
         if text_started:
             # Persist the same id we streamed, so the desktop client's
@@ -545,3 +597,45 @@ class Agent:
             yield event
         if self.hooks.on_response:
             await self.hooks.on_response(response)
+
+    def _provider_tool_events(self, call: ProviderToolCall) -> tuple[ToolStarted, ToolCompleted]:
+        return (
+            self._provider_tool_started(call),
+            self._provider_tool_completed(call),
+        )
+
+    def _provider_tool_started(self, call: ProviderToolCall) -> ToolStarted:
+        return ToolStarted(
+            depth=self.current_depth,
+            parent_id=self.parent_id,
+            tool_id=call.id,
+            name=call.name,
+            args=self._provider_tool_args(call.arguments),
+            display_name="Search Tools" if call.name == "tool_search" else call.name,
+            kind="tool",
+            icon="search",
+            noun="tool",
+            source="provider",
+        )
+
+    def _provider_tool_completed(self, call: ProviderToolCall) -> ToolCompleted:
+        return ToolCompleted(
+            depth=self.current_depth,
+            parent_id=self.parent_id,
+            tool_id=call.id,
+            name=call.name,
+            result=call.result,
+            preview=call.result,
+            duration_ms=0,
+            is_error=False,
+            data={"provider_executed": True},
+            display_name="Search Tools" if call.name == "tool_search" else call.name,
+            kind="tool",
+        )
+
+    def _provider_tool_args(self, raw: str) -> dict:
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            return {"input": raw}
+        return parsed if isinstance(parsed, dict) else {"input": parsed}

@@ -10,6 +10,7 @@ from ntrp.agent import (
     ToolCallStreamDelta,
 )
 from ntrp.llm.base import CompletionClient
+from ntrp.llm.models import supports_native_deferred_tools
 from ntrp.llm.openai_codex_auth import CODEX_BASE_URL, get_valid_tokens
 from ntrp.llm.openai_responses import (
     buffered_stream_responses_completion,
@@ -37,6 +38,7 @@ class OpenAICodexClient(CompletionClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> CompletionResponse:
         client = await self._client()
@@ -50,6 +52,7 @@ class OpenAICodexClient(CompletionClient):
                 max_tokens=max_tokens,
                 reasoning_effort=reasoning_effort,
                 response_format=response_format,
+                deferred_tools=deferred_tools,
                 **kwargs,
             )
             final_response: CompletionResponse | None = None
@@ -72,6 +75,7 @@ class OpenAICodexClient(CompletionClient):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str | ReasoningContentDelta | ToolCallStreamDelta | CompletionResponse]:
         client = await self._client()
@@ -85,6 +89,7 @@ class OpenAICodexClient(CompletionClient):
                 max_tokens=max_tokens,
                 reasoning_effort=reasoning_effort,
                 response_format=response_format,
+                deferred_tools=deferred_tools,
                 **kwargs,
             )
             async for item in stream_responses_completion(client, request, model=model):
@@ -121,12 +126,14 @@ class OpenAICodexClient(CompletionClient):
         max_tokens: int | None,
         reasoning_effort: str | None,
         response_format: type[BaseModel] | None,
+        deferred_tools: list[dict] | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         request = prepare_responses_request(
             messages=messages,
             model=self._api_model(model),
             tools=tools,
+            deferred_tools=deferred_tools if supports_native_deferred_tools(model) else None,
             tool_choice=tool_choice,
             temperature=temperature,
             max_tokens=max_tokens,

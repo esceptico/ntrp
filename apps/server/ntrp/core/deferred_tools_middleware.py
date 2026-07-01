@@ -2,9 +2,10 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from ntrp.agent.model_request import ModelRequest, ModelRequestNext
+from ntrp.llm.models import supports_native_deferred_tools
 from ntrp.tools.core.context import RunContext
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.deferred import visible_tool_names
+from ntrp.tools.deferred import is_deferred_tool, visible_tool_names
 
 
 class DeferredToolsModelRequestMiddleware:
@@ -24,7 +25,7 @@ class DeferredToolsModelRequestMiddleware:
     def _project_visible_tools(self, request: ModelRequest) -> ModelRequest:
         # Preserve upstream filtering. Operator/read-only paths may pass only non-mutating
         # schemas into Agent.tools; deferred loading must not re-add tools excluded there.
-        allowed = {t.get("function", {}).get("name") for t in request.tools}
+        allowed = {t.get("function", {}).get("name") for t in [*request.tools, *request.deferred_tools]}
         allowed.discard(None)
         capabilities = frozenset(self._get_services())
         names = visible_tool_names(
@@ -33,9 +34,19 @@ class DeferredToolsModelRequestMiddleware:
             self._run.loaded_tools,
             allowed_names=set(allowed),
         )
+        if supports_native_deferred_tools(request.model):
+            names.discard("load_tools")
+        deferred_names = {
+            name
+            for name in allowed
+            if name not in names
+            and isinstance(name, str)
+            and is_deferred_tool(name, self._registry)
+        }
         return replace(
             request,
             tools=self._registry.get_schemas(capabilities=capabilities, names=names),
+            deferred_tools=self._registry.get_schemas(capabilities=capabilities, names=deferred_names),
         )
 
     async def __call__(self, request: ModelRequest, next_request: ModelRequestNext) -> ModelRequest:

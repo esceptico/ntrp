@@ -614,9 +614,9 @@ export function rebuildTranscriptFromHistory(
         for (const toolCall of activityCalls) {
           const args = toolCall.arguments || "";
           const result = resultsById.get(toolCall.id);
+          const resultContent = toolCall.result ?? result?.content;
           const childAgent = childAgentFromToolResultData(result?.data);
-          const htmlWidget =
-            toolCall.kind === "html_widget" ? htmlWidgetFromHistory(args, result?.content) : undefined;
+          const htmlWidget = toolCall.kind === "html_widget" ? htmlWidgetFromHistory(args, resultContent) : undefined;
           activity.items.push({
             id: toolCall.id,
             kind: toolCall.name,
@@ -624,7 +624,7 @@ export function rebuildTranscriptFromHistory(
             workflowId: workflowIdFromData(result?.data),
             target: formatCallTarget(toolCall.name, args || "{}", toolCall.display_name),
             args,
-            result: result?.content,
+            result: resultContent,
             status: "executed",
             childAgent,
             htmlWidget,
