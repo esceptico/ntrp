@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Bot, Square, X } from "lucide-react";
+import { Bot, Square } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "@/stores";
 import { highlight } from "@/lib/highlight";
@@ -94,47 +94,41 @@ export function ToolViewer() {
       onClose={() => close(null)}
       size="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)]"
       ariaLabel="Tool details"
-    >
-      <header className="modal-header flex items-start justify-between gap-3.5 min-w-0">
-        <div className="min-w-0 flex-1 flex items-center gap-2.5">
-          {live && isAgent(live) && (
-            <span
-              aria-hidden
-              className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
-            >
-              <Bot size={ICON.XS} strokeWidth={2} />
+      header={{
+        title:
+          live && isAgent(live) ? (
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span
+                aria-hidden
+                className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
+              >
+                <Bot size={ICON.XS} strokeWidth={2} />
+              </span>
+              <span className="truncate">
+                {live.displayName ?? friendlyAgentLabel(live.kind)}
+              </span>
             </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
-              {live && isAgent(live)
-                ? live.displayName ?? friendlyAgentLabel(live.kind)
-                : live?.kind}
-            </div>
-            {live && !isAgent(live) && live.target && live.target !== live.kind && (
-              <div className="mt-0.5 text-xs text-faint font-mono truncate">
-                {live.target}
-              </div>
-            )}
-          </div>
-        </div>
-        {canStopSubagent && live && (
-          <IconButton
-            onClick={() => {
-              if (live.runId) void cancelSubagent(live.runId, live.id);
-            }}
-            aria-label="Stop subagent"
-            title="Stop subagent"
-            className="shrink-0"
-          >
-            <Square size={ICON.SM} strokeWidth={2} />
-          </IconButton>
-        )}
-        <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
-          <X size={ICON.SM} strokeWidth={2} />
-        </IconButton>
-      </header>
-
+          ) : (
+            live?.kind
+          ),
+        subtitle:
+          live && !isAgent(live) && live.target && live.target !== live.kind
+            ? live.target
+            : undefined,
+        actions:
+          canStopSubagent && live ? (
+            <IconButton
+              onClick={() => {
+                if (live.runId) void cancelSubagent(live.runId, live.id);
+              }}
+              aria-label="Stop subagent"
+              title="Stop subagent"
+            >
+              <Square size={ICON.SM} strokeWidth={2} />
+            </IconButton>
+          ) : undefined,
+      }}
+    >
       <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
         <ScrollFadeTop />
         {live && isAgent(live) ? (

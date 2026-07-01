@@ -118,7 +118,7 @@ export const UserMessage = memo(function UserMessage({ id }: { id: string }) {
               key={i}
               src={`data:${img.media_type};base64,${img.data}`}
               alt=""
-              className="rounded-lg max-h-[180px] max-w-[220px] object-cover border border-line-soft"
+              className="rounded-lg max-h-[180px] max-w-[220px] object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
             />
           ))}
         </div>

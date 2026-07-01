@@ -1,8 +1,8 @@
-import clsx from "clsx";
 import type { MCPServer } from "@/api/settings";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { LabeledField } from "@/components/ui/LabeledField";
+import { StatusDot } from "@/components/ui/StatusDot";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -26,14 +26,13 @@ export function OAuthStatus({
 }) {
   const expired = !server.connected && !!server.error;
   const status = server.connected ? "Connected" : expired ? "Tokens expired" : "Not connected";
-  const dot = server.connected ? "bg-ok" : expired ? "bg-bad" : "bg-line";
 
   return (
     <LabeledField label="Auth">
       <div className="grid gap-2 rounded-md border border-line-soft bg-surface-soft px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span aria-hidden className={clsx("w-1.5 h-1.5 rounded-full shrink-0", dot)} />
+            <StatusDot tone={server.connected ? "ok" : expired ? "bad" : "neutral"} />
             <span className="text-sm font-medium text-ink">OAuth · {status}</span>
           </div>
           <Button

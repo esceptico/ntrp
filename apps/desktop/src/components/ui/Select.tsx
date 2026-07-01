@@ -213,7 +213,7 @@ function SelectItem({
       onClick={onSelect}
       className={clsx(
         "relative z-[1] flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none",
-        "transition-colors duration-check ease-out",
+        "transition-[background-color,color,scale] duration-check ease-out active:scale-[0.98]",
         selected ? "text-ink" : "text-ink-soft hover:text-ink focus-visible:text-ink",
       )}
       style={selected ? { background: SELECTED_FILL } : undefined}

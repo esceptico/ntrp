@@ -7,17 +7,20 @@ type EmptyStateProps = {
   children: ReactNode;
   hint?: ReactNode;
   action?: ReactNode;
+  /** sm = 36px chip (compact sidebars), md = 48px chip (default modals/panes). */
+  size?: "sm" | "md";
   className?: string;
 };
 
 /** Designed empty/placeholder state: icon chip + conversational copy + an
  *  optional next action. Shared by both list and detail panes. */
-export function EmptyState({ icon: Icon = Inbox, children, hint, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon = Inbox, children, hint, action, size = "md", className }: EmptyStateProps) {
+  const sm = size === "sm";
   return (
     <div className={clsx("grid place-items-center px-6 text-center", className)}>
-      <div className="flex max-w-[260px] flex-col items-center gap-3">
-        <div className="grid size-12 place-items-center rounded-xl bg-surface-soft text-faint">
-          <Icon size={22} strokeWidth={1.75} />
+      <div className={clsx("flex max-w-[260px] flex-col items-center", sm ? "gap-2.5" : "gap-3")}>
+        <div className={clsx("grid place-items-center rounded-xl bg-surface-soft text-faint", sm ? "size-9" : "size-12")}>
+          <Icon size={sm ? 16 : 22} strokeWidth={1.75} />
         </div>
         <div className="text-sm text-muted">{children}</div>
         {hint && <div className="text-xs text-muted">{hint}</div>}
@@ -60,5 +63,21 @@ export function Empty({
     <EmptyState icon={icon} hint={hint} action={action} className="min-h-[200px]">
       {children}
     </EmptyState>
+  );
+}
+
+/** Compact inline "this list is empty" note — a subtle boxed italic message for
+ *  sub-lists (settings tabs, MCP servers), distinct from the icon-chip
+ *  EmptyState used for primary/detail panes. */
+export function EmptyNote({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={clsx(
+        "rounded-[10px] bg-bg-main/40 px-3 py-6 text-center text-sm italic text-muted",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }

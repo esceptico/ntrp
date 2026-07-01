@@ -517,7 +517,7 @@ export function CheckboxGroupItem({ value, label, description }: CheckboxGroupIt
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 text-white"
+              className="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 text-on-ink"
             >
               <motion.path
                 d="M6 12L10 16L18 8"

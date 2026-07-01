@@ -59,6 +59,8 @@ export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
+  /** Selected accent palette id (see `@/lib/palettes`). */
+  accent: string;
   /** How the sidebar session list is grouped. */
   sidebarGroupBy: SidebarGroupBy;
   /** Sidebar filter: show only unread (finished, unseen) sessions. */

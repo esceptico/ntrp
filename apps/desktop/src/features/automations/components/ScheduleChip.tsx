@@ -14,6 +14,7 @@ import { EASE_OUT, SPRING_POPOVER, MOTION } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { useReanchor } from "@/lib/hooks";
 import { Chip } from "@/components/ui/Chip";
+import { Input } from "@/components/ui/Input";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { RangeSlider } from "@/components/ui/Slider";
@@ -134,20 +135,20 @@ export function ScheduleChip({
                   className={fieldStackCls(schedule.kind === "at")}
                 >
                   <ScheduleField label="At">
-                    <input
+                    <Input
                       type="time"
                       value={schedule.at}
                       onChange={(e) => onChange({ ...schedule, at: e.target.value })}
-                      className={schedFieldCls}
+                      className="tabular-nums"
                     />
                   </ScheduleField>
                   <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
-                    <input
+                    <Input
                       value={schedule.days}
                       onChange={(e) => onChange({ ...schedule, days: e.target.value })}
                       placeholder="daily"
                       spellCheck={false}
-                      className={schedFieldCls}
+                      className="tabular-nums"
                     />
                   </ScheduleField>
                 </div>
@@ -157,21 +158,21 @@ export function ScheduleChip({
                   className={fieldStackCls(schedule.kind === "every")}
                 >
                   <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
-                    <input
+                    <Input
                       value={schedule.every}
                       onChange={(e) => onChange({ ...schedule, every: e.target.value })}
                       placeholder="30m"
                       spellCheck={false}
-                      className={schedFieldCls}
+                      className="tabular-nums"
                     />
                   </ScheduleField>
                   <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
-                    <input
+                    <Input
                       value={schedule.days}
                       onChange={(e) => onChange({ ...schedule, days: e.target.value })}
                       placeholder="weekdays"
                       spellCheck={false}
-                      className={schedFieldCls}
+                      className="tabular-nums"
                     />
                   </ScheduleField>
                   <ScheduleField label="Active window" hint="optional — only run within these hours">
@@ -213,12 +214,12 @@ export function ScheduleChip({
                   </ScheduleField>
                   {schedule.event === "approaching" && (
                     <ScheduleField label="Lead time" hint="minutes before the event">
-                      <input
+                      <Input
                         value={schedule.lead}
                         onChange={(e) => onChange({ ...schedule, lead: e.target.value })}
                         placeholder="15"
                         spellCheck={false}
-                        className={schedFieldCls}
+                        className="tabular-nums"
                       />
                     </ScheduleField>
                   )}
@@ -235,12 +236,12 @@ export function ScheduleChip({
                         strokeWidth={2}
                         className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
                       />
-                      <input
+                      <Input
                         value={schedule.channel}
                         onChange={(e) => onChange({ ...schedule, channel: e.target.value })}
                         placeholder="feel-good-inc, eng-bugs"
                         spellCheck={false}
-                        className={`${schedFieldCls} !pl-7`}
+                        className="!pl-7 tabular-nums"
                       />
                     </div>
                   </ScheduleField>
@@ -251,22 +252,22 @@ export function ScheduleChip({
                         strokeWidth={2}
                         className="absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
                       />
-                      <input
+                      <Input
                         value={schedule.fromUser}
                         onChange={(e) => onChange({ ...schedule, fromUser: e.target.value })}
                         placeholder="username"
                         spellCheck={false}
-                        className={`${schedFieldCls} !pl-7`}
+                        className="!pl-7 tabular-nums"
                       />
                     </div>
                   </ScheduleField>
                   <ScheduleField label="Keywords" hint="optional, any of — bug, error, broken">
-                    <input
+                    <Input
                       value={schedule.keywords}
                       onChange={(e) => onChange({ ...schedule, keywords: e.target.value })}
                       placeholder="bug, error"
                       spellCheck={false}
-                      className={schedFieldCls}
+                      className="tabular-nums"
                     />
                   </ScheduleField>
                 </div>
@@ -292,8 +293,6 @@ export function ScheduleChip({
 }
 
 // ─── Atoms ──────────────────────────────────────────────────────────
-
-const schedFieldCls = "input-field w-full tabular-nums";
 
 // All trigger-kind panels share one grid cell ([grid-area:1/1]) so the popover
 // is always as tall as the tallest panel — switching kinds can't change its

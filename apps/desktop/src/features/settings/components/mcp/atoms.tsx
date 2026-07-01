@@ -18,11 +18,3 @@ export function RemoveBtn({ onClick }: { onClick: () => void }) {
     </IconButton>
   );
 }
-
-export function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-3 py-6 rounded-[10px] bg-bg-main/40 text-sm text-muted italic text-center">
-      {children}
-    </div>
-  );
-}

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { EASE_OUT, MOTION, originFromEvent, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
+import { StatusDot } from "@/components/ui/StatusDot";
 
 // The single load-bearing "needs you" signal: a run is paused waiting on
 // an approval. One amber row that opens the review modal.
@@ -24,7 +25,7 @@ export function ApprovalsRow() {
             onClick={(e) => review(firstToolId, originFromEvent(e.currentTarget))}
             className="flex w-full items-center gap-2 rounded-[8px] bg-warn/10 px-2.5 py-2 text-left transition-[background-color,scale] duration-row ease-out hover:bg-warn/15 active:scale-[0.985]"
           >
-            <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-warn" aria-hidden />
+            <StatusDot tone="warn" />
             <span className="flex-1 text-xs text-ink-soft">
               {count} awaiting approval
             </span>

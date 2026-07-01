@@ -11,6 +11,7 @@ import { archiveSession, createSession, moveSessionToProject } from "@/actions/s
 import { ICON } from "@/lib/icons";
 import { useTimeTicker } from "@/lib/hooks";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { groupSessions, primarySidebarSessions } from "@/features/sessions/lib/projects";
 import { SessionRow } from "@/features/sessions/components/SessionRow";
 import { SessionContextMenu, type ContextMenuState } from "@/features/sessions/components/SessionContextMenu";
@@ -150,21 +151,15 @@ export function SessionList() {
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-            className="grid place-items-center gap-2.5 mt-10 px-3 text-center"
+            className="mt-10"
           >
-            <span
-              aria-hidden
-              className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
-            >
-              <Inbox size={ICON.MD} strokeWidth={2} />
-            </span>
-            <p className="m-0 text-sm text-muted leading-snug">
+            <EmptyState size="sm" icon={Inbox}>
               {!connected
                 ? "Connect to load sessions."
                 : hasFilter
                   ? "No sessions match this filter."
                   : "No sessions yet."}
-            </p>
+            </EmptyState>
           </motion.div>
         ) : (
           grouped.map((group, groupIndex) => {
@@ -239,14 +234,14 @@ export function SessionList() {
                             type="button"
                             onClick={() => toggleExpanded(group.key)}
                             aria-expanded={isExpanded}
-                            aria-label={isExpanded ? "Show fewer sessions" : `Show ${overflow} more sessions`}
+                            aria-label={isExpanded ? "Show fewer sessions" : `Show ${overflow} more session${overflow === 1 ? "" : "s"}`}
                             className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-faint hover:text-ink transition-colors cursor-pointer"
                           >
                             {/* Empty icon column keeps the dots in the title column,
                                 aligned directly under the session names above. */}
                             <span aria-hidden />
                             <MoreHorizontal
-                              size={ICON.LG}
+                              size={ICON.SM}
                               strokeWidth={2}
                               className={clsx("shrink-0 transition-opacity duration-row", isExpanded && "opacity-60")}
                             />

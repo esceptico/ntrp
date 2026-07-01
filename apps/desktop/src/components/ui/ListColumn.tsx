@@ -15,7 +15,6 @@ export function ListColumn<T>({
   emptyAction,
   totalLabel,
   wrapItems,
-  skeleton = false,
 }: {
   toolbar: ReactNode;
   items: T[];
@@ -27,8 +26,6 @@ export function ListColumn<T>({
   emptyAction?: ReactNode;
   totalLabel: string | null;
   wrapItems?: (children: ReactNode) => ReactNode;
-  /** Render shimmer bars instead of a "Loading…" string while loading. */
-  skeleton?: boolean;
 }) {
   const mapped = items.map(renderItem);
   return (
@@ -36,11 +33,7 @@ export function ListColumn<T>({
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">{toolbar}</div>
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-2 pb-3">
         {loading ? (
-          skeleton ? (
-            <ListSkeleton />
-          ) : (
-            <div className="grid min-h-[200px] place-items-center text-sm text-muted">Loading…</div>
-          )
+          <ListSkeleton />
         ) : error ? (
           <div className="px-1 py-3">{error}</div>
         ) : items.length === 0 ? (
@@ -61,11 +54,12 @@ export function ListColumn<T>({
 /** Shimmer placeholder rows that mirror the file-tree row geometry. */
 export function ListSkeleton() {
   return (
-    <div className="flex flex-col gap-1.5 px-1 pt-1" aria-hidden>
+    <div className="flex flex-col gap-1.5 px-1 pt-1" role="status" aria-label="Loading…">
       {Array.from({ length: 7 }).map((_, i) => (
         <div
           key={i}
-          className="h-8 rounded-[10px] bg-surface-soft motion-safe:animate-pulse"
+          aria-hidden
+          className="skeleton h-8 rounded-[10px]"
           style={{ width: `${72 - (i % 4) * 13}%` }}
         />
       ))}
@@ -83,7 +77,7 @@ export function ListError({
   onRetry?: () => void;
 }) {
   return (
-    <div className="flex gap-2.5 rounded-[10px] bg-bad-soft px-3 py-2.5">
+    <div role="alert" className="flex gap-2.5 rounded-[10px] bg-bad-soft px-3 py-2.5">
       <AlertCircle size={ICON.SM} strokeWidth={2} className="mt-px shrink-0 text-bad" />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-bad">{title}</div>

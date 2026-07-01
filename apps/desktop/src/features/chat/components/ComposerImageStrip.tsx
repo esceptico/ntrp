@@ -26,13 +26,13 @@ export function ComposerImageStrip({
           <img
             src={`data:${img.media_type};base64,${img.data}`}
             alt=""
-            className="h-14 w-14 rounded-md object-cover border border-line-soft"
+            className="h-14 w-14 rounded-md object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
           />
           <button
             type="button"
             onClick={() => onRemove(i)}
             aria-label="Remove image"
-            className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.94]"
+            className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 transition-[opacity,scale] duration-check ease-out active:scale-[0.97]"
           >
             <X size={ICON.XS} strokeWidth={2.4} />
           </button>

@@ -73,7 +73,7 @@ export function Properties({ frontmatter }: { frontmatter?: Record<string, FmVal
           const isDate = !isList && _DATE_KEYS.has(key) && typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value);
           const Icon = isList ? List : isDate ? Calendar : Text;
           return (
-            <div key={key} className="grid grid-cols-[140px_minmax(0,1fr)] items-start gap-2 text-sm">
+            <div key={key} className="grid grid-cols-[110px_minmax(0,1fr)] items-start gap-2 text-sm">
               <dt className="flex items-center gap-1.5 pt-0.5 text-muted">
                 <Icon className="h-3.5 w-3.5 shrink-0 text-faint" strokeWidth={2} />
                 <span className="truncate">{humanizeKey(key)}</span>

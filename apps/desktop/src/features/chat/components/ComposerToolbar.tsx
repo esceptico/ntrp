@@ -70,8 +70,8 @@ export function ComposerToolbar({
         // active:scale handles mouse press; sendPressing covers keyboard
         // Enter (form-submit doesn't fire :active). Both look identical.
         className={clsx(
-          "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,scale] duration-fast ease-out active:scale-[0.92]",
-          sendPressing && "scale-[0.92]",
+          "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-sm hover:opacity-90 disabled:opacity-[0.45] disabled:shadow-none transition-[opacity,scale] duration-fast ease-out active:scale-[0.97]",
+          sendPressing && "scale-[0.97]",
         )}
       >
         <AnimatePresence initial={false}>

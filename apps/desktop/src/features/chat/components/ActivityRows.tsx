@@ -112,7 +112,7 @@ export function ItemButton({ item, onOpen, last, motionDisabled }: RowProps) {
           {verb}
           {running && "…"}
         </span>
-        {detail && <span className="truncate text-[13px] text-muted leading-snug">{detail}</span>}
+        {detail && <span className="truncate text-sm text-muted leading-snug">{detail}</span>}
       </button>
       {sources.length > 0 && (
         <span className="mt-1.5 flex flex-wrap gap-1.5">
@@ -200,7 +200,7 @@ export function ToolGroupRow({
                   transition={{ duration: MOTION.row, ease: EASE_OUT, delay: 0.03 * i }}
                   onClick={() => onOpen(it)}
                   title={`${it.target || it.kind} — click to inspect`}
-                  className="truncate border-0 bg-transparent p-0 text-left text-[13px] leading-snug text-muted hover:text-ink-soft cursor-pointer"
+                  className="truncate border-0 bg-transparent p-0 text-left text-sm leading-snug text-muted hover:text-ink-soft cursor-pointer"
                 >
                   {text}
                 </motion.button>
@@ -314,7 +314,7 @@ function AgentRow({
       </span>
       {/* Progress / result line: the agent's "description". */}
       {detail && (
-        <span className={clsx("min-w-0 truncate text-[13px] text-muted leading-snug", running && "italic")}>
+        <span className={clsx("min-w-0 truncate text-sm text-muted leading-snug", running && "italic")}>
           {detail}
         </span>
       )}
@@ -340,7 +340,7 @@ export function AgentUsageSuffix({ tokens, cost }: { tokens: number; cost?: numb
       : `$${cost.toFixed(3)}`
     : null;
   return (
-    <span className="text-whisper tabular-nums shrink-0" aria-label="Subagent usage">
+    <span className="text-faint tabular-nums shrink-0" aria-label="Subagent usage">
       · {tk}
       {ct && ` · ${ct}`}
     </span>

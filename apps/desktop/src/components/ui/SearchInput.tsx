@@ -50,7 +50,7 @@ export function SearchInput({
         aria-label={ariaLabel}
         autoFocus={autoFocus}
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-7 rounded-[10px] bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line-soft text-sm text-ink-soft placeholder:text-muted outline-none transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-7 rounded-[10px] bg-surface-soft focus:bg-surface-sunken border border-transparent focus:border-line text-sm text-ink-soft placeholder:text-muted outline-none transition-[background-color,border-color]"
       />
       {showClear && value && (
         <button

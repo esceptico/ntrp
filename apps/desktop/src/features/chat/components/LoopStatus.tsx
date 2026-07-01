@@ -158,20 +158,20 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
     >
       {loop && (
         <>
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
-          <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
-          <div className="text-sm font-medium text-ink">Loop</div>
-          <div className="ml-auto text-xs text-muted">
+        <div className="modal-header flex items-center gap-2">
+          <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted shrink-0" />
+          <div className="text-lg font-semibold tracking-[-0.012em] text-ink">Loop</div>
+          <div className="ml-auto text-xs text-muted whitespace-nowrap">
             Every {loop.every} · next in {formatLoopCountdown(loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY)}
           </div>
           <IconButton size="sm" tone="faint" onClick={onClose} aria-label="Close">
             <X size={ICON.SM} strokeWidth={2} />
           </IconButton>
         </div>
-        <div className="scroll-thin overflow-y-auto px-4 py-3">
+        <div className="scroll-thin overflow-y-auto px-5 py-4">
           <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
         </div>
-        <div className="px-4 py-2 border-t border-line text-xs text-muted flex flex-wrap gap-x-3 gap-y-1">
+        <div className="px-5 py-2 border-t border-line text-xs text-muted flex flex-wrap gap-x-3 gap-y-1">
           {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
           {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
           {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}

@@ -111,7 +111,7 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
           {busy === "preflight" ? "Checking…" : `Preflight ${googleChoiceLabel(serviceChoice)}`}
         </Button>
         {preflight && (
-          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
+          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted break-all grid gap-1">
             <div>Credentials: {preflight.credentials.path} · {preflight.credentials.valid ? "valid" : "not ready"}</div>
             <div>Scopes: {preflight.scopes.join(", ") || "none"}</div>
             {preflight.warnings.map((warning) => <div key={warning} className="text-warn">{warning}</div>)}
@@ -133,8 +133,8 @@ export function GoogleSetupAssistant({ onDone }: { onDone: () => Promise<void> |
           {busy === "verify" ? "Refreshing…" : "Refresh setup status"}
         </Button>
         {status && (
-          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
-            {status.google.provider_statuses.map((provider) => <div key={provider.id}>{provider.label}: {provider.status} ({provider.tool_count} tools){provider.detail ? ` · ${provider.detail}` : ""}</div>)}
+          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted break-all grid gap-1">
+            {status.google.provider_statuses.map((provider) => <div key={provider.id}>{provider.label}: {provider.status} ({provider.tool_count} tool{provider.tool_count === 1 ? "" : "s"}){provider.detail ? ` · ${provider.detail}` : ""}</div>)}
             {status.google.accounts.map((account) => <div key={account.token_file}>Account: {account.email ?? account.token_file}</div>)}
             {status.google.calendar_tokens.map((token) => <div key={token.token_file}>Calendar token: {token.token_file} · {token.has_calendar_scope ? "calendar scope" : "missing scope"}</div>)}
           </div>

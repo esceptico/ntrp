@@ -54,7 +54,7 @@ export function SecretConnectEditor({
         {pending && spinner}
         Connect
       </Button>
-      <Button variant="secondary" onClick={onCancel}>
+      <Button variant="secondary" onClick={onCancel} disabled={pending}>
         Cancel
       </Button>
     </motion.div>

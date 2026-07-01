@@ -11,6 +11,7 @@ import { ICON } from "@/lib/icons";
 import { DURATION_POPOVER, EASE_DECELERATE, EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import { PROXIMITY_ITEM_ATTR, useProximityHover, useReanchor } from "@/lib/hooks";
 import { ProximityHighlight } from "@/components/ui/ProximityHighlight";
+import { Caption } from "@/components/ui/Caption";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -154,9 +155,7 @@ export function ModelReasoningPicker({
         >
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">
-              <div className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-                Reasoning effort
-              </div>
+              <Caption as="div">Reasoning effort</Caption>
               <div className="flex flex-wrap gap-1">
                 <EffortPill
                   label="off"
@@ -200,9 +199,9 @@ export function ModelReasoningPicker({
               {filteredGroups.map((g) => (
                 <div key={g.provider}>
                   {groups.length > 1 && (
-                    <div className="px-3 pt-2 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
+                    <Caption as="div" className="px-3 pt-2 pb-1 select-none">
                       {PROVIDER_LABELS[g.provider] ?? g.provider}
-                    </div>
+                    </Caption>
                   )}
                   {g.models.map((m) => {
                     const isCurrent = m === currentModel;

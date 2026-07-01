@@ -84,7 +84,7 @@ export const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-bad/20 text-bad text-base leading-[1.45] whitespace-pre-wrap break-words">
+      <div role="alert" className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15 text-bad text-base leading-[1.45] whitespace-pre-wrap break-words">
         {message.content}
       </div>
     </article>

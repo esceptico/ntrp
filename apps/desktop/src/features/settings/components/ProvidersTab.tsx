@@ -9,6 +9,7 @@ import { ReadinessCard } from "@/features/settings/components/ReadinessCard";
 import { SettingsGroupSection } from "@/features/settings/components/SettingsGroupSection";
 import { ProviderRow } from "@/features/settings/components/ProviderRow";
 import { CustomModelsPanel } from "@/features/settings/components/CustomModelsPanel";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
 import { providerReadinessSummary } from "@/features/settings/lib/providerConnection";
 import {
   canSaveCustomModelDraft,
@@ -257,7 +258,7 @@ export function ProvidersTab() {
 
       <div className="grid gap-3">
         {loading && providers.length === 0 ? (
-          <div className="text-sm text-muted">Loading providers…</div>
+          <SettingsTabSkeleton variant="cards" label="Loading providers…" />
         ) : !showContent ? (
           <SettingsConnectionHint />
         ) : (

@@ -136,16 +136,16 @@ export function MCPSetupAssistant({ onDone }: { onDone: () => Promise<void> | vo
           {busy === "refresh" ? "Refreshing…" : "Refresh MCP status"}
         </Button>
         {status && (
-          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
+          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted break-all grid gap-1">
             {status.mcp.servers.map((server) => (
               <div key={server.name}>
-                {server.name}: {server.connected ? "connected" : "not connected"} · {server.tool_count} tools{server.error ? ` · ${server.error}` : ""}
+                {server.name}: {server.connected ? "connected" : "not connected"} · {server.tool_count} tool{server.tool_count === 1 ? "" : "s"}{server.error ? ` · ${server.error}` : ""}
                 {server.auth === "oauth" && server.name === savedName && (
                   <button type="button" className="ml-2 underline text-ink-soft" onClick={() => void reauthenticate()}>Reauthenticate</button>
                 )}
               </div>
             ))}
-            {status.mcp.provider_statuses.map((provider) => <div key={provider.id}>{provider.label}: {provider.status} · {provider.tool_count} tools</div>)}
+            {status.mcp.provider_statuses.map((provider) => <div key={provider.id}>{provider.label}: {provider.status} · {provider.tool_count} tool{provider.tool_count === 1 ? "" : "s"}</div>)}
           </div>
         )}
         {saved && (

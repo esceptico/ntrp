@@ -14,6 +14,15 @@ const TONE: Record<CalloutTone, { box: string; fg: string }> = {
   neutral: { box: "bg-surface-soft border-line-soft", fg: "text-muted" },
 };
 
+// Errors/warnings are assertive (interrupt the screen reader); ok/neutral are
+// passive info and must NOT announce as "alert" — they're a polite status region.
+const TONE_ROLE: Record<CalloutTone, "alert" | "status"> = {
+  bad: "alert",
+  warn: "alert",
+  ok: "status",
+  neutral: "status",
+};
+
 interface CalloutProps {
   tone?: CalloutTone;
   /** Optional leading icon (e.g. TriangleAlert for warnings). */
@@ -38,7 +47,7 @@ export function Callout({ tone = "neutral", icon: Icon, title, children, action,
   const t = TONE[tone];
   return (
     <motion.div
-      role="alert"
+      role={TONE_ROLE[tone]}
       initial={RISE_IN}
       animate={RISE_SETTLED}
       exit={{ ...DISSOLVE_OUT, transition: { duration: MOTION.row, ease: EASE_OUT } }}

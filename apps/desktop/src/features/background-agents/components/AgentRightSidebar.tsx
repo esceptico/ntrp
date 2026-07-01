@@ -16,6 +16,8 @@ import { useWorkflows } from "@/hooks/useWorkflows";
 import { isActiveWorkflow, workflowKey } from "@/stores/workflow-domain";
 import { ExpandableWorkflowCard } from "@/components/ui/WorkflowDetail";
 import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Caption } from "@/components/ui/Caption";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Collapse } from "@/components/ui/Collapse";
@@ -231,9 +233,7 @@ export function AgentRightSidebar() {
             (z-panel-overlay 45, fixed right-14) floats over this header's right edge and
             is the single open/close control — no redundant in-panel X. */}
         <div className="drag-spacer flex items-center px-3 h-[34px] shrink-0">
-          <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">
-            Active
-          </span>
+          <Caption tone="muted">Active</Caption>
         </div>
         <RightPanelResizeHandle />
         <div className="flex min-h-0 flex-1 flex-col">
@@ -349,19 +349,13 @@ export function AgentRightSidebar() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, filter: "blur(3px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }}
                     transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
-                    className="grid place-items-center gap-2.5 min-h-[120px] px-3 text-center"
+                    className="grid min-h-[120px] place-items-center"
                   >
-                    <span
-                      aria-hidden
-                      className="grid place-items-center w-9 h-9 rounded-xl bg-surface-soft text-faint"
-                    >
-                      <Bot size={ICON.MD} strokeWidth={2} />
-                    </span>
-                    <p className="text-xs text-muted leading-relaxed">
+                    <EmptyState size="sm" icon={Bot}>
                       No agents yet.
                       <br />
                       Background agents you start appear here.
-                    </p>
+                    </EmptyState>
                   </motion.div>
                 )}
               </AnimatePresence>

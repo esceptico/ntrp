@@ -1,4 +1,4 @@
-import { CheckCircle2, Pause, Play, Target, Trash2 } from "lucide-react";
+import { CheckCircle2, Pause, Play, Target } from "lucide-react";
 import { clearGoal, updateGoal } from "@/actions/goals";
 import { useStore } from "@/stores";
 import { ICON } from "@/lib/icons";
@@ -6,6 +6,7 @@ import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Badge } from "@/components/ui/Badge";
 import { Chip } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { HoverPopover } from "@/components/ui/HoverPopover";
 
 export function GoalStatusBar() {
@@ -74,15 +75,12 @@ export function GoalStatusBar() {
               <CheckCircle2 size={ICON.SM} />
             </IconButton>
           )}
-          <IconButton
-            tone="faint"
+          <ConfirmDeleteButton
+            size="sm"
+            label="Clear goal"
             className="ml-auto"
-            onClick={() => void clearGoal()}
-            title="Clear goal"
-            aria-label="Clear goal"
-          >
-            <Trash2 size={ICON.SM} />
-          </IconButton>
+            onConfirm={() => void clearGoal()}
+          />
         </div>
       </HoverPopover>
     </div>

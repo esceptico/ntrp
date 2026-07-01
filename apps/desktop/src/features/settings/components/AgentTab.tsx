@@ -6,6 +6,7 @@ import { useStore } from "@/stores";
 import { useMutationState } from "@/lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
 // Coalesce per-keystroke edits so typing "16" saves once (16), not 1 then 16.
@@ -26,7 +27,7 @@ export function AgentTab({ serverConfig }: { serverConfig: ServerConfig | null }
 
   if (!serverConfig || depth === null) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-sm text-muted">Loading agent settings…</div>;
+    return <SettingsTabSkeleton label="Loading agent settings…" />;
   }
 
   const onChange = (n: number) => {

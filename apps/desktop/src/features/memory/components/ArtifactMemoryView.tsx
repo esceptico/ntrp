@@ -412,7 +412,7 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   );
 
   return (
-    <div className="h-full min-h-0 border-t border-line-soft">
+    <div className="h-full min-h-0">
       <PaneShell
         fixedList
         scrollDetail={false}

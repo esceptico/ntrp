@@ -78,7 +78,7 @@ export function TreeRow({
           style={{ marginLeft: indent }}
         >
           <ChevronRight
-            className={clsx("h-3 w-3 shrink-0 text-faint transition-transform duration-200", open && "rotate-90")}
+            className={clsx("h-3 w-3 shrink-0 text-faint transition-transform duration-trace", open && "rotate-90")}
             strokeWidth={2.25}
           />
           {open ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-faint" /> : <Folder className="h-3.5 w-3.5 shrink-0 text-faint" />}
@@ -135,10 +135,8 @@ export function TreeRow({
       aria-level={depth + 1}
       onClick={() => onSelect(a.path)}
       title={`${displayTitle(a)} — ${a.path}`}
-      className={clsx(
-        "group flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left transition-colors",
-        active ? "bg-surface-sunken" : "hover:bg-surface-soft",
-      )}
+      className="app-row group flex h-8 min-w-0 items-center gap-1.5 rounded-[10px] pl-2 pr-3 text-left"
+      data-active={active}
       style={{ marginLeft: indent }}
     >
       <span className="w-3 shrink-0" aria-hidden />
@@ -164,10 +162,8 @@ export function FlatRow({ a, active, onSelect }: { a: MemoryArtifact; active: bo
       type="button"
       onClick={() => onSelect(a.path)}
       title={a.path}
-      className={clsx(
-        "group flex min-w-0 items-start gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors",
-        active ? "bg-surface-sunken" : "hover:bg-surface-soft",
-      )}
+      className="app-row group flex min-w-0 items-start gap-2 rounded-[10px] px-2.5 py-1.5 text-left"
+      data-active={active}
     >
       <FileText className={clsx("mt-px h-3.5 w-3.5 shrink-0", active ? "text-muted" : "text-faint")} />
       <span className="min-w-0 flex-1">

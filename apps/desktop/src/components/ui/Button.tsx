@@ -39,8 +39,17 @@ const BASE =
   "active:scale-[0.97] disabled:opacity-[0.45] disabled:cursor-not-allowed disabled:active:scale-100";
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: "h-7 px-2.5 text-sm",
-  md: "h-8 px-3 text-sm",
+  sm: "h-7 text-sm",
+  md: "h-8 text-sm",
+};
+
+// Optical alignment (make-interfaces-feel-better): a button with text on one
+// side and an icon on the other gets ~2px LESS padding on the icon side, so the
+// glyph doesn't read as pushed toward the edge. Symmetric when there's no icon
+// (or an icon on both sides). Static class names so Tailwind generates them.
+const PAD: Record<ButtonSize, { sym: string; lead: string; trail: string }> = {
+  sm: { sym: "px-2.5", lead: "pl-2 pr-2.5", trail: "pl-2.5 pr-2" },
+  md: { sym: "px-3", lead: "pl-2.5 pr-3", trail: "pl-3 pr-2.5" },
 };
 
 const ICON_PX: Record<ButtonSize, number> = { sm: 14, md: 16 };
@@ -79,12 +88,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const px = ICON_PX[size];
+  const pad =
+    Leading && !Trailing
+      ? PAD[size].lead
+      : Trailing && !Leading
+        ? PAD[size].trail
+        : PAD[size].sym;
   return (
     <button
       ref={ref}
       type={type ?? "button"}
       data-active={active || undefined}
-      className={clsx(BASE, SIZE[size], VARIANT[variant], active && ACTIVE[variant], className)}
+      className={clsx(BASE, SIZE[size], pad, VARIANT[variant], active && ACTIVE[variant], className)}
       {...rest}
     >
       {Leading && <Leading size={px} strokeWidth={2} className="shrink-0" />}

@@ -165,7 +165,12 @@ export function PageModal({
                 with custom grids supply their own children directly. */}
             {header ? (
               <motion.div
-                className="min-h-0 min-w-0 grid grid-rows-[minmax(0,1fr)]"
+                // grid-cols-[minmax(0,1fr)] (not an implicit `auto` column) so
+                // wide unwrapped content (long tool args, code) can't stretch
+                // this cell past the panel — which would both overflow the body
+                // AND, via the shared panel column, shove the header title
+                // off-screen. min 0 lets inner scroll/wrap engage.
+                className="min-h-0 min-w-0 grid grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

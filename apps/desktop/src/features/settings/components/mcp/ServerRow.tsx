@@ -1,5 +1,4 @@
 import { Settings as SettingsIcon } from "lucide-react";
-import clsx from "clsx";
 import { useStore } from "@/stores";
 import { type MCPServer, startMCPOAuthApi, toggleMCPServerApi } from "@/api/settings";
 import { useMutationState } from "@/lib/hooks";
@@ -7,6 +6,7 @@ import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { SwitchControl } from "@/components/ui/SwitchControl";
 
 export function ServerRow({
@@ -36,7 +36,7 @@ export function ServerRow({
   const needsAuth = server.auth === "oauth" && !server.connected;
   const subtitleParts: string[] = [];
   subtitleParts.push(server.transport.toUpperCase());
-  if (server.connected) subtitleParts.push(`${server.tool_count} tools`);
+  if (server.connected) subtitleParts.push(`${server.tool_count} tool${server.tool_count === 1 ? "" : "s"}`);
   else if (!server.enabled) subtitleParts.push("disabled");
   else if (needsAuth) subtitleParts.push(server.error ? "tokens expired" : "sign in needed");
   else if (server.error) subtitleParts.push("error");
@@ -46,13 +46,7 @@ export function ServerRow({
     <li className="flex min-w-0 items-center gap-2 px-3.5 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className={clsx(
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              server.connected ? "bg-ok" : server.error ? "bg-bad" : "bg-line",
-            )}
-          />
+          <StatusDot tone={server.connected ? "ok" : server.error ? "bad" : "neutral"} />
           <span className="text-base font-medium text-ink tracking-[-0.005em] truncate">
             {server.name}
           </span>

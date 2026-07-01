@@ -87,7 +87,7 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
           </Button>
         </div>
         {verifyResult && (
-          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted">
+          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted break-all">
             Verified {verifyResult.token_kind} token{verifyResult.team ? ` for ${verifyResult.team}` : ""}{verifyResult.user ? ` · user ${verifyResult.user}` : ""}{verifyResult.bot_id ? ` · bot ${verifyResult.bot_id}` : ""}. Verification checks the token, not every tool permission.
           </div>
         )}
@@ -99,9 +99,9 @@ export function SlackSetupAssistant({ onDone }: { onDone: () => Promise<void> | 
           {busy === "refresh" ? "Refreshing…" : "Refresh Slack status"}
         </Button>
         {status && (
-          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted grid gap-1">
+          <div className="rounded-[10px] border border-line-soft bg-surface-soft/35 px-3 py-2 text-xs text-muted break-all grid gap-1">
             <div>Services: {status.slack.services.map((service) => `${service.name}: ${service.connected ? "token saved" : "not saved"}`).join(" · ") || "none"}</div>
-            <div>Provider: {status.slack.provider_status ? `${status.slack.provider_status.status} (${status.slack.provider_status.tool_count} tools)` : "not available"}</div>
+            <div>Provider: {status.slack.provider_status ? `${status.slack.provider_status.status} (${status.slack.provider_status.tool_count} tool${status.slack.provider_status.tool_count === 1 ? "" : "s"})` : "not available"}</div>
           </div>
         )}
         {saved && (

@@ -374,6 +374,19 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: var(--text-base);
+  /* Avoid single-word orphan lines in wrapped body copy (progressive
+     enhancement — ignored where unsupported). */
+  text-wrap: pretty;
+}
+
+/* Balance multi-line headings/titles so they don't break lopsided. */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+/* Code/mono content must wrap exactly — never pretty-reflowed. */
+pre, code, kbd, samp {
+  text-wrap: wrap;
 }
 
 /* Quick-capture window: hosted in a frameless transparent BrowserWindow.
@@ -1073,20 +1086,14 @@ button.app-row:not(:disabled):active,
 }
 .switch-control-knob {
   position: absolute;
-  left: 0;
-  top: var(--gs-knob-top);
-  width: var(--gs-knob-size);
-  height: var(--gs-knob-size);
   border-radius: 999px;
   background: var(--gs-knob-bg);
   border: 1px solid var(--gs-knob-border);
   box-shadow: var(--gs-knob-shadow);
   pointer-events: none;
-  /* Springy back-out so the knob overshoots slightly on flip, like a real
-     macOS switch. transform is GPU-composited; bg/shadow ease in step with
-     the track (dark-mode knob tint shifts on toggle). */
-  transition: transform var(--duration-panel) var(--ease-back-out),
-    background-color var(--duration-panel) var(--ease-out-soft),
+  /* Geometry (size, x/y) is motion-driven (FF-style morph + spring + drag);
+     only the themed fill/shadow transition here (dark-mode knob tint on flip). */
+  transition: background-color var(--duration-panel) var(--ease-out-soft),
     box-shadow var(--duration-panel) var(--ease-out-soft);
 }
 .switch-control:focus-visible {
@@ -1610,7 +1617,11 @@ main[data-has-approval="false"] .scroll-messages {
     --color-code-bg: #1a1a1a;
 
     --color-line: #2e2e2e;
-    --color-line-soft: #1a1a1a;
+    /* Soft edge — bumped off #1a1a1a, which was identical to --color-surface /
+       --color-code-bg and made every `border border-line-soft` card edge
+       invisible in dark (the same defect already fixed for --color-surface-soft
+       above). Stays below --color-line so the soft<strong edge order holds. */
+    --color-line-soft: #262626;
     --color-line-strong: #3a3a3a;
 
     --color-ink: #ededed;
@@ -1710,3 +1721,41 @@ main[data-has-approval="false"] .scroll-messages {
 .md {
   font-family: "MdQuoteSerif", var(--font-sans);
 }
+
+/* ─── Palette — Sage accent, greyscale status/syntax ──────────
+   One hue (Sage, from coolors) drives the accent (buttons' tint, links, active
+   states, slider fill, focus, selection); status + syntax stay
+   greyscale so only the accent carries hue. Swap the accent trio
+   below (light + dark) to rehue the whole app. Last in the cascade,
+   so it supersedes @theme / :root / :root.dark above.
+   Delete this block to restore the coloured Geist scheme. */
+:root {
+  /* Accent = Slate (the DEFAULT_ACCENT). This is only the pre-JS default;
+     at runtime `applyAccentPalette` (lib/palettes) injects the chosen
+     palette's accent from the `accent` pref — pick it in Settings › Appearance. */
+  --color-accent: #475569;
+  --color-accent-soft: rgba(71, 85, 105, 0.14);
+  --color-accent-strong: #334155;
+  --color-info: #475569;
+  --color-bad: #171717;  --color-bad-soft: rgba(23, 23, 23, 0.08);
+  --color-warn: #3d3d3d; --color-warn-soft: rgba(23, 23, 23, 0.08);
+  --color-ok: #525252;   --color-ok-soft: rgba(23, 23, 23, 0.08);
+  --hl-keyword: #171717; --hl-string: #3d3d3d; --hl-number: #6e6e6e; --hl-literal: #6e6e6e;
+  --hl-comment: #8f8f8f; --hl-attr: #3d3d3d; --hl-type: #171717; --hl-built-in: #171717;
+  --hl-title: #171717;   --hl-tag: #3d3d3d;   --hl-meta: #8f8f8f;  --hl-symbol: #3d3d3d;
+}
+:root.dark {
+  --color-accent: #94a3b8;
+  --color-accent-soft: rgba(148, 163, 184, 0.16);
+  --color-accent-strong: #cbd5e1;
+  --color-info: #94a3b8;
+  --color-bad: #ededed;  --color-bad-soft: rgba(237, 237, 237, 0.12);
+  --color-warn: #c4c4c4; --color-warn-soft: rgba(237, 237, 237, 0.12);
+  --color-ok: #a0a0a0;   --color-ok-soft: rgba(237, 237, 237, 0.12);
+  --hl-keyword: #ededed; --hl-string: #c4c4c4; --hl-number: #a0a0a0; --hl-literal: #a0a0a0;
+  --hl-comment: #7a7a7a; --hl-attr: #c4c4c4; --hl-type: #ededed; --hl-built-in: #ededed;
+  --hl-title: #ededed;   --hl-tag: #c4c4c4;   --hl-meta: #7a7a7a;  --hl-symbol: #c4c4c4;
+}
+::selection { background: rgba(71, 85, 105, 0.16); }
+:root.dark ::selection { background: rgba(148, 163, 184, 0.24); }
+:root.dark .modal-error span { color: #ededed !important; }

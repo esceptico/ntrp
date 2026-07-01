@@ -63,7 +63,6 @@ export function RecordListPane({
         toolbar={null}
         items={records}
         loading={recordsLoading}
-        skeleton
         error={
           recordsError ? (
             <ListError
@@ -91,10 +90,8 @@ export function RecordListPane({
             <button
               type="button"
               onClick={() => onSelectRecord(record.id)}
-              className={clsx(
-                "w-full rounded-[10px] p-2 pr-7 text-left transition-colors",
-                selectedRecordId === record.id ? "bg-surface-sunken" : "hover:bg-surface-soft",
-              )}
+              className="app-row w-full rounded-[10px] p-2 pr-7 text-left"
+              data-active={selectedRecordId === record.id}
             >
               <div className="line-clamp-2 text-sm text-ink">{record.content}</div>
               <div className="mt-1.5 flex items-center gap-1.5 text-2xs text-muted">

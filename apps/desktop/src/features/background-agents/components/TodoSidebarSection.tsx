@@ -7,6 +7,7 @@ import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 import { type TodoListState } from "@/stores";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Caption } from "@/components/ui/Caption";
 import { useEditableTodo } from "@/features/background-agents/hooks/useEditableTodo";
 import { rosterRowMotion } from "@/features/background-agents/lib/rosterMotion";
 
@@ -78,7 +79,7 @@ export function TodoSidebarSection({ todo, sessionId }: { todo: TodoListState; s
   return (
     <section>
       <div className="flex items-center justify-between gap-2 px-0.5 pt-0.5 pb-1.5">
-        <span className="text-2xs font-medium uppercase tracking-[0.08em] text-muted">Tasks</span>
+        <Caption tone="muted">Tasks</Caption>
         <div className="flex items-center gap-1.5">
           {edited && (
             <Tooltip label="Reset to the agent's list">

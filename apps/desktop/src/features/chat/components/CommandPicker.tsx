@@ -19,6 +19,7 @@ import { useStore } from "@/stores";
 import { ICON } from "@/lib/icons";
 import { filterCommands, useCommandList, type CommandEntry } from "@/features/chat/lib/commands";
 import { PickerRow } from "@/components/ui/PickerRow";
+import { Caption } from "@/components/ui/Caption";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   help: HelpCircle,
@@ -119,9 +120,9 @@ function Section({
     <>
       {withTopDivider && <div className="h-px bg-line-soft mx-1.5" />}
       <div className="py-1.5 px-1.5">
-        <div className="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
+        <Caption as="div" className="px-3 pb-1 pt-0.5 select-none">
           {title}
-        </div>
+        </Caption>
         {entries.map((entry, i) => {
           const idx = startIndex + i;
           const Icon = iconFor(entry);

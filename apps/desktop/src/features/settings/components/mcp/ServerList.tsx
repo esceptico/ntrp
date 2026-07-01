@@ -6,7 +6,8 @@ import { ICON } from "@/lib/icons";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Button } from "@/components/ui/Button";
 import { DividedList } from "@/components/ui/DividedList";
-import { Empty } from "@/features/settings/components/mcp/atoms";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
+import { EmptyNote } from "@/components/ui/EmptyState";
 import { ServerRow } from "@/features/settings/components/mcp/ServerRow";
 
 export function ServerList({
@@ -50,17 +51,22 @@ export function ServerList({
         />
 
         {servers === null ? (
-          <Empty>Loading…</Empty>
+          <SettingsTabSkeleton variant="cards" label="Loading MCP servers…" />
         ) : loadError ? (
           <div className="grid gap-3">
             <SettingsInlineError
               title="Couldn't load MCP servers"
               message={settingsErrorMessage(loadError)}
+              action={
+                <Button variant="secondary" size="sm" onClick={() => void onChanged()}>
+                  Retry
+                </Button>
+              }
             />
             <SettingsConnectionHint />
           </div>
         ) : servers.length === 0 ? (
-          <Empty>No MCP servers yet.</Empty>
+          <EmptyNote>No MCP servers yet.</EmptyNote>
         ) : (
           <DividedList className="min-w-0 overflow-hidden">
             {servers.map((s) => (

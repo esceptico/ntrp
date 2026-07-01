@@ -3,6 +3,7 @@ import { Markdown } from "@/components/ui/Markdown";
 import { WikiLinkContext, type WikiLinkHandlers } from "@/lib/wikilink";
 import { TabPanels } from "@/components/ui/TabPanels";
 import { DetailPlaceholder } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { DetailShell } from "@/components/ui/DetailShell";
 import { ListError } from "@/components/ui/ListColumn";
 import { MetaGrid } from "@/components/ui/MetaGrid";
@@ -76,7 +77,10 @@ export function FileDetailPane({
               onRetry={onRetry}
             />
           ) : contentLoading && !active.content ? (
-            <DetailPlaceholder>Loading artifact…</DetailPlaceholder>
+            <div className="grid gap-2.5" role="status" aria-label="Loading artifact…">
+              <Skeleton width="35%" height={14} />
+              <Skeleton lines={8} height={13} />
+            </div>
           ) : (
             <WikiLinkContext.Provider value={wikiHandlers}>
               <Properties frontmatter={active.frontmatter} />

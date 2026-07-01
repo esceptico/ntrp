@@ -1,4 +1,5 @@
 import type { Prefs } from "@/stores/types";
+import { DEFAULT_ACCENT } from "@/lib/palettes";
 
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 380;
@@ -20,6 +21,7 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
   theme: "system",
+  accent: DEFAULT_ACCENT,
   sidebarGroupBy: "project",
   sidebarUnreadOnly: false,
   sidebarChannelsOnly: false,

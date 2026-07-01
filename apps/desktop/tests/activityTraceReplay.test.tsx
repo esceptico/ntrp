@@ -416,7 +416,9 @@ test("workflow progress card renders status + a segmented phase bar, not a tool 
   expect(html).toContain("Review feature");
   expect(html).toContain("running"); // status badge
   expect(html).toContain("group/workflow");
-  expect(html).toContain("border-line-soft");
+  // border-line, not border-line-soft: soft == surface-sunken (#ebebeb) in light
+  // mode, so a soft border on this sunken card is invisible.
+  expect(html).toContain("border-line");
   expect(html).toContain("Review feature — open");
   // Real progress: a segment per phase (Review running → accent, Verify pending →
   // sunken) plus the agent-completion fraction.

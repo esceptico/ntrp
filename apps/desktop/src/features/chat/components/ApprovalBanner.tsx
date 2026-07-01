@@ -6,6 +6,7 @@ import { respondToAllApprovals, respondToApproval } from "@/actions/approvals";
 import { ICON } from "@/lib/icons";
 import { EASE_OUT, MOTION, originFromEvent, SPRING_STACK } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -316,13 +317,13 @@ function ApprovalCard({
             {path && (
               <>
                 <dt className="text-faint">Target</dt>
-                <dd className="m-0 font-mono text-ink-soft truncate">{path}</dd>
+                <dd className="m-0 font-mono text-ink-soft truncate" title={path}>{path}</dd>
               </>
             )}
             {previewLine && (
               <>
                 <dt className="text-faint">Content</dt>
-                <dd className="m-0 font-mono text-ink-soft truncate">{previewLine}</dd>
+                <dd className="m-0 font-mono text-ink-soft truncate" title={previewLine}>{previewLine}</dd>
               </>
             )}
           </dl>
@@ -331,7 +332,8 @@ function ApprovalCard({
 
       <Collapse open={interactive && denyOpen}>
         <div className="flex items-center gap-2 px-3 pb-2">
-          <input
+          <Input
+            size="sm"
             autoFocus
             value={denyReason}
             onChange={(e) => setDenyReason(e.target.value)}
@@ -345,7 +347,7 @@ function ApprovalCard({
               }
             }}
             placeholder="Why? — sent to the agent as guidance"
-            className="flex-1 min-w-0 h-7 px-2.5 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-faint focus:outline-none focus:border-line-strong transition-colors duration-check"
+            className="flex-1 min-w-0"
           />
           <Button variant="secondary" size="sm" onClick={submitDeny}>
             Deny

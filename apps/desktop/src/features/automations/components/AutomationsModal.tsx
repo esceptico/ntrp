@@ -73,7 +73,7 @@ export function AutomationsModal() {
             value={tab}
             onChange={(v) => setTab(v as Tab)}
             variant="underline"
-            className="items-center gap-5 px-6"
+            className="items-center gap-5 px-5"
           >
             <AutomationTab value="active" label="Active" count={activeCount} />
             <AutomationTab value="system" label="System" count={systemCount} />
@@ -84,7 +84,7 @@ export function AutomationsModal() {
             {/* Scroll lives outside TabPanels — motion transform breaks sticky overlays. */}
             <div ref={scrollRef} className="h-full min-h-0 overflow-y-auto scroll-thin">
               <ScrollFadeTop key={tab} />
-              <TabPanels value={tab} direction={direction} className="px-6 py-5">
+              <TabPanels value={tab} direction={direction} className="px-5 py-5">
                 {tab === "active" ? (
                   <ActiveList
                     automations={automationGroups?.user ?? null}

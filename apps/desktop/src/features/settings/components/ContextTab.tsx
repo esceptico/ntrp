@@ -5,7 +5,7 @@ import type { ServerConfigPatch } from "@/api/settings";
 import type { ServerConfig } from "@/api/types";
 import { useStore } from "@/stores";
 import { SaveButton } from "@/components/ui/SaveButton";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 
 type Draft = Pick<
@@ -44,14 +44,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
 
   if (!serverConfig || !draft) {
     if (!connected) return <SettingsConnectionHint />;
-    return (
-      <div className="grid gap-5" aria-busy>
-        <Skeleton width="60%" height={14} />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} height={40} radius={9} />
-        ))}
-      </div>
-    );
+    return <SettingsTabSkeleton rows={5} label="Loading context settings…" />;
   }
 
   const dirty = KEYS.some((k) => draft[k] !== serverConfig[k]);

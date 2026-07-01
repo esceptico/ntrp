@@ -305,7 +305,7 @@ export function QuickCapture() {
                 "grid place-items-center w-6 h-6 rounded-md shrink-0 transition-[opacity,scale] duration-check ease-out",
                 disabled
                   ? "text-faint"
-                  : "bg-ink text-on-ink hover:opacity-90 active:scale-[0.94]",
+                  : "bg-ink text-on-ink hover:opacity-90 active:scale-[0.97]",
               )}
             >
               <ArrowUp size={ICON.SM} strokeWidth={2.4} />

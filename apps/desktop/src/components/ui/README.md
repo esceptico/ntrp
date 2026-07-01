@@ -13,11 +13,12 @@ Props live in each file (kept here as a map, not a spec, so it can't go stale).
 ## Form inputs  (chrome = `.input-field` / `.input-field-sm`; never re-derive it)
 - **Input** — labelled `<input>` (label/help/error/size). **Textarea** — labelled `<textarea>`.
 - **SearchInput** — icon + input + clear + busy. **SegmentedControl** — 2–4 exclusive options.
-- **SwitchControl** / **SwitchDisclosure** — toggle, and toggle + expandable detail.
-- settings forms: **Field / NumberField / PercentField** (in `features/settings`) wrap Input.
+- **SwitchControl** — toggle (FF-tactile: hover/press knob morph + drag-to-toggle); pair with a `Tooltip` for help text (don't expand the row).
+- **Slider** / **RangeSlider** — drag/keyboard value + range. **SliderComfortable** — FF labelled settings selector (`pips` for small discrete ranges, `scrubber` for large).
+- settings forms: **Field** wraps Input; **NumberField / PercentField** (in `features/settings`) are **SliderComfortable** rows.
 
 ## Feedback & status
-- **Callout** — alert/notice box (`tone bad|warn|ok|neutral`, icon/title/action). **Badge** / **Chip** / **Pill** — labels/tags. **StatusDot** — status/tone dot (+pulse). **Skeleton** — loading. **EmptyState** — icon + copy + action (`HomeHero` = the store-wired home screen, not generic).
+- **Callout** — alert/notice box (`tone bad|warn|ok|neutral`, icon/title/action). **Badge** / **Chip** / **Pill** — labels/tags. **StatusDot** — status/tone dot (+pulse). **Skeleton** — loading. **EmptyState** — icon + copy + action (`HomeHero` = the store-wired home screen, not generic). **EmptyNote** — compact inline "list is empty" italic note for sub-lists (settings tabs, MCP servers), not the full icon-chip state.
 
 ## Overlays & menus
 - **PageModal** — portal+scrim+panel modal shell (`origin`, `elevated`, `grid`, `header`). **AnchoredPopover** — cursor/trigger-anchored popover (`variant menu|popover`, `proximity`). **HoverPopover** / **Tooltip** — hover surfaces. **MenuItem** — one menu/popover row (reads `ProximityContext`).

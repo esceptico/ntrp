@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore, type ThemeChoice } from "@/stores";
+import { applyAccentPalette } from "@/lib/palettes";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
@@ -20,6 +21,7 @@ function applyDarkMode(choice: ThemeChoice): void {
  *  so the app flips automatically without a reload. */
 export function useThemeEffect(): void {
   const theme = useStore((s) => s.prefs.theme);
+  const accent = useStore((s) => s.prefs.accent);
 
   useEffect(() => {
     applyDarkMode(theme);
@@ -29,4 +31,10 @@ export function useThemeEffect(): void {
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, [theme]);
+
+  // The palette <style> carries both light and dark accent rules, so it only
+  // needs re-applying when the chosen palette changes — not on theme flip.
+  useEffect(() => {
+    applyAccentPalette(accent);
+  }, [accent]);
 }

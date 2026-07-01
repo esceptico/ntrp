@@ -7,10 +7,13 @@ import { useMutationState } from "@/lib/hooks";
 import { settingsErrorMessage } from "@/features/settings/lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
 import { ToolPolicySelect } from "@/features/settings/components/ToolPolicySelect";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Button } from "@/components/ui/Button";
 import { DividedList } from "@/components/ui/DividedList";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { EmptyNote } from "@/components/ui/EmptyState";
 
 export function ToolsTab() {
   const config = useStore((s) => s.config);
@@ -75,13 +78,21 @@ export function ToolsTab() {
   }
 
   if (tools === null) {
-    return <div className="text-sm text-muted">Loading tools…</div>;
+    return <SettingsTabSkeleton label="Loading tools…" />;
   }
 
   if (loadError) {
     return (
       <div className="grid gap-3">
-        <SettingsInlineError title="Couldn't load tools" message={settingsErrorMessage(loadError)} />
+        <SettingsInlineError
+          title="Couldn't load tools"
+          message={settingsErrorMessage(loadError)}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          }
+        />
         <SettingsConnectionHint />
       </div>
     );
@@ -107,6 +118,11 @@ export function ToolsTab() {
       {error && <SettingsInlineError title="Couldn't save tool override" message={error} />}
 
       <div className="grid gap-3">
+        {groups.length === 0 && (
+          <EmptyNote>
+            {query.trim() ? `No tools match "${query.trim()}".` : "No tools available."}
+          </EmptyNote>
+        )}
         {groups.map(([source, items]) => (
           <section key={source} className="grid gap-2">
             <SectionHeader label={formatSource(source)} count={items.length} />

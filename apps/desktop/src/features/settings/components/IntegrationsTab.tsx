@@ -7,6 +7,7 @@ import { useStore } from "@/stores";
 import { ReadinessCard } from "@/features/settings/components/ReadinessCard";
 import { GoogleCard } from "@/features/settings/components/GoogleCard";
 import { ServiceCard } from "@/features/settings/components/ServiceCard";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
 import {
   googleConnectionSummary,
 } from "@/features/settings/lib/integrationConnection";
@@ -172,7 +173,7 @@ export function IntegrationsTab() {
       )}
 
       {loading && !hasLoadedData ? (
-        <div className="text-sm text-muted">Loading integrations…</div>
+        <SettingsTabSkeleton variant="cards" label="Loading integrations…" />
       ) : !showContent ? (
         <SettingsConnectionHint />
       ) : (

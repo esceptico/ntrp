@@ -171,7 +171,7 @@ export function TurnGroup({
   ) : null;
 
   return (
-    <div className="flex flex-col gap-2.5" data-turn-id={userId}>
+    <div className="flex flex-col gap-1.5" data-turn-id={userId}>
       <Message id={userId} />
 
       {isDone && workBlock}

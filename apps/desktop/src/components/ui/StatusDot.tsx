@@ -50,9 +50,10 @@ export function StatusDot({
   const label = tone ? undefined : STATUS_LABEL[status!];
   return (
     <span
-      role="img"
-      aria-label={label}
-      title={label}
+      // A status dot is a standalone read-out → labelled (role=img + name).
+      // A tone dot has no text alternative because the adjacent label already
+      // carries the state → decorative (aria-hidden), never an unnamed img.
+      {...(label ? { role: "img", "aria-label": label, title: label } : { "aria-hidden": true })}
       className={clsx(
         // transition-colors eases the status color change (running→done→
         // failed) instead of hard-cutting; the breathe halo is a separate

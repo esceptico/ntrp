@@ -89,29 +89,24 @@ export function SettingsModal() {
       onClose={close}
       origin={origin}
       size="w-[min(1000px,calc(100vw-32px))] h-[min(740px,calc(100vh-32px))] sm:w-[min(1000px,calc(100vw-64px))] sm:h-[min(740px,calc(100vh-64px))]"
-      grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
+      grid="grid-cols-[224px_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]"
       disableEscape={saving}
       ariaLabel="Settings"
     >
-        <aside className="sidebar settings-sidebar-card flex flex-col min-h-0 m-2 overflow-hidden">
-          {/* Title shares the nav rows' icon-column template (.settings-nav-row)
-              so its label aligns HORIZONTALLY with the row labels by
-              construction. Its top offset derives from the shared modal header
-              pad (--modal-header-pt) minus the card's m-2, so "Settings" tracks
-              the content header VERTICALLY — both move together if the header pad
-              changes. px-2.5 matches the Tabs container's px-2.5. */}
-          <div className="shrink-0 px-2.5 pt-[calc(var(--modal-header-pt)_-_0.5rem)] pb-2 select-none">
-            <div className="settings-nav-row">
-              <span aria-hidden />
-              <span className="text-lg font-semibold tracking-[-0.012em] text-ink">Settings</span>
-            </div>
-          </div>
+        {/* Left column is ONE continuous sidebar: "Settings" is its header, the
+            nav lives directly beneath it — not a title floating above a detached
+            card. Spans both grid rows so the sidebar is full-height. The active
+            section's title heads the content column on the right. */}
+        <aside className="settings-sidebar-card col-start-1 row-span-2 m-2 flex min-h-0 flex-col overflow-hidden px-2.5">
+          <h2 className="select-none px-2 pt-2.5 pb-2.5 text-lg font-semibold tracking-[-0.012em] text-ink">
+            Settings
+          </h2>
           <Tabs
             value={active}
             onChange={(v) => setActive(v as TabId)}
             variant="plain"
             orientation="vertical"
-            className="gap-px px-2.5 pt-2 pb-3 overflow-y-auto scroll-thin scroll-fade-bottom"
+            className="gap-px pb-2 overflow-y-auto scroll-thin scroll-fade-bottom"
           >
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -131,19 +126,19 @@ export function SettingsModal() {
           </Tabs>
         </aside>
 
-        <div className="relative min-h-0 min-w-0">
-          <header className="modal-header absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2">
-            <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
-              <BlurSwap swapKey={active} className="justify-items-start">
-                {TABS.find((t) => t.id === active)?.label}
-              </BlurSwap>
-            </div>
-            <IconButton onClick={close} disabled={saving} aria-label="Close">
-              <X size={ICON.SM} strokeWidth={2} />
-            </IconButton>
-          </header>
+        <header className="modal-header col-start-2 row-start-1 flex items-start justify-between gap-2">
+          <div className="min-w-0 text-lg font-semibold tracking-[-0.012em] text-ink">
+            <BlurSwap swapKey={active} className="justify-items-start">
+              {TABS.find((t) => t.id === active)?.label}
+            </BlurSwap>
+          </div>
+          <IconButton onClick={close} disabled={saving} aria-label="Close">
+            <X size={ICON.SM} strokeWidth={2} />
+          </IconButton>
+        </header>
 
-          <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-[var(--modal-header-h)] pb-4">
+        <div className="col-start-2 row-start-2 relative min-h-0 min-w-0">
+          <div className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-thin px-5 pt-1 pb-4">
             <ScrollFadeTop />
             <TabPanels value={active} direction={direction} className="pt-1">
               {active === "connection" && (

@@ -1,11 +1,13 @@
 import { motion } from "motion/react";
-import { Sparkles } from "lucide-react";
+import { Settings, Sparkles } from "lucide-react";
 import { useStore } from "@/stores";
-import { EASE_DECELERATE, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
+import { Button } from "@/components/ui/Button";
+import { EASE_DECELERATE, MOTION, RISE_IN, RISE_SETTLED, originFromEvent } from "@/lib/tokens/motion";
 import { ICON } from "@/lib/icons";
 
 export function HomeHero() {
   const connected = useStore((s) => s.connected);
+  const openSettings = useStore((s) => s.openSettings);
   return (
     <motion.div
       initial={RISE_IN}
@@ -29,6 +31,16 @@ export function HomeHero() {
             : "Open settings to point ntrp at your server."}
         </p>
       </div>
+      {!connected && (
+        <Button
+          variant="secondary"
+          size="md"
+          leadingIcon={Settings}
+          onClick={(e) => openSettings(originFromEvent(e.currentTarget), "connection")}
+        >
+          Open settings
+        </Button>
+      )}
     </motion.div>
   );
 }

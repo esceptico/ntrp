@@ -96,7 +96,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         disabled={disabled}
         title={cancelling ? "Cancelling…" : "Cancel"}
         aria-label="Cancel queued message"
-        className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-[color,background-color,scale] duration-check ease-out active:scale-[0.92] disabled:opacity-[0.45] disabled:hover:bg-transparent disabled:hover:text-faint"
+        className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97] disabled:opacity-[0.45] disabled:hover:bg-transparent disabled:hover:text-faint"
       >
         <BlurSwap swapKey={cancelling ? "loading" : "delete"} blur={3}>
           {cancelling ? (

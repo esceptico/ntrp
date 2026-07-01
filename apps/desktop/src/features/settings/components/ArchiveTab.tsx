@@ -11,6 +11,7 @@ import { formatRelativePast } from "@/lib/format";
 import { ICON } from "@/lib/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { EmptyNote } from "@/components/ui/EmptyState";
 
 export function ArchiveTab() {
   const archived = useStore((s) => s.archivedSessions);
@@ -41,8 +42,8 @@ export function ArchiveTab() {
           <SearchInput
             value={query}
             onChange={setQuery}
-            placeholder="Filter…"
-            ariaLabel="Filter"
+            placeholder="Search sessions…"
+            ariaLabel="Search sessions"
             showClear
             className="w-[200px] shrink-0"
           />
@@ -50,17 +51,17 @@ export function ArchiveTab() {
       </div>
 
       {filtered === null ? (
-        <div className="flex flex-col gap-1" aria-busy>
+        <div className="flex flex-col gap-1" role="status" aria-label="Loading archived items…">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} height={52} radius={10} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <Empty>
+        <EmptyNote>
           {archived && archived.length > 0
             ? "No matches."
             : "Nothing here. Archived sessions will show up in this view."}
-        </Empty>
+        </EmptyNote>
       ) : (
         // Keyed by query so filter keystrokes swap the list instantly (no
         // exits, no FLIP); restore/delete under a stable query still animates.
@@ -194,14 +195,6 @@ function RowAction({
       {icon}
       {label}
     </button>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid place-items-center min-h-[200px] text-base italic text-muted">
-      {children}
-    </div>
   );
 }
 

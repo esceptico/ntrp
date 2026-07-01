@@ -6,6 +6,8 @@ import { ModelReasoningPicker } from "@/components/ui/ComposerSelectors";
 import { useTimeoutFlag } from "@/lib/hooks";
 import { SettingsConnectionHint, SettingsInlineError } from "@/features/settings/components/SettingsNotice";
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
+import { SettingsTabSkeleton } from "@/features/settings/components/SettingsTabSkeleton";
+import { Button } from "@/components/ui/Button";
 
 type ModelKind = "research_model" | "workflow_model" | "memory_model";
 
@@ -36,7 +38,7 @@ export function ModelsTab() {
 
   if (!cfg) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-sm text-muted">Loading models…</div>;
+    return <SettingsTabSkeleton label="Loading models…" />;
   }
 
   if (!models) {
@@ -45,6 +47,11 @@ export function ModelsTab() {
         <SettingsInlineError
           title="Couldn't load models"
           message="The server is reachable, but the model list did not load."
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void fetchServerConfig()}>
+              Retry
+            </Button>
+          }
         />
         <SettingsConnectionHint
           title="Check provider setup"
@@ -76,9 +83,11 @@ export function ModelsTab() {
         Each chat keeps its own model — switch it from the composer. The default below applies to newly created chats. Research and memory models are for background work.
       </div>
 
-      <div className="flex min-h-5 items-center justify-end">
-        <SaveStatus busy={!!saving} saved={saved} />
-      </div>
+      {(saving || saved) && (
+        <div className="flex justify-end">
+          <SaveStatus busy={!!saving} saved={saved} />
+        </div>
+      )}
 
       <div className="grid divide-y divide-line-soft">
         <Section

@@ -81,7 +81,6 @@ export function AutomationCard({
   };
 
   const remove = async () => {
-    if (!confirm(`Delete "${automation.name}"?`)) return;
     setBusy("delete");
     try {
       await deleteAutomation(automation.task_id);
@@ -160,6 +159,7 @@ export function AutomationCard({
             onClick: remove,
             busy: busy === "delete",
             danger: true,
+            confirm: true,
           } satisfies AgentRunAction,
         ]
       : []),

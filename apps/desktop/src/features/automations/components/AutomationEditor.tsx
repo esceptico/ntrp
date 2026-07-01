@@ -8,7 +8,8 @@ import { PageModal } from "@/components/ui/PageModal";
 import { Callout } from "@/components/ui/Callout";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
-import { SwitchDisclosure } from "@/components/ui/SwitchDisclosure";
+import { SwitchControl } from "@/components/ui/SwitchControl";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ScheduleChip } from "@/features/automations/components/ScheduleChip";
 import type { EditorSeed, FormState } from "@/features/automations/lib/schedule";
@@ -161,20 +162,29 @@ export function AutomationEditor({
                 schedule={form.schedule}
                 onChange={(schedule) => setForm((p) => ({ ...p, schedule }))}
               />
-              <SwitchDisclosure
-                checked={form.auto_approve}
-                onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
-                label="Auto-Approve"
-                aria-label="Auto-Approve"
-              >
-                <p className="m-0 text-xs text-faint leading-[1.4]">
-                  Runs execute without asking for approval first.
-                </p>
-              </SwitchDisclosure>
+              {/* Help text lives in a hover tooltip, not a disclosure below the
+                  switch — the old Collapse grew the whole footer when toggled on. */}
+              <Tooltip label="Runs execute without asking for approval first.">
+                <div
+                  className="inline-flex items-center gap-1.5 px-1 select-none cursor-pointer"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    setForm((p) => ({ ...p, auto_approve: !p.auto_approve }));
+                  }}
+                >
+                  <SwitchControl
+                    size="sm"
+                    checked={form.auto_approve}
+                    onChange={(next) => setForm((p) => ({ ...p, auto_approve: next }))}
+                    aria-label="Auto-Approve"
+                  />
+                  <span className="text-sm text-muted">Auto-Approve</span>
+                </div>
+              </Tooltip>
             </div>
             <div className="flex items-center gap-1">
               <Button
-                variant="quiet"
+                variant="ghost"
                 onClick={onClose}
                 disabled={saving}
               >

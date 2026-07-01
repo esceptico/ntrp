@@ -85,7 +85,7 @@ export function ProviderRow({
 
   return (
     <div className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
-      <div className="flex flex-wrap items-start gap-3 px-3.5 py-2.5">
+      <div className="flex flex-wrap items-start gap-3 px-3.5 py-3">
         <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderIcon connected={provider.connected} />

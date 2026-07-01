@@ -17,11 +17,14 @@ interface ConfirmDeleteButtonProps {
   /** Fired when the countdown arms/disarms — lets a hover-revealed container
    *  stay visible while the countdown is running (so it can be cancelled). */
   onActiveChange?: (active: boolean) => void;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
   className?: string;
 }
 
 const SIZE = {
+  // xs: idle footprint matches a 16px icon-action so it sits flush in a dense
+  // action lane (AgentRunContent); grows to the same labelled countdown.
+  xs: { idle: "w-4 h-4", grown: "h-[22px] px-2 text-xs", icon: 13 },
   sm: { idle: "w-[26px] h-[22px]", grown: "h-[22px] px-2 text-xs", icon: 14 },
   md: { idle: "w-7 h-7", grown: "h-7 px-2.5 text-xs", icon: 16 },
 } as const;

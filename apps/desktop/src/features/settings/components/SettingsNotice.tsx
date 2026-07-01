@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Callout } from "@/components/ui/Callout";
 
 export function SettingsConnectionHint({
@@ -15,6 +16,18 @@ export function SettingsConnectionHint({
   );
 }
 
-export function SettingsInlineError({ title, message }: { title: string; message: string }) {
-  return <Callout tone="bad" title={title}>{message}</Callout>;
+export function SettingsInlineError({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Callout tone="bad" title={title} action={action}>
+      {message}
+    </Callout>
+  );
 }

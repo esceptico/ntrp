@@ -47,7 +47,7 @@ export function ThemeToggle() {
         type="button"
         aria-label="Toggle light and dark"
         onClick={() => setPref("theme", isDark ? "light" : "dark")}
-        className="grid place-items-center w-8 h-8 shrink-0 rounded-lg text-muted hover:text-ink hover:bg-surface-soft/70 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.92]"
+        className="grid place-items-center w-8 h-8 shrink-0 rounded-lg text-muted hover:text-ink hover:bg-surface-soft/70 transition-[color,background-color,scale] duration-check ease-out active:scale-[0.97]"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
           <mask id="theme-moon-mask">

@@ -22,6 +22,7 @@ import {
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Collapse } from "@/components/ui/Collapse";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 
 // <AgentRunRow> — the dense borderless row for the right-sidebar agents hub.
 // The activity trace renders its own coherent agent row (trace/ActivityTrace),
@@ -131,6 +132,10 @@ export interface AgentRunAction {
   busy?: boolean;
   disabled?: boolean;
   danger?: boolean;
+  /** Render as a cancellable countdown ConfirmDeleteButton instead of a plain
+   *  icon button, pinning the hover lane open while armed. For destructive
+   *  actions (the `icon` is ignored — the countdown button draws its own). */
+  confirm?: boolean;
 }
 
 // One icon-action button. Owns its own async-busy state so a fire-and-forget
@@ -222,6 +227,9 @@ export function AgentRunContent({
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // A confirm-action (countdown delete) pins the lane open while armed so the
+  // countdown can't fade out from under the cursor and fire unseen.
+  const [confirmArmed, setConfirmArmed] = useState(false);
 
   // A paused automation must not read green/active: force its dot muted even
   // when the last run completed, and suppress the recent-runs sparkline (whose
@@ -304,7 +312,9 @@ export function AgentRunContent({
             className={clsx(
               "flex items-center gap-2 transition-opacity duration-row",
               hasLane && "group-hover/run:opacity-0 group-focus-within/run:opacity-0",
-              composing && "opacity-0",
+              // composing (send) and confirmArmed (countdown delete) pin the
+              // lane open, so the status cluster must stay hidden to match.
+              (composing || confirmArmed) && "opacity-0",
             )}
           >
             {run.recentStatuses && !paused && <StatusSparkline statuses={run.recentStatuses} />}
@@ -317,7 +327,7 @@ export function AgentRunContent({
             <span
               className={clsx(
                 "absolute inset-y-0 right-0 flex items-center gap-0.5 transition-opacity duration-row ease-out",
-                composing
+                composing || confirmArmed
                   ? "opacity-100"
                   : "opacity-0 pointer-events-none group-hover/run:opacity-100 group-hover/run:pointer-events-auto group-focus-within/run:opacity-100 group-focus-within/run:pointer-events-auto",
               )}
@@ -339,9 +349,28 @@ export function AgentRunContent({
                   <SendHorizontal size={ICON.XS} strokeWidth={2} />
                 </button>
               )}
-              {laneActions.map((action) => (
-                <ActionButton key={action.label} action={action} />
-              ))}
+              {laneActions.map((action) =>
+                action.confirm ? (
+                  // Wrapper swallows the click so arming/cancelling the
+                  // countdown doesn't also fire the row's open handler.
+                  <span
+                    key={action.label}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="contents"
+                  >
+                    <ConfirmDeleteButton
+                      size="xs"
+                      label={action.label}
+                      busy={action.busy}
+                      onConfirm={action.onClick}
+                      onActiveChange={setConfirmArmed}
+                    />
+                  </span>
+                ) : (
+                  <ActionButton key={action.label} action={action} />
+                ),
+              )}
             </span>
           )}
         </span>
@@ -391,7 +420,7 @@ export function AgentRunContent({
             }}
             placeholder="Message this agent…"
             spellCheck={false}
-            className="w-full h-7 px-2 rounded-md bg-surface-soft focus:bg-surface-sunken text-xs text-ink-soft placeholder:text-muted outline-none border border-transparent focus:border-line-soft transition-colors duration-check disabled:opacity-60"
+            className="w-full h-7 px-2 rounded-md bg-surface-soft focus:bg-surface-sunken text-xs text-ink-soft placeholder:text-muted outline-none border border-transparent focus:border-line transition-colors duration-check disabled:opacity-60"
           />
         </div>
       </Collapse>

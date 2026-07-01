@@ -1,13 +1,32 @@
 import { useMemo } from "react";
 import { AnimatePresence } from "motion/react";
+import { CalendarClock } from "lucide-react";
 import { useStore } from "@/stores";
 import type { Automation, AutomationSuggestion } from "@/api/types";
 import { templatesByCategory, type AutomationTemplate } from "@/features/automations/lib/templates";
 import { Button } from "@/components/ui/Button";
+import { Empty } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Tab as TabItem } from "@/components/ui/Tabs";
 import { AutomationCard } from "@/features/automations/components/AutomationCard";
 import { TemplateCard } from "@/features/automations/components/TemplateCard";
 import { SuggestionsSection } from "@/features/automations/components/SuggestionsSection";
+
+/** Designed loading placeholder for the automation lists — card-shaped skeletons
+ *  in the same grid as the real cards, instead of a bare "Loading…" string. */
+function ListLoadingSkeleton() {
+  return (
+    <div
+      className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5"
+      role="status"
+      aria-label="Loading automations…"
+    >
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} height={84} radius={12} />
+      ))}
+    </div>
+  );
+}
 
 export function AutomationTab({
   value,
@@ -47,24 +66,26 @@ export function ActiveList({
   onCreate: () => void;
 }) {
   if (automations === null) {
-    return <div className="text-sm text-muted">Loading…</div>;
+    return <ListLoadingSkeleton />;
   }
   if (automations.length === 0) {
     return (
-      <div className="grid gap-2 max-w-[420px] py-10">
-        <div className="text-md font-medium text-ink">No automations yet.</div>
-        <div className="text-sm text-muted leading-[1.5]">
-          Start from a template, or write a prompt and a schedule from scratch.
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <Button variant="secondary" size="md" onClick={onPickTemplate}>
-            Browse templates
-          </Button>
-          <Button variant="quiet" size="md" onClick={onCreate}>
-            Start from scratch
-          </Button>
-        </div>
-      </div>
+      <Empty
+        icon={CalendarClock}
+        hint="Start from a template, or write a prompt and a schedule from scratch."
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="md" onClick={onPickTemplate}>
+              Browse templates
+            </Button>
+            <Button variant="quiet" size="md" onClick={onCreate}>
+              Start from scratch
+            </Button>
+          </div>
+        }
+      >
+        No automations yet.
+      </Empty>
     );
   }
   return (
@@ -84,16 +105,16 @@ export function ActiveList({
 
 export function SystemList({ automations }: { automations: Automation[] | null }) {
   if (automations === null) {
-    return <div className="text-sm text-muted">Loading…</div>;
+    return <ListLoadingSkeleton />;
   }
   if (automations.length === 0) {
     return (
-      <div className="grid gap-2 max-w-[520px] py-10">
-        <div className="text-md font-medium text-ink">No system automations.</div>
-        <div className="text-sm text-muted leading-[1.5]">
-          Knowledge reflection, retention, and health checks are seeded by the server when memory is enabled.
-        </div>
-      </div>
+      <Empty
+        icon={CalendarClock}
+        hint="Knowledge reflection, retention, and health checks are seeded by the server when memory is enabled."
+      >
+        No system automations.
+      </Empty>
     );
   }
   return (

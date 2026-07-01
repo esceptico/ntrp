@@ -5,6 +5,7 @@ import { getChildAgentResultApi, type ChildAgentResult } from "@/api/agents";
 import { activityItemStatus, extractTask } from "@/lib/agent";
 import { humanizeAgentType } from "@/lib/agentRun";
 import { Markdown } from "@/components/ui/Markdown";
+import { Caption } from "@/components/ui/Caption";
 import { EASE_DECELERATE, MOTION } from "@/lib/tokens/motion";
 import { buildStats, formatAgentUsage } from "@/features/chat/lib/toolViewer";
 import { CopyButton } from "@/features/chat/components/CopyButton";
@@ -76,9 +77,7 @@ export function AgentBody({
     <>
       <section className="grid gap-1.5">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-            Task
-          </h3>
+          <Caption>Task</Caption>
           {item.usage && item.usage.total > 0 && (
             <span className="text-xs text-faint tabular-nums" title="Subagent's own LLM spend (already rolled into the parent's total cost)">
               {formatAgentUsage(item.usage.total, item.cost)}
@@ -92,9 +91,7 @@ export function AgentBody({
 
       <section className="grid gap-1.5">
         <div className="flex items-center gap-2">
-          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-            Result
-          </h3>
+          <Caption>Result</Caption>
           {item.childAgent && (
             <span className="text-xs text-faint" title={item.childAgent.childRunId}>
               {humanizeAgentType(item.childAgent.agentType)} · {item.childAgent.wait ? "awaited" : "detached"}
@@ -114,7 +111,7 @@ export function AgentBody({
           className="min-w-0"
         >
           {resultState === "error" ? (
-            <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-bad">
+            <div role="alert" className="px-3 py-2.5 rounded-[10px] bg-bad-soft border border-bad/15 text-sm text-bad">
               {childResultError}
             </div>
           ) : resultState === "loading" ? (
@@ -140,9 +137,7 @@ export function AgentBody({
       {descendants.length > 0 && (
         <section className="grid gap-1.5 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-              Activity
-            </h3>
+            <Caption>Activity</Caption>
             <span className="text-xs text-faint tabular-nums">
               {stats.total} {stats.total === 1 ? "call" : "calls"}
               {stats.agents > 0 && ` · ${stats.agents} sub-agent${stats.agents === 1 ? "" : "s"}`}

@@ -36,7 +36,7 @@ export function phaseSegmentClass(status: WorkflowPhaseStatus): string {
   if (status === "completed") return "bg-ok";
   if (status === "failed") return "bg-bad";
   if (status === "running") return "bg-accent";
-  return "bg-surface-sunken"; // pending
+  return "bg-line"; // pending — bg-line (not surface-sunken) so segments stay visible on the surface-sunken card; line-soft == surface-sunken in light, so it must be bg-line
 }
 
 const TERMINAL_AGENT = new Set<WorkflowAgent["status"]>([
@@ -172,7 +172,7 @@ export function WorkflowProgressCard({
         }
       }}
       title={workflow.description ?? `${workflow.name ?? "Workflow"} — open`}
-      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line-soft bg-surface-sunken px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line hover:bg-surface-soft active:scale-[0.985]"
+      className="group/workflow flex w-full flex-col gap-1.5 rounded-md border border-line bg-surface-sunken px-2.5 py-2 text-left cursor-pointer transition-[background-color,border-color,scale] duration-row ease-out hover:border-line-strong hover:bg-surface-soft active:scale-[0.985]"
     >
       <div className="flex min-w-0 items-center gap-2">
         <span

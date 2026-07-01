@@ -7,7 +7,7 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ArrowUp, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
 import {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
@@ -22,6 +22,7 @@ import { BlurSwap } from "@/components/ui/BlurSwap";
 import { IconButton } from "@/components/ui/IconButton";
 import { radioGroupKeyDown } from "@/components/ui/RadioGroup";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { ACCENT_PALETTES, type AccentPalette } from "@/lib/palettes";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "comet", label: "Comet", hint: "Single arc travels around the rim" },
@@ -46,7 +47,11 @@ export function AppearanceTab() {
   const thinking = useStore((s) => s.prefs.thinkingAnimation);
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
+  const accent = useStore((s) => s.prefs.accent);
   const setPref = useStore((s) => s.setPref);
+
+  const onAccentKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) =>
+    radioGroupKeyDown(e, accent, (v) => setPref("accent", v));
 
   // The variant cards are a bespoke preview-card grid (RadioGroup's row-list +
   // radio dot don't fit), but the roving keyboard is the SHARED radioGroupKeyDown
@@ -75,6 +80,31 @@ export function AppearanceTab() {
             </SegmentedControl>
           }
         />
+      </section>
+
+      <section className="surface-rail">
+        <div className="px-4 py-3.5">
+          <div className="text-base font-medium text-ink tracking-[-0.005em]">Accent</div>
+          <div className="text-sm text-muted mt-0.5 leading-snug">
+            The single hue for links, active states, and controls. Surfaces, text,
+            status, and code stay neutral.
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Accent palette"
+            onKeyDown={onAccentKeyDown}
+            className="mt-3.5 flex flex-wrap gap-2.5"
+          >
+            {ACCENT_PALETTES.map((p) => (
+              <AccentSwatch
+                key={p.id}
+                palette={p}
+                selected={accent === p.id}
+                onSelect={() => setPref("accent", p.id)}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="surface-rail divide-y divide-line-soft/50">
@@ -263,6 +293,46 @@ function SettingRow({
       </div>
       <div className="shrink-0 max-w-full">{control}</div>
     </div>
+  );
+}
+
+/** One accent-palette swatch. Split diagonally into the palette's light and
+ *  dark accents so it stays legible on either theme's surface; the selected
+ *  check uses `mix-blend-difference` to invert against whatever it sits on. */
+function AccentSwatch({
+  palette,
+  selected,
+  onSelect,
+}: {
+  palette: AccentPalette;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={palette.name}
+      title={palette.name}
+      data-value={palette.id}
+      tabIndex={selected ? 0 : -1}
+      onClick={onSelect}
+      className={clsx(
+        "relative grid place-items-center w-9 h-9 rounded-full outline-none transition-[scale] duration-check ease-out active:scale-[0.9]",
+        "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+        selected
+          ? "ring-2 ring-ink ring-offset-2 ring-offset-surface"
+          : "ring-1 ring-inset ring-line-strong/40 hover:scale-[1.08]",
+      )}
+      style={{
+        background: `linear-gradient(135deg, ${palette.light.accent} 0 50%, ${palette.dark.accent} 50% 100%)`,
+      }}
+    >
+      {selected && (
+        <Check size={ICON.SM} strokeWidth={3} className="text-white mix-blend-difference" />
+      )}
+    </button>
   );
 }
 
