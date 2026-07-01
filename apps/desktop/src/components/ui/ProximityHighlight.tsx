@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { EXIT_FAST, MOTION, SPRING_POPOVER } from "@/lib/tokens/motion";
+import { EXIT_FAST, MOTION, SPRING_PROXIMITY } from "@/lib/tokens/motion";
 
 type Rect = { top: number; height: number };
 
@@ -19,7 +19,7 @@ const SECTION_GAP = 14;
  * Owns all three behaviours so they stay consistent everywhere — change them
  * HERE, never in a consumer:
  *   - fill: `bg-ink/[0.08]` (reads on any surface, both themes)
- *   - speed: SPRING_POPOVER (≈ FF spring.moderate; snappy, slight bounce)
+ *   - speed: SPRING_PROXIMITY (tracks the pointer near-instantly, no lag)
  *   - section-aware: cross-fades across a gap (bumps the AnimatePresence key)
  *     instead of sliding over a header/divider; adjacent rows still slide.
  *
@@ -57,7 +57,7 @@ export function ProximityHighlight({
           initial={{ opacity: 0, top: rect.top, height: rect.height }}
           animate={{ opacity: 1, top: rect.top, height: rect.height }}
           exit={{ opacity: 0, transition: EXIT_FAST }}
-          transition={{ ...SPRING_POPOVER, opacity: { duration: MOTION.fast } }}
+          transition={{ ...SPRING_PROXIMITY, opacity: { duration: MOTION.fast } }}
         />
       )}
     </AnimatePresence>

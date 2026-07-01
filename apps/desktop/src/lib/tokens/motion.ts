@@ -28,6 +28,10 @@ export const SPRING_TAP = { type: "spring", stiffness: 380, damping: 30, mass: 1
 export const SPRING_LAYOUT = { type: "spring", stiffness: 220, damping: 28, mass: 1 } as const;
 /** Popover / menu reveal — origin-anchored, snappy with a hint of bounce. */
 export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mass: 1 } as const;
+/** Traveling proximity-hover highlight (ProximityHighlight). Should track the
+ *  pointer near-instantly — much higher stiffness than POPOVER and heavy
+ *  damping so it snaps to the hovered row with no floaty lag or overshoot. */
+export const SPRING_PROXIMITY = { type: "spring", stiffness: 700, damping: 42, mass: 0.7 } as const;
 /** Row settles — Control Center–style spring for sibling-row entrances.
  *  Used by `TurnGroup`'s work-block stagger. Snappier than SPRING_MODAL;
  *  livelier than SPRING_MODAL. */
