@@ -2,12 +2,13 @@ import clsx from "clsx";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
 import { useTimeoutFlag } from "@/lib/hooks";
+import { copyText } from "@/lib/clipboard";
 import { ICON } from "@/lib/icons";
 
 export function CopyButton({ getValue }: { getValue: () => string }) {
   const [copied, flashCopied] = useTimeoutFlag(1200);
   const onCopy = async () => {
-    if (await window.ntrpDesktop?.clipboard?.writeText(getValue())) {
+    if (await copyText(getValue())) {
       flashCopied();
     }
   };

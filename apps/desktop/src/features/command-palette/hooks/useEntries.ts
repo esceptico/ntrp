@@ -30,6 +30,7 @@ import { runBuiltinCommand } from "@/actions/builtins";
 import { toggleAuto } from "@/actions/loops";
 import { compactSessionApi } from "@/api/core";
 import { formatRelativePast } from "@/lib/format";
+import { copyText } from "@/lib/clipboard";
 import { lastAssistantId } from "@/features/command-palette/lib/filter";
 import { buildProviderView, buildThemeView } from "@/features/command-palette/lib/views";
 import type { CommandEntry } from "@/features/command-palette/types";
@@ -215,7 +216,7 @@ export function useEntries(): CommandEntry[] {
         hint: currentSessionId.slice(0, 8),
         icon: Copy,
         run: async () => {
-          await window.ntrpDesktop?.clipboard?.writeText(currentSessionId);
+          await copyText(currentSessionId);
         },
         search: "copy session id identifier",
       });

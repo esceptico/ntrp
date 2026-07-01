@@ -142,7 +142,11 @@ export function PageModal({
             onClick={(e) => e.stopPropagation()}
           >
             {header && (
-              <header className="modal-header flex items-start justify-between gap-3">
+              // min-w-0: the header is a grid item (min-width:auto by default),
+              // so a long, nowrap title/subtitle would expand it past the panel
+              // and shove the close button off-screen (clipped by overflow-hidden)
+              // instead of letting the inner truncate engage.
+              <header className="modal-header flex items-start justify-between gap-3 min-w-0">
                 <div className="min-w-0">
                   <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
                     {header.title}

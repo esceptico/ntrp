@@ -525,6 +525,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .modal-header {
   /* top | inline (= px-5) | bottom (= pb-3) */
   padding: var(--modal-header-pt) 1.25rem 0.75rem;
+  /* Headers are grid items (min-width:auto by default); without this a long
+     nowrap title/subtitle expands the header past the panel and its close
+     button gets clipped by the panel's overflow-hidden. Every .modal-header
+     inherits the guard, so per-modal min-w-0 isn't required. */
+  min-width: 0;
 }
 
 /* One icon-column template for every settings nav element — the tab rows

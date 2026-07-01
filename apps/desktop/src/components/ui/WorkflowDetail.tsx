@@ -5,6 +5,7 @@ import { ChevronDown, Code2 } from "lucide-react";
 import { ICON } from "@/lib/icons";
 import { DISSOLVE_OUT, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { useTimeTicker, useTimeoutFlag } from "@/lib/hooks";
+import { copyText } from "@/lib/clipboard";
 import { formatDuration } from "@/lib/agentRun";
 import { switchSession } from "@/actions/sessions";
 import { useStore } from "@/stores";
@@ -90,7 +91,7 @@ function WorkflowSource({ parentToolCallId }: { parentToolCallId?: string }) {
   if (!script) return null;
 
   const onCopy = async () => {
-    if (await window.ntrpDesktop?.clipboard?.writeText(script)) flashCopied();
+    if (await copyText(script)) flashCopied();
   };
 
   return (

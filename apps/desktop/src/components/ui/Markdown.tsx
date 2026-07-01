@@ -6,6 +6,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
+import { copyText } from "@/lib/clipboard";
 import clsx from "clsx";
 import bash from "highlight.js/lib/languages/bash";
 import javascript from "highlight.js/lib/languages/javascript";
@@ -223,30 +224,10 @@ function CopyButton({ text }: { text: string }) {
   const [copied, flashCopied] = useTimeoutFlag(1200);
 
   const onClick = async () => {
-    // Prefer the Electron bridge (same path every other copy button uses).
-    // navigator.clipboard.writeText silently resolves without writing in this
-    // webview, so it can't be trusted as the primary path.
-    if (await window.ntrpDesktop?.clipboard?.writeText(text)) {
-      flashCopied();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // Last-resort fallback for restrictive contexts: legacy execCommand.
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand("copy");
-      } finally {
-        document.body.removeChild(ta);
-      }
-    }
-    flashCopied();
+    // Only flash "Copied" when the text actually landed — copyText uses
+    // execCommand (a real success signal) rather than trusting
+    // navigator.clipboard, which resolves without writing in this webview.
+    if (await copyText(text)) flashCopied();
   };
 
   return (

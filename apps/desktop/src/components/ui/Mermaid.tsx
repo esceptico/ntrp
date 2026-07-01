@@ -13,6 +13,7 @@ import {
   RISE_SETTLED,
 } from "@/lib/tokens/motion";
 import { useEscapeKey, useTimeoutFlag } from "@/lib/hooks";
+import { copyText } from "@/lib/clipboard";
 import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { CopyGlyph } from "@/components/ui/CopyGlyph";
@@ -164,8 +165,7 @@ function PanelInner({
   const dragRef = useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
 
   const onCopy = async () => {
-    await window.ntrpDesktop?.clipboard?.writeText(source);
-    flashCopied();
+    if (await copyText(source)) flashCopied();
   };
 
   // Inject the SVG once, capture natural size, fit-to-view.
@@ -352,8 +352,7 @@ function computeFit(surface: HTMLElement, natural: { w: number; h: number }): Vi
 function MermaidErrorBlock({ source, message }: { source: string; message: string }) {
   const [copied, flashCopied] = useTimeoutFlag(1200);
   const onCopy = async () => {
-    await window.ntrpDesktop?.clipboard?.writeText(source);
-    flashCopied();
+    if (await copyText(source)) flashCopied();
   };
   return (
     <div className="my-[0.6em] px-3.5 py-3 border border-bad/20 rounded-xl bg-bad-soft">

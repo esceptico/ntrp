@@ -1,22 +1,12 @@
 import { useState } from "react";
 import { GhostBtn } from "@/features/memory/components/shared";
+import { copyText } from "@/lib/clipboard";
 
 export function CopyPath({ path }: { path: string }) {
   const [state, setState] = useState<"idle" | "copied" | "unavailable">("idle");
 
   const copy = async () => {
-    let ok = false;
-    try {
-      // Electron's native clipboard (main process) — unlike navigator.clipboard
-      // it doesn't fail when the document isn't focused.
-      ok = (await window.ntrpDesktop?.clipboard?.writeText(path)) ?? false;
-      if (!ok && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(path);
-        ok = true;
-      }
-    } catch {
-      ok = false;
-    }
+    const ok = await copyText(path);
     setState(ok ? "copied" : "unavailable");
     window.setTimeout(() => setState("idle"), 1200);
   };

@@ -111,9 +111,12 @@ export function ToolViewer() {
           ) : (
             live?.kind
           ),
+        // Friendly name only (e.g. "list_issues (linear)") — NOT the full
+        // call signature. The args are already shown in the Input section
+        // below, so repeating them here as `label(arg=…, arg=…)` is redundant.
         subtitle:
-          live && !isAgent(live) && live.target && live.target !== live.kind
-            ? live.target
+          live && !isAgent(live) && live.displayName && live.displayName !== live.kind
+            ? live.displayName
             : undefined,
         actions:
           canStopSubagent && live ? (

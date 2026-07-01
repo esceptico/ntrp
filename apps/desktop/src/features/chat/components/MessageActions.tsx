@@ -7,6 +7,7 @@ import { branchAtMessage } from "@/actions/sessions";
 import { ICON } from "@/lib/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { useTimeoutFlag } from "@/lib/hooks";
+import { copyText } from "@/lib/clipboard";
 
 function formatMessageTime(ms: number): string {
   const d = new Date(ms);
@@ -33,8 +34,9 @@ export function MessageActions({ id, role }: { id: string; role: "user" | "assis
   async function copy() {
     const message = useStore.getState().messages.get(id);
     if (!message) return;
-    await window.ntrpDesktop?.clipboard?.writeText(message.content);
-    flashCopied();
+    // Only flash "Copied" if it actually landed — the bare bridge call would
+    // resolve to undefined (no copy) yet still flash when the bridge is down.
+    if (await copyText(message.content)) flashCopied();
   }
 
   function edit() {
