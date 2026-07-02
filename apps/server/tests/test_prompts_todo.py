@@ -32,6 +32,6 @@ def test_build_system_blocks_omits_todo_block_when_no_override():
 def test_build_system_blocks_native_deferred_prompt_omits_group_loader():
     text = _text(build_system_blocks(source_details={}, native_deferred_tools=True))
 
-    assert "native tool search" in text
+    assert "tool_search" in text
     assert "load_tools" not in text
     assert "load the relevant group" not in text

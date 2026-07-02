@@ -4,7 +4,17 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel
 
-from ntrp.agent import Agent, ProviderToolCall, Result, StopReason, Usage
+from ntrp.agent import (
+    Agent,
+    Choice,
+    CompletionResponse,
+    FinishReason,
+    Message,
+    ProviderToolCall,
+    Result,
+    StopReason,
+    Usage,
+)
 from ntrp.agent.model_request import ModelRequest, apply_model_request_middlewares
 from ntrp.agent.types.tool_choice import ToolChoiceMode
 from ntrp.context.models import SessionState
@@ -25,6 +35,7 @@ from ntrp.tools.deferred import (
     build_deferred_tools_prompt_for_schemas,
     build_native_deferred_tools_prompt_for_schemas,
     load_tools_tool,
+    tool_search_tool,
 )
 from ntrp.tools.executor import ToolExecutor
 from tests.helpers import MockCompletionClient, MockLLMClient, make_text_response, make_tool_response
@@ -50,6 +61,7 @@ async def fake_echo(execution: ToolExecution, args: SearchInput) -> ToolResult:
 def _registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register("load_tools", load_tools_tool, source="_system")
+    registry.register("tool_search", tool_search_tool, source="_system")
     registry.register(
         "echo",
         tool(
@@ -386,9 +398,32 @@ async def test_deferred_middleware_uses_native_loading_for_supported_models():
     deferred_names = {t["function"]["name"] for t in prepared.deferred_tools}
 
     assert "load_tools" not in names
+    assert "tool_search" in names
     assert "echo" in names
     assert "slack_search" not in names
     assert "slack_search" in deferred_names
+
+
+@pytest.mark.asyncio
+async def test_tool_search_loads_exact_deferred_names():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+
+    result = await registry.execute(
+        "tool_search",
+        ToolExecution(tool_id="call_search", tool_name="tool_search", ctx=ctx),
+        {"query": "select:slack_search"},
+    )
+
+    assert not result.is_error
+    assert "slack_search" in run.loaded_tools
+    assert "Loaded 1 deferred tool(s)" in result.content
 
 
 @pytest.mark.asyncio
@@ -432,6 +467,52 @@ async def test_agent_load_tools_reveals_slack_on_next_model_step():
     assert "load_tools" in first_tools
     assert "slack_search" not in first_tools
     assert "load_tools" in second_tools
+    assert "slack_search" in second_tools
+
+
+@pytest.mark.asyncio
+async def test_agent_tool_search_reveals_slack_on_next_native_model_step():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    executor = _Executor(registry)
+    llm = MockCompletionClient(
+        [
+            make_tool_response("tool_search", {"query": "select:slack_search"}, call_id="call_search", model="gpt-5.5"),
+            make_tool_response("slack_search", {"query": "hello"}, call_id="call_slack", model="gpt-5.5"),
+            make_text_response("done", model="gpt-5.5"),
+        ]
+    )
+    agent = Agent(
+        tools=registry.get_schemas(),
+        client=MockLLMClient(llm),
+        executor=NtrpToolExecutor(executor, ctx),
+        model="gpt-5.5",
+        model_request_middlewares=(
+            DeferredToolsModelRequestMiddleware(
+                registry=registry,
+                run=run,
+                get_services=lambda: ctx.services,
+            ),
+        ),
+    )
+
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}])
+
+    assert result.text == "done"
+    assert "slack_search" in run.loaded_tools
+    first_tools = {t["function"]["name"] for t in llm.calls[0]["tools"]}
+    first_deferred = {t["function"]["name"] for t in llm.calls[0]["deferred_tools"]}
+    second_tools = {t["function"]["name"] for t in llm.calls[1]["tools"]}
+    assert "tool_search" in first_tools
+    assert "load_tools" not in first_tools
+    assert "slack_search" not in first_tools
+    assert "slack_search" in first_deferred
     assert "slack_search" in second_tools
 
 
@@ -546,6 +627,68 @@ async def test_agent_marks_provider_searched_deferred_tools_loaded_for_next_step
     assert "read_email" in run.loaded_tools
     second_tools = {t["function"]["name"] for t in llm.calls[1]["tools"]}
     assert "read_email" in second_tools
+
+
+@pytest.mark.asyncio
+async def test_agent_continues_after_provider_only_tool_search_loads_names():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    executor = _Executor(registry)
+    first = CompletionResponse(
+        choices=[
+            Choice(
+                message=Message(
+                    role="assistant",
+                    content=None,
+                    tool_calls=None,
+                    reasoning_content=None,
+                    provider_tool_calls=[
+                        ProviderToolCall(
+                            id="tsc_1",
+                            name="tool_search",
+                            arguments='{"tools":["slack_search"]}',
+                            result="Matched tools: slack_search",
+                        )
+                    ],
+                ),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ],
+        usage=Usage(),
+        model="gpt-5.5",
+    )
+    llm = MockCompletionClient(
+        [
+            first,
+            make_tool_response("slack_search", {"query": "hello"}, call_id="call_slack", model="gpt-5.5"),
+            make_text_response("done", model="gpt-5.5"),
+        ]
+    )
+    agent = Agent(
+        tools=registry.get_schemas(),
+        client=MockLLMClient(llm),
+        executor=NtrpToolExecutor(executor, ctx),
+        model="gpt-5.5",
+        model_request_middlewares=(
+            DeferredToolsModelRequestMiddleware(
+                registry=registry,
+                run=run,
+                get_services=lambda: ctx.services,
+            ),
+        ),
+    )
+
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "search slack"}])
+
+    assert result.text == "done"
+    assert "slack_search" in run.loaded_tools
+    assert "slack_search" in {t["function"]["name"] for t in llm.calls[1]["tools"]}
 
 
 @pytest.mark.asyncio
@@ -733,7 +876,8 @@ def test_native_deferred_prompt_lists_exact_tool_names_without_group_loader():
     )
 
     assert prompt is not None
-    assert "native tool search" in prompt
+    assert "tool_search" in prompt
+    assert 'tool_search(query="select:slack_search")' in prompt
     assert "slack_search" in prompt
     assert "load_tools" not in prompt
     assert "load_group" not in prompt

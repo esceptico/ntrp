@@ -164,6 +164,38 @@ def test_responses_request_uses_native_deferred_tool_search():
     assert deferred["defer_loading"] is True
 
 
+def test_responses_request_allows_visible_tool_search_loader_with_native_deferred_tools():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[{"role": "user", "content": "search slack"}],
+        model="gpt-5.5",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "tool_search",
+                    "description": "Search Tools",
+                    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+                },
+            }
+        ],
+        deferred_tools=[
+            {"type": "function", "function": {"name": "slack_search", "parameters": {"type": "object"}}}
+        ],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    function_loader = next(tool for tool in request["tools"] if tool.get("name") == "tool_search")
+    assert function_loader["type"] == "function"
+    assert {"type": "tool_search"} in request["tools"]
+    assert next(tool for tool in request["tools"] if tool.get("name") == "slack_search")["defer_loading"] is True
+
+
 def test_responses_deferred_tool_search_preserves_prompt_cache_key():
     client = OpenAIClient(api_key="test")
 

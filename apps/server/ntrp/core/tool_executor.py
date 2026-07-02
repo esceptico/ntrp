@@ -7,8 +7,8 @@ from judgeval import Tracer
 
 from ntrp import logging
 from ntrp.agent import ToolMeta, ToolResult
-from ntrp.agent.types.tool_presentation import tool_presentation
 from ntrp.agent.ledger import SharedLedger, access_key, format_arguments
+from ntrp.agent.types.tool_presentation import tool_presentation
 from ntrp.constants import (
     DEFAULT_EXTERNAL_TOOL_TIMEOUT_SECONDS,
     OFFLOAD_PREVIEW_CHARS,
@@ -67,7 +67,11 @@ class NtrpToolExecutor:
                 preview="Unknown tool",
             )
 
-        if self._ctx.run.allowed_tool_names is not None and name not in self._ctx.run.allowed_tool_names:
+        if (
+            self._ctx.run.allowed_tool_names is not None
+            and name not in self._ctx.run.allowed_tool_names
+            and not (name == "tool_search" and self._ctx.run.deferred_tools_enabled)
+        ):
             return ToolResult(
                 content=f"Tool {name!r} is not available in this run. Use only tools exposed in the system prompt.",
                 preview="Tool not allowed",
@@ -82,7 +86,7 @@ class NtrpToolExecutor:
             return ToolResult(
                 content=(
                     f"Tool {name!r} is deferred and has not been loaded in this run. "
-                    f"Call load_tools(names=[{name!r}]) or load_tools(group=...) first, then retry."
+                    f"Call tool_search(query='select:{name}') first, then retry."
                 ),
                 preview="Tool not loaded",
                 is_error=True,

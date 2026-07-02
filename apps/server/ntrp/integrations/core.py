@@ -26,7 +26,7 @@ from ntrp.tools.background import (
     send_to_agent_tool,
 )
 from ntrp.tools.bash import bash_tool
-from ntrp.tools.deferred import load_tools_tool
+from ntrp.tools.deferred import load_tools_tool, tool_search_tool
 from ntrp.tools.directives import set_directives_tool
 from ntrp.tools.files import (
     edit_file_tool,
@@ -78,6 +78,7 @@ SYSTEM = Integration(
         "save_workflow": save_workflow_tool,
         "background": background_tool,
         "load_tools": load_tools_tool,
+        "tool_search": tool_search_tool,
     },
 )
 

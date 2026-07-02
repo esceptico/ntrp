@@ -207,6 +207,11 @@ class Agent:
                     return
 
                 if not response_message.tool_calls:
+                    if self._mark_provider_loaded_tools(response_message.provider_tool_calls or [], step_deferred_tools):
+                        step += 1
+                        if self.hooks.on_step_finish:
+                            await self.hooks.on_step_finish(step, self._last_response, messages)
+                        continue
                     # A user message may have arrived during this LLM turn.
                     # Drain it before declaring the run finished so the agent
                     # can respond to it instead of stranding it.
@@ -302,6 +307,21 @@ class Agent:
         if messages is not None and reason != StopReason.END_TURN and not text.strip():
             text = self._fallback_result_text(messages, reason) or text
         return Result(text=text, stop_reason=reason, steps=step, usage=self._usage)
+
+    def _mark_provider_loaded_tools(
+        self,
+        provider_tool_calls: Sequence[ProviderToolCall],
+        deferred_tools: list[dict] | None,
+    ) -> set[str]:
+        if not deferred_tools or not hasattr(self._executor, "mark_provider_loaded_tools"):
+            return set()
+        deferred_names = {name for tool in deferred_tools if (name := _tool_name(tool))}
+        loaded_names: set[str] = set()
+        for provider_call in provider_tool_calls:
+            loaded_names.update(_provider_loaded_tool_names(provider_call) & deferred_names)
+        if loaded_names:
+            self._executor.mark_provider_loaded_tools(loaded_names)
+        return loaded_names
 
     def _fallback_result_text(self, messages: list[dict], reason: StopReason) -> str:
         tool_outputs = [str(msg.get("content") or "").strip() for msg in messages if msg.get("role") == Role.TOOL]

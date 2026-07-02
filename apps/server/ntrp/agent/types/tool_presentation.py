@@ -22,6 +22,7 @@ _BY_NAME: dict[str, tuple[str, str | None]] = {
     "current_time": ("clock", None),
     "render_html": ("image", None),
     "load_tools": ("wrench", None),
+    "tool_search": ("search", "tool"),
     "notify": ("bell", None),
     "update_todos": ("list", None),
     # Web

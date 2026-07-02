@@ -109,11 +109,13 @@ Connected MCP servers:
 {% endif %}""")
 
 _NATIVE_DEFERRED_TOOLS_TEMPLATE = _env.from_string("""Some integration/action tools are deferred to reduce prompt noise. Use native tool search by exact tool name before calling these tools. For direct requests about email, calendar, Slack, automations, notifications, directives, file edits, or MCP-backed apps, search the relevant listed names before using memory, local files, or current_time unless the user asked for those sources.
+MANDATORY PREREQUISITE: call `tool_search(query="select:<tool_name>")` before calling a listed deferred tool. Loading tools does not execute them; it only makes selected tools callable on the next model step. Do not use filesystem/time/no-op tool calls to discover or unlock deferred tools.
 
 {% for group in groups %}
 <native_deferred_tool_group name="{{ group.label }}">
 {{ group.description }}
 Tool names: {{ group.tool_names | join(", ") }}.
+Load exact names with `tool_search(query="select:{{ group.tool_names[0] }}")`.
 </native_deferred_tool_group>
 {% if not loop.last or mcp_servers %}
 
@@ -359,6 +361,13 @@ class LoadToolsInput(BaseModel):
         return self
 
 
+class ToolSearchInput(BaseModel):
+    query: str = Field(
+        description='Query to find deferred tools. Use "select:<tool_name>" for direct selection.',
+    )
+    max_results: int = Field(default=5, ge=1, le=25, description="Maximum number of matches to load.")
+
+
 def _names_for_group(
     group: str,
     registry: ToolRegistry,
@@ -402,6 +411,64 @@ def _dedupe(names: list[str]) -> list[str]:
             seen.add(name)
             out.append(name)
     return out
+
+
+def _select_tool_names(query: str, available: list[str]) -> list[str] | None:
+    match = query.strip()
+    if not match.lower().startswith("select:"):
+        return None
+    selected = [name.strip() for name in match.split(":", 1)[1].split(",") if name.strip()]
+    available_set = set(available)
+    return [name for name in _dedupe(selected) if name in available_set]
+
+
+def _search_tool_names(
+    query: str,
+    registry: ToolRegistry,
+    capabilities: frozenset[str],
+    *,
+    allowed_names: set[str] | None,
+    max_results: int,
+) -> list[str]:
+    catalog = build_deferred_catalog(registry, capabilities, allowed_names=allowed_names)
+    available = sorted({name for names in catalog.by_group.values() for name in names})
+    selected = _select_tool_names(query, available)
+    if selected is not None:
+        return selected[:max_results]
+
+    normalized = query.strip().lower()
+    if not normalized:
+        return []
+
+    exact = [name for name in available if name.lower() == normalized]
+    if exact:
+        return exact[:max_results]
+
+    tokens = [token for token in normalized.replace("_", " ").replace("-", " ").split() if token]
+    if not tokens:
+        return []
+
+    scored: list[tuple[int, str]] = []
+    for name in available:
+        source = registry.get_source(name) or ""
+        tool_obj = registry.get(name)
+        description = " ".join((tool_obj.description if tool_obj else "").lower().split())
+        name_text = name.lower().replace("_", " ").replace("-", " ")
+        score = 0
+        for token in tokens:
+            if token in name_text.split():
+                score += 10
+            elif token in name_text:
+                score += 5
+            if token == source.lower():
+                score += 4
+            if token in description:
+                score += 2
+        if score:
+            scored.append((score, name))
+
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [name for _, name in scored[:max_results]]
 
 
 async def load_tools(execution: ToolExecution, args: LoadToolsInput) -> ToolResult:
@@ -481,6 +548,20 @@ async def load_tools(execution: ToolExecution, args: LoadToolsInput) -> ToolResu
     return ToolResult(content="\n".join(lines), preview=preview, is_error=is_error)
 
 
+async def tool_search(execution: ToolExecution, args: ToolSearchInput) -> ToolResult:
+    matches = _search_tool_names(
+        args.query,
+        execution.ctx.registry,
+        execution.ctx.capabilities,
+        allowed_names=execution.ctx.run.allowed_tool_names,
+        max_results=args.max_results,
+    )
+    if not matches:
+        return ToolResult(content="No matching deferred tools found.", preview="No matches")
+
+    return await load_tools(execution, LoadToolsInput(names=matches))
+
+
 load_tools_tool = tool(
     display_name="Load Tools",
     description=(
@@ -494,4 +575,17 @@ load_tools_tool = tool(
     input_model=LoadToolsInput,
     policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
     execute=load_tools,
+)
+
+tool_search_tool = tool(
+    display_name="Search Tools",
+    description=(
+        "Fetch full schemas for deferred tools so they can be called. "
+        "MANDATORY PREREQUISITE: use this before calling any deferred tool listed in the DEFERRED TOOLS prompt. "
+        "Use query='select:<tool_name>' for exact names, or keywords to search by name/description. "
+        "Loading tools does not execute them; selected tools become callable on the next model step."
+    ),
+    input_model=ToolSearchInput,
+    policy=ToolPolicy(action=ToolAction.READ, scope=ToolScope.INTERNAL),
+    execute=tool_search,
 )

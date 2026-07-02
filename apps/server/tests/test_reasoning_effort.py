@@ -1,10 +1,11 @@
-import pytest
-from fastapi import HTTPException
 from types import SimpleNamespace
 
-from ntrp.config import Config
+import pytest
+from fastapi import HTTPException
+
 from ntrp.agent import ProviderToolCall
 from ntrp.agent.llm.parsing import normalize_assistant_message
+from ntrp.config import Config
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.models import get_model
 from ntrp.server.routers.settings import _validate_reasoning_patch
@@ -110,6 +111,38 @@ def test_anthropic_request_uses_native_deferred_tool_search():
     assert request["tools"][0] == {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"}
     deferred = next(tool for tool in request["tools"] if tool.get("name") == "slack_search")
     assert deferred["defer_loading"] is True
+
+
+def test_anthropic_request_allows_visible_tool_search_loader_with_native_deferred_tools():
+    client = AnthropicClient(api_key="test")
+
+    _, request = client._prepare(
+        messages=[{"role": "user", "content": "search slack"}],
+        model="claude-opus-4-7",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "tool_search",
+                    "description": "Search Tools",
+                    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+                },
+            }
+        ],
+        deferred_tools=[
+            {"type": "function", "function": {"name": "slack_search", "parameters": {"type": "object"}}}
+        ],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=4096,
+        reasoning_effort=None,
+        response_format=None,
+    )
+
+    assert request["tools"][0] == {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"}
+    function_loader = next(tool for tool in request["tools"] if tool.get("name") == "tool_search")
+    assert function_loader["input_schema"]["properties"]["query"]["type"] == "string"
+    assert next(tool for tool in request["tools"] if tool.get("name") == "slack_search")["defer_loading"] is True
 
 
 def test_anthropic_deferred_tools_do_not_get_cache_control_breakpoints():
