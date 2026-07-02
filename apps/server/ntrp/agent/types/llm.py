@@ -26,6 +26,7 @@ class ProviderToolCall:
     arguments: str = "{}"
     result: str = ""
     done: bool = True
+    provider_item: dict | None = None
 
 
 @dataclass(frozen=True)

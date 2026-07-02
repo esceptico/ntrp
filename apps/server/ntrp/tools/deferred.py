@@ -108,6 +108,27 @@ Connected MCP servers:
 </deferred_tool_group>
 {% endif %}""")
 
+_NATIVE_DEFERRED_TOOLS_TEMPLATE = _env.from_string("""Some integration/action tools are deferred to reduce prompt noise. Use native tool search by exact tool name before calling these tools. For direct requests about email, calendar, Slack, automations, notifications, directives, file edits, or MCP-backed apps, search the relevant listed names before using memory, local files, or current_time unless the user asked for those sources.
+
+{% for group in groups %}
+<native_deferred_tool_group name="{{ group.label }}">
+{{ group.description }}
+Tool names: {{ group.tool_names | join(", ") }}.
+</native_deferred_tool_group>
+{% if not loop.last or mcp_servers %}
+
+{% endif %}
+{% endfor %}
+{% if mcp_servers %}
+<native_deferred_tool_group name="mcp">
+{{ mcp_description }}
+Connected MCP server tools:
+{% for server in mcp_servers %}
+- {{ server.name }}: {{ server.tools_text }}.
+{% endfor %}
+</native_deferred_tool_group>
+{% endif %}""")
+
 
 def is_deferred_tool(name: str, registry: ToolRegistry) -> bool:
     if name in DEFERRED_TOOL_GROUP_BY_NAME:
@@ -268,6 +289,35 @@ def build_deferred_tools_prompt_for_schemas(
     tools: list[dict],
 ) -> str | None:
     return build_deferred_tools_prompt(
+        registry,
+        capabilities,
+        allowed_names=tool_schema_names(tools),
+    )
+
+
+def build_native_deferred_tools_prompt(
+    registry: ToolRegistry,
+    capabilities: frozenset[str],
+    *,
+    allowed_names: set[str] | None = None,
+) -> str | None:
+    catalog = build_deferred_catalog(registry, capabilities, allowed_names=allowed_names)
+    if not catalog.by_group:
+        return None
+
+    return _NATIVE_DEFERRED_TOOLS_TEMPLATE.render(
+        groups=_deferred_prompt_groups(catalog, registry),
+        mcp_description=GROUP_DESCRIPTIONS["mcp"],
+        mcp_servers=_mcp_prompt_servers(catalog),
+    ).strip()
+
+
+def build_native_deferred_tools_prompt_for_schemas(
+    registry: ToolRegistry,
+    capabilities: frozenset[str],
+    tools: list[dict],
+) -> str | None:
+    return build_native_deferred_tools_prompt(
         registry,
         capabilities,
         allowed_names=tool_schema_names(tools),

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from ntrp.agent.llm.parsing import normalize_assistant_message
 from ntrp.agent.types.llm import ProviderToolCall, ToolCallStreamDelta
 from ntrp.llm.openai import OpenAIClient
 from ntrp.llm.openai_responses import (
@@ -183,6 +184,103 @@ def test_responses_deferred_tool_search_preserves_prompt_cache_key():
 
     assert request["prompt_cache_key"] == "session-1"
     assert {"type": "tool_search"} in request["tools"]
+
+
+def test_responses_replays_provider_tool_search_before_loaded_function_call():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[
+            {"role": "user", "content": "read email"},
+            {
+                "role": "assistant",
+                "content": "",
+                "provider_tool_calls": [
+                    {
+                        "id": "tsc_1",
+                        "name": "tool_search",
+                        "arguments": '{"tools":["emails"]}',
+                        "result": "Matched tools: emails",
+                    }
+                ],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "emails", "arguments": '{"days":1}'},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "20 emails"},
+        ],
+        model="gpt-5.5",
+        tools=[{"type": "function", "function": {"name": "current_time", "parameters": {"type": "object"}}}],
+        deferred_tools=[{"type": "function", "function": {"name": "emails", "parameters": {"type": "object"}}}],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    replay = request["input"][1:4]
+    assert replay[0] == {
+        "type": "tool_search_call",
+        "id": "tsc_1",
+        "status": "completed",
+        "arguments": {"tools": ["emails"]},
+    }
+    assert replay[1]["type"] == "function_call"
+    assert replay[1]["name"] == "emails"
+    assert replay[2]["type"] == "function_call_output"
+
+
+def test_responses_replays_stored_provider_tool_search_item_before_loaded_function_call():
+    client = OpenAIClient(api_key="test")
+
+    request = client._prepare_responses(
+        messages=[
+            {"role": "user", "content": "read email"},
+            {
+                "role": "assistant",
+                "content": "",
+                "provider_tool_calls": [
+                    {
+                        "id": "tsc_1",
+                        "name": "tool_search",
+                        "arguments": '{"tools":["emails"]}',
+                        "result": "Matched tools: emails",
+                        "provider_item": {"type": "tool_search_call", "id": "tsc_1", "status": "completed"},
+                    }
+                ],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "emails", "arguments": '{"days":1}'},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "20 emails"},
+        ],
+        model="gpt-5.5",
+        tools=[{"type": "function", "function": {"name": "current_time", "parameters": {"type": "object"}}}],
+        deferred_tools=[{"type": "function", "function": {"name": "emails", "parameters": {"type": "object"}}}],
+        tool_choice="auto",
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="high",
+        response_format=None,
+    )
+
+    assert request["input"][1] == {
+        "type": "tool_search_call",
+        "id": "tsc_1",
+        "status": "completed",
+        "arguments": {"tools": ["emails"]},
+    }
+    assert request["input"][2]["type"] == "function_call"
+    assert request["input"][2]["name"] == "emails"
 
 
 def test_responses_request_skips_native_deferred_tool_search_for_unsupported_model():
@@ -616,6 +714,40 @@ def test_responses_parser_preserves_provider_tool_search_call():
     assert provider_calls[0].name == "tool_search"
     assert provider_calls[0].arguments == '{"query": "slack"}'
     assert provider_calls[0].result == '[{"name": "slack_search"}]'
+    assert provider_calls[0].provider_item == {
+        "type": "tool_search_call",
+        "id": "tsc_1",
+        "query": "slack",
+        "results": [{"name": "slack_search"}],
+        "status": "completed",
+    }
+
+
+def test_responses_normalizes_provider_tool_search_replay_item():
+    message = SimpleNamespace(
+        content=None,
+        tool_calls=None,
+        reasoning_content=None,
+        reasoning_encrypted_content=None,
+        anthropic_content=None,
+        provider_tool_calls=[
+            ProviderToolCall(
+                id="tsc_1",
+                name="tool_search",
+                arguments='{"query":"slack"}',
+                result="Matched tools: slack_search",
+                provider_item={"type": "tool_search_call", "id": "tsc_1", "status": "completed"},
+            )
+        ],
+    )
+
+    normalized = normalize_assistant_message(message)
+
+    assert normalized["provider_tool_calls"][0]["provider_item"] == {
+        "type": "tool_search_call",
+        "id": "tsc_1",
+        "status": "completed",
+    }
 
 
 def test_responses_parser_infers_tool_search_matches_from_function_calls():

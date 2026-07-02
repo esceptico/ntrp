@@ -1,8 +1,8 @@
+import json
+import warnings
 from collections.abc import AsyncGenerator
 from contextlib import contextmanager
-import json
 from typing import Any
-import warnings
 
 import httpx
 import openai
@@ -427,12 +427,18 @@ def _parse_tool_search_call(data: dict[str, Any], *, done: bool = True) -> Provi
     result = data.get("results") or data.get("output") or data.get("tools") or data.get("status") or ""
     if result == "completed":
         result = ""
+    provider_item = dict(data)
+    provider_item["type"] = "tool_search_call"
+    provider_item["id"] = str(call_id)
+    if done:
+        provider_item["status"] = provider_item.get("status") or "completed"
     return ProviderToolCall(
         id=str(call_id),
         name="tool_search",
         arguments=json.dumps({"query": query}, default=str),
         result=_provider_tool_result_text(result),
         done=done,
+        provider_item=provider_item,
     )
 
 
@@ -449,6 +455,7 @@ def _with_tool_search_matches(calls: list[ProviderToolCall], tool_calls: list[To
             arguments=arguments if call.arguments in ('{"query": {}}', '{"query": ""}') else call.arguments,
             result=call.result or result,
             done=True,
+            provider_item=call.provider_item,
         )
         for call in calls
     ]
@@ -460,6 +467,18 @@ def _provider_tool_result_text(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, default=str)
+
+
+def _provider_tool_arguments_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _convert_messages(messages: list[dict]) -> tuple[str | None, list[dict[str, Any]]]:
@@ -527,6 +546,19 @@ def _convert_assistant_message(msg: dict) -> list[dict[str, Any]]:
         items.append({"type": "reasoning", "encrypted_content": encrypted, "summary": []})
     if content := msg.get("content"):
         items.append({"role": "assistant", "content": _content_to_text(content)})
+    for call in msg.get("provider_tool_calls") or []:
+        if call.get("name") == "tool_search":
+            provider_item = call.get("provider_item") or {}
+            items.append(
+                {
+                    "type": "tool_search_call",
+                    "id": provider_item.get("id") or call["id"],
+                    "status": provider_item.get("status") or "completed",
+                    "arguments": _provider_tool_arguments_object(
+                        provider_item.get("arguments") or call.get("arguments")
+                    ),
+                }
+            )
     for tc in msg.get("tool_calls", []):
         fn = tc["function"]
         items.append(

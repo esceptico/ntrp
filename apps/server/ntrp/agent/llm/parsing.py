@@ -37,6 +37,7 @@ def normalize_assistant_message(message: Message) -> dict:
                 "arguments": call.arguments,
                 "result": call.result,
                 "done": call.done,
+                **({"provider_item": call.provider_item} if call.provider_item else {}),
             }
             for call in provider_tool_calls
         ]

@@ -16,7 +16,10 @@ from ntrp.observability import activate_tracing, observed_trace
 from ntrp.server.bus import SessionBus
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ApprovalControls
-from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
+from ntrp.tools.deferred import (
+    build_deferred_tools_prompt_for_schemas,
+    build_native_deferred_tools_prompt_for_schemas,
+)
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
@@ -66,8 +69,12 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
 
     native_deferred_tools = supports_native_deferred_tools(agent_config.model)
     deferred_tools_context = (
-        build_deferred_tools_prompt_for_schemas(executor.registry, frozenset(executor.tool_services), tools)
-        if agent_config.deferred_tools and not native_deferred_tools
+        (
+            build_native_deferred_tools_prompt_for_schemas
+            if native_deferred_tools
+            else build_deferred_tools_prompt_for_schemas
+        )(executor.registry, frozenset(executor.tool_services), tools)
+        if agent_config.deferred_tools
         else None
     )
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None

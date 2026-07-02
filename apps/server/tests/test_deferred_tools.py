@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel
 
-from ntrp.agent import Agent, Result, StopReason, Usage
+from ntrp.agent import Agent, ProviderToolCall, Result, StopReason, Usage
 from ntrp.agent.model_request import ModelRequest, apply_model_request_middlewares
 from ntrp.agent.types.tool_choice import ToolChoiceMode
 from ntrp.context.models import SessionState
@@ -20,7 +20,12 @@ from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.tools.core import ToolAction, ToolPolicy, ToolResult, ToolScope, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.deferred import build_deferred_tools_prompt, build_deferred_tools_prompt_for_schemas, load_tools_tool
+from ntrp.tools.deferred import (
+    build_deferred_tools_prompt,
+    build_deferred_tools_prompt_for_schemas,
+    build_native_deferred_tools_prompt_for_schemas,
+    load_tools_tool,
+)
 from ntrp.tools.executor import ToolExecutor
 from tests.helpers import MockCompletionClient, MockLLMClient, make_text_response, make_tool_response
 
@@ -469,6 +474,81 @@ async def test_agent_accepts_provider_loaded_deferred_tool_call():
 
 
 @pytest.mark.asyncio
+async def test_agent_marks_provider_searched_deferred_tools_loaded_for_next_step():
+    registry = _registry()
+    registry.register(
+        "emails",
+        tool(
+            description="List emails",
+            input_model=SearchInput,
+            policy=READ_EXTERNAL_POLICY,
+            execute=fake_search,
+        ),
+        source="gmail",
+    )
+    registry.register(
+        "read_email",
+        tool(
+            description="Read an email",
+            input_model=SearchInput,
+            policy=READ_EXTERNAL_POLICY,
+            execute=fake_search,
+        ),
+        source="gmail",
+    )
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+    executor = _Executor(registry)
+    first = make_tool_response("emails", {"query": "newer_than:1d"}, call_id="call_emails", model="gpt-5.5")
+    first.choices[0] = replace(
+        first.choices[0],
+        message=replace(
+            first.choices[0].message,
+            provider_tool_calls=[
+                ProviderToolCall(
+                    id="tsc_1",
+                    name="tool_search",
+                    arguments='{"tools":["emails"]}',
+                    provider_item={
+                        "type": "tool_search_call",
+                        "id": "tsc_1",
+                        "status": "completed",
+                        "arguments": {"paths": ["read_email"]},
+                    },
+                )
+            ],
+        ),
+    )
+    llm = MockCompletionClient([first, make_text_response("done", model="gpt-5.5")])
+    agent = Agent(
+        tools=registry.get_schemas(),
+        client=MockLLMClient(llm),
+        executor=NtrpToolExecutor(executor, ctx),
+        model="gpt-5.5",
+        model_request_middlewares=(
+            DeferredToolsModelRequestMiddleware(
+                registry=registry,
+                run=run,
+                get_services=lambda: ctx.services,
+            ),
+        ),
+    )
+
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "read email"}])
+
+    assert result.text == "done"
+    assert "emails" in run.loaded_tools
+    assert "read_email" in run.loaded_tools
+    second_tools = {t["function"]["name"] for t in llm.calls[1]["tools"]}
+    assert "read_email" in second_tools
+
+
+@pytest.mark.asyncio
 async def test_load_tools_can_be_called_again_after_group_is_loaded():
     registry = _registry()
     run = RunContext(run_id="run", deferred_tools_enabled=True)
@@ -641,6 +721,22 @@ def test_deferred_prompt_respects_allowed_tool_schemas():
     assert "notify" not in prompt
     assert "set_directives" not in prompt
     assert "write_file" not in prompt
+
+
+def test_native_deferred_prompt_lists_exact_tool_names_without_group_loader():
+    registry = _registry()
+
+    prompt = build_native_deferred_tools_prompt_for_schemas(
+        registry,
+        frozenset(),
+        registry.get_schemas(names={"echo", "slack_search"}),
+    )
+
+    assert prompt is not None
+    assert "native tool search" in prompt
+    assert "slack_search" in prompt
+    assert "load_tools" not in prompt
+    assert "load_group" not in prompt
 
 
 @pytest.mark.asyncio

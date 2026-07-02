@@ -65,6 +65,24 @@ def _tool_name(tool: dict) -> str | None:
     return name if isinstance(name, str) else None
 
 
+def _provider_loaded_tool_names(call: ProviderToolCall) -> set[str]:
+    names: set[str] = set()
+    for raw in ((call.provider_item or {}).get("arguments"), call.arguments):
+        args = raw
+        if isinstance(raw, str):
+            try:
+                args = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(args, dict):
+            continue
+        for key in ("tools", "paths"):
+            values = args.get(key)
+            if isinstance(values, list):
+                names.update(value for value in values if isinstance(value, str))
+    return names
+
+
 @dataclass
 class RunBudget:
     tool_calls: int = 0
@@ -210,12 +228,16 @@ class Agent:
 
                 calls = parse_tool_calls(response_message.tool_calls)
                 if step_deferred_tools and hasattr(self._executor, "mark_provider_loaded_tools"):
+                    deferred_names = {name for tool in step_deferred_tools if (name := _tool_name(tool))}
+                    loaded_names = {
+                        call.name
+                        for call in calls
+                        if call.name in deferred_names
+                    }
+                    for provider_call in response_message.provider_tool_calls or []:
+                        loaded_names.update(_provider_loaded_tool_names(provider_call) & deferred_names)
                     self._executor.mark_provider_loaded_tools(
-                        {
-                            call.name
-                            for call in calls
-                            if any(_tool_name(tool) == call.name for tool in step_deferred_tools)
-                        }
+                        loaded_names
                     )
                 if self._would_exceed_tool_budget(len(calls)):
                     self._append_budget_denials(messages, response_message.tool_calls, StopReason.MAX_TOOL_CALLS)

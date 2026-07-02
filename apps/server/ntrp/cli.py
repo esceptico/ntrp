@@ -18,7 +18,10 @@ from ntrp.observability import observed_trace
 from ntrp.server.runtime import Runtime
 from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
 from ntrp.tools.core.context import IOBridge
-from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
+from ntrp.tools.deferred import (
+    build_deferred_tools_prompt_for_schemas,
+    build_native_deferred_tools_prompt_for_schemas,
+)
 
 console = Console()
 
@@ -236,10 +239,12 @@ async def _run_headless(prompt: str):
         tools = runtime.executor.get_tools()
         native_deferred_tools = supports_native_deferred_tools(config.model)
         deferred_tools_context = (
-            build_deferred_tools_prompt_for_schemas(
-                runtime.executor.registry, frozenset(runtime.executor.tool_services), tools
-            )
-            if config.deferred_tools and not native_deferred_tools
+            (
+                build_native_deferred_tools_prompt_for_schemas
+                if native_deferred_tools
+                else build_deferred_tools_prompt_for_schemas
+            )(runtime.executor.registry, frozenset(runtime.executor.tool_services), tools)
+            if config.deferred_tools
             else None
         )
         system_prompt = build_system_prompt(

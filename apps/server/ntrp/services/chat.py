@@ -46,7 +46,10 @@ from ntrp.services.token_directive import parse_token_budget
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import ChildIOFactory, ChildIOParams, ChildSession, IOBridge
 from ntrp.tools.core.types import ToolAction
-from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
+from ntrp.tools.deferred import (
+    build_deferred_tools_prompt_for_schemas,
+    build_native_deferred_tools_prompt_for_schemas,
+)
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
@@ -413,8 +416,12 @@ async def _prepare_messages(
     notifiers = deps.notifier_service.list_summary() if deps.notifier_service else None
     native_deferred_tools = supports_native_deferred_tools(deps.chat_model)
     deferred_tools_context = (
-        build_deferred_tools_prompt_for_schemas(deps.executor.registry, frozenset(deps.executor.tool_services), tools)
-        if deps.agent_config.deferred_tools and not native_deferred_tools
+        (
+            build_native_deferred_tools_prompt_for_schemas
+            if native_deferred_tools
+            else build_deferred_tools_prompt_for_schemas
+        )(deps.executor.registry, frozenset(deps.executor.tool_services), tools)
+        if deps.agent_config.deferred_tools
         else None
     )
     system_blocks = build_system_blocks(
