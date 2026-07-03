@@ -19,6 +19,9 @@ interface ConfirmDeleteButtonProps {
   onActiveChange?: (active: boolean) => void;
   size?: "xs" | "sm" | "md";
   className?: string;
+  /** -1 removes the button from the Tab order (roving-focus hosts like the
+   *  session rows expose the action via the row's context menu instead). */
+  tabIndex?: number;
 }
 
 const SIZE = {
@@ -44,6 +47,7 @@ export function ConfirmDeleteButton({
   onActiveChange,
   size = "sm",
   className,
+  tabIndex,
 }: ConfirmDeleteButtonProps) {
   const [state, setState] = useState<State>("idle");
   const [count, setCount] = useState(seconds);
@@ -102,6 +106,7 @@ export function ConfirmDeleteButton({
       type="button"
       onClick={onClick}
       disabled={busy}
+      tabIndex={tabIndex}
       aria-label={counting ? "Cancel delete" : label}
       className={clsx(
         "relative inline-flex items-center justify-center overflow-hidden rounded-[6px] font-medium transition-[background-color,color] duration-check ease-out active:scale-[0.96]",

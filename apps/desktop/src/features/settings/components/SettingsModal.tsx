@@ -17,7 +17,7 @@ import { PageModal } from "@/components/ui/PageModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { ICON } from "@/lib/icons";
-import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import { ScrollFadeBottom, ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { Tab as TabItem, Tabs } from "@/components/ui/Tabs";
 import { TabPanels, useTabDirection } from "@/components/ui/TabPanels";
 
@@ -106,8 +106,9 @@ export function SettingsModal() {
             onChange={(v) => setActive(v as TabId)}
             variant="plain"
             orientation="vertical"
-            className="gap-px pb-2 overflow-y-auto scroll-thin scroll-fade-bottom"
+            className="gap-px pb-2 overflow-y-auto scroll-thin"
           >
+            <ScrollFadeBottom />
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (

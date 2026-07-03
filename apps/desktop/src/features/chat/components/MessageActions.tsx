@@ -67,7 +67,7 @@ export function MessageActions({ id, role }: { id: string; role: "user" | "assis
   return (
     <div
       className={clsx(
-        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-row ease-out",
+        "flex items-center gap-1.5 h-6 mt-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity duration-row ease-out",
         role === "user" && "justify-end",
       )}
     >

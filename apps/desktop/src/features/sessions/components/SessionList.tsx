@@ -10,7 +10,7 @@ import { loadHistory } from "@/actions/history";
 import { archiveSession, createSession, moveSessionToProject } from "@/actions/sessions";
 import { ICON } from "@/lib/icons";
 import { useTimeTicker } from "@/lib/hooks";
-import { ScrollFadeTop } from "@/components/ui/ScrollBlur";
+import { ScrollFadeBottom, ScrollFadeTop } from "@/components/ui/ScrollBlur";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { groupSessions, primarySidebarSessions } from "@/features/sessions/lib/projects";
 import { SessionRow } from "@/features/sessions/components/SessionRow";
@@ -97,6 +97,43 @@ export function SessionList() {
 
   const closeMenu = () => setMenu(null);
 
+  // Roving tabindex over the rendered rows: the whole list is ONE Tab stop
+  // (the active session when visible, else the first row); arrows move
+  // between rows. Mirrors radioGroupKeyDown's DOM-order query so collapsed
+  // groups, filters, and the "…" cap never need index bookkeeping.
+  const renderedSessionIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const group of grouped) {
+      if (collapsedGroups.has(group.key)) continue;
+      const visible = expandedGroups.has(group.key)
+        ? group.sessions
+        : group.sessions.slice(0, MAX_VISIBLE);
+      for (const session of visible) ids.push(session.session_id);
+    }
+    return ids;
+  }, [grouped, collapsedGroups, expandedGroups]);
+  const tabbableId =
+    currentSessionId && renderedSessionIds.includes(currentSessionId)
+      ? currentSessionId
+      : (renderedSessionIds[0] ?? null);
+
+  const onListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const rows = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(".session-row"));
+    if (rows.length === 0) return;
+    // Only when focus is ON a row — arrows inside the rename input or on
+    // group headers keep their native behavior.
+    const idx = rows.indexOf(e.target as HTMLElement);
+    if (idx === -1) return;
+    e.preventDefault();
+    const next =
+      e.key === "Home" ? 0
+      : e.key === "End" ? rows.length - 1
+      : e.key === "ArrowDown" ? (idx + 1) % rows.length
+      : (idx - 1 + rows.length) % rows.length;
+    rows[next].focus();
+  };
+
   const renderRow = (session: SessionListItem) => (
     <div key={session.session_id} role="listitem">
     <SessionRow
@@ -112,6 +149,7 @@ export function SessionList() {
       isChannel={session.session_type === "channel"}
       isAgent={false}
       depth={0}
+      tabbable={session.session_id === tabbableId}
       renaming={renamingId === session.session_id}
       onStartRename={() => setRenamingId(session.session_id)}
       onCancelRename={() => setRenamingId(null)}
@@ -144,8 +182,9 @@ export function SessionList() {
         <SidebarFilters />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom pb-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pb-3" onKeyDown={onListKeyDown}>
         <ScrollFadeTop />
+        <ScrollFadeBottom />
         {grouped.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 4 }}

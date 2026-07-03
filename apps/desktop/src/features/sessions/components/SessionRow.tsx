@@ -16,6 +16,7 @@ export function SessionRow({
   isChannel,
   isAgent,
   depth = 0,
+  tabbable,
   renaming,
   onStartRename,
   onCancelRename,
@@ -32,6 +33,9 @@ export function SessionRow({
   isChannel: boolean;
   isAgent: boolean;
   depth?: number;
+  /** Roving tabindex: exactly one row per list is the Tab stop; arrows on
+   *  the list container move focus between rows. */
+  tabbable: boolean;
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
@@ -91,12 +95,22 @@ export function SessionRow({
   return (
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={tabbable ? 0 : -1}
       onClick={() => void switchSession(sessionId)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           void switchSession(sessionId);
+          return;
+        }
+        // Keyboard route to the context menu (its actions replace the
+        // hover cluster, which is out of the Tab order). Anchored to the
+        // row rect — a keyboard-triggered native contextmenu event would
+        // report clientX/Y = 0.
+        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+          e.preventDefault();
+          const r = e.currentTarget.getBoundingClientRect();
+          onMenu({ x: r.left + 8, y: r.bottom });
         }
       }}
       onContextMenu={onContextMenu}
@@ -135,6 +149,7 @@ export function SessionRow({
           <ConfirmDeleteButton
             size="sm"
             label="Archive session"
+            tabIndex={-1}
             onConfirm={onArchive}
             onActiveChange={setDeleting}
           />
@@ -143,6 +158,7 @@ export function SessionRow({
           type="button"
           aria-label="Session actions"
           title="More"
+          tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
             const r = e.currentTarget.getBoundingClientRect();

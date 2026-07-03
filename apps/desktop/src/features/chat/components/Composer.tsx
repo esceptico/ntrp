@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Box } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -158,9 +158,14 @@ export function Composer() {
   // pseudo-element in CSS.
   const [justSent, flashJustSent] = useTimeoutFlag(280);
 
-  useEffect(() => {
+  // Layout effect so the height is set before paint — an effect-timed
+  // resize lets a multi-line programmatic draft (history recall, edit)
+  // paint one frame at the stale height.
+  useLayoutEffect(() => {
     if (inputRef.current) resize(inputRef.current);
   }, [draft]);
+
+  const [dragOver, setDragOver] = useState(false);
 
   function dispatchCommand(text: string): boolean {
     // If the text is a slash-command, route it. Returns true if handled.
@@ -288,8 +293,33 @@ export function Composer() {
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}
+        data-drag-over={dragOver ? "true" : undefined}
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          // dragleave fires when moving onto a child; only clear when the
+          // pointer actually left the form.
+          if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          void attachFiles(Array.from(e.dataTransfer.files));
+        }}
         className="composer-card surface-panel surface-radius-md relative flex flex-col"
       >
+        {/* Always-mounted live region — a region that mounts together with
+            its content is not reliably announced, so the span stays and
+            only its text toggles. Covers the submit → first-token window;
+            ActivityHeader's aria-live takes over once tool activity exists. */}
+        <span role="status" className="sr-only">
+          {showThinking ? "Agent is thinking" : ""}
+        </span>
         <AnimatePresence initial={false}>
           {editingId && <ComposerEditingBanner key="editing-banner" onCancel={cancelEdit} />}
         </AnimatePresence>
@@ -340,6 +370,9 @@ export function Composer() {
               setDraft(e.target.value);
             }}
             onKeyDown={(e) => {
+              // Enter (or any key) during IME composition confirms the
+              // conversion — it must never submit or hit shortcut branches.
+              if (e.nativeEvent.isComposing) return;
               // Backspace on empty draft + attached skill → detach the skill.
               if (
                 e.key === "Backspace" &&
@@ -433,7 +466,9 @@ export function Composer() {
               }
             }}
             rows={1}
-            placeholder={selectedSkill ? "if needed" : "Message ntrp…"}
+            placeholder={
+              dragOver ? "Drop images here" : selectedSkill ? "if needed" : "Message ntrp…"
+            }
             className="min-h-[44px] max-h-[220px] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-muted"
           />
         </div>

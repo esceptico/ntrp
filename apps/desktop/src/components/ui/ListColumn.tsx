@@ -3,6 +3,7 @@ import { AlertCircle } from "lucide-react";
 import { ICON } from "@/lib/icons";
 import { Button } from "@/components/ui/Button";
 import { Empty } from "@/components/ui/EmptyState";
+import { ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 
 export function ListColumn<T>({
   toolbar,
@@ -31,7 +32,8 @@ export function ListColumn<T>({
   return (
     <>
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">{toolbar}</div>
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-2 pb-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-2 pb-3">
+        <ScrollFadeBottom />
         {loading ? (
           <ListSkeleton />
         ) : error ? (

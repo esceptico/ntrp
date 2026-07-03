@@ -5,35 +5,38 @@ import {
   isValidElement,
   useCallback,
   useContext,
-  useId,
+  useEffect,
   useRef,
+  useState,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
   type ReactElement,
   type ReactNode,
   type Ref,
 } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { SPRING_LAYOUT, SPRING_TAP, MOTION } from "@/lib/tokens/motion";
-import { useProximityHover, useRegisterProximityItem } from "@/hooks/useProximityHover";
+import { SPRING_LAYOUT, SPRING_TAP } from "@/lib/tokens/motion";
+import { useProximityHover, useRegisterProximityItem, type ItemRect } from "@/hooks/useProximityHover";
 
 type Size = "sm" | "md" | "lg";
 
 const SIZES = {
-  sm: { pad: 4, h: 32, font: 12, gap: 2, padX: 14 },
-  md: { pad: 5, h: 40, font: 13, gap: 3, padX: 18 },
-  lg: { pad: 6, h: 48, font: 14, gap: 4, padX: 22 },
+  sm: { h: 28, padX: 10, font: 12 },
+  md: { h: 33, padX: 12, font: 13 },
+  lg: { h: 40, padX: 14, font: 14 },
 } as const;
 
-// The pill reads better slightly larger than the button it highlights.
-const PILL_GROW = 2;
+// FF's bg-active (overlay 7% light / 10% dark) — same fill as RadioGroup /
+// CheckboxGroup so every FF-style selection control shares one language.
+// The hover pill is this fill at 0.4 element-opacity, per FF tabs-subtle.
+const SELECTED_FILL = "color-mix(in oklab, var(--color-ink) 7%, transparent)";
 
 interface SegmentedContextValue {
   value: string;
   onChange: (value: string) => void;
   size: Size;
-  layoutId: string;
-  reduced: boolean;
+  hoveredIndex: number | null;
   registerItem: (index: number, el: HTMLElement | null) => void;
 }
 
@@ -51,19 +54,22 @@ interface SegmentedControlProps {
   ref?: Ref<HTMLDivElement>;
 }
 
+const rectPose = (r: ItemRect) => ({ left: r.left, top: r.top, width: r.width, height: r.height });
+
 /**
- * Compound segmented control. Compose options as <SegmentedControlItem> children
- * so each segment can carry an icon, a label, or both (icon-only via aria-label) —
- * the caller owns the content. Colors come from the --gt-* tokens (light + dark);
- * the active pill slides between segments via a shared layout animation.
- *
- * Arrow-key navigation reads the rendered `[role="tab"]` buttons from the DOM, so
- * items can be any direct children (including a `.map(...)`).
- *
- * A faint hover ghost (FF "fluid hover") springs between segments under the
- * pointer, sitting behind the selected pill. It's additive: items self-register
- * their measured rect via a `__index` the provider injects with `Children.map`,
- * so consumers don't change. Skipped under reduced-motion.
+ * FF "tabs-subtle", adapted to ntrp's compound value/onChange API. Trackless:
+ * no capsule border — the selection reads through a quiet tinted pill that
+ * springs between segments, and the fluid details carry the feel:
+ *   - the hover pill GROWS OUT of the selected pill, and on pointer exit
+ *     retreats back into it while fading;
+ *   - the selected pill dims to 0.8 while another segment is hovered;
+ *   - a focus-visible ring travels between segments (accent, not FF's
+ *     hard-coded blue);
+ *   - string labels reserve their semibold width with an invisible ghost so
+ *     the weight shift never moves siblings.
+ * Divergence from FF, kept deliberately: arrow keys select (automatic
+ * activation) — the house pattern shared with Tabs/RadioGroup — where FF
+ * only moves focus.
  */
 export function SegmentedControl({
   value,
@@ -74,14 +80,26 @@ export function SegmentedControl({
   className,
   ref,
 }: SegmentedControlProps) {
-  const sz = SIZES[size];
-  const layoutId = useId();
   const reduced = !!useReducedMotion();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { activeIndex, itemRects, handlers, registerItem } = useProximityHover(containerRef, {
-    axis: "x",
+  const mouseInsideRef = useRef(false);
+  const { activeIndex: hoveredIndex, itemRects, handlers, registerItem, measureItems } =
+    useProximityHover(containerRef, { axis: "x" });
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+
+  // Child order == registration order (__index), so the selected rect is
+  // just the value's position among the children.
+  const values: string[] = [];
+  Children.forEach(children, (child) => {
+    if (isValidElement(child)) values.push((child.props as { value: string }).value);
   });
+  const selectedIndex = values.indexOf(value);
+
+  // Labels can change (e.g. count suffixes) without any register/unregister.
+  useEffect(() => {
+    measureItems();
+  }, [measureItems, children]);
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
@@ -111,69 +129,104 @@ export function SegmentedControl({
     if (v && v !== value) onChange(v);
   };
 
-  const trackStyle: CSSProperties = {
-    position: "relative",
-    display: "inline-flex",
-    // Buttons stretch to the pill's vertical bounds: the track's vertical
-    // padding doubles as the pill inset, so the layoutId indicator inside
-    // the active button needs no measurement.
-    alignItems: "stretch",
-    gap: sz.gap,
-    height: sz.h,
-    padding: `${Math.max(2, sz.pad - PILL_GROW)}px ${sz.pad}px`,
-    borderRadius: 999,
-    background: "var(--gt-track-bg)",
-    border: "1px solid var(--gt-track-border)",
-    boxShadow: "var(--gt-track-shadow)",
+  const onFocus = (e: FocusEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const v = target.dataset.value;
+    setFocusedIndex(v !== undefined && target.matches(":focus-visible") ? values.indexOf(v) : null);
+  };
+  const onBlur = (e: FocusEvent<HTMLDivElement>) => {
+    if (containerRef.current?.contains(e.relatedTarget as Node)) return;
+    setFocusedIndex(null);
   };
 
-  const ctx: SegmentedContextValue = { value, onChange, size, layoutId, reduced, registerItem };
-  const hoverRect = activeIndex != null ? itemRects[activeIndex] : null;
+  const selectedRect = selectedIndex >= 0 ? itemRects[selectedIndex] : undefined;
+  const hoverRect = hoveredIndex != null ? itemRects[hoveredIndex] : undefined;
+  const isHoveringSelected = hoveredIndex === selectedIndex;
+  const isHoveringOther = hoveredIndex != null && !isHoveringSelected;
+  const focusRect = focusedIndex != null && focusedIndex >= 0 ? itemRects[focusedIndex] : undefined;
+
+  const ctx: SegmentedContextValue = { value, onChange, size, hoveredIndex, registerItem };
 
   return (
     <div
       ref={setRefs}
       role="tablist"
       aria-label={label}
-      className={["segmented-control", className].filter(Boolean).join(" ")}
-      style={trackStyle}
+      className={["segmented-control relative inline-flex items-center gap-0.5 select-none", className]
+        .filter(Boolean)
+        .join(" ")}
       onKeyDown={onKeyDown}
-      onMouseMove={handlers.onMouseMove}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onMouseMove={(e) => {
+        mouseInsideRef.current = true;
+        handlers.onMouseMove(e);
+      }}
       onMouseEnter={handlers.onMouseEnter}
-      onMouseLeave={handlers.onMouseLeave}
+      onMouseLeave={() => {
+        mouseInsideRef.current = false;
+        handlers.onMouseLeave();
+      }}
     >
+      {/* Selected pill — container-level so it can dim under a hover
+          elsewhere and hand its rect to the hover pill's enter/exit. */}
+      {selectedRect && (
+        <motion.div
+          aria-hidden
+          className="absolute rounded-lg pointer-events-none"
+          style={{ background: SELECTED_FILL }}
+          initial={false}
+          animate={{ ...rectPose(selectedRect), opacity: isHoveringOther ? 0.8 : 1 }}
+          transition={
+            reduced ? { duration: 0 } : { ...SPRING_LAYOUT, opacity: { duration: 0.08 } }
+          }
+        />
+      )}
+      {/* Hover pill — born from the selected pill, retreats into it when the
+          pointer leaves the control (fade-only if it unmounts another way). */}
+      <AnimatePresence>
+        {!reduced && hoverRect && !isHoveringSelected && selectedRect && (
+          <motion.div
+            key="hover-pill"
+            aria-hidden
+            className="absolute rounded-lg pointer-events-none"
+            style={{ background: SELECTED_FILL }}
+            initial={{ ...rectPose(selectedRect), opacity: 0 }}
+            animate={{ ...rectPose(hoverRect), opacity: 0.4 }}
+            exit={
+              !mouseInsideRef.current
+                ? {
+                    ...rectPose(selectedRect),
+                    opacity: 0,
+                    transition: { ...SPRING_LAYOUT, opacity: { duration: 0.06 } },
+                  }
+                : { opacity: 0, transition: { duration: 0.06 } }
+            }
+            transition={{ ...SPRING_TAP, opacity: { duration: 0.08 } }}
+          />
+        )}
+      </AnimatePresence>
+      {/* Traveling focus-visible ring — concentric +2px over the pill. */}
+      <AnimatePresence>
+        {focusRect && (
+          <motion.div
+            aria-hidden
+            className="absolute z-20 rounded-[10px] border border-accent pointer-events-none"
+            initial={false}
+            animate={{
+              left: focusRect.left - 2,
+              top: focusRect.top - 2,
+              width: focusRect.width + 4,
+              height: focusRect.height + 4,
+            }}
+            exit={{ opacity: 0, transition: { duration: 0.06 } }}
+            transition={
+              reduced ? { duration: 0 } : { ...SPRING_TAP, opacity: { duration: 0.08 } }
+            }
+          />
+        )}
+      </AnimatePresence>
       <SegmentedContext.Provider value={ctx}>
-        <AnimatePresence>
-          {!reduced && hoverRect && (
-            <motion.span
-              key="segmented-hover"
-              aria-hidden
-              initial={{
-                opacity: 0,
-                left: hoverRect.left,
-                top: hoverRect.top,
-                width: hoverRect.width,
-                height: hoverRect.height,
-              }}
-              animate={{
-                opacity: 1,
-                left: hoverRect.left,
-                top: hoverRect.top,
-                width: hoverRect.width,
-                height: hoverRect.height,
-              }}
-              exit={{ opacity: 0, transition: { duration: MOTION.fast } }}
-              transition={{ ...SPRING_TAP, opacity: { duration: MOTION.fast } }}
-              style={{
-                position: "absolute",
-                zIndex: 0,
-                borderRadius: 999,
-                background: "var(--gt-hover-bg)",
-                pointerEvents: "none",
-              }}
-            />
-          )}
-        </AnimatePresence>
         {Children.map(children, (child, i) =>
           isValidElement(child)
             ? cloneElement(child as ReactElement<{ __index?: number }>, { __index: i })
@@ -191,7 +244,7 @@ interface SegmentedControlItemProps {
   id?: string;
   "aria-label"?: string;
   /** Injected by SegmentedControl via Children.map — the segment's DOM index,
-   *  used to register its measured rect for the proximity hover. */
+   *  used to register its measured rect for the pills. */
   __index?: number;
 }
 
@@ -205,9 +258,34 @@ export function SegmentedControlItem({
   const ctx = useContext(SegmentedContext);
   if (!ctx) throw new Error("SegmentedControlItem must be used within SegmentedControl");
   const sz = SIZES[ctx.size];
-  const active = ctx.value === value;
+  const selected = ctx.value === value;
+  const active = selected || ctx.hoveredIndex === __index;
   const btnRef = useRef<HTMLButtonElement | null>(null);
   useRegisterProximityItem(ctx.registerItem, __index, btnRef);
+
+  const buttonStyle: CSSProperties = {
+    position: "relative",
+    zIndex: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    lineHeight: 1,
+    height: sz.h,
+    padding: `0 ${sz.padX}px`,
+    fontSize: sz.font,
+    color: active ? "var(--color-ink)" : "var(--color-muted)",
+    background: "transparent",
+    border: "none",
+    borderRadius: 8,
+    outline: "none",
+    cursor: "pointer",
+    appearance: "none",
+    WebkitAppearance: "none",
+    whiteSpace: "nowrap",
+    transition: "color 80ms var(--ease-out-soft)",
+    userSelect: "none",
+  };
 
   return (
     <button
@@ -216,55 +294,29 @@ export function SegmentedControlItem({
       type="button"
       role="tab"
       data-value={value}
-      aria-selected={active}
+      aria-selected={selected}
       aria-label={ariaLabel}
-      tabIndex={active ? 0 : -1}
+      tabIndex={selected ? 0 : -1}
       onClick={() => ctx.onChange(value)}
-      style={{
-        position: "relative",
-        isolation: "isolate",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        lineHeight: 1,
-        padding: `0 ${sz.padX}px`,
-        fontSize: sz.font,
-        fontWeight: active ? 600 : 500,
-        color: active ? "var(--gt-fg)" : "var(--gt-fg-muted)",
-        background: "transparent",
-        border: "none",
-        borderRadius: 999,
-        cursor: "pointer",
-        appearance: "none",
-        WebkitAppearance: "none",
-        whiteSpace: "nowrap",
-        transition: "color var(--duration-trace) var(--ease-out-soft)",
-        userSelect: "none",
-      }}
+      style={buttonStyle}
     >
-      {active && (
-        <motion.span
-          aria-hidden
-          layoutId={`${ctx.layoutId}-pill`}
-          className="segmented-control-pill"
-          transition={ctx.reduced ? { layout: { duration: 0 } } : { layout: SPRING_LAYOUT }}
-          style={{
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            left: -PILL_GROW,
-            right: -PILL_GROW,
-            zIndex: -1,
-            borderRadius: 999,
-            background: "var(--gt-pill-bg)",
-            border: "1px solid var(--gt-pill-border)",
-            boxShadow: "var(--gt-pill-shadow)",
-            pointerEvents: "none",
-          }}
-        />
+      {typeof children === "string" ? (
+        // Invisible semibold ghost reserves the selected width so the weight
+        // shift never nudges neighboring segments (FF's inline-grid trick).
+        <span className="inline-grid">
+          <span aria-hidden className="col-start-1 row-start-1 invisible font-semibold">
+            {children}
+          </span>
+          <span
+            className="col-start-1 row-start-1"
+            style={{ fontWeight: selected ? 600 : 500 }}
+          >
+            {children}
+          </span>
+        </span>
+      ) : (
+        children
       )}
-      {children}
     </button>
   );
 }
