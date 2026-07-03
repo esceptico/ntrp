@@ -28,7 +28,7 @@ _logger = get_logger(__name__)
 
 # Builtin daily memory maintenance phases. When multiple phases are overdue
 # after sleep/offline time, catch them up in this order on the same boot.
-_CATCH_UP_PHASE_ORDER = ("integration_sync", "memory_consolidate", "memory_publish")
+_CATCH_UP_PHASE_ORDER = ("memory_consolidate", "memory_publish")
 _CATCH_UP_HANDLERS = set(_CATCH_UP_PHASE_ORDER)
 _CATCH_UP_CADENCE = timedelta(hours=24)
 

@@ -35,7 +35,7 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
   expect(copyPath).toContain('@/lib/clipboard');
 
   // Folder order + no old structure are the genuine v3 contracts, in artifactTree.ts.
-  expect(tree).toContain('const DIRECTORY_ORDER = ["topics", "feeds", "daily", "insights", "observations", "context", "facts", "changelog"]');
+  expect(tree).toContain('const DIRECTORY_ORDER = ["topics", "feeds", "daily", "insights", "context", "facts", "changelog"]');
   expect(tree).not.toContain('"sources", "files", "docs"');
   expect(tree).not.toContain('Fact shards');
 

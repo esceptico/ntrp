@@ -85,11 +85,11 @@ class _DreamLLM:
 async def test_dream_learnings_partitioned_and_conventions_injected(tmp_path: Path):
     store = FilePageStore(Path(tmp_path))
     await store.open()
-    a = await store.add("The user works on Dex.", kind="fact", source_ref=SourceRef("user", ""))
+    a = await store.add("The user works on Dex.", kind="fact", source_ref=SourceRef("user", ""), entity_labels=["Dex"])
     for t in ("The user prefers async.", "The user is in Armenia.", "The user uses Obsidian."):
         await store.add(t, kind="fact", source_ref=SourceRef("user", ""))
-    b = await store.add("Email about the Nexus review.", kind="observation", source_ref=SourceRef("gmail", "g1"))
-    await store.add("Calendar 1:1 with Regina.", kind="observation", source_ref=SourceRef("calendar", "c1"))
+    b = await store.add("The Nexus review is scheduled weekly.", kind="fact", source_ref=SourceRef("user", ""), entity_labels=["Nexus"])
+    await store.add("Regina runs a weekly 1:1.", kind="fact", source_ref=SourceRef("user", ""))
 
     llm = _DreamLLM(b.id, a.id)
     summary, learnings = await run_dream(

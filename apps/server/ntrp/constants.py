@@ -188,15 +188,11 @@ MEMORY_RETENTION_TTL_TRANSIENT_DAYS = 180  # source (re-findable pointers)
 # Raw integration observations are high-volume and low-trust: keep them short so
 # they don't accrete. The dream promotes the valuable ones into durable insights
 # (src:dreamer, fact TTL) before they expire; the rest age out.
-MEMORY_RETENTION_TTL_OBSERVATION_DAYS = 90
+MEMORY_RETENTION_TTL_PROVISIONAL_DAYS = 90  # machine-authored dream insights (provisional by construction)
 # An entity earns its own entities/<slug>.md page only once it has this many
 # active atoms; below it, atoms park on me.md (remembering their entity) so a
 # single stray label can't spawn a dead-end one-fact topic page.
 MEMORY_MIN_ENTITY_RECORDS = 2
-# Incremental integration ingest runs before the maintenance pass so the night's
-# fresh calendar/gmail/slack deltas get consolidated + synthesized the same run.
-BUILTIN_INTEGRATION_SYNC_ID = "builtin-integration-sync"
-INTEGRATION_SYNC_AT = "02:30"
 MAX_AUTOMATION_SUGGESTIONS = 6
 DEFAULT_KNOWLEDGE_REFLECTION_IDLE_MINUTES = 5
 DEFAULT_KNOWLEDGE_REFLECTION_SWEEP_IDLE_MINUTES = 5

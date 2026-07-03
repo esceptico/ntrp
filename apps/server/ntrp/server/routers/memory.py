@@ -171,7 +171,6 @@ async def rebuild_artifacts(
 
 class InitBody(BaseModel):
     confirm: bool = Field(default=False)
-    recency_days: int | None = Field(default=None, ge=1, le=3650)
     max_llm_calls: int = Field(default=400, ge=1, le=100_000)
     wipe: bool = Field(default=False)
 
@@ -182,10 +181,9 @@ async def init_memory(
     runtime: Runtime = Depends(get_runtime),
 ) -> dict:
     """/init: reset the curator + consolidate watermarks and (re)derive memory from
-    ALL chat transcripts AND the connected integrations via the BULK curator gate,
-    then consolidate and rebuild the artifact projection. Additive by default
-    (keeps existing records, can only enrich); pass wipe=true for a destructive
-    reset (wipe-except-pinned first). Requires confirm=true."""
+    ALL chat transcripts via the BULK curator gate, then consolidate. Additive by
+    default (keeps existing records, can only enrich); pass wipe=true for a
+    destructive reset (wipe-except-pinned first). Requires confirm=true."""
     if not body.confirm:
         raise HTTPException(status_code=400, detail="init requires confirm=true")
     if not runtime.knowledge.memory_ready:
@@ -194,9 +192,7 @@ async def init_memory(
 
     return await run_memory_init(
         runtime.knowledge,
-        recency_days=body.recency_days,
         max_llm_calls=body.max_llm_calls,
-        integration_clients=runtime.integrations.clients,
         wipe=body.wipe,
     )
 

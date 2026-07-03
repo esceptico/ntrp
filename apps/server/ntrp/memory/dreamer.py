@@ -20,8 +20,6 @@ _logger = get_logger(__name__)
 
 MIN_RECORDS = 6
 CATALOG_LIMIT = 120
-OBS_CATALOG_CAP = 40  # observations are recent TEXTURE, not the backbone — cap their share so a high-volume
-# integration day can't evict the durable facts that give the cross-domain questions their altitude.
 _DURABLE_KINDS = [Kind.DIRECTIVE, Kind.FACT, Kind.SOURCE, Kind.CHANGELOG]
 EVIDENCE_PER_Q = 8
 MAX_INSIGHTS = 5
@@ -78,21 +76,16 @@ _LEARNINGS_RE = re.compile(r"(?i)\blearnings:\s*(.+)$")  # gotcha trailer; match
 
 
 async def _build_catalog(store) -> list:
-    """The question-seeding catalog: the durable backbone (facts/directives/sources)
-    as the bulk — excluding prior dream insights so the dream reflects on raw memory,
-    not its own output — plus a BOUNDED slice of recent integration observations as
-    connective texture. The cap is load-bearing: without it a high-volume integration
-    day floods the date-sorted list and evicts every durable fact, collapsing the
-    cross-domain dream into gmail↔calendar noise (the starvation re-introduced)."""
-    budget = CATALOG_LIMIT - OBS_CATALOG_CAP
+    """The question-seeding catalog: the durable backbone (facts/directives/sources),
+    excluding prior dream insights so the dream reflects on raw memory, not its own
+    output. (Raw integration observations are retired — feeds/ carry that transient
+    state outside the record pool.)"""
     # Over-fetch then drop prior dream insights, so they don't eat the durable budget
     # before truncation (filter-after-limit would silently under-represent real facts).
-    durable = [
-        r for r in await store.list(limit=budget * 2, scopes=None, kinds=_DURABLE_KINDS)
+    return [
+        r for r in await store.list(limit=CATALOG_LIMIT * 2, scopes=None, kinds=_DURABLE_KINDS)
         if not (r.source_ref and r.source_ref.kind == "dreamer")
-    ][:budget]
-    observations = await store.list(limit=OBS_CATALOG_CAP, scopes=None, kinds=[Kind.OBSERVATION])
-    return durable + observations
+    ][:CATALOG_LIMIT]
 
 
 @observed_trace("memory.dream", tags="memory")

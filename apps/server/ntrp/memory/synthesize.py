@@ -141,8 +141,6 @@ def _page_kind(root: Path, path: Path) -> str | None:
         return "active_work"
     if rel.parts and rel.parts[0] == "daily":
         return "daily"
-    if rel.parts and rel.parts[0] == "observations":
-        return "overview"
     if rel.parts and rel.parts[0] in ("topics", "entities", "projects"):
         return "dossier"
     return None
@@ -272,25 +270,7 @@ async def _synth_active_work(store, labels, llm, model, effort, conventions: str
     return out.rstrip()
 
 
-async def _synth_overview(store, path, labels, llm, model, effort, conventions: str = "") -> str | None:
-    """Integration-source overview (the dex-style SOP): synthesize the raw
-    observation stream on observations/<source>.md into a 'what's here / patterns'
-    map, written into the page's prose zone above the timeline."""
-    page = store._pages[path]
-    rows = [store._to_record(ln, path) for ln in page.active_lines()]
-    if not rows:
-        return None
-    ordered = sorted(rows, key=lambda r: r.last_confirmed_at, reverse=True)
-    user = ps.overview_user_message(path.stem, ordered, _flat(labels, ordered))
-    out = await _complete(llm, model, _pre(ps.OVERVIEW_SYSTEM, conventions), user, effort)
-    if not out or out.strip() == ps.NO_OVERVIEW:
-        return None
-    if not _provenance_ok(out, {r.id for r in ordered}):
-        return None
-    return out.rstrip()
-
-
-_DAILY_SKIP_KINDS = {"observation", "changelog"}
+_DAILY_SKIP_KINDS = {"observation", "changelog"}  # observation = legacy lines pre-retirement
 
 
 def _daily_records(store, day: str) -> list:
@@ -374,8 +354,6 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
             prose = await _synth_active_work(store, labels, llm, model, reasoning_effort, conventions)
         elif kind == "daily":
             prose = await _synth_daily(store, path, labels, llm, model, reasoning_effort, conventions)
-        elif kind == "overview":
-            prose = await _synth_overview(store, path, labels, llm, model, reasoning_effort, conventions)
         else:
             prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort, conventions)
         if prose is None:
@@ -395,7 +373,7 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         # Legacy-cite pages are also exempt: their baseline is the old essay register,
         # and the briefing register is SUPPOSED to be tighter (one-time migration).
         if (
-            prose not in (ps.NO_ACTIVE_WORK, ps.INSUFFICIENT_DOSSIER, ps.NO_OVERVIEW)
+            prose not in (ps.NO_ACTIVE_WORK, ps.INSUFFICIENT_DOSSIER)
             and not legacy_cites
             and not _regression_ok(page, prose)
         ):
@@ -481,15 +459,7 @@ if __name__ == "__main__":
             await run_synthesis(store, fake, "m")
             assert store._pages[root / "topics" / "cats.md"].prose == "", "fabricated cite must be rejected"
 
-            # integration overview: an observation source gets a synthesized SOP above its raw stream
             fake.mode = "echo"
-            for i in range(3):
-                await store.add(f"Email about topic {i}.", kind="observation", source_ref=SourceRef("gmail", f"g{i}"))
-            gmail_obs = root / "observations" / "gmail.md"
-            assert gmail_obs in store._pages, "observation source page exists"
-            await run_synthesis(store, fake, "m")
-            assert store._pages[gmail_obs].prose, "observation source got a synthesized overview"
-            assert len(store._pages[gmail_obs].active_lines()) == 3, "raw observation stream survives under the overview"
 
             # daily log: a dated, prose-only page aggregating the day's MEANINGFUL
             # records (facts), with integration observations filtered out.

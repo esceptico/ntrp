@@ -47,7 +47,6 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "projects": "topic",  # legacy — folded into topics/
     "references": "source",
     "feeds": "source",  # automation-owned briefings (feeds/<slug>.md) — whole-page rewritten per run
-    "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
     "insights": "topic",  # cross-domain dream outputs (OKF insights/)
     "daily": "source",  # dated activity logs (daily/<date>.md) — browsable history, prose-only
     "changelog": "changelog",

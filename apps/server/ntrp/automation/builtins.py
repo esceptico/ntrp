@@ -8,12 +8,10 @@ from ntrp.automation.triggers import CountTrigger, TimeTrigger, Trigger
 from ntrp.constants import (
     AUTOMATION_SUGGESTER_DAILY_AT,
     BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID,
-    BUILTIN_INTEGRATION_SYNC_ID,
     BUILTIN_MEMORY_CONSOLIDATE_ID,
     BUILTIN_MEMORY_DREAM_ID,
     BUILTIN_MEMORY_RETENTION_ID,
     BUILTIN_MEMORY_SYNTHESIZE_ID,
-    INTEGRATION_SYNC_AT,
     MEMORY_CONSOLIDATE_AT,
     MEMORY_DREAM_AT,
     MEMORY_RETENTION_AT,
@@ -93,23 +91,14 @@ BUILTINS = [
         handler="memory_retention",
         auto_approve=True,
     ),
-    BuiltinSpec(
-        task_id=BUILTIN_INTEGRATION_SYNC_ID,
-        name="Integration Sync",
-        description="Incrementally pull new calendar, gmail, and slack activity since the last run into memory. Runs just before the nightly maintenance pass so the fresh items get synthesized and dreamed-over the same night.",
-        triggers=[
-            TimeTrigger(at=INTEGRATION_SYNC_AT, days="daily"),
-        ],
-        handler="integration_sync",
-        auto_approve=True,
-    ),
 ]
 
 _CURRENT_BUILTIN_IDS = {spec.task_id for spec in BUILTINS}
 # Handlers we seed today, plus retired ones whose registration is gone — both
 # must be swept so previously-seeded automations don't dangle on a missing
-# handler. (pattern_finder/skill_inducer died with the claims+lens pipeline.)
-_RETIRED_HANDLERS = {"pattern_finder_daily", "skill_inducer_daily", "memory_publish"}
+# handler. (pattern_finder/skill_inducer died with the claims+lens pipeline;
+# integration_sync died with the observation ingest — feeds replaced it.)
+_RETIRED_HANDLERS = {"pattern_finder_daily", "skill_inducer_daily", "memory_publish", "integration_sync"}
 _KNOWLEDGE_HANDLERS = {spec.handler for spec in BUILTINS} | _RETIRED_HANDLERS
 
 

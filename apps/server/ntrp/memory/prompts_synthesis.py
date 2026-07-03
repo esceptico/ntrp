@@ -16,11 +16,10 @@ and keeps the verified id list in the page's raw sidecar (prose_cites).
   - PROFILE_SYSTEM     -> me.md
   - DOSSIER_SYSTEM     -> topics/<subject>.md  (one page per subject)
   - ACTIVE_WORK_SYSTEM -> active-work.md
-  - OVERVIEW_SYSTEM    -> observations/<source>.md  (integration source overview)
   - DAILY_SYSTEM       -> daily/<date>.md  (per-day activity log)
 
 Record kinds (ntrp.memory.models.Kind): directive | fact | source | changelog |
-observation | lesson. Scopes are visibility metadata, not shown to the model.
+lesson. Scopes are visibility metadata, not shown to the model.
 """
 
 from __future__ import annotations
@@ -33,7 +32,6 @@ from ntrp.memory.models import TRUST_DEFAULT, Record, source_trust
 # caller matches these exactly and skips the file rather than persisting a stub.
 INSUFFICIENT_DOSSIER = "_Insufficient records to synthesize a brief._"
 NO_ACTIVE_WORK = "_No active threads in the recent window._"
-NO_OVERVIEW = "_Not enough observations to summarize this source yet._"
 NO_DAILY = "_No notable activity this day._"
 
 # A citation is only counted inside a well-formed parenthetical group —
@@ -385,61 +383,6 @@ def active_work_user_message(
         "<records>\n"
         f"{format_records_block(merged, labels_by_id)}\n"
         "</records>"
-    )
-
-
-# ===========================================================================
-# 4) OVERVIEW  ->  observations/<source>.md (prose zone above the raw stream)
-# ===========================================================================
-
-OVERVIEW_SYSTEM = "\n\n".join([
-    """\
-You write the overview for ONE integration source (gmail, calendar, slack, …) in
-a personal memory wiki. Below this prose sits the raw observation stream the agent
-ingested from that source; your job is the SOP above it — a durable, current map
-of what this source is to the user and what flows through it.
-
-You are given the source name and its recent observation records. Output:
-
-```
-# <Source> — overview
-
-<one sentence: what this source is to the user>
-
-## What's here
-The recurring correspondents, topics, and threads that show up — SYNTHESIZED, not
-a list of messages. Group related observations into themes. Cite (record:XXXXXXXX).
-
-## Patterns
-How the user uses this source / what recurs (standing senders, notification types,
-cadences). Cite each. Omit the section if the observations don't support it.
-```
-
-These are integration-sourced observations, NOT user-stated facts: describe
-PATTERNS across the stream, phrase tentatively, and never elevate a single
-email/event into a durable fact about the user.
-
-HARD GATE — if there are fewer than 3 substantive observations (bot/notification
-noise doesn't count), output EXACTLY this and nothing else:
-
-""" + NO_OVERVIEW + """""",
-    _GROUNDING,
-    _SYNTHESIS_QUALITY,
-    _NO_SLOP,
-])
-
-
-def overview_user_message(
-    source: str,
-    records: list[Record],
-    labels_by_id: dict[str, list[str]] | None = None,
-) -> str:
-    return (
-        f"Source: {source}\n\n"
-        "<records>\n"
-        f"{format_records_block(records, labels_by_id)}\n"
-        "</records>\n\n"
-        f'Write the overview for "{source}". Apply the 3-observation gate first.'
     )
 
 

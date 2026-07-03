@@ -84,10 +84,6 @@ class AutomationRuntime:
             self._build_memory_consolidate_handler(),
         )
         self.scheduler.register_handler(
-            "integration_sync",
-            self._build_integration_sync_handler(),
-        )
-        self.scheduler.register_handler(
             "memory_dream",
             self._build_memory_dream_handler(),
         )
@@ -199,22 +195,6 @@ class AutomationRuntime:
             stats = await store.reconcile_entities()
             detail = f"; entities {stats}" if (stats["promoted"] or stats["demoted"]) else ""
             return report.summary() + detail
-
-        return handler
-
-    def _build_integration_sync_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            knowledge = self.get_knowledge()
-            if knowledge is None or not knowledge.memory_ready:
-                return "integration sync unavailable (memory not ready)"
-            clients = self.get_integration_clients() or {}
-            if not clients:
-                return "integration sync skipped (no integrations connected)"
-            from ntrp.memory.init import run_integration_ingest
-
-            report = await run_integration_ingest(knowledge, integration_clients=clients)
-            parts = [f"{src}: {d.get('admitted', 0)} new" for src, d in report["integrations"].items()]
-            return "; ".join(parts) or "no connected sources"
 
         return handler
 

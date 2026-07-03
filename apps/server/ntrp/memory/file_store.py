@@ -41,7 +41,7 @@ _ME = "me.md"
 _LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records)
 _ENTITIES = "topics"  # one folder for every emergent subject (people/products/projects/topics)
 _LEGACY_SUBJECT_DIRS = ("entities", "projects")  # folded into topics/ at open() (migration)
-_OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
+_OBSERVATIONS = "observations"  # RETIRED raw integration streams — folded away at open() (feeds/ replaced them)
 _RAW = "raw"  # machine layer: per-page record timelines (raw/<page-path>.md sidecars)
 _INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
 _GENERATED_FILES = {"index.md", "AGENTS.md", "health.md"}  # generated reports, not record pages
@@ -77,7 +77,6 @@ pages are compiled from it.
 - `fact` — a stable, durable truth about the user or their world.
 - `source` — a re-findable pointer (receipt), evidence for a fact.
 - `lesson` — a working-pattern the agent DISTILLED (the continual-learning playbook).
-- `observation` — a raw integration item (low-trust, ages out fast).
 - `changelog` — housekeeping; ignore for synthesis.
 
 ## Layout
@@ -90,7 +89,6 @@ pages are compiled from it.
 - `references.md` — source pointers.
 - `feeds/<slug>.md` — automation-owned briefings: a feed automation rewrites its page
   in place each run (memory_write). No records, no append log — the page IS the state.
-- `observations/<source>.md` — integration-source overviews (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
 - `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
 - `health.md` — generated self-audit of gaps (stale topics, idle sources).
@@ -245,6 +243,7 @@ class FilePageStore:
         if legacy:
             _logger.info("split legacy two-zone pages", pages=len(legacy))
         self._migrate_insights()  # relocate pre-insights/ dream records (one-time, idempotent)
+        self._retire_observations()  # drop the retired raw integration streams (feeds/ replaced them)
         self._migrate_to_topics()  # fold entities/+projects/ into one topics/ folder (idempotent)
         self._heal_structural_pages()  # repair cross-contaminated identity + canonical titles
         self._backfill_entities()
@@ -572,6 +571,30 @@ class FilePageStore:
                 except OSError:
                     pass
 
+    def _retire_observations(self) -> None:
+        """One-time/idempotent: the raw per-source integration streams
+        (observations/<source>.md) are retired — targeted feed automations (feeds/)
+        replaced them. Their records were 90d-TTL noise by design; drop the pages,
+        their raw/ sidecars, and the records outright. Dream insights that cited
+        them lose those cites via the synthesis dangling-cite pass."""
+        pages = [p for p in list(self._pages.keys()) if p.parent.name == _OBSERVATIONS]
+        dropped = 0
+        for path in pages:
+            for line in self._pages[path].lines:
+                self._loc.pop(line.id, None)
+                self._unindex_line(line.id)
+                dropped += 1
+            del self._pages[path]
+            self._remove_page_files(path)
+        for root in (self._root / _OBSERVATIONS, self._root / _RAW / _OBSERVATIONS):
+            if root.is_dir() and not any(root.iterdir()):
+                try:
+                    root.rmdir()
+                except OSError:
+                    pass
+        if pages:
+            _logger.info("retired observation streams", pages=len(pages), records=dropped)
+
     def _migrate_insights(self) -> None:
         """One-time/idempotent: dream insights used to file to entities/insights.md via
         [ent:Insights]; they now belong in insights/<month>.md. Relocate any stray
@@ -654,7 +677,6 @@ class FilePageStore:
             ("", [p for p in roots if p in self._pages]),
             ("Topics", sorted(p for p in self._pages if p.parent.name == _ENTITIES)),
             ("Feeds", sorted(p for p in self._pages if p.parent.name == "feeds")),
-            ("Integrations", sorted(p for p in self._pages if p.parent.name == _OBSERVATIONS)),
             ("Insights", sorted(p for p in self._pages if p.parent.name == _INSIGHTS)),
         ]
         record_list_pages = {self._root / _DIRECTIVES, self._root / _LESSONS, self._root / _REFERENCES}
@@ -679,7 +701,7 @@ class FilePageStore:
         principle 11): stale topics, idle integration sources, and whether the dream/
         synthesis have run. Makes gaps visible instead of silently rotting."""
         today = datetime.now(UTC).date()
-        STALE_DAYS, IDLE_DAYS, DREAM_DAYS = 90, 14, 7
+        STALE_DAYS, DREAM_DAYS = 90, 7
 
         def _age(d: str) -> int | None:
             try:
@@ -726,11 +748,6 @@ class FilePageStore:
                 refs |= {str(al).lower() for al in (aliases if isinstance(aliases, list) else [aliases])}
                 if not (refs & linked):
                     gaps.append(f"- Orphan topic: `topics/{path.stem}.md` — no other page links to it.")
-            elif path.parent.name == _OBSERVATIONS:
-                newest = max((ln.date for ln in pg.active_lines()), default="")
-                a = _age(newest)
-                if a is not None and a > IDLE_DAYS:
-                    gaps.append(f"- Idle source: `observations/{path.stem}.md` — nothing new in {a}d (sync/connection?).")
 
         parts = [
             "# Memory health", "",
@@ -837,13 +854,6 @@ class FilePageStore:
             # separate from facts/entities; retention ages them as provisional.
             base = self._root / _INSIGHTS / f"{line.date[:7]}.md"
             title = f"Insights {line.date[:7]}"
-        elif str(kind) == Kind.OBSERVATION and source_ref is not None:
-            # Raw integration observations stream to a per-source page (never entity
-            # pages, no promotion); the dream mines them across sources and retention
-            # ages them out. A distinct page per source keeps cross-source insights
-            # citing >=2 different pages (the dream's bar).
-            base = self._root / _OBSERVATIONS / f"{_slug(source_ref.kind)}.md"
-            title = source_ref.kind
         else:
             base = self._page_for(str(kind), scope_kind, scope_key)
             primary = _slug(entity_labels[0]) if entity_labels else None
@@ -1417,14 +1427,21 @@ if __name__ == "__main__":
             await again.reconcile_entities()
             assert not zeta.exists(), "empty entity page is reclaimed by the sweep"
 
-            # OBSERVATION routing: a raw integration record streams to observations/<source>.md
-            # (never an entity page), stays user-scoped + dream-listable.
-            obs = await again.add("Email from Kevin re: PRD-407 review.", kind="observation", source_ref=SourceRef("gmail", "g1"))
-            assert (Path(d) / "observations" / "gmail.md").exists(), "observation streams to observations/<source>.md"
-            assert not (Path(d) / "topics" / "gmail.md").exists(), "observation never spawns an entity page"
-            got = await again.get(obs.id)
-            assert got.kind == "observation" and got.scope_kind == "user", (got.kind, got.scope_kind)
-            assert any(r.id == obs.id for r in await again.list(scopes=None, limit=None)), "observation is dream-listable"
+            # RETIRED observation streams: legacy observations/<source>.md pages are
+            # dropped (pages + raw sidecars + records) on open — feeds/ replaced them.
+            legacy_obs = Path(d) / "observations" / "gmail.md"
+            legacy_obs.parent.mkdir(parents=True, exist_ok=True)
+            legacy_obs.write_text(
+                "---\ntitle: gmail\n---\n\nOld overview.\n\n<!-- timeline (append-only; edit prose above, not below) -->\n\n"
+                "- 2026-06-22 ^0bs01234 [observation] (src:gmail) Old bot mail.\n",
+                encoding="utf-8",
+            )
+            relegacy = FilePageStore(Path(d))
+            await relegacy.open()
+            assert not legacy_obs.exists(), "observation stream retired on open"
+            assert not (Path(d) / "observations").exists(), "empty observations/ folder removed"
+            assert await relegacy.get("0bs01234") is None, "observation records dropped"
+            again = relegacy
 
             # LESSON routing: continual-learning playbook records stream to lessons.md, global scope.
             les = await again.add("Verify against the running system before reporting status.", kind="lesson", source_ref=SourceRef("curator", ""))

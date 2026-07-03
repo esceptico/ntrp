@@ -96,14 +96,8 @@ async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
 @pytest.mark.asyncio
 async def test_overdue_memory_builtins_catch_up_in_phase_order(store: AutomationStore):
     started: list[str] = []
-    release_sync = asyncio.Event()
     release_consolidate = asyncio.Event()
     publish_started = asyncio.Event()
-
-    async def integration_sync(_ctx):
-        started.append("integration_sync")
-        await release_sync.wait()
-        return "integration_sync"
 
     async def memory_consolidate(_ctx):
         started.append("memory_consolidate")
@@ -116,7 +110,6 @@ async def test_overdue_memory_builtins_catch_up_in_phase_order(store: Automation
         return "memory_publish"
 
     for task_id, handler, at in (
-        ("sync", "integration_sync", "02:30"),
         ("consolidate", "memory_consolidate", "03:00"),
         ("publish", "memory_publish", "03:30"),
     ):
@@ -131,20 +124,16 @@ async def test_overdue_memory_builtins_catch_up_in_phase_order(store: Automation
         )
 
     sched = Scheduler(store=store, build_deps=lambda: None)
-    sched.register_handler("integration_sync", integration_sync)
     sched.register_handler("memory_consolidate", memory_consolidate)
     sched.register_handler("memory_publish", memory_publish)
 
     loop_task = asyncio.create_task(sched._loop())
     try:
-        await _wait_until(lambda: started == ["integration_sync"])
-
-        release_sync.set()
-        await _wait_until(lambda: started == ["integration_sync", "memory_consolidate"])
+        await _wait_until(lambda: started == ["memory_consolidate"])
 
         release_consolidate.set()
         await asyncio.wait_for(publish_started.wait(), timeout=1.0)
-        await _wait_until(lambda: started == ["integration_sync", "memory_consolidate", "memory_publish"])
+        await _wait_until(lambda: started == ["memory_consolidate", "memory_publish"])
 
         for task in list(sched._running):
             await task

@@ -47,9 +47,9 @@ _logger = get_logger(__name__)
 _KINDS = {"directive", "fact", "source"}
 
 NEIGHBORHOOD_LIMIT = 8
-# Consolidation only touches the DURABLE pool. Observations are low-trust integration
-# noise that ages out via retention; lessons are the agent's playbook. Neither should be
-# merged into / retyped to a durable fact (that would launder trust) — exclude them.
+# Consolidation only touches the DURABLE pool. Lessons are the agent's playbook and
+# must never be merged into / retyped to a durable fact; legacy `observation` lines
+# (retired kind) are skipped rather than trust-laundered.
 _SKIP_KINDS = {"observation", "lesson"}
 LABEL_FINGERPRINT_KEY = "consolidate_label_fingerprint"
 JUDGES_PER_SWEEP = 200  # cap LLM judgments/run; changed hoods beyond it roll to the next run

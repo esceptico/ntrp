@@ -5,10 +5,9 @@ watermark, reconciles them against existing similar records (ADD/UPDATE/
 SUPERSEDE/NOOP), and applies the ops — text AND labels — to the flat record
 pool. Labels are open-vocabulary names (referents and categories) decided once
 at write time; the prompt carries the existing vocabulary so names get reused
-instead of re-minted. The chat path writes durable directives/facts/sources
-through the worthiness gate; integration items bypass it via store_observations
-(low-trust `observation` records the dream mines), since routine email/events
-aren't durable facts but are the cross-domain texture the dream connects.
+instead of re-minted. Everything enters through the worthiness gate; targeted
+feed automations (feeds/) carry transient integration state outside the record
+pool entirely.
 
 The watermark lives in a tiny `meta(key, value)` table the Dreamer OWNS inside
 `config.memory_db_path`. Key form: `curate_watermark:{session_id}`. Anti-heartbeat:
@@ -18,13 +17,12 @@ a session with no new turns costs one DB read and no LLM call.
 import asyncio
 import json
 import os
-import html
 import re
 from pathlib import Path
 
 from ntrp.database import connect as db_connect
 from ntrp.logging import get_logger
-from ntrp.memory.models import Kind, Record, SourceRef
+from ntrp.memory.models import Record, SourceRef
 from ntrp.memory.records import RecordStore
 from ntrp.memory.scopes import apply_scope_to_source, scope_for_write
 from ntrp.observability import observed_trace
@@ -39,7 +37,6 @@ SWEEP_SESSION_LIMIT = 50
 CURATION_BATCH_MAX_TURNS = 40
 CURATION_BATCH_MAX_CHARS = 6_000
 CURATION_TURN_MAX_CHARS = 2_000
-OBSERVATION_MAX_CHARS = 280  # raw integration observations are kept terse (scannable timeline + focused vector)
 # Defense-in-depth atop source-trust: drop passive integration items that look like
 # prompt injection before they ever enter memory (a poisoned email/message can't
 # launder instructions into the store for the dream/agent to later read). Heuristic,
@@ -371,38 +368,6 @@ class Curator:
 
         return {"admitted": admitted, "calls": calls, "capped": capped}
 
-    async def store_observations(self, items, *, source_kind: str) -> dict:
-        """Land raw integration RawItems (calendar/gmail/slack) as low-trust
-        `observation` records — NO worthiness gate, NO LLM call.
-
-        The chat worthiness gate is right for chat (most chatter is noise) but wrong
-        for integrations: a routine email/event/message is not a "durable fact about
-        the user", yet it IS the cross-domain texture the dream connects. So we store
-        the (already noise-filtered) stream verbatim-but-tagged at integration trust;
-        the dream promotes the valuable ones into durable insights and retention ages
-        the rest out (MEMORY_RETENTION_TTL_OBSERVATION_DAYS). The file store routes
-        each to observations/<source>.md by source_ref.kind.
-
-        Returns {"admitted", "calls", "capped"} like the old gate, so the ingest
-        flow's watermark/accounting is unchanged; calls is always 0 (no LLM)."""
-        source_ref = SourceRef(kind=source_kind, ref=f"{source_kind}:observation")
-        admitted = 0
-        dropped = 0
-        for item in items:
-            text = self._render_item(item)
-            if not text:
-                continue
-            if _INJECTION_RE.search(text):
-                dropped += 1  # passive item looks like prompt injection — keep it out of memory
-                continue
-            if len(text) > OBSERVATION_MAX_CHARS:
-                text = text[:OBSERVATION_MAX_CHARS].rstrip()
-            await self._record_store.add(text, kind=Kind.OBSERVATION, source_ref=source_ref)
-            admitted += 1
-        if dropped:
-            _logger.info("observations: dropped suspected injection", source=source_kind, dropped=dropped)
-        return {"admitted": admitted, "calls": 0, "capped": False}
-
     @observed_trace("memory.labels", tags="memory")
     async def backfill_entity_labels(self, *, limit: int = 80) -> int:
         """Tag active fact/source records that carry NO entity label with the single
@@ -459,46 +424,13 @@ class Curator:
             _logger.info("entity backfill tagged records", tagged=tagged, examined=len(untagged))
         return tagged
 
-    @staticmethod
-    def _render_item(item) -> str:
-        """Render a RawItem to a `title\\ncontent` line; truncate content to
-        CURATION_TURN_MAX_CHARS (same ceiling as _flatten_turn). HTML entities are
-        decoded so email/PR observations read as text, not `&gt;`/`&lt;` soup."""
-        title = html.unescape((getattr(item, "title", "") or "").strip())
-        content = html.unescape((getattr(item, "content", "") or "").strip())
-        if len(content) > CURATION_TURN_MAX_CHARS:
-            content = content[:CURATION_TURN_MAX_CHARS].rstrip()
-        line = "\n".join(part for part in (title, content) if part)
-        return line.strip()
-
     async def reset_watermarks(self) -> None:
-        """/init: clear every per-session curate watermark AND per-source ingest
-        watermark so the next read starts fresh (full re-curation from the start of
-        each transcript; full-window re-ingest of each integration source)."""
+        """/init: clear every per-session curate watermark so the next read starts
+        fresh (full re-curation from the start of each transcript). Also sweeps
+        retired ingest watermarks left by the removed integration-observation flow."""
         conn = await self._ensure_conn()
         await conn.execute("DELETE FROM meta WHERE key LIKE 'curate_watermark:%'")
         await conn.execute("DELETE FROM meta WHERE key LIKE 'ingest_watermark:%'")
-        await conn.commit()
-
-    @staticmethod
-    def _ingest_watermark_key(source_kind: str) -> str:
-        return f"ingest_watermark:{source_kind}"
-
-    async def read_ingest_watermark(self, source_kind: str) -> str | None:
-        """The ISO timestamp of the newest item last ingested for this source, or
-        None if the source has never been ingested. Drives incremental fetch."""
-        conn = await self._ensure_conn()
-        rows = await conn.execute_fetchall(
-            "SELECT value FROM meta WHERE key = ?", (self._ingest_watermark_key(source_kind),)
-        )
-        return rows[0]["value"] if rows else None
-
-    async def write_ingest_watermark(self, source_kind: str, value: str) -> None:
-        conn = await self._ensure_conn()
-        await conn.execute(
-            "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (self._ingest_watermark_key(source_kind), value),
-        )
         await conn.commit()
 
     async def stop(self) -> None:

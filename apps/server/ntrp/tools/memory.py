@@ -115,8 +115,8 @@ class RecallInput(BaseModel):
         default=None,
         description="Optional kinds to search. Defaults to fact+source (topical recall). Standing "
         "directives and learned lessons are always in the resident context, so they're excluded here "
-        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly. Raw integration "
-        "items (emails/events/messages) are kind 'observation' — pass kinds=['observation'] to search them.",
+        "by default — pass kinds=['directive'] or ['lesson'] to search them explicitly. Live integration "
+        "state (inbox, PR queue, …) lives on feeds/ pages — memory_read those, don't recall.",
     )
 
 
@@ -703,7 +703,7 @@ def _entity_brief_nudge(query: str) -> str | None:
 _MEMORY_FS_DESCRIPTION = (
     "The memory wiki is plain markdown: me.md (profile), directives.md, topics/<slug>.md "
     "(one page per subject — people, products, projects), feeds/ (automation-owned "
-    "briefings, updated in place), observations/, insights/, daily/. "
+    "briefings, updated in place), insights/, daily/. "
     "Use recall for atomic facts; use memory_tree for the live file tree, then memory_read a "
     "page by path/title to go deep."
 )

@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from ntrp.constants import (
     MEMORY_RETENTION_TTL_DURABLE_DAYS,
-    MEMORY_RETENTION_TTL_OBSERVATION_DAYS,
+    MEMORY_RETENTION_TTL_PROVISIONAL_DAYS,
     MEMORY_RETENTION_TTL_TRANSIENT_DAYS,
 )
 from ntrp.logging import get_logger
@@ -29,13 +29,12 @@ _TTL: dict[str, int | None] = {
     Kind.FACT: MEMORY_RETENTION_TTL_DURABLE_DAYS,
     Kind.CHANGELOG: MEMORY_RETENTION_TTL_DURABLE_DAYS,
     Kind.SOURCE: MEMORY_RETENTION_TTL_TRANSIENT_DAYS,
-    Kind.OBSERVATION: MEMORY_RETENTION_TTL_OBSERVATION_DAYS,  # raw integration items age out fast
     Kind.LESSON: None,  # continual-learning playbook persists (superseded when the agent learns better)
 }
 _DEFAULT_TTL = MEMORY_RETENTION_TTL_DURABLE_DAYS  # unknown kinds -> durable
-# Machine-authored insights are provisional AND cite their evidence — capped at the most
-# perishable citable kind (observations, 90d) so a dream can't outlive what it cites.
-_DREAMER_TTL = MEMORY_RETENTION_TTL_OBSERVATION_DAYS
+# Machine-authored insights are provisional by construction — they age out fast
+# unless the nightly dream re-derives them from records that still stand.
+_DREAMER_TTL = MEMORY_RETENTION_TTL_PROVISIONAL_DAYS
 
 
 @dataclass
@@ -131,13 +130,6 @@ if __name__ == "__main__":
             await run_retention(store)
             assert store._find(r_dream.id)[1].superseded, "dreamer fact expires at transient TTL"
             assert not store._find(r_userfact.id)[1].superseded, "durable user fact survives 200d"
-            # observations age out fast: a 100-day-old one expires (>90), a fresh one survives.
-            d100 = (date.today() - timedelta(days=100)).isoformat()
-            r_obs_old = await store.add("old gmail observation", kind="observation", source_ref=SourceRef("gmail", ""), date=d100)
-            r_obs_new = await store.add("fresh gmail observation", kind="observation", source_ref=SourceRef("gmail", ""), date=today)
-            await run_retention(store)
-            assert store._find(r_obs_old.id)[1].superseded, "observation expires at 90d"
-            assert not store._find(r_obs_new.id)[1].superseded, "fresh observation survives"
             print("retention.py self-check OK")
 
     asyncio.run(_check())

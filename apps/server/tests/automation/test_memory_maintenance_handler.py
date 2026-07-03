@@ -3,12 +3,10 @@ artifacts in a separate builtin so each phase can run and report independently."
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-import ntrp.memory.init as init_mod
 from ntrp.server.runtime.automation import AutomationRuntime
 
 pytestmark = pytest.mark.asyncio
@@ -105,41 +103,3 @@ async def test_consolidate_handler_continues_when_only_new_report_fields_changed
 
     assert consolidate.run_once.await_count == 3
     assert "reclassified 1" in result and "pruned 2" in result
-
-
-# --- integration_sync handler ------------------------------------------------
-
-
-def _sync_runtime(knowledge, clients) -> AutomationRuntime:
-    rt = object.__new__(AutomationRuntime)
-    rt.get_knowledge = lambda: knowledge
-    rt.get_integration_clients = lambda: clients
-    return rt
-
-
-async def test_sync_handler_runs_incremental_ingest(monkeypatch):
-    captured = {}
-
-    async def fake_ingest(knowledge, *, integration_clients, **kw):
-        captured["clients"] = integration_clients
-        return {"admitted": 3, "integrations": {"calendar": {"admitted": 2}, "gmail": {"admitted": 1}}}
-
-    monkeypatch.setattr(init_mod, "run_integration_ingest", fake_ingest)
-    knowledge = SimpleNamespace(memory_ready=True)
-    handler = _sync_runtime(knowledge, {"calendar": object(), "gmail": object()})._build_integration_sync_handler()
-
-    result = await handler(None)
-
-    assert captured["clients"].keys() == {"calendar", "gmail"}
-    assert "calendar: 2 new" in result and "gmail: 1 new" in result
-
-
-async def test_sync_handler_skips_when_no_integrations():
-    knowledge = SimpleNamespace(memory_ready=True)
-    handler = _sync_runtime(knowledge, {})._build_integration_sync_handler()
-    assert "skipped" in await handler(None)
-
-
-async def test_sync_handler_unavailable_when_memory_not_ready():
-    handler = _sync_runtime(SimpleNamespace(memory_ready=False), {"calendar": object()})._build_integration_sync_handler()
-    assert "unavailable" in await handler(None)
