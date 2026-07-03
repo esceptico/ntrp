@@ -84,7 +84,7 @@ export function FileDetailPane({
           ) : (
             <WikiLinkContext.Provider value={wikiHandlers}>
               <Properties frontmatter={active.frontmatter} />
-              <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" />
+              <Markdown content={stripLeadingH1(stripCites(active.content))} className="max-w-none" provenance />
               {/* Record-list pages (directives/lessons/references/insights) already render
                   their records as the body — don't repeat them in the timeline disclosure. */}
               {!isRecordListPage(active.path) && <TimelineDisclosure timeline={active.timeline} />}

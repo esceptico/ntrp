@@ -16,7 +16,7 @@ import typescript from "highlight.js/lib/languages/typescript";
 import { Mermaid } from "@/components/ui/Mermaid";
 import { ICON } from "@/lib/icons";
 import { useTimeoutFlag } from "@/lib/hooks";
-import { remarkWikiLink, WikiLinkContext } from "@/lib/wikilink";
+import { remarkProvenance, remarkWikiLink, WikiLinkContext } from "@/lib/wikilink";
 
 const HL_LANGUAGES = {
   json,
@@ -57,8 +57,9 @@ const sanitizeSchema = {
     code: [...(defaultSchema.attributes?.code ?? []), ["className"]],
     span: [...(defaultSchema.attributes?.span ?? []), ["className"], "style"],
     div: [...(defaultSchema.attributes?.div ?? []), ["className"], "style"],
-    // Wikilinks carry a className styling hook + the resolution target.
-    a: [...(defaultSchema.attributes?.a ?? []), ["className"], ["data-wikilink"]],
+    // Wikilinks carry a className styling hook + the resolution target;
+    // provenance chips reuse the same transport with data-prov.
+    a: [...(defaultSchema.attributes?.a ?? []), ["className"], ["data-wikilink"], ["data-prov"]],
     // KaTeX uses MathML annotations and explicit display modes.
     math: [["xmlns"], "display"],
     annotation: [["encoding"]],
@@ -86,10 +87,14 @@ export function Markdown({
   content,
   className,
   streaming = false,
+  provenance = false,
 }: {
   content: string;
   className?: string;
   streaming?: boolean;
+  /** Render memory-synthesizer source tags — `(from chat)`, `(inferred)` — as
+   *  inline chips. Only the memory wiki view opts in; chat prose stays literal. */
+  provenance?: boolean;
 }) {
   return (
     <div className={clsx("md", className)}>
@@ -100,7 +105,7 @@ export function Markdown({
         // before sanitize so its output exists when sanitize walks the
         // tree, but the sanitize schema is extended above to keep the
         // tags/classes/attributes katex emits.
-        remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
+        remarkPlugins={provenance ? [remarkGfm, remarkMath, remarkWikiLink, remarkProvenance] : [remarkGfm, remarkMath, remarkWikiLink]}
         rehypePlugins={
           streaming
             ? [
@@ -127,6 +132,11 @@ export function Markdown({
 
 function Anchor({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   const wiki = useContext(WikiLinkContext);
+  const prov = (rest as Record<string, unknown>)["data-prov"] as string | undefined;
+  if (prov != null) {
+    // Not a link at all — a provenance chip riding the anchor transport.
+    return <span className="prov">{children}</span>;
+  }
   const target = (rest as Record<string, unknown>)["data-wikilink"] as string | undefined;
   if (target != null) {
     const { className, ...anchorRest } = rest;

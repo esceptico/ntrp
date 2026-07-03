@@ -10,8 +10,29 @@ export type TreeNode = {
 
 // Folder sort + default-expand order, post topics/-unification (entities/ & projects/
 // are folded into topics/).
-const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"];
-const DEFAULT_EXPANDED_DIRS = new Set(["topics", "daily", "insights", "observations"]);
+const DIRECTORY_ORDER = ["topics", "feeds", "daily", "insights", "observations", "context", "facts", "changelog"];
+// Only the subject pages open by default — dated logs / feeds / audit stay folded
+// until asked for. The tree should read as "who and what", not "everything".
+const DEFAULT_EXPANDED_DIRS = new Set(["topics"]);
+
+// Root reads top-down by how often a page matters: the hero pages, then the
+// folders, then stray files, then generated system reports (quiet tail).
+const ROOT_FILE_ORDER = ["me.md", "active-work.md", "directives.md", "lessons.md", "references.md"];
+export const SYSTEM_FILES = new Set(["index.md", "health.md", "AGENTS.md", "README.md", "tooling.md"]);
+
+function rootRank(n: TreeNode): number {
+  if (n.kind === "directory") {
+    const i = DIRECTORY_ORDER.indexOf(n.name);
+    return 100 + (i === -1 ? 99 : i);
+  }
+  const i = ROOT_FILE_ORDER.indexOf(n.path);
+  if (i !== -1) return i;
+  return SYSTEM_FILES.has(n.path) ? 300 : 200;
+}
+
+function rootSort(a: TreeNode, b: TreeNode) {
+  return rootRank(a) - rootRank(b) || a.name.localeCompare(b.name);
+}
 
 function directorySort(a: TreeNode, b: TreeNode) {
   if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
@@ -47,7 +68,8 @@ export function buildArtifactTree(artifacts: MemoryArtifact[]) {
     node.children.sort(directorySort);
     node.children.forEach(sortRec);
   };
-  sortRec(root);
+  root.children.forEach(sortRec);
+  root.children.sort(rootSort);
   return root.children;
 }
 

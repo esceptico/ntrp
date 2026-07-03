@@ -14,6 +14,7 @@ import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } fr
 import { Empty } from "@/components/ui/EmptyState";
 import { ListError, ListSkeleton } from "@/components/ui/ListColumn";
 import { PaneShell } from "@/components/ui/PaneShell";
+import { ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 import { GhostBtn } from "@/features/memory/components/shared";
 import { searchMatches } from "@/features/memory/lib/format";
 import { FlatRow, TreeRow, TreeSearch } from "@/features/memory/components/MemoryFileTree";
@@ -309,7 +310,8 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
           {rebuilding ? "Reloading…" : "Reload"}
         </GhostBtn>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin scroll-fade-bottom px-3 pb-3 pt-1">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
+        <ScrollFadeBottom />
         {loading && artifacts.length === 0 ? (
           <ListSkeleton />
         ) : error ? (

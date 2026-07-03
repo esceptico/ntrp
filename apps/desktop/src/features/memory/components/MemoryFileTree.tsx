@@ -5,7 +5,7 @@ import type { MemoryArtifact } from "@/api/memoryArtifacts";
 import { ICON } from "@/lib/icons";
 import { EASE_EMPHASIZED, EASE_OUT, MOTION, RISE_IN, RISE_SETTLED } from "@/lib/tokens/motion";
 import { displayFileName, displayTitle } from "@/features/memory/lib/format";
-import type { TreeNode } from "@/features/memory/lib/artifactTree";
+import { SYSTEM_FILES, type TreeNode } from "@/features/memory/lib/artifactTree";
 
 /** Full-bleed search header with a leading icon — the file-tree variant of
  *  SearchInput's chrome, sized to the 52px list header. */
@@ -128,6 +128,9 @@ export function TreeRow({
 
   const a = node.artifact!;
   const active = selectedPath === a.path;
+  // Generated system reports (index/health/AGENTS) sit at the tail of the root —
+  // dimmed so the pages that matter carry the visual weight.
+  const system = depth === 0 && SYSTEM_FILES.has(a.path);
   return (
     <button
       type="button"
@@ -144,7 +147,7 @@ export function TreeRow({
       <span
         className={clsx(
           "min-w-0 flex-1 truncate text-sm",
-          active ? "font-medium text-ink" : "text-ink-soft group-hover:text-ink",
+          active ? "font-medium text-ink" : system ? "text-muted group-hover:text-ink" : "text-ink-soft group-hover:text-ink",
         )}
       >
         {displayFileName(a)}

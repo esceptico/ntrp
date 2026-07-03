@@ -590,20 +590,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   );
 }
 
-.scroll-fade-bottom {
-  overscroll-behavior: contain;
+/* Bottom edge fade — toggled by ScrollFadeBottom, which only sets it while
+   the scroller overflows AND more content sits below, so the last row of a
+   short or fully-scrolled list is never softened. */
+[data-scroll-fade-bottom="true"] {
   -webkit-mask-image: linear-gradient(to top, transparent 0, #000 24px);
           mask-image: linear-gradient(to top, transparent 0, #000 24px);
 }
-.scroll-fade-both {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
-          mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
-}
-/* A scroller with a static bottom fade that should ALSO fade at the top once
-   scrolled (session list, settings list, memory list). A single mask-image
-   can't stack two rules, so combine both edges here; bare .scroll-fade-bottom
-   covers the at-top state, and ScrollFadeTop flips data-scroll-fade-top. */
-[data-scroll-fade-top="true"].scroll-fade-bottom {
+/* Both edges active (session list mid-scroll). A single mask-image can't
+   stack two rules, so combine them here. */
+[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 calc(100% - 24px), transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 calc(100% - 24px), transparent 100%);
 }
@@ -618,7 +614,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* ─── Scrollbars ───────────────────────────────────────────────
    Hidden app-wide. Scrolling still works (wheel / trackpad / keys);
    the bar just isn't painted. The scroll-edge fade masks
-   (.scroll-fade-*, ScrollFadeTop) carry the "there's more" cue in
+   ([data-scroll-fade-top] / [data-scroll-fade-bottom], toggled by
+   ScrollFadeTop/ScrollFadeBottom) carry the "there's more" cue in
    its place. */
 * { scrollbar-width: none; }
 *::-webkit-scrollbar { width: 0; height: 0; display: none; }
@@ -814,6 +811,12 @@ button.app-row:not(:disabled):active,
 .assistant-message[data-streaming="true"] .md pre.streaming-code {
   border-color: color-mix(in oklab, var(--color-line-soft) 78%, var(--color-accent));
 }
+/* While streaming, plain greedy wrapping — the body's `text-wrap: pretty`
+   rebalances earlier lines on every appended word, making settled text
+   jitter. Pretty wrapping resumes when data-streaming clears. */
+.assistant-message[data-streaming="true"] .md {
+  text-wrap: wrap;
+}
 /* Sheen rides an absolutely-positioned overlay swept via transform —
    compositor-only, same pattern as .skeleton::after — instead of
    animating background-position across the whole pre (full-block
@@ -896,6 +899,22 @@ button.app-row:not(:disabled):active,
 .md a.wikilink--unresolved:hover {
   color: var(--color-muted);
   background-color: transparent;
+}
+/* Provenance chips — the memory synthesizer's (from chat)/(inferred) source
+   tags. Quiet by design: evidence metadata must never compete with the claim. */
+.md .prov {
+  display: inline-block;
+  margin-left: 0.45em;
+  padding: 0 0.5em;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  font-size: 0.7em;
+  line-height: 1.75;
+  color: var(--color-faint);
+  white-space: nowrap;
+  vertical-align: 0.14em;
+  letter-spacing: 0.01em;
+  user-select: none;
 }
 .md h1, .md h2, .md h3, .md h4 {
   margin: 0.5em 0 0.22em;
@@ -1003,55 +1022,21 @@ button.app-row:not(:disabled):active,
 .surface-panel.surface-radius-sm {
   box-shadow: var(--shadow-2);
 }
-/* SegmentedControl — self-contained segmented control. Variables are
-   consumed by the component's inline styles; this block just resolves
-   them per color scheme. Light defaults live on the element; the dark
-   override flips them under :root.dark. */
+/* SegmentedControl — FF tabs-subtle port; the pills/tints live in the
+   component (ink-derived color-mix, theme-aware by construction). */
 .segmented-control {
   /* Hug content — never stretch full-width when used as a grid/flex
-     item (default justify-self:stretch otherwise blows the track out
+     item (default justify-self:stretch otherwise blows the control out
      with empty space to the right). */
   justify-self: start;
   align-self: start;
-  /* Light values use ink-derived alphas (not white). White-on-light is
-     invisible on flat panels. Ink-derived borders read on both flat
-     light panels and elevated surfaces. */
-  --gt-track-bg: rgba(20, 24, 28, 0.04);
-  --gt-track-border: rgba(20, 24, 28, 0.14);
-  --gt-track-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 1px 2px rgba(20, 24, 28, 0.04);
-  --gt-pill-bg: #ffffff;
-  --gt-pill-border: rgba(20, 24, 28, 0.10);
-  --gt-pill-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.08),
-    0 4px 12px rgba(20, 24, 28, 0.06);
-  --gt-fg: rgba(20, 20, 30, 0.92);
-  --gt-fg-muted: rgba(20, 20, 30, 0.55);
-  /* Fluid hover ghost — faint, springs between segments behind the pill. */
-  --gt-hover-bg: rgba(20, 24, 28, 0.06);
-}
-:root.dark .segmented-control {
-  --gt-track-bg: rgba(255, 255, 255, 0.08);
-  --gt-track-border: rgba(255, 255, 255, 0.12);
-  --gt-track-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  --gt-pill-bg: rgba(255, 255, 255, 0.14);
-  --gt-pill-border: rgba(255, 255, 255, 0.22);
-  --gt-pill-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 2px 8px rgba(0, 0, 0, 0.35);
-  --gt-fg: rgba(255, 255, 255, 0.95);
-  --gt-fg-muted: rgba(255, 255, 255, 0.55);
-  --gt-hover-bg: rgba(255, 255, 255, 0.07);
 }
 /* SwitchControl — boolean on/off switch sibling to SegmentedControl.
    Variables resolved per color scheme; consumed via inline styles in
    the component. */
 .switch-control {
-  /* Light values: ink-derived alphas, same reason as .segmented-control —
-     white-on-light vanished on flat panels. */
+  /* Light values: ink-derived alphas — white-on-light vanished on flat
+     panels. */
   /* ON state uses the app accent (not a macOS-platform green) so the switch
      shares the single-accent language of Slider/Radio/Checkbox/focus rings.
      Theme-aware via var(--color-accent), so no dark override is needed. */
@@ -1212,6 +1197,13 @@ button.app-row:not(:disabled):active,
   box-shadow:
     var(--shadow-pop),
     inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+/* Drop target for image drag-and-drop — accent ring while a file drag
+   hovers the composer. Same outline mechanism as focus-within so it
+   follows the panel radius; wins over focus when both apply. */
+.composer-card.surface-panel[data-drag-over="true"] {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 0;
 }
 .composer-wrap {
   container-type: inline-size;

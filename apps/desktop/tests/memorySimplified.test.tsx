@@ -30,10 +30,12 @@ test("artifact memory browser reflects filesystem v3 tree contracts", () => {
 
   // Copy-path UX feature lives in CopyPath.tsx.
   expect(copyPath).toContain('Copy path');
-  expect(copyPath).toContain('navigator.clipboard');
+  // Clipboard must route through the webview-safe shared util, not the
+  // silently-failing navigator.clipboard.
+  expect(copyPath).toContain('@/lib/clipboard');
 
   // Folder order + no old structure are the genuine v3 contracts, in artifactTree.ts.
-  expect(tree).toContain('const DIRECTORY_ORDER = ["topics", "daily", "insights", "observations", "context", "facts", "changelog"]');
+  expect(tree).toContain('const DIRECTORY_ORDER = ["topics", "feeds", "daily", "insights", "observations", "context", "facts", "changelog"]');
   expect(tree).not.toContain('"sources", "files", "docs"');
   expect(tree).not.toContain('Fact shards');
 
