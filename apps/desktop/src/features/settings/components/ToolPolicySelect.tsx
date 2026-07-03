@@ -1,5 +1,5 @@
 import type { ToolOverrideDecision } from "@/api/types";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Tab, Tabs } from "@/components/ui/Tabs";
 
 export const TOOL_POLICY_DECISIONS: Array<{ value: ToolOverrideDecision; label: string }> = [
   { value: "approve", label: "Approve" },
@@ -21,16 +21,16 @@ export function ToolPolicySelect({
   onChange: (decision: ToolOverrideDecision) => void;
 }) {
   return (
-    <SegmentedControl
+    <Tabs variant="segmented"
       size="sm"
       value={value}
       onChange={(v) => onChange(v as ToolOverrideDecision)}
     >
       {TOOL_POLICY_DECISIONS.map((d) => (
-        <SegmentedControlItem key={d.value} value={d.value}>
+        <Tab key={d.value} value={d.value}>
           {d.label}
-        </SegmentedControlItem>
+        </Tab>
       ))}
-    </SegmentedControl>
+    </Tabs>
   );
 }

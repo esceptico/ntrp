@@ -12,7 +12,7 @@ Props live in each file (kept here as a map, not a spec, so it can't go stale).
 
 ## Form inputs  (chrome = `.input-field` / `.input-field-sm`; never re-derive it)
 - **Input** — labelled `<input>` (label/help/error/size). **Textarea** — labelled `<textarea>`.
-- **SearchInput** — icon + input + clear + busy. **SegmentedControl** — 2–4 exclusive options.
+- **SearchInput** — icon + input + clear + busy. **Tabs `variant="segmented"`** — 2–4 exclusive options (capsule track + sliding pill).
 - **SwitchControl** — toggle (FF-tactile: hover/press knob morph + drag-to-toggle); pair with a `Tooltip` for help text (don't expand the row).
 - **Slider** / **RangeSlider** — drag/keyboard value + range. **SliderComfortable** — FF labelled settings selector (`pips` for small discrete ranges, `scrubber` for large).
 - settings forms: **Field** wraps Input; **NumberField / PercentField** (in `features/settings`) are **SliderComfortable** rows.

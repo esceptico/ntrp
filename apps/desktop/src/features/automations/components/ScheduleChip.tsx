@@ -15,7 +15,7 @@ import { ICON } from "@/lib/icons";
 import { useReanchor } from "@/lib/hooks";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Tab, Tabs } from "@/components/ui/Tabs";
 import { Select } from "@/components/ui/Select";
 import { RangeSlider } from "@/components/ui/Slider";
 
@@ -118,16 +118,16 @@ export function ScheduleChip({
               }}
               className="surface-panel surface-popover w-[340px] grid gap-3 p-3"
             >
-              <SegmentedControl
+              <Tabs variant="segmented"
                 size="sm"
                 value={schedule.kind}
                 onChange={(kind) => onChange({ ...schedule, kind: kind as ScheduleKind })}
               >
-                <SegmentedControlItem value="at">Time</SegmentedControlItem>
-                <SegmentedControlItem value="every">Every</SegmentedControlItem>
-                <SegmentedControlItem value="event">Event</SegmentedControlItem>
-                <SegmentedControlItem value="message">Message</SegmentedControlItem>
-              </SegmentedControl>
+                <Tab value="at">Time</Tab>
+                <Tab value="every">Every</Tab>
+                <Tab value="event">Event</Tab>
+                <Tab value="message">Message</Tab>
+              </Tabs>
 
               <div className="grid">
                 <div

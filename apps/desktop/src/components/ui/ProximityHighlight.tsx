@@ -13,7 +13,7 @@ const SECTION_GAP = 14;
 /**
  * THE single definition of the traveling proximity-hover highlight used by every
  * popover menu and selection list (AnchoredPopover, the model picker, Select,
- * and the RadioGroup/CheckboxGroup/SegmentedControl hover ghost). One element
+ * and the RadioGroup/CheckboxGroup hover ghost). One element
  * eases toward the row nearest the pointer.
  *
  * Owns all three behaviours so they stay consistent everywhere — change them

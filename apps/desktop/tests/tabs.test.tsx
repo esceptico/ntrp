@@ -29,19 +29,22 @@ test("underline variant renders exactly one underline indicator", () => {
   expect(html).toContain('data-tab-indicator="underline"');
 });
 
-test("pill variant renders a pill indicator with the supplied indicator class", () => {
+test("segmented variant renders the track, pill indicator, and item sizing", () => {
   const html = renderToStaticMarkup(
     <Tabs
       value="a"
       onChange={() => {}}
-      variant="pill"
+      variant="segmented"
+      size="sm"
       indicatorClassName="indicator-probe"
     >
       <Tab value="a">Alpha</Tab>
     </Tabs>,
   );
-  expect(html).toContain('data-tab-indicator="pill"');
+  expect(html).toContain('data-tab-indicator="segmented"');
   expect(html).toContain("indicator-probe");
+  expect(html).toContain("segmented-control");
+  expect(html).toContain("h-7");
 });
 
 test("page panel variant matches settings-style directional swaps", () => {

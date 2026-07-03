@@ -1,22 +1,19 @@
-import type { ReactNode } from "react";
 import { Database, Pin, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
-import { Select } from "@/components/ui/Select";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
 import { ListColumn, ListError } from "@/components/ui/ListColumn";
 import { GhostBtn, relativeTime } from "@/features/memory/components/shared";
 import { kindLabel, scopeLabel } from "@/features/memory/lib/format";
-import { TreeSearch } from "@/features/memory/components/MemoryFileTree";
-import type { MemoryItem, MemoryKind } from "@/api/memoryItems";
+import type { MemoryItem } from "@/api/memoryItems";
 
+// Search field + mode toggle + kind filter live in ArtifactMemoryView's
+// shared list header (stable across mode switches); this pane is just the
+// record list.
 export function RecordListPane({
   query,
   onQueryChange,
-  modeToggle,
-  recordKind,
-  onRecordKindChange,
   records,
   recordsLoading,
   recordsError,
@@ -29,9 +26,6 @@ export function RecordListPane({
 }: {
   query: string;
   onQueryChange: (value: string) => void;
-  modeToggle: ReactNode;
-  recordKind: MemoryKind | "";
-  onRecordKindChange: (kind: MemoryKind | "") => void;
   records: MemoryItem[];
   recordsLoading: boolean;
   recordsError: string | null;
@@ -43,23 +37,7 @@ export function RecordListPane({
   onRetry: () => void;
 }) {
   return (
-    <>
-      <TreeSearch value={query} onChange={onQueryChange} placeholder="Search raw DB facts/records…" />
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
-        {modeToggle}
-        <Select
-          value={recordKind}
-          onChange={(v) => onRecordKindChange(v as MemoryKind | "")}
-          options={[
-            { value: "", label: "All kinds" },
-            { value: "fact", label: "Facts" },
-            { value: "directive", label: "Rules" },
-            { value: "source", label: "Sources" },
-          ]}
-          aria-label="Filter by record kind"
-        />
-      </div>
-      <ListColumn
+    <ListColumn
         toolbar={null}
         items={records}
         loading={recordsLoading}
@@ -127,6 +105,5 @@ export function RecordListPane({
           </motion.li>
         )}
       />
-    </>
   );
 }

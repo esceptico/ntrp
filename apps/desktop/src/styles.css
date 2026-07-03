@@ -535,7 +535,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* transitions.dev "tabs sliding" (p16) — Tabs.tsx writes the active tab's
    measured offset/size onto the indicator inline; this transition owns the
    tween. Tabs.tsx suspends it (transition: none + reflow) on first paint and
-   resize so the indicator snaps instead of animating in from width 0. */
+   resize so the indicator snaps instead of animating in from width 0.
+   `height` is deliberately NOT transitioned: segments never legitimately
+   change height, and keeping it out makes a 0→N vertical grow (fresh element
+   whose inline styles were lost to a React node recreation) impossible. */
 :root {
   --tabs-dur: 250ms;
   --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -549,8 +552,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   transform: translate(0, 0);
   transition:
     transform var(--tabs-dur) var(--tabs-ease),
-    width var(--tabs-dur) var(--tabs-ease),
-    height var(--tabs-dur) var(--tabs-ease);
+    width var(--tabs-dur) var(--tabs-ease);
   will-change: transform, width;
   pointer-events: none;
 }
@@ -1048,8 +1050,9 @@ button.app-row:not(:disabled):active,
 .surface-panel.surface-radius-sm {
   box-shadow: var(--shadow-2);
 }
-/* SegmentedControl — FF tabs-subtle port; the pills/tints live in the
-   component (ink-derived color-mix, theme-aware by construction). */
+/* Tabs variant="segmented" — transitions.dev sliding tabs (capsule track +
+   pill); colors live in the component (ink-derived track tint +
+   surface-ladder pill, theme-aware by construction). */
 .segmented-control {
   /* Hug content — never stretch full-width when used as a grid/flex
      item (default justify-self:stretch otherwise blows the control out

@@ -21,7 +21,7 @@ import { ICON } from "@/lib/icons";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { IconButton } from "@/components/ui/IconButton";
 import { radioGroupKeyDown } from "@/components/ui/RadioGroup";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Tab, Tabs } from "@/components/ui/Tabs";
 import { ACCENT_PALETTES, type AccentPalette } from "@/lib/palettes";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
@@ -66,18 +66,18 @@ export function AppearanceTab() {
           title="Mode"
           hint="Light, Dark, or follow your system preference."
           control={
-            <SegmentedControl
+            <Tabs variant="segmented"
               size="sm"
               value={theme}
               onChange={(v) => setPref("theme", v as ThemeChoice)}
             >
               {THEMES.map((t) => (
-                <SegmentedControlItem key={t.id} value={t.id}>
+                <Tab key={t.id} value={t.id}>
                   <t.icon size={ICON.MD} strokeWidth={2} />
                   {t.label}
-                </SegmentedControlItem>
+                </Tab>
               ))}
-            </SegmentedControl>
+            </Tabs>
           }
         />
       </section>
@@ -120,17 +120,17 @@ export function AppearanceTab() {
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
           control={
-            <SegmentedControl
+            <Tabs variant="segmented"
               size="sm"
               value={intensity}
               onChange={(v) => setPref("thinkingIntensity", v as ThinkingIntensity)}
             >
               {INTENSITIES.map((o) => (
-                <SegmentedControlItem key={o.id} value={o.id}>
+                <Tab key={o.id} value={o.id}>
                   {o.label}
-                </SegmentedControlItem>
+                </Tab>
               ))}
-            </SegmentedControl>
+            </Tabs>
           }
         />
         <div

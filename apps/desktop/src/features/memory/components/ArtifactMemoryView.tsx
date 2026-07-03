@@ -4,7 +4,7 @@ import { useReducedMotion } from "motion/react";
 import { useStore } from "@/stores";
 import type { AppConfig } from "@/api/core";
 import { wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Tab, Tabs } from "@/components/ui/Tabs";
 import {
   listMemoryArtifacts,
   readMemoryArtifact,
@@ -15,6 +15,7 @@ import { listMemoryItems, setRecordPinned, type MemoryItem, type MemoryKind } fr
 import { Empty } from "@/components/ui/EmptyState";
 import { ListError, ListSkeleton } from "@/components/ui/ListColumn";
 import { PaneShell } from "@/components/ui/PaneShell";
+import { Select } from "@/components/ui/Select";
 import { ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 import { GhostBtn } from "@/features/memory/components/shared";
 import { searchMatches } from "@/features/memory/lib/format";
@@ -300,28 +301,51 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     setSelectedRecordId(id);
   };
 
-  // ─── Mode toggle (shared by both panes' headers) ────────────────────
-  const modeToggle = (
-    <SegmentedControl
-      size="sm"
-      value={mode}
-      onChange={(v) => setMode(v as MemoryViewMode)}
-    >
-      <SegmentedControlItem value="files">Files</SegmentedControlItem>
-      <SegmentedControlItem value="records">Records</SegmentedControlItem>
-    </SegmentedControl>
+  // ─── List header — shared by both modes, rendered in ONE stable tree
+  // position so the segmented toggle keeps its DOM node across mode switches
+  // and the pill slides (a remount would snap it into place instead). Only
+  // the search placeholder and the right-side control swap around it. ──────
+  const listHeader = (
+    <>
+      <TreeSearch
+        value={query}
+        onChange={setQuery}
+        placeholder={mode === "files" ? "Search paths, titles, snippets…" : "Search raw DB facts/records…"}
+      />
+      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
+        <Tabs
+          variant="segmented"
+          size="sm"
+          value={mode}
+          onChange={(v) => setMode(v as MemoryViewMode)}
+        >
+          <Tab value="files">Files</Tab>
+          <Tab value="records">Records</Tab>
+        </Tabs>
+        {mode === "files" ? (
+          <GhostBtn onClick={rebuild} disabled={rebuilding} title="Reload memory pages from disk (pick up edits made in Obsidian)">
+            {rebuilding ? "Reloading…" : "Reload"}
+          </GhostBtn>
+        ) : (
+          <Select
+            value={recordKind}
+            onChange={(v) => setRecordKind(v as MemoryKind | "")}
+            options={[
+              { value: "", label: "All kinds" },
+              { value: "fact", label: "Facts" },
+              { value: "directive", label: "Rules" },
+              { value: "source", label: "Sources" },
+            ]}
+            aria-label="Filter by record kind"
+          />
+        )}
+      </div>
+    </>
   );
 
   // ─── Files list pane ────────────────────────────────────────────────
   const filesList = (
     <>
-      <TreeSearch value={query} onChange={setQuery} placeholder="Search paths, titles, snippets…" />
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
-        {modeToggle}
-        <GhostBtn onClick={rebuild} disabled={rebuilding} title="Reload memory pages from disk (pick up edits made in Obsidian)">
-          {rebuilding ? "Reloading…" : "Reload"}
-        </GhostBtn>
-      </div>
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-3 pt-1">
         <ScrollFadeBottom />
         {loading && artifacts.length === 0 ? (
@@ -386,9 +410,6 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
     <RecordListPane
       query={query}
       onQueryChange={setQuery}
-      modeToggle={modeToggle}
-      recordKind={recordKind}
-      onRecordKindChange={setRecordKind}
       records={records}
       recordsLoading={recordsLoading}
       recordsError={recordsError}
@@ -430,7 +451,12 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
       <PaneShell
         fixedList
         scrollDetail={false}
-        list={mode === "files" ? filesList : recordsList}
+        list={
+          <>
+            {listHeader}
+            {mode === "files" ? filesList : recordsList}
+          </>
+        }
         detail={mode === "files" ? filesDetail : recordsDetail}
       />
     </div>

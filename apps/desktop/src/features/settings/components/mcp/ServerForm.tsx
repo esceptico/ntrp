@@ -7,7 +7,7 @@ import { SettingsInlineError } from "@/features/settings/components/SettingsNoti
 import { SaveStatus } from "@/features/settings/components/SaveStatus";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
-import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
+import { Tab, Tabs } from "@/components/ui/Tabs";
 import { Input } from "@/components/ui/Input";
 import { type KeyVal } from "@/features/settings/components/mcp/editors";
 import { buildMCPServerPayload, type MCPAuthMode } from "@/features/settings/components/mcp/payload";
@@ -139,14 +139,14 @@ export function ServerForm({
             {transport === "stdio" ? "STDIO" : "Streamable HTTP"}
           </div>
         ) : (
-          <SegmentedControl
+          <Tabs variant="segmented"
             size="sm"
             value={transport}
             onChange={(v) => setTransport(v as MCPTransport)}
           >
-            <SegmentedControlItem value="stdio">STDIO</SegmentedControlItem>
-            <SegmentedControlItem value="http">Streamable HTTP</SegmentedControlItem>
-          </SegmentedControl>
+            <Tab value="stdio">STDIO</Tab>
+            <Tab value="http">Streamable HTTP</Tab>
+          </Tabs>
         )}
 
         {transportLocked && (
