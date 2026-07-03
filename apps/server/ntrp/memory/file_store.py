@@ -196,6 +196,11 @@ class FilePageStore:
         self._scorer = None  # optional async (text, kind, pinned) -> int(1..10); set by knowledge
         self._pages: dict[Path, Page] = {}
         self._loc: dict[str, Path] = {}  # record id -> page path
+        # Live-vault state: mtimes of every tracked .md (pages + raw sidecars) as
+        # last seen/written by THIS store, so the watch loop reloads only external
+        # edits (Obsidian, feeds, git) — our own writes never echo.
+        self._file_state: dict[Path, int] = {}
+        self._watch_task: asyncio.Task | None = None
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -254,11 +259,107 @@ class FilePageStore:
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
         self._write_index()        # index.md — one line of meaning per page (navigate by index)
+        self._file_state = self._scan_files()  # live-vault baseline (post-migration state)
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
     async def close(self) -> None:
-        return None
+        if self._watch_task is not None and not self._watch_task.done():
+            self._watch_task.cancel()
+            await asyncio.gather(self._watch_task, return_exceptions=True)
+        self._watch_task = None
+
+    # -- live vault (Obsidian-style: disk is truth, the store follows) --------
+
+    def _scan_files(self) -> dict[Path, int]:
+        """mtime_ns of every tracked .md — content pages AND raw/ sidecars.
+        Generated root reports and dot-dirs are untracked (regenerated, never
+        externally edited as content)."""
+        out: dict[Path, int] = {}
+        for path in self._root.rglob("*.md"):
+            rel_parts = path.relative_to(self._root).parts
+            if {".index", ".maintenance"} & set(rel_parts):
+                continue
+            if path.parent == self._root and path.name in _GENERATED_FILES:
+                continue
+            try:
+                out[path] = path.stat().st_mtime_ns
+            except OSError:
+                continue
+        return out
+
+    def _reload_page(self, path: Path) -> None:
+        """Re-read one page (+ its raw sidecar) from disk, replacing the in-memory
+        state. Synchronous mutation — no await between evicting the old page and
+        installing the new one, so concurrent store ops never see a half-state."""
+        old = self._pages.pop(path, None)
+        if old is not None:
+            for ln in old.lines:
+                self._loc.pop(ln.id, None)
+                self._unindex_line(ln.id)
+        try:
+            page_text = path.read_text(encoding="utf-8") if path.exists() else ""
+            raw_path = self._raw_path(path)
+            raw_text = raw_path.read_text(encoding="utf-8") if raw_path.exists() else None
+        except OSError:
+            _logger.warning("vault reload failed", path=str(path), exc_info=True)
+            return
+        if not page_text and raw_text is None:
+            return  # page deleted on disk
+        try:
+            page = merge_split(parse_page(page_text), raw_text)
+        except Exception:
+            _logger.warning("skip unparseable memory page on reload", path=str(path))
+            return
+        self._pages[path] = page
+        for ln in page.lines:
+            self._loc[ln.id] = path
+            if not ln.superseded:
+                self._index_line(ln)
+
+    async def refresh_from_disk(self) -> list[str]:
+        """Absorb external edits (Obsidian, feeds, git, memory_write): reload every
+        page whose file or raw sidecar changed since we last saw/wrote it. Returns
+        the vault-relative paths of reloaded pages (empty = nothing changed)."""
+        current = self._scan_files()
+        raw_root = self._root / _RAW
+        changed: set[Path] = set()
+        for p in current.keys() | self._file_state.keys():
+            if self._file_state.get(p) == current.get(p):
+                continue
+            rel = p.relative_to(self._root)
+            changed.add(self._root / p.relative_to(raw_root) if rel.parts[0] == _RAW else p)
+        for page_path in sorted(changed):
+            self._reload_page(page_path)
+        self._file_state = current
+        if changed:
+            self._write_index()
+            self._write_health()
+        return [p.relative_to(self._root).as_posix() for p in sorted(changed)]
+
+    def start_watch(self, on_change=None, *, interval: float = 2.0) -> None:
+        """Poll the vault for external edits (ponytail: mtime scan of ~100 files
+        beats fsevents plumbing at this scale). `on_change(paths)` fires after a
+        batch is absorbed — the server publishes it to the global event bus."""
+
+        async def _loop() -> None:
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    paths = await self.refresh_from_disk()
+                except Exception:
+                    _logger.warning("vault watch pass failed", exc_info=True)
+                    continue
+                if paths:
+                    _logger.info("vault absorbed external edits", pages=len(paths))
+                    if on_change is not None:
+                        try:
+                            await on_change(paths)
+                        except Exception:
+                            _logger.debug("vault change sink failed", exc_info=True)
+
+        if self._watch_task is None or self._watch_task.done():
+            self._watch_task = asyncio.ensure_future(_loop())
 
     def attach_search_index(self, search_index: object | None) -> None:
         self._search_index = search_index
@@ -789,12 +890,15 @@ class FilePageStore:
             return []
         return [p for p in sorted(raw_root.rglob("*.md")) if (self._root / p.relative_to(raw_root)) not in self._pages]
 
-    @staticmethod
-    def _write_atomic(path: Path, text: str) -> None:
+    def _write_atomic(self, path: Path, text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(text, encoding="utf-8")
         tmp.replace(path)
+        try:
+            self._file_state[path] = path.stat().st_mtime_ns  # own write — not an external change
+        except OSError:
+            pass
 
     def _persist(self, path: Path) -> None:
         page = self._pages[path]
@@ -810,6 +914,8 @@ class FilePageStore:
     def _remove_page_files(self, path: Path) -> None:
         path.unlink(missing_ok=True)
         self._raw_path(path).unlink(missing_ok=True)
+        self._file_state.pop(path, None)
+        self._file_state.pop(self._raw_path(path), None)
 
     def _find(self, record_id: str) -> tuple[Path, Line] | None:
         path = self._loc.get(record_id)

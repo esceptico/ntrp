@@ -532,6 +532,11 @@ export interface Actions {
   automationStreamIdle: () => void;
   automationProgress: (taskId: string, status: string) => void;
   automationFinished: (taskId: string) => void;
+  /** Monotonic counter bumped when the server's live memory vault absorbs
+   *  on-disk changes (Obsidian edit, feed write, maintenance pass) — the
+   *  memory view refetches silently when it moves. */
+  memoryVaultVersion: number;
+  memoryVaultChanged: () => void;
   pushToast: (toast: Toast) => void;
   dismissToast: (id: string) => void;
   backgroundAgentsRefreshStarted: () => void;

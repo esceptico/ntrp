@@ -532,6 +532,32 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   min-width: 0;
 }
 
+/* transitions.dev "tabs sliding" (p16) — Tabs.tsx writes the active tab's
+   measured offset/size onto the indicator inline; this transition owns the
+   tween. Tabs.tsx suspends it (transition: none + reflow) on first paint and
+   resize so the indicator snaps instead of animating in from width 0. */
+:root {
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-tabs-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  transform: translate(0, 0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width var(--tabs-dur) var(--tabs-ease),
+    height var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-tabs-indicator { transition: none !important; }
+}
+
 /* One icon-column template for every settings nav element — the tab rows
    AND the sidebar title share it, so the title's label sits in the same
    column as the row labels regardless of icon size / gap / padding. */

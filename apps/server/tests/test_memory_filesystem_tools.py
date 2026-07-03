@@ -278,3 +278,50 @@ async def test_memory_write_refuses_record_backed_generated_and_bad_paths(store:
     for bad in ("../evil.md", "raw/me.md", "changelog/2026/2026-07.md", "newroot.md"):
         result = await memory_write(execution, MemoryWriteInput(path=bad, content="x"))
         assert result.is_error, bad
+
+
+async def test_live_vault_absorbs_external_edits(tmp_path: Path):
+    """Obsidian-for-ntrp: an on-disk edit (new page, prose edit, raw timeline
+    change, deletion) is absorbed by refresh_from_disk without a restart; the
+    store's own writes never read as external changes."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    root = tmp_path / "memory"
+    store = FilePageStore(root)
+    await store.open()
+
+    # own writes are echo-suppressed
+    rec = await store.add("Tim rides a gravel bike.", kind="fact", source_ref=SourceRef("user", ""))
+    assert await store.refresh_from_disk() == []
+
+    # external prose edit on an existing page is absorbed
+    me = root / "me.md"
+    me.write_text(me.read_text(encoding="utf-8") + "\nEdited in Obsidian.\n", encoding="utf-8")
+    changed = await store.refresh_from_disk()
+    assert changed == ["me.md"], changed
+    assert "Edited in Obsidian." in store._pages[me].prose
+    assert (await store.get(rec.id)) is not None, "timeline survives a prose edit"
+
+    # external new page (a feed write) appears
+    feed = root / "feeds" / "pr-queue.md"
+    feed.parent.mkdir(parents=True, exist_ok=True)
+    feed.write_text("# PR queue\n\n- none open\n", encoding="utf-8")
+    assert await store.refresh_from_disk() == ["feeds/pr-queue.md"]
+    assert store._pages[feed].prose.startswith("# PR queue")
+
+    # external raw-sidecar edit reloads the page's records
+    raw_me = root / "raw" / "me.md"
+    raw_text = raw_me.read_text(encoding="utf-8")
+    raw_me.write_text(raw_text + "- 2026-07-03 ^ee11ff22 [fact] (src:user) Added via git.\n", encoding="utf-8")
+    assert await store.refresh_from_disk() == ["me.md"]
+    assert (await store.get("ee11ff22")) is not None
+
+    # deletion drops the page + records
+    feed.unlink()
+    assert await store.refresh_from_disk() == ["feeds/pr-queue.md"]
+    assert feed not in store._pages
+
+    # index.md reflects the absorbed state (regenerated on change)
+    assert "pr-queue" not in (root / "index.md").read_text(encoding="utf-8")
+    await store.close()

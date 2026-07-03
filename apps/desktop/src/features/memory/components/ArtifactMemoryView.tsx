@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Search } from "lucide-react";
 import { useReducedMotion } from "motion/react";
+import { useStore } from "@/stores";
 import type { AppConfig } from "@/api/core";
 import { wikiSlug, type WikiLinkHandlers } from "@/lib/wikilink";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/SegmentedControl";
@@ -94,6 +95,17 @@ export function ArtifactMemoryView({ config }: { config: AppConfig }) {
   useEffect(() => {
     void load(serverQuery);
   }, [config, serverQuery]);
+
+  // Live vault: the server absorbed on-disk edits (Obsidian, a feed run, a
+  // maintenance pass). Refetch what we're showing — silently: the list/detail
+  // skeletons only render when there's nothing on screen yet.
+  const memoryVaultVersion = useStore((s) => s.memoryVaultVersion);
+  useEffect(() => {
+    if (memoryVaultVersion === 0) return;
+    void load(serverQuery);
+    setContentRefreshKey((k) => k + 1);
+    if (mode === "records") setRecordsRefreshKey((k) => k + 1);
+  }, [memoryVaultVersion]);
 
   useEffect(() => {
     if (mode !== "records") return;

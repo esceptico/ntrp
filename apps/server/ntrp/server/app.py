@@ -12,6 +12,7 @@ from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
 from ntrp.core.tool_result_files import prune_offload_store
+from ntrp.events.sse import MemoryChangedEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
@@ -98,6 +99,14 @@ async def lifespan(app: FastAPI):
             await bus_registry.get_or_create(AUTOMATION_BUS_KEY).emit(event)
 
         runtime.session_service.set_event_sink(_publish_session_event)
+
+    # Live memory vault: the store polls the memory dir for external edits
+    # (Obsidian, feed automations, git) and fans each absorbed batch out on the
+    # global stream so the desktop memory view refreshes itself — no restarts.
+    async def _publish_memory_changed(paths: list[str]) -> None:
+        await bus_registry.get_or_create(AUTOMATION_BUS_KEY).emit(MemoryChangedEvent(paths=paths))
+
+    runtime.knowledge.start_memory_watch(_publish_memory_changed)
 
     # Per-session write locks. The post dispatcher holds one for its full
     # lifetime so two concurrent post-mode dispatches against the same

@@ -713,6 +713,9 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({
       automationStream: reduceAutomationFinished(s.automationStream, taskId),
     })),
+  memoryVaultVersion: 0,
+  memoryVaultChanged: () =>
+    set((s) => ({ memoryVaultVersion: s.memoryVaultVersion + 1 })),
   pushToast: (toast) =>
     set((s) => (s.toasts.some((t) => t.id === toast.id) ? {} : { toasts: [...s.toasts, toast] })),
   dismissToast: (id) =>

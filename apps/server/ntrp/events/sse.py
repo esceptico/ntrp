@@ -87,6 +87,7 @@ class EventType(StrEnum):
     TOKEN_USAGE = "token_usage"
     GOAL_UPDATED = "goal_updated"
     GOAL_CLEARED = "goal_cleared"
+    MEMORY_CHANGED = "memory_changed"
     TODO_UPDATED = "todo_updated"
     SESSION_UPDATED = "session_updated"
     SESSION_CREATED = "session_created"
@@ -162,6 +163,16 @@ class SessionUpdatedEvent(SSEEvent):
     type: EventType = field(default=EventType.SESSION_UPDATED, init=False)
     session_id: str = ""
     name: str | None = None
+
+
+@dataclass(frozen=True)
+class MemoryChangedEvent(SSEEvent):
+    """The live memory vault absorbed on-disk changes (Obsidian edit, feed write,
+    maintenance pass). Rides the global automation bus; clients refetch the listed
+    pages if they're showing them."""
+
+    type: EventType = field(default=EventType.MEMORY_CHANGED, init=False)
+    paths: list[str] = field(default_factory=list)  # vault-relative page paths
 
 
 @dataclass(frozen=True)

@@ -26,6 +26,7 @@ type AutomationEvent =
   | { type: "automation_suggestions_updated"; seq?: number }
   | { type: "session_created"; session: SessionListItem; seq?: number }
   | { type: "session_activity"; session: SessionListItem; seq?: number }
+  | { type: "memory_changed"; paths: string[]; seq?: number }
   | { type: "stream_keepalive"; latest_seq: number; seq?: number }
   | { type: "stream_reset"; reason: string; seq?: number };
 
@@ -106,6 +107,11 @@ export function useAutomationEvents(): void {
         // An automation just provisioned its channel session. Prepend it so the
         // sidebar row shows up live; the store dedupes an already-loaded id.
         store().prependSession(event.session);
+      } else if (event.type === "memory_changed") {
+        // The live memory vault absorbed on-disk edits (Obsidian, a feed run,
+        // a maintenance pass) — bump the version so an open memory view
+        // silently refetches what it's showing.
+        store().memoryVaultChanged();
       } else if (event.type === "session_activity") {
         // A channel the user may not be viewing got new content — bump its
         // sidebar row to the top with fresh metadata.

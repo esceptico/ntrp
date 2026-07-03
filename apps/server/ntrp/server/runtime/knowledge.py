@@ -34,6 +34,13 @@ class KnowledgeRuntime:
     def consolidate(self):
         return self._consolidate
 
+    def start_memory_watch(self, on_change) -> None:
+        """Turn the vault live: absorb external edits (Obsidian, feeds, git) into
+        the in-memory store and fan a change event out through `on_change`."""
+        store = self._record_store
+        if store is not None and hasattr(store, "start_watch"):
+            store.start_watch(on_change)
+
     def _memory_llm(self):
         """(client, model) for memory-page synthesis — the same completion client
         and model the curator/consolidate use. (None, "") when no memory_model is
