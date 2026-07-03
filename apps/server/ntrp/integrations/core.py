@@ -44,6 +44,7 @@ from ntrp.tools.memory import (
     memory_rebuild_tool,
     memory_search_tool,
     memory_tree_tool,
+    memory_write_tool,
     recall_tool,
     remember_tool,
 )
@@ -174,6 +175,7 @@ MEMORY = Integration(
         "memory_read": memory_read_tool,
         "memory_search": memory_search_tool,
         "memory_patch": memory_patch_tool,
+        "memory_write": memory_write_tool,
         "memory_rebuild": memory_rebuild_tool,
     },
 )

@@ -96,6 +96,11 @@ class MemoryPatchInput(BaseModel):
     force_generated: bool = Field(default=False, description="Explicitly allow editing a generated read-only artifact after approval.")
 
 
+class MemoryWriteInput(BaseModel):
+    path: str = Field(description="Relative .md path under the memory root, e.g. feeds/pr-queue.md. Creates the page or replaces its whole content (update-in-place).")
+    content: str = Field(min_length=1, max_length=40_000, description="Full markdown content for the page (a compact briefing, not an append log).")
+
+
 class MemoryRebuildInput(BaseModel):
     reason: str | None = Field(default=None, max_length=500, description="Optional short reason for the rebuild audit log.")
 
@@ -284,11 +289,13 @@ def _read_text_no_symlink(path: Path) -> str:
         raise
 
 
-def _write_text_no_symlink(path: Path, text: str) -> None:
+def _write_text_no_symlink(path: Path, text: str, *, create: bool = False) -> None:
     flags = os.O_WRONLY | os.O_TRUNC
+    if create:
+        flags |= os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    fd = os.open(path, flags)
+    fd = os.open(path, flags, 0o644)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
@@ -505,6 +512,79 @@ async def memory_patch(execution: ToolExecution, args: MemoryPatchInput) -> Tool
     return await asyncio.to_thread(_memory_patch_sync, args)
 
 
+def _write_target(args: MemoryWriteInput) -> tuple[str, str] | ToolResult:
+    """Validate a memory_write target; returns (rel, existing_content) or an error.
+
+    Feed pages (any page WITHOUT a raw/ timeline sidecar) are whole-page writable —
+    they are the automation-owned, update-in-place layer. Record-backed pages are
+    compiled from their records, so a whole-page write would be clobbered by the
+    next synthesis; those keep flowing through remember/memory_patch."""
+    rel = _validate_relative_path(args.path)
+    if rel is None or not rel.endswith(".md"):
+        return _path_error(args.path)
+    store = _artifact_store()
+    if not store._allowed_artifact_rel(rel) or rel.startswith("changelog/"):
+        return _path_error(args.path)
+    try:
+        artifact = store.read_artifact(rel)
+        if artifact.generated:
+            return ToolResult(content=f"{rel} is a generated report — it is rebuilt from the pages; there is nothing durable to write here.", preview="Generated artifact", is_error=True)
+    except FileNotFoundError:
+        pass  # creating a new page
+    if (store.root / "raw" / rel).is_file():
+        return ToolResult(
+            content=f"{rel} is a record-backed page — its prose is compiled from records and a whole-page write would be overwritten. Use remember for new facts or memory_patch for a prose fix.",
+            preview="Record-backed page",
+            is_error=True,
+        )
+    existing = ""
+    path = _safe_existing_file_path(store.root, rel)
+    if path is not None:
+        try:
+            existing = _read_text_no_symlink(path)
+        except OSError:
+            return _path_error(args.path)
+    return rel, existing
+
+
+def _approve_memory_write_sync(args: MemoryWriteInput) -> ApprovalInfo | None:
+    target = _write_target(args)
+    if isinstance(target, ToolResult):
+        return None
+    rel, existing = target
+    verb = "Update" if existing else "Create"
+    return ApprovalInfo(
+        description=f"{verb} memory page {rel}",
+        preview=args.content[:500],
+        diff=_unified_diff(rel, existing, args.content),
+    )
+
+
+async def approve_memory_write(execution: ToolExecution, args: MemoryWriteInput) -> ApprovalInfo | None:
+    return await asyncio.to_thread(_approve_memory_write_sync, args)
+
+
+def _memory_write_sync(args: MemoryWriteInput) -> ToolResult:
+    target = _write_target(args)
+    if isinstance(target, ToolResult):
+        return target
+    rel, existing = target
+    store = _artifact_store()
+    path = store.root.joinpath(*Path(rel).parts)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = args.content if args.content.endswith("\n") else args.content + "\n"
+        _write_text_no_symlink(path, content, create=True)
+    except OSError as exc:
+        return ToolResult(content=f"Error writing memory page: {exc}", preview="Write failed", is_error=True)
+    verb = "Updated" if existing else "Created"
+    return ToolResult(content=f"{verb} memory page {rel}.", preview=verb, data={"path": rel})
+
+
+async def memory_write(execution: ToolExecution, args: MemoryWriteInput) -> ToolResult:
+    return await asyncio.to_thread(_memory_write_sync, args)
+
+
 async def approve_memory_rebuild(execution: ToolExecution, args: MemoryRebuildInput) -> ApprovalInfo | None:
     reason = f": {args.reason}" if args.reason else ""
     return ApprovalInfo(description=f"Rebuild memory filesystem artifacts{reason}", preview=None, diff=None)
@@ -622,7 +702,8 @@ def _entity_brief_nudge(query: str) -> str | None:
 
 _MEMORY_FS_DESCRIPTION = (
     "The memory wiki is plain markdown: me.md (profile), directives.md, topics/<slug>.md "
-    "(one page per subject — people, products, projects), observations/, insights/, daily/. "
+    "(one page per subject — people, products, projects), feeds/ (automation-owned "
+    "briefings, updated in place), observations/, insights/, daily/. "
     "Use recall for atomic facts; use memory_tree for the live file tree, then memory_read a "
     "page by path/title to go deep."
 )
@@ -658,6 +739,21 @@ memory_patch_tool = tool(
     policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True, permissions=frozenset({MEMORY_RECORDS_SERVICE})),
     approval=approve_memory_patch,
     execute=memory_patch,
+)
+
+memory_write_tool = tool(
+    display_name="MemoryWrite",
+    description=(
+        "Create or update-in-place a whole memory page (e.g. a feeds/<slug>.md briefing "
+        "owned by an automation). Replaces the entire page — write the full current "
+        "briefing, never an appended log. Refuses generated reports and record-backed "
+        "pages (those compile from records; use remember/memory_patch). Requires approval. "
+        + _MEMORY_FS_DESCRIPTION
+    ),
+    input_model=MemoryWriteInput,
+    policy=ToolPolicy(action=ToolAction.WRITE, scope=ToolScope.INTERNAL, requires_approval=True, permissions=frozenset({MEMORY_RECORDS_SERVICE})),
+    approval=approve_memory_write,
+    execute=memory_write,
 )
 
 memory_rebuild_tool = tool(
