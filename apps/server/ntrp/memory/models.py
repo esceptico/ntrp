@@ -81,3 +81,4 @@ class Record:
     superseded_by: str | None = None
     pinned: bool = False
     source_ref: SourceRef | None = None
+    imp: int | None = None  # 1-10 poignancy from the scorer; None = unscored (neutral 5)

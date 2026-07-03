@@ -41,6 +41,12 @@ Propose ONLY these operations:
   (no provenance source) — a stray fragment.
 - noop: when records are unrelated, or you are unsure.
 
+A neighborhood may consist entirely of `lesson` records — the agent's distilled
+playbook of working rules. Treat those like any dedup pass: merge near-duplicate or
+overlapping lessons into the ONE sharpest, most actionable second-person sentence,
+and invalidate a lesson a newer one clearly obsoletes. Never retype a lesson (omit
+`kind` on lesson merges) — an agent-inferred rule must not become a durable fact.
+
 Worthiness bar (same one the writer uses): durable knowledge about the USER — identity,
 preferences, goals, working style — standing behaviour rules, and substantive ongoing-
 project facts all STAY. A record being merely old, or about engineering work, is NOT

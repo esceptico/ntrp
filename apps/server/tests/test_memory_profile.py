@@ -77,3 +77,29 @@ async def test_verbose_directives_do_not_starve_facts(tmp_path: Path):
 
     assert "the user is named Tim" in block  # facts get their own guaranteed slice
     await store.close()
+
+
+async def test_playbook_is_salience_ranked_not_recency_ranked(tmp_path: Path):
+    """A char-budgeted playbook must carry the BEST lessons: a high-imp old lesson
+    outranks a flood of newer low-imp ones."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    keeper = await store.add("KEEPER: never push to origin without approval.", kind="lesson", source_ref=SourceRef("curator", ""))
+    await store.set_pinned(keeper.id, False)  # ensure normal path
+    # score the keeper high; bury it under many newer low-imp filler lessons
+    for path, line in [store._find(keeper.id)]:
+        line.imp = 9
+        store._persist(path)
+    for i in range(80):
+        r = await store.add(f"filler lesson {i} " + "y" * 30, kind="lesson", source_ref=SourceRef("curator", ""))
+        found = store._find(r.id)
+        found[1].imp = 1
+        store._persist(found[0])
+
+    block = await resident_profile(store)
+
+    assert "KEEPER: never push to origin" in block, "high-salience lesson survives the budget"
+    await store.close()

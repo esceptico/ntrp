@@ -387,6 +387,7 @@ class FilePageStore:
             superseded_by=("superseded" if line.superseded else None),
             pinned=line.pinned,
             source_ref=SourceRef(kind=line.src, ref=line.id),
+            imp=line.imp,
         )
 
     def _entity_path(self, slug: str) -> Path:

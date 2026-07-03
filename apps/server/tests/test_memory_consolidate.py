@@ -543,3 +543,65 @@ async def test_neighborhood_excludes_self(tmp_path: Path):
     assert a.id not in ids
     assert b.id in ids
     await records.close()
+
+
+async def test_lessons_merge_with_lessons_but_never_cross_into_durable_hoods(tmp_path: Path):
+    """Playbook hygiene: near-duplicate lessons dedup like facts do, but the
+    neighborhoods are kind-partitioned so a lesson never merges with a fact."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    l1 = await store.add("Verify against the running system before reporting status.", kind="lesson", source_ref=SourceRef("curator", ""))
+    l2 = await store.add("Always verify claims against the live system before reporting.", kind="lesson", source_ref=SourceRef("curator", ""))
+    fact = await store.add("The user verifies systems at Dex.", kind="fact", source_ref=SourceRef("user", ""))
+
+    class _HoodAwareLLM(StubLLM):
+        """Hood order isn't deterministic — answer the merge only for the lesson hood."""
+
+        async def completion(self, *, messages, model, reasoning_effort=None, response_format=None, **kwargs):
+            self.calls.append({"messages": messages, "model": model, "response_format": response_format})
+            body = messages[-1]["content"]
+            if l1.id in body and l2.id in body:
+                return completion_response(_merge_ops([l1.id, l2.id], merged_text="Verify against the running system before reporting status."))
+            return completion_response(LintOps().model_dump_json())
+
+    llm = _HoodAwareLLM()
+    consolidate = Consolidate(store, llm, model="memory-model", db_path=tmp_path / "meta.db")
+
+    report = await consolidate.run_once()
+
+    assert report.merged == 1
+    active = await store.list(limit=None, scopes=None)
+    lessons = [r for r in active if r.kind == "lesson"]
+    assert len(lessons) == 1 and lessons[0].kind == "lesson", lessons
+    assert any(r.id == fact.id for r in active), "fact untouched"
+    # no judged neighborhood ever mixed a lesson with a durable record
+    for call in llm.calls:
+        body = call["messages"][-1]["content"]
+        if '"kind": "lesson"' in body:
+            assert '"kind": "fact"' not in body, "lesson hood contaminated with a durable record"
+    await consolidate.close()
+    await store.close()
+
+
+async def test_lesson_is_never_retyped_to_durable(tmp_path: Path):
+    """Trust boundary: the judge cannot promote an agent-inferred lesson to a fact."""
+    from ntrp.memory.file_store import FilePageStore
+    from ntrp.memory.models import SourceRef
+
+    store = FilePageStore(tmp_path / "memory")
+    await store.open()
+    lesson = await store.add("Prefer editing artifacts in place.", kind="lesson", source_ref=SourceRef("curator", ""))
+
+    retype = LintOps.model_validate({"retypes": [{"record_id": lesson.id, "kind": "fact"}]}).model_dump_json()
+    llm = StubLLM(retype)
+    consolidate = Consolidate(store, llm, model="memory-model", db_path=tmp_path / "meta.db")
+
+    report = await consolidate.run_once()
+
+    assert report.retyped == 0
+    assert (await store.get(lesson.id)).kind == "lesson"
+    await consolidate.close()
+    await store.close()

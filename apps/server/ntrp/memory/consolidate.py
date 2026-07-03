@@ -47,10 +47,12 @@ _logger = get_logger(__name__)
 _KINDS = {"directive", "fact", "source"}
 
 NEIGHBORHOOD_LIMIT = 8
-# Consolidation only touches the DURABLE pool. Lessons are the agent's playbook and
-# must never be merged into / retyped to a durable fact; legacy `observation` lines
-# (retired kind) are skipped rather than trust-laundered.
-_SKIP_KINDS = {"observation", "lesson"}
+# Legacy `observation` lines (retired kind) are never judged. Lessons ARE judged,
+# but only against other lessons: a lesson may merge with / supersede a lesson,
+# never cross the boundary into durable facts (that would launder agent-inferred
+# rules into user-grade knowledge) — enforced by kind-partitioned neighborhoods
+# plus the retype guard.
+_SKIP_KINDS = {"observation"}
 LABEL_FINGERPRINT_KEY = "consolidate_label_fingerprint"
 JUDGES_PER_SWEEP = 200  # cap LLM judgments/run; changed hoods beyond it roll to the next run
 
@@ -177,7 +179,7 @@ class Consolidate:
     # --- candidate selection (bounded) ------------------------------------
 
     async def _select_delta(self) -> list[Record]:
-        """The active DURABLE candidate pool (observations/lessons excluded). Unchanged
+        """The active candidate pool (retired observations excluded). Unchanged
         neighborhoods are skipped via the fingerprint cache in run_once, so scanning the
         whole pool is cheap on a clean night and there is no record-count ceiling — the
         per-run cost is bounded by JUDGES_PER_SWEEP changed hoods, not the corpus size."""
@@ -187,15 +189,20 @@ class Consolidate:
     async def _build_neighborhoods(self, delta: list[Record]) -> list[list[Record]]:
         """One neighborhood per delta record: the record plus a handful of active
         records that resemble it (so a new record merges against an older one
-        outside the delta). De-duped by frozen id-set so two delta records that
-        recall each other aren't judged twice."""
+        outside the delta). Kind-partitioned at the lesson boundary: a lesson hood
+        holds only lessons, a durable hood only durables — dedup happens within each
+        pool, never across the trust boundary. De-duped by frozen id-set so two
+        delta records that recall each other aren't judged twice."""
         seen: set[frozenset[str]] = set()
         hoods: list[list[Record]] = []
         for record in delta:
+            lesson_pool = record.kind == "lesson"
             members = {record.id: record}
             for hit in await self._records.neighborhood(record, limit=NEIGHBORHOOD_LIMIT):
                 if hit.kind in _SKIP_KINDS:
-                    continue  # never pull an observation/lesson into a durable-record merge
+                    continue  # retired kinds never re-enter through a merge
+                if (hit.kind == "lesson") != lesson_pool:
+                    continue  # lessons only ever merge with lessons
                 members.setdefault(hit.id, hit)
             key = frozenset(members)
             if key in seen:
@@ -275,7 +282,9 @@ class Consolidate:
             return  # never merge a pinned record away
         survivor = self._pick_survivor(members)
         loser_ids = [m.id for m in members if m.id != survivor.id]
-        kind = op.kind if op.kind in _KINDS else None
+        # A lesson merge stays a lesson — the judge cannot promote it to a durable
+        # kind on the way through (hoods are kind-partitioned, so members agree).
+        kind = op.kind if (op.kind in _KINDS and survivor.kind != "lesson") else None
         # An empty/whitespace merged_text would blank the survivor + evict its vector;
         # keep the survivor's existing text in that case.
         text = op.merged_text if (op.merged_text and op.merged_text.strip()) else None
@@ -295,6 +304,8 @@ class Consolidate:
         target = live.get(op.record_id)
         if target is None or target.pinned:
             return
+        if target.kind == "lesson":
+            return  # a lesson never becomes durable knowledge (trust laundering)
         if op.kind not in _KINDS or op.kind == target.kind:
             return
         if await self._records.set_kind(op.record_id, op.kind):

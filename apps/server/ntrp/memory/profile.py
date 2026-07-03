@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ntrp.logging import get_logger
 from ntrp.memory.scopes import scopes_for_read
+from ntrp.memory.scorer import salience
 
 _logger = get_logger(__name__)
 
@@ -25,14 +26,17 @@ SYNTHESIZED_PROSE_CHAR_LIMIT = 4000
 async def _playbook(memory_records: object, scopes: list) -> str | None:
     """The continual-learning playbook: lesson records the agent has DISTILLED
     from past interactions, surfaced every turn so they're actually applied (the
-    active half of continual learning — capture is useless if never read)."""
+    active half of continual learning — capture is useless if never read).
+    Salience-ranked, not recency-ranked: the char budget should carry the BEST
+    lessons, not whichever happened to be confirmed last."""
     try:
-        lessons = await memory_records.list(kinds=["lesson"], scopes=scopes, limit=PROFILE_RECORD_LIMIT)
+        lessons = await memory_records.list(kinds=["lesson"], scopes=scopes, limit=None)
     except Exception:
         _logger.warning("playbook load failed", exc_info=True)
         return None
     if not lessons:
         return None
+    lessons.sort(key=lambda r: (salience(r.imp, r.last_confirmed_at), r.last_confirmed_at), reverse=True)
     lines: list[str] = []
     used = 0
     for r in lessons:
