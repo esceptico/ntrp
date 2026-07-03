@@ -19,6 +19,7 @@ curation; integration observations use no LLM and always run.
 
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -63,6 +64,10 @@ _SOURCE_FETCH_LIMIT = {"calendar": 200, "gmail": 150, "slack": 300}
 _GMAIL_NOISE_LABELS = frozenset(
     {"CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "SPAM"}
 )
+# Machine-authored senders (CI bots, PR review bots, notification relays, digest
+# mailers). Their mail is lifecycle noise, not signal about the user — storing it
+# as observations buried the store in CodeRabbit/Vercel PR chatter.
+_GMAIL_BOT_SENDER_RE = re.compile(r"(?i)no-?reply|donotreply|notifications?@|\[bot\]|mailer-daemon")
 
 
 async def run_memory_init(
@@ -340,13 +345,16 @@ def _fetch_gmail(client, window_days: int) -> list:
 
 
 def _filter_gmail(items: list) -> list:
-    """Drop bulk/category mail (promotions/social/updates/spam) BEFORE any LLM
-    call — highest-volume source, so the label gate is the main cost lever."""
+    """Drop bulk/category mail (promotions/social/updates/spam) and bot-authored
+    mail (CI/PR-review/notification senders) BEFORE any LLM call — highest-volume
+    source, so these gates are the main cost AND noise lever."""
     kept = []
     for item in items:
         meta = getattr(item, "metadata", {}) or {}
         labels = {str(label) for label in (meta.get("labels") or [])}
         if labels & _GMAIL_NOISE_LABELS:
+            continue
+        if _GMAIL_BOT_SENDER_RE.search(str(meta.get("from") or "")):
             continue
         kept.append(item)
     return kept

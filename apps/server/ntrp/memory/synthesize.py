@@ -68,21 +68,29 @@ async def _complete(llm, model, system, user, effort) -> str | None:
     return content.strip() if content and content.strip() else None
 
 
-def _prune_dead_cites(prose: str, live_ids: set[str]) -> str:
-    """Remove (record:..) refs that no longer resolve to a live record, keeping the live
-    ones in a multi-id group. Used when a page can't re-synthesize but its prose has gone
-    stale-cited, so the file never carries dangling provenance."""
-    def repl(m: re.Match) -> str:
-        ids = ps._CITE_ID_RE.findall(m.group(0))
-        live = [i for i in ids if i.lower() in live_ids]
-        if not live:
-            return ""
-        if len(live) == len(ids):
-            return m.group(0)
-        return "(" + ", ".join(f"record:{i}" for i in live) + ")"
+# The LLM contract stays id-based — `(record:XXXXXXXX)` cites are what the
+# provenance check verifies. The STORED page translates each cite group into a
+# dex-style readable source tag — `(from chat)`, `(from gmail + calendar)`,
+# `(inferred)` — and the verified id list moves to the raw sidecar (prose_cites).
+_SRC_CLASS = {"user": "chat", "chat_turn": "chat", "curator": "chat", "seed": "chat", "unknown": "chat"}
 
-    out = ps._CITATION_GROUP_RE.sub(repl, prose)
-    return re.sub(r" +([.,;])", r"\1", out)  # tidy a space left before punctuation
+
+def _cite_tag(ids: list[str], src_by_id: dict[str, str]) -> str:
+    classes: list[str] = []
+    for rid in ids:
+        src = src_by_id.get(rid.lower(), "chat")
+        label = "inferred" if src == "dreamer" else f"from {_SRC_CLASS.get(src, src)}"
+        if label not in classes:
+            classes.append(label)
+    # "(from chat + gmail)" — strip the repeated "from" on merged classes
+    return "(" + " + ".join(c.removeprefix("from ") if i else c for i, c in enumerate(classes)) + ")"
+
+
+def _humanize_cites(prose: str, src_by_id: dict[str, str]) -> str:
+    def repl(m: re.Match) -> str:
+        return _cite_tag(ps._CITE_ID_RE.findall(m.group(0)), src_by_id)
+
+    return ps._CITATION_GROUP_RE.sub(repl, prose)
 
 
 def _pre(system: str, conventions: str) -> str:
@@ -98,9 +106,12 @@ def _provenance_ok(text: str, allowed: set[str]) -> bool:
 def _regression_ok(page, candidate: str) -> bool:
     """GEPA-style anti-collapse guard: reject a re-synthesis that drops token or
     citation count below REGRESSION_FLOOR of the prior (keep the prior prose).
+    Prior tokens come from the stored prose; prior cites from the verified
+    grounding list (the stored prose carries readable tags, not ids). The
+    candidate is judged pre-translation, so its ids are still countable.
     First synthesis (no baseline) always passes."""
-    prior_tokens = int(page.frontmatter.get("prose_tokens") or 0)
-    prior_cites = int(page.frontmatter.get("prose_cites") or 0)
+    prior_tokens = len(page.prose.split()) if page.prose else 0
+    prior_cites = len(page.frontmatter.get("prose_cites") or [])
     if prior_tokens == 0 and prior_cites == 0:
         return True
     new_tokens = len(candidate.split())
@@ -187,10 +198,7 @@ def _rename_project_pages(store) -> None:
         for ln in page.lines:
             store._loc[ln.id] = new_path
         store._persist(new_path)
-        try:
-            path.unlink()
-        except OSError:
-            pass
+        store._remove_page_files(path)
 
 
 # -- per-page synthesizers -----------------------------------------------------
@@ -287,14 +295,15 @@ _DAILY_SKIP_KINDS = {"observation", "changelog"}
 
 def _daily_records(store, day: str) -> list:
     """Meaningful records that entered memory on `day` (by append date), gathered
-    across the whole store. Integration observations and housekeeping are excluded
-    so the daily log reads as what the USER did, not inbox noise."""
+    across the whole store. Integration observations, housekeeping, and dream
+    insights are excluded so the daily log reads as what the USER did — not inbox
+    noise, and not a mirror of the insights page."""
     out: list = []
     for path, page in store._pages.items():
         if _page_kind(store._root, path) == "daily":
             continue
         for ln in page.active_lines():
-            if ln.date == day and ln.kind not in _DAILY_SKIP_KINDS:
+            if ln.date == day and ln.kind not in _DAILY_SKIP_KINDS and ln.src != "dreamer":
                 out.append(store._to_record(ln, path))
     return out
 
@@ -338,7 +347,8 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
     all_records = await store.list(limit=None, scopes=None)
     labels = await store.labels_for([r.id for r in all_records], include_kind=True)
     known_titles = _known_titles(store)  # links survive only to real topic pages (no dangling [[X]] in Obsidian)
-    live_ids = {r.id.lower() for r in all_records}  # for dangling-cite detection
+    live_ids = {r.id.lower() for r in all_records}  # for dangling-grounding detection
+    src_by_id = {r.id.lower(): (r.source_ref.kind if r.source_ref else "chat") for r in all_records}
     done: list[str] = []
     for path in list(store._pages.keys()):
         kind = _page_kind(store._root, path)
@@ -350,10 +360,13 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
         # track the store's current state. Past-window daily pages fall through to
         # _stale and freeze once written.
         force = kind == "active_work" or (kind == "daily" and path.stem in recent_days)
-        # Re-synthesize if a new record arrived OR a prose cite went dangling (the cited
-        # record was merged/superseded/pruned away) — so provenance never rots on disk.
-        dangling = not ps.cited_ids(page.prose).issubset(live_ids) if page.prose else False
-        if not force and not dangling and not _stale(page):
+        # Re-synthesize if a new record arrived, a grounding id went dangling (the
+        # cited record was merged/superseded/pruned away), or the prose still carries
+        # the legacy inline `(record:..)` dialect (one-time migration to source tags).
+        grounding = {str(i).lower() for i in (page.frontmatter.get("prose_cites") or [])}
+        legacy_cites = bool(ps.cited_ids(page.prose)) if page.prose else False
+        dangling = bool(page.prose) and not grounding.issubset(live_ids)
+        if not force and not dangling and not legacy_cites and not _stale(page):
             continue
         if kind == "profile":
             prose = await _synth_profile(store, labels, llm, model, reasoning_effort, conventions)
@@ -367,28 +380,34 @@ async def run_synthesis(store, llm, model: str, *, reasoning_effort: str | None 
             prose = await _synth_dossier(store, path, labels, llm, model, reasoning_effort, conventions)
         if prose is None:
             # Couldn't re-synthesize (e.g. a frozen daily log whose records consolidated
-            # away), but if its existing prose has dead cites, strip them so provenance
-            # doesn't rot on disk — keep the prose, drop the broken (record:..) refs.
-            if dangling and page.prose:
-                cleaned = _prune_dead_cites(page.prose, live_ids)
-                if cleaned != page.prose:
-                    page.prose = cleaned
-                    page.frontmatter["prose_cites"] = len(ps.cited_ids(cleaned))
-                    store._persist(path)
-                    done.append(path.stem)
+            # away). Keep the prose but keep its bookkeeping honest: translate any legacy
+            # inline id-cites to readable source tags and drop dead ids from the grounding.
+            if page.prose and (legacy_cites or dangling):
+                page.prose = _humanize_cites(page.prose, src_by_id)
+                page.frontmatter["prose_cites"] = sorted(grounding & live_ids)
+                store._persist(path)
+                done.append(path.stem)
             continue
         # Strip wikilinks to subjects that have no page (parked sub-threshold entities)
         # so the vault has no dangling [[X]] links in Obsidian — every pass, not just profile.
         prose = _strip_unknown_wikilinks(prose, known_titles)
         # Sentinels are deliberate short strings — exempt from the regression guard.
-        if prose not in (ps.NO_ACTIVE_WORK, ps.INSUFFICIENT_DOSSIER, ps.NO_OVERVIEW) and not _regression_ok(page, prose):
+        # Legacy-cite pages are also exempt: their baseline is the old essay register,
+        # and the briefing register is SUPPOSED to be tighter (one-time migration).
+        if (
+            prose not in (ps.NO_ACTIVE_WORK, ps.INSUFFICIENT_DOSSIER, ps.NO_OVERVIEW)
+            and not legacy_cites
+            and not _regression_ok(page, prose)
+        ):
             continue
-        page.prose = prose
+        page.frontmatter["prose_cites"] = sorted(ps.cited_ids(prose))  # verified grounding, pre-translation
+        page.prose = _humanize_cites(prose, src_by_id)
         page.frontmatter["prose_synced"] = now_iso()[:10]
-        page.frontmatter["prose_tokens"] = len(prose.split())
-        page.frontmatter["prose_cites"] = len(ps.cited_ids(prose))
         store._persist(path)
         done.append(path.stem)
+    if done:  # prose changed -> index blurbs + health verdicts changed with it
+        store._write_index()
+        store._write_health()
     msg = f"synthesized {len(done)} pages ({', '.join(done) or 'none'})"
     _logger.info(msg)
     return msg
@@ -437,9 +456,12 @@ if __name__ == "__main__":
             await run_synthesis(store, fake, "m")
             page = store._pages[bike_path]
             ids = {ln.id for ln in page.active_lines()}
-            assert page.prose and any(f"(record:{i}" in page.prose for i in ids), page.prose
+            assert page.prose and "(from chat)" in page.prose and "(record:" not in page.prose, page.prose
+            assert set(page.frontmatter["prose_cites"]) & ids, page.frontmatter
             assert len(page.active_lines()) == 2, "timeline must survive synthesis"
-            assert "<!-- timeline" in bike_path.read_text(encoding="utf-8"), "sentinel + timeline persist"
+            raw_bike = root / "raw" / "topics" / "bicycles.md"
+            assert raw_bike.exists() and "^" in raw_bike.read_text(encoding="utf-8"), "timeline persists in raw/ sidecar"
+            assert "<!-- timeline" not in bike_path.read_text(encoding="utf-8"), "page file is prose-only"
             # active-work.md is a cross-cutting thread (no own timeline) — created + synthesized from the store
             aw = root / "active-work.md"
             assert aw in store._pages and store._pages[aw].prose, "active-work.md synthesized from across the store"
@@ -478,7 +500,7 @@ if __name__ == "__main__":
             daily_path = root / "daily" / f"{today}.md"
             assert daily_path in store._pages, "daily page created for today"
             dp = store._pages[daily_path]
-            assert dp.prose and "(record:" in dp.prose, "daily page synthesized with cites"
+            assert dp.prose and "(from" in dp.prose and "(record:" not in dp.prose, "daily page synthesized with readable source tags"
             assert not dp.active_lines(), "daily page is a prose-only projection (no own records)"
 
             # project rename: opaque-id page -> human name (add files under slug of scope_key)

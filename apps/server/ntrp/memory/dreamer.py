@@ -40,14 +40,23 @@ _INSIGHTS_SYSTEM = (
     "CROSS-DOMAIN insights — connections the user never stated explicitly, each spanning at "
     "least two different topics. Ground every insight in the evidence: cite at least two ids "
     "from DIFFERENT topics. Do not restate a single line. Do not speculate beyond the evidence.\n"
+    "FORM — this is a hard contract: an insight is CLAIM-FIRST and AT MOST 3 sentences "
+    "(~50 words). Lead with the connection itself; one clause of why it matters may follow. "
+    "An essay, a career narrative, or a paragraph of qualifications is NOT an insight — "
+    "if it can't be said in 3 sentences, it isn't sharp enough to store.\n"
     "Format EXACTLY one insight per line:\n"
-    "<insight sentence> (because of ^id1, ^id2)\n"
+    "<claim-first insight, <=3 sentences> (because of ^id1, ^id2)\n"
     "If nothing genuinely cross-domain emerges, output NOTHING.\n"
     "After the insights, on a FINAL separate line, you MAY emit "
     "`LEARNINGS: <one short factual gotcha about THIS run>` (e.g. evidence too thin to "
     "bridge two domains, or a source that keeps surfacing noise). Omit the line entirely "
     "if nothing notable."
 )
+
+# An insight that blows past the 3-sentence contract is an essay — storing it
+# pollutes the insights page, so it's dropped at ingest (the LLM already got the
+# rule; enforcement is what keeps a bad run from rotting the store).
+MAX_INSIGHT_CHARS = 600
 
 
 def _with_preamble(system: str, conventions: str | None, learnings: str | None) -> str:
@@ -161,6 +170,9 @@ async def run_dream(
     written = 0
     today = now_iso()
     for line in insight_lines[:MAX_INSIGHTS]:
+        if len(line) > MAX_INSIGHT_CHARS:
+            _logger.info("dream insight dropped: essay-length", chars=len(line))
+            continue
         cited = set(_CITE_RE.findall(line))  # capturing group -> bare 8-hex ids
         # require >=2 citations that resolve to LIVE records spanning >=2 different subjects
         domains = {d for d in (_domain(c) for c in cited) if d}

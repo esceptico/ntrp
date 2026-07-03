@@ -1,4 +1,6 @@
-"""FilePageStore — canonical memory backed by plain markdown two-zone pages.
+"""FilePageStore — canonical memory backed by plain markdown pages, layered
+Karpathy-style: the visible page file is compiled prose (the wiki), its
+append-only record timeline lives in a raw/<same-path>.md sidecar.
 
 Duck-types the slice of RecordStore that tools/profile/curator actually call
 (open/close/attach_search_index, add/update/supersede_with/supersede/confirm/
@@ -26,7 +28,7 @@ from ntrp.constants import MEMORY_MIN_ENTITY_RECORDS, RRF_K
 from ntrp.database import serialize_embedding
 from ntrp.logging import get_logger
 from ntrp.memory.models import TRUST_DEFAULT, TRUST_LEVEL, Kind, Record, SourceRef, now_iso
-from ntrp.memory.pages import Line, Page, parse_page, render_page
+from ntrp.memory.pages import SENTINEL, Line, Page, merge_split, parse_page, render_page, render_raw
 from ntrp.memory.scorer import salience
 from ntrp.search.retrieval import rrf_merge
 
@@ -40,6 +42,7 @@ _LESSONS = "lessons.md"  # continual-learning playbook (distilled lesson records
 _ENTITIES = "topics"  # one folder for every emergent subject (people/products/projects/topics)
 _LEGACY_SUBJECT_DIRS = ("entities", "projects")  # folded into topics/ at open() (migration)
 _OBSERVATIONS = "observations"  # per-source raw integration stream (gmail/slack/calendar), dream-mined
+_RAW = "raw"  # machine layer: per-page record timelines (raw/<page-path>.md sidecars)
 _INSIGHTS = "insights"  # cross-domain DREAM outputs (OKF insights/), kept out of facts/entities
 _GENERATED_FILES = {"index.md", "AGENTS.md", "health.md"}  # generated reports, not record pages
 # Canonical, properly-cased titles for the fixed structural pages (root). Keeps the
@@ -58,17 +61,16 @@ _CONVENTIONS_TEMPLATE = """\
 This directory is a personal memory wiki — plain markdown, the single source of
 truth (no DB). An agent reads it to understand the user and act on their behalf.
 
-## Page format (two zones)
-Each page is synthesized **prose** above a sentinel, then an append-only
-**timeline** of atomic records below it:
+## Layers (page = compiled prose; raw/ = record timeline)
+Each visible page is **compiled prose** — the current, human-readable briefing.
+Its append-only **timeline** of atomic records lives in `raw/<same-path>.md`:
 
-    <compiled prose — the current, human-readable briefing>
-    <!-- timeline (append-only; edit prose above, not below) -->
     - 2026-06-21 ^a1b2c3d4 [fact] [imp:6] (src:curator) Tim rides a gravel bike.
 
 A timeline line is the canonical record. Tags: `[pin]` (never dropped),
 `[imp:1-10]` (poignancy), `[ent:slug]` (primary entity), `[superseded]`.
-`(src:…)` is provenance. The prose cites records as `(record:<8hex>)`.
+`(src:…)` is provenance. Never edit `raw/` by hand — it is machine-owned;
+pages are compiled from it.
 
 ## Record kinds (by FUNCTION, not subject)
 - `directive` — a standing behaviour rule the USER stated.
@@ -86,14 +88,19 @@ A timeline line is the canonical record. Tags: `[pin]` (never dropped),
   topics). A subject emerges once it has ≥2 records (else parked on me.md); a page
   with a `scope_key` is a project workstream. No separate people/ or projects/ split.
 - `references.md` — source pointers.
-- `observations/<source>.md` — raw integration streams (gmail/calendar/slack).
+- `feeds/<slug>.md` — automation-owned briefings: a feed automation rewrites its page
+  in place each run (memory_write). No records, no append log — the page IS the state.
+- `observations/<source>.md` — integration-source overviews (gmail/calendar/slack).
 - `insights/<month>.md` — cross-domain dream outputs (provisional, cited).
 - `daily/<date>.md` — per-day activity log, synthesized prose only (browsable history).
 - `health.md` — generated self-audit of gaps (stale topics, idle sources).
+- `raw/<page-path>.md` — machine layer: the page's record timeline (never hand-edit).
 - `.index/` — throwaway search index (rebuildable, never canonical).
 
-Navigation is the file tree itself — the desktop file browser, Obsidian's explorer,
-or the agent's memory_tree tool. There is no generated index file.
+Navigate by `index.md` — one line of meaning per page. Read it first, follow the
+few relevant pages, and synthesize from those; don't load the whole vault.
+`health.md` is the lint report: stale topics, orphans, pending synthesis, idle
+sources. Both are regenerated on load and after synthesis.
 
 ## Source trust
 When sources conflict, the higher-trust source wins — update the claim in place. A
@@ -109,12 +116,14 @@ Cite only real record ids you were given — never invent, reformat, or guess on
 only what the cited records support; bring in no outside knowledge. On conflict between
 records: directive > fact > source. Pinned records are never dropped; changelog records
 are ignored for synthesis. Never leak a record id or file path into user-facing prose.
-Cite dialects: synthesized pages write `(record:<8hex>)`; dream insights write
-`(because of ^id1, ^id2)`.
+Cite dialects: synthesis passes emit `(record:<8hex>)`, which the store verifies and
+then renders as a readable source tag — `(from chat)`, `(from gmail)`, `(inferred)` —
+keeping the verified id list in the page's raw sidecar (`prose_cites`); dream insights
+write `(because of ^id1, ^id2)`.
 
 ## Authoring
 Re-read a page before editing it. Update prose IN PLACE — don't append corrections as new
-sentences. Edit the prose ABOVE the sentinel, never the timeline below. Prune stale claims.
+sentences. Edit only the page prose, never the `raw/` timelines. Prune stale claims.
 Two learnings channels — not parallel systems: `lessons.md` (the distilled, agent-facing
 playbook) rides the resident profile into every turn; `.maintenance/<automation>-learnings.md`
 holds per-automation operational notes read ONLY by that automation, never shown in chat.
@@ -196,21 +205,45 @@ class FilePageStore:
         self._root.mkdir(parents=True, exist_ok=True)
         self._pages.clear()
         self._loc.clear()
+        legacy: list[Path] = []
         for path in sorted(self._root.rglob("*.md")):
             # Generated reports live at ROOT only; a nested file like topics/health.md
             # is a real content page (the user's "health" topic), not the generated audit.
-            # .maintenance/ holds per-automation learnings sidecars — never record pages
+            # .maintenance/ holds per-automation learnings sidecars — never record pages;
+            # raw/ holds the machine timelines, loaded WITH their page below
             # (rglob DOES descend dotdirs, so this filter is mandatory).
-            if {".index", ".maintenance"} & set(path.parts) or (path.parent == self._root and path.name in _GENERATED_FILES):
-                continue  # .index/.maintenance = throwaway; root index.md/AGENTS.md/health.md = generated
+            rel_parts = path.relative_to(self._root).parts
+            if {".index", ".maintenance", _RAW} & set(rel_parts) or (path.parent == self._root and path.name in _GENERATED_FILES):
+                continue
             try:
-                page = parse_page(path.read_text(encoding="utf-8"))
+                text = path.read_text(encoding="utf-8")
+                raw_path = self._raw_path(path)
+                page = merge_split(parse_page(text), raw_path.read_text(encoding="utf-8") if raw_path.exists() else None)
             except Exception:
                 _logger.warning("skip unparseable memory page", path=str(path))
                 continue
             self._pages[path] = page
             for line in page.lines:
                 self._loc[line.id] = path
+            if SENTINEL in text:  # legacy two-zone file — rewrite split on this open
+                legacy.append(path)
+        for path in self._orphan_raw_files():
+            # a raw sidecar whose page file is gone: resurrect a prose-less page so
+            # its records stay reachable (synthesis will re-compile the prose)
+            page_path = self._root / path.relative_to(self._root / _RAW)
+            try:
+                page = merge_split(Page(), path.read_text(encoding="utf-8"))
+            except Exception:
+                _logger.warning("skip unparseable raw timeline", path=str(path))
+                continue
+            self._pages[page_path] = page
+            for line in page.lines:
+                self._loc[line.id] = page_path
+            legacy.append(page_path)
+        for path in legacy:
+            self._persist(path)
+        if legacy:
+            _logger.info("split legacy two-zone pages", pages=len(legacy))
         self._migrate_insights()  # relocate pre-insights/ dream records (one-time, idempotent)
         self._migrate_to_topics()  # fold entities/+projects/ into one topics/ folder (idempotent)
         self._heal_structural_pages()  # repair cross-contaminated identity + canonical titles
@@ -221,7 +254,7 @@ class FilePageStore:
         stats = await self.reconcile_entities()
         self._write_conventions()  # AGENTS.md (OKF conventions) — static, once
         self._write_health()       # health.md (self-audit / surfaced gaps) — deterministic
-        self._drop_index()         # the file browser IS the index; a static tree-of-files file is redundant
+        self._write_index()        # index.md — one line of meaning per page (navigate by index)
         _logger.info("file memory ready", pages=len(self._pages), lines=len(self._loc), root=str(self._root), **stats)
         await self._sync_index()
 
@@ -409,7 +442,7 @@ class FilePageStore:
             # a dead file; drop it. Its prose described records that no longer exist.
             if existing is not None and not existing.lines:
                 self._pages.pop(entity_page, None)
-                entity_page.unlink(missing_ok=True)
+                self._remove_page_files(entity_page)
             return None
         if display is None:
             display = (existing.frontmatter.get("title") if existing else None) or _deslug(slug)
@@ -444,7 +477,7 @@ class FilePageStore:
             # still holds its records so it survives this.
             if p.parent.name == _ENTITIES and not self._pages[p].lines:
                 self._pages.pop(p, None)
-                p.unlink(missing_ok=True)
+                self._remove_page_files(p)
             else:
                 self._persist(p)
         return entity_page if promoted else None
@@ -530,10 +563,7 @@ class FilePageStore:
                 existing.frontmatter["type"] = "project" if existing.frontmatter.get("scope_key") else "topic"
                 del self._pages[src]
                 self._persist(target)
-            try:
-                src.unlink()
-            except OSError:
-                pass
+            self._remove_page_files(src)
         for name in _LEGACY_SUBJECT_DIRS:  # drop the now-empty legacy folders
             d = self._root / name
             if d.is_dir() and not any(d.iterdir()):
@@ -589,17 +619,60 @@ class FilePageStore:
         if current != _CONVENTIONS:
             path.write_text(_CONVENTIONS, encoding="utf-8")
 
-    def _drop_index(self) -> None:
-        """Navigation is the file tree itself — the desktop file browser for a human,
-        the memory_tree tool for the agent. A generated index.md that draws an ASCII
-        tree of the same files is redundant (dex keeps one only because its agent has
-        no file browser). Remove any leftover so it stops cluttering the vault."""
-        legacy = self._root / "index.md"
-        if legacy.exists():
-            try:
-                legacy.unlink()
-            except OSError:
-                pass
+    def _page_blurb(self, page: Page, *, record_list: bool = False) -> str:
+        """One index line per page: the first real sentence of its prose (the honest
+        summary — it was synthesized from the records), else its record count."""
+        for raw in page.prose.splitlines():
+            s = raw.strip()
+            if not s or s.startswith("#") or s.startswith("---"):
+                continue
+            s = re.sub(r"\[\[(?:[^\]|]+\|)?([^\]]+)\]\]", r"\1", s)  # unwrap wikilinks
+            s = re.sub(r"\s*\((?:from |inferred)[^)]*\)", "", s)  # source tags are page furniture, not index meaning
+            s = s.lstrip("-• ").strip()
+            if s:
+                return s[:117] + "…" if len(s) > 120 else s
+        active = len(page.active_lines())
+        if not active:
+            return "empty"
+        # record-list pages (directives/lessons/references/insights) are the records —
+        # they are never prose-synthesized, so "pending" would be a lie
+        return f"{active} entries" if record_list else f"{active} records — synthesis pending"
+
+    def _write_index(self) -> None:
+        """index.md — the navigational backbone (Karpathy VII: navigate by index).
+        Not a file tree (the browser shows that): one line of MEANING per page, so
+        an agent can pick the right pages without loading the vault. Regenerated on
+        open() and after synthesis."""
+        def link(path: Path) -> str:
+            rel = path.relative_to(self._root)
+            title = str(self._pages[path].frontmatter.get("title") or path.stem)
+            target = rel.as_posix().removesuffix(".md")
+            return f"[[{target}|{title}]]"
+
+        roots = [self._root / n for n in (_ME, "active-work.md", _DIRECTIVES, _LESSONS, _REFERENCES)]
+        sections: list[tuple[str, list[Path]]] = [
+            ("", [p for p in roots if p in self._pages]),
+            ("Topics", sorted(p for p in self._pages if p.parent.name == _ENTITIES)),
+            ("Feeds", sorted(p for p in self._pages if p.parent.name == "feeds")),
+            ("Integrations", sorted(p for p in self._pages if p.parent.name == _OBSERVATIONS)),
+            ("Insights", sorted(p for p in self._pages if p.parent.name == _INSIGHTS)),
+        ]
+        record_list_pages = {self._root / _DIRECTIVES, self._root / _LESSONS, self._root / _REFERENCES}
+        parts = ["# Memory index", ""]
+        for heading, paths in sections:
+            if not paths:
+                continue
+            if heading:
+                parts += [f"## {heading}", ""]
+            parts += [
+                f"- {link(p)} — {self._page_blurb(self._pages[p], record_list=p in record_list_pages or heading == 'Insights')}"
+                for p in paths
+            ]
+            parts.append("")
+        dailies = sorted(p.stem for p in self._pages if p.parent.name == "daily")
+        if dailies:
+            parts += ["## Daily", "", f"- `daily/` — {len(dailies)} dated logs, newest [[daily/{dailies[-1]}|{dailies[-1]}]]", ""]
+        (self._root / "index.md").write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
 
     def _write_health(self) -> None:
         """health.md — a deterministic self-audit that surfaces blind spots (doc
@@ -626,12 +699,33 @@ class FilePageStore:
         dream_age = _age(last_dream) if last_dream else None  # None != 0 — don't let a same-day dream read as "never"
         if dream_age is None or dream_age > DREAM_DAYS:
             gaps.append(f"- Cross-domain dream hasn't run recently (last: {last_dream or 'never'}) — fewer net-new insights.")
+        # Inbound wikilinks across all prose — a topic no page links to is an orphan
+        # (Karpathy VIII: the value of the wiki is in the edges, not the nodes).
+        linked = {
+            m.group(1).strip().lower()
+            for pg in self._pages.values()
+            for m in re.finditer(r"\[\[([^\]#|]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]", pg.prose)
+        }
+        live_ids = {ln.id.lower() for ln in records}
         for path, pg in sorted(self._pages.items()):
+            rel = path.relative_to(self._root).as_posix()
+            grounding = pg.frontmatter.get("prose_cites") or []
+            dead = [i for i in grounding if str(i).lower() not in live_ids]
+            if dead:
+                gaps.append(f"- Dangling grounding: `{rel}` cites {len(dead)} pruned record(s) — re-synthesis pending.")
             if path.parent.name == _ENTITIES:
                 newest = max((ln.date for ln in pg.active_lines()), default="")
                 a = _age(newest)
                 if a is not None and a > STALE_DAYS:
                     gaps.append(f"- Stale topic: `topics/{path.stem}.md` — no update in {a}d (since {newest}).")
+                if not pg.prose and pg.active_lines():
+                    gaps.append(f"- Pending synthesis: `{rel}` has {len(pg.active_lines())} records but no compiled prose yet.")
+                title = str(pg.frontmatter.get("title") or path.stem).lower()
+                refs = {title, path.stem.lower(), rel.removesuffix(".md").lower()}
+                aliases = pg.frontmatter.get("aliases") or []
+                refs |= {str(al).lower() for al in (aliases if isinstance(aliases, list) else [aliases])}
+                if not (refs & linked):
+                    gaps.append(f"- Orphan topic: `topics/{path.stem}.md` — no other page links to it.")
             elif path.parent.name == _OBSERVATIONS:
                 newest = max((ln.date for ln in pg.active_lines()), default="")
                 a = _age(newest)
@@ -668,13 +762,36 @@ class FilePageStore:
             self._pages[path] = page
         return page
 
+    def _raw_path(self, path: Path) -> Path:
+        return self._root / _RAW / path.relative_to(self._root)
+
+    def _orphan_raw_files(self) -> list[Path]:
+        raw_root = self._root / _RAW
+        if not raw_root.is_dir():
+            return []
+        return [p for p in sorted(raw_root.rglob("*.md")) if (self._root / p.relative_to(raw_root)) not in self._pages]
+
+    @staticmethod
+    def _write_atomic(path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+
     def _persist(self, path: Path) -> None:
         page = self._pages[path]
         page.frontmatter["updated"] = now_iso()[:10]
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(render_page(page), encoding="utf-8")
-        tmp.replace(path)
+        self._write_atomic(path, render_page(page))
+        raw = render_raw(page)
+        raw_path = self._raw_path(path)
+        if raw:
+            self._write_atomic(raw_path, raw)
+        else:
+            raw_path.unlink(missing_ok=True)
+
+    def _remove_page_files(self, path: Path) -> None:
+        path.unlink(missing_ok=True)
+        self._raw_path(path).unlink(missing_ok=True)
 
     def _find(self, record_id: str) -> tuple[Path, Line] | None:
         path = self._loc.get(record_id)
@@ -1320,13 +1437,14 @@ if __name__ == "__main__":
             assert (await again.get(ins.id)).scope_kind == "user"
             assert any(p.parent.name == "insights" for p in again._pages), "dream insight filed under insights/"
 
-            # conventions + self-audit are generated on open(). NO index.md: the file
-            # tree itself (browser / memory_tree) is the navigation; a leftover is removed.
+            # conventions + self-audit + index are generated on open(); index.md carries
+            # one line of meaning per page (navigate by index), overwriting any stale copy.
             assert (Path(d) / "AGENTS.md").exists(), "AGENTS.md conventions written"
             (Path(d) / "index.md").write_text("# stale\n", encoding="utf-8")
             once2 = FilePageStore(Path(d))
             await once2.open()
-            assert not (Path(d) / "index.md").exists(), "redundant index.md removed, not regenerated"
+            idx = (Path(d) / "index.md").read_text(encoding="utf-8")
+            assert idx.startswith("# Memory index") and "[[" in idx, idx
             hp = Path(d) / "health.md"
             assert hp.exists() and "# Memory health" in hp.read_text(encoding="utf-8"), "health.md self-audit generated"
 

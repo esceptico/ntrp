@@ -23,7 +23,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ntrp.memory.frontmatter import QuotedStr, dump_frontmatter, parse_frontmatter, strip_frontmatter
-from ntrp.memory.pages import SENTINEL as _PAGE_SENTINEL
 from ntrp.memory.pages import parse_line as _parse_line
 
 _logger = logging.getLogger(__name__)
@@ -47,6 +46,7 @@ ARTIFACT_DIR_KINDS: dict[str, str] = {
     "entities": "topic",  # legacy — folded into topics/ (kept so leftovers still read)
     "projects": "topic",  # legacy — folded into topics/
     "references": "source",
+    "feeds": "source",  # automation-owned briefings (feeds/<slug>.md) — whole-page rewritten per run
     "observations": "source",  # per-source raw integration stream (gmail/slack/calendar) — browsable, not a dossier
     "insights": "topic",  # cross-domain dream outputs (OKF insights/)
     "daily": "source",  # dated activity logs (daily/<date>.md) — browsable history, prose-only
@@ -76,6 +76,7 @@ _LEGACY_CHANGELOG_RE = re.compile(r"^-\s+(\d{4})-(\d{2})")
 _CHANGELOG_MONTH_RE = re.compile(r"^changelog/(\d{4})/(\d{4}-\d{2})\.md$")
 _CHANGELOG_YEAR_RE = re.compile(r"^changelog/(\d{4})\.md$")
 _SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_BECAUSE_OF_RE = re.compile(r"\s*\(because of [^)]*\)")
 _WIKILINK_RE = re.compile(r"\[\[([^\]#|]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]")
 _DEBUG_KEYS = (
     "scope",
@@ -229,15 +230,14 @@ def _artifact_record_count(kind: str, content: str) -> int:
     return 0
 
 
-def _record_count_for_artifact(rel: str, kind: str, content: str) -> int | None:
+def _record_count_for_artifact(rel: str, kind: str, content: str, timeline: tuple | None = None) -> int | None:
     if rel in {"README.md", "tooling.md"} or rel.startswith("changelog/"):
         return None
     if rel.endswith("/index.md"):
         return None
+    if timeline is not None:  # canonical page: count active timeline atoms (raw/ sidecar)
+        return sum(1 for ln in timeline if not ln.superseded)
     fm, body = parse_frontmatter(content)
-    if _PAGE_SENTINEL in body:  # two-zone canonical page: count active timeline atoms
-        _, _, tl = body.partition(_PAGE_SENTINEL)
-        return sum(1 for raw in tl.splitlines() if (ln := _parse_line(raw)) is not None and not ln.superseded)
     if "record_count" in fm:
         value = fm["record_count"]
         return int(value) if value is not None else None
@@ -252,22 +252,22 @@ def _artifact_directory(rel: str) -> str:
     return parts[0] if len(parts) > 1 else "memory"
 
 
+# Reports regenerated on load — everything else in the vault is a canonical page.
+_GENERATED_RELS = {"AGENTS.md", "health.md", "index.md", "facts/index.md"}
+
+
 def _artifact_generated(rel: str, content: str) -> bool:
-    # Two-zone canonical pages (file-canonical memory) are NOT generated projections.
-    if _PAGE_SENTINEL in content:
-        return False
+    if rel in _GENERATED_RELS or rel.startswith("changelog/"):
+        return True
     fm, _ = parse_frontmatter(content)
     if "generated" in fm:
         return bool(fm["generated"])
-    marker = "<!-- ntrp-memory: generated=false editable=true -->"
-    return marker not in content
+    return False
 
 
 def _artifact_editable(rel: str, content: str) -> bool:
     if rel.startswith("changelog/"):
         return False
-    if _PAGE_SENTINEL in content:  # canonical two-zone pages are directly editable
-        return True
     fm, _ = parse_frontmatter(content)
     if "editable" in fm:
         return bool(fm["editable"])
@@ -279,19 +279,19 @@ def _readonly_reason(rel: str, kind: str, generated: bool) -> str | None:
         return "Conventions doc — regenerated on load."
     if rel == "health.md":
         return "Self-audit — regenerated on load from the current pages."
+    if rel == "index.md":
+        return "Navigational index — regenerated from the pages."
     if rel == "facts/index.md":
         return "Generated from DB records; use recall/record tools for facts."
     if rel.startswith("changelog/"):
         return "Generated audit log; append events through memory tools."
     if generated:
-        return "Synthesized prose above the timeline — edits are overwritten; change the records below."
+        return "Generated report — edits are overwritten; change the underlying records."
     return None
 
 
 def _artifact_snippet(content: str, query: str | None = None) -> str | None:
     content = strip_frontmatter(content)
-    if _PAGE_SENTINEL in content:  # two-zone page: preview the prose, not the timeline dump
-        content = content.partition(_PAGE_SENTINEL)[0]
     lines = [_sanitize_visible_text(line, max_chars=MAX_DOSSIER_SNIPPET_CHARS) for line in content.splitlines()]
     lines = [
         line
@@ -702,7 +702,7 @@ class ArtifactMemoryStore:
                     scope_kind=scope_kind,
                     scope_key=scope_key,
                     content="",
-                    record_count=_record_count_for_artifact(rel, artifact_kind, content),
+                    record_count=_record_count_for_artifact(rel, artifact_kind, content, self._load_timeline(rel)),
                     updated_at=datetime.fromtimestamp(st.st_mtime, UTC).isoformat(),
                     type="file",
                     directory=_artifact_directory(rel),
@@ -735,26 +735,27 @@ class ArtifactMemoryStore:
             st = path.lstat()
         content = self._read_text_no_symlink(path)
         fm, body = parse_frontmatter(content)
-        # Two-zone pages: serve the synthesized PROSE zone (the wiki view) as the
-        # body, and surface the timeline atoms separately so the client can show
-        # them as secondary/collapsed evidence. The timeline stays canonical on disk.
-        timeline: tuple = ()
-        if _PAGE_SENTINEL in body:
-            prose, _, timeline_text = body.partition(_PAGE_SENTINEL)
-            timeline = tuple(ln for ln in (_parse_line(r) for r in timeline_text.splitlines()) if ln is not None)
-            prose = prose.strip()
+        # Canonical pages: the file IS the prose (wiki view); the timeline atoms come
+        # from the raw/ sidecar and are surfaced separately so the client can show
+        # them as secondary/collapsed evidence.
+        timeline = self._load_timeline(rel_posix)
+        if timeline is not None:
+            prose = body.strip()
             if not prose:
                 if _is_record_list_page(rel_posix):
                     # Intentionally never synthesized — these are verbatim rules/lessons/
                     # pointers (paraphrasing would distort them). Show the records, not a
-                    # "synthesis pending" note that will never resolve.
+                    # "synthesis pending" note that will never resolve. Dream insights
+                    # carry a machine cite tail `(because of ^id1, ^id2)` — provenance
+                    # for the engine, noise for the reader; strip it from the view.
                     active = [ln for ln in timeline if not ln.superseded]
-                    prose = "\n".join(f"- {ln.text}" for ln in active) or "_No entries yet._"
+                    prose = "\n".join(f"- {_BECAUSE_OF_RE.sub('', ln.text).rstrip()}" for ln in active) or "_No entries yet._"
                 else:
                     prose = "_No synthesized summary yet — synthesis pass pending._"
             body = prose
             # Drop the synthesizer's own leading `# Title` h1 (the chrome shows the title) — never a `## Section`.
             body = re.sub(r"^\s*#[^#][^\n]*\n+", "", body, count=1).lstrip("\n")
+        timeline = timeline or ()
         kind, title, scope_kind, scope_key = self._artifact_meta(rel_posix, content)
         generated = _artifact_generated(rel_posix, content)
         editable = _artifact_editable(rel_posix, content)
@@ -765,7 +766,7 @@ class ArtifactMemoryStore:
             scope_kind=scope_kind,
             scope_key=scope_key,
             content=body,
-            record_count=_record_count_for_artifact(rel_posix, kind, content),
+            record_count=_record_count_for_artifact(rel_posix, kind, content, timeline or None),
             updated_at=datetime.fromtimestamp(st.st_mtime, UTC).isoformat(),
             type="file",
             directory=_artifact_directory(rel_posix),
@@ -823,6 +824,22 @@ class ArtifactMemoryStore:
             matches.sort(key=lambda key: (0 if key.startswith("project:") else 1, len(key), key))
             return matches[0]
         return stem
+
+    def _load_timeline(self, rel: str) -> tuple | None:
+        """Parse the raw/ sidecar timeline for a page; None when the page has no
+        sidecar (prose-only pages, generated reports, changelog)."""
+        path = self.root / "raw" / rel
+        try:
+            st = path.lstat()
+        except (FileNotFoundError, OSError):
+            return None
+        if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+            return None
+        try:
+            text = self._read_text_no_symlink(path)
+        except (FileNotFoundError, OSError):
+            return None
+        return tuple(ln for ln in (_parse_line(r) for r in strip_frontmatter(text).splitlines()) if ln is not None)
 
     def _artifact_sort_key(self, rel: str) -> tuple[int, int, str]:
         if rel in ROOT_ARTIFACTS:

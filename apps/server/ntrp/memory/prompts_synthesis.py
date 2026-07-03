@@ -4,11 +4,14 @@ Five prose-page synthesizers that replace the bullet-dump projection. Each
 receives a list of atomic RECORDS (id, text, kind, labels, pinned,
 last_confirmed_at) and synthesizes a grounded markdown page FROM them.
 
-Modeled on dex's context-wiki: durable, texture-rich, no slop. The key ntrp
-difference: input is atomic records with stable ids, so provenance is an inline
-`(record:XXXXXXXX)` tag carrying the 8-char id prefix of the supporting record —
-not a `(from slack)`-style source tag. The model may cite ONLY the ids it was
-given, and may assert ONLY what those records support.
+Modeled on dex's context-wiki: durable, texture-rich, no slop. Input is atomic
+records with stable ids, so provenance in the MODEL's output is an inline
+`(record:XXXXXXXX)` tag carrying the 8-char id prefix of the supporting record.
+The model may cite ONLY the ids it was given, and may assert ONLY what those
+records support — that contract is what the provenance check verifies. The
+STORED page never shows ids: synthesize._humanize_cites translates each cite
+group into a readable `(from chat)` / `(from gmail)` / `(inferred)` source tag
+and keeps the verified id list in the page's raw sidecar (prose_cites).
 
   - PROFILE_SYSTEM     -> me.md
   - DOSSIER_SYSTEM     -> topics/<subject>.md  (one page per subject)
@@ -117,6 +120,11 @@ an operational briefing.
   where it belongs.
 - A single uncorroborated inference is weak evidence — phrase it tentatively or
   leave it out. A directive or pinned record is strong — state it plainly.
+- BRIEFING REGISTER, not essay: short sentences (never chain more than two
+  clauses), bold lead-ins on bullets (`- **Kevin Gu** — engineering lead; …`),
+  bullets over paragraphs whenever the content is list-shaped, and a small
+  markdown table when facts are enumerable (accounts, contacts, PR status).
+  The reader scans this page; write for the scan.
 </synthesis_quality>"""
 
 
@@ -183,7 +191,8 @@ Output this structure, omitting any section with no record-backed content:
 
 ## Identity
 Role, company, contact handles, location/timezone, self-description — whatever
-the records establish. Prose or tight bullets; cite each non-obvious claim.
+the records establish. Tight bullets with bold lead-ins (`- **Role:** …`,
+`- **Location:** …`); cite each non-obvious claim.
 
 ## What you work on
 The user's actual focus areas and ownership, synthesized into a few paragraphs

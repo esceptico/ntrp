@@ -183,25 +183,33 @@ async def test_memory_tools_reject_symlink_and_fifo(store: RecordStore, artifact
 
 
 async def test_memory_patch_refuses_generated_without_force_and_force_patch_audits(store: RecordStore, artifacts_dir: Path):
+    """Canonical pages (me.md, topics/) patch freely; generated reports (health.md)
+    refuse without force_generated."""
     await _seed(artifacts_dir)
     execution = _execution(store)
     store_obj = memory_tools.ArtifactMemoryStore(artifacts_dir)
-    old = store_obj.read_artifact("me.md").content.splitlines()[0]
+    store_obj._write("health.md", "Health & gaps", "topic", "global", None, "# Memory health\n\nAll good.\n", None)
+    old = store_obj.read_artifact("health.md").content.splitlines()[0]
 
-    refused = await memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=False))
+    refused = await memory_patch(execution, MemoryPatchInput(path="health.md", old_text=old, new_text="# Patched memory", force_generated=False))
     assert refused.is_error
     assert "Refusing to edit generated" in refused.content
 
-    approval = await approve_memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=True))
+    approval = await approve_memory_patch(execution, MemoryPatchInput(path="health.md", old_text=old, new_text="# Patched memory", force_generated=True))
     assert approval is not None
-    assert approval.description == "Force edit generated memory artifact me.md"
+    assert approval.description == "Force edit generated memory artifact health.md"
     assert "-" in (approval.diff or "") and "+" in (approval.diff or "")
 
-    patched = await memory_patch(execution, MemoryPatchInput(path="me.md", old_text=old, new_text="# Patched memory", force_generated=True))
+    patched = await memory_patch(execution, MemoryPatchInput(path="health.md", old_text=old, new_text="# Patched memory", force_generated=True))
     assert not patched.is_error
-    assert store_obj.read_artifact("me.md").content.startswith("# Patched memory")
+    assert store_obj.read_artifact("health.md").content.startswith("# Patched memory")
     changelog = "\n".join(p.read_text(encoding="utf-8") for p in (artifacts_dir / "changelog").glob("**/*.md"))
     assert "memory filesystem patched" not in changelog  # maintenance edits aren't logged as changelog noise
+
+    # canonical prose pages are directly editable — no force needed
+    me_old = store_obj.read_artifact("me.md").content.splitlines()[0]
+    edited = await memory_patch(execution, MemoryPatchInput(path="me.md", old_text=me_old, new_text="# Me, edited", force_generated=False))
+    assert not edited.is_error
 
 
 async def test_memory_patch_requires_unique_old_text(store: RecordStore, artifacts_dir: Path):
@@ -228,3 +236,45 @@ async def test_memory_rebuild_noop_without_memory_records_service(artifacts_dir:
     result = await memory_rebuild(_execution(None), MemoryRebuildInput())
     assert not result.is_error
     assert result.data["rebuilt"] is False
+
+
+async def test_memory_write_creates_and_updates_feed_pages(store: RecordStore, artifacts_dir: Path):
+    from ntrp.tools.memory import MemoryWriteInput, approve_memory_write, memory_write
+
+    await _seed(artifacts_dir)
+    execution = _execution(store)
+
+    approval = await approve_memory_write(execution, MemoryWriteInput(path="feeds/pr-queue.md", content="# PR queue\n\n- none open"))
+    assert approval is not None and approval.description == "Create memory page feeds/pr-queue.md"
+
+    created = await memory_write(execution, MemoryWriteInput(path="feeds/pr-queue.md", content="# PR queue\n\n- none open"))
+    assert not created.is_error
+    assert (artifacts_dir / "feeds" / "pr-queue.md").read_text(encoding="utf-8").startswith("# PR queue")
+
+    updated = await memory_write(execution, MemoryWriteInput(path="feeds/pr-queue.md", content="# PR queue\n\n- 2 open"))
+    assert not updated.is_error and updated.preview == "Updated"
+    assert "2 open" in (artifacts_dir / "feeds" / "pr-queue.md").read_text(encoding="utf-8")
+
+
+async def test_memory_write_refuses_record_backed_generated_and_bad_paths(store: RecordStore, artifacts_dir: Path):
+    from ntrp.tools.memory import MemoryWriteInput, memory_write
+
+    await _seed(artifacts_dir)
+    execution = _execution(store)
+
+    # record-backed page (raw/ sidecar exists) -> compiled prose, refuse whole-page write
+    (artifacts_dir / "raw").mkdir(parents=True, exist_ok=True)
+    (artifacts_dir / "raw" / "me.md").write_text("- 2026-07-02 ^aaaa1111 [fact] (src:user) x\n", encoding="utf-8")
+    refused = await memory_write(execution, MemoryWriteInput(path="me.md", content="# clobber"))
+    assert refused.is_error and "record-backed" in refused.content
+
+    # generated report
+    store_obj = memory_tools.ArtifactMemoryStore(artifacts_dir)
+    store_obj._write("health.md", "Health", "topic", "global", None, "# Memory health\n", None)
+    gen = await memory_write(execution, MemoryWriteInput(path="health.md", content="# nope"))
+    assert gen.is_error
+
+    # path escapes / disallowed dirs
+    for bad in ("../evil.md", "raw/me.md", "changelog/2026/2026-07.md", "newroot.md"):
+        result = await memory_write(execution, MemoryWriteInput(path=bad, content="x"))
+        assert result.is_error, bad

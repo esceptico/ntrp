@@ -1,15 +1,18 @@
-"""Two-zone OKF memory page: synthesized prose ABOVE a sentinel, an append-only
-dated TIMELINE of record lines below. The timeline line is the canonical record —
-it round-trips a Record. Prose is human-facing and optional (filled later by
-synthesis); the store reads the timeline.
+"""Karpathy-layered memory page: the visible page file is COMPILED PROSE only
+(the wiki artifact a human reads); its append-only dated TIMELINE of record lines
+lives in a raw/<same-path>.md sidecar (the machine layer). A timeline line is the
+canonical record — it round-trips a Record. Prose is human-facing and optional
+(filled later by synthesis); the store reads the timeline.
 
 Line shape (readable, parseable):
     - 2026-06-21 ^a1b2c3d4 [fact] (src:curator) Tim rides a gravel bike.
     - 2026-06-21 ^a1b2c3d4 [fact] [pin] (src:user) Tim's wife is Lena.
     - ~~2026-04-02 ^7a1b2c3d [fact] (src:chat) old claim~~   (superseded)
 
-Scope is positional (derived from the page + kind), not encoded per line:
-directives -> global; projects/<key>.md -> (project, key); everything else -> user.
+Frontmatter splits by owner: human-facing keys (title, updated, aliases, type)
+render into the page file; engine bookkeeping (RAW_FM_KEYS) renders into the raw
+sidecar. Scope is positional (derived from the page + kind), not encoded per line:
+directives -> global; project pages carry scope_key; everything else -> user.
 ponytail: minimal frontmatter parser (we control what we write); no yaml dep.
 """
 
@@ -19,7 +22,15 @@ import json
 import re
 from dataclasses import dataclass, field
 
-SENTINEL = "<!-- timeline (append-only; edit prose above, not below) -->"
+SENTINEL = "<!-- timeline (append-only; edit prose above, not below) -->"  # legacy two-zone marker, parsed for migration only
+
+# Engine bookkeeping — rendered into the raw sidecar, never the visible page.
+# prose_cites is the page's grounding: the record ids its prose was verified
+# against at synthesis time (the visible prose carries readable source tags,
+# not ids — this list is what keeps the grounding machine-checkable).
+RAW_FM_KEYS = ("scope_key", "entity_labels", "meta_labels", "prose_synced", "prose_cites")
+# Legacy bookkeeping now computed from the prose itself — dropped on parse.
+_DROPPED_FM_KEYS = ("prose_tokens",)
 
 # Greedy text + bracket tags only (incl. [superseded]) so the text body can
 # contain ANYTHING — trailing ~~, "(superseded)", brackets — without ambiguity.
@@ -114,27 +125,64 @@ class Page:
         return [ln for ln in self.lines if not ln.superseded]
 
 
-def parse_page(text: str) -> Page:
-    fm: dict = {}
-    body = text
+def _split_frontmatter(text: str) -> tuple[dict, str]:
     if text.startswith("---\n"):
         end = text.find("\n---\n", 4)
         if end != -1:
-            fm = _parse_frontmatter(text[4:end])
-            body = text[end + 5 :]
+            return _parse_frontmatter(text[4:end]), text[end + 5 :]
+    return {}, text
+
+
+def parse_page(text: str) -> Page:
+    """Parse a page file. Tolerates the legacy two-zone format (prose + SENTINEL +
+    timeline in one file) so a pre-split vault migrates on first load."""
+    fm, body = _split_frontmatter(text)
+    for key in _DROPPED_FM_KEYS:
+        fm.pop(key, None)
+    if not isinstance(fm.get("prose_cites"), list):  # legacy int count — superseded by the id list
+        fm.pop("prose_cites", None)
     prose, _, timeline = body.partition(SENTINEL)
     lines = [ln for ln in (parse_line(r) for r in timeline.splitlines()) if ln]
     return Page(frontmatter=fm, prose=prose.strip(), lines=lines)
 
 
+def parse_raw(text: str) -> tuple[dict, list[Line]]:
+    """Parse a raw sidecar: engine frontmatter + every parseable timeline line."""
+    fm, body = _split_frontmatter(text)
+    return fm, [ln for ln in (parse_line(r) for r in body.splitlines()) if ln]
+
+
+def merge_split(page: Page, raw_text: str | None) -> Page:
+    """Attach a raw sidecar's frontmatter + timeline onto a parsed page."""
+    if raw_text:
+        fm, lines = parse_raw(raw_text)
+        page.frontmatter.update(fm)
+        page.lines.extend(lines)
+    return page
+
+
 def render_page(page: Page) -> str:
+    """The visible wiki page: human frontmatter + compiled prose. No timeline."""
+    fm = {k: v for k, v in page.frontmatter.items() if k not in RAW_FM_KEYS}
     parts = []
-    if page.frontmatter:
-        parts.append("---\n" + _dump_frontmatter(page.frontmatter) + "\n---")
+    if fm:
+        parts.append("---\n" + _dump_frontmatter(fm) + "\n---")
     if page.prose:
         parts.append(page.prose)
-    parts.append(SENTINEL)
-    parts.append("\n".join(format_line(ln) for ln in page.lines))
+    return "\n\n".join(parts).rstrip() + "\n"
+
+
+def render_raw(page: Page) -> str:
+    """The machine sidecar: engine frontmatter + timeline. Empty string when the
+    page carries neither (caller removes the sidecar file)."""
+    fm = {k: page.frontmatter[k] for k in RAW_FM_KEYS if k in page.frontmatter}
+    if not fm and not page.lines:
+        return ""
+    parts = []
+    if fm:
+        parts.append("---\n" + _dump_frontmatter(fm) + "\n---")
+    if page.lines:
+        parts.append("\n".join(format_line(ln) for ln in page.lines))
     return "\n\n".join(parts).rstrip() + "\n"
 
 
@@ -168,9 +216,19 @@ if __name__ == "__main__":
     paren = Line(id="ee44", text="issue resolved (superseded) per Lena", kind="fact", date="2026-06-21", src="chat")
     assert parse_line(format_line(paren)) == paren, parse_line(format_line(paren))
     page = Page(frontmatter={"type": "topic", "title": "Bicycles", "entity_labels": ["Bicycles"]}, prose="Tim's bikes.", lines=[src, pinned, dead])
-    rp = parse_page(render_page(page))
+    # split round-trip: page file carries prose + human fm; raw carries engine fm + timeline
+    page_text, raw_text = render_page(page), render_raw(page)
+    assert "entity_labels" not in page_text and "^a1b2c3d4" not in page_text, page_text
+    assert "entity_labels" in raw_text and "^a1b2c3d4" in raw_text, raw_text
+    rp = merge_split(parse_page(page_text), raw_text)
     assert rp.frontmatter["title"] == "Bicycles"
     assert rp.frontmatter["entity_labels"] == ["Bicycles"]
     assert len(rp.lines) == 3 and len(rp.active_lines()) == 2
     assert rp.prose == "Tim's bikes."
+    # legacy two-zone file still parses (migration path), incl. dropped bookkeeping keys
+    legacy_text = "---\ntitle: Bicycles\nprose_tokens: 12\nprose_cites: 3\n---\n\nTim's bikes.\n\n" + SENTINEL + "\n\n" + format_line(src) + "\n"
+    lp = parse_page(legacy_text)
+    assert lp.prose == "Tim's bikes." and len(lp.lines) == 1 and "prose_tokens" not in lp.frontmatter, lp
+    # prose-only page (no fm-worthy machine state, no lines) needs no raw sidecar
+    assert render_raw(Page(frontmatter={"title": "2026-07-02"}, prose="Did things.")) == ""
     print("pages.py self-check OK")
