@@ -588,7 +588,11 @@ class Scheduler:
             except json.JSONDecodeError:
                 ctx = {"event_context": context}
         else:
-            ctx = None
+            ctx = {}
+        # Handlers shared by multiple automation instances (e.g. one "slice_agent"
+        # handler backing every slice:{key} automation) need to know which
+        # instance fired; singleton builtin handlers just ignore the extra key.
+        ctx["task_id"] = automation.task_id
         return await handler(ctx)
 
     async def _run_agent(self, automation: Automation, context: str | dict | None = None) -> str | None:

@@ -11,7 +11,6 @@ from ntrp.agent import Role
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
-from ntrp.constants import SLICES_FILE, SLICES_STATE_FILE
 from ntrp.core.tool_result_files import prune_offload_store
 from ntrp.events.sse import MemoryChangedEvent, SlicesChangedEvent
 from ntrp.logging import get_logger
@@ -37,8 +36,6 @@ from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.routers.slices import router as slices_router
 from ntrp.server.runtime import Runtime
 from ntrp.services.chat import submit_chat_message
-from ntrp.slices.asks import AskStore
-from ntrp.slices.registry import SliceRegistry
 from ntrp.slices.service import SliceService
 
 _logger = get_logger(__name__)
@@ -117,9 +114,12 @@ async def lifespan(app: FastAPI):
     # Slices: a project's automations/sessions/asks grouped under slice_key
     # (mirrors project_id). Registry/asks live under ~/.ntrp next to the
     # other flat-file stores; callables read live off the session/automation
-    # stores so overview()/detail() never go stale.
-    slice_registry = SliceRegistry(runtime.config.ntrp_dir / SLICES_FILE)
-    slice_asks = AskStore(runtime.config.ntrp_dir / SLICES_STATE_FILE)
+    # stores so overview()/detail() never go stale. Reuse AutomationRuntime's
+    # instances (not fresh ones) — AskStore caches in memory after __init__,
+    # so a second instance would never see agent-nominated asks the slice
+    # agent handler upserts through AutomationRuntime.slice_asks.
+    slice_registry = runtime.automation.slice_registry
+    slice_asks = runtime.automation.slice_asks
 
     def _slice_get_page(page_path: str):
         full_path = runtime.config.memory_artifacts_dir / page_path

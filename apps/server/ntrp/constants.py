@@ -222,3 +222,5 @@ assert AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES <= MONITOR_EVENT_APPROA
 
 SLICES_FILE = "slices.json"  # under the ~/.ntrp dir
 SLICES_STATE_FILE = "slices-state.json"
+SLICE_AGENT_HANDLER = "slice_agent"
+SLICE_AGENT_DAILY_AT = "06:30"

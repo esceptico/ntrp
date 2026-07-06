@@ -1,20 +1,28 @@
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ntrp.agent_surface.schedules import compile_schedules_to_automations
 from ntrp.automation.builtins import seed_builtins
+from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
-from ntrp.events.sse import AutomationSuggestionsUpdatedEvent
+from ntrp.automation.triggers import EventTrigger, TimeTrigger
+from ntrp.config import Config
+from ntrp.constants import SLICE_AGENT_DAILY_AT, SLICE_AGENT_HANDLER, SLICES_FILE, SLICES_STATE_FILE
+from ntrp.events.sse import AutomationSuggestionsUpdatedEvent, EventType
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.logging import get_logger
+from ntrp.memory.pages import Page, parse_page
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
 from ntrp.server.runtime.outbox import RuntimeOutbox
 from ntrp.server.stores import Stores
+from ntrp.slices.agent import run_slice_agent
+from ntrp.slices.asks import AskStore
+from ntrp.slices.registry import SliceRegistry
 
 _logger = get_logger(__name__)
 
@@ -28,6 +36,7 @@ class AutomationRuntime:
         self,
         *,
         stores: Stores,
+        config: Config,
         build_operator_deps: Callable[[], OperatorDeps],
         get_records: Callable[[], object | None],
         get_chat_connector: Callable[[], object | None],
@@ -41,6 +50,7 @@ class AutomationRuntime:
         get_integration_clients: Callable[[], dict[str, object]] = dict,
     ):
         self.stores = stores
+        self.config = config
         self.get_records = get_records
         self.get_calendar_source = get_calendar_source
         self.get_slack_client = get_slack_client
@@ -49,6 +59,9 @@ class AutomationRuntime:
         self.get_knowledge = get_knowledge
         self.get_integration_clients = get_integration_clients
         self.cheap_model = cheap_model
+        self.build_operator_deps = build_operator_deps
+        self.slice_registry = SliceRegistry(config.ntrp_dir / SLICES_FILE)
+        self.slice_asks = AskStore(config.ntrp_dir / SLICES_STATE_FILE)
         self.scheduler = Scheduler(
             store=stores.automations,
             build_deps=build_operator_deps,
@@ -95,8 +108,13 @@ class AutomationRuntime:
             "memory_retention",
             self._build_memory_retention_handler(),
         )
+        self.scheduler.register_handler(
+            SLICE_AGENT_HANDLER,
+            self._build_slice_agent_handler(),
+        )
 
         await seed_builtins(self.stores.automations)
+        await self._seed_slice_automations()
         await compile_schedules_to_automations(".", self.stores.automations)
         await self.automation_service.backfill_channels()
         self.scheduler.start()
@@ -197,6 +215,63 @@ class AutomationRuntime:
             return report.summary() + detail
 
         return handler
+
+    def _load_slice_page(self, page_path: str) -> Page:
+        full_path = self.config.memory_artifacts_dir / page_path
+        text = full_path.read_text(encoding="utf-8") if full_path.exists() else ""
+        return parse_page(text)
+
+    @staticmethod
+    def _slice_key_from_task_id(task_id: str) -> str:
+        prefix = "slice:"
+        if not task_id.startswith(prefix):
+            raise RuntimeError(f"Slice agent automation task_id '{task_id}' missing '{prefix}' prefix")
+        return task_id[len(prefix) :]
+
+    def _build_slice_agent_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            task_id = (context or {})["task_id"]
+            key = self._slice_key_from_task_id(task_id)
+            slice_ = self.slice_registry.get(key)
+            page = self._load_slice_page(slice_.page_path)
+            automation = await self.stores.automations.get(task_id)
+            recent: list[dict] = []
+            if automation and automation.last_run_at:
+                recent = [{"event": "memory_changed", "path": slice_.page_path}]
+            return await run_slice_agent(
+                self.build_operator_deps(), slice_, page, self.slice_asks, recent,
+            )
+
+        return handler
+
+    async def _seed_slice_automations(self) -> None:
+        now = datetime.now(UTC)
+        for slice_ in self.slice_registry.load():
+            task_id = f"slice:{slice_.key}"
+            if await self.stores.automations.get(task_id):
+                continue
+            time_trigger = TimeTrigger(at=SLICE_AGENT_DAILY_AT, days="daily")
+            automation = Automation(
+                task_id=task_id,
+                name=task_id,
+                description=f"Standing agent for the '{slice_.title}' slice",
+                model=None,
+                triggers=[
+                    time_trigger,
+                    EventTrigger(event_type=EventType.MEMORY_CHANGED.value),
+                ],
+                enabled=True,
+                created_at=now,
+                next_run_at=time_trigger.next_run(now),
+                last_run_at=None,
+                last_result=None,
+                running_since=None,
+                auto_approve=False,
+                handler=SLICE_AGENT_HANDLER,
+                builtin=False,
+            )
+            await self.stores.automations.save(automation)
+            _logger.info("Seeded slice automation: %s", task_id)
 
     def _suggester_available(self) -> bool:
         return self.get_records() is not None and self.get_cheap_llm() is not None

@@ -219,6 +219,7 @@ class Runtime:
     def _init_automation(self) -> None:
         self.automation = AutomationRuntime(
             stores=self.stores,
+            config=self.config,
             build_operator_deps=self.build_operator_deps,
             get_records=lambda: self.memory_records,
             get_chat_connector=lambda: self.knowledge.chat_connector,
