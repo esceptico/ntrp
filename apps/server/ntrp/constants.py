@@ -216,3 +216,9 @@ MESSAGE_RECEIVED = "message_received"  # TriggerEvent.event_type for Slack messa
 assert AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES <= MONITOR_EVENT_APPROACHING_HORIZON_MINUTES, (
     f"{AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES=} must be <= {MONITOR_EVENT_APPROACHING_HORIZON_MINUTES=}"
 )
+
+
+# --- Slices ---
+
+SLICES_FILE = "slices.json"  # under the ~/.ntrp dir
+SLICES_STATE_FILE = "slices-state.json"
