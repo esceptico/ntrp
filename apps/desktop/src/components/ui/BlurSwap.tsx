@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { EASE_OUT, MOTION } from "@/lib/tokens/motion";
 
+// Overlapping blur crossfade for spatial content; for in-place TEXT state
+// swaps (old and new must never coexist) use FieldSwap instead.
 interface BlurSwapProps {
   /** Identity of the current content. A change triggers the crossfade. */
   swapKey: string;

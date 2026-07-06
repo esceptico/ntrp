@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { EXIT_FAST, MOTION, SPRING_PROXIMITY } from "@/lib/tokens/motion";
 
+// Pointer-proximity variant; for focus/data-selected-driven lists (menus,
+// command pickers) use TravelingHighlight instead.
 type Rect = { top: number; height: number };
 
 // Vertical gap (px) above which the highlight cross-fades instead of sliding —
