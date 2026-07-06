@@ -18,6 +18,7 @@ export interface SliceAsk {
   actions: { verb: string; ref: string }[];
   state: string;
   created_at: string;
+  snoozed_until: string | null;
   provenance?: string | null;
 }
 
@@ -26,13 +27,17 @@ export interface SlicesOverview {
   focus: SliceAsk[];
 }
 
-export interface SliceDetail extends SliceSummary {
+export interface SliceDetail {
+  key: string;
+  title: string;
+  autonomy: "observe" | "act";
+  page_path: string;
+  related: string[];
   open_loops: string[];
+  updated: string;
   asks: SliceAsk[];
   sessions: { session_id: string; name: string }[];
   automations: unknown[];
-  page_path: string;
-  related: string[];
 }
 
 export async function fetchSlicesOverview(config: AppConfig): Promise<SlicesOverview> {
