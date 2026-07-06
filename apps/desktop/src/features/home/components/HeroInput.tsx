@@ -92,7 +92,9 @@ export function HeroInput() {
 
   return (
     <div className="relative">
-      <div className="flex h-14 items-center gap-2 rounded-[14px] border border-line bg-surface px-4">
+      {/* Elevation per theme rules: light lifts via shadow tier, dark via the
+          additive surface climb (bg-surface-2 over the floor). */}
+      <div className="flex h-14 items-center gap-2 rounded-[14px] border border-line bg-surface-2 px-4 shadow-md">
         <input
           id="message-input"
           type="text"

@@ -15,24 +15,27 @@ export function OpenLoops({ loops }: { loops: string[] }) {
   return (
     <div className="grid gap-2">
       <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Open loops</span>
-      <div className="grid gap-px">
+      {/* Quiet hairline list (mock: dot + text between separators), not a
+          stack of tonal bars — tone is reserved for things that need
+          attention; loops are ambient context. */}
+      <div className="grid">
         {loops.map((loop, index) => {
           const open = openIndex === index;
           return (
-            <div key={index} className="rounded-[10px] bg-surface-soft">
+            <div key={index} className={index > 0 ? "border-t border-line-soft" : undefined}>
               <button
                 type="button"
                 onClick={() => setOpenIndex(open ? null : index)}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-ink-soft"
+                className="group flex w-full items-center gap-2.5 py-2.5 text-left text-sm text-ink-soft"
               >
                 <ChevronRight
-                  className="size-3.5 shrink-0 text-faint transition-transform duration-check"
+                  className="size-3.5 shrink-0 text-whisper transition-transform duration-check group-hover:text-faint"
                   style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
                 />
                 <span className={open ? "min-w-0 flex-1" : "min-w-0 flex-1 truncate"}>{loop}</span>
               </button>
               <Collapse open={open}>
-                <p className="px-3.5 pb-2.5 pl-[38px] text-sm text-ink-soft">{loop}</p>
+                <p className="pb-2.5 pl-[26px] text-sm text-ink-soft">{loop}</p>
               </Collapse>
             </div>
           );

@@ -8,7 +8,6 @@ import { AskCard } from "@/features/slices/components/AskCard";
 import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
 import { ChargeButton } from "@/components/ui/ChargeButton";
-import { RollingToken } from "@/components/ui/RollingToken";
 import { formatRelativePast } from "@/lib/format";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
 
@@ -113,29 +112,37 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
         ← Home
       </button>
 
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="min-w-0 truncate text-xl font-semibold text-ink">{detail.title}</h1>
-        {detail.autonomy === "observe" ? (
-          <ChargeButton
-            key={detail.autonomy}
-            label="Observe only"
-            armedLabel="Act granted"
-            onArmed={() => void grantAct()}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => void revokeAct()}
-            className="rounded-[10px] bg-accent-soft px-4 py-2 text-[13px] font-medium text-accent-strong"
-          >
-            Acting — click to revoke
-          </button>
-        )}
+      <div className="grid gap-1.5">
+        {/* Autonomy control sits beside the title as a quiet chip (mock:
+            "asks before acting" inline with the name), not parked at the
+            far edge. Grant keeps the hold-to-arm ceremony; revoke is a
+            plain click — de-escalation needs none. */}
+        <div className="flex items-center gap-3">
+          <h1 className="m-0 min-w-0 truncate text-[22px] font-medium tracking-[-0.01em] text-ink">
+            {detail.title}
+          </h1>
+          {detail.autonomy === "observe" ? (
+            <ChargeButton
+              key={detail.autonomy}
+              label="Observe only"
+              armedLabel="Act granted"
+              onArmed={() => void grantAct()}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => void revokeAct()}
+              title="Click to revoke act autonomy"
+              className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-medium text-on-ink hover:opacity-90"
+            >
+              Acting
+            </button>
+          )}
+        </div>
+        <p className="m-0 text-xs text-faint">
+          Last activity {formatRelativePast(detail.updated)} ago
+        </p>
       </div>
-
-      <p className="text-xs text-faint">
-        Last activity <RollingToken value={formatRelativePast(detail.updated)} mono /> ago
-      </p>
 
       {topAsk && (
         <AnimatePresence initial={false}>
@@ -165,7 +172,7 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       )}
 
       <div className="fixed inset-x-0 bottom-0 mx-auto flex w-[640px] max-w-full justify-center px-4 pb-6">
-        <div className="flex h-11 w-full items-center gap-2 rounded-[12px] border border-line bg-surface px-3.5">
+        <div className="flex h-[52px] w-full items-center gap-2 rounded-[13px] border border-line bg-surface-2 px-4 shadow-md">
           <input
             type="text"
             value={draft}

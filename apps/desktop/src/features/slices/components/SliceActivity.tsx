@@ -1,4 +1,5 @@
 import { switchSession } from "@/actions/sessions";
+import { formatRelativePast } from "@/lib/format";
 
 interface SliceSessionRow {
   session_id: string;
@@ -54,7 +55,15 @@ export function SliceActivity({
           >
             <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-faint" />
             <span className="min-w-0 flex-1 truncate">{auto.name}</span>
-            {auto.running_since && <span className="shrink-0 text-2xs text-faint">running</span>}
+            {auto.running_since ? (
+              <span className="shrink-0 text-2xs text-faint">running</span>
+            ) : (
+              auto.last_run_at && (
+                <span className="shrink-0 text-2xs text-whisper tabular-nums">
+                  {formatRelativePast(auto.last_run_at)} ago
+                </span>
+              )
+            )}
           </div>
         ))}
       </div>

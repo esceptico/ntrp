@@ -79,11 +79,13 @@ export function Home() {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="mx-auto mt-[12vh] grid w-[640px] max-w-full gap-6 px-4"
+      className="mx-auto mt-[16vh] grid w-[640px] max-w-full gap-7 px-4"
     >
-      <span className="text-[11px] font-medium tracking-wide text-faint uppercase">{dateLabel}</span>
-      <HeroInput />
-      <p className="m-0 text-lg text-ink-soft">{greeting(focus.length)}</p>
+      <div className="grid gap-3">
+        <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
+        <HeroInput />
+      </div>
+      <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
       {focus.length > 0 && (
         <div className="grid gap-2">
           <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
