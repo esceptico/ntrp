@@ -130,6 +130,9 @@
   --duration-trace: 200ms;
   --duration-panel: 200ms;
   --duration-route: 300ms;
+  /* Traveling-indicator tier (transitions.dev) — was tabs-only (--tabs-dur);
+     promoted so TravelingHighlight can share it. --tabs-dur now aliases it. */
+  --duration-travel: 250ms;
 
   --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-geist: cubic-bezier(0.175, 0.885, 0.32, 1.1);
@@ -140,6 +143,10 @@
   --ease-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   /* Springy back-out for physical toggles (switch knob). */
   --ease-back-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Smooth-out curve for traveling indicators/slides (design-language.md
+     "Ease roles"). Was tabs-only (--tabs-ease); promoted so
+     TravelingHighlight shares it. --tabs-ease now aliases it. */
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
   /* Remap Tailwind's ease-out utility onto the house curve so the 24+
      `ease-out` call sites speak the same dialect as EASE_OUT in motion.ts. */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -540,8 +547,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    change height, and keeping it out makes a 0→N vertical grow (fresh element
    whose inline styles were lost to a React node recreation) impossible. */
 :root {
-  --tabs-dur: 250ms;
-  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-dur: var(--duration-travel);
+  --tabs-ease: var(--ease-smooth-out);
+  /* Lab-ported name for the same 150ms tier as --duration-check — read by
+     name (not as a Tailwind utility) from FieldSwap/ChargeButton's inline
+     styles via getComputedStyle, matching ~/src/interaction-lab's
+     --duration-quick so the tuned-value provenance stays legible. Declared
+     outside @theme: Tailwind v4 prunes @theme custom properties that no
+     utility class references, and nothing in CSS reads this one. */
+  --duration-quick: 150ms;
 }
 .t-tabs-indicator {
   position: absolute;
