@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     agent_type TEXT,
     agent_status TEXT,
     project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL,
-    chat_model TEXT
+    chat_model TEXT,
+    slice_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
@@ -336,9 +337,9 @@ SQL_SAVE_SESSION = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
     session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-    agent_type, agent_status, project_id, chat_model
+    agent_type, agent_status, project_id, chat_model, slice_key
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity,
     messages = excluded.messages,
@@ -351,7 +352,8 @@ ON CONFLICT(session_id) DO UPDATE SET
     agent_type = excluded.agent_type,
     agent_status = excluded.agent_status,
     project_id = sessions.project_id,
-    chat_model = excluded.chat_model
+    chat_model = excluded.chat_model,
+    slice_key = sessions.slice_key
 """
 
 SQL_GET_LATEST = """
@@ -363,7 +365,7 @@ ORDER BY last_activity DESC LIMIT 1
 SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
        session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-       agent_type, agent_status, project_id, chat_model,
+       agent_type, agent_status, project_id, chat_model, slice_key,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL
@@ -374,7 +376,7 @@ LIMIT ? OFFSET ?
 SQL_LIST_PRIMARY_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
        session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-       agent_type, agent_status, project_id, chat_model,
+       agent_type, agent_status, project_id, chat_model, slice_key,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL AND COALESCE(session_type, 'chat') != 'agent'
@@ -385,7 +387,7 @@ LIMIT ? OFFSET ?
 SQL_LIST_ARCHIVED = """
 SELECT session_id, started_at, last_activity, name, archived_at,
        session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-       agent_type, agent_status, project_id, chat_model,
+       agent_type, agent_status, project_id, chat_model, slice_key,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NOT NULL
@@ -401,14 +403,15 @@ SQL_UPSERT_PROGRESS = """
 INSERT INTO sessions (
     session_id, started_at, last_activity, messages, metadata, name,
     session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-    agent_type, agent_status, project_id, chat_model
+    agent_type, agent_status, project_id, chat_model, slice_key
 )
-VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     messages = excluded.messages,
     last_activity = excluded.last_activity,
     agent_status = excluded.agent_status,
-    project_id = sessions.project_id
+    project_id = sessions.project_id,
+    slice_key = sessions.slice_key
 """
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_UPDATE_NAME_IF_EMPTY = "UPDATE sessions SET name = ? WHERE session_id = ? AND (name IS NULL OR name = '')"
@@ -636,6 +639,7 @@ class SessionStore:
             "agent_status TEXT",
             "project_id TEXT REFERENCES projects(project_id) ON DELETE SET NULL",
             "chat_model TEXT",
+            "slice_key TEXT",
         ):
             try:
                 await self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
@@ -1500,6 +1504,7 @@ class SessionStore:
                     state.agent_status,
                     state.project_id,
                     state.chat_model,
+                    state.slice_key,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable)
@@ -2642,6 +2647,7 @@ class SessionStore:
                     state.agent_status,
                     state.project_id,
                     state.chat_model,
+                    state.slice_key,
                 ),
             )
             await self._mirror_session_messages(state.session_id, serializable_messages)
@@ -2676,6 +2682,7 @@ class SessionStore:
             agent_status=dict(row).get("agent_status"),
             project_id=row["project_id"],
             chat_model=dict(row).get("chat_model"),
+            slice_key=dict(row).get("slice_key"),
         )
 
         raw_messages, raw_metadata = row["messages"], row["metadata"]
@@ -2713,7 +2720,7 @@ class SessionStore:
                 """
                 SELECT session_id, started_at, last_activity, name,
                        session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-                       agent_type, agent_status, project_id, chat_model,
+                       agent_type, agent_status, project_id, chat_model, slice_key,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL
@@ -2729,7 +2736,7 @@ class SessionStore:
                 """
                 SELECT session_id, started_at, last_activity, name,
                        session_type, origin_automation_id, parent_session_id, parent_tool_call_id,
-                       agent_type, agent_status, project_id, chat_model,
+                       agent_type, agent_status, project_id, chat_model, slice_key,
                        json_array_length(COALESCE(messages, '[]')) AS message_count
                 FROM sessions
                 WHERE archived_at IS NULL
@@ -2755,6 +2762,7 @@ class SessionStore:
                 "agent_status": row["agent_status"],
                 "project_id": row["project_id"],
                 "chat_model": dict(row).get("chat_model"),
+                "slice_key": dict(row).get("slice_key"),
             }
             for row in rows
         ]
@@ -2795,6 +2803,7 @@ class SessionStore:
                 "agent_status": row["agent_status"],
                 "project_id": row["project_id"],
                 "chat_model": dict(row).get("chat_model"),
+                "slice_key": dict(row).get("slice_key"),
             }
             for row in rows
         ]

@@ -511,6 +511,7 @@ async def get_session(
         name=session_state.name,
         project_id=session_state.project_id,
         chat_model=session_state.chat_model,
+        slice_key=session_state.slice_key,
     )
 
 
@@ -690,6 +691,7 @@ async def branch_session(
         "started_at": state.started_at.isoformat(),
         "last_activity": state.last_activity.isoformat(),
         "project_id": state.project_id,
+        "slice_key": state.slice_key,
     }
 
 
@@ -701,8 +703,9 @@ async def create_session(
 ):
     name = req.name if req else None
     project_id = req.project_id if req else None
+    slice_key = req.slice_key if req else None
     await _require_project(svc, project_id)
-    state = svc.create(name=name, project_id=project_id, chat_model=runtime.config.chat_model)
+    state = svc.create(name=name, project_id=project_id, chat_model=runtime.config.chat_model, slice_key=slice_key)
     await svc.save(state, [])
     return {
         "session_id": state.session_id,
@@ -712,6 +715,7 @@ async def create_session(
         "message_count": 0,
         "project_id": state.project_id,
         "chat_model": state.chat_model,
+        "slice_key": state.slice_key,
     }
 
 

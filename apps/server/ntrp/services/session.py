@@ -33,6 +33,7 @@ def session_row(state: SessionState, message_count: int) -> dict:
         "agent_status": state.agent_status,
         "project_id": state.project_id,
         "chat_model": state.chat_model,
+        "slice_key": state.slice_key,
     }
 
 
@@ -74,6 +75,7 @@ class SessionService:
         agent_status: str | None = None,
         project_id: str | None = None,
         chat_model: str | None = None,
+        slice_key: str | None = None,
     ) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
@@ -88,6 +90,7 @@ class SessionService:
             agent_status=agent_status,
             project_id=project_id,
             chat_model=chat_model,
+            slice_key=slice_key,
         )
 
     async def provision(
@@ -102,6 +105,7 @@ class SessionService:
         agent_status: str | None = None,
         project_id: str | None = None,
         chat_model: str | None = None,
+        slice_key: str | None = None,
     ) -> SessionState:
         """Create + persist a session and announce it (SESSION_CREATED) so
         connected desktops add the sidebar row live. The single creation
@@ -118,6 +122,7 @@ class SessionService:
             agent_status=agent_status,
             project_id=project_id,
             chat_model=chat_model,
+            slice_key=slice_key,
         )
         await self.save(state, [])
         await self._publish(SessionCreatedEvent(session=session_row(state, 0)))
@@ -567,6 +572,7 @@ class SessionService:
         new_state = self.create(
             name=name or (f"{data.state.name} (branch)" if data.state.name else None),
             project_id=data.state.project_id,
+            slice_key=data.state.slice_key,
         )
         new_state.auto_approve = set(data.state.auto_approve)
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
