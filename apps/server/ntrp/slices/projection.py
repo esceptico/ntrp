@@ -33,3 +33,14 @@ def page_summary(page: Page) -> dict:
         "updated": str(page.frontmatter.get("updated", "")),
         "open_loops": parse_open_loops(page.prose),
     }
+
+
+def slice_automation_match(name: str, key: str) -> bool:
+    """Match an automation name against a slice key.
+
+    Seeded slice automations are named exactly `slice:{key}` (see
+    _seed_slice_automations); colon-suffixed names like `slice:{key}:daily`
+    are reserved for future sub-automations.
+    """
+    base = f"slice:{key}"
+    return name == base or name.startswith(f"{base}:")

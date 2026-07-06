@@ -1,4 +1,4 @@
-from ntrp.slices.projection import parse_open_loops
+from ntrp.slices.projection import parse_open_loops, slice_automation_match
 
 PROSE = """# O-1A
 
@@ -28,3 +28,19 @@ def test_parse_open_loops_missing_section_is_empty():
 def test_parse_open_loops_indented_heading_terminates_section():
     prose = "# T\n\n## Open loops\n- Loop one.\n  ## Indented heading\n- Not a loop.\n"
     assert parse_open_loops(prose) == ["Loop one."]
+
+
+def test_slice_automation_match_exact_seeded_name():
+    assert slice_automation_match("slice:o-1a", "o-1a")
+
+
+def test_slice_automation_match_colon_suffixed_sub_automation():
+    assert slice_automation_match("slice:o-1a:daily", "o-1a")
+
+
+def test_slice_automation_match_rejects_other_key_prefix_collision():
+    assert not slice_automation_match("slice:o-1a-other", "o-1a")
+
+
+def test_slice_automation_match_rejects_unrelated_name():
+    assert not slice_automation_match("some-other-automation", "o-1a")

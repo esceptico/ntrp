@@ -36,6 +36,7 @@ from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.routers.slices import router as slices_router
 from ntrp.server.runtime import Runtime
 from ntrp.services.chat import submit_chat_message
+from ntrp.slices.projection import slice_automation_match
 from ntrp.slices.service import SliceService
 
 _logger = get_logger(__name__)
@@ -156,7 +157,6 @@ async def lifespan(app: FastAPI):
         return None
 
     def _slice_automations(key: str) -> list[dict]:
-        prefix = f"slice:{key}:"
         return [
             {
                 "name": a.name,
@@ -165,7 +165,7 @@ async def lifespan(app: FastAPI):
                 "running_since": a.running_since.isoformat() if a.running_since else None,
             }
             for a in slice_snapshot["automations"]
-            if a.name.startswith(prefix)
+            if slice_automation_match(a.name, key)
         ]
 
     def _slice_sessions(key: str) -> list[dict]:
