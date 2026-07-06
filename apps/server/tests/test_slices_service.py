@@ -1,9 +1,10 @@
 from pathlib import Path
+
+from ntrp.memory.pages import parse_page
+from ntrp.slices.asks import AskStore
 from ntrp.slices.models import Slice
 from ntrp.slices.registry import SliceRegistry
-from ntrp.slices.asks import AskStore
 from ntrp.slices.service import SliceService
-from ntrp.memory.pages import parse_page
 
 PAGE = "---\ntitle: O-1A\nupdated: 2026-07-05\n---\n# O-1A\n\n## Open loops\n- Find counsel.\n"
 
@@ -16,8 +17,7 @@ def make_service(tmp_path: Path) -> SliceService:
         asks=AskStore(tmp_path / "state.json"),
         get_page=lambda path: parse_page(PAGE),
         pending_approvals=lambda: [
-            {"run_id": "r1", "tool_call_id": "t1", "session_id": "s1",
-             "tool_name": "bash", "preview": "gh pr create"}
+            {"run_id": "r1", "tool_call_id": "t1", "session_id": "s1", "tool_name": "bash", "preview": "gh pr create"}
         ],
         session_slice=lambda sid: "o-1a" if sid == "s1" else None,
         slice_automations=lambda key: [],
