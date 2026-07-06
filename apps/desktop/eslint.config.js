@@ -17,6 +17,7 @@ const FEATURES = [
   "settings",
   "command-palette",
   "background-agents",
+  "home",
 ];
 
 const SHARED = [

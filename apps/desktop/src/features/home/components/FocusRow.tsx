@@ -1,8 +1,9 @@
 import { motion } from "motion/react";
 import type { SliceAsk } from "@/api/slices";
 import { useStore } from "@/stores";
-import { resolveAsk } from "@/actions/slices";
 import { runAutomation } from "@/actions/automations";
+import { switchSession } from "@/actions/sessions";
+import { primaryActionFor } from "@/features/home/lib/askActions";
 import { FieldSwap } from "@/components/ui/FieldSwap";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 
@@ -14,16 +15,12 @@ import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } f
  *  superseded ask never overlaps the next one mid-transition. */
 export function FocusRow({ ask }: { ask: SliceAsk }) {
   const openSlice = useStore((s) => s.openSlice);
-  const primaryAction = ask.actions[0];
-
-  const handlePrimaryAction = () => {
-    if (!primaryAction) return;
-    if (primaryAction.verb === "run") {
-      void runAutomation(primaryAction.ref);
-    } else {
-      void resolveAsk(ask.slice_key, ask.id, primaryAction.verb);
-    }
-  };
+  const automations = useStore((s) => s.automations);
+  const primaryAction = primaryActionFor(ask, automations, {
+    switchSession: (id) => void switchSession(id),
+    runAutomation: (taskId) => void runAutomation(taskId),
+    openSlice,
+  });
 
   return (
     <motion.div
@@ -49,10 +46,10 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
       {primaryAction && (
         <button
           type="button"
-          onClick={handlePrimaryAction}
+          onClick={primaryAction.run}
           className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-medium text-on-ink hover:opacity-90"
         >
-          {primaryAction.verb}
+          {primaryAction.label}
         </button>
       )}
     </motion.div>

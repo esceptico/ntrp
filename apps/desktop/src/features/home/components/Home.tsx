@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import type { SliceAsk, SliceSummary } from "@/api/slices";
 import { useStore } from "@/stores";
 import { useSlicesData } from "@/features/home/hooks/useSlicesData";
 import { HeroInput } from "@/features/home/components/HeroInput";
@@ -12,6 +13,11 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   month: "long",
   day: "numeric",
 };
+
+// Stable references for "not loaded yet" fallbacks — see HeroInput's
+// NO_SLICES/NO_AUTOMATIONS for why an inline `?? []` is unsafe with zustand.
+const NO_FOCUS: SliceAsk[] = [];
+const NO_SLICES: SliceSummary[] = [];
 
 function greeting(focusCount: number): string {
   if (focusCount === 0) return "All clear.";
@@ -27,8 +33,8 @@ function greeting(focusCount: number): string {
 export function Home() {
   const { overview } = useSlicesData();
   const connected = useStore((s) => s.connected);
-  const focus = overview?.focus ?? [];
-  const slices = overview?.slices ?? [];
+  const focus = overview?.focus ?? NO_FOCUS;
+  const slices = overview?.slices ?? NO_SLICES;
   const dateLabel = useMemo(() => new Date().toLocaleDateString(undefined, DATE_FORMAT), []);
 
   return (
