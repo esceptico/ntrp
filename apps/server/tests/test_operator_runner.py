@@ -19,13 +19,35 @@ def _write_skill(root: Path, name: str, description: str) -> None:
 
 
 class FakeExecutor:
-    def get_tools(self, read_only: bool = False) -> list[dict]:
+    def get_tools(
+        self,
+        read_only: bool | None = None,
+        actions: frozenset | None = None,
+        extra_names: frozenset[str] = frozenset(),
+    ) -> list[dict]:
         return []
 
 
-def _deps(skill_registry: SkillRegistry | None) -> OperatorDeps:
+class RecordingExecutor:
+    """Captures the get_tools() call so tests can assert on the resolved
+    toolset request without needing a real ToolRegistry."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def get_tools(
+        self,
+        read_only: bool | None = None,
+        actions: frozenset | None = None,
+        extra_names: frozenset[str] = frozenset(),
+    ) -> list[dict]:
+        self.calls.append({"read_only": read_only, "actions": actions, "extra_names": extra_names})
+        return []
+
+
+def _deps(skill_registry: SkillRegistry | None, executor=None) -> OperatorDeps:
     return OperatorDeps(
-        executor=FakeExecutor(),
+        executor=executor if executor is not None else FakeExecutor(),
         config=AgentConfig(model="test-model", research_model=None, max_depth=1, deferred_tools=False),
         source_details={},
         create_session=lambda: SessionState(
@@ -66,3 +88,43 @@ async def test_prepare_allows_missing_skill_registry(monkeypatch):
     )
 
     assert "<available_skills>" not in messages[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_prepare_auto_approve_ignores_extra_tool_names(monkeypatch):
+    """auto_approve=True already grants the full toolset (no read_only filter);
+    extra_tool_names is only meaningful for the non-auto-approve path."""
+    monkeypatch.setattr(runner, "create_agent", lambda **kwargs: object())
+    executor = RecordingExecutor()
+
+    await runner._prepare(
+        _deps(None, executor=executor),
+        RunRequest(
+            prompt="do it", auto_approve=True, source_id="test",
+            extra_tool_names=frozenset({"remember"}),
+        ),
+    )
+
+    assert executor.calls == [{"read_only": None, "actions": None, "extra_names": frozenset()}]
+
+
+@pytest.mark.asyncio
+async def test_prepare_non_auto_approve_threads_extra_tool_names(monkeypatch):
+    """The observe-mode decoupling: non-auto-approve still means read_only,
+    but named extras (e.g. memory-write tools) ride along on top of it —
+    this is the fix for observe-mode slice agents being unable to write
+    memory despite their contract promising it."""
+    monkeypatch.setattr(runner, "create_agent", lambda **kwargs: object())
+    executor = RecordingExecutor()
+
+    await runner._prepare(
+        _deps(None, executor=executor),
+        RunRequest(
+            prompt="do it", auto_approve=False, source_id="test",
+            extra_tool_names=frozenset({"remember", "memory_patch"}),
+        ),
+    )
+
+    assert executor.calls == [
+        {"read_only": True, "actions": None, "extra_names": frozenset({"remember", "memory_patch"})}
+    ]

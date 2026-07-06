@@ -94,11 +94,13 @@ class ToolExecutor:
         self,
         read_only: bool | None = None,
         actions: frozenset[ToolAction] | None = None,
+        extra_names: frozenset[str] = frozenset(),
     ) -> list[dict]:
         return self.registry.get_schemas(
             capabilities=frozenset(self._get_services()),
             read_only=read_only,
             actions=actions,
+            extra_names=extra_names,
         )
 
     def get_tool_metadata(self) -> list[dict]:

@@ -10,8 +10,10 @@ from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import EventTrigger, TimeTrigger
 from ntrp.memory.pages import parse_page
-from ntrp.slices.agent import build_slice_prompt, parse_agent_ask
+import ntrp.slices.agent as slice_agent_module
+from ntrp.slices.agent import _OBSERVE_EXTRA_TOOLS, build_slice_prompt, parse_agent_ask, run_slice_agent
 from ntrp.slices.models import Slice
+from ntrp.tools.executor import ToolExecutor
 
 SLICE = Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="observe")
 PAGE = parse_page("---\ntitle: O-1A\n---\n# O-1A\n\n## Open loops\n- Find counsel.\n")
@@ -29,6 +31,93 @@ def test_parse_agent_ask_extracts_json_block_or_none():
     ask = parse_agent_ask(out)
     assert ask == {"text": "Review counsel memo", "kind": "review"}
     assert parse_agent_ask("All quiet, nothing needs the user.") is None
+
+
+def test_observe_toolset_includes_memory_write_but_excludes_bash_and_send():
+    """The contract promises observe agents 'may read + update the topic
+    page + ask' — regression test for the bug where auto_approve=False
+    silently collapsed the toolset to read-only, excluding memory writes."""
+    executor = ToolExecutor(get_services=lambda: {"memory_records"})
+    tools = executor.get_tools(read_only=True, extra_names=_OBSERVE_EXTRA_TOOLS)
+    names = {t["function"]["name"] for t in tools}
+
+    assert "remember" in names  # memory-write, granted to observe
+    assert "recall" in names  # read tool, granted by read_only=True
+    assert "bash" not in names
+    assert "send" not in names
+
+
+def test_act_toolset_is_a_superset_of_observe_toolset():
+    executor = ToolExecutor(get_services=lambda: {"memory_records"})
+    observe_names = {
+        t["function"]["name"]
+        for t in executor.get_tools(read_only=True, extra_names=_OBSERVE_EXTRA_TOOLS)
+    }
+    act_names = {t["function"]["name"] for t in executor.get_tools()}
+
+    assert observe_names <= act_names
+    assert "bash" in act_names
+    assert len(act_names) > len(observe_names)
+
+
+@pytest.mark.asyncio
+async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve(monkeypatch):
+    """run_slice_agent must build a RunRequest that stays non-auto-approve
+    (approvals still gate everything) while still naming the memory-write
+    extras for observe mode."""
+    captured = {}
+
+    async def fake_run_agent(deps, request):
+        captured["request"] = request
+
+        class _Result:
+            run_id = "r1"
+            output = None
+
+        return _Result()
+
+    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
+
+    class FakeAskStore:
+        def upsert(self, ask):
+            raise AssertionError("no ask should be upserted for a silent run")
+
+    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=FakeAskStore(), recent=[])
+
+    request = captured["request"]
+    assert request.auto_approve is False
+    assert request.extra_tool_names == _OBSERVE_EXTRA_TOOLS
+
+
+@pytest.mark.asyncio
+async def test_run_slice_agent_act_mode_requests_no_extra_tools(monkeypatch):
+    """act mode already gets the full toolset via auto_approve=True, so no
+    extras are needed (and RunRequest.extra_tool_names is ignored on that
+    path — see runner._prepare)."""
+    captured = {}
+
+    async def fake_run_agent(deps, request):
+        captured["request"] = request
+
+        class _Result:
+            run_id = "r1"
+            output = None
+
+        return _Result()
+
+    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
+
+    act_slice = Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="act")
+
+    class FakeAskStore:
+        def upsert(self, ask):
+            raise AssertionError("no ask should be upserted for a silent run")
+
+    await run_slice_agent(deps=object(), slice=act_slice, page=PAGE, asks=FakeAskStore(), recent=[])
+
+    request = captured["request"]
+    assert request.auto_approve is True
+    assert request.extra_tool_names == frozenset()
 
 
 @pytest_asyncio.fixture

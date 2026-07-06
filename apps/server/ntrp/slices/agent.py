@@ -16,6 +16,13 @@ _CONTRACT = {
     "act": "You may run this slice's automations and workflows; irreversible actions still require approval.",
 }
 
+# Names of the memory-write tools (see ntrp/tools/memory.py) — the "update the
+# topic page" half of the observe contract. Granted on top of the read-only
+# toolset via RunRequest.extra_tool_names so an observe-mode run stays
+# non-auto-approve (approvals still gate everything else) while still able to
+# do the one write action its contract promises.
+_OBSERVE_EXTRA_TOOLS = frozenset({"remember", "forget", "memory_patch", "memory_write"})
+
 
 def build_slice_prompt(slice: Slice, page: Page, recent: list[dict]) -> str:
     loops = "\n".join(f"- {l}" for l in parse_open_loops(page.prose)) or "- (none)"
@@ -49,6 +56,7 @@ async def run_slice_agent(
         auto_approve=slice.autonomy == "act",
         source_id=f"slice:{slice.key}",
         automation_id=f"slice:{slice.key}",
+        extra_tool_names=_OBSERVE_EXTRA_TOOLS if slice.autonomy == "observe" else frozenset(),
     )
     result = await run_agent(deps, request)
     if not result.output:

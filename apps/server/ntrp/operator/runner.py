@@ -45,6 +45,13 @@ class RunRequest:
     model: str | None = None
     skip_approvals: bool = False
     automation_id: str | None = None
+    # Decouples the toolset from the approval-flow concern. auto_approve still
+    # separately controls whether irreversible tools skip the approval gate —
+    # a caller can be non-auto-approve (approvals still required) while
+    # granting a wider toolset than plain read-only, by naming specific
+    # additional tools here (e.g. slice observe mode: READ tools + the named
+    # memory-write tools, but not bash/send/automation-write).
+    extra_tool_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -61,7 +68,11 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     memory_context = await resident_profile(deps.memory_records)
 
     executor = deps.executor
-    tools = executor.get_tools() if request.auto_approve else executor.get_tools(read_only=True)
+    tools = (
+        executor.get_tools()
+        if request.auto_approve
+        else executor.get_tools(read_only=True, extra_names=request.extra_tool_names)
+    )
 
     agent_config = deps.config
     if request.model:
