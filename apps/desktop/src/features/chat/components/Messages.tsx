@@ -12,7 +12,6 @@ import { firstMessageIdInSourceFocus } from "@/lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "@/actions/history";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
 import { BlurSwap } from "@/components/ui/BlurSwap";
-import { HomeHero } from "@/components/ui/HomeHero";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/Marker";
 import { Message } from "@/features/chat/components/Message";
 import { CompactionIndicator } from "@/features/chat/components/CompactionIndicator";
@@ -203,15 +202,19 @@ export function Messages() {
               <MarkerContent>Loading earlier messages…</MarkerContent>
             </Marker>
           )}
+          {/* App.tsx renders <Home /> in place of <Chat /> (and therefore
+              this component) when visibleOrder is empty and nothing is
+              running — see the seam note there. Messages still renders
+              nothing extra for that state as a defensive fallback (e.g. a
+              run starts on an empty session — the app layer's `running`
+              guard un-shows Home before this line would matter). */}
           {!sessionReady
             ? null
-            : visibleOrder.length === 0
-              ? <HomeHero />
-              : segments.map((seg, index) =>
-                  seg.userId
-                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
-                    : <div key={`preamble-${index}`} className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
-                )}
+            : segments.map((seg, index) =>
+                seg.userId
+                  ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
+                  : <div key={`preamble-${index}`} className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
+              )}
           <CompactionIndicator />
         </div>
       </div>

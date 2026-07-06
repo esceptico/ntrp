@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/stores";
 import { refreshLoops } from "@/actions/loops";
 import { fetchAutomations, fetchAutomationSuggestions } from "@/actions/automations";
+import { fetchSlicesOverview } from "@/actions/slices";
 import type { AppConfig } from "@/api/core";
 import type { SessionListItem } from "@/api/types";
 import { createStallWatchdog } from "@/lib/streamWatchdog";
@@ -100,6 +101,9 @@ export function useAutomationEvents(): void {
         // Drop the row from the sidebar card immediately rather than after the
         // next 20s poll catches up to running_since going null.
         void fetchAutomations();
+        // A finished automation run may have written slice asks/state —
+        // refresh Home's focus set the same way slices_changed does.
+        void fetchSlicesOverview();
       } else if (event.type === "automation_suggestions_updated") {
         // The background suggester recomputed the active set — pull it so
         // "Suggested for you" reflects the new drafts without a modal reopen.
@@ -117,6 +121,11 @@ export function useAutomationEvents(): void {
         // A channel the user may not be viewing got new content — bump its
         // sidebar row to the top with fresh metadata.
         store().patchSession(event.session);
+      } else if (event.type === "slices_changed") {
+        // A slice's asks/state moved (server-side dream/consolidation or an
+        // automation write) — refetch so the Home focus set and strip
+        // reflect it without waiting for the next mount.
+        void fetchSlicesOverview();
       } else if (event.type === "stream_reset") {
         void fetchAutomations();
         const sid = useStore.getState().currentSessionId;
