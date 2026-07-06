@@ -23,3 +23,8 @@ def test_parse_open_loops_extracts_bullets_until_next_heading():
 
 def test_parse_open_loops_missing_section_is_empty():
     assert parse_open_loops("# T\n\n## What we know\nx\n") == []
+
+
+def test_parse_open_loops_indented_heading_terminates_section():
+    prose = "# T\n\n## Open loops\n- Loop one.\n  ## Indented heading\n- Not a loop.\n"
+    assert parse_open_loops(prose) == ["Loop one."]

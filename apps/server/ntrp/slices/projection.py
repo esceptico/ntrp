@@ -13,13 +13,14 @@ def parse_open_loops(prose: str) -> list[str]:
     loops: list[str] = []
     in_section = False
     for line in prose.splitlines():
-        if _LOOP_HEADING.match(line.strip()):
+        stripped = line.strip()
+        if _LOOP_HEADING.match(stripped):
             in_section = True
             continue
-        if in_section and _HEADING.match(line):
+        if in_section and _HEADING.match(stripped):
             break
         if in_section:
-            m = _BULLET.match(line.strip())
+            m = _BULLET.match(stripped)
             if m:
                 text = _MD_BOLD.sub(r"\1", m.group(1))
                 loops.append(_PROVENANCE.sub("", text).strip())
