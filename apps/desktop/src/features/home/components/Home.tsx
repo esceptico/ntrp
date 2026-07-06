@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Settings, Sparkles } from "lucide-react";
 import type { SliceAsk, SliceSummary } from "@/api/slices";
 import { useStore } from "@/stores";
 import { useSlicesData } from "@/features/home/hooks/useSlicesData";
 import { HeroInput } from "@/features/home/components/HeroInput";
 import { FocusRow } from "@/features/home/components/FocusRow";
 import { SlicesStrip } from "@/features/home/components/SlicesStrip";
-import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
+import { Button } from "@/components/ui/Button";
+import { ICON } from "@/lib/icons";
+import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE, originFromEvent } from "@/lib/tokens/motion";
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   weekday: "long",
@@ -33,9 +36,43 @@ function greeting(focusCount: number): string {
 export function Home() {
   const { overview } = useSlicesData();
   const connected = useStore((s) => s.connected);
+  const openSettings = useStore((s) => s.openSettings);
   const focus = overview?.focus ?? NO_FOCUS;
   const slices = overview?.slices ?? NO_SLICES;
   const dateLabel = useMemo(() => new Date().toLocaleDateString(undefined, DATE_FORMAT), []);
+
+  if (!connected) {
+    // Mirrors the retired HomeHero's disconnected state: Home's hero input
+    // is a dead end with no server behind it, so a connect CTA replaces it
+    // entirely rather than showing an input that can't send.
+    return (
+      <motion.div
+        initial={RISE_IN}
+        animate={RISE_SETTLED}
+        transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
+        className="mt-[14vh] mx-auto grid gap-5 justify-items-center text-center"
+      >
+        <span
+          aria-hidden
+          className="grid place-items-center w-12 h-12 rounded-2xl bg-accent-soft text-accent-strong"
+        >
+          <Sparkles size={ICON.HERO} strokeWidth={2} />
+        </span>
+        <div className="grid gap-1.5 max-w-[420px]">
+          <h2 className="m-0 text-2xl font-semibold tracking-[-0.018em] text-ink">Connect to get started</h2>
+          <p className="m-0 text-base text-muted leading-snug">Open settings to point ntrp at your server.</p>
+        </div>
+        <Button
+          variant="secondary"
+          size="md"
+          leadingIcon={Settings}
+          onClick={(e) => openSettings(originFromEvent(e.currentTarget), "connection")}
+        >
+          Open settings
+        </Button>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -46,24 +83,20 @@ export function Home() {
     >
       <span className="text-[11px] font-medium tracking-wide text-faint uppercase">{dateLabel}</span>
       <HeroInput />
-      {connected && (
-        <>
-          <p className="m-0 text-lg text-ink-soft">{greeting(focus.length)}</p>
-          {focus.length > 0 && (
-            <div className="grid gap-2">
-              <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
-              <div className="grid gap-1.5">
-                <AnimatePresence initial={false}>
-                  {focus.map((ask) => (
-                    <FocusRow key={ask.id} ask={ask} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
-          )}
-          <SlicesStrip slices={slices} />
-        </>
+      <p className="m-0 text-lg text-ink-soft">{greeting(focus.length)}</p>
+      {focus.length > 0 && (
+        <div className="grid gap-2">
+          <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
+          <div className="grid gap-1.5">
+            <AnimatePresence initial={false}>
+              {focus.map((ask) => (
+                <FocusRow key={ask.id} ask={ask} />
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
       )}
+      <SlicesStrip slices={slices} />
     </motion.div>
   );
 }

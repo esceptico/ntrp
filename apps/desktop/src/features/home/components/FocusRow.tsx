@@ -4,15 +4,16 @@ import { useStore } from "@/stores";
 import { runAutomation } from "@/actions/automations";
 import { switchSession } from "@/actions/sessions";
 import { primaryActionFor } from "@/lib/askActions";
-import { FieldSwap } from "@/components/ui/FieldSwap";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 
 /** A single focus-set row: 52px tonal card, slice key small-caps on the
  *  left, ask text in the middle, primary action on the right. Enters with
  *  RISE_IN/SPRING_ROW_ENTRY, retires with ROW_EXIT (list membership is
  *  driven by AnimatePresence in FocusList — this component only owns its
- *  own pose). Ask text changes route through FieldSwap so a resolved/
- *  superseded ask never overlaps the next one mid-transition. */
+ *  own pose). Rows are keyed by ask.id (not slice_key), so a text change
+ *  is a fresh row mounting via AnimatePresence, not an in-place swap —
+ *  FieldSwap (built for in-place swaps) would be inert here (dir={0}) and
+ *  was removed. */
 export function FocusRow({ ask }: { ask: SliceAsk }) {
   const openSlice = useStore((s) => s.openSlice);
   const automations = useStore((s) => s.automations);
@@ -39,9 +40,7 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
         {ask.slice_key}
       </button>
       <div className="min-w-0 flex-1 text-sm text-ink">
-        <FieldSwap swapKey={ask.text} dir={0}>
-          <span className="block truncate">{ask.text}</span>
-        </FieldSwap>
+        <span className="block truncate">{ask.text}</span>
       </div>
       {primaryAction && (
         <button

@@ -23,15 +23,23 @@ const KIND_DOT: Record<SliceAsk["kind"], string> = {
  *  action mapped from `ask.actions[0]` (shared askActions logic — same
  *  verb→handler map Home's FocusRow uses), and a dismiss ✕ that resolves
  *  the ask as "dismissed". Retires with ROW_EXIT; list membership (removal
- *  on resolve) is driven by the caller's AnimatePresence. */
+ *  on resolve) is driven by the caller's AnimatePresence.
+ *
+ *  `open_page` actions route to `openSlice(ask.slice_key)` — inside the
+ *  room that's already showing that slice, so it's a no-op button. The
+ *  caller (SliceRoom) always renders asks scoped to its own slice, so the
+ *  primary action is simply suppressed for `open_page`. */
 export function AskCard({ ask }: { ask: SliceAsk }) {
   const automations = useStore((s) => s.automations);
 
-  const primaryAction = primaryActionFor(ask, automations as Automation[] | null, {
-    switchSession: (id) => void switchSession(id),
-    runAutomation: (taskId) => void runAutomation(taskId),
-    openSlice: (key) => useStore.getState().openSlice(key),
-  });
+  const isNoOpOpenPage = ask.actions[0]?.verb === "open_page";
+  const primaryAction = isNoOpOpenPage
+    ? null
+    : primaryActionFor(ask, automations as Automation[] | null, {
+        switchSession: (id) => void switchSession(id),
+        runAutomation: (taskId) => void runAutomation(taskId),
+        openSlice: (key) => useStore.getState().openSlice(key),
+      });
 
   const dismiss = async () => {
     try {
