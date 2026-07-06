@@ -7,10 +7,10 @@ from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
-from ntrp.automation.triggers import EventTrigger, TimeTrigger
+from ntrp.automation.triggers import TimeTrigger
 from ntrp.config import Config
 from ntrp.constants import SLICE_AGENT_DAILY_AT, SLICE_AGENT_HANDLER, SLICES_FILE, SLICES_STATE_FILE
-from ntrp.events.sse import AutomationSuggestionsUpdatedEvent, EventType
+from ntrp.events.sse import AutomationSuggestionsUpdatedEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.logging import get_logger
 from ntrp.memory.pages import Page, parse_page
@@ -137,7 +137,7 @@ class AutomationRuntime:
             for _ in range(8):
                 rep = await consolidate.run_once()
                 if totals is None:
-                    totals = {key: 0 for key in rep.summary_counts}
+                    totals = dict.fromkeys(rep.summary_counts, 0)
                 for key, value in rep.summary_counts.items():
                     totals[key] += value
                 if not rep.changed_memory:
@@ -250,16 +250,18 @@ class AutomationRuntime:
             task_id = f"slice:{slice_.key}"
             if await self.stores.automations.get(task_id):
                 continue
+            # Daily only for now. A memory_changed EventTrigger was seeded
+            # here originally but nothing routes vault changes into
+            # Scheduler.fire_event, and wiring it unfiltered would fire an
+            # LLM run per slice on every vault edit — event triggers return
+            # WITH per-slice path filtering + debounce.
             time_trigger = TimeTrigger(at=SLICE_AGENT_DAILY_AT, days="daily")
             automation = Automation(
                 task_id=task_id,
                 name=task_id,
                 description=f"Standing agent for the '{slice_.title}' slice",
                 model=None,
-                triggers=[
-                    time_trigger,
-                    EventTrigger(event_type=EventType.MEMORY_CHANGED.value),
-                ],
+                triggers=[time_trigger],
                 enabled=True,
                 created_at=now,
                 next_run_at=time_trigger.next_run(now),
