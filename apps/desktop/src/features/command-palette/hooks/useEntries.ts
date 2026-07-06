@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/stores";
 import { loadHistory } from "@/actions/history";
-import { archiveSession, branchAtMessage, createProject, createSession, renameSession, switchSession } from "@/actions/sessions";
+import { archiveSession, branchAtMessage, createProject, goToNewSessionHome, renameSession, switchSession } from "@/actions/sessions";
 import { stopRun } from "@/actions/messages";
 import { runBuiltinCommand } from "@/actions/builtins";
 import { toggleAuto } from "@/actions/loops";
@@ -63,7 +63,7 @@ export function useEntries(): CommandEntry[] {
       label: "New session",
       icon: Pencil,
       shortcut: "⌘N",
-      run: () => createSession(),
+      run: () => goToNewSessionHome(),
       search: "new session create chat",
     });
     entries.push({

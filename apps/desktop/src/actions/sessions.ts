@@ -14,6 +14,19 @@ export async function switchSession(sessionId: string, historyOptions: LoadHisto
   await fetchGoal(sessionId);
 }
 
+/** "New session" as the sidebar nav row / ⌘N / command palette entry mean
+ *  it: land on Home rather than eagerly provisioning an empty session.
+ *  Home's hero input creates the actual session lazily on first send (see
+ *  sendMessage) — this just clears the current session/room so Home's
+ *  no-session branch in App.tsx renders. Other createSession() callers
+ *  (quick-capture, new-project, in-project "new session" rows) still want
+ *  an eagerly-provisioned session and are unaffected. */
+export function goToNewSessionHome(): void {
+  const s = getState();
+  s.setCurrentSession(null);
+  s.openSlice(null);
+}
+
 export async function createSession(projectId?: string | null): Promise<void> {
   const s = getState();
   const targetProjectId =

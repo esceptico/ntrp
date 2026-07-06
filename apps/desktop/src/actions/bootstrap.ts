@@ -1,11 +1,10 @@
-import { apiWithConfig, checkHealth, loadInitialConfig } from "@/api/core";
+import { checkHealth, loadInitialConfig } from "@/api/core";
 import { listPrimarySessionsApi, listProjectsApi } from "@/api/sessions";
 import { getState } from "@/stores";
 import { isAgentSessionId, parentSessionIdOf } from "@/lib/agentRun";
 import { fetchAutomations } from "@/actions/automations";
 import { refreshChildAgents } from "@/actions/childAgents";
 import { fetchGoal } from "@/actions/goals";
-import { loadHistory } from "@/actions/history";
 import { refreshLoops } from "@/actions/loops";
 import { refreshSessions } from "@/actions/sessions";
 import { fetchSkills } from "@/actions/skills";
@@ -59,20 +58,18 @@ export async function refresh(): Promise<void> {
     s.setConnected(true);
     s.setError(null);
 
-    const [projects, sessions, session] = await Promise.all([
+    const [projects, sessions] = await Promise.all([
       listProjectsApi(s.config),
       listPrimarySessionsApi(s.config),
-      apiWithConfig<{ session_id: string; name?: string | null }>(s.config, "/session"),
     ]);
     s.setProjects(projects);
     s.setSessions(sessions);
-    s.setCurrentSession(session.session_id);
-    await loadHistory(session.session_id);
-    try {
-      await fetchGoal(session.session_id);
-    } catch {
-      // Goal state is accessory UI; history/session refresh should remain usable.
-    }
+    // Deliberately does NOT auto-select the most recent session (that was
+    // GET /session's job pre-Slices) — the app opens on Home per the Slices
+    // spec ("Placement": Home is the no-session state of the main pane).
+    // currentSessionId stays whatever it already was (null on a fresh boot),
+    // and App.tsx's showHome derivation renders Home from that. The sidebar
+    // still gets its sessions list from the fetch above.
   } catch (error) {
     s.setConnected(false);
     s.setError(error instanceof Error ? error.message : String(error));

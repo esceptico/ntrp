@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import { refresh } from "@/actions/bootstrap";
 import { loadHistory } from "@/actions/history";
-import { switchSession } from "@/actions/sessions";
+import { goToNewSessionHome, switchSession } from "@/actions/sessions";
 import { getState, setState, useStore } from "@/stores/index";
 import type { UiMessage } from "@/stores/index";
 import { createInitialSessionViewState } from "@/stores/session-view";
@@ -310,7 +310,10 @@ test("switchSession preserves cached preview until canonical history replaces it
   }
 });
 
-test("refresh hydrates the current session goal", async () => {
+test("refresh loads projects/sessions but does not auto-select a current session", async () => {
+  // Home is the app's entrypoint (Slices spec, "Placement") — refresh() must
+  // not resurrect the old GET /session "load the latest session" behavior,
+  // or every boot would land back in Chat instead of Home.
   const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
   const requests: string[] = [];
   (globalThis as typeof globalThis & { window?: unknown }).window = {
@@ -327,40 +330,6 @@ test("refresh hydrates the current session goal", async () => {
           if (request.path === "/sessions" || request.path.startsWith("/sessions?limit=500&offset=")) {
             return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
           }
-          if (request.path === "/session") {
-            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { session_id: "A", name: "A" }, text: "" };
-          }
-          if (request.path === "/session/history?session_id=A") {
-            return {
-              ok: true,
-              status: 200,
-              statusText: "OK",
-              contentType: "application/json",
-              data: { messages: [], active_run_id: null, page: { has_more_before: false, has_more_after: false } },
-              text: "",
-            };
-          }
-          if (request.path === "/sessions/A/goal") {
-            return {
-              ok: true,
-              status: 200,
-              statusText: "OK",
-              contentType: "application/json",
-              data: {
-                goal_id: "goal-1",
-                session_id: "A",
-                objective: "Keep status stable",
-                status: "active",
-                token_budget: null,
-                tokens_used: 0,
-                time_used_seconds: 0,
-                evidence: [],
-                created_at: "",
-                updated_at: "",
-              },
-              text: "",
-            };
-          }
           throw new Error(`unexpected request: ${request.path}`);
         },
       },
@@ -370,71 +339,14 @@ test("refresh hydrates the current session goal", async () => {
   };
 
   try {
-    setState({ config: { serverUrl: "http://localhost:6877", apiKey: "" } });
+    setState({ config: { serverUrl: "http://localhost:6877", apiKey: "" }, currentSessionId: null });
     await refresh();
 
-    expect(requests).toContain("/sessions/A/goal");
-    expect(getState().goals["A"]?.objective).toBe("Keep status stable");
-  } finally {
-    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
-  }
-});
-
-test("refresh keeps the current session usable when goal hydration fails", async () => {
-  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
-  const requests: string[] = [];
-  (globalThis as typeof globalThis & { window?: unknown }).window = {
-    ntrpDesktop: {
-      api: {
-        request: async (_config: unknown, request: { path: string }) => {
-          requests.push(request.path);
-          if (request.path === "/health") {
-            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { auth: true }, text: "" };
-          }
-          if (request.path === "/projects") {
-            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { projects: [] }, text: "" };
-          }
-          if (request.path === "/sessions" || request.path.startsWith("/sessions?limit=500&offset=")) {
-            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { sessions: [{ session_id: "A", name: "A" }] }, text: "" };
-          }
-          if (request.path === "/session") {
-            return { ok: true, status: 200, statusText: "OK", contentType: "application/json", data: { session_id: "A", name: "A" }, text: "" };
-          }
-          if (request.path === "/session/history?session_id=A") {
-            return {
-              ok: true,
-              status: 200,
-              statusText: "OK",
-              contentType: "application/json",
-              data: {
-                messages: [{ id: "server-a-1", role: "user", content: "canonical A" }],
-                active_run_id: null,
-                page: { has_more_before: false, has_more_after: false },
-              },
-              text: "",
-            };
-          }
-          if (request.path === "/sessions/A/goal") {
-            throw new Error("goal route failed");
-          }
-          throw new Error(`unexpected request: ${request.path}`);
-        },
-      },
-    },
-    setTimeout,
-    clearTimeout,
-  };
-
-  try {
-    setState({ config: { serverUrl: "http://localhost:6877", apiKey: "" } });
-    await refresh();
-
-    expect(requests).toContain("/sessions/A/goal");
+    expect(requests).toEqual(["/health", "/projects", "/sessions?limit=500&offset=0&include_agents=false"]);
     expect(getState().connected).toBe(true);
     expect(getState().error).toBeNull();
-    expect(getState().currentSessionId).toBe("A");
-    expect(getState().sessionView.historyLoadedFor).toBe("A");
-    expect(getState().messages.get("server-a-1")?.content).toBe("canonical A");
+    expect(getState().sessions.map((s) => s.session_id)).toEqual(["A"]);
+    expect(getState().currentSessionId).toBeNull();
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
@@ -905,4 +817,20 @@ test("resetCancellingQueuedMessages flips cancelling back to pending", () => {
   s.addQueuedMessage({ clientId: "cid-2", text: "b", status: "pending", enqueuedAt: 0 });
   s.resetCancellingQueuedMessages();
   expect(getState().queuedMessages.map((q) => q.status)).toEqual(["pending", "pending"]);
+});
+
+test("goToNewSessionHome clears the current session and closes an open slice room", () => {
+  // "New session" (sidebar nav row / ⌘N / command palette) must land on
+  // Home, not eagerly provision an empty session — Home's hero input
+  // creates the session lazily on first send.
+  const s = getState();
+  s.setCurrentSession("A");
+  s.openSlice("o-1a");
+  expect(getState().slices.openSliceKey).toBe("o-1a");
+
+  goToNewSessionHome();
+
+  expect(getState().currentSessionId).toBeNull();
+  expect(getState().slices.openSliceKey).toBeNull();
+  expect(getState().order).toEqual([]);
 });

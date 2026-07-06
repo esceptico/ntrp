@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { enqueueMessage, stopRun } from "@/actions/messages";
+import { enqueueMessage, sendMessage, stopRun } from "@/actions/messages";
 import { getState, setState } from "@/stores/index";
 
 type CapturedRequest = { path: string; method: string; body?: string };
@@ -138,6 +138,73 @@ test("enqueueMessage promotes stale queued submit when server starts a new run",
     expect(state.order).toHaveLength(1);
     expect(state.messages.get(state.order[0])?.role).toBe("user");
     expect(state.messages.get(state.order[0])?.content).toBe("use mcp");
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("sendMessage with no current session lazily creates one, then sends into it", async () => {
+  // Home has no current session — the first message from its hero input
+  // must provision one (reusing createSession) rather than silently no-op
+  // like sendMessage used to when currentSessionId was null.
+  setState({
+    config: { serverUrl: "http://localhost:6877", apiKey: "" },
+    currentSessionId: null,
+    sessions: [],
+    messages: new Map(),
+    order: [],
+    running: false,
+    currentRunId: null,
+    activeRunSessionIds: new Set(),
+    queuedMessages: [],
+    pendingApprovals: [],
+  });
+
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const requests: { path: string; method?: string; body?: string }[] = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string; method?: string; body?: string }) => {
+          requests.push(request);
+          if (request.path === "/sessions" && request.method === "POST") {
+            return {
+              ok: true,
+              contentType: "application/json",
+              data: { session_id: "new-1", name: null, project_id: null },
+            };
+          }
+          if (request.path === "/session/history?session_id=new-1") {
+            return {
+              ok: true,
+              contentType: "application/json",
+              data: { messages: [], active_run_id: null, page: { has_more_before: false, has_more_after: false } },
+            };
+          }
+          if (request.path === "/sessions/new-1/goal") {
+            return { ok: true, contentType: "application/json", data: null };
+          }
+          if (request.path === "/chat/message") {
+            return { ok: true, contentType: "application/json", data: { run_id: "run-1", session_id: "new-1" } };
+          }
+          throw new Error(`unexpected request: ${request.path}`);
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    await sendMessage("hello from home");
+
+    expect(getState().currentSessionId).toBe("new-1");
+    const postedSession = requests.find((r) => r.path === "/sessions" && r.method === "POST");
+    expect(postedSession).toBeDefined();
+    const chatCall = requests.find((r) => r.path === "/chat/message");
+    expect(chatCall).toBeDefined();
+    const chatBody = JSON.parse(chatCall?.body ?? "{}");
+    expect(chatBody.session_id).toBe("new-1");
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }

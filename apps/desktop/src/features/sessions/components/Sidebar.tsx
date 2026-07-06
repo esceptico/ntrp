@@ -1,7 +1,7 @@
 import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
 import { originFromEvent } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
-import { createSession } from "@/actions/sessions";
+import { goToNewSessionHome } from "@/actions/sessions";
 import { fetchAutomations } from "@/actions/automations";
 import { ICON } from "@/lib/icons";
 import { useVisibilityPoll } from "@/lib/hooks";
@@ -24,7 +24,7 @@ export function Sidebar() {
         <NavRow
           icon={<Pencil size={ICON.LG} strokeWidth={2} />}
           label="New session"
-          onClick={() => void createSession()}
+          onClick={() => goToNewSessionHome()}
         />
         <NavRow
           icon={<Zap size={ICON.LG} strokeWidth={2} />}

@@ -10,6 +10,7 @@ import {
   reduceRunStopRequested,
 } from "@/stores/run-lifecycle";
 import { clearCachedStoppingRun } from "@/stores/session-cache";
+import { createSession } from "@/actions/sessions";
 
 interface SendMessageOptions {
   meta?: boolean;
@@ -26,11 +27,20 @@ export async function sendMessage(
   images: ImageBlock[] = [],
   options: SendMessageOptions = {},
 ): Promise<void> {
+  const trimmedText = text.trim();
+  if (!trimmedText && images.length === 0) return;
+
+  // Home has no current session (the door, not a room — see Slices spec
+  // Placement) — the FIRST message from its hero input is what actually
+  // provisions the session, lazily, reusing the same createSession path
+  // the sidebar's "new session in project" rows use.
+  if (!getState().currentSessionId) {
+    await createSession();
+  }
+
   const s = getState();
   if (!s.currentSessionId) return;
   const sendSessionId = s.currentSessionId;
-  const trimmedText = text.trim();
-  if (!trimmedText && images.length === 0) return;
 
   if (s.editingId) {
     // Truncate the *server's* saved message list at the message being

@@ -22,7 +22,7 @@ import { useAutomationEvents } from "@/features/automations/hooks/useAutomationE
 import { useTaskResultToasts } from "@/hooks/useTaskResultToasts";
 import { useThemeEffect } from "@/lib/theme";
 import { bootstrap } from "@/actions/bootstrap";
-import { createSession, switchSession } from "@/actions/sessions";
+import { createSession, goToNewSessionHome, switchSession } from "@/actions/sessions";
 import { sendMessage } from "@/actions/messages";
 
 // The five "open from chrome" modals only mount when the user actually
@@ -140,7 +140,7 @@ export function App() {
         }
         if (k === "n" && !e.shiftKey) {
           e.preventDefault();
-          void createSession();
+          goToNewSessionHome();
           return;
         }
         if (e.key === ",") {
