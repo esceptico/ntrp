@@ -50,6 +50,14 @@ import {
   type WorkflowsDomainState,
 } from "@/stores/workflow-domain";
 import {
+  createSlicesDomainState,
+  reduceOverviewLoaded,
+  reduceDetailLoaded,
+  reduceAskResolved,
+  reduceOpenSlice,
+  type SlicesDomainState,
+} from "@/stores/slices-domain";
+import {
   reduceApprovalRequested,
   reduceApprovalResolved,
   reduceCancellingQueuedMessagesReset,
@@ -98,6 +106,7 @@ export type {
   BackgroundAgentsDomainState,
   AutomationStreamDomainState,
   WorkflowsDomainState,
+  SlicesDomainState,
 };
 export type { Workflow, WorkflowAgent, WorkflowPhase } from "@/stores/workflow-domain";
 export { selectWorkflowsForSession } from "@/stores/workflow-domain";
@@ -228,6 +237,7 @@ export const useStore = create<State & Actions>((set) => ({
   pendingGoalProposal: null,
   toasts: [],
   prefs: loadPrefs(),
+  slices: createSlicesDomainState(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setProjects: (projects) => set({ projects }),
@@ -740,6 +750,14 @@ export const useStore = create<State & Actions>((set) => ({
       persistPrefs(next);
       return { prefs: next };
     }),
+  slicesOverviewLoaded: (overview) =>
+    set((s) => ({ slices: reduceOverviewLoaded(s.slices, overview) })),
+  sliceDetailLoaded: (detail) =>
+    set((s) => ({ slices: reduceDetailLoaded(s.slices, detail) })),
+  sliceAskResolved: (key, askId) =>
+    set((s) => ({ slices: reduceAskResolved(s.slices, key, askId) })),
+  openSlice: (key) =>
+    set((s) => ({ slices: reduceOpenSlice(s.slices, key) })),
 }));
 
 // Dev-only: expose the store so connection-gated surfaces can be driven for

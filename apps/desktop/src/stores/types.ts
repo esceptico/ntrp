@@ -12,6 +12,7 @@ import type {
   WorkflowTokenUsageInput,
 } from "@/stores/workflow-domain";
 import type { SessionViewState } from "@/stores/session-view";
+import type { SlicesDomainState } from "@/stores/slices-domain";
 
 export type { SessionViewState } from "@/stores/session-view";
 
@@ -408,6 +409,7 @@ export interface State {
   pendingGoalProposal: PendingGoalProposal | null;
   toasts: Toast[];
   prefs: Prefs;
+  slices: SlicesDomainState;
 }
 
 export interface Actions {
@@ -582,4 +584,8 @@ export interface Actions {
   togglePalette: () => void;
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
   toggleSidebar: () => void;
+  slicesOverviewLoaded: (overview: import("@/api/slices").SlicesOverview) => void;
+  sliceDetailLoaded: (detail: import("@/api/slices").SliceDetail) => void;
+  sliceAskResolved: (key: string, askId: string) => void;
+  openSlice: (key: string | null) => void;
 }
