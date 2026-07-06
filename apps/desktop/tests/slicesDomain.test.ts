@@ -4,6 +4,8 @@ import {
   reduceOverviewLoaded,
   reduceAskResolved,
   reduceOpenSlice,
+  reduceDetailLoaded,
+  reduceAutonomyUpdated,
 } from "@/stores/slices-domain";
 
 const ask = {
@@ -42,4 +44,30 @@ test("openSlice sets and clears the room", () => {
   let s = reduceOpenSlice(createSlicesDomainState(), "o-1a");
   expect(s.openSliceKey).toBe("o-1a");
   expect(reduceOpenSlice(s, null).openSliceKey).toBeNull();
+});
+
+const detail = {
+  key: "o-1a",
+  title: "O-1A",
+  autonomy: "observe" as const,
+  page_path: "topics/o-1a.md",
+  related: [],
+  open_loops: [],
+  updated: "",
+  asks: [],
+  sessions: [],
+  automations: [],
+};
+
+test("autonomy update patches both cached detail and overview summary", () => {
+  let s = reduceOverviewLoaded(createSlicesDomainState(), overview);
+  s = reduceDetailLoaded(s, detail);
+  s = reduceAutonomyUpdated(s, "o-1a", "act");
+  expect(s.detailByKey["o-1a"].autonomy).toBe("act");
+  expect(s.overview?.slices[0].autonomy).toBe("act");
+});
+
+test("autonomy update is a no-op when the slice has no cached detail", () => {
+  const s = reduceAutonomyUpdated(createSlicesDomainState(), "unknown", "act");
+  expect(s.detailByKey["unknown"]).toBeUndefined();
 });

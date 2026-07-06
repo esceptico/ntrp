@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/stores";
 import { refreshLoops } from "@/actions/loops";
 import { fetchAutomations, fetchAutomationSuggestions } from "@/actions/automations";
-import { fetchSlicesOverview } from "@/actions/slices";
+import { fetchSlicesOverview, fetchSliceDetail } from "@/actions/slices";
 import type { AppConfig } from "@/api/core";
 import type { SessionListItem } from "@/api/types";
 import { createStallWatchdog } from "@/lib/streamWatchdog";
@@ -126,6 +126,12 @@ export function useAutomationEvents(): void {
         // automation write) — refetch so the Home focus set and strip
         // reflect it without waiting for the next mount.
         void fetchSlicesOverview();
+        // If the changed slice's room is currently open, refetch its detail
+        // too — otherwise the open room goes stale until the user re-opens it.
+        const openKey = useStore.getState().slices.openSliceKey;
+        if (openKey && event.keys.includes(openKey)) {
+          void fetchSliceDetail(openKey);
+        }
       } else if (event.type === "stream_reset") {
         void fetchAutomations();
         const sid = useStore.getState().currentSessionId;

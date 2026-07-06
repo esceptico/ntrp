@@ -55,6 +55,7 @@ import {
   reduceDetailLoaded,
   reduceAskResolved,
   reduceOpenSlice,
+  reduceAutonomyUpdated,
   type SlicesDomainState,
 } from "@/stores/slices-domain";
 import {
@@ -758,6 +759,8 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({ slices: reduceAskResolved(s.slices, key, askId) })),
   openSlice: (key) =>
     set((s) => ({ slices: reduceOpenSlice(s.slices, key) })),
+  sliceAutonomyUpdated: (key, autonomy) =>
+    set((s) => ({ slices: reduceAutonomyUpdated(s.slices, key, autonomy) })),
 }));
 
 // Dev-only: expose the store so connection-gated surfaces can be driven for

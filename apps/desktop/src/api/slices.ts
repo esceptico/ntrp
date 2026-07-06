@@ -62,3 +62,25 @@ export async function resolveAsk(
     body: JSON.stringify(body),
   });
 }
+
+// Server returns the slice registry record (key/title/autonomy/page_path/
+// related) — not a full SliceDetail (no asks/sessions/automations). The
+// action layer merges just the autonomy field into any cached detail.
+export interface SliceRegistryRecord {
+  key: string;
+  title: string;
+  autonomy: "observe" | "act";
+  page_path: string;
+  related: string[];
+}
+
+export async function updateSliceAutonomy(
+  config: AppConfig,
+  key: string,
+  autonomy: "observe" | "act",
+): Promise<SliceRegistryRecord> {
+  return apiWithConfig<SliceRegistryRecord>(config, `/slices/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ autonomy }),
+  });
+}

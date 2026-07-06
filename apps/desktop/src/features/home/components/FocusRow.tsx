@@ -3,7 +3,7 @@ import type { SliceAsk } from "@/api/slices";
 import { useStore } from "@/stores";
 import { runAutomation } from "@/actions/automations";
 import { switchSession } from "@/actions/sessions";
-import { primaryActionFor } from "@/features/home/lib/askActions";
+import { primaryActionFor } from "@/lib/askActions";
 import { FieldSwap } from "@/components/ui/FieldSwap";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 

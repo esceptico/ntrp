@@ -20,6 +20,9 @@ export interface SessionListItem {
   name: string | null;
   message_count: number;
   project_id?: string | null;
+  /** Set when the session was provisioned from a slice room's scoped
+   *  composer — attributes the session back to `/slices/{key}` detail. */
+  slice_key?: string | null;
   /** Per-chat model override. null/undefined → falls back to the global
    *  default (config.chat_model), which is also what new chats inherit. */
   chat_model?: string | null;

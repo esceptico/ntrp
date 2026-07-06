@@ -18,6 +18,7 @@ const FEATURES = [
   "command-palette",
   "background-agents",
   "home",
+  "slices",
 ];
 
 const SHARED = [

@@ -588,4 +588,5 @@ export interface Actions {
   sliceDetailLoaded: (detail: import("@/api/slices").SliceDetail) => void;
   sliceAskResolved: (key: string, askId: string) => void;
   openSlice: (key: string | null) => void;
+  sliceAutonomyUpdated: (key: string, autonomy: "observe" | "act") => void;
 }

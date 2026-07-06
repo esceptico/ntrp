@@ -65,3 +65,23 @@ export function reduceOpenSlice(state: SlicesDomainState, key: string | null): S
     openSliceKey: key,
   };
 }
+
+export function reduceAutonomyUpdated(
+  state: SlicesDomainState,
+  key: string,
+  autonomy: "observe" | "act",
+): SlicesDomainState {
+  const detail = state.detailByKey[key];
+  const detailByKey = detail
+    ? { ...state.detailByKey, [key]: { ...detail, autonomy } }
+    : state.detailByKey;
+
+  const overview = state.overview
+    ? {
+        ...state.overview,
+        slices: state.overview.slices.map((s) => (s.key === key ? { ...s, autonomy } : s)),
+      }
+    : null;
+
+  return { ...state, detailByKey, overview };
+}

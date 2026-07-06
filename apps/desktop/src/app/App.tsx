@@ -7,6 +7,7 @@ import { visibleMessageIds } from "@/lib/messageVisibility";
 import { Sidebar } from "@/features/sessions/components/Sidebar";
 import { Chat } from "@/features/chat/components/Chat";
 import { Home } from "@/features/home/components/Home";
+import { SliceRoom } from "@/features/slices/components/SliceRoom";
 import { CommandPalette } from "@/features/command-palette/components/CommandPalette";
 import { MarkdownViewer } from "@/components/ui/MarkdownViewer";
 import { ApprovalReviewModal } from "@/features/chat/components/ApprovalReviewModal";
@@ -107,6 +108,7 @@ export function App() {
     [order, roles, metaFlags, contentFlags],
   );
   const showHome = visibleOrder.length === 0 && !running;
+  const openSliceKey = useStore((s) => s.slices.openSliceKey);
 
   // Publish dock widths as CSS vars so the chat shell can stay flush with
   // both sidebars as they resize. Drag handles update these imperatively
@@ -249,7 +251,7 @@ export function App() {
         <SidebarResizeHandle />
       </motion.div>
       <ErrorBoundary>
-        {showHome ? <Home /> : <Chat />}
+        {openSliceKey ? <SliceRoom sliceKey={openSliceKey} /> : showHome ? <Home /> : <Chat />}
       </ErrorBoundary>
       <AgentRightSidebar />
       <ErrorBoundary>

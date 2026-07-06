@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { primaryActionFor } from "@/lib/askActions";
+import { primaryActionFor } from "@/features/home/lib/askActions";
 import type { SliceAsk } from "@/api/slices";
 import type { Automation } from "@/api/types";
 
