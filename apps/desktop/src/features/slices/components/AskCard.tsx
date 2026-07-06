@@ -4,7 +4,7 @@ import type { Automation } from "@/api/types";
 import { useStore } from "@/stores";
 import { runAutomation } from "@/actions/automations";
 import { switchSession } from "@/actions/sessions";
-import { resolveAsk } from "@/actions/slices";
+import { fetchSliceDetail, resolveAsk } from "@/actions/slices";
 import { primaryActionFor } from "@/lib/askActions";
 import { IconButton } from "@/components/ui/IconButton";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
@@ -33,6 +33,20 @@ export function AskCard({ ask }: { ask: SliceAsk }) {
     openSlice: (key) => useStore.getState().openSlice(key),
   });
 
+  const dismiss = async () => {
+    try {
+      await resolveAsk(ask.slice_key, ask.id, "dismissed");
+    } catch {
+      useStore.getState().pushToast({
+        id: `ask-dismiss-fail:${ask.slice_key}:${ask.id}`,
+        title: "Couldn’t dismiss",
+        status: "failed",
+        target: { kind: "automation" },
+      });
+      await fetchSliceDetail(ask.slice_key);
+    }
+  };
+
   return (
     <motion.div
       layout
@@ -54,11 +68,7 @@ export function AskCard({ ask }: { ask: SliceAsk }) {
             {primaryAction.label}
           </button>
         )}
-        <IconButton
-          size="sm"
-          title="Dismiss"
-          onClick={() => void resolveAsk(ask.slice_key, ask.id, "dismissed")}
-        >
+        <IconButton size="sm" title="Dismiss" onClick={() => void dismiss()}>
           <X className="size-3.5" />
         </IconButton>
       </div>

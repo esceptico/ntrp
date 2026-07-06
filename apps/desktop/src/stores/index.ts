@@ -292,6 +292,11 @@ export const useStore = create<State & Actions>((set) => ({
     ),
   setCurrentSession: (currentSessionId) =>
     set((s) => {
+      // Navigating to a chat session always closes the slice room — a room
+      // stays open across the *current* session but must not silently trail
+      // along underneath a session switch (e.g. clicking a session row in
+      // SliceActivity while a room is open).
+      const slices = s.slices.openSliceKey ? reduceOpenSlice(s.slices, null) : s.slices;
       let unread = s.unreadDoneSessionIds;
       if (currentSessionId && unread.has(currentSessionId)) {
         unread = new Set(unread);
@@ -301,7 +306,10 @@ export const useStore = create<State & Actions>((set) => ({
       // global slots ARE that session's live state. Touching cache here
       // would clobber it with a stale snapshot.
       if (s.currentSessionId === currentSessionId) {
-        return unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {};
+        const patch: Partial<State> = {};
+        if (unread !== s.unreadDoneSessionIds) patch.unreadDoneSessionIds = unread;
+        if (slices !== s.slices) patch.slices = slices;
+        return patch;
       }
       // Snapshot outgoing session into cache so a switch-back can
       // restore the UI instantly and the SSE replay (with the bus
@@ -317,6 +325,7 @@ export const useStore = create<State & Actions>((set) => ({
         sessionView = reduceCachePreviewRestored(view.sessionView, currentSessionId);
       }
       return {
+        slices,
         sessionView,
         currentSessionId: sessionView.currentSessionId,
         sessionCache: cache,

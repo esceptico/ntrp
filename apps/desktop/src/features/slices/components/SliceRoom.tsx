@@ -49,8 +49,33 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
   const topAsk = detail.asks[0] ?? null;
   const relatedTitle = (key: string) => overviewSlices?.find((s) => s.key === key)?.title ?? key;
 
-  const grantAct = () => void updateSliceAutonomy(sliceKey, "act");
-  const revokeAct = () => void updateSliceAutonomy(sliceKey, "observe");
+  const grantAct = async () => {
+    try {
+      await updateSliceAutonomy(sliceKey, "act");
+    } catch {
+      useStore.getState().pushToast({
+        id: `slice-autonomy-fail:${sliceKey}`,
+        title: "Couldn’t grant act autonomy",
+        status: "failed",
+        target: { kind: "automation" },
+      });
+      await fetchSliceDetail(sliceKey);
+    }
+  };
+
+  const revokeAct = async () => {
+    try {
+      await updateSliceAutonomy(sliceKey, "observe");
+    } catch {
+      useStore.getState().pushToast({
+        id: `slice-autonomy-fail:${sliceKey}`,
+        title: "Couldn’t revoke act autonomy",
+        status: "failed",
+        target: { kind: "automation" },
+      });
+      await fetchSliceDetail(sliceKey);
+    }
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -60,6 +85,14 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
     try {
       await createSessionWithSlice(sliceKey);
       await sendMessage(text);
+    } catch {
+      setDraft(text);
+      useStore.getState().pushToast({
+        id: `slice-send-fail:${sliceKey}`,
+        title: "Couldn’t send message",
+        status: "failed",
+        target: { kind: "automation" },
+      });
     } finally {
       setSending(false);
     }
@@ -83,11 +116,16 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       <div className="flex items-center justify-between gap-3">
         <h1 className="min-w-0 truncate text-xl font-semibold text-ink">{detail.title}</h1>
         {detail.autonomy === "observe" ? (
-          <ChargeButton label="Observe only" armedLabel="Act granted" onArmed={grantAct} />
+          <ChargeButton
+            key={detail.autonomy}
+            label="Observe only"
+            armedLabel="Act granted"
+            onArmed={() => void grantAct()}
+          />
         ) : (
           <button
             type="button"
-            onClick={revokeAct}
+            onClick={() => void revokeAct()}
             className="rounded-[10px] bg-accent-soft px-4 py-2 text-[13px] font-medium text-accent-strong"
           >
             Acting — click to revoke

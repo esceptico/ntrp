@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { getState } from "@/stores/index";
 import {
   createSlicesDomainState,
   reduceOverviewLoaded,
@@ -70,4 +71,13 @@ test("autonomy update patches both cached detail and overview summary", () => {
 test("autonomy update is a no-op when the slice has no cached detail", () => {
   const s = reduceAutonomyUpdated(createSlicesDomainState(), "unknown", "act");
   expect(s.detailByKey["unknown"]).toBeUndefined();
+});
+
+test("setCurrentSession closes an open slice room (navigating away from a slice)", () => {
+  getState().openSlice("o-1a");
+  expect(getState().slices.openSliceKey).toBe("o-1a");
+
+  getState().setCurrentSession("s1");
+
+  expect(getState().slices.openSliceKey).toBeNull();
 });
