@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/stores";
@@ -13,6 +13,7 @@ import { loadNewerHistory, loadOlderHistory } from "@/actions/history";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT } from "@/lib/tokens/motion";
 import { BlurSwap } from "@/components/ui/BlurSwap";
 import { HomeHero } from "@/components/ui/HomeHero";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/Marker";
 import { Message } from "@/features/chat/components/Message";
 import { CompactionIndicator } from "@/features/chat/components/CompactionIndicator";
 import { TurnGroup } from "@/features/chat/components/TurnGroup";
@@ -191,6 +192,17 @@ export function Messages() {
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0"
       >
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-2">
+          {/* Older-history paging feedback: the scroll-anchor restore keeps the
+              viewport still while pages prepend, so without this row a top-of-
+              scroll load is invisible until content pops in. */}
+          {sessionReady && visibleOrder.length > 0 && historyPaging.loadingBefore && (
+            <Marker variant="separator" role="status" className="my-2">
+              <MarkerIcon>
+                <Loader2 strokeWidth={2} className="animate-spin" />
+              </MarkerIcon>
+              <MarkerContent>Loading earlier messages…</MarkerContent>
+            </Marker>
+          )}
           {!sessionReady
             ? null
             : visibleOrder.length === 0

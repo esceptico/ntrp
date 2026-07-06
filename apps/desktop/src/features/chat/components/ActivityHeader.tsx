@@ -2,6 +2,7 @@ import { ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityLabel } from "@/stores";
 import { RollingToken } from "@/components/ui/RollingToken";
+import { Marker, MarkerIcon } from "@/components/ui/Marker";
 import { ICON } from "@/lib/icons";
 
 export function ActivityHeader({
@@ -38,18 +39,22 @@ export function ActivityHeader({
   const suppressMotion = motionDisabled ?? streamReplaying;
 
   return (
-    <button
+    <Marker
+      as="button"
       type={interactive ? "button" : undefined}
       onClick={onToggle}
       disabled={!interactive}
+      aria-expanded={interactive ? expanded : undefined}
       className={clsx(
-        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-sm leading-[1.4] text-faint",
+        "h-[18px] leading-[1.4] text-faint!",
         interactive
-          ? "cursor-pointer transition-colors hover:text-muted active:text-ink-soft select-none"
-          : "cursor-default",
+          ? "transition-colors hover:text-muted! active:text-ink-soft!"
+          : "cursor-default!",
       )}
     >
-      <SquareTerminal size={ICON.MD} strokeWidth={2} className="shrink-0" />
+      <MarkerIcon>
+        <SquareTerminal strokeWidth={2} />
+      </MarkerIcon>
       {/* Three odometer slots so the label flip ("Running" → "Done"),
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate
@@ -77,6 +82,6 @@ export function ActivityHeader({
           )}
         />
       )}
-    </button>
+    </Marker>
   );
 }

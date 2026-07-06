@@ -12,7 +12,7 @@ export function TimelineDisclosure({ timeline }: { timeline?: MemoryArtifact["ti
   const label = records.length === 1 ? "record" : "records";
   return (
     <details className="group mt-8 border-t border-line pt-3">
-      <summary className="flex cursor-pointer select-none items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+      <summary className="flex select-none items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
         <ChevronRight
           className="h-3 w-3 shrink-0 text-faint transition-transform duration-150 group-open:rotate-90"
           strokeWidth={2}

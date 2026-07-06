@@ -273,7 +273,7 @@ export function RadioGroupItem({
           onChange(value);
         }
       }}
-      className="relative z-10 flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 outline-none"
+      className="relative z-10 flex items-center gap-2.5 rounded-lg px-3 py-2 outline-none"
     >
       <span className="relative h-[15px] w-[15px] shrink-0">
         <span

@@ -166,7 +166,7 @@ export function AutomationEditor({
                   switch — the old Collapse grew the whole footer when toggled on. */}
               <Tooltip label="Runs execute without asking for approval first.">
                 <div
-                  className="inline-flex items-center gap-1.5 px-1 select-none cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-1 select-none"
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("button")) return;
                     setForm((p) => ({ ...p, auto_approve: !p.auto_approve }));

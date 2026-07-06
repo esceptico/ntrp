@@ -65,7 +65,7 @@ export function SurfaceCard({
           type="button"
           aria-label={ariaLabel}
           onClick={onClick}
-          className="absolute inset-0 cursor-pointer rounded-[inherit] focus:outline-none"
+          className="absolute inset-0 rounded-[inherit] focus:outline-none"
         />
       )}
       {children}

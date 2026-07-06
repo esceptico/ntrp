@@ -123,7 +123,7 @@ export function SessionRow({
       aria-current={active ? "true" : undefined}
       data-depth={depth || undefined}
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
-      className="app-row session-row group/row relative grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left cursor-pointer"
+      className="app-row session-row group/row relative grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-ink-soft text-left"
     >
       <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} isAgent={isAgent} />
       {/* Title uses the full width at rest; on hover its right edge fades under

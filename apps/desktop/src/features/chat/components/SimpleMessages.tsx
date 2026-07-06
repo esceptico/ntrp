@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Terminal } from "lucide-react";
 import clsx from "clsx";
 import { ICON } from "@/lib/icons";
+import { Marker, MarkerContent } from "@/components/ui/Marker";
 import {
   SOURCE_FOCUS_CLASS,
   entryAnimation,
@@ -54,7 +55,7 @@ export const StatusMessage = memo(function StatusMessage({ id }: { id: string })
   return (
     <article
       className={clsx(
-        "self-center grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-panel",
         entryAnimation(message, "animate-fade-in"),
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
@@ -62,9 +63,9 @@ export const StatusMessage = memo(function StatusMessage({ id }: { id: string })
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-sm leading-[1.4] text-muted">
-        {text}
-      </div>
+      <Marker variant="separator">
+        <MarkerContent>{text}</MarkerContent>
+      </Marker>
     </article>
   );
 });

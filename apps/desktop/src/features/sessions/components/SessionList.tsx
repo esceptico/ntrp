@@ -214,7 +214,7 @@ export function SessionList() {
                     type="button"
                     onClick={() => toggleGroup(group.key)}
                     aria-expanded={!isCollapsed}
-                    className="flex-1 flex items-center gap-1 min-w-0 pl-[18px] pt-1.5 pb-0.5 text-base font-medium text-muted hover:text-ink transition-colors cursor-pointer select-none"
+                    className="flex-1 flex items-center gap-1 min-w-0 pl-[18px] pt-1.5 pb-0.5 text-base font-medium text-muted hover:text-ink transition-colors select-none"
                   >
                     {group.pinned && (
                       <Pin size={ICON.XS} strokeWidth={2} className="shrink-0 -ml-[2px] mr-0.5 text-faint" />
@@ -274,7 +274,7 @@ export function SessionList() {
                             onClick={() => toggleExpanded(group.key)}
                             aria-expanded={isExpanded}
                             aria-label={isExpanded ? "Show fewer sessions" : `Show ${overflow} more session${overflow === 1 ? "" : "s"}`}
-                            className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-faint hover:text-ink transition-colors cursor-pointer"
+                            className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-0.5 rounded-lg text-faint hover:text-ink transition-colors"
                           >
                             {/* Empty icon column keeps the dots in the title column,
                                 aligned directly under the session names above. */}

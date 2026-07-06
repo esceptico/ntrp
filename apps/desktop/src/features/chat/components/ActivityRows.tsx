@@ -101,7 +101,7 @@ export function ItemButton({ item, onOpen, last, motionDisabled }: RowProps) {
         type="button"
         onClick={() => onOpen(item)}
         title={`${item.target || item.kind} — click to inspect`}
-        className="flex w-full min-w-0 flex-col gap-1 border-0 bg-transparent p-0 text-left cursor-pointer"
+        className="flex w-full min-w-0 flex-col gap-1 border-0 bg-transparent p-0 text-left"
       >
         <span
           className={clsx(
@@ -166,7 +166,7 @@ export function ToolGroupRow({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 text-left cursor-pointer"
+        className="flex w-full min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 text-left"
       >
         <span
           className={clsx(
@@ -200,7 +200,7 @@ export function ToolGroupRow({
                   transition={{ duration: MOTION.row, ease: EASE_OUT, delay: 0.03 * i }}
                   onClick={() => onOpen(it)}
                   title={`${it.target || it.kind} — click to inspect`}
-                  className="truncate border-0 bg-transparent p-0 text-left text-sm leading-snug text-muted hover:text-ink-soft cursor-pointer"
+                  className="truncate border-0 bg-transparent p-0 text-left text-sm leading-snug text-muted hover:text-ink-soft"
                 >
                   {text}
                 </motion.button>
@@ -285,7 +285,7 @@ function AgentRow({
           }}
           title={childSessionId ? "Open agent session" : `${item.kind} — click to inspect`}
           data-child-session-id={childSessionId}
-          className="flex min-w-0 items-center gap-1.5 text-left bg-transparent border-0 p-0 m-0 cursor-pointer"
+          className="flex min-w-0 items-center gap-1.5 text-left bg-transparent border-0 p-0 m-0"
         >
           <span
             className={clsx(

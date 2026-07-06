@@ -493,7 +493,7 @@ export function CheckboxGroupItem({ value, label, description }: CheckboxGroupIt
           ctx.toggle(value);
         }
       }}
-      className="relative z-10 flex items-start gap-2.5 rounded-lg px-3 py-2 cursor-pointer outline-none"
+      className="relative z-10 flex items-start gap-2.5 rounded-lg px-3 py-2 outline-none"
     >
       {/* Checkbox glyph. */}
       <span

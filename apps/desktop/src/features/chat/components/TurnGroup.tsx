@@ -11,7 +11,7 @@ import { turnHasActiveChildAgent } from "@/features/chat/lib/turnActiveAgents";
 import { SPRING_ROW_ENTRY } from "@/lib/tokens/motion";
 import { Collapse } from "@/components/ui/Collapse";
 import { Reveal } from "@/components/ui/Reveal";
-import { Button } from "@/components/ui/Button";
+import { Marker, MarkerContent } from "@/components/ui/Marker";
 import { ICON } from "@/lib/icons";
 
 export function TurnGroup({
@@ -135,21 +135,23 @@ export function TurnGroup({
   const workBlock = hasWork ? (
     <div className="flex flex-col">
       <Collapse open={isDone}>
-        <Button
-          variant="ghost"
+        <Marker
+          as="button"
+          variant="border"
+          aria-expanded={expanded}
           onClick={() => {
             onManualResize?.();
             setExpanded((v) => !v);
           }}
-          className="self-start h-auto px-1.5! -mx-1.5 py-0.5 text-base! font-normal leading-[1.45] hover:text-ink-soft hover:bg-surface-soft/40 select-none"
+          className="transition-colors hover:text-ink-soft"
         >
-          <span>{headerLabel}</span>
+          <MarkerContent>{headerLabel}</MarkerContent>
           <ChevronDown
             size={ICON.XS}
             strokeWidth={2}
-            className={clsx("transition-transform duration-trace", expanded && "rotate-180")}
+            className={clsx("shrink-0 transition-transform duration-trace", expanded && "rotate-180")}
           />
-        </Button>
+        </Marker>
       </Collapse>
 
       {/* No height tween here — the interim subtree is the heaviest in the
@@ -159,7 +161,6 @@ export function TurnGroup({
         <AnimatePresence initial={false}>
           {showInterim && (
             <Reveal key="interim">
-              <div className="h-px bg-line-soft mt-2" />
               {interimList}
             </Reveal>
           )}

@@ -100,7 +100,7 @@ function WorkflowSource({ parentToolCallId }: { parentToolCallId?: string }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="group/src flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
+          className="group/src flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left bg-transparent border-0 rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
         >
           <ChevronDown
             size={ICON.XS}
@@ -218,7 +218,7 @@ function PhaseGroup({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="group/phase flex w-full items-center gap-1.5 px-1.5 py-0.5 text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
+        className="group/phase flex w-full items-center gap-1.5 px-1.5 py-0.5 text-left bg-transparent border-0 rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
       >
         <ChevronDown
           size={ICON.XS}
@@ -307,7 +307,7 @@ function AgentRow({
       type="button"
       onClick={() => onOpenAgent(childSessionId)}
       title={`Open ${agent.name ?? "agent"} — watch its tool calls live`}
-      className="group/agent flex w-full items-center gap-2 pl-6 pr-1.5 py-0.5 text-xs text-left bg-transparent border-0 cursor-pointer rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
+      className="group/agent flex w-full items-center gap-2 pl-6 pr-1.5 py-0.5 text-xs text-left bg-transparent border-0 rounded hover:bg-surface-soft transition-[background-color,scale] duration-row ease-out active:scale-[0.985]"
     >
       {body}
     </button>

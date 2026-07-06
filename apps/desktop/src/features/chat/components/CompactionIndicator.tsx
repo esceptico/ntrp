@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { useStore } from "@/stores";
 import { MOTION, EASE_OUT } from "@/lib/tokens/motion";
-import { ICON } from "@/lib/icons";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/Marker";
 
 export function CompactionIndicator() {
   const compacting = useStore((s) => s.compacting);
@@ -21,17 +21,14 @@ export function CompactionIndicatorContent({ compacting }: { compacting: boolean
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -2, transition: { duration: MOTION.fast, ease: EASE_OUT } }}
           transition={{ duration: MOTION.palette, ease: EASE_OUT }}
-          className="flex items-center gap-2 my-1"
+          className="my-1"
         >
-          <Loader2
-            size={ICON.XS}
-            strokeWidth={2}
-            aria-hidden
-            className="text-muted animate-spin"
-          />
-          <span className="text-sm font-medium text-muted">
-            Compacting conversation…
-          </span>
+          <Marker>
+            <MarkerIcon>
+              <Loader2 strokeWidth={2} className="animate-spin" />
+            </MarkerIcon>
+            <MarkerContent>Compacting conversation…</MarkerContent>
+          </Marker>
         </motion.div>
       ) : null}
     </AnimatePresence>
