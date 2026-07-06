@@ -1,43 +1,44 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { Collapse } from "@/components/ui/Collapse";
 
-/** OPEN LOOPS rows: v1 loops are plain strings (no id/state), so each row
- *  is just a Collapse-driven in-place expand of its own full text — useful
- *  once loop strings get long enough to truncate. No per-row "agent
- *  completed" dimming yet since the shape carries no such flag; this is
- *  a hook point for whenever that lands server-side. */
+/** OPEN LOOPS rows: v1 loops are plain strings (no id/state), so a row is
+ *  collapsed to one truncated line and expands IN PLACE to its full wrapped
+ *  text — one copy of the text, toggled between truncate and wrap. Every
+ *  wrapper down the chain needs min-w-0: these are grid/flex items whose
+ *  min-content size is the untruncated line, and without it long loops blow
+ *  the track past the 640px column (bit us with real vault data). No
+ *  per-row "agent completed" dimming yet — the shape carries no such flag;
+ *  hook point for whenever that lands server-side. */
 export function OpenLoops({ loops }: { loops: string[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   if (loops.length === 0) return null;
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Open loops</span>
-      {/* Quiet hairline list (mock: dot + text between separators), not a
-          stack of tonal bars — tone is reserved for things that need
-          attention; loops are ambient context. */}
-      <div className="grid">
+      {/* Quiet hairline list (mock: separators, no tonal bars) — tone is
+          reserved for things that need attention; loops are ambient. */}
+      <div className="grid min-w-0">
         {loops.map((loop, index) => {
           const open = openIndex === index;
           return (
-            <div key={index} className={index > 0 ? "border-t border-line-soft" : undefined}>
-              <button
-                type="button"
-                onClick={() => setOpenIndex(open ? null : index)}
-                className="group flex w-full items-center gap-2.5 py-2.5 text-left text-sm text-ink-soft"
-              >
-                <ChevronRight
-                  className="size-3.5 shrink-0 text-whisper transition-transform duration-check group-hover:text-faint"
-                  style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
-                />
-                <span className={open ? "min-w-0 flex-1" : "min-w-0 flex-1 truncate"}>{loop}</span>
-              </button>
-              <Collapse open={open}>
-                <p className="pb-2.5 pl-[26px] text-sm text-ink-soft">{loop}</p>
-              </Collapse>
-            </div>
+            <button
+              key={index}
+              type="button"
+              onClick={() => setOpenIndex(open ? null : index)}
+              className={`group flex min-w-0 items-start gap-2.5 py-2.5 text-left text-sm text-ink-soft ${
+                index > 0 ? "border-t border-line-soft" : ""
+              }`}
+            >
+              <ChevronRight
+                className="mt-0.5 size-3.5 shrink-0 text-whisper transition-transform duration-check group-hover:text-faint"
+                style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+              />
+              <span className={open ? "min-w-0 flex-1 whitespace-normal" : "min-w-0 flex-1 truncate"}>
+                {loop}
+              </span>
+            </button>
           );
         })}
       </div>

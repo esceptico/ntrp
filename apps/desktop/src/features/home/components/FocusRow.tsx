@@ -30,7 +30,7 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex h-[52px] items-center gap-3 rounded-[10px] bg-surface-soft px-3.5"
+      className="flex h-[52px] min-w-0 items-center gap-3 rounded-[10px] bg-surface-soft px-3.5"
     >
       <button
         type="button"

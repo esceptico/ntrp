@@ -62,7 +62,7 @@ export function AskCard({ ask }: { ask: SliceAsk }) {
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex items-start gap-3 rounded-[10px] bg-surface-soft px-3.5 py-3"
+      className="flex min-w-0 items-start gap-3 rounded-[10px] bg-surface-soft px-3.5 py-3"
     >
       <span aria-hidden className={`mt-1.5 size-1.5 shrink-0 rounded-full ${KIND_DOT[ask.kind]}`} />
       <p className="min-w-0 flex-1 text-sm text-ink">{ask.text}</p>

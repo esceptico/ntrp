@@ -35,15 +35,18 @@ export function SliceActivity({
   if (sessions.length === 0 && automationRows.length === 0) return null;
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Activity</span>
-      <div className="grid gap-px">
+      {/* min-w-0 down the chain: rows truncate, so their min-content is the
+          full untruncated line — without it long names blow the grid track
+          past the column (same trap as OpenLoops/modal headers). */}
+      <div className="grid min-w-0 gap-px">
         {sessions.map((session) => (
           <button
             key={session.session_id}
             type="button"
             onClick={() => void switchSession(session.session_id)}
-            className="flex items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm text-ink-soft hover:bg-surface-soft"
+            className="flex min-w-0 items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm text-ink-soft hover:bg-surface-soft"
           >
             <span className="min-w-0 flex-1 truncate">{session.name || "Untitled session"}</span>
           </button>
@@ -51,7 +54,7 @@ export function SliceActivity({
         {automationRows.map((auto, index) => (
           <div
             key={`${auto.name}-${index}`}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-ink-soft"
+            className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm text-ink-soft"
           >
             <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-faint" />
             <span className="min-w-0 flex-1 truncate">{auto.name}</span>
