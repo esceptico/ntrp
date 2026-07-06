@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+
 from ntrp.slices.asks import AskStore, nominate_focus
 from ntrp.slices.models import Ask
 
 
-def ask(id: str, slice_key: str, kind: str, created: str = "2026-07-06T10:00:00") -> Ask:
-    return Ask(id=id, slice_key=slice_key, text=id, kind=kind, source="open_loop",
+def ask(id: str, slice_key: str, kind: str, created: str = "2026-07-06T10:00:00", source: str = "open_loop") -> Ask:
+    return Ask(id=id, slice_key=slice_key, text=id, kind=kind, source=source,
                actions=[], state="active", created_at=created)
 
 
@@ -61,3 +62,27 @@ def test_snooze_comparison_handles_aware_and_naive(tmp_path: Path):
     store.resolve("a2", "snoozed", snoozed_until="2000-01-01T00:00:00")
 
     assert sorted(a.id for a in store.list("o-1a")) == ["a1", "a2"]
+
+
+def test_retire_active_agent_asks_marks_only_active_source_agent_asks_done(tmp_path: Path):
+    store = AskStore(tmp_path / "state.json")
+    store.upsert(ask("agent-1", "o-1a", "review", source="agent"))
+    store.upsert(ask("approval-1", "o-1a", "decide", source="approval"))
+    store.upsert(ask("agent-2", "dex", "review", source="agent"))
+
+    store.retire_active_agent_asks("o-1a")
+
+    all_asks = {a.id: a for a in store.list(include_resolved=True)}
+    assert all_asks["agent-1"].state == "done"
+    assert all_asks["approval-1"].state == "active"  # not source=="agent" — untouched
+    assert all_asks["agent-2"].state == "active"  # different slice — untouched
+
+
+def test_retire_active_agent_asks_leaves_already_resolved_agent_asks_alone(tmp_path: Path):
+    store = AskStore(tmp_path / "state.json")
+    store.upsert(ask("agent-1", "o-1a", "review", source="agent"))
+    store.resolve("agent-1", "dismissed")
+
+    store.retire_active_agent_asks("o-1a")
+
+    assert store.list("o-1a", include_resolved=True)[0].state == "dismissed"  # not clobbered to "done"

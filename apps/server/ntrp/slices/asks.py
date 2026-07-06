@@ -38,6 +38,18 @@ class AskStore:
         self._flush()
         return ask
 
+    def retire_active_agent_asks(self, slice_key: str) -> None:
+        """Mark this slice's active source=="agent" asks "done" — called
+        before upserting a fresh nomination so a new run's ask supersedes,
+        rather than piles on top of, its predecessor."""
+        changed = False
+        for ask in self._asks.values():
+            if ask.slice_key == slice_key and ask.source == "agent" and ask.state == "active":
+                ask.state = "done"
+                changed = True
+        if changed:
+            self._flush()
+
     def list(self, slice_key: str | None = None, include_resolved: bool = False) -> list[Ask]:
         now = datetime.now(UTC)
         out = []

@@ -16,7 +16,7 @@ from ntrp.memory.pages import parse_page
 from ntrp.server.app import app
 from ntrp.server.routers.slices import router as slices_router
 from ntrp.slices.asks import AskStore
-from ntrp.slices.models import Slice
+from ntrp.slices.models import Ask, Slice
 from ntrp.slices.registry import SliceRegistry
 from ntrp.slices.service import SliceService
 
@@ -108,6 +108,28 @@ def test_resolve_unknown_ask_404(client):
     c, *_ = client
     res = c.post("/slices/o-1a/asks/missing/resolve", json={"state": "done"})
     assert res.status_code == 404
+
+
+def test_resolve_ask_404s_when_ask_belongs_to_a_different_slice(client):
+    """An ask id that resolves fine but belongs to another slice than the
+    {key} path segment must 404, not silently resolve + emit under the
+    wrong slice."""
+    c, svc, emitted = client
+    svc.create_slice("dex", "Dex", "topics/dex.md")
+    svc._asks.upsert(Ask(
+        id="agent:dex:1", slice_key="dex", text="Dex thing", kind="review", source="agent",
+        actions=[], state="active", created_at="2026-07-06T10:00:00",
+    ))
+
+    res = c.post("/slices/o-1a/asks/agent:dex:1/resolve", json={"state": "dismissed"})
+    assert res.status_code == 404
+    assert "dex" in res.json()["detail"]
+    assert emitted == []
+
+    # sanity: resolving it under its real slice still works and emits ask.slice_key
+    res = c.post("/slices/dex/asks/agent:dex:1/resolve", json={"state": "dismissed"})
+    assert res.status_code == 200
+    assert emitted == [["dex"]]
 
 
 def test_resolve_rejects_bad_state(client):

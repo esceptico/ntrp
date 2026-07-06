@@ -5,13 +5,14 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+import ntrp.slices.agent as slice_agent_module
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import EventTrigger, TimeTrigger
 from ntrp.memory.pages import parse_page
-import ntrp.slices.agent as slice_agent_module
 from ntrp.slices.agent import _OBSERVE_EXTRA_TOOLS, build_slice_prompt, parse_agent_ask, run_slice_agent
+from ntrp.slices.asks import AskStore
 from ntrp.slices.models import Slice
 from ntrp.tools.executor import ToolExecutor
 
@@ -31,6 +32,32 @@ def test_parse_agent_ask_extracts_json_block_or_none():
     ask = parse_agent_ask(out)
     assert ask == {"text": "Review counsel memo", "kind": "review"}
     assert parse_agent_ask("All quiet, nothing needs the user.") is None
+
+
+def test_parse_agent_ask_rejects_invalid_kind_as_silence():
+    out = '```json\n{"ask": {"text": "Do the thing", "kind": "yolo"}}\n```'
+    assert parse_agent_ask(out) is None
+
+
+def test_parse_agent_ask_rejects_missing_text_as_silence():
+    out = '```json\n{"ask": {"kind": "review"}}\n```'
+    assert parse_agent_ask(out) is None
+
+
+def test_parse_agent_ask_rejects_empty_text_as_silence():
+    out = '```json\n{"ask": {"text": "", "kind": "review"}}\n```'
+    assert parse_agent_ask(out) is None
+
+
+def test_parse_agent_ask_rejects_non_str_text_as_silence():
+    out = '```json\n{"ask": {"text": 42, "kind": "review"}}\n```'
+    assert parse_agent_ask(out) is None
+
+
+def test_parse_agent_ask_accepts_every_valid_kind():
+    for kind in ("review", "decide", "act", "drift"):
+        out = f'```json\n{{"ask": {{"text": "x", "kind": "{kind}"}}}}\n```'
+        assert parse_agent_ask(out) == {"text": "x", "kind": kind}
 
 
 def test_observe_toolset_includes_memory_write_but_excludes_bash_and_send():
@@ -174,3 +201,37 @@ async def test_scheduler_dispatches_slice_automation_into_slice_agent_handler(st
 
     reloaded = await store.get("slice:o-1a")
     assert reloaded.last_result == "ran slice agent"
+
+
+@pytest.mark.asyncio
+async def test_two_sequential_nominations_leave_only_the_newest_active(tmp_path: Path, monkeypatch):
+    """A new agent nomination must retire the slice's previous active
+    source=="agent" ask (state "done") rather than piling on top of it —
+    only the newest survives as active."""
+    outputs = iter([
+        '```json\n{"ask": {"text": "First nomination", "kind": "review"}}\n```',
+        '```json\n{"ask": {"text": "Second nomination", "kind": "decide"}}\n```',
+    ])
+
+    async def fake_run_agent(deps, request):
+        class _Result:
+            run_id = "r1"
+            output = next(outputs)
+
+        return _Result()
+
+    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
+
+    asks = AskStore(tmp_path / "state.json")
+    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=asks, recent=[])
+    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=asks, recent=[])
+
+    active = asks.list("o-1a")
+    assert len(active) == 1
+    assert active[0].text == "Second nomination"
+
+    all_agent_asks = [a for a in asks.list("o-1a", include_resolved=True) if a.source == "agent"]
+    assert len(all_agent_asks) == 2
+    done = [a for a in all_agent_asks if a.state == "done"]
+    assert len(done) == 1
+    assert done[0].text == "First nomination"

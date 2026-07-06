@@ -1,15 +1,20 @@
 import json
 import re
 from datetime import UTC, datetime
+from typing import get_args
 from uuid import uuid4
 
+from ntrp.logging import get_logger
 from ntrp.memory.pages import Page
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
 from ntrp.slices.asks import AskStore
-from ntrp.slices.models import Ask, Slice
+from ntrp.slices.models import Ask, AskKind, Slice
 from ntrp.slices.projection import parse_open_loops
 
+_logger = get_logger(__name__)
+
 _ASK_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+_VALID_ASK_KINDS = frozenset(get_args(AskKind))
 
 _CONTRACT = {
     "observe": "You may READ anything and update the topic page, but take no external action.",
@@ -42,10 +47,23 @@ def build_slice_prompt(slice: Slice, page: Page, recent: list[dict]) -> str:
 
 
 def parse_agent_ask(result_text: str) -> dict | None:
+    """Parse the agent's fenced-json ask nomination, validating it at this
+    trust boundary (the model's free-form output). An invalid nomination is
+    treated as silence — logged, never upserted — rather than trusted or
+    defensively patched up."""
     m = _ASK_BLOCK.search(result_text)
     if not m:
         return None
-    return json.loads(m.group(1))["ask"]
+    ask = json.loads(m.group(1))["ask"]
+    kind = ask.get("kind")
+    text = ask.get("text")
+    if kind not in _VALID_ASK_KINDS:
+        _logger.warning("Slice agent nominated an ask with invalid kind %r; treating as silence", kind)
+        return None
+    if not isinstance(text, str) or not text.strip():
+        _logger.warning("Slice agent nominated an ask with empty/non-str text %r; treating as silence", text)
+        return None
+    return ask
 
 
 async def run_slice_agent(
@@ -63,6 +81,7 @@ async def run_slice_agent(
         return None
     nominated = parse_agent_ask(result.output)
     if nominated:
+        asks.retire_active_agent_asks(slice.key)
         asks.upsert(Ask(
             id=f"agent:{slice.key}:{uuid4().hex[:8]}",
             slice_key=slice.key, text=nominated["text"], kind=nominated["kind"],

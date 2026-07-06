@@ -52,7 +52,9 @@ async def resolve_ask(request: Request, key: str, ask_id: str, body: ResolveBody
         ask = _svc(request).resolve_ask(ask_id, body.state, body.snoozed_until)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    await request.app.state.emit_slices_changed([key])
+    if ask["slice_key"] != key:
+        raise HTTPException(status_code=404, detail=f"ask '{ask_id}' belongs to slice '{ask['slice_key']}', not '{key}'")
+    await request.app.state.emit_slices_changed([ask["slice_key"]])
     return ask
 
 
