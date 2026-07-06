@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from ntrp.memory.pages import Page
 from ntrp.slices.asks import AskStore, nominate_focus
-from ntrp.slices.models import Ask
+from ntrp.slices.models import Ask, AskState, Autonomy
 from ntrp.slices.projection import page_summary
 from ntrp.slices.registry import SliceRegistry
 
@@ -77,6 +77,15 @@ class SliceService:
                 "updated": summary["updated"], "ask_count": len(slice_asks),
             })
         return {"slices": out, "focus": [asdict(a) for a in focus]}
+
+    def resolve_ask(self, ask_id: str, state: AskState, snoozed_until: str | None) -> dict:
+        return asdict(self._asks.resolve(ask_id, state, snoozed_until))
+
+    def update_autonomy(self, key: str, autonomy: Autonomy) -> dict:
+        return asdict(self._registry.update_autonomy(key, autonomy))
+
+    def create_slice(self, key: str, title: str, page_path: str) -> dict:
+        return asdict(self._registry.create(key, title, page_path))
 
     def detail(self, key: str) -> dict:
         s = self._registry.get(key)

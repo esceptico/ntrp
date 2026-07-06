@@ -11,9 +11,11 @@ from ntrp.agent import Role
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
+from ntrp.constants import SLICES_FILE, SLICES_STATE_FILE
 from ntrp.core.tool_result_files import prune_offload_store
-from ntrp.events.sse import MemoryChangedEvent
+from ntrp.events.sse import MemoryChangedEvent, SlicesChangedEvent
 from ntrp.logging import get_logger
+from ntrp.memory.pages import parse_page
 from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry, prime_bus_cursor_from_store
 from ntrp.server.middleware import AuthMiddleware, TracingMiddleware
@@ -32,8 +34,12 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.setup import router as setup_router
 from ntrp.server.routers.skills import router as skills_router
+from ntrp.server.routers.slices import router as slices_router
 from ntrp.server.runtime import Runtime
 from ntrp.services.chat import submit_chat_message
+from ntrp.slices.asks import AskStore
+from ntrp.slices.registry import SliceRegistry
+from ntrp.slices.service import SliceService
 
 _logger = get_logger(__name__)
 
@@ -107,6 +113,79 @@ async def lifespan(app: FastAPI):
         await bus_registry.get_or_create(AUTOMATION_BUS_KEY).emit(MemoryChangedEvent(paths=paths))
 
     runtime.knowledge.start_memory_watch(_publish_memory_changed)
+
+    # Slices: a project's automations/sessions/asks grouped under slice_key
+    # (mirrors project_id). Registry/asks live under ~/.ntrp next to the
+    # other flat-file stores; callables read live off the session/automation
+    # stores so overview()/detail() never go stale.
+    slice_registry = SliceRegistry(runtime.config.ntrp_dir / SLICES_FILE)
+    slice_asks = AskStore(runtime.config.ntrp_dir / SLICES_STATE_FILE)
+
+    def _slice_get_page(page_path: str):
+        full_path = runtime.config.memory_artifacts_dir / page_path
+        text = full_path.read_text(encoding="utf-8") if full_path.exists() else ""
+        return parse_page(text)
+
+    # SliceService's injected callables are synchronous (Task 5's contract),
+    # but the session/automation stores are async-only. A per-request async
+    # hydrate snapshots the live data into these closures right before each
+    # sync SliceService call, so the callables stay plain sync lookups over
+    # a fresh snapshot instead of needing their own event loop.
+    slice_snapshot: dict[str, object] = {"sessions": [], "approvals": [], "automations": []}
+
+    async def hydrate_slice_snapshot() -> None:
+        sessions = await runtime.session_service.list_sessions(limit=1000) if runtime.session_service else []
+        # Pending approvals only exist under a live run, so scan the in-memory
+        # active runs instead of querying every session row.
+        approvals: list[dict] = []
+        if runtime.session_service:
+            for session_id in {run.session_id for run in runtime.run_registry.list_active_runs()}:
+                approvals.extend(await runtime.session_service.store.list_pending_tool_approvals(session_id))
+        automations = await runtime.stores.automations.list_all() if runtime.stores else []
+        slice_snapshot["sessions"] = sessions
+        slice_snapshot["approvals"] = approvals
+        slice_snapshot["automations"] = automations
+
+    def _slice_pending_approvals() -> list[dict]:
+        return slice_snapshot["approvals"]
+
+    def _slice_session_slice(session_id: str) -> str | None:
+        for row in slice_snapshot["sessions"]:
+            if row["session_id"] == session_id:
+                return row["slice_key"]
+        return None
+
+    def _slice_automations(key: str) -> list[dict]:
+        prefix = f"slice:{key}:"
+        return [
+            {
+                "name": a.name,
+                "last_result": a.last_result,
+                "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
+                "running_since": a.running_since.isoformat() if a.running_since else None,
+            }
+            for a in slice_snapshot["automations"]
+            if a.name.startswith(prefix)
+        ]
+
+    def _slice_sessions(key: str) -> list[dict]:
+        return [row for row in slice_snapshot["sessions"] if row["slice_key"] == key]
+
+    app.state.slice_service = SliceService(
+        registry=slice_registry,
+        asks=slice_asks,
+        get_page=_slice_get_page,
+        pending_approvals=_slice_pending_approvals,
+        session_slice=_slice_session_slice,
+        slice_automations=_slice_automations,
+        slice_sessions=_slice_sessions,
+    )
+    app.state.hydrate_slice_snapshot = hydrate_slice_snapshot
+
+    async def _publish_slices_changed(keys: list[str]) -> None:
+        await bus_registry.get_or_create(AUTOMATION_BUS_KEY).emit(SlicesChangedEvent(keys=keys))
+
+    app.state.emit_slices_changed = _publish_slices_changed
 
     # Per-session write locks. The post dispatcher holds one for its full
     # lifetime so two concurrent post-mode dispatches against the same
@@ -280,3 +359,4 @@ app.include_router(skills_router)
 app.include_router(mcp_router)
 app.include_router(loops_router)
 app.include_router(memory_router)
+app.include_router(slices_router)

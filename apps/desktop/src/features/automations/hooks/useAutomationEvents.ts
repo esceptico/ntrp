@@ -27,6 +27,7 @@ type AutomationEvent =
   | { type: "session_created"; session: SessionListItem; seq?: number }
   | { type: "session_activity"; session: SessionListItem; seq?: number }
   | { type: "memory_changed"; paths: string[]; seq?: number }
+  | { type: "slices_changed"; keys: string[]; seq?: number }
   | { type: "stream_keepalive"; latest_seq: number; seq?: number }
   | { type: "stream_reset"; reason: string; seq?: number };
 
