@@ -1,3 +1,4 @@
+from dataclasses import replace as dc_replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -657,3 +658,22 @@ async def test_seed_builtins_repairs_missing_next_run_at(automation_store: Autom
     repaired = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
     assert repaired is not None
     assert repaired.next_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_seed_builtins_respects_user_cadence_and_pause(automation_store: AutomationStore):
+    """Triggers and enabled are user dials once the row exists — re-seeding
+    must not revert an edited schedule or re-enable a paused builtin."""
+    from ntrp.automation.builtins import seed_builtins
+    from ntrp.constants import BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID
+
+    await seed_builtins(automation_store)
+    seeded = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
+    edited = dc_replace(seeded, triggers=[TimeTrigger(at="21:30")], enabled=False)
+    await automation_store.update_metadata(edited)
+
+    await seed_builtins(automation_store)
+
+    kept = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
+    assert kept.enabled is False
+    assert [(t.at.hour, t.at.minute) for t in kept.triggers] == [(21, 30)]

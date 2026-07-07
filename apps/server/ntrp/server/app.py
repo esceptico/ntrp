@@ -167,7 +167,7 @@ async def lifespan(app: FastAPI):
                 "running_since": a.running_since.isoformat() if a.running_since else None,
             }
             for a in slice_snapshot["automations"]
-            if slice_automation_match(a.name, key)
+            if slice_automation_match(a.task_id, key)
         ]
 
     def _slice_sessions(key: str) -> list[dict]:

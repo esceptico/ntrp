@@ -136,16 +136,13 @@ async def seed_builtins(store: AutomationStore) -> None:
                 changes["handler"] = spec.handler
             if existing.auto_approve != spec.auto_approve:
                 changes["auto_approve"] = spec.auto_approve
-            if existing.enabled != spec.enabled:
-                changes["enabled"] = spec.enabled
             if existing.cooldown_minutes is None and spec.cooldown_minutes is not None:
                 changes["cooldown_minutes"] = spec.cooldown_minutes
-            spec_triggers = [{"type": t.type, **t.params()} for t in spec.triggers]
-            existing_triggers = [{"type": t.type, **t.params()} for t in existing.triggers]
-            time_triggers = [t for t in spec.triggers if isinstance(t, TimeTrigger)]
-            if existing_triggers != spec_triggers:
-                changes["triggers"] = spec.triggers
-            if spec.enabled and existing.next_run_at is None and time_triggers:
+            # Triggers and enabled are the USER'S dials once the row exists —
+            # re-stamping them every boot silently reverted cadence edits and
+            # re-enabled paused builtins. Spec values apply on first seed only.
+            time_triggers = [t for t in existing.triggers if isinstance(t, TimeTrigger)]
+            if existing.enabled and existing.next_run_at is None and time_triggers:
                 changes["next_run_at"] = time_triggers[0].next_run(datetime.now(UTC))
             if changes:
                 updated = dc_replace(existing, **changes)

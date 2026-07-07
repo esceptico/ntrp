@@ -52,12 +52,13 @@ def page_summary(page: Page) -> dict:
     }
 
 
-def slice_automation_match(name: str, key: str) -> bool:
-    """Match an automation name against a slice key.
+def slice_automation_match(task_id: str, key: str) -> bool:
+    """Match an automation task_id against a slice key.
 
-    Seeded slice automations are named exactly `slice:{key}` (see
-    _seed_slice_automations); colon-suffixed names like `slice:{key}:daily`
-    are reserved for future sub-automations.
+    Seeded slice automations carry the stable id `slice:{key}` (see
+    _seed_slice_automations) while their display name is ordinary prose;
+    colon-suffixed ids like `slice:{key}:daily` are reserved for future
+    sub-automations.
     """
     base = f"slice:{key}"
-    return name == base or name.startswith(f"{base}:")
+    return task_id == base or task_id.startswith(f"{base}:")

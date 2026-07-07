@@ -12,6 +12,7 @@ import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
 import { ChargeButton } from "@/components/ui/ChargeButton";
 import { formatRelativePast } from "@/lib/format";
+import { resultSnippet } from "@/lib/agentRun";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
 
 /** Slice room: the full-screen detail view for one slice, opened from the
@@ -66,10 +67,10 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       last_result?: string | null;
       last_run_at?: string | null;
       running_since?: string | null;
-    } => typeof a === "object" && a !== null && (a as { name?: string }).name === `slice:${sliceKey}`,
+    } => typeof a === "object" && a !== null && (a as { task_id?: string }).task_id === `slice:${sliceKey}`,
   );
   const agentRunning = Boolean(agentAuto?.running_since);
-  const agentSummary = agentAuto?.last_result?.split("\n")[0]?.trim();
+  const agentSummary = resultSnippet(agentAuto?.last_result);
   const agentLine = agentRunning
     ? "Agent working now…"
     : agentSummary && agentAuto?.last_run_at

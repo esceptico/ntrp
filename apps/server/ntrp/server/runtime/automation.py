@@ -103,9 +103,9 @@ class AutomationRuntime:
         — instead of a scheduler special case."""
         autos = await self.stores.automations.list_session_bound_by_session(run_completed.session_id)
         for auto in autos:
-            if not auto.name.startswith("slice:"):
+            if not auto.task_id.startswith("slice:"):
                 continue
-            key = auto.name.removeprefix("slice:")
+            key = auto.task_id.removeprefix("slice:")
             try:
                 slice_ = self.slice_registry.get(key)
             except KeyError:
@@ -301,7 +301,8 @@ class AutomationRuntime:
                     channel_name, task_id, slice_key=slice_.key
                 )
                 await self.automation_service.create(
-                    name=task_id,
+                    task_id=task_id,
+                    name=channel_name,
                     description=slice_agent_instructions(slice_),
                     triggers=[trigger],
                     auto_approve=slice_.autonomy == "observe",
@@ -318,6 +319,7 @@ class AutomationRuntime:
                     channel_name, task_id, slice_key=slice_.key
                 )
                 time_trigger = TimeTrigger(at=run_at, days="daily")
+                existing.name = channel_name
                 existing.handler = None
                 existing.thread_id = channel.session_id
                 existing.read_history = True
@@ -337,8 +339,16 @@ class AutomationRuntime:
                 data = await self.stores.sessions.load(existing.thread_id)
                 if data is not None and data.state.name == task_id:
                     await self.stores.sessions.rename(existing.thread_id, channel_name)
+            changed = False
+            if existing.name == task_id:
+                # First passes named the automation after its task_id; the row
+                # is an ordinary automation, so it gets an ordinary name.
+                existing.name = channel_name
+                changed = True
             if existing.last_result and "without a report" in existing.last_result:
                 existing.last_result = None
+                changed = True
+            if changed:
                 await self.stores.automations.save(existing)
 
     def _suggester_available(self) -> bool:

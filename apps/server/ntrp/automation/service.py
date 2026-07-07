@@ -380,6 +380,7 @@ class AutomationService:
         attempt_n: int | None = None,
         tool_scope: list[str] | None = None,
         slice_key: str | None = None,
+        task_id: str | None = None,
     ) -> Automation | None:
         triggers = await self._resolve_message_triggers(triggers)
         parsed_triggers, next_run = _build_trigger_and_next_run(
@@ -397,7 +398,9 @@ class AutomationService:
         )
 
         now = datetime.now(UTC)
-        task_id = generate_slug(2)
+        # Stable ids (e.g. slice:{key}) let seeding find its rows across boots;
+        # everything else gets a random slug.
+        task_id = task_id or generate_slug(2)
 
         if idempotency_key is not None and idempotency_scope is None:
             raise ValueError("idempotency_scope required when idempotency_key is set")

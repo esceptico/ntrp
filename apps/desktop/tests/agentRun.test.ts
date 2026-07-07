@@ -109,8 +109,12 @@ describe("resultSnippet", () => {
     expect(resultSnippet("**bold** text")).toBe("bold text");
   });
 
-  it("skips blank lines and code-fence delimiters", () => {
-    expect(resultSnippet("\n```ts\nReal summary")).toBe("Real summary");
+  it("skips blank lines and entire fenced blocks, not just their markers", () => {
+    expect(resultSnippet("\n```ts\ncode line\n```\nReal summary")).toBe("Real summary");
+    // A slice agent's ask nomination: prose first, fenced json tail — the
+    // json must never become the one-line preview.
+    expect(resultSnippet('```json\n{"ask": {"text": "hi"}}\n```\nQuiet day.')).toBe("Quiet day.");
+    expect(resultSnippet('```json\n{"ask": {"text": "hi"}}\n```')).toBeUndefined();
   });
 
   it("truncates to max with an ellipsis", () => {

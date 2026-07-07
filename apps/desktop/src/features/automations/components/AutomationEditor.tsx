@@ -56,6 +56,9 @@ export function AutomationEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Builtins run server-side handlers: what they do is code-owned (name and
+  // prompt would be re-stamped at boot), but when they run is the user's dial.
+  const builtin = seed?.kind === "edit" && seed.automation.builtin;
   const isMessage = form.schedule.kind === "message";
   const valid =
     form.prompt.trim().length > 0 &&
@@ -109,8 +112,9 @@ export function AutomationEditor({
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
               placeholder="Untitled automation"
               spellCheck={false}
+              readOnly={builtin}
               autoFocus={seed.kind === "create" && !seed.preset}
-              className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-muted"
+              className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-muted read-only:text-muted"
             />
             <div className="flex items-center gap-0.5 text-faint">
               <IconButton tone="faint" onClick={reset} title="Reset" aria-label="Reset">
@@ -129,7 +133,8 @@ export function AutomationEditor({
               placeholder="What should the agent do when this automation fires?"
               spellCheck={false}
               rows={6}
-              className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-muted"
+              readOnly={builtin}
+              className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-muted read-only:text-muted"
             />
           </div>
 

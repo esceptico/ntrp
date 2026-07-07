@@ -143,9 +143,16 @@ export function resultSnippet(
   max = 140,
 ): string | undefined {
   if (!text) return undefined;
+  let inFence = false;
   for (const raw of text.split(/\r?\n/)) {
     let line = raw.trim();
-    if (!line || line.startsWith("```")) continue;
+    if (line.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    // Fenced content (code, a slice agent's json ask nomination) is never a
+    // useful one-line preview — skip the whole block, not just its markers.
+    if (!line || inFence) continue;
     line = line
       .replace(/^#{1,6}\s+/, "")
       .replace(/^[-*+]\s+/, "")

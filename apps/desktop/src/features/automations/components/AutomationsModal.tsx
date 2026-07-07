@@ -93,7 +93,10 @@ export function AutomationsModal() {
                     onCreate={() => setEditor({ kind: "create" })}
                   />
                 ) : tab === "system" ? (
-                  <SystemList automations={automationGroups?.internal ?? null} />
+                  <SystemList
+                    automations={automationGroups?.internal ?? null}
+                    onEdit={(automation) => setEditor({ kind: "edit", automation })}
+                  />
                 ) : (
                   <TemplatesList
                     onPick={(template) => setEditor({ kind: "create", preset: template.payload })}

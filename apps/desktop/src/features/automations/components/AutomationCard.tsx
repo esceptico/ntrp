@@ -104,17 +104,16 @@ export function AutomationCard({
   const closeAutomations = useStore((s) => s.closeAutomations);
   const channel = sessions.find((sx) => sx.origin_automation_id === automation.task_id) ?? null;
   const trustLabel = automationTrustLabel(automation);
-  const editable = !automation.builtin;
 
-  // The card's primary navigation: editable → open the editor; otherwise an
-  // automation with a bound channel → open that channel; otherwise inert.
+  // The card's primary navigation is the editor — builtins included (their
+  // schedule and pause are the user's dials; the editor locks the rest).
   const openChannel = channel
     ? () => {
         void switchSession(channel.session_id);
         closeAutomations();
       }
     : undefined;
-  const open = editable ? onEdit : openChannel;
+  const open = onEdit;
 
   // One agent view-model, the same body. Automation runs aren't openable
   // sessions, so the view's childSessionId is intentionally unset — the card
@@ -183,9 +182,7 @@ export function AutomationCard({
     ) : null;
 
   const interactive = !!open;
-  const openLabel = editable
-    ? `Edit ${automation.name || "automation"}`
-    : `Open ${automation.name || "automation"} channel`;
+  const openLabel = `Edit ${automation.name || "automation"}`;
 
   return (
     <SurfaceCard
