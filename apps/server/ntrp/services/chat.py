@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from ntrp.agent import Agent, Role
 from ntrp.agent.types.events import Result, ToolCompleted
-from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW
+from ntrp.config import get_config
+from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW, SLICES_FILE
 from ntrp.context.models import ProjectContext, SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
@@ -44,6 +45,7 @@ from ntrp.services.goal_continuation import (
 from ntrp.services.session import SessionService
 from ntrp.services.token_directive import parse_token_budget
 from ntrp.skills.registry import SkillRegistry
+from ntrp.slices.context import load_slice_context
 from ntrp.tools.core.context import ChildIOFactory, ChildIOParams, ChildSession, IOBridge
 from ntrp.tools.core.types import ToolAction
 from ntrp.tools.deferred import (
@@ -404,6 +406,7 @@ async def _prepare_messages(
     run_id: str | None = None,
     goal_context: dict | None = None,
     project_context: ProjectContext | None = None,
+    slice_context: dict | None = None,
     todo_override: dict | None = None,
 ) -> list[dict]:
     memory_context = await resident_profile(
@@ -433,6 +436,7 @@ async def _prepare_messages(
         deferred_tools_context=deferred_tools_context,
         goal_context=goal_context,
         project_context=project_context,
+        slice_context=slice_context,
         todo_override=todo_override,
         use_cache_control=_is_anthropic(deps.chat_model),
         native_deferred_tools=native_deferred_tools,
@@ -616,6 +620,12 @@ async def prepare_chat(
         await deps.session_service.get_project(session_state.project_id) if session_state.project_id else None
     )
     project_context = _project_context_from_record(project_record)
+    slice_context = None
+    if session_state.slice_key:
+        config = get_config()
+        slice_context = load_slice_context(
+            config.ntrp_dir / SLICES_FILE, config.memory_artifacts_dir, session_state.slice_key
+        )
     messages = await _prepare_messages(
         deps,
         messages,
@@ -629,6 +639,7 @@ async def prepare_chat(
         run_id=run.run_id,
         goal_context=goal_context,
         project_context=project_context,
+        slice_context=slice_context,
         todo_override=todo_override,
     )
 

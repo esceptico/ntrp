@@ -1,9 +1,7 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
-import { useShallow } from "zustand/react/shallow";
 import { MOTION, EASE_EMPHASIZED, EASE_OUT, DURATION_RIGHT_PANEL_HIDE } from "@/lib/tokens/motion";
 import { IS_DESKTOP_MAC } from "@/lib/platform";
-import { visibleMessageIds } from "@/lib/messageVisibility";
 import { Sidebar } from "@/features/sessions/components/Sidebar";
 import { Chat } from "@/features/chat/components/Chat";
 import { Home } from "@/features/home/components/Home";
@@ -85,30 +83,11 @@ export function App() {
   const rightPanelWidth = useStore((s) => s.prefs.rightPanelWidth);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const openSettings = useStore((s) => s.openSettings);
-  const running = useStore((s) => s.running);
-
-  // Home replaces Chat when the current session has nothing to show and
-  // nothing is running — mirrors Messages.tsx's own visibleOrder derivation
-  // (kept in the shared @/lib/messageVisibility, not chat-owned) so the app
-  // layer can make this call without features/home importing features/chat
-  // or vice versa.
-  const order = useStore((s) => s.order);
-  const roles = useStore(useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)));
-  const metaFlags = useStore(useShallow((s) => order.map((id) => Boolean(s.messages.get(id)?.isMeta))));
-  const contentFlags = useStore(
-    useShallow((s) =>
-      order.map((id) => {
-        const message = s.messages.get(id);
-        if (message?.role !== "assistant") return "";
-        return (message.content ?? "").trim().length > 0 ? "x" : "";
-      }),
-    ),
-  );
-  const visibleOrder = useMemo(
-    () => visibleMessageIds({ ids: order, roles, metaFlags, contents: contentFlags }),
-    [order, roles, metaFlags, contentFlags],
-  );
-  const showHome = visibleOrder.length === 0 && !running;
+  // Home = no session selected, full stop. Since boot stopped auto-selecting
+  // the latest session, an EMPTY-but-selected session is still a chat (its
+  // own empty state), not Home — the old transcript-emptiness derivation
+  // made a freshly opened session flash Home while history loaded.
+  const showHome = useStore((s) => s.currentSessionId === null);
   const openSliceKey = useStore((s) => s.slices.openSliceKey);
 
   // Publish dock widths as CSS vars so the chat shell can stay flush with

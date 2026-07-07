@@ -39,10 +39,17 @@ function ChatHeader() {
   const sessionId = useStore((s) => s.currentSessionId);
   const sessions = useStore((s) => s.sessions);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const openSlice = useStore((s) => s.openSlice);
+  const sliceTitle = useStore((s) => {
+    const key = s.sessions.find((x) => x.session_id === s.currentSessionId)?.slice_key;
+    if (!key) return null;
+    return s.slices.overview?.slices.find((sl) => sl.key === key)?.title ?? key;
+  });
   const hasTrafficLights = useHasTrafficLights();
   const session = sessions.find((s) => s.session_id === sessionId);
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
+  const sliceKey = session?.slice_key ?? null;
 
   // A child agent session gets a breadcrumb back to its parent in the header —
   // the discoverable spot, mirroring the hub's "← parent" chip.
@@ -82,6 +89,23 @@ function ChatHeader() {
               />
               <span className="truncate">{parentName}</span>
             </Button>
+            <span className="shrink-0 text-faint select-none" aria-hidden>
+              /
+            </span>
+          </>
+        )}
+        {/* Slice-scoped chats breadcrumb back to their room, mirroring the
+            agent parent chip: the room is this conversation's context. */}
+        {sliceKey && (
+          <>
+            <button
+              type="button"
+              onClick={() => openSlice(sliceKey)}
+              title={`Back to the ${sliceTitle} slice`}
+              className="shrink-0 max-w-[160px] truncate rounded-md bg-surface-soft px-2 py-0.5 text-xs font-medium text-ink-soft hover:text-ink"
+            >
+              {sliceTitle}
+            </button>
             <span className="shrink-0 text-faint select-none" aria-hidden>
               /
             </span>

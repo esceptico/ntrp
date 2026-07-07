@@ -235,3 +235,32 @@ async def test_two_sequential_nominations_leave_only_the_newest_active(tmp_path:
     done = [a for a in all_agent_asks if a.state == "done"]
     assert len(done) == 1
     assert done[0].text == "First nomination"
+
+
+def test_load_slice_context_reads_page_or_degrades(tmp_path):
+    from ntrp.slices.context import load_slice_context
+    from ntrp.slices.registry import SliceRegistry
+    from ntrp.slices.models import Slice
+
+    reg_path = tmp_path / "slices.json"
+    SliceRegistry(reg_path).save([Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="observe")])
+    vault = tmp_path / "memory"
+    (vault / "topics").mkdir(parents=True)
+    (vault / "topics" / "o-1a.md").write_text("---\ntitle: O-1A\n---\n# O-1A\n\n## Open loops\n- Find counsel.\n")
+
+    ctx = load_slice_context(reg_path, vault, "o-1a")
+    assert ctx["title"] == "O-1A"
+    assert "Find counsel." in ctx["page"]
+
+    assert load_slice_context(reg_path, vault, "nope") is None  # unknown slice → plain chat
+    (vault / "topics" / "o-1a.md").unlink()
+    assert load_slice_context(reg_path, vault, "o-1a") is None  # missing page → plain chat
+
+
+def test_system_blocks_include_slice_block():
+    from ntrp.core.prompts import build_system_blocks
+
+    blocks = build_system_blocks(source_details={}, slice_context={"title": "O-1A", "page": "# O-1A\ncase notes"})
+    joined = "\n".join(b["text"] for b in blocks)
+    assert "## SLICE: O-1A" in joined
+    assert "case notes" in joined
