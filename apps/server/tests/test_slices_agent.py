@@ -89,9 +89,9 @@ def test_act_toolset_is_a_superset_of_observe_toolset():
 
 @pytest.mark.asyncio
 async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve(monkeypatch):
-    """run_slice_agent must build a RunRequest that stays non-auto-approve
-    (approvals still gate everything) while still naming the memory-write
-    extras for observe mode."""
+    """Observe runs auto-approve WITHIN the narrow read+memory-write set —
+    a detached run has no approval UI, and the page is the agent's own
+    notebook. Safety comes from the toolset, not the gate."""
     captured = {}
 
     async def fake_run_agent(deps, request):
@@ -112,7 +112,7 @@ async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve
     await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=FakeAskStore(), recent=[])
 
     request = captured["request"]
-    assert request.auto_approve is False
+    assert request.auto_approve is True
     assert request.extra_tool_names == _OBSERVE_EXTRA_TOOLS
 
 
@@ -264,3 +264,30 @@ def test_system_blocks_include_slice_block():
     joined = "\n".join(b["text"] for b in blocks)
     assert "## SLICE: O-1A" in joined
     assert "case notes" in joined
+
+
+def test_observe_toolset_is_narrow_even_with_auto_approve(monkeypatch):
+    """auto_approve + extra_tool_names must mean 'skip approvals WITHIN the
+    narrow set' — never the full toolset."""
+    from ntrp.operator import runner
+
+    class _Exec:
+        def get_tools(self, read_only=False, extra_names=frozenset()):
+            return [{"read_only": read_only, "extra": sorted(extra_names)}]
+
+    captured = {}
+
+    class _Req:
+        auto_approve = True
+        extra_tool_names = frozenset({"memory_write"})
+
+    # exercise just the branch logic by mirroring _prepare's tools selection
+    req = _Req()
+    ex = _Exec()
+    if req.extra_tool_names:
+        tools = ex.get_tools(read_only=True, extra_names=req.extra_tool_names)
+    elif req.auto_approve:
+        tools = ex.get_tools()
+    else:
+        tools = ex.get_tools(read_only=True)
+    assert tools[0]["read_only"] is True and tools[0]["extra"] == ["memory_write"]

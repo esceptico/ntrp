@@ -68,11 +68,17 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     memory_context = await resident_profile(deps.memory_records)
 
     executor = deps.executor
-    tools = (
-        executor.get_tools()
-        if request.auto_approve
-        else executor.get_tools(read_only=True, extra_names=request.extra_tool_names)
-    )
+    # Two independent dials sharing two fields: auto_approve skips approval
+    # gates; extra_tool_names narrows the set. Combined they mean "skip
+    # approvals WITHIN this narrow set" — a detached run has no approval UI,
+    # so an agent trusted with only read + its own notebook (observe-mode
+    # slice agents) must not stall on gates it can never answer.
+    if request.extra_tool_names:
+        tools = executor.get_tools(read_only=True, extra_names=request.extra_tool_names)
+    elif request.auto_approve:
+        tools = executor.get_tools()
+    else:
+        tools = executor.get_tools(read_only=True)
 
     agent_config = deps.config
     if request.model:

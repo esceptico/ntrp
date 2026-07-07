@@ -69,9 +69,13 @@ def parse_agent_ask(result_text: str) -> dict | None:
 async def run_slice_agent(
     deps: OperatorDeps, slice: Slice, page: Page, asks: AskStore, recent: list[dict],
 ) -> str | None:
+    # Observe: narrow set (read + own topic page) with approvals skipped —
+    # a detached run has no approval UI, and the contract says the page IS
+    # the agent's notebook. Act: full set, approvals skipped (v1 — the
+    # ask-mediated approval loop for detached act runs is future work).
     request = RunRequest(
         prompt=build_slice_prompt(slice, page, recent),
-        auto_approve=slice.autonomy == "act",
+        auto_approve=True,
         source_id=f"slice:{slice.key}",
         automation_id=f"slice:{slice.key}",
         extra_tool_names=_OBSERVE_EXTRA_TOOLS if slice.autonomy == "observe" else frozenset(),
@@ -80,8 +84,11 @@ async def run_slice_agent(
     if not result.output:
         return None
     nominated = parse_agent_ask(result.output)
+    # Every run re-decides the slice's ONE ask: silence retires the previous
+    # nomination just like a new one supersedes it — a stale ask outliving
+    # the agent's own re-evaluation contradicts the contract.
+    asks.retire_active_agent_asks(slice.key)
     if nominated:
-        asks.retire_active_agent_asks(slice.key)
         asks.upsert(Ask(
             id=f"agent:{slice.key}:{uuid4().hex[:8]}",
             slice_key=slice.key, text=nominated["text"], kind=nominated["kind"],

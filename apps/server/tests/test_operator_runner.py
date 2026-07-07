@@ -92,8 +92,9 @@ async def test_prepare_allows_missing_skill_registry(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_prepare_auto_approve_ignores_extra_tool_names(monkeypatch):
-    """auto_approve=True already grants the full toolset (no read_only filter);
-    extra_tool_names is only meaningful for the non-auto-approve path."""
+    """extra_tool_names takes precedence over auto_approve for the TOOLSET:
+    naming extras always means the narrow read+extras set, with auto_approve
+    deciding only whether approval gates apply within it."""
     monkeypatch.setattr(runner, "create_agent", lambda **kwargs: object())
     executor = RecordingExecutor()
 
@@ -105,7 +106,7 @@ async def test_prepare_auto_approve_ignores_extra_tool_names(monkeypatch):
         ),
     )
 
-    assert executor.calls == [{"read_only": None, "actions": None, "extra_names": frozenset()}]
+    assert executor.calls == [{"read_only": True, "actions": None, "extra_names": frozenset({"remember"})}]
 
 
 @pytest.mark.asyncio
