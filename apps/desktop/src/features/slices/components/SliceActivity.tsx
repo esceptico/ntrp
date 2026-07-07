@@ -7,40 +7,16 @@ interface SliceSessionRow {
   last_activity?: string;
 }
 
-// Server-side `_slice_automations` shape (ntrp/slices/service.py) — name +
-// run bookkeeping. `SliceDetail.automations` is typed `unknown[]` on the
-// wire since the slice service passes raw dicts through; narrow here at
-// the render boundary rather than widening the shared API type.
-interface SliceAutomationRow {
-  name?: string;
-  running_since?: string | null;
-  last_run_at?: string | null;
-}
-
-function isAutomationRow(value: unknown): value is SliceAutomationRow {
-  return typeof value === "object" && value !== null && "name" in value;
-}
-
-/** ACTIVITY: quiet rows for the slice's sessions and automation runs.
- *  Sessions are click-through (switchSession); automations are read-only
- *  status rows here — the primary retry action for a failing automation
- *  lives on its ask card, not this list. */
-export function SliceActivity({
-  sessions,
-  automations,
-}: {
-  sessions: SliceSessionRow[];
-  automations: unknown[];
-}) {
-  const automationRows = automations.filter(isAutomationRow);
-  if (sessions.length === 0 && automationRows.length === 0) return null;
+/** ACTIVITY: the slice's sessions, click-through. Automation bookkeeping
+ *  rows were dropped — the room header already carries the agent's last
+ *  run, so repeating `slice:{key}` here was noise. Section renders only
+ *  when there is actually something to show. */
+export function SliceActivity({ sessions }: { sessions: SliceSessionRow[] }) {
+  if (sessions.length === 0) return null;
 
   return (
     <div className="grid min-w-0 gap-2">
       <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Activity</span>
-      {/* min-w-0 down the chain: rows truncate, so their min-content is the
-          full untruncated line — without it long names blow the grid track
-          past the column (same trap as OpenLoops/modal headers). */}
       <div className="grid min-w-0 gap-px">
         {sessions.map((session) => (
           <button
@@ -56,24 +32,6 @@ export function SliceActivity({
               </span>
             )}
           </button>
-        ))}
-        {automationRows.map((auto, index) => (
-          <div
-            key={`${auto.name}-${index}`}
-            className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm text-ink-soft"
-          >
-            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-faint" />
-            <span className="min-w-0 flex-1 truncate">{auto.name}</span>
-            {auto.running_since ? (
-              <span className="shrink-0 text-2xs text-faint">running</span>
-            ) : (
-              auto.last_run_at && (
-                <span className="shrink-0 text-2xs text-whisper tabular-nums">
-                  {formatRelativePast(auto.last_run_at)} ago
-                </span>
-              )
-            )}
-          </div>
         ))}
       </div>
     </div>

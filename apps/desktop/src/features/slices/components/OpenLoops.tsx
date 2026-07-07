@@ -8,10 +8,16 @@ import { useState } from "react";
  *  the track past the 640px column (bit us with real vault data). No
  *  per-row "agent completed" dimming yet — the shape carries no such flag;
  *  hook point for whenever that lands server-side. */
+// Rooms with sprawling pages (dex: 21 loops) become walls of text — cap
+// the resting view; "Show all" reveals the rest in place.
+const VISIBLE_CAP = 7;
+
 export function OpenLoops({ loops }: { loops: string[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   if (loops.length === 0) return null;
+  const visible = showAll ? loops : loops.slice(0, VISIBLE_CAP);
 
   return (
     <div className="grid min-w-0 gap-2">
@@ -19,7 +25,7 @@ export function OpenLoops({ loops }: { loops: string[] }) {
       {/* Quiet hairline list (mock: separators, no tonal bars) — tone is
           reserved for things that need attention; loops are ambient. */}
       <div className="grid min-w-0">
-        {loops.map((loop, index) => {
+        {visible.map((loop, index) => {
           const open = openIndex === index;
           return (
             <button
@@ -43,6 +49,15 @@ export function OpenLoops({ loops }: { loops: string[] }) {
           );
         })}
       </div>
+      {loops.length > VISIBLE_CAP && !showAll && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="justify-self-start text-xs text-faint hover:text-ink-soft"
+        >
+          Show all {loops.length}
+        </button>
+      )}
     </div>
   );
 }

@@ -90,9 +90,13 @@ class SliceService:
     def detail(self, key: str) -> dict:
         s = self._registry.get(key)
         summary = page_summary(self._get_page(s.page_path))
+        # Related = the page's `## Related` wikilinks (live) merged with any
+        # registry-pinned keys, kept to slices that actually exist.
+        known = {r.key for r in self._registry.load()}
+        related = [k for k in dict.fromkeys([*summary["related"], *s.related]) if k in known and k != key]
         return {
             "key": s.key, "title": s.title, "autonomy": s.autonomy,
-            "page_path": s.page_path, "related": s.related,
+            "page_path": s.page_path, "related": related,
             "open_loops": summary["open_loops"], "updated": summary["updated"],
             "asks": [asdict(a) for a in self._asks.list(key)],
             "sessions": self._slice_sessions(key),

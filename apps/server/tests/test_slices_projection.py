@@ -44,3 +44,16 @@ def test_slice_automation_match_rejects_other_key_prefix_collision():
 
 def test_slice_automation_match_rejects_unrelated_name():
     assert not slice_automation_match("some-other-automation", "o-1a")
+
+
+def test_parse_related_extracts_wikilink_slugs():
+    prose = "# O-1A\n\n## Open loops\n- Find counsel.\n\n## Related\n- [[United States]] — visa planning context.\n- [[Health]]\n"
+    from ntrp.slices.projection import parse_related
+
+    assert parse_related(prose) == ["united-states", "health"]
+
+
+def test_parse_related_missing_section_is_empty():
+    from ntrp.slices.projection import parse_related
+
+    assert parse_related("# T\n\n## Open loops\n- x\n") == []

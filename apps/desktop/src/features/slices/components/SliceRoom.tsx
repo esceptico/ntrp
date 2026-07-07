@@ -48,17 +48,24 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
   const topAsk = detail.asks[0] ?? null;
   const relatedTitle = (key: string) => overviewSlices?.find((s) => s.key === key)?.title ?? key;
 
-  // Header status line, best data first: the slice agent's last run (first
-  // line of its result + when), else the page's own updated date.
+  // Header status line, best data first: agent running now > the agent's
+  // last run (first line of its result + when) > the page's updated date.
   const agentAuto = detail.automations.find(
-    (a): a is { name: string; last_result?: string | null; last_run_at?: string | null } =>
+    (
+      a,
+    ): a is { name: string; last_result?: string | null; last_run_at?: string | null; running_since?: string | null } =>
       typeof a === "object" && a !== null && (a as { name?: string }).name === `slice:${sliceKey}`,
   );
+  const agentRunning = Boolean(agentAuto?.running_since);
   const agentSummary = agentAuto?.last_result?.split("\n")[0]?.trim();
-  const agentLine =
-    agentSummary && agentAuto?.last_run_at
+  const agentLine = agentRunning
+    ? "Agent working now…"
+    : agentSummary && agentAuto?.last_run_at
       ? `Agent, ${formatRelativePast(agentAuto.last_run_at)} ago — ${agentSummary}`
       : `Last activity ${formatRelativePast(detail.updated)} ago`;
+
+  const isEmpty =
+    detail.open_loops.length === 0 && detail.asks.length === 0 && detail.sessions.length === 0;
 
   const discussAsk = (ask: { text: string }) => {
     setDraft(`About "${ask.text}" — `);
@@ -142,12 +149,16 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             {detail.title}
           </h1>
           {detail.autonomy === "observe" ? (
-            <ChargeButton
-              key={detail.autonomy}
-              label="Observe only"
-              armedLabel="Act granted"
-              onArmed={() => void grantAct()}
-            />
+            <span
+              title="Autonomy contract: the agent reads this slice and updates its page, but takes no external action. Hold to grant it the right to act (run automations and workflows — irreversible steps still need your approval)."
+            >
+              <ChargeButton
+                key={detail.autonomy}
+                label="Observe only"
+                armedLabel="Act granted"
+                onArmed={() => void grantAct()}
+              />
+            </span>
           ) : (
             <button
               type="button"
@@ -159,7 +170,10 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             </button>
           )}
         </div>
-        <p className="m-0 min-w-0 truncate text-xs text-faint">{agentLine}</p>
+        <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-faint">
+          {agentRunning && <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-ink" />}
+          <span className="min-w-0 truncate">{agentLine}</span>
+        </p>
       </div>
 
       {topAsk && (
@@ -168,8 +182,14 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
         </AnimatePresence>
       )}
 
+      {isEmpty && (
+        <p className="m-0 text-sm text-faint">
+          Nothing on file yet — message the slice below, or its agent will report after its next run.
+        </p>
+      )}
+
       <OpenLoops loops={detail.open_loops} />
-      <SliceActivity sessions={detail.sessions} automations={detail.automations} />
+      <SliceActivity sessions={detail.sessions} />
 
       {detail.related.length > 0 && (
         <div className="grid gap-2">
