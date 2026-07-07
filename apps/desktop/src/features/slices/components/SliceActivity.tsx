@@ -4,6 +4,7 @@ import { formatRelativePast } from "@/lib/format";
 interface SliceSessionRow {
   session_id: string;
   name: string;
+  last_activity?: string;
 }
 
 // Server-side `_slice_automations` shape (ntrp/slices/service.py) — name +
@@ -49,6 +50,11 @@ export function SliceActivity({
             className="flex min-w-0 items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm text-ink-soft hover:bg-surface-soft"
           >
             <span className="min-w-0 flex-1 truncate">{session.name || "Untitled session"}</span>
+            {session.last_activity && (
+              <span className="shrink-0 text-2xs text-whisper tabular-nums">
+                {formatRelativePast(session.last_activity)} ago
+              </span>
+            )}
           </button>
         ))}
         {automationRows.map((auto, index) => (

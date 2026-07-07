@@ -32,7 +32,7 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
 
   if (!detail) {
     return (
-      <div className="mx-auto mt-[12vh] grid w-[640px] max-w-full gap-6 px-4">
+      <div className="mx-auto grid w-[640px] max-w-full gap-6 px-4 pt-[12vh]">
         <button
           type="button"
           onClick={() => openSlice(null)}
@@ -47,6 +47,23 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
 
   const topAsk = detail.asks[0] ?? null;
   const relatedTitle = (key: string) => overviewSlices?.find((s) => s.key === key)?.title ?? key;
+
+  // Header status line, best data first: the slice agent's last run (first
+  // line of its result + when), else the page's own updated date.
+  const agentAuto = detail.automations.find(
+    (a): a is { name: string; last_result?: string | null; last_run_at?: string | null } =>
+      typeof a === "object" && a !== null && (a as { name?: string }).name === `slice:${sliceKey}`,
+  );
+  const agentSummary = agentAuto?.last_result?.split("\n")[0]?.trim();
+  const agentLine =
+    agentSummary && agentAuto?.last_run_at
+      ? `Agent, ${formatRelativePast(agentAuto.last_run_at)} ago — ${agentSummary}`
+      : `Last activity ${formatRelativePast(detail.updated)} ago`;
+
+  const discussAsk = (ask: { text: string }) => {
+    setDraft(`About "${ask.text}" — `);
+    document.getElementById("slice-composer-input")?.focus();
+  };
 
   const grantAct = async () => {
     try {
@@ -102,8 +119,11 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="mx-auto mt-[12vh] grid w-[640px] max-w-full gap-6 px-4 pb-24"
+      className="flex h-full min-h-0 flex-col"
     >
+      {/* Content scrolls; the scoped composer stays pinned below it. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto grid w-[640px] max-w-full gap-6 px-4 pt-14 pb-8">
       <button
         type="button"
         onClick={() => openSlice(null)}
@@ -139,14 +159,12 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             </button>
           )}
         </div>
-        <p className="m-0 text-xs text-faint">
-          Last activity {formatRelativePast(detail.updated)} ago
-        </p>
+        <p className="m-0 min-w-0 truncate text-xs text-faint">{agentLine}</p>
       </div>
 
       {topAsk && (
         <AnimatePresence initial={false}>
-          <AskCard key={topAsk.id} ask={topAsk} />
+          <AskCard key={topAsk.id} ask={topAsk} onDiscuss={discussAsk} />
         </AnimatePresence>
       )}
 
@@ -171,9 +189,13 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 mx-auto flex w-[640px] max-w-full justify-center px-4 pb-6">
+        </div>
+      </div>
+
+      <div className="mx-auto w-[640px] max-w-full shrink-0 px-4 pb-6">
         <div className="flex h-[52px] w-full items-center gap-2 rounded-[13px] border border-line bg-surface-2 px-4 shadow-md">
           <input
+            id="slice-composer-input"
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

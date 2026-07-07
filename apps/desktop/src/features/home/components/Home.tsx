@@ -79,8 +79,9 @@ export function Home() {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="mx-auto mt-[16vh] grid w-[640px] max-w-full gap-7 px-4"
+      className="h-full overflow-y-auto"
     >
+      <div className="mx-auto grid w-[640px] max-w-full gap-7 px-4 pt-[16vh] pb-16">
       <div className="grid gap-3">
         <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
         <HeroInput />
@@ -98,7 +99,8 @@ export function Home() {
           </div>
         </div>
       )}
-      <SlicesStrip slices={slices} />
+        <SlicesStrip slices={slices} />
+      </div>
     </motion.div>
   );
 }

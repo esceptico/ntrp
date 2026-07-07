@@ -19,18 +19,26 @@ const KIND_DOT: Record<SliceAsk["kind"], string> = {
   drift: "bg-bad",
 };
 
-/** Attention card for a slice's top ask: severity dot, ask text, a primary
- *  action mapped from `ask.actions[0]` (shared askActions logic — same
- *  verb→handler map Home's FocusRow uses), and a dismiss ✕ that resolves
- *  the ask as "dismissed". Retires with ROW_EXIT; list membership (removal
- *  on resolve) is driven by the caller's AnimatePresence.
+/** Agent asks read as "headline — elaboration"; split on the first em-dash
+ *  so the card can render the mock's title/description hierarchy. Asks
+ *  without one are all title. */
+function splitAsk(text: string): { title: string; detail: string | null } {
+  const i = text.indexOf(" — ");
+  if (i === -1) return { title: text, detail: null };
+  return { title: text.slice(0, i), detail: text.slice(i + 3) };
+}
+
+/** Attention card for a slice's top ask: severity dot, title/detail, a
+ *  buttons row (primary action + Discuss), dismiss ✕ in the corner.
+ *  Discuss hands the ask to the room's scoped composer via `onDiscuss`.
+ *  Retires with ROW_EXIT; list membership is the caller's AnimatePresence.
  *
- *  `open_page` actions route to `openSlice(ask.slice_key)` — inside the
- *  room that's already showing that slice, so it's a no-op button. The
- *  caller (SliceRoom) always renders asks scoped to its own slice, so the
- *  primary action is simply suppressed for `open_page`. */
-export function AskCard({ ask }: { ask: SliceAsk }) {
+ *  `open_page` actions route to `openSlice(ask.slice_key)` — a no-op
+ *  inside the ask's own room, so the primary button is suppressed there
+ *  and Discuss carries the card. */
+export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: SliceAsk) => void }) {
   const automations = useStore((s) => s.automations);
+  const { title, detail } = splitAsk(ask.text);
 
   const isNoOpOpenPage = ask.actions[0]?.verb === "open_page";
   const primaryAction = isNoOpOpenPage
@@ -62,24 +70,36 @@ export function AskCard({ ask }: { ask: SliceAsk }) {
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex min-w-0 items-start gap-3 rounded-[10px] bg-surface-soft px-3.5 py-3"
+      className="flex min-w-0 items-start gap-3 rounded-[12px] bg-surface-soft px-4 py-3.5"
     >
-      <span aria-hidden className={`mt-1.5 size-1.5 shrink-0 rounded-full ${KIND_DOT[ask.kind]}`} />
-      <p className="min-w-0 flex-1 text-sm text-ink">{ask.text}</p>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {primaryAction && (
-          <button
-            type="button"
-            onClick={primaryAction.run}
-            className="rounded-md bg-ink px-2.5 py-1 text-xs font-medium text-on-ink hover:opacity-90"
-          >
-            {primaryAction.label}
-          </button>
-        )}
-        <IconButton size="sm" title="Dismiss" onClick={() => void dismiss()}>
-          <X className="size-3.5" />
-        </IconButton>
+      <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${KIND_DOT[ask.kind]}`} />
+      <div className="grid min-w-0 flex-1 gap-1">
+        <p className="m-0 text-sm font-medium text-ink">{title}</p>
+        {detail && <p className="m-0 text-[13px] leading-snug text-muted">{detail}</p>}
+        <div className="mt-2 flex items-center gap-2">
+          {primaryAction && (
+            <button
+              type="button"
+              onClick={primaryAction.run}
+              className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:opacity-90"
+            >
+              {primaryAction.label}
+            </button>
+          )}
+          {onDiscuss && (
+            <button
+              type="button"
+              onClick={() => onDiscuss(ask)}
+              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
+            >
+              Discuss
+            </button>
+          )}
+        </div>
       </div>
+      <IconButton size="sm" title="Dismiss" onClick={() => void dismiss()}>
+        <X className="size-3.5" />
+      </IconButton>
     </motion.div>
   );
 }

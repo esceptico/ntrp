@@ -80,6 +80,7 @@ export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const rightPanelCollapsed = useStore((s) => s.prefs.rightPanelCollapsed);
   const sidebarWidth = useStore((s) => s.prefs.sidebarWidth);
   const rightPanelWidth = useStore((s) => s.prefs.rightPanelWidth);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
@@ -251,7 +252,20 @@ export function App() {
         <SidebarResizeHandle />
       </motion.div>
       <ErrorBoundary>
-        {openSliceKey ? <SliceRoom sliceKey={openSliceKey} /> : showHome ? <Home /> : <Chat />}
+        {openSliceKey || showHome ? (
+          /* Home/SliceRoom get the same pane geometry Chat's <main> claims
+             (flush with both sidebars) plus a scroll container — they are
+             full screens, not floating columns. */
+          <main
+            data-sidebar-hidden={sidebarHidden ? "true" : "false"}
+            data-right-open={rightPanelCollapsed ? "false" : "true"}
+            className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 data-[right-open=true]:right-[var(--right-panel-width,320px)] bg-bg overflow-hidden"
+          >
+            {openSliceKey ? <SliceRoom sliceKey={openSliceKey} /> : <Home />}
+          </main>
+        ) : (
+          <Chat />
+        )}
       </ErrorBoundary>
       <AgentRightSidebar />
       <ErrorBoundary>
