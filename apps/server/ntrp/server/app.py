@@ -197,6 +197,7 @@ async def lifespan(app: FastAPI):
         message: str,
         client_id: str | None = None,
         skip_approvals: bool | None = False,
+        tool_scope: tuple[str, ...] | None = None,
     ) -> str | None:
         chat_model = await runtime.resolve_session_chat_model(session_id)
         result = await submit_chat_message(
@@ -208,6 +209,7 @@ async def lifespan(app: FastAPI):
             skip_approvals=skip_approvals,
             client_id=client_id,
             session_service=runtime.session_service,
+            tool_scope=tool_scope,
         )
         return result.get("run_id") if isinstance(result, dict) else None
 
@@ -234,6 +236,7 @@ async def lifespan(app: FastAPI):
             message,
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
             skip_approvals=automation.auto_approve,
+            tool_scope=tuple(automation.tool_scope) if automation.tool_scope else None,
         )
 
     runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
@@ -267,6 +270,7 @@ async def lifespan(app: FastAPI):
                 model=automation.model,
                 skip_approvals=automation.auto_approve,
                 automation_id=automation.task_id,
+                tool_scope=tuple(automation.tool_scope) if automation.tool_scope else None,
             )
 
             deps = runtime.build_operator_deps()

@@ -105,6 +105,7 @@ def _row_to_automation(row: dict) -> Automation:
         parent_automation_id=row["parent_automation_id"],
         idempotency_key=row["idempotency_key"],
         idempotency_scope=row["idempotency_scope"],
+        tool_scope=json.loads(row["tool_scope"]) if dict(row).get("tool_scope") else None,
     )
 
 
@@ -155,7 +156,8 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     read_history INTEGER NOT NULL DEFAULT 0,
     parent_automation_id TEXT,
     idempotency_key TEXT,
-    idempotency_scope TEXT
+    idempotency_scope TEXT,
+    tool_scope TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
@@ -256,12 +258,12 @@ _COLUMNS = (
     "created_at, last_run_at, next_run_at, last_result, running_since, "
     "auto_approve, handler, builtin, cooldown_minutes, "
     "kind, max_iterations, iteration_count, stop_when, max_age_days, "
-    "thread_id, read_history, parent_automation_id, idempotency_key, idempotency_scope"
+    "thread_id, read_history, parent_automation_id, idempotency_key, idempotency_scope, tool_scope"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -375,7 +377,7 @@ SET name = ?, description = ?, model = ?, triggers = ?,
     max_iterations = ?, stop_when = ?,
     max_age_days = ?,
     thread_id = ?, read_history = ?,
-    parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?
+    parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?, tool_scope = ?
 WHERE task_id = ?
 """
 
@@ -646,7 +648,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -764,6 +766,13 @@ async def _set_schema_version(conn: aiosqlite.Connection, version: int) -> None:
         "INSERT OR REPLACE INTO automation_meta (key, value) VALUES ('schema_version', ?)",
         (str(version),),
     )
+
+
+async def _migrate_v12(conn: aiosqlite.Connection) -> None:
+    rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+    existing = {row["name"] for row in rows}
+    if "tool_scope" not in existing:
+        await conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN tool_scope TEXT")
 
 
 async def _migrate(conn: aiosqlite.Connection) -> None:
@@ -1091,6 +1100,12 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await conn.commit()
         _logger.info("Migrated automation store to v11 (automation_suggestions table)")
 
+    if version < 12:
+        await _migrate_v12(conn)
+        await _set_schema_version(conn, 12)
+        await conn.commit()
+        _logger.info("Migrated automation store to v12 (tool_scope allowlist)")
+
 
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -1137,6 +1152,7 @@ class AutomationStore:
                 automation.parent_automation_id,
                 automation.idempotency_key,
                 automation.idempotency_scope,
+                json.dumps(automation.tool_scope) if automation.tool_scope else None,
             ),
         )
         await self.conn.commit()
@@ -1285,6 +1301,7 @@ class AutomationStore:
                 automation.parent_automation_id,
                 automation.idempotency_key,
                 automation.idempotency_scope,
+                json.dumps(automation.tool_scope) if automation.tool_scope else None,
                 automation.task_id,
             ),
         )
@@ -1477,6 +1494,7 @@ class AutomationStore:
                     automation.parent_automation_id,
                     automation.idempotency_key,
                     automation.idempotency_scope,
+                    json.dumps(automation.tool_scope) if automation.tool_scope else None,
                 ),
             )
             await self.conn.commit()

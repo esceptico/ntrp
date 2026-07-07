@@ -608,6 +608,7 @@ class Scheduler:
             model=automation.model,
             skip_approvals=automation.auto_approve,
             automation_id=automation.task_id,
+            tool_scope=tuple(automation.tool_scope) if automation.tool_scope else None,
         )
 
         if self._bus_registry:

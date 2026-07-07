@@ -52,6 +52,9 @@ class RunRequest:
     # additional tools here (e.g. slice observe mode: READ tools + the named
     # memory-write tools, but not bash/send/automation-write).
     extra_tool_names: frozenset[str] = frozenset()
+    # Allowlist patterns ('*', exact, 'slack_*') applied as the hard outer
+    # gate over whichever pool the flags above select. None = unrestricted.
+    tool_scope: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -73,12 +76,13 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     # approvals WITHIN this narrow set" — a detached run has no approval UI,
     # so an agent trusted with only read + its own notebook (observe-mode
     # slice agents) must not stall on gates it can never answer.
+    scope_kw = {"scope": request.tool_scope} if request.tool_scope else {}
     if request.extra_tool_names:
-        tools = executor.get_tools(read_only=True, extra_names=request.extra_tool_names)
+        tools = executor.get_tools(read_only=True, extra_names=request.extra_tool_names, **scope_kw)
     elif request.auto_approve:
-        tools = executor.get_tools()
+        tools = executor.get_tools(**scope_kw)
     else:
-        tools = executor.get_tools(read_only=True)
+        tools = executor.get_tools(read_only=True, **scope_kw)
 
     agent_config = deps.config
     if request.model:

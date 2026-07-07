@@ -215,6 +215,7 @@ class AutomationService:
         max_iterations: int | None = None,
         stop_when: str | None = None,
         max_age_days: int | None = None,
+        tool_scope: list[str] | None = None,
     ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
         if name is not None:
@@ -235,6 +236,9 @@ class AutomationService:
             changes["stop_when"] = stop_when
         if max_age_days is not None:
             changes["max_age_days"] = max_age_days
+        if tool_scope is not None:
+            # [] clears the scope back to unrestricted; a non-empty list replaces it.
+            changes["tool_scope"] = tool_scope or None
         return changes
 
     @staticmethod
@@ -291,6 +295,7 @@ class AutomationService:
         max_iterations: int | None = None,
         stop_when: str | None = None,
         max_age_days: int | None = None,
+        tool_scope: list[str] | None = None,
     ) -> Automation:
         task = await self.get(task_id)
         changes = self._build_metadata_changes(
@@ -303,6 +308,7 @@ class AutomationService:
             max_iterations=max_iterations,
             stop_when=stop_when,
             max_age_days=max_age_days,
+            tool_scope=tool_scope,
         )
 
         trigger_patch = TriggerPatch(
@@ -369,6 +375,7 @@ class AutomationService:
         parent_automation_id: str | None = None,
         parent_fire_at: str | None = None,
         attempt_n: int | None = None,
+        tool_scope: list[str] | None = None,
     ) -> Automation | None:
         triggers = await self._resolve_message_triggers(triggers)
         parsed_triggers, next_run = _build_trigger_and_next_run(
@@ -419,6 +426,7 @@ class AutomationService:
             parent_automation_id=parent_automation_id,
             idempotency_key=idempotency_key,
             idempotency_scope=idempotency_scope,
+            tool_scope=tool_scope,
         )
 
         if idempotency_key is not None:

@@ -563,6 +563,7 @@ async def prepare_chat(
     client_id: str | None = None,
     loop_task_id: str | None = None,
     emit: Callable[[object], Awaitable[None]] | None = None,
+    tool_scope: tuple[str, ...] | None = None,
 ) -> ChatContext:
     registry = deps.run_registry
 
@@ -611,7 +612,7 @@ async def prepare_chat(
     run = registry.create_run(session_state.session_id)
     run.token_budget = parse_token_budget(message)
 
-    tools = deps.executor.get_tools()
+    tools = deps.executor.get_tools(scope=tool_scope) if tool_scope else deps.executor.get_tools()
     get_goal = getattr(deps.session_service, "get_goal", None)
     goal_context = await get_goal(session_state.session_id) if get_goal else None
     get_todo_override = getattr(deps.session_service, "get_todo_override", None)
@@ -756,6 +757,7 @@ async def submit_chat_message(
     context: list[dict] | None = None,
     client_id: str | None = None,
     session_service: SessionService | None = None,
+    tool_scope: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     load_session = getattr(session_service, "load", None)
     if load_session is not None and await load_session(session_id) is None:
@@ -772,6 +774,7 @@ async def submit_chat_message(
             context=context,
             client_id=client_id,
             session_service=session_service,
+            tool_scope=tool_scope,
         )
 
 
@@ -787,6 +790,7 @@ async def _submit_chat_message_locked(
     context: list[dict] | None = None,
     client_id: str | None = None,
     session_service: SessionService | None = None,
+    tool_scope: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
     is_meta_client = _is_meta_client_id(client_id)
@@ -881,6 +885,7 @@ async def _submit_chat_message_locked(
         client_id=client_id,
         loop_task_id=loop_task_id,
         emit=bus.emit,
+        tool_scope=tool_scope,
     )
     try:
         await _record_run_started(

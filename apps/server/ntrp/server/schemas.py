@@ -492,6 +492,7 @@ class CreateAutomationRequest(BaseModel):
     end: str | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None
+    tool_scope: list[str] | None = None
     from_suggestion_id: str | None = None
 
 
@@ -528,6 +529,7 @@ class UpdateAutomationRequest(BaseModel):
     enabled: bool | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None
+    tool_scope: list[str] | None = None
 
 
 class CreateLoopRequest(BaseModel):

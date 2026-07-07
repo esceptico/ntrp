@@ -4,6 +4,7 @@ from typing import Any, Self
 from ntrp.tools.core.base import RESERVED_ARG_KEYS, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.middleware import DEFAULT_TOOL_MIDDLEWARE, ToolCall, ToolMiddleware
+from ntrp.tools.core.scope import matches_scope
 from ntrp.tools.core.types import ApprovalMode, ToolAction, ToolOverrideDecision, ToolPolicy
 
 
@@ -81,10 +82,16 @@ class ToolRegistry:
         read_only: bool | None = None,
         actions: frozenset[ToolAction] | None = None,
         extra_names: frozenset[str] = frozenset(),
+        scope: tuple[str, ...] | None = None,
     ) -> list[dict]:
         schemas = []
         for name, tool in self._tools.items():
             if self._tool_overrides.get(name) == ToolOverrideDecision.DENY:
+                continue
+            # Scope is the hard outer gate — applied before every other
+            # selection (including extra_names) so no path widens a run past
+            # its author's allowlist.
+            if scope is not None and not matches_scope(scope, name):
                 continue
             tool = self._effective_tool(name, tool)
             if names is not None and name not in names:
