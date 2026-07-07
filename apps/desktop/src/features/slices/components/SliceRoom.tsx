@@ -128,8 +128,11 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
       className="flex h-full min-h-0 flex-col"
     >
-      {/* Content scrolls; the scoped composer stays pinned below it. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Content scrolls; the scoped composer stays pinned below it.
+          overflow-x-hidden is the structural backstop: a child that loses
+          its min-w-0 again clips at the pane instead of pushing the whole
+          layout off-screen. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         <div className="mx-auto grid w-[640px] max-w-full gap-6 px-4 pt-14 pb-8">
       <button
         type="button"

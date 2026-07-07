@@ -79,7 +79,7 @@ export function Home() {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="h-full overflow-y-auto"
+      className="h-full overflow-y-auto overflow-x-hidden"
     >
       <div className="mx-auto grid w-[640px] max-w-full gap-7 px-4 pt-[16vh] pb-16">
       <div className="grid gap-3">

@@ -34,7 +34,7 @@ export function OpenLoops({
         {visible.map((loop, index) => {
           const open = openIndex === index;
           return (
-            <div key={index} className={index > 0 ? "border-t border-line-soft" : undefined}>
+            <div key={index} className={`min-w-0 ${index > 0 ? "border-t border-line-soft" : ""}`}>
               <button
                 type="button"
                 onClick={() => setOpenIndex(open ? null : index)}
