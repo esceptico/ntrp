@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "@/stores";
 import { fetchSliceDetail, updateSliceAutonomy } from "@/actions/slices";
-import { createSessionWithSlice } from "@/actions/sessions";
+import { runAutomation } from "@/actions/automations";
+import { createSessionWithSlice, switchSession } from "@/actions/sessions";
 import { sendMessage } from "@/actions/messages";
+import { Play } from "lucide-react";
+import { ICON } from "@/lib/icons";
 import { AskCard } from "@/features/slices/components/AskCard";
 import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
@@ -49,12 +52,21 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
   const relatedTitle = (key: string) => overviewSlices?.find((s) => s.key === key)?.title ?? key;
 
   // Header status line, best data first: agent running now > the agent's
-  // last run (first line of its result + when) > the page's updated date.
+  // last run (first line of its report + when) > never-ran. The line is the
+  // door to the agent's channel (its full transcript); Run now sits beside
+  // it. The channel session itself is excluded from ACTIVITY — that list is
+  // the user's own chats, not infrastructure.
   const agentAuto = detail.automations.find(
     (
       a,
-    ): a is { name: string; last_result?: string | null; last_run_at?: string | null; running_since?: string | null } =>
-      typeof a === "object" && a !== null && (a as { name?: string }).name === `slice:${sliceKey}`,
+    ): a is {
+      name: string;
+      task_id?: string;
+      thread_id?: string | null;
+      last_result?: string | null;
+      last_run_at?: string | null;
+      running_since?: string | null;
+    } => typeof a === "object" && a !== null && (a as { name?: string }).name === `slice:${sliceKey}`,
   );
   const agentRunning = Boolean(agentAuto?.running_since);
   const agentSummary = agentAuto?.last_result?.split("\n")[0]?.trim();
@@ -62,10 +74,29 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
     ? "Agent working now…"
     : agentSummary && agentAuto?.last_run_at
       ? `Agent, ${formatRelativePast(agentAuto.last_run_at)} ago — ${agentSummary}`
-      : `Last activity ${formatRelativePast(detail.updated)} ago`;
+      : agentAuto?.last_run_at
+        ? `Agent ran ${formatRelativePast(agentAuto.last_run_at)} ago`
+        : "Agent hasn’t run yet";
+  const agentChannelId = agentAuto?.thread_id ?? null;
+  const userSessions = detail.sessions.filter((s) => s.session_id !== agentChannelId);
 
   const isEmpty =
-    detail.open_loops.length === 0 && detail.asks.length === 0 && detail.sessions.length === 0;
+    detail.open_loops.length === 0 && detail.asks.length === 0 && userSessions.length === 0;
+
+  const runAgentNow = async () => {
+    if (!agentAuto?.task_id) return;
+    try {
+      await runAutomation(agentAuto.task_id);
+      await fetchSliceDetail(sliceKey);
+    } catch {
+      useStore.getState().pushToast({
+        id: `slice-run-fail:${sliceKey}`,
+        title: "Couldn’t start the agent",
+        status: "failed",
+        target: { kind: "automation" },
+      });
+    }
+  };
 
   const discussAsk = (ask: { text: string }) => {
     setDraft(`About "${ask.text}" — `);
@@ -173,10 +204,35 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             </button>
           )}
         </div>
-        <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-faint">
-          {agentRunning && <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-ink" />}
-          <span className="min-w-0 truncate">{agentLine}</span>
-        </p>
+        <div className="flex min-w-0 items-center gap-2">
+          {agentChannelId ? (
+            <button
+              type="button"
+              onClick={() => void switchSession(agentChannelId)}
+              title="Open the agent’s channel — every run’s full transcript"
+              className="flex min-w-0 items-center gap-1.5 text-left text-xs text-faint hover:text-ink-soft"
+            >
+              {agentRunning && (
+                <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-ink" />
+              )}
+              <span className="min-w-0 truncate underline decoration-line-soft underline-offset-2">
+                {agentLine}
+              </span>
+            </button>
+          ) : (
+            <p className="m-0 min-w-0 truncate text-xs text-faint">{agentLine}</p>
+          )}
+          {agentAuto?.task_id && !agentRunning && (
+            <button
+              type="button"
+              onClick={() => void runAgentNow()}
+              className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted hover:bg-surface-soft hover:text-ink"
+            >
+              <Play size={ICON.XS} strokeWidth={2} />
+              Run now
+            </button>
+          )}
+        </div>
       </div>
 
       {topAsk && (
@@ -198,7 +254,7 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
           document.getElementById("slice-composer-input")?.focus();
         }}
       />
-      <SliceActivity sessions={detail.sessions} />
+      <SliceActivity sessions={userSessions} />
 
       {detail.related.length > 0 && (
         <div className="grid gap-2">

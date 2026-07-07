@@ -255,14 +255,19 @@ class AutomationRuntime:
             run_at = self._slice_run_at(index)
             trigger = {"type": "time", "at": run_at, "days": "daily"}
             existing = await self.stores.automations.get(task_id)
+            channel_name = f"{slice_.title} agent"
             if existing is None:
+                channel = await self.automation_service._provision_channel(
+                    channel_name, task_id, slice_key=slice_.key
+                )
                 await self.automation_service.create(
                     name=task_id,
                     description=slice_agent_instructions(slice_),
                     triggers=[trigger],
                     auto_approve=slice_.autonomy == "observe",
                     tool_scope=OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None,
-                    slice_key=slice_.key,
+                    thread_id=channel.session_id,
+                    read_history=True,
                 )
                 _logger.info("Seeded slice channel automation: %s (at=%s)", task_id, run_at)
                 continue
@@ -270,7 +275,7 @@ class AutomationRuntime:
                 # Migrate the handler-based, thread-less shape: provision the
                 # slice-tagged channel and convert in place.
                 channel = await self.automation_service._provision_channel(
-                    task_id, task_id, slice_key=slice_.key
+                    channel_name, task_id, slice_key=slice_.key
                 )
                 time_trigger = TimeTrigger(at=run_at, days="daily")
                 existing.handler = None
@@ -281,8 +286,20 @@ class AutomationRuntime:
                 existing.tool_scope = OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None
                 existing.triggers = [time_trigger]
                 existing.next_run_at = time_trigger.next_run(datetime.now(UTC))
+                existing.last_result = None  # pre-rebuild diagnostics would read as current state
                 await self.stores.automations.save(existing)
                 _logger.info("Migrated slice automation %s to a channel (session %s)", task_id, channel.session_id)
+                continue
+            # Repair channels from the first migration pass: cryptic task_id
+            # names + stale pre-rebuild diagnostics leaking into the room UI.
+            if existing.thread_id:
+                await self.stores.sessions.rename_if_empty(existing.thread_id, channel_name)
+                data = await self.stores.sessions.load(existing.thread_id)
+                if data is not None and data.state.name == task_id:
+                    await self.stores.sessions.rename(existing.thread_id, channel_name)
+            if existing.last_result and "without a report" in existing.last_result:
+                existing.last_result = None
+                await self.stores.automations.save(existing)
 
     def _suggester_available(self) -> bool:
         return self.get_records() is not None and self.get_cheap_llm() is not None

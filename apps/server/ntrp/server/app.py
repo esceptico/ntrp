@@ -160,6 +160,8 @@ async def lifespan(app: FastAPI):
         return [
             {
                 "name": a.name,
+                "task_id": a.task_id,
+                "thread_id": a.thread_id,
                 "last_result": a.last_result,
                 "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
                 "running_since": a.running_since.isoformat() if a.running_since else None,
