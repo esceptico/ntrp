@@ -1,5 +1,7 @@
 # ntrp
 
+**ntrp** is entropy: the measure of disorder in a system. Your calendar, emails, memory, half-remembered conversations, and recurring chores all accumulate. This project exists to reduce it.
+
 A local-first personal assistant. Not a coding agent: a place to keep the moving parts of your life in one system that remembers them and tells you what needs you. Python backend, Electron desktop app.
 
 ![ntrp](docs/images/main.png)
