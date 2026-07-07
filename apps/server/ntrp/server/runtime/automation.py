@@ -248,7 +248,16 @@ class AutomationRuntime:
         now = datetime.now(UTC)
         for slice_ in self.slice_registry.load():
             task_id = f"slice:{slice_.key}"
-            if await self.stores.automations.get(task_id):
+            existing = await self.stores.automations.get(task_id)
+            if existing:
+                # Repair rows seeded before the inert memory_changed
+                # EventTrigger was dropped — dead config that still rendered
+                # in the automations UI ("on:memory_change…").
+                live = [t for t in existing.triggers if getattr(t, "type", None) != "event"]
+                if len(live) != len(existing.triggers):
+                    existing.triggers = live
+                    await self.stores.automations.save(existing)
+                    _logger.info("Stripped inert event trigger from %s", task_id)
                 continue
             # Daily only for now. A memory_changed EventTrigger was seeded
             # here originally but nothing routes vault changes into

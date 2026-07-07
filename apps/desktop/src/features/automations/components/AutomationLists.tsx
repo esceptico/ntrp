@@ -4,6 +4,7 @@ import { CalendarClock } from "lucide-react";
 import { useStore } from "@/stores";
 import type { Automation, AutomationSuggestion } from "@/api/types";
 import { templatesByCategory, type AutomationTemplate } from "@/features/automations/lib/templates";
+import { formatRelativePast } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Empty } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -54,6 +55,63 @@ export function AutomationTab({
 
 // ─── Active list ────────────────────────────────────────────────────
 
+/** Slice agents are seeded infrastructure, one per slice — identical in
+ *  shape, managed from their rooms. Card-parity with the user's own
+ *  automations buried the real ones under six boilerplate cards, so they
+ *  render as a compact ledger instead: dot, slice, last run, result line;
+ *  click opens the slice room. */
+function SliceAgentRows({ agents }: { agents: Automation[] }) {
+  const openSlice = useStore((s) => s.openSlice);
+  const closeAutomations = useStore((s) => s.closeAutomations);
+  const titles = useStore((s) => s.slices.overview?.slices);
+
+  if (agents.length === 0) return null;
+
+  return (
+    <section className="grid gap-1.5">
+      <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-muted">
+        Slice agents
+      </h3>
+      <div className="grid min-w-0">
+        {agents.map((agent, i) => {
+          const key = agent.name.slice("slice:".length);
+          const title = titles?.find((s) => s.key === key)?.title ?? key;
+          const running = Boolean(agent.running_since);
+          const resultLine = (agent.last_result ?? "").split("\n")[0]?.trim();
+          return (
+            <button
+              key={agent.task_id}
+              type="button"
+              onClick={() => {
+                closeAutomations();
+                openSlice(key);
+              }}
+              title={`Open the ${title} room`}
+              className={`flex min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-sm hover:bg-surface-soft ${
+                i > 0 ? "border-t border-line-soft" : ""
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`size-1.5 shrink-0 rounded-full ${
+                  running ? "animate-pulse bg-ink" : agent.enabled ? "bg-muted" : "bg-whisper"
+                }`}
+              />
+              <span className="w-28 shrink-0 truncate font-medium text-ink">{title}</span>
+              <span className="min-w-0 flex-1 truncate text-ink-soft">
+                {running ? "working now…" : resultLine || "no runs yet"}
+              </span>
+              <span className="shrink-0 text-2xs text-whisper tabular-nums">
+                {agent.last_run_at ? `${formatRelativePast(agent.last_run_at)} ago` : "daily 06:30"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function ActiveList({
   automations,
   onEdit,
@@ -88,17 +146,23 @@ export function ActiveList({
       </Empty>
     );
   }
+  const sliceAgents = automations.filter((a) => a.name.startsWith("slice:"));
+  const own = automations.filter((a) => !a.name.startsWith("slice:"));
+
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
-      <AnimatePresence mode="popLayout" initial={false}>
-        {automations.map((automation) => (
-          <AutomationCard
-            key={automation.task_id}
-            automation={automation}
-            onEdit={() => onEdit(automation)}
-          />
-        ))}
-      </AnimatePresence>
+    <div className="grid content-start gap-6">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {own.map((automation) => (
+            <AutomationCard
+              key={automation.task_id}
+              automation={automation}
+              onEdit={() => onEdit(automation)}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+      <SliceAgentRows agents={sliceAgents} />
     </div>
   );
 }
