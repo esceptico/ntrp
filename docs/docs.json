@@ -24,6 +24,7 @@
           {
             "group": "Features",
             "pages": [
+              "guides/slices",
               "guides/memory",
               "guides/automations",
               "guides/tools",

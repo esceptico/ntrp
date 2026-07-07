@@ -18,6 +18,12 @@ There is no separate graph, claim, or lens layer. Records are atomic; lineage is
 a single line (a corrected record is *superseded* by its replacement); pinned
 records survive cleanup.
 
+Records with a shared subject are periodically **synthesized** into readable
+**topic pages** — one markdown file per person, project, or life domain, with
+prose, open loops, and wikilinks to related pages. The topic pages are what the
+[Slices](/guides/slices) surface is built on: a slice *is* a topic page, watched
+by a standing agent.
+
 ## Records
 
 A record carries its text, an optional source reference, timestamps, a scope, a
@@ -100,10 +106,11 @@ in the resident profile and are never touched by consolidation or the LINT.
 
 Open the Memory view in the desktop app to inspect and control memory.
 
-![Memory records viewer](../images/memory-patterns.png)
+![Memory topic pages in the desktop app](../images/memory-patterns.png)
 
-- **Browse** records and a generated, read-only markdown view of your memory.
-- **Search** records by keyword or meaning, inspect scope, source, and lifecycle.
+- **Browse** the generated topic pages (the **Files** view) and the underlying
+  records (the **Records** view).
+- **Search** by keyword or meaning, inspect scope, source, and lifecycle.
 - **Capture** a new record, and **pin** the ones you want to keep permanently.
 
 ## Agent tools

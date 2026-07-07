@@ -1,0 +1,54 @@
+---
+title: "Slices"
+description: "Life domains mapped to memory pages, each watched by a standing agent that raises at most one ask."
+---
+
+## Overview
+
+A **slice** is a domain of your life — an apartment hunt, your health, a side project, finances. Each slice is backed by a memory topic page and watched by a **standing agent** that runs on a schedule, keeps the page current, and raises **at most one ask** when something genuinely needs your judgment.
+
+**Home** is the desktop app's entrypoint. It shows a composer, the **focus set** (every slice's one ask, gathered into a single list), and the **slices strip**.
+
+![Home — the focus set and slices strip](../images/main.png)
+
+The design goal is focus, not a feed. A slice agent's whole job is to decide the single highest-leverage thing in its domain — or to stay silent. A quiet slice is the deliverable, not a gap.
+
+## Where slices come from
+
+You don't hand-register slices. A daily **suggester** reads the unpromoted topic pages in your memory vault, identifies the ones that are genuinely life domains (an ongoing arc with personal stakes, not a reference note), and offers them on Home as one-click **ghost chips**. Accept one and ntrp provisions the whole apparatus — the topic page becomes a slice, gets a standing agent, a channel, and a room. Dismiss one and it's never suggested again.
+
+You can also promote a page yourself from the slices strip, or ask in chat.
+
+## Slice rooms
+
+Open a slice to see its room:
+
+![A slice room](../images/slice-room.png)
+
+- **The one ask**, if there is one, with a **Discuss** button that opens a scoped chat about it.
+- **Open loops** — the unresolved threads the agent parses from the page's `## Open loops` section.
+- **Agent status** — a line showing the agent working now, its last run's summary, or that it hasn't run yet. The line is a door into the agent's channel transcript, with **Run now** beside it.
+- **Related** slices, from the page's wikilinks.
+- **Activity** — your own chats scoped to this slice.
+- **A scoped composer** — a chat you start here carries the slice's topic page as context, so the agent already knows the domain.
+
+## The standing agent
+
+A slice agent is an **ordinary automation** — you'll find it in the Automations panel under **Slice agents**, and you can edit, pause, reschedule, or run it like any other. What makes it a slice agent is data on the automation, not a special code path:
+
+- It runs as a **channel automation** — a durable session owns its runs, so its full transcript is visible and replyable in the room.
+- Its **tool scope** is an observe-only allowlist (read + its own memory-page writes; nothing that acts on the outside world) — see [tool scoping](/guides/tools#per-automation-tool-scoping).
+- Its **output schema** makes each run return a validated one-ask nomination (`ask`, or none) instead of free-form text — see [structured output](/guides/tools#structured-output).
+
+Every run re-decides the slice's single ask: a new nomination supersedes the old one, and silence retires it. So the focus set always reflects the latest read of each domain, never a backlog.
+
+### Observe vs act
+
+Slice agents run in **observe** mode by default: they read anything and update their own topic page, but take no external action. **Act** mode lets an agent run the slice's own automations and workflows; irreversible actions still require approval. Toggle autonomy from the slice room.
+
+## Relationship to memory and automations
+
+Slices sit on top of two existing systems:
+
+- **[Memory](/guides/memory)** is the substrate — a slice *is* a topic page, and the agent's edits are ordinary memory writes. Open the Memory view to see the same pages the slices read from.
+- **[Automations](/guides/automations)** is the engine — slice agents are seeded automations with a tool scope and an output schema. Nothing about them is a special case.

@@ -174,6 +174,22 @@ Settings → Tools can override individual tools:
 | Ask | Expose the tool and require approval |
 | Deny | Hide the tool from the agent and block execution |
 
+## Per-automation tool scoping
+
+An automation can carry a **tool scope**: an allowlist of tool-name patterns that bounds what its runs may touch, applied as a hard outer gate before any other selection. Patterns are `*` (everything), an exact name, or a `prefix*` wildcard.
+
+```json
+"tool_scope": ["memory_*", "recall", "web_search"]
+```
+
+This is how [slice agents](/guides/slices) stay observe-only — they get the read and memory-write tools they need and nothing that acts on the outside world, regardless of other flags. A scope of `null` (the default) is unrestricted.
+
+## Structured output
+
+An agent run can return a **validated object** instead of just prose. Pass a schema, and after the normal tool loop finishes, the run spends one extra constrained step producing an object that matches it — the text and the structured result come back separately.
+
+Automations reference a named schema (`output_schema`), resolved on the server. This is the mechanism behind a slice agent's one-ask nomination: rather than parsing free-form text for an ask, the run returns `{ ask: {...} | null }` as a guaranteed-shaped object.
+
 ## User-defined tools
 
 Create custom tools in `~/.ntrp/tools/`. Each file is a Python module that exports a `tools` mapping:
