@@ -239,8 +239,8 @@ async def test_two_sequential_nominations_leave_only_the_newest_active(tmp_path:
 
 def test_load_slice_context_reads_page_or_degrades(tmp_path):
     from ntrp.slices.context import load_slice_context
-    from ntrp.slices.registry import SliceRegistry
     from ntrp.slices.models import Slice
+    from ntrp.slices.registry import SliceRegistry
 
     reg_path = tmp_path / "slices.json"
     SliceRegistry(reg_path).save([Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="observe")])
@@ -269,13 +269,10 @@ def test_system_blocks_include_slice_block():
 def test_observe_toolset_is_narrow_even_with_auto_approve(monkeypatch):
     """auto_approve + extra_tool_names must mean 'skip approvals WITHIN the
     narrow set' — never the full toolset."""
-    from ntrp.operator import runner
 
     class _Exec:
         def get_tools(self, read_only=False, extra_names=frozenset()):
             return [{"read_only": read_only, "extra": sorted(extra_names)}]
-
-    captured = {}
 
     class _Req:
         auto_approve = True
