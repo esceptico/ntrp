@@ -1,18 +1,22 @@
 # ntrp
 
-**ntrp** is entropy — the measure of disorder in a system. Your calendar, emails, apartment hunt, health goals, half-remembered conversations, and recurring chores all accumulate. This project exists to reduce it.
+Entropy is the measure of disorder in a system. Your calendar, inbox, apartment hunt, health goals, and recurring chores all accumulate it. ntrp is a personal assistant that tries to reduce it.
 
-ntrp is a local-first personal assistant: a Python backend and an Electron desktop app. It isn't a coding agent — it's a place to keep the moving parts of your life in one system that remembers, watches, and compresses each domain down to what actually needs you.
+It's a Python backend and an Electron desktop app, both running locally. It's not a coding agent. It's a place to keep the moving parts of your life in one system that remembers them and tells you what needs you.
 
-![ntrp Home — the focus set and life slices](docs/images/main.png)
+![ntrp Home](docs/images/main.png)
 
-## Slices — the home surface
+## Slices
 
-A **slice** is a domain of your life — apartment hunt, health, a side project, finances. Each slice is backed by a memory topic page and watched by a **standing agent** that runs on a schedule, keeps the page current, and raises **at most one ask** when something genuinely needs your judgment. **Home** is the entrypoint: a composer, the focus set (every slice's one ask, in one list), and the slices strip.
+A slice is a domain of your life: apartment hunt, health, a side project, finances. Each one is backed by a memory topic page and watched by a standing agent. The agent runs on a schedule, keeps the page up to date, and raises at most one ask when something actually needs you.
 
-- **Focus, not a feed** — the agent's whole job is to decide the single highest-leverage thing per slice, or stay silent. A quiet slice is the deliverable, not a gap.
-- **Derived from memory** — you don't hand-register slices. A daily suggester reads your unpromoted topic pages, spots the ones that are real life domains, and offers them as one-click ghost chips on Home.
-- **Slice rooms** — open a slice to see its open loops, the agent's last run, the ask with a Discuss button, related slices, and a scoped composer. Chats you start here carry the slice's page as context.
+Home is where you land. It has a composer, the focus set (each slice's current ask, in one list), and a strip of your slices.
+
+A few things worth knowing:
+
+- The agent's job is to pick the single most important thing in its domain, or say nothing. A quiet slice is fine. It doesn't invent work to look busy.
+- You don't register slices by hand. A daily job reads the topic pages in your memory that look like real life domains and suggests them on Home. One click promotes a suggestion into a slice; dismiss it and it won't come back.
+- Open a slice to get its room: open loops, the agent's last run, the ask with a Discuss button, related slices, and a composer. Chats you start there already know the slice's page.
 
 <table>
 <tr>
@@ -20,22 +24,22 @@ A **slice** is a domain of your life — apartment hunt, health, a side project,
 <td width="50%"><img src="docs/images/memory-patterns.png" alt="Memory topic pages"/></td>
 </tr>
 <tr>
-<td align="center"><em>A slice room — one ask, open loops, agent status</em></td>
-<td align="center"><em>Memory: the topic pages slices are built on</em></td>
+<td align="center"><em>A slice room</em></td>
+<td align="center"><em>The topic pages slices are built on</em></td>
 </tr>
 </table>
 
-## What else it does
+## Everything else
 
-- **Persistent memory**: durable, source-backed records that consolidate into readable topic pages; provenance stays visible, recall is hybrid (keyword + semantic).
-- **Automations**: scheduled tasks, background agents, channel automations, and multi-agent workflows. Slice agents are ordinary automations you can edit, pause, or reschedule.
-- **Structured output**: pass a schema and an agent run returns a validated object, not just prose — the mechanism behind a slice agent's one-ask nomination.
-- **Per-automation tool scoping**: an allowlist of tool-name patterns bounds what any given automation's runs may touch.
-- **Connected sources**: Gmail, Google Calendar, Slack, web search, MCP servers, local files, shell commands, and notifications.
-- **Rich desktop UI**: streaming traces, tool approvals, memory inspection, integration setup assistants, MCP config, and sandboxed HTML widgets.
-- **Any LLM**: Claude, GPT, Gemini, OpenRouter, Ollama, vLLM, LM Studio, custom OpenAI-compatible endpoints, or OpenAI account sign-in through the Codex provider.
+- **Memory.** Durable, source-backed records that get synthesized into readable topic pages. Provenance stays visible; recall is keyword plus semantic.
+- **Automations.** Scheduled tasks, background agents, channel automations, and multi-agent workflows. Slice agents are just automations, so you can edit, pause, or reschedule them like the rest.
+- **Structured output.** Pass a schema and an agent run hands back a validated object instead of text you have to parse. This is how a slice agent nominates its one ask.
+- **Tool scoping.** Any automation can carry an allowlist of tool-name patterns that caps what its runs can touch.
+- **Sources.** Gmail, Google Calendar, Slack, web search, MCP servers, local files, shell, and notifications.
+- **Desktop UI.** Streaming traces, tool approvals, a memory browser, integration setup flows, MCP config, and sandboxed HTML widgets.
+- **Any model.** Claude, GPT, Gemini, OpenRouter, Ollama, vLLM, LM Studio, other OpenAI-compatible endpoints, or an OpenAI sign-in through the Codex provider.
 
-![Automations — slice agents are ordinary, editable automations](docs/images/automations.png)
+![Automations](docs/images/automations.png)
 
 ## Install
 
@@ -91,19 +95,10 @@ cd apps/desktop && bun run typecheck && bun test
 
 ## Repo layout
 
-- `apps/server` — FastAPI backend, agent runtime, memory system, slices, tools, integrations, builtin skills, tests, and Python package metadata.
-- `apps/desktop` — Electron desktop client: Home + slice rooms, chat, traces, memory UI, approvals, settings, integration assistants, MCP management, and HTML widget rendering.
-- `docs` — Mintlify docs plus internal design/research notes.
-- `tasks` / `notes` — working plans, lessons, and project notes.
-
-## Core concepts
-
-- **Slices** map life domains to memory topic pages, each watched by a standing agent that compresses the domain into at most one ask.
-- **Memory** stores durable records and synthesizes them into readable topic pages, instead of shoving everything into the prompt.
-- **Agents** run a tool loop that can return validated structured output; per-run tool scoping bounds what each may touch.
-- **Tools** are policy-aware. Mutating operations require approval; large integration groups are deferred until the agent loads them.
-- **Streaming** uses per-session SSE with ordered events, resumable cursors, tool lifecycle events, and run/background status.
-- **HTML widgets** let the agent render sandboxed charts, forms, tables, and other rich cards in the desktop chat.
+- `apps/server`: FastAPI backend, agent runtime, memory, slices, tools, integrations, builtin skills, tests, package metadata.
+- `apps/desktop`: Electron client with Home, slice rooms, chat, traces, memory, approvals, settings, integrations, MCP, and widgets.
+- `docs`: Mintlify docs plus internal design and research notes.
+- `tasks`, `notes`: working plans, lessons, project notes.
 
 ## Releasing
 
@@ -120,8 +115,8 @@ Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI 
 
 ## Inspired by
 
-- [letta](https://github.com/letta-ai/letta) — persistent memory and personalized agents
-- [hindsight](https://github.com/vectorize-io/hindsight) — graph memory structure
+- [letta](https://github.com/letta-ai/letta) for persistent memory and personalized agents
+- [hindsight](https://github.com/vectorize-io/hindsight) for graph memory structure
 
 ## License
 
