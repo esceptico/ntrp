@@ -6,6 +6,7 @@ from typing import Any
 from coolname import generate_slug
 
 from ntrp.automation.models import Automation
+from ntrp.automation.output_schemas import resolve_output_schema
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import MessageTrigger, TimeTrigger, Trigger, build_trigger, parse_one
@@ -219,6 +220,7 @@ class AutomationService:
         stop_when: str | None = None,
         max_age_days: int | None = None,
         tool_scope: list[str] | None = None,
+        output_schema: str | None = None,
     ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
         if name is not None:
@@ -242,6 +244,10 @@ class AutomationService:
         if tool_scope is not None:
             # [] clears the scope back to unrestricted; a non-empty list replaces it.
             changes["tool_scope"] = tool_scope or None
+        if output_schema is not None:
+            # "" clears it; a name must exist in the registry.
+            resolve_output_schema(output_schema or None)
+            changes["output_schema"] = output_schema or None
         return changes
 
     @staticmethod
@@ -299,6 +305,7 @@ class AutomationService:
         stop_when: str | None = None,
         max_age_days: int | None = None,
         tool_scope: list[str] | None = None,
+        output_schema: str | None = None,
     ) -> Automation:
         task = await self.get(task_id)
         changes = self._build_metadata_changes(
@@ -312,6 +319,7 @@ class AutomationService:
             stop_when=stop_when,
             max_age_days=max_age_days,
             tool_scope=tool_scope,
+            output_schema=output_schema,
         )
 
         trigger_patch = TriggerPatch(
@@ -379,6 +387,7 @@ class AutomationService:
         parent_fire_at: str | None = None,
         attempt_n: int | None = None,
         tool_scope: list[str] | None = None,
+        output_schema: str | None = None,
         slice_key: str | None = None,
         task_id: str | None = None,
     ) -> Automation | None:
@@ -414,6 +423,7 @@ class AutomationService:
             thread_id = channel.session_id
             read_history = True
 
+        resolve_output_schema(output_schema)
         automation = Automation(
             task_id=task_id,
             name=name,
@@ -434,6 +444,7 @@ class AutomationService:
             idempotency_key=idempotency_key,
             idempotency_scope=idempotency_scope,
             tool_scope=tool_scope,
+            output_schema=output_schema,
         )
 
         if idempotency_key is not None:

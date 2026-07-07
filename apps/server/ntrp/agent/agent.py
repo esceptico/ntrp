@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from judgeval import Tracer
+from pydantic import BaseModel
 
 from ntrp.agent.hooks import AgentHooks
 from ntrp.agent.llm.client import LLMClient
@@ -41,6 +42,9 @@ from ntrp.agent.types.llm import (
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
+from ntrp.logging import get_logger
+
+_logger = get_logger(__name__)
 
 AgentEvent = (
     TextStarted
@@ -119,6 +123,7 @@ class Agent:
         clock: Callable[[], float] = time.monotonic,
         started_at: float | None = None,
         budget: RunBudget | None = None,
+        output_schema: type[BaseModel] | None = None,
     ):
         if max_cost is not None and cost_calculator is None and cost_getter is None:
             raise ValueError("max_cost requires cost_calculator or cost_getter")
@@ -143,6 +148,8 @@ class Agent:
         self._clock = clock
         self._started_at = started_at
         self._budget = budget or RunBudget()
+        self.output_schema = output_schema
+        self._output: dict | None = None
         self._executor = executor
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
@@ -220,6 +227,8 @@ class Agent:
                     if len(messages) > before:
                         continue
                     result_text = (response_message.content or "").strip()
+                    if self.output_schema is not None:
+                        self._output = await self._generate_output(messages)
                     yield self._result(result_text, StopReason.END_TURN, step)
                     return
 
@@ -306,7 +315,32 @@ class Agent:
     def _result(self, text: str, reason: StopReason, step: int, messages: list[dict] | None = None) -> Result:
         if messages is not None and reason != StopReason.END_TURN and not text.strip():
             text = self._fallback_result_text(messages, reason) or text
-        return Result(text=text, stop_reason=reason, steps=step, usage=self._usage)
+        return Result(text=text, stop_reason=reason, steps=step, usage=self._usage, output=self._output)
+
+    async def _generate_output(self, messages: list[dict]) -> dict | None:
+        """AI SDK-style structured output: ONE extra constrained completion
+        over the finished conversation (their `output` option — the docs'
+        `stopWhen + 1` step). Text and object stay separate: the transcript
+        keeps its prose, the caller gets a schema-validated dump. The model's
+        constrained response is a trust boundary — a failure here degrades to
+        no output, never a crash of the run that already produced its text."""
+        assert self.output_schema is not None
+        try:
+            response = await self.client.complete(
+                self.model,
+                [*messages, {"role": Role.SYSTEM, "content": "Return the structured result for this run now."}],
+                response_format=self.output_schema,
+            )
+            content = response.choices[0].message.content
+            parsed = (
+                content
+                if isinstance(content, self.output_schema)
+                else self.output_schema.model_validate_json(content)
+            )
+            return parsed.model_dump()
+        except Exception:
+            _logger.warning("Structured output step failed for schema %s", self.output_schema.__name__, exc_info=True)
+            return None
 
     def _mark_provider_loaded_tools(
         self,

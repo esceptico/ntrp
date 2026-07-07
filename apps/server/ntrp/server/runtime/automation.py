@@ -114,7 +114,7 @@ class AutomationRuntime:
                 self.slice_asks,
                 key,
                 slice_.page_path,
-                run_completed.result or "",
+                run_completed.structured_output,
                 run_ref=f"run:{run_completed.run_id}",
             )
             await self.scheduler.emit_automation_event(SlicesChangedEvent(keys=[key]))
@@ -307,6 +307,7 @@ class AutomationRuntime:
                     triggers=[trigger],
                     auto_approve=slice_.autonomy == "observe",
                     tool_scope=OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None,
+                    output_schema="slice_ask",
                     thread_id=channel.session_id,
                     read_history=True,
                 )
@@ -326,6 +327,7 @@ class AutomationRuntime:
                 existing.description = slice_agent_instructions(slice_)
                 existing.auto_approve = slice_.autonomy == "observe"
                 existing.tool_scope = OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None
+                existing.output_schema = "slice_ask"
                 existing.triggers = [time_trigger]
                 existing.next_run_at = time_trigger.next_run(datetime.now(UTC))
                 existing.last_result = None  # pre-rebuild diagnostics would read as current state
@@ -344,6 +346,11 @@ class AutomationRuntime:
                 # First passes named the automation after its task_id; the row
                 # is an ordinary automation, so it gets an ordinary name.
                 existing.name = channel_name
+                changed = True
+            if existing.output_schema is None:
+                # Pre-structured-output rows nominated asks via a fenced json
+                # convention; upgrade them to the schema the hook now expects.
+                existing.output_schema = "slice_ask"
                 changed = True
             if existing.last_result and "without a report" in existing.last_result:
                 existing.last_result = None

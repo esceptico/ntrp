@@ -3,9 +3,12 @@ page arrives via the SLICE system block, not the prompt), validated one-ask
 nomination, and the outbox-driven ask sync where every run re-decides the
 slice's single ask."""
 
+import pytest
+from pydantic import ValidationError
+
 from ntrp.slices.agent import (
     OBSERVE_TOOL_SCOPE,
-    parse_agent_ask,
+    SliceAskNomination,
     record_slice_run,
     slice_agent_instructions,
 )
@@ -25,24 +28,19 @@ def test_instructions_state_contract_and_one_ask_protocol():
     assert "stale decision-ready open loop" in text  # nomination calibration
 
 
-def test_parse_agent_ask_extracts_json_block_or_none():
-    out = 'Reviewed the domain.\n```json\n{"ask": {"text": "Review counsel memo", "kind": "review"}}\n```'
-    assert parse_agent_ask(out) == {"text": "Review counsel memo", "kind": "review"}
-    assert parse_agent_ask("All quiet, nothing needs the user.") is None
-
-
-def test_parse_agent_ask_validates_at_the_trust_boundary():
-    bad_kind = '```json\n{"ask": {"text": "x", "kind": "urgent"}}\n```'
-    assert parse_agent_ask(bad_kind) is None
-    empty_text = '```json\n{"ask": {"text": "  ", "kind": "review"}}\n```'
-    assert parse_agent_ask(empty_text) is None
+def test_nomination_schema_validates_at_the_trust_boundary():
+    ok = SliceAskNomination.model_validate({"ask": {"text": "Review counsel memo", "kind": "review"}})
+    assert ok.ask.kind == "review"
+    assert SliceAskNomination.model_validate({"ask": None}).ask is None
+    with pytest.raises(ValidationError):
+        SliceAskNomination.model_validate({"ask": {"text": "x", "kind": "urgent"}})
 
 
 def test_record_slice_run_nominates_and_supersedes(tmp_path):
     store = AskStore(tmp_path / "state.json")
     record_slice_run(
         store, "o-1a", "topics/o-1a.md",
-        'Did things.\n```json\n{"ask": {"text": "First ask", "kind": "review"}}\n```',
+        {"ask": {"text": "First ask", "kind": "review"}},
         run_ref="run:r1",
     )
     first = store.list("o-1a")
@@ -50,7 +48,7 @@ def test_record_slice_run_nominates_and_supersedes(tmp_path):
 
     record_slice_run(
         store, "o-1a", "topics/o-1a.md",
-        '```json\n{"ask": {"text": "Second ask", "kind": "decide"}}\n```',
+        {"ask": {"text": "Second ask", "kind": "decide"}},
         run_ref="run:r2",
     )
     active = store.list("o-1a")
@@ -61,11 +59,19 @@ def test_record_slice_run_silence_retires_previous(tmp_path):
     store = AskStore(tmp_path / "state.json")
     record_slice_run(
         store, "o-1a", "topics/o-1a.md",
-        '```json\n{"ask": {"text": "Old ask", "kind": "review"}}\n```',
+        {"ask": {"text": "Old ask", "kind": "review"}},
         run_ref="run:r1",
     )
-    record_slice_run(store, "o-1a", "topics/o-1a.md", "Nothing needs the user today.", run_ref="run:r2")
+    record_slice_run(store, "o-1a", "topics/o-1a.md", {"ask": None}, run_ref="run:r2")
     assert store.list("o-1a") == []  # the agent re-decided: silence
+    # A failed constrained step (None) is silence too, never a crash.
+    record_slice_run(
+        store, "o-1a", "topics/o-1a.md",
+        {"ask": {"text": "Back", "kind": "review"}},
+        run_ref="run:r3",
+    )
+    record_slice_run(store, "o-1a", "topics/o-1a.md", None, run_ref="run:r4")
+    assert store.list("o-1a") == []
 
 
 def test_observe_scope_covers_memory_and_read_but_not_action_tools():

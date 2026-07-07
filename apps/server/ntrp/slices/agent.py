@@ -1,16 +1,11 @@
-import json
-import re
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
-from ntrp.logging import get_logger
+from pydantic import BaseModel
+
 from ntrp.slices.asks import AskStore
 from ntrp.slices.models import Ask, Slice
-
-_logger = get_logger(__name__)
-
-_ASK_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
-_VALID_ASK_KINDS = frozenset({"review", "decide", "act", "drift"})
 
 # Observe-mode toolset as DATA: the automation's tool_scope allowlist
 # (visible and editable on the automation itself) instead of a code-side
@@ -37,6 +32,20 @@ _CONTRACT = {
 }
 
 
+class SliceAskDraft(BaseModel):
+    text: str
+    kind: Literal["review", "decide", "act", "drift"]
+
+
+class SliceAskNomination(BaseModel):
+    """The run's structured output (registered as "slice_ask"): at most ONE
+    ask, or null when the day is quiet. Schema-validated by the constrained
+    final step, so the transcript stays prose and the nomination arrives as
+    a guaranteed-shaped object."""
+
+    ask: SliceAskDraft | None
+
+
 def slice_agent_instructions(slice: Slice) -> str:
     """The automation's description = the standing per-turn message. The
     fresh topic page is NOT embedded here — it arrives via the SLICE system
@@ -52,38 +61,19 @@ def slice_agent_instructions(slice: Slice) -> str:
         "Ask-worthy: something new that needs their judgment, a drift between a commitment "
         "and reality, or a stale decision-ready open loop they haven't touched. Routine "
         "tracking is not ask-worthy.\n"
-        "Nominate at most ONE ask — the single highest-leverage item. If something needs "
-        "them, end your reply with exactly one fenced json block:\n"
-        '```json\n{"ask": {"text": "<one sentence>", "kind": "review|decide|act|drift"}}\n```\n'
-        "If nothing needs them, end with no json block — silence is correct on a quiet day."
+        "End with a short prose report. Afterwards you will be asked for a structured "
+        "nomination: at most ONE ask — the single highest-leverage item — or none. "
+        "Silence is correct on a quiet day."
     )
 
 
-def parse_agent_ask(result_text: str) -> dict | None:
-    """Parse the agent's fenced-json ask nomination, validating it at this
-    trust boundary (the model's free-form output). An invalid nomination is
-    treated as silence — logged, never upserted — rather than trusted or
-    defensively patched up."""
-    m = _ASK_BLOCK.search(result_text)
-    if not m:
-        return None
-    ask = json.loads(m.group(1))["ask"]
-    kind = ask.get("kind")
-    text = ask.get("text")
-    if kind not in _VALID_ASK_KINDS:
-        _logger.warning("Slice agent nominated an ask with invalid kind %r; treating as silence", kind)
-        return None
-    if not isinstance(text, str) or not text.strip():
-        _logger.warning("Slice agent nominated an ask with empty/non-str text %r; treating as silence", text)
-        return None
-    return ask
-
-
-def record_slice_run(asks: AskStore, slice_key: str, page_path: str, result_text: str, run_ref: str) -> None:
+def record_slice_run(asks: AskStore, slice_key: str, page_path: str, structured_output: dict | None, run_ref: str) -> None:
     """Post-run ask sync (called from the outbox run-completed pipeline):
     every run re-decides the slice's ONE ask — silence retires the previous
-    nomination just like a new one supersedes it."""
-    nominated = parse_agent_ask(result_text)
+    nomination just like a new one supersedes it. `structured_output` is the
+    schema-validated SliceAskNomination dump from the run (or None when the
+    constrained step failed — treated as silence)."""
+    nominated = (structured_output or {}).get("ask")
     asks.retire_active_agent_asks(slice_key)
     if nominated:
         asks.upsert(

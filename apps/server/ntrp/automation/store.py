@@ -106,6 +106,7 @@ def _row_to_automation(row: dict) -> Automation:
         idempotency_key=row["idempotency_key"],
         idempotency_scope=row["idempotency_scope"],
         tool_scope=json.loads(row["tool_scope"]) if dict(row).get("tool_scope") else None,
+        output_schema=dict(row).get("output_schema"),
     )
 
 
@@ -157,7 +158,8 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     parent_automation_id TEXT,
     idempotency_key TEXT,
     idempotency_scope TEXT,
-    tool_scope TEXT
+    tool_scope TEXT,
+    output_schema TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
@@ -258,12 +260,12 @@ _COLUMNS = (
     "created_at, last_run_at, next_run_at, last_result, running_since, "
     "auto_approve, handler, builtin, cooldown_minutes, "
     "kind, max_iterations, iteration_count, stop_when, max_age_days, "
-    "thread_id, read_history, parent_automation_id, idempotency_key, idempotency_scope, tool_scope"
+    "thread_id, read_history, parent_automation_id, idempotency_key, idempotency_scope, tool_scope, output_schema"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -377,7 +379,8 @@ SET name = ?, description = ?, model = ?, triggers = ?,
     max_iterations = ?, stop_when = ?,
     max_age_days = ?,
     thread_id = ?, read_history = ?,
-    parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?, tool_scope = ?
+    parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?, tool_scope = ?,
+    output_schema = ?
 WHERE task_id = ?
 """
 
@@ -648,7 +651,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 12
+CURRENT_SCHEMA_VERSION = 13
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -1106,6 +1109,15 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await conn.commit()
         _logger.info("Migrated automation store to v12 (tool_scope allowlist)")
 
+    if version < 13:
+        cursor = await conn.execute("PRAGMA table_info(scheduled_tasks)")
+        existing = {row[1] for row in await cursor.fetchall()}
+        if "output_schema" not in existing:
+            await conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN output_schema TEXT")
+        await _set_schema_version(conn, 13)
+        await conn.commit()
+        _logger.info("Migrated automation store to v13 (output_schema)")
+
 
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -1153,6 +1165,7 @@ class AutomationStore:
                 automation.idempotency_key,
                 automation.idempotency_scope,
                 json.dumps(automation.tool_scope) if automation.tool_scope else None,
+                automation.output_schema,
             ),
         )
         await self.conn.commit()
@@ -1302,6 +1315,7 @@ class AutomationStore:
                 automation.idempotency_key,
                 automation.idempotency_scope,
                 json.dumps(automation.tool_scope) if automation.tool_scope else None,
+                automation.output_schema,
                 automation.task_id,
             ),
         )
@@ -1495,6 +1509,7 @@ class AutomationStore:
                     automation.idempotency_key,
                     automation.idempotency_scope,
                     json.dumps(automation.tool_scope) if automation.tool_scope else None,
+                    automation.output_schema,
                 ),
             )
             await self.conn.commit()

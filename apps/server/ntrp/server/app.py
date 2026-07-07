@@ -6,9 +6,11 @@ from importlib.metadata import version
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from ntrp.agent import Role
 from ntrp.automation.models import Automation
+from ntrp.automation.output_schemas import resolve_output_schema
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
 from ntrp.core.tool_result_files import prune_offload_store
@@ -201,6 +203,7 @@ async def lifespan(app: FastAPI):
         client_id: str | None = None,
         skip_approvals: bool | None = False,
         tool_scope: tuple[str, ...] | None = None,
+        output_schema: type[BaseModel] | None = None,
     ) -> str | None:
         chat_model = await runtime.resolve_session_chat_model(session_id)
         result = await submit_chat_message(
@@ -213,6 +216,7 @@ async def lifespan(app: FastAPI):
             client_id=client_id,
             session_service=runtime.session_service,
             tool_scope=tool_scope,
+            output_schema=output_schema,
         )
         return result.get("run_id") if isinstance(result, dict) else None
 
@@ -240,6 +244,7 @@ async def lifespan(app: FastAPI):
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
             skip_approvals=automation.auto_approve,
             tool_scope=tuple(automation.tool_scope) if automation.tool_scope else None,
+            output_schema=resolve_output_schema(automation.output_schema),
         )
 
     runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
@@ -274,6 +279,7 @@ async def lifespan(app: FastAPI):
                 skip_approvals=automation.auto_approve,
                 automation_id=automation.task_id,
                 tool_scope=tuple(automation.tool_scope) if automation.tool_scope else None,
+                output_schema=resolve_output_schema(automation.output_schema),
             )
 
             deps = runtime.build_operator_deps()

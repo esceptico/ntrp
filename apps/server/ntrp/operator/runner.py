@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 
 from coolname import generate_slug
+from pydantic import BaseModel
 
 from ntrp.agent import Agent, Result, Role, Usage
 from ntrp.context.models import SessionState
@@ -55,6 +56,10 @@ class RunRequest:
     # Allowlist patterns ('*', exact, 'slack_*') applied as the hard outer
     # gate over whichever pool the flags above select. None = unrestricted.
     tool_scope: tuple[str, ...] | None = None
+    # Pydantic schema for AI SDK-style structured output: the run ends with
+    # one constrained completion whose validated dump rides RunResult.structured
+    # and RunCompleted.structured_output.
+    output_schema: type[BaseModel] | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class RunResult:
     run_id: str
     output: str | None
     usage: Usage
+    structured: dict | None = None
 
 
 async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list[dict], str, str]:
@@ -118,6 +124,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         session_state=session_state,
         run_id=run_id,
         approval_controls=ApprovalControls(skip_approvals=request.skip_approvals),
+        output_schema=request.output_schema,
     )
 
     messages = [
@@ -135,6 +142,7 @@ async def _publish_completed(
     messages: list,
     usage: Usage,
     result: str | None,
+    structured_output: dict | None = None,
 ) -> None:
     event = RunCompleted(
         run_id=run_id,
@@ -142,6 +150,7 @@ async def _publish_completed(
         messages=tuple(messages),
         usage=usage,
         result=result,
+        structured_output=structured_output,
     )
     if deps.enqueue_run_completed:
         await deps.enqueue_run_completed(event)
@@ -158,9 +167,11 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     activate_tracing(session_id, tags=["automation", request.source_id])
 
     agent_result = await _run_agent(agent, messages, session_id, request.source_id)
-    await _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
+    await _publish_completed(
+        deps, run_id, session_id, messages, agent_result.usage, agent_result.text, agent_result.output
+    )
 
-    return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)
+    return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage, structured=agent_result.output)
 
 
 @observed_trace("automation", tags="automation")
@@ -171,16 +182,18 @@ async def _consume_agent_stream(
     task_id: str,
     session_id: str,
     source_id: str,
-) -> tuple[str | None, Usage]:
+) -> tuple[str | None, Usage, dict | None]:
     activate_tracing(session_id, tags=["automation", source_id])
     result_text: str | None = None
     usage = Usage()
+    structured: dict | None = None
     gen = agent.stream(messages)
     try:
         async for item in gen:
             if isinstance(item, Result):
                 result_text = item.text
                 usage = item.usage
+                structured = item.output
             else:
                 sse = agent_event_to_sse(item)
                 if isinstance(sse, ToolCallStartEvent):
@@ -192,7 +205,7 @@ async def _consume_agent_stream(
                     await bus.emit(AutomationProgressEvent(task_id=task_id, status=status))
     except asyncio.CancelledError:
         pass
-    return result_text, usage
+    return result_text, usage, structured
 
 
 async def run_agent_streaming(
@@ -204,8 +217,10 @@ async def run_agent_streaming(
     agent, messages, run_id, session_id = await _prepare(deps, request)
     activate_tracing(session_id, tags=["automation", request.source_id])
 
-    result_text, usage = await _consume_agent_stream(agent, messages, bus, task_id, session_id, request.source_id)
+    result_text, usage, structured = await _consume_agent_stream(
+        agent, messages, bus, task_id, session_id, request.source_id
+    )
 
-    await _publish_completed(deps, run_id, session_id, messages, usage, result_text)
+    await _publish_completed(deps, run_id, session_id, messages, usage, result_text, structured)
 
-    return RunResult(run_id=run_id, output=result_text, usage=usage)
+    return RunResult(run_id=run_id, output=result_text, usage=usage, structured=structured)

@@ -11,8 +11,8 @@ from ntrp.events.sse import (
     TextMessageStartEvent,
     agent_events_to_sse,
 )
-from ntrp.server.state import RunStatus
 from ntrp.observability import activate_tracing, observed_trace
+from ntrp.server.state import RunStatus
 
 if TYPE_CHECKING:
     from ntrp.agent import Agent
@@ -98,6 +98,7 @@ async def run_agent_loop(
                     break
                 result = item.text
                 ctx.run.stop_reason = item.stop_reason.value
+                ctx.run.structured_output = item.output
             else:
                 for sse in agent_events_to_sse(item):
                     if isinstance(sse, TextMessageEndEvent):

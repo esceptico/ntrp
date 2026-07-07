@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from time import monotonic
 from typing import TYPE_CHECKING, Self
 
+from pydantic import BaseModel
+
 from ntrp.agent import Agent, AgentHooks, RunBudget
 from ntrp.agent.ledger import SharedLedger
 from ntrp.context.models import ProjectContext, SessionState
@@ -90,6 +92,7 @@ def create_agent(
     project_context: ProjectContext | None = None,
     token_budget: int | None = None,
     child_io_factory: ChildIOFactory | None = None,
+    output_schema: type[BaseModel] | None = None,
 ) -> Agent:
     started_at = monotonic()
     # Per-turn directive ("+500k") overrides the configured default ceiling.
@@ -184,6 +187,7 @@ def create_agent(
         cost_getter=(lambda: parent_tracker.cost) if parent_tracker is not None else None,
         started_at=started_at,
         budget=budget,
+        output_schema=output_schema,
     )
 
 

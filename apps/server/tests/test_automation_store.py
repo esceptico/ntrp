@@ -677,3 +677,17 @@ async def test_seed_builtins_respects_user_cadence_and_pause(automation_store: A
     kept = await automation_store.get(BUILTIN_AUTOMATION_SUGGESTER_DAILY_ID)
     assert kept.enabled is False
     assert [(t.at.hour, t.at.minute) for t in kept.triggers] == [(21, 30)]
+
+
+@pytest.mark.asyncio
+async def test_output_schema_round_trips(automation_store: AutomationStore):
+    from ntrp.automation.output_schemas import resolve_output_schema
+
+    auto = dc_replace(_automation("with-schema"), output_schema="slice_ask")
+    await automation_store.save(auto)
+    loaded = await automation_store.get("with-schema")
+    assert loaded.output_schema == "slice_ask"
+    assert resolve_output_schema("slice_ask") is not None
+    assert resolve_output_schema(None) is None
+    with pytest.raises(ValueError, match="slice_ask"):
+        resolve_output_schema("nope")

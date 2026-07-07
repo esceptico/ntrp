@@ -14,6 +14,7 @@ def run_completed_payload(event: RunCompleted) -> dict:
         "usage": asdict(event.usage),
         "result": event.result,
         "source_refs": list(event.source_refs),
+        "structured_output": event.structured_output,
     }
 
 
@@ -31,4 +32,5 @@ def run_completed_from_payload(payload: dict) -> RunCompleted:
         ),
         result=payload.get("result"),
         source_refs=tuple(payload.get("source_refs") or ()),
+        structured_output=payload.get("structured_output"),
     )

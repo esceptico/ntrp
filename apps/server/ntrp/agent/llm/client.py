@@ -1,6 +1,8 @@
 from collections.abc import AsyncGenerator
 from typing import Protocol
 
+from pydantic import BaseModel
+
 from ntrp.agent.types.llm import CompletionResponse, ProviderToolCall, ReasoningContentDelta, ToolCallStreamDelta
 from ntrp.agent.types.tool_choice import ToolChoice
 
@@ -23,4 +25,5 @@ class LLMClient(Protocol):
         messages: list[dict],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        response_format: type[BaseModel] | None = None,
     ) -> CompletionResponse: ...

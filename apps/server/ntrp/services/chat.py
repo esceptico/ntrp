@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from inspect import Parameter, signature
 from uuid import uuid4
 
+from pydantic import BaseModel
+
 from ntrp.agent import Agent, Role
 from ntrp.agent.types.events import Result, ToolCompleted
 from ntrp.config import get_config
@@ -167,6 +169,7 @@ class ChatContext:
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
     dispatch_session_message: Callable[[str, str, str | None, bool | None], Awaitable[object]] | None = None
     memory_curator: object | None = None
+    output_schema: type[BaseModel] | None = None
 
 
 async def _apply_generated_session_name(ctx: ChatContext, bus: SessionBus) -> None:
@@ -564,6 +567,7 @@ async def prepare_chat(
     loop_task_id: str | None = None,
     emit: Callable[[object], Awaitable[None]] | None = None,
     tool_scope: tuple[str, ...] | None = None,
+    output_schema: type[BaseModel] | None = None,
 ) -> ChatContext:
     registry = deps.run_registry
 
@@ -670,6 +674,7 @@ async def prepare_chat(
         enqueue_run_completed=deps.enqueue_run_completed,
         dispatch_session_message=deps.dispatch_session_message,
         memory_curator=deps.memory_curator,
+        output_schema=output_schema,
     )
 
 
@@ -758,6 +763,7 @@ async def submit_chat_message(
     client_id: str | None = None,
     session_service: SessionService | None = None,
     tool_scope: tuple[str, ...] | None = None,
+    output_schema: type[BaseModel] | None = None,
 ) -> dict[str, str]:
     load_session = getattr(session_service, "load", None)
     if load_session is not None and await load_session(session_id) is None:
@@ -775,6 +781,7 @@ async def submit_chat_message(
             client_id=client_id,
             session_service=session_service,
             tool_scope=tool_scope,
+            output_schema=output_schema,
         )
 
 
@@ -791,6 +798,7 @@ async def _submit_chat_message_locked(
     client_id: str | None = None,
     session_service: SessionService | None = None,
     tool_scope: tuple[str, ...] | None = None,
+    output_schema: type[BaseModel] | None = None,
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
     is_meta_client = _is_meta_client_id(client_id)
@@ -886,6 +894,7 @@ async def _submit_chat_message_locked(
         loop_task_id=loop_task_id,
         emit=bus.emit,
         tool_scope=tool_scope,
+        output_schema=output_schema,
     )
     try:
         await _record_run_started(
@@ -1111,8 +1120,12 @@ async def _drain_backgrounded(
                             session_id=ctx.session_state.session_id,
                             messages=tuple(ctx.run.messages),
                             usage=ctx.run.usage,
-                            result=drain_result,
+                            # drain_result is the agent's Result object — passing it
+                            # whole made the payload non-JSON-serializable, so every
+                            # backgrounded run silently lost its run-completed event.
+                            result=drain_result.text if drain_result else None,
                             source_refs=tuple(ctx.run.source_refs),
+                            structured_output=drain_result.output if drain_result else None,
                         )
                     )
                 except Exception:
@@ -1371,6 +1384,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
                 project_context=ctx.project_context,
                 token_budget=run.token_budget,
                 child_io_factory=child_io_factory,
+                output_schema=ctx.output_schema,
             )
 
         async def _track_response(response) -> None:
@@ -1649,6 +1663,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus, buses: BusRegistry) -> Non
                         usage=run.usage,
                         result=result,
                         source_refs=tuple(run.source_refs),
+                        structured_output=run.structured_output,
                     )
                     if run_finished_event is not None:
                         await bus.emit(run_finished_event)
