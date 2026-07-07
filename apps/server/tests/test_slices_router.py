@@ -50,9 +50,16 @@ def client(tmp_path: Path):
 
     test_app = FastAPI()
     test_app.include_router(slices_router)
+    from ntrp.slices.suggester import SliceSuggestionStore
+
+    suggestions = SliceSuggestionStore(tmp_path / "suggestions.json")
+    suggestions.replace_suggestions(
+        [{"id": "sg1", "key": "health", "title": "Health", "page_path": "topics/health.md", "rationale": "r", "created_at": "2026-07-07"}]
+    )
     test_app.state.slice_service = svc
     test_app.state.emit_slices_changed = _emit_slices_changed
     test_app.state.hydrate_slice_snapshot = _hydrate_slice_snapshot
+    test_app.state.slice_suggestions = suggestions
 
     with TestClient(test_app) as c:
         yield c, svc, emitted
@@ -187,3 +194,14 @@ def test_post_duplicate_key_409(client):
     res = c.post("/slices", json={"key": "o-1a", "title": "O-1A", "page_path": "topics/o-1a.md"})
     assert res.status_code == 409
     assert emitted == []
+
+
+def test_overview_includes_suggestions_and_dismiss_persists(client):
+    c, *_ = client
+    body = c.get("/slices").json()
+    assert [x["key"] for x in body["suggested"]] == ["health"]
+
+    res = c.post("/slices/suggestions/health/dismiss")
+    assert res.status_code == 200
+    body = c.get("/slices").json()
+    assert body["suggested"] == []  # dismissed persists, never re-suggested

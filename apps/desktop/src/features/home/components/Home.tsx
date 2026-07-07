@@ -99,7 +99,7 @@ export function Home() {
           </div>
         </div>
       )}
-        <SlicesStrip slices={slices} />
+        <SlicesStrip slices={slices} suggested={overview?.suggested} />
       </div>
     </motion.div>
   );

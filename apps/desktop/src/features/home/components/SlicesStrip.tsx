@@ -1,17 +1,30 @@
 import { useRef } from "react";
-import type { SliceSummary } from "@/api/slices";
+import { Plus, X } from "lucide-react";
+import type { SliceSuggestion, SliceSummary } from "@/api/slices";
 import { useStore } from "@/stores";
+import { dismissSliceSuggestion, promoteSuggestedSlice } from "@/actions/slices";
 import { TravelingHighlight } from "@/components/ui/TravelingHighlight";
+import { ICON } from "@/lib/icons";
 
 /** Horizontal strip of every slice as a tonal chip: a live dot marks slices
  *  with active asks or a running agent; quiet slices sit at 55% opacity so
- *  the live ones read as "where attention currently is." TravelingHighlight
- *  rides hover via real DOM focus/pointer state against the row list. */
-export function SlicesStrip({ slices }: { slices: SliceSummary[] }) {
+ *  the live ones read as "where attention currently is."
+ *
+ *  Suggested slices (the daily suggester's picks from unpromoted topic
+ *  pages) render as ghost chips at the end — dashed, with a plus; click
+ *  promotes the page into a real slice, the ✕ dismisses it permanently.
+ *  The rationale rides the tooltip so accepting is an informed one-click. */
+export function SlicesStrip({
+  slices,
+  suggested = [],
+}: {
+  slices: SliceSummary[];
+  suggested?: SliceSuggestion[];
+}) {
   const openSlice = useStore((s) => s.openSlice);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  if (slices.length === 0) return null;
+  if (slices.length === 0 && suggested.length === 0) return null;
 
   return (
     <div className="grid gap-2">
@@ -32,6 +45,31 @@ export function SlicesStrip({ slices }: { slices: SliceSummary[] }) {
             )}
             <span className="truncate">{slice.title}</span>
           </button>
+        ))}
+        {suggested.map((s) => (
+          <span
+            key={s.key}
+            className="relative z-[1] inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-line pr-1.5 pl-3 text-[12.5px] text-muted"
+            title={s.rationale}
+          >
+            <button
+              type="button"
+              onClick={() => void promoteSuggestedSlice(s.key, s.title, s.page_path)}
+              className="inline-flex items-center gap-1 hover:text-ink"
+              title={`${s.rationale} — click to add`}
+            >
+              <Plus size={ICON.XS} strokeWidth={2} />
+              <span className="truncate">{s.title}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void dismissSliceSuggestion(s.key)}
+              aria-label={`Dismiss ${s.title} suggestion`}
+              className="grid size-5 place-items-center rounded-full text-whisper hover:bg-surface-soft hover:text-ink-soft"
+            >
+              <X size={ICON.XS} strokeWidth={2} />
+            </button>
+          </span>
         ))}
       </div>
     </div>

@@ -8,7 +8,14 @@ from ntrp.automation.service import AutomationService
 from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
 from ntrp.automation.triggers import TimeTrigger
 from ntrp.config import Config
-from ntrp.constants import SLICE_AGENT_DAILY_AT, SLICE_AGENT_HANDLER, SLICES_FILE, SLICES_STATE_FILE
+from ntrp.constants import (
+    BUILTIN_SLICE_SUGGESTER_ID,
+    SLICE_AGENT_DAILY_AT,
+    SLICE_AGENT_HANDLER,
+    SLICES_FILE,
+    SLICES_STATE_FILE,
+    SLICES_SUGGESTIONS_FILE,
+)
 from ntrp.events.sse import AutomationSuggestionsUpdatedEvent, SlicesChangedEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.logging import get_logger
@@ -21,6 +28,7 @@ from ntrp.server.stores import Stores
 from ntrp.slices.agent import OBSERVE_TOOL_SCOPE, record_slice_run, slice_agent_instructions
 from ntrp.slices.asks import AskStore
 from ntrp.slices.registry import SliceRegistry
+from ntrp.slices.suggester import SliceSuggester, SliceSuggestionStore
 
 _logger = get_logger(__name__)
 
@@ -60,6 +68,7 @@ class AutomationRuntime:
         self.build_operator_deps = build_operator_deps
         self.slice_registry = SliceRegistry(config.ntrp_dir / SLICES_FILE)
         self.slice_asks = AskStore(config.ntrp_dir / SLICES_STATE_FILE)
+        self.slice_suggestions = SliceSuggestionStore(config.ntrp_dir / SLICES_SUGGESTIONS_FILE)
         self.scheduler = Scheduler(
             store=stores.automations,
             build_deps=build_operator_deps,
@@ -131,8 +140,13 @@ class AutomationRuntime:
             "memory_retention",
             self._build_memory_retention_handler(),
         )
+        self.scheduler.register_handler(
+            "slice_suggester_daily",
+            self._build_slice_suggester_handler(),
+        )
         await seed_builtins(self.stores.automations)
         await self._seed_slice_automations()
+        await self._kick_first_slice_suggestion()
         await compile_schedules_to_automations(".", self.stores.automations)
         await self.automation_service.backfill_channels()
         self.scheduler.start()
@@ -233,6 +247,32 @@ class AutomationRuntime:
             return report.summary() + detail
 
         return handler
+
+    def _build_slice_suggester_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            cheap_llm = self.get_cheap_llm()
+            if cheap_llm is None:
+                return "slice suggester unavailable (no cheap model configured)"
+            suggester = SliceSuggester(
+                registry=self.slice_registry,
+                vault_dir=self.config.memory_artifacts_dir,
+                store=self.slice_suggestions,
+                cheap_llm=cheap_llm,
+                model=self.cheap_model,
+            )
+            return await suggester.run()
+
+        return handler
+
+    async def _kick_first_slice_suggestion(self) -> None:
+        """Don't make a fresh install wait a day for its first suggestions:
+        if the store has never been written, pull the builtin's next run to
+        now — the scheduler fires it within its normal tick."""
+        if self.slice_suggestions.exists():
+            return
+        auto = await self.stores.automations.get(BUILTIN_SLICE_SUGGESTER_ID)
+        if auto and auto.enabled:
+            await self.stores.automations.set_next_run(BUILTIN_SLICE_SUGGESTER_ID, datetime.now(UTC))
 
     @staticmethod
     def _slice_run_at(index: int) -> str:

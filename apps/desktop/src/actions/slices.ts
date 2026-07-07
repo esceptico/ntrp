@@ -1,4 +1,6 @@
-import { fetchSlicesOverview as fetchSlicesOverviewApi, fetchSliceDetail as fetchSliceDetailApi, resolveAsk as resolveAskApi, updateSliceAutonomy as updateSliceAutonomyApi } from "@/api/slices";
+import {
+  createSlice as createSliceApi,
+  dismissSliceSuggestion as dismissSliceSuggestionApi, fetchSlicesOverview as fetchSlicesOverviewApi, fetchSliceDetail as fetchSliceDetailApi, resolveAsk as resolveAskApi, updateSliceAutonomy as updateSliceAutonomyApi } from "@/api/slices";
 import { getState } from "@/stores";
 
 export async function fetchSlicesOverview(): Promise<void> {
@@ -27,4 +29,16 @@ export async function updateSliceAutonomy(key: string, autonomy: "observe" | "ac
   const s = getState();
   const record = await updateSliceAutonomyApi(s.config, key, autonomy);
   s.sliceAutonomyUpdated(key, record.autonomy);
+}
+
+export async function promoteSuggestedSlice(key: string, title: string, pagePath: string): Promise<void> {
+  const s = getState();
+  await createSliceApi(s.config, key, title, pagePath);
+  await fetchSlicesOverview();
+}
+
+export async function dismissSliceSuggestion(key: string): Promise<void> {
+  const s = getState();
+  await dismissSliceSuggestionApi(s.config, key);
+  await fetchSlicesOverview();
 }

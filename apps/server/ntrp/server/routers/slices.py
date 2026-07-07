@@ -34,7 +34,16 @@ async def list_slices(request: Request):
     await request.app.state.hydrate_slice_snapshot()
     svc = _svc(request)
     svc.refresh_mechanical()
-    return svc.overview()
+    overview = svc.overview()
+    existing = {s["key"] for s in overview["slices"]}
+    overview["suggested"] = request.app.state.slice_suggestions.list(exclude_keys=existing)
+    return overview
+
+
+@router.post("/suggestions/{key}/dismiss")
+async def dismiss_suggestion(request: Request, key: str):
+    request.app.state.slice_suggestions.dismiss(key)
+    return {"dismissed": key}
 
 
 @router.get("/{key}")

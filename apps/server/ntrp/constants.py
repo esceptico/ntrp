@@ -222,5 +222,8 @@ assert AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES <= MONITOR_EVENT_APPROA
 
 SLICES_FILE = "slices.json"  # under the ~/.ntrp dir
 SLICES_STATE_FILE = "slices-state.json"
+SLICES_SUGGESTIONS_FILE = "slices-suggestions.json"
+BUILTIN_SLICE_SUGGESTER_ID = "builtin-slice-suggester"
+SLICE_SUGGESTER_DAILY_AT = "07:15"
 SLICE_AGENT_HANDLER = "slice_agent"
 SLICE_AGENT_DAILY_AT = "06:30"

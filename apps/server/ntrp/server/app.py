@@ -173,6 +173,7 @@ async def lifespan(app: FastAPI):
     def _slice_sessions(key: str) -> list[dict]:
         return [row for row in slice_snapshot["sessions"] if row["slice_key"] == key]
 
+    app.state.slice_suggestions = runtime.automation.slice_suggestions
     app.state.slice_service = SliceService(
         registry=slice_registry,
         asks=slice_asks,

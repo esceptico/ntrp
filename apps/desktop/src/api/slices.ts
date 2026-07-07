@@ -22,9 +22,19 @@ export interface SliceAsk {
   provenance?: string | null;
 }
 
+export interface SliceSuggestion {
+  id: string;
+  key: string;
+  title: string;
+  page_path: string;
+  rationale: string;
+  created_at: string;
+}
+
 export interface SlicesOverview {
   slices: SliceSummary[];
   focus: SliceAsk[];
+  suggested?: SliceSuggestion[];
 }
 
 export interface SliceDetail {
@@ -82,5 +92,23 @@ export async function updateSliceAutonomy(
   return apiWithConfig<SliceRegistryRecord>(config, `/slices/${encodeURIComponent(key)}`, {
     method: "PUT",
     body: JSON.stringify({ autonomy }),
+  });
+}
+
+export async function createSlice(
+  config: AppConfig,
+  key: string,
+  title: string,
+  pagePath: string,
+): Promise<void> {
+  await apiWithConfig(config, "/slices", {
+    method: "POST",
+    body: JSON.stringify({ key, title, page_path: pagePath }),
+  });
+}
+
+export async function dismissSliceSuggestion(config: AppConfig, key: string): Promise<void> {
+  await apiWithConfig(config, `/slices/suggestions/${encodeURIComponent(key)}/dismiss`, {
+    method: "POST",
   });
 }
