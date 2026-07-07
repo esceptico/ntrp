@@ -3,24 +3,22 @@ from datetime import UTC, datetime
 
 from ntrp.agent_surface.schedules import compile_schedules_to_automations
 from ntrp.automation.builtins import seed_builtins
-from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.suggestions import AutomationSuggester, AutomationSuggestion
 from ntrp.automation.triggers import TimeTrigger
 from ntrp.config import Config
 from ntrp.constants import SLICE_AGENT_DAILY_AT, SLICE_AGENT_HANDLER, SLICES_FILE, SLICES_STATE_FILE
-from ntrp.events.sse import AutomationSuggestionsUpdatedEvent
+from ntrp.events.sse import AutomationSuggestionsUpdatedEvent, SlicesChangedEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.logging import get_logger
-from ntrp.memory.pages import Page, parse_page
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
 from ntrp.server.runtime.outbox import RuntimeOutbox
 from ntrp.server.stores import Stores
-from ntrp.slices.agent import run_slice_agent
+from ntrp.slices.agent import OBSERVE_TOOL_SCOPE, record_slice_run, slice_agent_instructions
 from ntrp.slices.asks import AskStore
 from ntrp.slices.registry import SliceRegistry
 
@@ -78,6 +76,7 @@ class AutomationRuntime:
             scheduler=self.scheduler,
             indexer=indexer,
             get_chat_connector=get_chat_connector,
+            on_slice_run=self._on_slice_run_completed,
         )
         self.monitor: Monitor | None = None
 
@@ -86,6 +85,30 @@ class AutomationRuntime:
             await self.monitor.stop()
         await self.outbox_runtime.stop()
         await self.scheduler.stop()
+
+    async def _on_slice_run_completed(self, run_completed) -> None:
+        """Ask sync for slice channel runs: when a completed run's session
+        belongs to a slice:* automation, every run re-decides the slice's one
+        ask (record_slice_run parses the fenced nomination; silence retires
+        the previous one). Rides the outbox — the designed post-run pipeline
+        — instead of a scheduler special case."""
+        autos = await self.stores.automations.list_session_bound_by_session(run_completed.session_id)
+        for auto in autos:
+            if not auto.name.startswith("slice:"):
+                continue
+            key = auto.name.removeprefix("slice:")
+            try:
+                slice_ = self.slice_registry.get(key)
+            except KeyError:
+                continue
+            record_slice_run(
+                self.slice_asks,
+                key,
+                slice_.page_path,
+                run_completed.result or "",
+                run_ref=f"run:{run_completed.run_id}",
+            )
+            await self.scheduler.emit_automation_event(SlicesChangedEvent(keys=[key]))
 
     async def start_scheduler(self) -> None:
         self.scheduler.register_handler(
@@ -108,11 +131,6 @@ class AutomationRuntime:
             "memory_retention",
             self._build_memory_retention_handler(),
         )
-        self.scheduler.register_handler(
-            SLICE_AGENT_HANDLER,
-            self._build_slice_agent_handler(),
-        )
-
         await seed_builtins(self.stores.automations)
         await self._seed_slice_automations()
         await compile_schedules_to_automations(".", self.stores.automations)
@@ -216,34 +234,6 @@ class AutomationRuntime:
 
         return handler
 
-    def _load_slice_page(self, page_path: str) -> Page:
-        full_path = self.config.memory_artifacts_dir / page_path
-        text = full_path.read_text(encoding="utf-8") if full_path.exists() else ""
-        return parse_page(text)
-
-    @staticmethod
-    def _slice_key_from_task_id(task_id: str) -> str:
-        prefix = "slice:"
-        if not task_id.startswith(prefix):
-            raise RuntimeError(f"Slice agent automation task_id '{task_id}' missing '{prefix}' prefix")
-        return task_id[len(prefix) :]
-
-    def _build_slice_agent_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            task_id = (context or {})["task_id"]
-            key = self._slice_key_from_task_id(task_id)
-            slice_ = self.slice_registry.get(key)
-            page = self._load_slice_page(slice_.page_path)
-            automation = await self.stores.automations.get(task_id)
-            recent: list[dict] = []
-            if automation and automation.last_run_at:
-                recent = [{"event": "memory_changed", "path": slice_.page_path}]
-            return await run_slice_agent(
-                self.build_operator_deps(), slice_, page, self.slice_asks, recent,
-            )
-
-        return handler
-
     @staticmethod
     def _slice_run_at(index: int) -> str:
         """Stagger the daily slots 5 minutes apart. Identical times made all
@@ -254,50 +244,45 @@ class AutomationRuntime:
         return f"{total // 60 % 24:02d}:{total % 60:02d}"
 
     async def _seed_slice_automations(self) -> None:
-        now = datetime.now(UTC)
+        """Slice agents are ordinary CHANNEL automations — created through
+        AutomationService.create like everything else: a slice-tagged channel
+        session owns each agent's runs (visible transcript, replyable,
+        approvals surface in the session), iteration mode gives run-to-run
+        memory, and the observe contract lives in tool_scope as editable
+        data. Also migrates rows from the earlier handler-based shape."""
         for index, slice_ in enumerate(self.slice_registry.load()):
             task_id = f"slice:{slice_.key}"
             run_at = self._slice_run_at(index)
+            trigger = {"type": "time", "at": run_at, "days": "daily"}
             existing = await self.stores.automations.get(task_id)
-            if existing:
-                # Repair rows from earlier seed shapes: drop the inert
-                # memory_changed EventTrigger, and re-stagger identical
-                # 06:30 slots.
-                live = [t for t in existing.triggers if getattr(t, "type", None) != "event"]
-                needs_stagger = any(
-                    getattr(t, "type", None) == "time" and getattr(t, "at", None) != run_at for t in live
+            if existing is None:
+                await self.automation_service.create(
+                    name=task_id,
+                    description=slice_agent_instructions(slice_),
+                    triggers=[trigger],
+                    auto_approve=slice_.autonomy == "observe",
+                    tool_scope=OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None,
+                    slice_key=slice_.key,
                 )
-                if len(live) != len(existing.triggers) or needs_stagger:
-                    trigger = TimeTrigger(at=run_at, days="daily")
-                    existing.triggers = [trigger]
-                    existing.next_run_at = trigger.next_run(now)
-                    await self.stores.automations.save(existing)
-                    _logger.info("Repaired slice automation %s (at=%s)", task_id, run_at)
+                _logger.info("Seeded slice channel automation: %s (at=%s)", task_id, run_at)
                 continue
-            # Daily only for now. A memory_changed EventTrigger was seeded
-            # here originally but nothing routes vault changes into
-            # Scheduler.fire_event, and wiring it unfiltered would fire an
-            # LLM run per slice on every vault edit — event triggers return
-            # WITH per-slice path filtering + debounce.
-            time_trigger = TimeTrigger(at=run_at, days="daily")
-            automation = Automation(
-                task_id=task_id,
-                name=task_id,
-                description=f"Standing agent for the '{slice_.title}' slice",
-                model=None,
-                triggers=[time_trigger],
-                enabled=True,
-                created_at=now,
-                next_run_at=time_trigger.next_run(now),
-                last_run_at=None,
-                last_result=None,
-                running_since=None,
-                auto_approve=False,
-                handler=SLICE_AGENT_HANDLER,
-                builtin=False,
-            )
-            await self.stores.automations.save(automation)
-            _logger.info("Seeded slice automation: %s", task_id)
+            if existing.handler == SLICE_AGENT_HANDLER or existing.thread_id is None:
+                # Migrate the handler-based, thread-less shape: provision the
+                # slice-tagged channel and convert in place.
+                channel = await self.automation_service._provision_channel(
+                    task_id, task_id, slice_key=slice_.key
+                )
+                time_trigger = TimeTrigger(at=run_at, days="daily")
+                existing.handler = None
+                existing.thread_id = channel.session_id
+                existing.read_history = True
+                existing.description = slice_agent_instructions(slice_)
+                existing.auto_approve = slice_.autonomy == "observe"
+                existing.tool_scope = OBSERVE_TOOL_SCOPE if slice_.autonomy == "observe" else None
+                existing.triggers = [time_trigger]
+                existing.next_run_at = time_trigger.next_run(datetime.now(UTC))
+                await self.stores.automations.save(existing)
+                _logger.info("Migrated slice automation %s to a channel (session %s)", task_id, channel.session_id)
 
     def _suggester_available(self) -> bool:
         return self.get_records() is not None and self.get_cheap_llm() is not None

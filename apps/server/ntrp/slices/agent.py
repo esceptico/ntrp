@@ -1,48 +1,61 @@
 import json
 import re
 from datetime import UTC, datetime
-from typing import get_args
 from uuid import uuid4
 
 from ntrp.logging import get_logger
-from ntrp.memory.pages import Page
-from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
 from ntrp.slices.asks import AskStore
-from ntrp.slices.models import Ask, AskKind, Slice
-from ntrp.slices.projection import parse_open_loops
+from ntrp.slices.models import Ask, Slice
 
 _logger = get_logger(__name__)
 
 _ASK_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
-_VALID_ASK_KINDS = frozenset(get_args(AskKind))
+_VALID_ASK_KINDS = frozenset({"review", "decide", "act", "drift"})
+
+# Observe-mode toolset as DATA: the automation's tool_scope allowlist
+# (visible and editable on the automation itself) instead of a code-side
+# toolset hack. Read/search surfaces + the memory tools that edit the
+# slice's own page — nothing that acts on the outside world.
+OBSERVE_TOOL_SCOPE = [
+    "memory_*",
+    "recall",
+    "remember",
+    "forget",
+    "web_search",
+    "web_fetch",
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_text",
+    "current_time",
+    "update_todos",
+]
 
 _CONTRACT = {
-    "observe": "You may READ anything and update the topic page, but take no external action.",
+    "observe": "You may read anything and update this slice's topic page, but take no external action.",
     "act": "You may run this slice's automations and workflows; irreversible actions still require approval.",
 }
 
-# Names of the memory-write tools (see ntrp/tools/memory.py) — the "update the
-# topic page" half of the observe contract. Granted on top of the read-only
-# toolset via RunRequest.extra_tool_names so an observe-mode run stays
-# non-auto-approve (approvals still gate everything else) while still able to
-# do the one write action its contract promises.
-_OBSERVE_EXTRA_TOOLS = frozenset({"remember", "forget", "memory_patch", "memory_write"})
 
-
-def build_slice_prompt(slice: Slice, page: Page, recent: list[dict]) -> str:
-    loops = "\n".join(f"- {l}" for l in parse_open_loops(page.prose)) or "- (none)"
-    events = "\n".join(f"- {json.dumps(e)}" for e in recent) or "- (none)"
+def slice_agent_instructions(slice: Slice) -> str:
+    """The automation's description = the standing per-turn message. The
+    fresh topic page is NOT embedded here — it arrives via the SLICE system
+    block on the slice-tagged channel session, so every turn sees current
+    state while these instructions stay static."""
     return (
-        f"You are the standing agent for the '{slice.title}' slice of the user's life.\n"
+        f"You are the standing agent for the '{slice.title}' slice of the user's life. "
+        f"Its topic page is in your SLICE context block.\n"
         f"Autonomy contract ({slice.autonomy}): {_CONTRACT[slice.autonomy]}\n\n"
-        f"Topic page:\n\n{page.prose}\n\n"
-        f"Open loops:\n{loops}\n\n"
-        f"What changed since your last run:\n{events}\n\n"
-        "Your job: absorb what changed, update the topic page if warranted (memory tools), "
-        "and decide whether ANYTHING needs the user. Nominate at most ONE ask.\n"
-        "If something needs them, end your reply with exactly one fenced json block:\n"
+        "This turn: absorb what changed in this domain since your last turn (your channel "
+        "history is your own past runs), update the topic page if warranted (memory tools), "
+        "and decide whether ANYTHING needs the user.\n"
+        "Ask-worthy: something new that needs their judgment, a drift between a commitment "
+        "and reality, or a stale decision-ready open loop they haven't touched. Routine "
+        "tracking is not ask-worthy.\n"
+        "Nominate at most ONE ask — the single highest-leverage item. If something needs "
+        "them, end your reply with exactly one fenced json block:\n"
         '```json\n{"ask": {"text": "<one sentence>", "kind": "review|decide|act|drift"}}\n```\n'
-        "If nothing needs them, end with no json block — silence is the correct output on a quiet day."
+        "If nothing needs them, end with no json block — silence is correct on a quiet day."
     )
 
 
@@ -66,41 +79,23 @@ def parse_agent_ask(result_text: str) -> dict | None:
     return ask
 
 
-async def run_slice_agent(
-    deps: OperatorDeps, slice: Slice, page: Page, asks: AskStore, recent: list[dict],
-) -> str | None:
-    # Observe: narrow toolset (read + the named memory-write tools) with
-    # approvals SKIPPED — a detached run has no approval UI, and the page is
-    # the agent's own notebook; safety comes from the toolset. NOTE the two
-    # separate runner dials: extra_tool_names picks the set, skip_approvals
-    # (not auto_approve, which only widens the set) disarms the gates.
-    # Act: full set, gates ON — gated calls fail fast in detached runs; the
-    # ask-mediated approval loop for act mode is future work.
-    observe = slice.autonomy == "observe"
-    request = RunRequest(
-        prompt=build_slice_prompt(slice, page, recent),
-        auto_approve=not observe,
-        skip_approvals=observe,
-        source_id=f"slice:{slice.key}",
-        automation_id=f"slice:{slice.key}",
-        extra_tool_names=_OBSERVE_EXTRA_TOOLS if observe else frozenset(),
-    )
-    result = await run_agent(deps, request)
-    if not result.output:
-        # A silent-empty run is indistinguishable from a healthy quiet one in
-        # the automations UI — leave a diagnostic trail instead of "".
-        return "(agent run ended without a report — likely hit an error or produced only tool calls)"
-    nominated = parse_agent_ask(result.output)
-    # Every run re-decides the slice's ONE ask: silence retires the previous
-    # nomination just like a new one supersedes it — a stale ask outliving
-    # the agent's own re-evaluation contradicts the contract.
-    asks.retire_active_agent_asks(slice.key)
+def record_slice_run(asks: AskStore, slice_key: str, page_path: str, result_text: str, run_ref: str) -> None:
+    """Post-run ask sync (called from the outbox run-completed pipeline):
+    every run re-decides the slice's ONE ask — silence retires the previous
+    nomination just like a new one supersedes it."""
+    nominated = parse_agent_ask(result_text)
+    asks.retire_active_agent_asks(slice_key)
     if nominated:
-        asks.upsert(Ask(
-            id=f"agent:{slice.key}:{uuid4().hex[:8]}",
-            slice_key=slice.key, text=nominated["text"], kind=nominated["kind"],
-            source="agent", actions=[{"verb": "open_page", "ref": slice.page_path}],
-            state="active", created_at=datetime.now(UTC).isoformat(),
-            provenance=f"run:{result.run_id}",
-        ))
-    return result.output
+        asks.upsert(
+            Ask(
+                id=f"agent:{slice_key}:{uuid4().hex[:8]}",
+                slice_key=slice_key,
+                text=nominated["text"],
+                kind=nominated["kind"],
+                source="agent",
+                actions=[{"verb": "open_page", "ref": page_path}],
+                state="active",
+                created_at=datetime.now(UTC).isoformat(),
+                provenance=run_ref,
+            )
+        )

@@ -162,7 +162,9 @@ class AutomationService:
                 resolved.append(t)
         return resolved
 
-    async def _provision_channel(self, name: str, task_id: str, project_id: str | None = None) -> SessionState:
+    async def _provision_channel(
+        self, name: str, task_id: str, project_id: str | None = None, slice_key: str | None = None
+    ) -> SessionState:
         """Create the durable channel session that owns an automation's
         activity. SessionService.provision announces it (SESSION_CREATED) so
         connected desktops add the sidebar row live instead of after reload."""
@@ -171,6 +173,7 @@ class AutomationService:
             session_type="channel",
             origin_automation_id=task_id,
             project_id=project_id,
+            slice_key=slice_key,
         )
 
     @property
@@ -376,6 +379,7 @@ class AutomationService:
         parent_fire_at: str | None = None,
         attempt_n: int | None = None,
         tool_scope: list[str] | None = None,
+        slice_key: str | None = None,
     ) -> Automation | None:
         triggers = await self._resolve_message_triggers(triggers)
         parsed_triggers, next_run = _build_trigger_and_next_run(
@@ -403,7 +407,7 @@ class AutomationService:
         # through the existing session-bound iteration path (no new
         # execution path), which persists the full turn and emits live SSE.
         if thread_id is None:
-            channel = await self._provision_channel(name, task_id, project_id=project_id)
+            channel = await self._provision_channel(name, task_id, project_id=project_id, slice_key=slice_key)
             thread_id = channel.session_id
             read_history = True
 

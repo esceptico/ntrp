@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from ntrp.automation.scheduler import Scheduler
@@ -25,6 +25,7 @@ class RuntimeOutbox:
         scheduler: Scheduler,
         indexer: Indexer | None,
         get_chat_connector: Callable[[], object | None],
+        on_slice_run: Callable[[object], Awaitable[None]] | None = None,
     ):
         self.worker = OutboxWorker(outbox_store)
         self.outbox_store = outbox_store
@@ -32,6 +33,7 @@ class RuntimeOutbox:
         self.scheduler = scheduler
         self.indexer = indexer
         self._get_chat_connector_fn = get_chat_connector
+        self._on_slice_run = on_slice_run
         self._register_handlers()
 
     def start(self) -> None:
@@ -51,6 +53,11 @@ class RuntimeOutbox:
                 await chat_connector.on_run_completed(run_completed)
             except Exception:
                 _logger.warning("Chat connector run-completed handler failed", exc_info=True)
+        if self._on_slice_run:
+            try:
+                await self._on_slice_run(run_completed)
+            except Exception:
+                _logger.warning("Slice run-completed hook failed", exc_info=True)
         await self.scheduler.handle_run_completed(run_completed)
 
     def _get_chat_connector(self):

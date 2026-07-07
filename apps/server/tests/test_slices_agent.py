@@ -1,244 +1,80 @@
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+"""Slice agents as channel automations: standing instructions (the fresh
+page arrives via the SLICE system block, not the prompt), validated one-ask
+nomination, and the outbox-driven ask sync where every run re-decides the
+slice's single ask."""
 
-import pytest
-import pytest_asyncio
-
-import ntrp.database as database
-import ntrp.slices.agent as slice_agent_module
-from ntrp.automation.models import Automation
-from ntrp.automation.scheduler import Scheduler
-from ntrp.automation.store import AutomationStore
-from ntrp.automation.triggers import EventTrigger, TimeTrigger
-from ntrp.memory.pages import parse_page
-from ntrp.slices.agent import _OBSERVE_EXTRA_TOOLS, build_slice_prompt, parse_agent_ask, run_slice_agent
+from ntrp.slices.agent import (
+    OBSERVE_TOOL_SCOPE,
+    parse_agent_ask,
+    record_slice_run,
+    slice_agent_instructions,
+)
 from ntrp.slices.asks import AskStore
 from ntrp.slices.models import Slice
-from ntrp.tools.executor import ToolExecutor
+from ntrp.tools.core.scope import matches_scope
 
 SLICE = Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="observe")
-PAGE = parse_page("---\ntitle: O-1A\n---\n# O-1A\n\n## Open loops\n- Find counsel.\n")
 
 
-def test_prompt_contains_page_loops_and_contract():
-    p = build_slice_prompt(SLICE, PAGE, recent=[{"event": "memory_changed", "path": "topics/o-1a.md"}])
-    assert "Find counsel." in p
-    assert "at most ONE ask" in p
-    assert "observe" in p  # contract stated to the agent
+def test_instructions_state_contract_and_one_ask_protocol():
+    text = slice_agent_instructions(SLICE)
+    assert "O-1A" in text
+    assert "observe" in text
+    assert "at most ONE ask" in text
+    assert "SLICE context block" in text  # page comes from context, not embedded
+    assert "stale decision-ready open loop" in text  # nomination calibration
 
 
 def test_parse_agent_ask_extracts_json_block_or_none():
     out = 'Reviewed the domain.\n```json\n{"ask": {"text": "Review counsel memo", "kind": "review"}}\n```'
-    ask = parse_agent_ask(out)
-    assert ask == {"text": "Review counsel memo", "kind": "review"}
+    assert parse_agent_ask(out) == {"text": "Review counsel memo", "kind": "review"}
     assert parse_agent_ask("All quiet, nothing needs the user.") is None
 
 
-def test_parse_agent_ask_rejects_invalid_kind_as_silence():
-    out = '```json\n{"ask": {"text": "Do the thing", "kind": "yolo"}}\n```'
-    assert parse_agent_ask(out) is None
+def test_parse_agent_ask_validates_at_the_trust_boundary():
+    bad_kind = '```json\n{"ask": {"text": "x", "kind": "urgent"}}\n```'
+    assert parse_agent_ask(bad_kind) is None
+    empty_text = '```json\n{"ask": {"text": "  ", "kind": "review"}}\n```'
+    assert parse_agent_ask(empty_text) is None
 
 
-def test_parse_agent_ask_rejects_missing_text_as_silence():
-    out = '```json\n{"ask": {"kind": "review"}}\n```'
-    assert parse_agent_ask(out) is None
-
-
-def test_parse_agent_ask_rejects_empty_text_as_silence():
-    out = '```json\n{"ask": {"text": "", "kind": "review"}}\n```'
-    assert parse_agent_ask(out) is None
-
-
-def test_parse_agent_ask_rejects_non_str_text_as_silence():
-    out = '```json\n{"ask": {"text": 42, "kind": "review"}}\n```'
-    assert parse_agent_ask(out) is None
-
-
-def test_parse_agent_ask_accepts_every_valid_kind():
-    for kind in ("review", "decide", "act", "drift"):
-        out = f'```json\n{{"ask": {{"text": "x", "kind": "{kind}"}}}}\n```'
-        assert parse_agent_ask(out) == {"text": "x", "kind": kind}
-
-
-def test_observe_toolset_includes_memory_write_but_excludes_bash_and_send():
-    """The contract promises observe agents 'may read + update the topic
-    page + ask' — regression test for the bug where auto_approve=False
-    silently collapsed the toolset to read-only, excluding memory writes."""
-    executor = ToolExecutor(get_services=lambda: {"memory_records"})
-    tools = executor.get_tools(read_only=True, extra_names=_OBSERVE_EXTRA_TOOLS)
-    names = {t["function"]["name"] for t in tools}
-
-    assert "remember" in names  # memory-write, granted to observe
-    assert "recall" in names  # read tool, granted by read_only=True
-    assert "bash" not in names
-    assert "send" not in names
-
-
-def test_act_toolset_is_a_superset_of_observe_toolset():
-    executor = ToolExecutor(get_services=lambda: {"memory_records"})
-    observe_names = {
-        t["function"]["name"]
-        for t in executor.get_tools(read_only=True, extra_names=_OBSERVE_EXTRA_TOOLS)
-    }
-    act_names = {t["function"]["name"] for t in executor.get_tools()}
-
-    assert observe_names <= act_names
-    assert "bash" in act_names
-    assert len(act_names) > len(observe_names)
-
-
-@pytest.mark.asyncio
-async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve(monkeypatch):
-    """Observe = narrow toolset (extra_tool_names) with approval GATES
-    disarmed via skip_approvals — the runner's actual approval dial;
-    auto_approve only widens the toolset and must stay off. A detached run
-    has no approval UI; safety comes from the toolset, not the gate."""
-    captured = {}
-
-    async def fake_run_agent(deps, request):
-        captured["request"] = request
-
-        class _Result:
-            run_id = "r1"
-            output = None
-
-        return _Result()
-
-    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
-
-    class FakeAskStore:
-        def upsert(self, ask):
-            raise AssertionError("no ask should be upserted for a silent run")
-
-    out = await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=FakeAskStore(), recent=[])
-
-    request = captured["request"]
-    assert request.auto_approve is False
-    assert request.skip_approvals is True
-    assert request.extra_tool_names == _OBSERVE_EXTRA_TOOLS
-    # empty output leaves a diagnostic trail instead of a silent "".
-    assert out is not None and "without a report" in out
-
-
-@pytest.mark.asyncio
-async def test_run_slice_agent_act_mode_requests_no_extra_tools(monkeypatch):
-    """act mode already gets the full toolset via auto_approve=True, so no
-    extras are needed (and RunRequest.extra_tool_names is ignored on that
-    path — see runner._prepare)."""
-    captured = {}
-
-    async def fake_run_agent(deps, request):
-        captured["request"] = request
-
-        class _Result:
-            run_id = "r1"
-            output = None
-
-        return _Result()
-
-    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
-
-    act_slice = Slice(key="o-1a", title="O-1A", page_path="topics/o-1a.md", autonomy="act")
-
-    class FakeAskStore:
-        def upsert(self, ask):
-            raise AssertionError("no ask should be upserted for a silent run")
-
-    await run_slice_agent(deps=object(), slice=act_slice, page=PAGE, asks=FakeAskStore(), recent=[])
-
-    request = captured["request"]
-    assert request.auto_approve is True
-    assert request.extra_tool_names == frozenset()
-
-
-@pytest_asyncio.fixture
-async def store(tmp_path: Path):
-    conn = await database.connect(tmp_path / "automation.db")
-    s = AutomationStore(conn)
-    await s.init_schema()
-    yield s
-    await conn.close()
-
-
-def _slice_automation(task_id: str = "slice:o-1a") -> Automation:
-    now = datetime.now(UTC)
-    return Automation(
-        task_id=task_id,
-        name=task_id,
-        description="Standing agent for the 'O-1A' slice",
-        model=None,
-        triggers=[TimeTrigger(at="06:30", days="daily"), EventTrigger(event_type="memory_changed")],
-        enabled=True,
-        created_at=now,
-        next_run_at=now - timedelta(seconds=1),
-        last_run_at=None,
-        last_result=None,
-        running_since=None,
-        auto_approve=False,
-        handler="slice_agent",
-        builtin=False,
+def test_record_slice_run_nominates_and_supersedes(tmp_path):
+    store = AskStore(tmp_path / "state.json")
+    record_slice_run(
+        store, "o-1a", "topics/o-1a.md",
+        'Did things.\n```json\n{"ask": {"text": "First ask", "kind": "review"}}\n```',
+        run_ref="run:r1",
     )
+    first = store.list("o-1a")
+    assert len(first) == 1 and first[0].text == "First ask" and first[0].provenance == "run:r1"
+
+    record_slice_run(
+        store, "o-1a", "topics/o-1a.md",
+        '```json\n{"ask": {"text": "Second ask", "kind": "decide"}}\n```',
+        run_ref="run:r2",
+    )
+    active = store.list("o-1a")
+    assert [a.text for a in active] == ["Second ask"]  # superseded, not stacked
 
 
-@pytest.mark.asyncio
-async def test_scheduler_dispatches_slice_automation_into_slice_agent_handler(store: AutomationStore):
-    """The generic 'slice_agent' handler backs every slice:{key} automation; the
-    scheduler must thread automation.task_id through so the shared handler can
-    resolve which slice fired (mirrors AutomationRuntime._build_slice_agent_handler,
-    which pulls context["task_id"] to look up the slice by key)."""
-    await store.save(_slice_automation())
-    calls: list[dict] = []
-
-    async def slice_agent_handler(context: dict | None) -> str | None:
-        calls.append(context)
-        return "ran slice agent"
-
-    sched = Scheduler(store=store, build_deps=lambda: None)
-    sched.register_handler("slice_agent", slice_agent_handler)
-
-    await sched._tick()
-    for t in list(sched._running):
-        await t
-
-    assert len(calls) == 1
-    assert calls[0]["task_id"] == "slice:o-1a"
-
-    reloaded = await store.get("slice:o-1a")
-    assert reloaded.last_result == "ran slice agent"
+def test_record_slice_run_silence_retires_previous(tmp_path):
+    store = AskStore(tmp_path / "state.json")
+    record_slice_run(
+        store, "o-1a", "topics/o-1a.md",
+        '```json\n{"ask": {"text": "Old ask", "kind": "review"}}\n```',
+        run_ref="run:r1",
+    )
+    record_slice_run(store, "o-1a", "topics/o-1a.md", "Nothing needs the user today.", run_ref="run:r2")
+    assert store.list("o-1a") == []  # the agent re-decided: silence
 
 
-@pytest.mark.asyncio
-async def test_two_sequential_nominations_leave_only_the_newest_active(tmp_path: Path, monkeypatch):
-    """A new agent nomination must retire the slice's previous active
-    source=="agent" ask (state "done") rather than piling on top of it —
-    only the newest survives as active."""
-    outputs = iter([
-        '```json\n{"ask": {"text": "First nomination", "kind": "review"}}\n```',
-        '```json\n{"ask": {"text": "Second nomination", "kind": "decide"}}\n```',
-    ])
-
-    async def fake_run_agent(deps, request):
-        class _Result:
-            run_id = "r1"
-            output = next(outputs)
-
-        return _Result()
-
-    monkeypatch.setattr(slice_agent_module, "run_agent", fake_run_agent)
-
-    asks = AskStore(tmp_path / "state.json")
-    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=asks, recent=[])
-    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=asks, recent=[])
-
-    active = asks.list("o-1a")
-    assert len(active) == 1
-    assert active[0].text == "Second nomination"
-
-    all_agent_asks = [a for a in asks.list("o-1a", include_resolved=True) if a.source == "agent"]
-    assert len(all_agent_asks) == 2
-    done = [a for a in all_agent_asks if a.state == "done"]
-    assert len(done) == 1
-    assert done[0].text == "First nomination"
+def test_observe_scope_covers_memory_and_read_but_not_action_tools():
+    assert matches_scope(tuple(OBSERVE_TOOL_SCOPE), "memory_patch")
+    assert matches_scope(tuple(OBSERVE_TOOL_SCOPE), "recall")
+    assert matches_scope(tuple(OBSERVE_TOOL_SCOPE), "web_search")
+    assert not matches_scope(tuple(OBSERVE_TOOL_SCOPE), "send_email")
+    assert not matches_scope(tuple(OBSERVE_TOOL_SCOPE), "bash")
+    assert not matches_scope(tuple(OBSERVE_TOOL_SCOPE), "create_calendar_event")
 
 
 def test_load_slice_context_reads_page_or_degrades(tmp_path):
