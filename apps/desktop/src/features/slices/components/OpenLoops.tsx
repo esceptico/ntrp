@@ -12,7 +12,13 @@ import { useState } from "react";
 // the resting view; "Show all" reveals the rest in place.
 const VISIBLE_CAP = 7;
 
-export function OpenLoops({ loops }: { loops: string[] }) {
+export function OpenLoops({
+  loops,
+  onDiscuss,
+}: {
+  loops: string[];
+  onDiscuss?: (loop: string) => void;
+}) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
 
@@ -28,24 +34,34 @@ export function OpenLoops({ loops }: { loops: string[] }) {
         {visible.map((loop, index) => {
           const open = openIndex === index;
           return (
-            <button
-              key={index}
-              type="button"
-              onClick={() => setOpenIndex(open ? null : index)}
-              className={`group flex min-w-0 items-start gap-2.5 py-2.5 text-left text-sm text-ink-soft ${
-                index > 0 ? "border-t border-line-soft" : ""
-              }`}
-            >
-              {/* Mock marker: a quiet dot, not a chevron — expandability
-                  reads through the hover tint + wrap behavior. */}
-              <span
-                aria-hidden
-                className="mt-[7px] size-1.5 shrink-0 rounded-full bg-muted transition-colors group-hover:bg-ink-soft"
-              />
-              <span className={open ? "min-w-0 flex-1 whitespace-normal" : "min-w-0 flex-1 truncate"}>
-                {loop}
-              </span>
-            </button>
+            <div key={index} className={index > 0 ? "border-t border-line-soft" : undefined}>
+              <button
+                type="button"
+                onClick={() => setOpenIndex(open ? null : index)}
+                className="group flex w-full min-w-0 items-start gap-2.5 py-2.5 text-left text-sm text-ink-soft"
+              >
+                {/* Mock marker: a quiet dot, not a chevron — expandability
+                    reads through the hover tint + wrap behavior. */}
+                <span
+                  aria-hidden
+                  className="mt-[7px] size-1.5 shrink-0 rounded-full bg-muted transition-colors group-hover:bg-ink-soft"
+                />
+                <span className={open ? "min-w-0 flex-1 whitespace-normal" : "min-w-0 flex-1 truncate"}>
+                  {loop}
+                </span>
+              </button>
+              {open && onDiscuss && (
+                <div className="pb-2.5 pl-[18px]">
+                  <button
+                    type="button"
+                    onClick={() => onDiscuss(loop)}
+                    className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
+                  >
+                    Discuss
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

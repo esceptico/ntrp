@@ -188,7 +188,13 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
         </p>
       )}
 
-      <OpenLoops loops={detail.open_loops} />
+      <OpenLoops
+        loops={detail.open_loops}
+        onDiscuss={(loop) => {
+          setDraft(`About the open loop "${loop}" — `);
+          document.getElementById("slice-composer-input")?.focus();
+        }}
+      />
       <SliceActivity sessions={detail.sessions} />
 
       {detail.related.length > 0 && (
