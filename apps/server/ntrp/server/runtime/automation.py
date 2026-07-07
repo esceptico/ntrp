@@ -244,27 +244,42 @@ class AutomationRuntime:
 
         return handler
 
+    @staticmethod
+    def _slice_run_at(index: int) -> str:
+        """Stagger the daily slots 5 minutes apart. Identical times made all
+        agents stampede the LLM/embedding providers at once every morning —
+        the observed 503 cascade under parallel load."""
+        hour, minute = (int(p) for p in SLICE_AGENT_DAILY_AT.split(":"))
+        total = hour * 60 + minute + index * 5
+        return f"{total // 60 % 24:02d}:{total % 60:02d}"
+
     async def _seed_slice_automations(self) -> None:
         now = datetime.now(UTC)
-        for slice_ in self.slice_registry.load():
+        for index, slice_ in enumerate(self.slice_registry.load()):
             task_id = f"slice:{slice_.key}"
+            run_at = self._slice_run_at(index)
             existing = await self.stores.automations.get(task_id)
             if existing:
-                # Repair rows seeded before the inert memory_changed
-                # EventTrigger was dropped — dead config that still rendered
-                # in the automations UI ("on:memory_change…").
+                # Repair rows from earlier seed shapes: drop the inert
+                # memory_changed EventTrigger, and re-stagger identical
+                # 06:30 slots.
                 live = [t for t in existing.triggers if getattr(t, "type", None) != "event"]
-                if len(live) != len(existing.triggers):
-                    existing.triggers = live
+                needs_stagger = any(
+                    getattr(t, "type", None) == "time" and getattr(t, "at", None) != run_at for t in live
+                )
+                if len(live) != len(existing.triggers) or needs_stagger:
+                    trigger = TimeTrigger(at=run_at, days="daily")
+                    existing.triggers = [trigger]
+                    existing.next_run_at = trigger.next_run(now)
                     await self.stores.automations.save(existing)
-                    _logger.info("Stripped inert event trigger from %s", task_id)
+                    _logger.info("Repaired slice automation %s (at=%s)", task_id, run_at)
                 continue
             # Daily only for now. A memory_changed EventTrigger was seeded
             # here originally but nothing routes vault changes into
             # Scheduler.fire_event, and wiring it unfiltered would fire an
             # LLM run per slice on every vault edit — event triggers return
             # WITH per-slice path filtering + debounce.
-            time_trigger = TimeTrigger(at=SLICE_AGENT_DAILY_AT, days="daily")
+            time_trigger = TimeTrigger(at=run_at, days="daily")
             automation = Automation(
                 task_id=task_id,
                 name=task_id,
