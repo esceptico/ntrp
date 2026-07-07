@@ -289,6 +289,22 @@ async def _require_project(svc: SessionService, project_id: str | None) -> dict 
     return project
 
 
+def _slug(name: str) -> str:
+    return name.strip().lower().replace(" ", "-")
+
+
+async def _project_for_slice(svc: SessionService, slice_key: str) -> str | None:
+    """Slice↔project bridge: a slice-tagged session joins the project whose
+    slugified name equals the slice key ("Dex" → dex, "O-1A" → o-1a), so it
+    groups in the sidebar and inherits project context instead of landing
+    in Inbox next to an identically-named group. Link-only — no project is
+    created for slices without one."""
+    for project in await svc.list_projects():
+        if _slug(project.get("name", "")) == slice_key:
+            return project["project_id"]
+    return None
+
+
 @router.get("/session/history")
 async def get_session_history(
     svc: SessionService = Depends(require_session_service),
@@ -705,6 +721,8 @@ async def create_session(
     project_id = req.project_id if req else None
     slice_key = req.slice_key if req else None
     await _require_project(svc, project_id)
+    if slice_key and not project_id:
+        project_id = await _project_for_slice(svc, slice_key)
     state = svc.create(name=name, project_id=project_id, chat_model=runtime.config.chat_model, slice_key=slice_key)
     await svc.save(state, [])
     return {
