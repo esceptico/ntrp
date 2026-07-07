@@ -69,20 +69,27 @@ def parse_agent_ask(result_text: str) -> dict | None:
 async def run_slice_agent(
     deps: OperatorDeps, slice: Slice, page: Page, asks: AskStore, recent: list[dict],
 ) -> str | None:
-    # Observe: narrow set (read + own topic page) with approvals skipped —
-    # a detached run has no approval UI, and the contract says the page IS
-    # the agent's notebook. Act: full set, approvals skipped (v1 — the
-    # ask-mediated approval loop for detached act runs is future work).
+    # Observe: narrow toolset (read + the named memory-write tools) with
+    # approvals SKIPPED — a detached run has no approval UI, and the page is
+    # the agent's own notebook; safety comes from the toolset. NOTE the two
+    # separate runner dials: extra_tool_names picks the set, skip_approvals
+    # (not auto_approve, which only widens the set) disarms the gates.
+    # Act: full set, gates ON — gated calls fail fast in detached runs; the
+    # ask-mediated approval loop for act mode is future work.
+    observe = slice.autonomy == "observe"
     request = RunRequest(
         prompt=build_slice_prompt(slice, page, recent),
-        auto_approve=True,
+        auto_approve=not observe,
+        skip_approvals=observe,
         source_id=f"slice:{slice.key}",
         automation_id=f"slice:{slice.key}",
-        extra_tool_names=_OBSERVE_EXTRA_TOOLS if slice.autonomy == "observe" else frozenset(),
+        extra_tool_names=_OBSERVE_EXTRA_TOOLS if observe else frozenset(),
     )
     result = await run_agent(deps, request)
     if not result.output:
-        return None
+        # A silent-empty run is indistinguishable from a healthy quiet one in
+        # the automations UI — leave a diagnostic trail instead of "".
+        return "(agent run ended without a report — likely hit an error or produced only tool calls)"
     nominated = parse_agent_ask(result.output)
     # Every run re-decides the slice's ONE ask: silence retires the previous
     # nomination just like a new one supersedes it — a stale ask outliving

@@ -89,9 +89,10 @@ def test_act_toolset_is_a_superset_of_observe_toolset():
 
 @pytest.mark.asyncio
 async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve(monkeypatch):
-    """Observe runs auto-approve WITHIN the narrow read+memory-write set —
-    a detached run has no approval UI, and the page is the agent's own
-    notebook. Safety comes from the toolset, not the gate."""
+    """Observe = narrow toolset (extra_tool_names) with approval GATES
+    disarmed via skip_approvals — the runner's actual approval dial;
+    auto_approve only widens the toolset and must stay off. A detached run
+    has no approval UI; safety comes from the toolset, not the gate."""
     captured = {}
 
     async def fake_run_agent(deps, request):
@@ -109,11 +110,14 @@ async def test_run_slice_agent_requests_observe_extra_tools_but_not_auto_approve
         def upsert(self, ask):
             raise AssertionError("no ask should be upserted for a silent run")
 
-    await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=FakeAskStore(), recent=[])
+    out = await run_slice_agent(deps=object(), slice=SLICE, page=PAGE, asks=FakeAskStore(), recent=[])
 
     request = captured["request"]
-    assert request.auto_approve is True
+    assert request.auto_approve is False
+    assert request.skip_approvals is True
     assert request.extra_tool_names == _OBSERVE_EXTRA_TOOLS
+    # empty output leaves a diagnostic trail instead of a silent "".
+    assert out is not None and "without a report" in out
 
 
 @pytest.mark.asyncio
