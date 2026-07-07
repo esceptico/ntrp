@@ -1,4 +1,4 @@
-import { Brain, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
+import { Brain, House, Settings as SettingsIcon, Zap } from "lucide-react";
 import { originFromEvent } from "@/lib/tokens/motion";
 import { useStore } from "@/stores";
 import { goToNewSessionHome } from "@/actions/sessions";
@@ -21,9 +21,11 @@ export function Sidebar() {
           macOS traffic-lights zone, not below a 38px chrome ribbon. */}
       <div className="drag-spacer shrink-0 h-[22px]" />
       <nav className="flex flex-col gap-0.5 px-2.5 pt-2">
+        {/* Home doubles as "new session": the hero input starts a chat, so
+            one destination covers both (⌘N lands here too). */}
         <NavRow
-          icon={<Pencil size={ICON.LG} strokeWidth={2} />}
-          label="New session"
+          icon={<House size={ICON.LG} strokeWidth={2} />}
+          label="Home"
           onClick={() => goToNewSessionHome()}
         />
         <NavRow
