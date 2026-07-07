@@ -34,6 +34,9 @@ export function SlicesStrip({ slices }: { slices: SliceSummary[] }) {
           </button>
         ))}
       </div>
+      <p className="m-0 text-[11.5px] text-whisper">
+        Quiet slices stay quiet — silence is the deliverable.
+      </p>
     </div>
   );
 }

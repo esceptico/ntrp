@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
 
 /** OPEN LOOPS rows: v1 loops are plain strings (no id/state), so a row is
  *  collapsed to one truncated line and expands IN PLACE to its full wrapped
@@ -31,9 +30,11 @@ export function OpenLoops({ loops }: { loops: string[] }) {
                 index > 0 ? "border-t border-line-soft" : ""
               }`}
             >
-              <ChevronRight
-                className="mt-0.5 size-3.5 shrink-0 text-whisper transition-transform duration-check group-hover:text-faint"
-                style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+              {/* Mock marker: a quiet dot, not a chevron — expandability
+                  reads through the hover tint + wrap behavior. */}
+              <span
+                aria-hidden
+                className="mt-[7px] size-1.5 shrink-0 rounded-full bg-muted transition-colors group-hover:bg-ink-soft"
               />
               <span className={open ? "min-w-0 flex-1 whitespace-normal" : "min-w-0 flex-1 truncate"}>
                 {loop}

@@ -46,7 +46,7 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
         <button
           type="button"
           onClick={primaryAction.run}
-          className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-medium text-on-ink hover:opacity-90"
+          className="shrink-0 rounded-[7px] border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
         >
           {primaryAction.label}
         </button>

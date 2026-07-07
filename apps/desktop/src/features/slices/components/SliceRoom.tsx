@@ -138,7 +138,7 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             far edge. Grant keeps the hold-to-arm ceremony; revoke is a
             plain click — de-escalation needs none. */}
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="m-0 min-w-0 truncate text-[22px] font-medium tracking-[-0.01em] text-ink">
+          <h1 className="m-0 min-w-0 truncate text-2xl font-medium tracking-[-0.015em] text-ink">
             {detail.title}
           </h1>
           {detail.autonomy === "observe" ? (
