@@ -94,26 +94,32 @@ export function HtmlWidgetCard({ item }: { item: ActivityItem }) {
 
   const badge = widgetBadge(item, widget.mode, pending, resolution?.action ?? localAction);
 
+  // title is optional; the header only exists to carry a title, a status
+  // badge, or the Decline action, so drop it entirely when there's none.
+  const showHeader = !!widget.title || !!badge || pending;
+
   return (
     <div className="surface-card overflow-hidden">
-      <div className="px-3 py-2 border-b border-line-soft flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{widget.title}</span>
-        {badge && (
-          <BlurSwap swapKey={badge.label} blur={3} className="shrink-0">
-            <Badge tone={badge.tone}>{badge.label}</Badge>
-          </BlurSwap>
-        )}
-        {pending && (
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => resolve("decline", {})}
-            className="shrink-0"
-          >
-            Decline
-          </Button>
-        )}
-      </div>
+      {showHeader && (
+        <div className="px-3 py-2 border-b border-line-soft flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{widget.title}</span>
+          {badge && (
+            <BlurSwap swapKey={badge.label} blur={3} className="shrink-0">
+              <Badge tone={badge.tone}>{badge.label}</Badge>
+            </BlurSwap>
+          )}
+          {pending && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => resolve("decline", {})}
+              className="shrink-0"
+            >
+              Decline
+            </Button>
+          )}
+        </div>
+      )}
       <div className={clsx(frozen && "pointer-events-none opacity-60")}>
         <iframe
           ref={iframeRef}

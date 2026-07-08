@@ -11,7 +11,7 @@ RENDER_HTML_DESCRIPTION = """Render an HTML widget as a rich card in the chat.
 
 The HTML must be fully self-contained: inline all CSS and JavaScript. The widget runs in a sandboxed iframe with a strict Content-Security-Policy — external scripts, stylesheets, images, fonts, fetch/XHR, form submissions to URLs, and link navigation are all blocked or swallowed; assume the widget has no network access. Images must be data: URIs. Do not include links or form actions pointing at external URLs — they will not work.
 
-The host renders your HTML inside a card that already has a border, rounded corners, padding, a background, and a header showing the title — do NOT draw your own outer container: no wrapper panel with border/border-radius/box-shadow/background, no repeating the title as a heading. Start directly with content (controls, table, chart, prose) and let it fill 100% of the available width.
+The host renders your HTML inside a card that already has a border, rounded corners, padding, and a background. If you pass a title, the card shows a header with it (otherwise the card is headerless) — do NOT draw your own outer container: no wrapper panel with border/border-radius/box-shadow/background, no repeating the title as a heading. Start directly with content (controls, table, chart, prose) and let it fill 100% of the available width.
 
 Theming: the host injects the app's design tokens as CSS variables on :root — use them so the widget matches the app. Available: --color-bg, --color-surface, --color-surface-soft, --color-line, --color-line-soft, --color-ink, --color-ink-soft, --color-muted, --color-faint, --color-accent, --color-accent-soft, --color-ok, --color-warn, --color-bad, --font-sans, --font-mono. The body already has comfortable padding, the app font, and a transparent background.
 
@@ -29,7 +29,11 @@ class RenderHtmlInput(BaseModel):
         max_length=RENDER_HTML_MAX_CHARS,
         description="Self-contained HTML to render inside the sandboxed widget. Inline CSS/JS only; no external resources.",
     )
-    title: str = Field(max_length=200, description="Short title shown on the widget card.")
+    title: str = Field(
+        default="",
+        max_length=200,
+        description="Optional short title shown on the widget card's header. Omit for a headerless card.",
+    )
     mode: Literal["display", "input"] = Field(
         description='"display" renders and returns immediately; "input" blocks until the user responds via ntrp.submit()/ntrp.cancel().'
     )
@@ -37,15 +41,16 @@ class RenderHtmlInput(BaseModel):
 
 async def render_html(execution: ToolExecution, args: RenderHtmlInput) -> ToolResult:
     data = {"html": args.html, "title": args.title, "mode": args.mode}
+    label = args.title or "widget"
     if args.mode == "display":
-        return ToolResult(content=f'Rendered HTML widget "{args.title}".', preview=args.title, data=data)
+        return ToolResult(content=f"Rendered HTML {label}.", preview=label, data=data)
     envelope = await execution.request_input(html=args.html, title=args.title)
     if envelope is None:
         return ToolResult.error(
             'No interactive client connected — render_html mode="input" requires an active desktop session. '
             'Use mode="display" or ask in plain text instead.'
         )
-    return ToolResult(content=envelope, preview=args.title, data=data)
+    return ToolResult(content=envelope, preview=label, data=data)
 
 
 render_html_tool = tool(
