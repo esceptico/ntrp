@@ -63,7 +63,12 @@ def slice_agent_instructions(slice: Slice) -> str:
         "tracking is not ask-worthy.\n"
         "End with a short prose report. Afterwards you will be asked for a structured "
         "nomination: at most ONE ask — the single highest-leverage item — or none. "
-        "Silence is correct on a quiet day."
+        "Silence is correct on a quiet day.\n"
+        "Pick the kind that fits, dimmest that's true:\n"
+        "- review: an FYI — you did or noticed something worth a glance, no decision needed.\n"
+        "- decide: a choice or judgment call is waiting on them.\n"
+        "- act: they need to take a concrete external step (send, book, pay, submit).\n"
+        "- drift: a commitment and reality have diverged and it's slipping."
     )
 
 
