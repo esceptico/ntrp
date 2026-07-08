@@ -336,6 +336,10 @@ _SQL_SET_NEXT_RUN = """
 UPDATE scheduled_tasks SET next_run_at = ? WHERE task_id = ?
 """
 
+_SQL_SET_LAST_RESULT = """
+UPDATE scheduled_tasks SET last_result = ? WHERE task_id = ?
+"""
+
 _SQL_TRY_MARK_RUNNING = """
 UPDATE scheduled_tasks
 SET running_since = ?
@@ -1347,6 +1351,12 @@ class AutomationStore:
 
     async def set_next_run(self, task_id: str, next_run: datetime) -> None:
         await self.conn.execute(_SQL_SET_NEXT_RUN, (next_run.isoformat(), task_id))
+        await self.conn.commit()
+
+    async def set_last_result(self, task_id: str, result: str | None) -> None:
+        # Bound the stored text so a chatty run can't bloat the row.
+        clipped = result if result is None or len(result) <= 4000 else result[:4000] + "…"
+        await self.conn.execute(_SQL_SET_LAST_RESULT, (clipped, task_id))
         await self.conn.commit()
 
     async def update_name(self, task_id: str, name: str) -> None:
