@@ -266,12 +266,14 @@ class AutomationRuntime:
 
     async def _kick_first_slice_suggestion(self) -> None:
         """Don't make a fresh install wait a day for its first suggestions:
-        if the store has never been written, pull the builtin's next run to
-        now — the scheduler fires it within its normal tick."""
-        if self.slice_suggestions.exists():
-            return
+        pull the builtin's next run to now so the scheduler fires it on this
+        tick. Guard on last_run_at, NOT the suggestions file — a run killed
+        mid-flight (a quick restart) advances next_run to the far daily slot
+        but never writes the file, so keying on 'has it ever completed'
+        re-arms it every boot until the first real run lands, instead of
+        stranding suggestions for a day."""
         auto = await self.stores.automations.get(BUILTIN_SLICE_SUGGESTER_ID)
-        if auto and auto.enabled:
+        if auto and auto.enabled and auto.last_run_at is None:
             await self.stores.automations.set_next_run(BUILTIN_SLICE_SUGGESTER_ID, datetime.now(UTC))
 
     @staticmethod
