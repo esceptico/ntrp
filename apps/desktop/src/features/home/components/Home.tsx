@@ -115,11 +115,11 @@ export function Home() {
           strip always stay put. */}
       <div className="mx-auto flex h-full w-[640px] max-w-full flex-col gap-6 px-4 pt-[12vh] pb-8">
         <div className="grid shrink-0 gap-3">
-          <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
+          <span className="text-2xs font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
           <HeroInput />
         </div>
         <div className="grid shrink-0 gap-1">
-          <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
+          <h2 className="m-0 text-2xl font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
           {watchLine && <p className="m-0 text-xs text-faint">{watchLine}</p>}
         </div>
         {focus.length > 0 && (

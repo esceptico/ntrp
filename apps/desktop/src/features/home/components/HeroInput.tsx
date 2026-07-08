@@ -115,7 +115,7 @@ export function HeroInput() {
     <div className="relative">
       {/* Elevation per theme rules: light lifts via shadow tier, dark via the
           additive surface climb (bg-surface-2 over the floor). */}
-      <div className="flex h-14 items-center gap-2 rounded-[14px] border border-line bg-surface-2 px-4 shadow-md">
+      <div className="flex h-14 items-center gap-2 rounded-xl border border-line bg-surface-2 px-4 shadow-md">
         <input
           id="message-input"
           type="text"
@@ -124,7 +124,7 @@ export function HeroInput() {
           onKeyDown={onKeyDown}
           placeholder="Ask, search, or start a chat…"
           autoFocus
-          className="min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-faint focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent text-md text-ink placeholder:text-faint focus:outline-none"
         />
         <kbd className="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 text-2xs font-medium text-faint">
           ⌘K

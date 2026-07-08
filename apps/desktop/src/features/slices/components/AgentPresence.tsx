@@ -92,7 +92,7 @@ export function AgentPresence({
       type="button"
       onClick={onOpenChannel}
       title="Open the agent's channel — every run's full transcript"
-      className="group/agent relative w-full overflow-hidden rounded-[12px] bg-surface-soft px-4 py-3 text-left"
+      className="app-row group/agent relative w-full overflow-hidden rounded-xl bg-surface-soft px-4 py-3 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
     >
       {/* Settle edge — a hairline accent border that releases when a run
           lands. Opacity is driven imperatively; starts hidden. */}

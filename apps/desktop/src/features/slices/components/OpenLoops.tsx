@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 /** OPEN LOOPS rows: v1 loops are plain strings (no id/state), so a row is
  *  collapsed to one truncated line and expands IN PLACE to its full wrapped
@@ -52,13 +53,9 @@ export function OpenLoops({
               </button>
               {open && onDiscuss && (
                 <div className="pb-2.5 pl-[18px]">
-                  <button
-                    type="button"
-                    onClick={() => onDiscuss(loop)}
-                    className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => onDiscuss(loop)}>
                     Discuss
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

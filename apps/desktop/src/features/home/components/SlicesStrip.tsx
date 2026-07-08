@@ -37,7 +37,7 @@ export function SlicesStrip({
             type="button"
             role="menuitem"
             onClick={() => openSlice(slice.key)}
-            className="relative z-[1] inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-soft px-3 text-[12.5px] font-medium text-ink"
+            className="relative z-[1] inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-soft px-3 text-xs font-medium text-ink"
             style={{ opacity: slice.live ? 1 : 0.55 }}
           >
             {slice.live && (
@@ -49,7 +49,7 @@ export function SlicesStrip({
         {suggested.map((s) => (
           <span
             key={s.key}
-            className="relative z-[1] inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-line pr-1.5 pl-3 text-[12.5px] text-muted"
+            className="relative z-[1] inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-line pr-1.5 pl-3 text-xs text-muted"
             title={s.rationale}
           >
             <button

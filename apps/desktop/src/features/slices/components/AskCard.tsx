@@ -7,6 +7,7 @@ import { switchSession } from "@/actions/sessions";
 import { fetchSliceDetail, resolveAsk } from "@/actions/slices";
 import { primaryActionFor } from "@/lib/askActions";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 import { X } from "lucide-react";
 
@@ -70,30 +71,22 @@ export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: S
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex min-w-0 items-start gap-3 rounded-[12px] bg-surface-soft px-4 py-3.5"
+      className="flex min-w-0 items-start gap-3 rounded-xl bg-surface-soft px-4 py-3.5"
     >
       <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${KIND_DOT[ask.kind]}`} />
       <div className="grid min-w-0 flex-1 gap-1">
         <p className="m-0 text-sm font-medium text-ink">{title}</p>
-        {detail && <p className="m-0 text-[13px] leading-snug text-muted">{detail}</p>}
+        {detail && <p className="m-0 text-sm leading-snug text-muted">{detail}</p>}
         <div className="mt-2 flex items-center gap-2">
           {primaryAction && (
-            <button
-              type="button"
-              onClick={primaryAction.run}
-              className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:opacity-90"
-            >
+            <Button variant="primary" size="sm" onClick={primaryAction.run}>
               {primaryAction.label}
-            </button>
+            </Button>
           )}
           {onDiscuss && (
-            <button
-              type="button"
-              onClick={() => onDiscuss(ask)}
-              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
-            >
+            <Button variant="secondary" size="sm" onClick={() => onDiscuss(ask)}>
               Discuss
-            </button>
+            </Button>
           )}
         </div>
       </div>

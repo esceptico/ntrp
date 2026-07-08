@@ -35,7 +35,7 @@ export function FocusRow({ ask, sliceTitle }: { ask: SliceAsk; sliceTitle: strin
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="group/row flex w-full min-w-0 items-start gap-3 rounded-[12px] bg-surface-soft px-4 py-3 text-left transition-colors hover:bg-surface-2"
+      className="app-row group/row flex w-full min-w-0 items-start gap-3 rounded-xl bg-surface-soft px-4 py-3 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
     >
       <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${kind.dot}`} />
       <div className="grid min-w-0 flex-1 gap-1">
