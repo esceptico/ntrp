@@ -5,14 +5,11 @@ import { fetchSliceDetail, updateSliceAutonomy } from "@/actions/slices";
 import { runAutomation } from "@/actions/automations";
 import { createSessionWithSlice, switchSession } from "@/actions/sessions";
 import { sendMessage } from "@/actions/messages";
-import { Play } from "lucide-react";
-import { ICON } from "@/lib/icons";
 import { AskCard } from "@/features/slices/components/AskCard";
+import { AgentPresence, type AgentInfo } from "@/features/slices/components/AgentPresence";
 import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
 import { ChargeButton } from "@/components/ui/ChargeButton";
-import { formatRelativePast } from "@/lib/format";
-import { resultSnippet } from "@/lib/agentRun";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
 
 /** Slice room: the full-screen detail view for one slice, opened from the
@@ -52,32 +49,14 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
   const topAsk = detail.asks[0] ?? null;
   const relatedTitle = (key: string) => overviewSlices?.find((s) => s.key === key)?.title ?? key;
 
-  // Header status line, best data first: agent running now > the agent's
-  // last run (first line of its report + when) > never-ran. The line is the
-  // door to the agent's channel (its full transcript); Run now sits beside
-  // it. The channel session itself is excluded from ACTIVITY — that list is
-  // the user's own chats, not infrastructure.
+  // The slice's standing agent (an automation keyed `slice:{key}`), rendered
+  // as a first-class presence (AgentPresence) rather than a footnote. Its
+  // channel session is excluded from ACTIVITY — that list is the user's own
+  // chats, not infrastructure.
   const agentAuto = detail.automations.find(
-    (
-      a,
-    ): a is {
-      name: string;
-      task_id?: string;
-      thread_id?: string | null;
-      last_result?: string | null;
-      last_run_at?: string | null;
-      running_since?: string | null;
-    } => typeof a === "object" && a !== null && (a as { task_id?: string }).task_id === `slice:${sliceKey}`,
+    (a): a is AgentInfo & { task_id: string } =>
+      typeof a === "object" && a !== null && (a as { task_id?: string }).task_id === `slice:${sliceKey}`,
   );
-  const agentRunning = Boolean(agentAuto?.running_since);
-  const agentSummary = resultSnippet(agentAuto?.last_result);
-  const agentLine = agentRunning
-    ? "Agent working now…"
-    : agentSummary && agentAuto?.last_run_at
-      ? `Agent, ${formatRelativePast(agentAuto.last_run_at)} ago — ${agentSummary}`
-      : agentAuto?.last_run_at
-        ? `Agent ran ${formatRelativePast(agentAuto.last_run_at)} ago`
-        : "Agent hasn’t run yet";
   const agentChannelId = agentAuto?.thread_id ?? null;
   const userSessions = detail.sessions.filter((s) => s.session_id !== agentChannelId);
 
@@ -205,36 +184,15 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
             </button>
           )}
         </div>
-        <div className="flex min-w-0 items-center gap-2">
-          {agentChannelId ? (
-            <button
-              type="button"
-              onClick={() => void switchSession(agentChannelId)}
-              title="Open the agent’s channel — every run’s full transcript"
-              className="flex min-w-0 items-center gap-1.5 text-left text-xs text-faint hover:text-ink-soft"
-            >
-              {agentRunning && (
-                <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-ink" />
-              )}
-              <span className="min-w-0 truncate underline decoration-line-soft underline-offset-2">
-                {agentLine}
-              </span>
-            </button>
-          ) : (
-            <p className="m-0 min-w-0 truncate text-xs text-faint">{agentLine}</p>
-          )}
-          {agentAuto?.task_id && !agentRunning && (
-            <button
-              type="button"
-              onClick={() => void runAgentNow()}
-              className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted hover:bg-surface-soft hover:text-ink"
-            >
-              <Play size={ICON.XS} strokeWidth={2} />
-              Run now
-            </button>
-          )}
-        </div>
       </div>
+
+      {agentAuto && (
+        <AgentPresence
+          agent={agentAuto}
+          onRunNow={() => void runAgentNow()}
+          onOpenChannel={() => agentChannelId && void switchSession(agentChannelId)}
+        />
+      )}
 
       {topAsk && (
         <AnimatePresence initial={false}>

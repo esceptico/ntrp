@@ -6,15 +6,25 @@ import { switchSession } from "@/actions/sessions";
 import { primaryActionFor } from "@/lib/askActions";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 
-/** A single focus-set row: 52px tonal card, slice key small-caps on the
- *  left, ask text in the middle, primary action on the right. Enters with
- *  RISE_IN/SPRING_ROW_ENTRY, retires with ROW_EXIT (list membership is
- *  driven by AnimatePresence in FocusList — this component only owns its
- *  own pose). Rows are keyed by ask.id (not slice_key), so a text change
- *  is a fresh row mounting via AnimatePresence, not an in-place swap —
- *  FieldSwap (built for in-place swaps) would be inert here (dir={0}) and
- *  was removed. */
-export function FocusRow({ ask }: { ask: SliceAsk }) {
+// `kind` doubles as severity and verb. The dot uses the status palette
+// (attention kinds warmer); the verb relabels an open_page button so the
+// action reads as the judgment call ("Decide") instead of a generic
+// "Review" on every row. Mirrors AskCard's KIND_DOT so Home and the room
+// speak the same language.
+const KIND: Record<SliceAsk["kind"], { dot: string; verb: string }> = {
+  review: { dot: "bg-muted", verb: "Review" },
+  decide: { dot: "bg-accent", verb: "Decide" },
+  act: { dot: "bg-warn", verb: "Act" },
+  drift: { dot: "bg-bad", verb: "Resolve" },
+};
+
+/** A single focus-set row: a slice's one ask, made legible. Eyebrow line is
+ *  the slice title + a severity dot; the ask reads in full (up to two
+ *  lines) instead of a truncated teaser; the action button carries the
+ *  kind's verb. Enters RISE_IN/SPRING_ROW_ENTRY, retires ROW_EXIT via the
+ *  caller's AnimatePresence (keyed by ask.id, so a text change is a fresh
+ *  mount, not an in-place edit). */
+export function FocusRow({ ask, sliceTitle }: { ask: SliceAsk; sliceTitle: string }) {
   const openSlice = useStore((s) => s.openSlice);
   const automations = useStore((s) => s.automations);
   const primaryAction = primaryActionFor(ask, automations, {
@@ -23,6 +33,12 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
     openSlice,
   });
 
+  const kind = KIND[ask.kind];
+  // open_page is "go handle it in the slice" — relabel with the kind verb.
+  // Behavioral verbs (Open/Retry) keep primaryActionFor's own label.
+  const actionLabel =
+    primaryAction && ask.actions[0]?.verb === "open_page" ? kind.verb : primaryAction?.label;
+
   return (
     <motion.div
       layout
@@ -30,25 +46,30 @@ export function FocusRow({ ask }: { ask: SliceAsk }) {
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex h-[52px] min-w-0 items-center gap-3 rounded-[10px] bg-surface-soft px-3.5"
+      className="group/row flex min-w-0 items-center gap-3.5 rounded-[12px] bg-surface-soft px-4 py-3"
     >
-      <button
-        type="button"
-        onClick={() => openSlice(ask.slice_key)}
-        className="w-[76px] shrink-0 text-left text-2xs font-semibold tracking-wide text-muted uppercase [font-variant-caps:small-caps] hover:text-ink"
-      >
-        {ask.slice_key}
-      </button>
-      <div className="min-w-0 flex-1 text-sm text-ink">
-        <span className="block truncate">{ask.text}</span>
+      <div className="grid min-w-0 flex-1 gap-1">
+        <button
+          type="button"
+          onClick={() => openSlice(ask.slice_key)}
+          className="flex min-w-0 items-center gap-2 text-left"
+        >
+          <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${kind.dot}`} />
+          <span className="min-w-0 truncate text-xs font-medium text-muted group-hover/row:text-ink">
+            {sliceTitle}
+          </span>
+        </button>
+        <p className="m-0 min-w-0 text-sm leading-snug text-ink line-clamp-2 [overflow-wrap:anywhere]">
+          {ask.text}
+        </p>
       </div>
       {primaryAction && (
         <button
           type="button"
           onClick={primaryAction.run}
-          className="shrink-0 rounded-[7px] border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
+          className="shrink-0 self-center rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-soft"
         >
-          {primaryAction.label}
+          {actionLabel}
         </button>
       )}
     </motion.div>

@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Settings, Sparkles } from "lucide-react";
 import type { SliceAsk, SliceSummary } from "@/api/slices";
+import type { Automation } from "@/api/types";
 import { useStore } from "@/stores";
+import { formatRelativePast } from "@/lib/format";
 import { useSlicesData } from "@/features/home/hooks/useSlicesData";
 import { HeroInput } from "@/features/home/components/HeroInput";
 import { FocusRow } from "@/features/home/components/FocusRow";
@@ -28,6 +30,25 @@ function greeting(focusCount: number): string {
   return `${focusCount} things need you.`;
 }
 
+/** The standing agents made legible: how many are watching, and when one
+ *  last swept. Slice agents are automations keyed `slice:{key}`; the line
+ *  reassures the focus set is a fresh read, not a stale to-do list. */
+function agentWatchLine(automations: Automation[] | null): string | null {
+  const agents = (automations ?? []).filter((a) => a.task_id.startsWith("slice:"));
+  if (agents.length === 0) return null;
+  const running = agents.filter((a) => a.running_since != null).length;
+  const runs = agents
+    .map((a) => a.last_run_at)
+    .filter((t): t is string => !!t)
+    .sort();
+  const noun = agents.length === 1 ? "agent" : "agents";
+  if (running > 0) return `${agents.length} ${noun} watching · ${running} running now`;
+  const last = runs.at(-1);
+  return last
+    ? `${agents.length} ${noun} watching · last swept ${formatRelativePast(last)} ago`
+    : `${agents.length} ${noun} watching`;
+}
+
 /** Home entrypoint: centered 640px column, nothing else on the screen.
  *  date line → hero input (the composer, promoted) → greeting stating the
  *  focus count → FOCUS rows → SLICES strip. Replaces HomeHero as the empty-
@@ -37,9 +58,15 @@ export function Home() {
   const { overview } = useSlicesData();
   const connected = useStore((s) => s.connected);
   const openSettings = useStore((s) => s.openSettings);
+  const automations = useStore((s) => s.automations);
   const focus = overview?.focus ?? NO_FOCUS;
   const slices = overview?.slices ?? NO_SLICES;
   const dateLabel = useMemo(() => new Date().toLocaleDateString(undefined, DATE_FORMAT), []);
+  const titleFor = useMemo(() => {
+    const map = new Map(slices.map((s) => [s.key, s.title]));
+    return (key: string) => map.get(key) ?? key;
+  }, [slices]);
+  const watchLine = agentWatchLine(automations);
 
   if (!connected) {
     // Mirrors the retired HomeHero's disconnected state: Home's hero input
@@ -86,14 +113,17 @@ export function Home() {
         <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
         <HeroInput />
       </div>
-      <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
+      <div className="grid gap-1">
+        <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
+        {watchLine && <p className="m-0 text-xs text-faint">{watchLine}</p>}
+      </div>
       {focus.length > 0 && (
         <div className="grid gap-2">
           <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
           <div className="grid gap-1.5">
             <AnimatePresence initial={false}>
               {focus.map((ask) => (
-                <FocusRow key={ask.id} ask={ask} />
+                <FocusRow key={ask.id} ask={ask} sliceTitle={titleFor(ask.slice_key)} />
               ))}
             </AnimatePresence>
           </div>
