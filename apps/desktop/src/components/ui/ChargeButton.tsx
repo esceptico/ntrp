@@ -108,7 +108,7 @@ export function ChargeButton({
       onPointerLeave={stopCharge}
       onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) startCharge(); }}
       onKeyUp={stopCharge}
-      className="relative select-none touch-none rounded-[10px] bg-surface-soft px-4 py-2 text-[13px] text-ink-soft shadow-[var(--shadow-sm)]"
+      className="relative select-none touch-none rounded-md px-2 py-1 text-xs font-medium text-muted transition-colors hover:text-ink"
       aria-live="polite"
     >
       {/* The charge: a full border whose intensity ramps with hold time. */}
@@ -116,7 +116,7 @@ export function ChargeButton({
         ref={chargeRef}
         aria-hidden="true"
         onTransitionEnd={onTransitionEnd}
-        className="pointer-events-none absolute rounded-[11px] border-[1.5px] border-accent opacity-0"
+        className="pointer-events-none absolute rounded-[7px] border-[1.5px] border-accent opacity-0"
         style={{ inset: -1 }}
       />
       {/* Fixed-width clip; the label rolls to the receipt on arm. */}

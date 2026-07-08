@@ -92,14 +92,16 @@ export function AgentPresence({
       type="button"
       onClick={onOpenChannel}
       title="Open the agent's channel — every run's full transcript"
-      className="app-row group/agent relative w-full overflow-hidden rounded-xl bg-surface-soft px-4 py-3 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
+      // Unfilled on purpose: the ask below is the filled focal card, so the
+      // agent status reads as a quiet header, not a competing card.
+      className="app-row group/agent relative w-full overflow-hidden rounded-lg px-3 py-2 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
     >
       {/* Settle edge — a hairline accent border that releases when a run
           lands. Opacity is driven imperatively; starts hidden. */}
       <div
         ref={edgeRef}
         aria-hidden
-        className="pointer-events-none absolute rounded-[13px] border-[1.5px] border-accent opacity-0"
+        className="pointer-events-none absolute rounded-[9px] border-[1.5px] border-accent opacity-0"
         style={{ inset: -1 }}
       />
       <div className="flex min-w-0 items-center gap-2">

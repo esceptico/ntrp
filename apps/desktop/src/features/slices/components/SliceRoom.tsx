@@ -178,7 +178,7 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
               type="button"
               onClick={() => void revokeAct()}
               title="Click to revoke act autonomy"
-              className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-medium text-on-ink hover:opacity-90"
+              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:opacity-80"
             >
               Acting
             </button>

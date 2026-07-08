@@ -63,33 +63,36 @@ export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: S
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="flex min-w-0 items-start gap-3 rounded-xl bg-surface-soft px-4 py-3.5"
+      className="grid min-w-0 gap-1.5 rounded-xl bg-surface-soft px-4 py-3.5"
     >
-      <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${ASK_KIND[ask.kind].dot}`} />
-      <div className="grid min-w-0 flex-1 gap-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="m-0 min-w-0 text-sm font-medium text-ink">{title}</p>
-          <span className="shrink-0 text-2xs font-medium uppercase tracking-wide text-faint">
-            {ASK_KIND[ask.kind].label}
-          </span>
-        </div>
-        {detail && <p className="m-0 text-sm leading-snug text-muted">{detail}</p>}
-        <div className="mt-2 flex items-center gap-2">
-          {primaryAction && (
-            <Button variant="primary" size="sm" onClick={primaryAction.run}>
-              {primaryAction.label}
-            </Button>
-          )}
-          {onDiscuss && (
-            <Button variant="secondary" size="sm" onClick={() => onDiscuss(ask)}>
-              Discuss
-            </Button>
-          )}
-        </div>
+      {/* Eyebrow: the kind is a LABEL (severity dot + text), not an action;
+          dismiss sits at the far end. Keeps the kind out of the button
+          position where it read as a control. */}
+      <div className="flex min-w-0 items-center gap-2">
+        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${ASK_KIND[ask.kind].dot}`} />
+        <span className="text-2xs font-medium uppercase tracking-wide text-faint">
+          {ASK_KIND[ask.kind].label}
+        </span>
+        <IconButton size="sm" title="Dismiss" onClick={() => void dismiss()} className="-my-1 ml-auto">
+          <X className="size-3.5" />
+        </IconButton>
       </div>
-      <IconButton size="sm" title="Dismiss" onClick={() => void dismiss()}>
-        <X className="size-3.5" />
-      </IconButton>
+      <div className="min-w-0">
+        <p className="m-0 text-sm font-medium leading-snug text-ink [overflow-wrap:anywhere]">{title}</p>
+        {detail && <p className="m-0 mt-1 text-sm leading-snug text-muted [overflow-wrap:anywhere]">{detail}</p>}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        {primaryAction && (
+          <Button variant="primary" size="sm" onClick={primaryAction.run}>
+            {primaryAction.label}
+          </Button>
+        )}
+        {onDiscuss && (
+          <Button variant={primaryAction ? "ghost" : "primary"} size="sm" onClick={() => onDiscuss(ask)}>
+            Discuss
+          </Button>
+        )}
+      </div>
     </motion.div>
   );
 }
