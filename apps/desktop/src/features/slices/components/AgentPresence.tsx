@@ -61,10 +61,9 @@ export function AgentPresence({
         title="Open the agent's channel — every run's full transcript"
         className="app-row group/agent -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
       >
-        <span
-          aria-hidden
-          className={`size-1.5 shrink-0 rounded-full ${running ? "animate-pulse bg-accent" : "bg-muted"}`}
-        />
+        {/* The one dot left, and only when it means something: a live pulse
+            while the agent is actually running. Idle needs no marker. */}
+        {running && <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="shrink-0 text-xs font-medium text-muted group-hover/agent:text-ink-soft">{status}</span>
         {summary && <span className="min-w-0 truncate text-xs text-faint">— {summary}</span>}
       </button>

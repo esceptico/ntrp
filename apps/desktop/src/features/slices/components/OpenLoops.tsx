@@ -39,20 +39,14 @@ export function OpenLoops({
               <button
                 type="button"
                 onClick={() => setOpenIndex(open ? null : index)}
-                className="group flex w-full min-w-0 items-start gap-2.5 py-2.5 text-left text-sm text-ink-soft"
+                className="group flex w-full min-w-0 py-2.5 text-left text-sm text-ink-soft transition-colors hover:text-ink"
               >
-                {/* Mock marker: a quiet dot, not a chevron — expandability
-                    reads through the hover tint + wrap behavior. */}
-                <span
-                  aria-hidden
-                  className="mt-[7px] size-1.5 shrink-0 rounded-full bg-muted transition-colors group-hover:bg-ink-soft"
-                />
                 <span className={open ? "min-w-0 flex-1 whitespace-normal" : "min-w-0 flex-1 truncate"}>
                   {loop}
                 </span>
               </button>
               {open && onDiscuss && (
-                <div className="pb-2.5 pl-[18px]">
+                <div className="pb-2.5">
                   <Button variant="secondary" size="sm" onClick={() => onDiscuss(loop)}>
                     Discuss
                   </Button>

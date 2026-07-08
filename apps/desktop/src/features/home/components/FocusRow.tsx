@@ -26,22 +26,19 @@ export function FocusRow({ ask, sliceTitle }: { ask: SliceAsk; sliceTitle: strin
       animate={RISE_SETTLED}
       exit={{ ...ROW_EXIT, transition: { duration: MOTION.row, ease: EASE_OUT } }}
       transition={SPRING_ROW_ENTRY}
-      className="app-row group/row flex w-full min-w-0 items-start gap-3 rounded-xl bg-surface-soft px-4 py-3 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
+      className="app-row group/row grid w-full min-w-0 gap-1 rounded-xl bg-surface-soft px-4 py-3 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
     >
-      <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${kind.dot}`} />
-      <div className="grid min-w-0 flex-1 gap-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate text-xs font-medium text-muted group-hover/row:text-ink">
-            {sliceTitle}
-          </span>
-          <span className="shrink-0 text-2xs font-medium uppercase tracking-wide text-faint">
-            {kind.label}
-          </span>
-        </div>
-        <p className="m-0 min-w-0 text-sm leading-snug text-ink line-clamp-2 [overflow-wrap:anywhere]">
-          {ask.text}
-        </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate text-xs font-medium text-muted group-hover/row:text-ink">
+          {sliceTitle}
+        </span>
+        <span className="shrink-0 text-2xs font-medium uppercase tracking-wide text-faint">
+          {kind.label}
+        </span>
       </div>
+      <p className="m-0 min-w-0 text-sm leading-snug text-ink line-clamp-2 [overflow-wrap:anywhere]">
+        {ask.text}
+      </p>
     </motion.button>
   );
 }

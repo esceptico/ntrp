@@ -37,12 +37,9 @@ export function SlicesStrip({
             type="button"
             role="menuitem"
             onClick={() => openSlice(slice.key)}
-            className="relative z-[1] inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-soft px-3 text-xs font-medium text-ink"
-            style={{ opacity: slice.live ? 1 : 0.55 }}
+            className="relative z-[1] inline-flex h-8 items-center rounded-full bg-surface-soft px-3 text-xs font-medium text-ink"
+            style={{ opacity: slice.live ? 1 : 0.5 }}
           >
-            {slice.live && (
-              <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-ink" />
-            )}
             <span className="truncate">{slice.title}</span>
           </button>
         ))}

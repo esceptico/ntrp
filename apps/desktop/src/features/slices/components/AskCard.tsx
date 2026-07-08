@@ -65,11 +65,10 @@ export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: S
       transition={SPRING_ROW_ENTRY}
       className="grid min-w-0 gap-1.5 rounded-xl bg-surface-soft px-4 py-3.5"
     >
-      {/* Eyebrow: the kind is a LABEL (severity dot + text), not an action;
-          dismiss sits at the far end. Keeps the kind out of the button
-          position where it read as a control. */}
+      {/* Eyebrow: the kind is a text LABEL, not an action; dismiss at the
+          far end. Keeps the kind out of the button position where it read
+          as a control. */}
       <div className="flex min-w-0 items-center gap-2">
-        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${ASK_KIND[ask.kind].dot}`} />
         <span className="text-2xs font-medium uppercase tracking-wide text-faint">
           {ASK_KIND[ask.kind].label}
         </span>
