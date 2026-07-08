@@ -10,6 +10,7 @@ import { AgentPresence, type AgentInfo } from "@/features/slices/components/Agen
 import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
 import { ChargeButton } from "@/components/ui/ChargeButton";
+import { ScrollFadeTop, ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
 
 /** Slice room: the full-screen detail view for one slice, opened from the
@@ -137,14 +138,15 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="flex h-full min-h-0 flex-col"
+      className="h-full overflow-hidden"
     >
-      {/* Content scrolls; the scoped composer stays pinned below it.
-          overflow-x-hidden is the structural backstop: a child that loses
-          its min-w-0 again clips at the pane instead of pushing the whole
-          layout off-screen. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto grid w-[640px] max-w-full gap-6 px-4 pt-14 pb-8">
+      {/* Fixed-viewport column — the room never scrolls as a whole. The
+          title, agent status, ask, and composer stay pinned; only the open
+          loops / activity / related list scrolls internally, so what needs
+          you (the ask) is always in view. overflow-x-hidden is the
+          structural backstop against a child that loses its min-w-0. */}
+      <div className="mx-auto flex h-full w-[640px] max-w-full flex-col px-4 pt-14 pb-6">
+        <div className="grid shrink-0 gap-6">
       <button
         type="button"
         onClick={() => openSlice(null)}
@@ -199,60 +201,66 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
           <AskCard key={topAsk.id} ask={topAsk} onDiscuss={discussAsk} />
         </AnimatePresence>
       )}
+        </div>
 
-      {isEmpty && (
-        <p className="m-0 text-sm text-faint">
-          Nothing on file yet — message the slice below, or its agent will report after its next run.
-        </p>
-      )}
+        {/* The only scroller: the slice's reference material. */}
+        <div className="relative mt-6 min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-thin">
+          <ScrollFadeTop />
+          <ScrollFadeBottom />
+          <div className="grid content-start gap-6 pb-1">
+            {isEmpty && (
+              <p className="m-0 text-sm text-faint">
+                Nothing on file yet — message the slice below, or its agent will report after its next run.
+              </p>
+            )}
 
-      <OpenLoops
-        loops={detail.open_loops}
-        onDiscuss={(loop) => {
-          setDraft(`About the open loop "${loop}" — `);
-          document.getElementById("slice-composer-input")?.focus();
-        }}
-      />
-      <SliceActivity sessions={userSessions} />
+            <OpenLoops
+              loops={detail.open_loops}
+              onDiscuss={(loop) => {
+                setDraft(`About the open loop "${loop}" — `);
+                document.getElementById("slice-composer-input")?.focus();
+              }}
+            />
+            <SliceActivity sessions={userSessions} />
 
-      {detail.related.length > 0 && (
-        <div className="grid gap-2">
-          <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Related</span>
-          <div className="flex flex-wrap gap-1.5">
-            {detail.related.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => openSlice(key)}
-                className="rounded-full bg-surface-soft px-2.5 py-1 text-xs text-ink-soft hover:text-ink"
-              >
-                {relatedTitle(key)}
-              </button>
-            ))}
+            {detail.related.length > 0 && (
+              <div className="grid gap-2">
+                <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Related</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {detail.related.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => openSlice(key)}
+                      className="rounded-full bg-surface-soft px-2.5 py-1 text-xs text-ink-soft hover:text-ink"
+                    >
+                      {relatedTitle(key)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-        </div>
-      </div>
-
-      <div className="mx-auto w-[640px] max-w-full shrink-0 px-4 pb-6">
-        <div className="flex h-[52px] w-full items-center gap-2 rounded-[13px] border border-line bg-surface-2 px-4 shadow-md">
-          <input
-            id="slice-composer-input"
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            placeholder={`Message in ${detail.title}…`}
-            disabled={sending}
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
-          />
+        <div className="shrink-0 pt-3">
+          <div className="flex h-[52px] w-full items-center gap-2 rounded-xl border border-line bg-surface-2 px-4 shadow-md">
+            <input
+              id="slice-composer-input"
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder={`Message in ${detail.title}…`}
+              disabled={sending}
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
+            />
+          </div>
         </div>
       </div>
     </motion.div>
