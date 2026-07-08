@@ -8,17 +8,9 @@ import { fetchSliceDetail, resolveAsk } from "@/actions/slices";
 import { primaryActionFor } from "@/lib/askActions";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
+import { ASK_KIND } from "@/lib/sliceKind";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 import { X } from "lucide-react";
-
-// `kind` doubles as severity: `act`/`drift` need attention sooner than a
-// routine `review`/`decide` — tinted dot only, no badge chrome.
-const KIND_DOT: Record<SliceAsk["kind"], string> = {
-  review: "bg-muted",
-  decide: "bg-accent",
-  act: "bg-warn",
-  drift: "bg-bad",
-};
 
 /** Agent asks read as "headline — elaboration"; split on the first em-dash
  *  so the card can render the mock's title/description hierarchy. Asks
@@ -73,9 +65,14 @@ export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: S
       transition={SPRING_ROW_ENTRY}
       className="flex min-w-0 items-start gap-3 rounded-xl bg-surface-soft px-4 py-3.5"
     >
-      <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${KIND_DOT[ask.kind]}`} />
+      <span aria-hidden className={`mt-[7px] size-1.5 shrink-0 rounded-full ${ASK_KIND[ask.kind].dot}`} />
       <div className="grid min-w-0 flex-1 gap-1">
-        <p className="m-0 text-sm font-medium text-ink">{title}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="m-0 min-w-0 text-sm font-medium text-ink">{title}</p>
+          <span className="shrink-0 text-2xs font-medium uppercase tracking-wide text-faint">
+            {ASK_KIND[ask.kind].label}
+          </span>
+        </div>
         {detail && <p className="m-0 text-sm leading-snug text-muted">{detail}</p>}
         <div className="mt-2 flex items-center gap-2">
           {primaryAction && (

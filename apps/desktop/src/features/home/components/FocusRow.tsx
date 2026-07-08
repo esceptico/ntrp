@@ -1,17 +1,8 @@
 import { motion } from "motion/react";
 import type { SliceAsk } from "@/api/slices";
 import { useStore } from "@/stores";
+import { ASK_KIND } from "@/lib/sliceKind";
 import { RISE_IN, RISE_SETTLED, ROW_EXIT, SPRING_ROW_ENTRY, MOTION, EASE_OUT } from "@/lib/tokens/motion";
-
-// `kind` is descriptive, not an action — a quiet text tag, not a button.
-// The label reads in monochrome (the real signal); the dot is a bonus
-// severity cue in accent themes (attention kinds warmer). Mirrors AskCard.
-const KIND: Record<SliceAsk["kind"], { dot: string; label: string }> = {
-  review: { dot: "bg-muted", label: "review" },
-  decide: { dot: "bg-accent", label: "decide" },
-  act: { dot: "bg-warn", label: "act" },
-  drift: { dot: "bg-bad", label: "drift" },
-};
 
 /** A single focus-set row: a slice's one ask, made legible and actionable
  *  by the row itself. The whole card opens the slice — there's no per-row
@@ -24,7 +15,7 @@ const KIND: Record<SliceAsk["kind"], { dot: string; label: string }> = {
  *  caller's AnimatePresence (keyed by ask.id). */
 export function FocusRow({ ask, sliceTitle }: { ask: SliceAsk; sliceTitle: string }) {
   const openSlice = useStore((s) => s.openSlice);
-  const kind = KIND[ask.kind];
+  const kind = ASK_KIND[ask.kind];
 
   return (
     <motion.button
