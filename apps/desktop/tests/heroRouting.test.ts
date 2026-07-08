@@ -47,3 +47,16 @@ test("no matches returns only the chat suggestion", () => {
   const s = routeHeroInput("zzz-nonexistent-zzz", ctx);
   expect(s).toEqual([{ kind: "chat", label: "zzz-nonexistent-zzz", ref: "" }]);
 });
+
+test("a question mentioning a slice's distinctive word surfaces that slice", () => {
+  const ctx2 = { ...ctx, slices: [{ key: "apartment-hunt", title: "Apartment hunt" }] };
+  const s = routeHeroInput("should I apply to the apartment on Elsie", ctx2);
+  expect(s[0].kind).toBe("chat"); // chat still default
+  expect(s.some((x) => x.kind === "slice" && x.ref === "apartment-hunt")).toBe(true);
+});
+
+test("short filler words never trigger a slice match", () => {
+  const ctx2 = { ...ctx, slices: [{ key: "aside", title: "Aside" }] };
+  // "the" / "a" / "on" are < 4 chars; nothing distinctive from Aside appears.
+  expect(routeHeroInput("what a day on the road", ctx2).some((x) => x.kind === "slice")).toBe(false);
+});

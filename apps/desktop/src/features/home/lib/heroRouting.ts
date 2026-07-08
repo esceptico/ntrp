@@ -20,6 +20,18 @@ function matches(haystack: string, query: string): boolean {
   return haystack.toLowerCase().includes(query.toLowerCase());
 }
 
+/** A slice is offered when the query is a fragment of its name (typing to
+ *  jump) OR when the query *mentions* a distinctive slice word — so a real
+ *  question ("should I apply to the apartment") surfaces Apartment hunt, not
+ *  just typing its name. Words under 4 chars don't count, so "the"/"a" never
+ *  match. The chat option is always first, so a wrong guess costs nothing. */
+function sliceMatches(slice: { key: string; title: string }, query: string): boolean {
+  const q = query.toLowerCase();
+  if (matches(slice.title, query) || matches(slice.key, query)) return true;
+  const tokens = [...slice.title.toLowerCase().split(/\s+/), ...slice.key.toLowerCase().split(/[-_\s]+/)];
+  return tokens.some((t) => t.length >= 4 && q.includes(t));
+}
+
 /** Case-insensitive substring match across slices, sessions, automations,
  *  skills — ordered chat → slice → session → automation → skill, capped at
  *  `MAX_SUGGESTIONS`. Pure function; heroRouting owns its own suggestion
@@ -29,7 +41,7 @@ export function routeHeroInput(query: string, ctx: HeroRoutingContext): HeroSugg
   if (!query) return suggestions;
 
   for (const slice of ctx.slices) {
-    if (matches(slice.title, query) || matches(slice.key, query)) {
+    if (sliceMatches(slice, query)) {
       suggestions.push({ kind: "slice", label: slice.title, ref: slice.key });
     }
   }

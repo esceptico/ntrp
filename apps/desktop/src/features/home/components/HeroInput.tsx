@@ -3,7 +3,7 @@ import { CornerDownLeft } from "lucide-react";
 import { useStore } from "@/stores";
 import { sendMessage } from "@/actions/messages";
 import { runAutomation } from "@/actions/automations";
-import { switchSession } from "@/actions/sessions";
+import { switchSession, createSessionWithSlice } from "@/actions/sessions";
 import { routeHeroInput, type HeroSuggestion } from "@/features/home/lib/heroRouting";
 import { PickerRow } from "@/components/ui/PickerRow";
 import { ICON } from "@/lib/icons";
@@ -16,7 +16,7 @@ const NO_AUTOMATIONS: { task_id: string; name: string }[] = [];
 
 const KIND_LABEL: Record<HeroSuggestion["kind"], string> = {
   chat: "Chat",
-  slice: "Slice",
+  slice: "Ask in",
   session: "Session",
   automation: "Automation",
   skill: "Skill",
@@ -57,10 +57,22 @@ export function HeroInput() {
         void sendMessage(suggestion.label);
         setDraft("");
         break;
-      case "slice":
-        openSlice(suggestion.ref);
+      case "slice": {
+        // Route the chat INTO the slice: a scoped session carries the slice's
+        // page as context (and joins the bridged project). A bare slice name
+        // with nothing to ask just opens the room to browse.
+        const msg = draft.trim();
+        const nameOnly =
+          msg.toLowerCase() === suggestion.label.toLowerCase() ||
+          msg.toLowerCase() === suggestion.ref.toLowerCase();
+        if (nameOnly) {
+          openSlice(suggestion.ref);
+        } else {
+          void createSessionWithSlice(suggestion.ref).then(() => sendMessage(msg));
+        }
         setDraft("");
         break;
+      }
       case "session":
         void switchSession(suggestion.ref);
         setDraft("");
