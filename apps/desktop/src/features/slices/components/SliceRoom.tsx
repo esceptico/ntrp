@@ -5,11 +5,11 @@ import { fetchSliceDetail, updateSliceAutonomy } from "@/actions/slices";
 import { runAutomation } from "@/actions/automations";
 import { createSessionWithSlice, switchSession } from "@/actions/sessions";
 import { sendMessage } from "@/actions/messages";
+import { Eye, Zap } from "lucide-react";
 import { AskCard } from "@/features/slices/components/AskCard";
 import { AgentPresence, type AgentInfo } from "@/features/slices/components/AgentPresence";
 import { OpenLoops } from "@/features/slices/components/OpenLoops";
 import { SliceActivity } from "@/features/slices/components/SliceActivity";
-import { ChargeButton } from "@/components/ui/ChargeButton";
 import { ScrollFadeTop, ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE } from "@/lib/tokens/motion";
 
@@ -156,32 +156,33 @@ export function SliceRoom({ sliceKey }: { sliceKey: string }) {
       </button>
 
       <div className="grid gap-1.5">
-        {/* Autonomy control sits beside the title as a quiet chip (mock:
-            "asks before acting" inline with the name), not parked at the
-            far edge. Grant keeps the hold-to-arm ceremony; revoke is a
-            plain click — de-escalation needs none. */}
+        {/* The agent's permission dial, a clear pill beside the title: Eye =
+            observe (reads + updates the page only), Zap = act (may run this
+            slice's automations/workflows). A plain click toggles — the
+            "irreversible steps still ask you" contract is the safety net, so
+            no hold-to-arm ceremony. */}
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="m-0 min-w-0 truncate text-2xl font-medium tracking-[-0.015em] text-ink">
             {detail.title}
           </h1>
           {detail.autonomy === "observe" ? (
-            <span
-              title="Autonomy contract: the agent reads this slice and updates its page, but takes no external action. Hold to grant it the right to act (run automations and workflows — irreversible steps still need your approval)."
+            <button
+              type="button"
+              onClick={() => void grantAct()}
+              title="The agent only reads this slice and updates its page — it takes no action on its own. Click to let it act: run this slice's automations and workflows. Irreversible steps still ask you first."
+              className="shrink-0 self-center inline-flex h-7 items-center gap-1.5 rounded-full border border-line-soft px-3 text-xs font-medium text-muted transition-colors hover:border-line-strong hover:text-ink"
             >
-              <ChargeButton
-                key={detail.autonomy}
-                label="Observe only"
-                armedLabel="Act granted"
-                onArmed={() => void grantAct()}
-              />
-            </span>
+              <Eye size={13} strokeWidth={2} />
+              Observing
+            </button>
           ) : (
             <button
               type="button"
               onClick={() => void revokeAct()}
-              title="Click to revoke act autonomy"
-              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:opacity-80"
+              title="The agent can run this slice's automations and workflows on its own. Click to return it to observe-only."
+              className="shrink-0 self-center inline-flex h-7 items-center gap-1.5 rounded-full border border-accent-soft px-3 text-xs font-medium text-accent transition-colors hover:opacity-80"
             >
+              <Zap size={13} strokeWidth={2} />
               Acting
             </button>
           )}
