@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { Play, Radio } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Play } from "lucide-react";
 import { resultSnippet, formatRelative } from "@/lib/agentRun";
 import { ICON } from "@/lib/icons";
-import { RISE_IN, RISE_SETTLED, MOTION, EASE_OUT } from "@/lib/tokens/motion";
 
 export interface AgentInfo {
   task_id?: string;
@@ -27,29 +25,11 @@ function useElapsed(since: string | null | undefined): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function nextRunLabel(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return "next sweep due";
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return `next sweep in ${mins}m`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `next sweep in ${hrs}h`;
-  return `next sweep in ${Math.round(hrs / 24)}d`;
-}
-
-/** The standing agent as a first-class presence in the room, not a faint
- *  footnote. Three honest states:
- *   • running  → live pulse + mm:ss elapsed, a real "it's working" signal
- *                (no fake progress bar — the run's length is unknown).
- *   • ran      → the report's first line, when it swept, next sweep, and the
- *                Run now / Open channel doors. When a run just COMPLETED
- *                (running true→false), the fresh summary reveals out of blur
- *                and the accent edge charges then releases — the
- *                FocusProgress "settle", fired only at the real moment work
- *                lands (rare, so it earns the motion).
- *   • idle     → hasn't run yet, offer Run now.
- *  The whole block is a door to the agent's channel transcript. */
+/** The slice's standing agent as ONE quiet line, not a block: a state dot,
+ *  "Agent · swept 2h ago", the last run's summary inline (when there is a
+ *  real one), and Run now. The line is the door to the agent's channel.
+ *  Deliberately understated — the ask below is the focal element; this is
+ *  just the pulse that says "something is watching this, and it's fresh." */
 export function AgentPresence({
   agent,
   onRunNow,
@@ -61,123 +41,44 @@ export function AgentPresence({
 }) {
   const running = agent.running_since != null;
   const elapsed = useElapsed(agent.running_since);
-  const summary = resultSnippet(agent.last_result);
-  const edgeRef = useRef<HTMLDivElement | null>(null);
-  const wasRunning = useRef(running);
-  const [justSettled, setJustSettled] = useState(false);
+  const rawSummary = resultSnippet(agent.last_result);
+  // Guard the run-id-slug bug: channel automations record their run_id (a
+  // coolname like "amazing-angelfish") as last_result. A real report has
+  // spaces/capitals; a bare kebab slug is noise, so drop it.
+  const summary = rawSummary && !/^[a-z]+(-[a-z]+)+$/.test(rawSummary) ? rawSummary : null;
 
-  // Fire the settle (edge charge → release) exactly when a run finishes.
-  useEffect(() => {
-    if (wasRunning.current && !running) {
-      setJustSettled(true);
-      const edge = edgeRef.current;
-      if (edge && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        edge.style.transition = "none";
-        edge.style.opacity = "1";
-        requestAnimationFrame(() => {
-          edge.style.transition = "opacity 600ms cubic-bezier(0.22, 1, 0.36, 1)";
-          edge.style.opacity = "0";
-        });
-      }
-      const t = setTimeout(() => setJustSettled(false), 700);
-      return () => clearTimeout(t);
-    }
-    wasRunning.current = running;
-  }, [running]);
-
-  const next = nextRunLabel(agent.next_run_at);
+  const status = running
+    ? `Working… ${elapsed}`
+    : agent.last_run_at
+      ? `Agent · swept ${formatRelative(agent.last_run_at)}`
+      : "Agent · hasn't run yet";
 
   return (
-    <button
-      type="button"
-      onClick={onOpenChannel}
-      title="Open the agent's channel — every run's full transcript"
-      // Unfilled on purpose: the ask below is the filled focal card, so the
-      // agent status reads as a quiet header, not a competing card.
-      className="app-row group/agent relative w-full overflow-hidden rounded-lg px-3 py-2 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
-    >
-      {/* Settle edge — a hairline accent border that releases when a run
-          lands. Opacity is driven imperatively; starts hidden. */}
-      <div
-        ref={edgeRef}
-        aria-hidden
-        className="pointer-events-none absolute rounded-[9px] border-[1.5px] border-accent opacity-0"
-        style={{ inset: -1 }}
-      />
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={onOpenChannel}
+        title="Open the agent's channel — every run's full transcript"
+        className="app-row group/agent -mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left focus-visible:shadow-[0_0_0_2px_var(--color-accent-soft)] focus-visible:outline-none"
+      >
         <span
           aria-hidden
-          className={`size-1.5 shrink-0 rounded-full ${running ? "animate-pulse bg-ink" : "bg-muted"}`}
+          className={`size-1.5 shrink-0 rounded-full ${running ? "animate-pulse bg-accent" : "bg-muted"}`}
         />
-        <span className="text-2xs font-semibold uppercase tracking-wide text-faint">Agent</span>
-        {running ? (
-          <span className="ml-auto font-mono text-2xs tabular-nums text-muted">{elapsed}</span>
-        ) : (
-          agent.last_run_at && (
-            <span className="ml-auto text-2xs text-whisper tabular-nums">
-              swept {formatRelative(agent.last_run_at)}
-            </span>
-          )
-        )}
-      </div>
-
-      <div className="mt-1.5 min-w-0">
-        <AnimatePresence mode="wait" initial={false}>
-          {running ? (
-            <motion.p
-              key="running"
-              initial={RISE_IN}
-              animate={RISE_SETTLED}
-              exit={{ opacity: 0, filter: "blur(3px)", transition: { duration: MOTION.fast, ease: EASE_OUT } }}
-              className="m-0 text-sm text-ink-soft"
-            >
-              Working now…
-            </motion.p>
-          ) : summary ? (
-            <motion.p
-              key={`summary:${agent.last_run_at}`}
-              // Fresh report writes itself out of blur only when it just
-              // landed; an existing summary on mount is already resolved.
-              initial={justSettled ? RISE_IN : false}
-              animate={RISE_SETTLED}
-              className="m-0 text-sm leading-snug text-ink-soft line-clamp-2 [overflow-wrap:anywhere]"
-            >
-              {summary}
-            </motion.p>
-          ) : (
-            <p className="m-0 text-sm text-faint">Hasn't run yet.</p>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <div className="mt-2 flex items-center gap-3 text-2xs text-whisper">
-        <span className="inline-flex items-center gap-1">
-          <Radio size={ICON.XS} strokeWidth={2} />
-          open channel
-        </span>
-        {!running && next && <span className="text-faint">{next}</span>}
-        {!running && agent.task_id && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRunNow();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onRunNow();
-              }
-            }}
-            className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-muted hover:bg-surface-2 hover:text-ink"
-          >
-            <Play size={ICON.XS} strokeWidth={2} />
-            Run now
-          </span>
-        )}
-      </div>
-    </button>
+        <span className="shrink-0 text-xs font-medium text-muted group-hover/agent:text-ink-soft">{status}</span>
+        {summary && <span className="min-w-0 truncate text-xs text-faint">— {summary}</span>}
+      </button>
+      {!running && agent.task_id && (
+        <button
+          type="button"
+          onClick={onRunNow}
+          title="Run the agent now"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+        >
+          <Play size={ICON.XS} strokeWidth={2} />
+          Run now
+        </button>
+      )}
+    </div>
   );
 }

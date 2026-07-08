@@ -78,8 +78,8 @@ export function AskCard({ ask, onDiscuss }: { ask: SliceAsk; onDiscuss?: (ask: S
         </IconButton>
       </div>
       <div className="min-w-0">
-        <p className="m-0 text-sm font-medium leading-snug text-ink [overflow-wrap:anywhere]">{title}</p>
-        {detail && <p className="m-0 mt-1 text-sm leading-snug text-muted [overflow-wrap:anywhere]">{detail}</p>}
+        <p className="m-0 text-base font-medium leading-snug text-ink [overflow-wrap:anywhere]">{title}</p>
+        {detail && <p className="m-0 mt-1 text-sm leading-snug text-ink-soft [overflow-wrap:anywhere]">{detail}</p>}
       </div>
       <div className="mt-2 flex items-center gap-2">
         {primaryAction && (
