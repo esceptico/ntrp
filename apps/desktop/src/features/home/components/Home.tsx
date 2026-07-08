@@ -9,6 +9,7 @@ import { useSlicesData } from "@/features/home/hooks/useSlicesData";
 import { HeroInput } from "@/features/home/components/HeroInput";
 import { FocusRow } from "@/features/home/components/FocusRow";
 import { SlicesStrip } from "@/features/home/components/SlicesStrip";
+import { ScrollFadeTop, ScrollFadeBottom } from "@/components/ui/ScrollBlur";
 import { Button } from "@/components/ui/Button";
 import { ICON } from "@/lib/icons";
 import { RISE_IN, RISE_SETTLED, MOTION, EASE_DECELERATE, originFromEvent } from "@/lib/tokens/motion";
@@ -106,30 +107,40 @@ export function Home() {
       initial={RISE_IN}
       animate={RISE_SETTLED}
       transition={{ duration: MOTION.trace, ease: EASE_DECELERATE }}
-      className="h-full overflow-y-auto overflow-x-hidden"
+      className="h-full overflow-hidden"
     >
-      <div className="mx-auto grid w-[640px] max-w-full gap-7 px-4 pt-[16vh] pb-16">
-      <div className="grid gap-3">
-        <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
-        <HeroInput />
-      </div>
-      <div className="grid gap-1">
-        <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
-        {watchLine && <p className="m-0 text-xs text-faint">{watchLine}</p>}
-      </div>
-      {focus.length > 0 && (
-        <div className="grid gap-2">
-          <span className="text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
-          <div className="grid gap-1.5">
-            <AnimatePresence initial={false}>
-              {focus.map((ask) => (
-                <FocusRow key={ask.id} ask={ask} sliceTitle={titleFor(ask.slice_key)} />
-              ))}
-            </AnimatePresence>
-          </div>
+      {/* Fixed viewport column — Home never scrolls as a whole. The header,
+          greeting and slices strip are pinned; only the focus list scrolls
+          internally when the asks outgrow the space, so the composer and the
+          strip always stay put. */}
+      <div className="mx-auto flex h-full w-[640px] max-w-full flex-col gap-6 px-4 pt-[12vh] pb-8">
+        <div className="grid shrink-0 gap-3">
+          <span className="text-[11px] font-medium tracking-[0.08em] text-faint uppercase">{dateLabel}</span>
+          <HeroInput />
         </div>
-      )}
-        <SlicesStrip slices={slices} suggested={overview?.suggested} />
+        <div className="grid shrink-0 gap-1">
+          <h2 className="m-0 text-[21px] font-medium tracking-[-0.01em] text-ink">{greeting(focus.length)}</h2>
+          {watchLine && <p className="m-0 text-xs text-faint">{watchLine}</p>}
+        </div>
+        {focus.length > 0 && (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <span className="shrink-0 text-2xs font-semibold tracking-wide text-faint uppercase">Focus</span>
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-thin">
+              <ScrollFadeTop />
+              <ScrollFadeBottom />
+              <div className="grid gap-1.5 pb-1">
+                <AnimatePresence initial={false}>
+                  {focus.map((ask) => (
+                    <FocusRow key={ask.id} ask={ask} sliceTitle={titleFor(ask.slice_key)} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="mt-auto shrink-0">
+          <SlicesStrip slices={slices} suggested={overview?.suggested} />
+        </div>
       </div>
     </motion.div>
   );
